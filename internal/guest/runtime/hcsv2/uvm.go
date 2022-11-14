@@ -39,8 +39,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/pkg/cosesign1"
-	didx509resolver "github.com/Microsoft/hcsshim/pkg/did-x509-resolver"
+	"github.com/Microsoft/hcsshim/internal/cosesign1"
+	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
@@ -178,7 +178,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 	_ = os.WriteFile("/tmp/fragment.blob", blob, 0644)
 
 	var unpacked cosesign1.UnpackedCoseSign1
-	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, nil, false, true) // params raw []byte, optionaPubKeyPEM []byte, requireKNownAuthority bool, verbose bool
+	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, nil, true)
 
 	// Since EPRS cannot cope with iss/feed today (maybe next week) we MAY have a json payload with issuer and feed tags OR have them in the header
 

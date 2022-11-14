@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	didx509resolver "github.com/Microsoft/hcsshim/pkg/did-x509-resolver"
+	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
 )
 
 func parsePemChain(chainPem string) ([]*x509.Certificate, error) {

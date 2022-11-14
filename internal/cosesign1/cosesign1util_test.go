@@ -43,7 +43,7 @@ func comparePEMs(pk1pem string, pk2pem string) bool {
 
 func Test_UnpackAndValidateCannedFragment(t *testing.T) {
 	var unpacked UnpackedCoseSign1
-	unpacked, err := UnpackAndValidateCOSE1CertChain(FragmentCose, nil, nil, false, false)
+	unpacked, err := UnpackAndValidateCOSE1CertChain(FragmentCose, nil, nil, false)
 
 	if err != nil {
 		t.Errorf("UnpackAndValidateCOSE1CertChain failed: %s", err.Error())
@@ -85,7 +85,7 @@ func Test_UnpackAndValidateCannedFragmentCorrupted(t *testing.T) {
 
 	var offset = len(FragmentCose2) / 2
 	FragmentCose2[offset] = FragmentCose[offset] + 1 // corrupt the cose document (use the uncorrupted one as source in case we loop back to a good value)
-	var _, err = UnpackAndValidateCOSE1CertChain(FragmentCose2, nil, nil, false, false)
+	var _, err = UnpackAndValidateCOSE1CertChain(FragmentCose2, nil, nil, false)
 
 	// expect it to fail
 	if err == nil {
@@ -115,9 +115,9 @@ func Test_CreateCoseSign1Fragment(t *testing.T) {
 }
 
 func Test_OldCose(t *testing.T) {
-	filename := "old.1.cose"
+	filename := "esrp.test.cose"
 	cose := readFileBytes(filename)
-	_, err := UnpackAndValidateCOSE1CertChain(cose, nil, nil, false, false)
+	_, err := UnpackAndValidateCOSE1CertChain(cose, nil, nil, false)
 	if err != nil {
 		t.Errorf("validation of %s failed", filename)
 	}
