@@ -158,6 +158,10 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}()
 	defer cancel()
 
+	// create exitCh ahead of time to prevent race conditions between writing
+	// initalizing the channel and waiting on it during acceptAndClose
+	uvm.exitCh = make(chan struct{})
+
 	// Prepare to provide entropy to the init process in the background. This
 	// must be done in a goroutine since, when using the internal bridge, the
 	// call to Start() will block until the GCS launches, and this cannot occur
@@ -208,7 +212,6 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}()
 
 	// Start waiting on the utility VM.
-	uvm.exitCh = make(chan struct{})
 	go func() {
 		err := uvm.hcsSystem.Wait()
 		if err == nil {
