@@ -93,7 +93,7 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 		return UnpackedCoseSign1{}, fmt.Errorf("x5Chain missing")
 	}
 
-	if !isADERChain(chainDER) {
+	if !isADERChain(chainDER) && !isADEROnly(chainDER) {
 		return UnpackedCoseSign1{}, fmt.Errorf("x5Chain wrong type")
 	}
 
@@ -112,7 +112,13 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 	// The HeaderLabelX5Chain entry in the cose header may be a blob (single cert) or an array of blobs (a chain) see https://datatracker.ietf.org/doc/draft-ietf-cose-x509/08/
 
 	var chain []*x509.Certificate
-	chainIA := chainDER.([]interface{})
+	var chainIA []interface{}
+	if isADERChain(chainDER) {
+		chainIA = chainDER.([]interface{})
+	} else {
+		chainIA = append(chainIA, chainDER)
+	}
+
 	for i := range chainIA {
 		cert, err := x509.ParseCertificate(chainIA[i].([]byte))
 		chain = append(chain, cert)
@@ -123,6 +129,7 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 			return UnpackedCoseSign1{}, err
 		}
 	}
+	
 
 	// A reasonable chain will have 1-100 elements
 	chainLen := len(chain)
