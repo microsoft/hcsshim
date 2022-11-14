@@ -6,6 +6,8 @@ package flag
 import (
 	"flag"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 const FeatureFlagName = "feature"
@@ -73,4 +75,41 @@ func (ss StringSet) String() string {
 // Standardize formats the feature flag s to be consistent (ie, trim and to lowercase)
 func Standardize(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// LogrusLevel is a flag that accepts logrus logging levels, as strings.
+type LogrusLevel struct {
+	Level logrus.Level
+}
+
+var _ flag.Value = &LogrusLevel{}
+
+func NewLogrusLevel(name, value, usage string) *LogrusLevel {
+	l := &LogrusLevel{}
+	if lvl, err := logrus.ParseLevel(value); err == nil {
+		l.Level = lvl
+	} else {
+		l.Level = logrus.StandardLogger().Level
+	}
+	flag.Var(l, name, usage)
+	return l
+}
+
+func (l *LogrusLevel) String() string {
+	// may be called ona nil receiver
+	// return default level
+	if l == nil {
+		return logrus.StandardLogger().Level.String()
+	}
+
+	return l.Level.String()
+}
+
+func (l *LogrusLevel) Set(s string) error {
+	lvl, err := logrus.ParseLevel(s)
+	if err != nil {
+		return err
+	}
+	l.Level = lvl
+	return nil
 }
