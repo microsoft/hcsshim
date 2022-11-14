@@ -3,15 +3,12 @@ package main
 import (
 	"flag"
 	"os"
-
 	"log"
-
-	"github.com/Microsoft/hcsshim/pkg/cosesign1"
-	didx509resolver "github.com/Microsoft/hcsshim/pkg/did-x509-resolver"
-	"github.com/veraison/go-cose"
+	"github.com/Microsoft/hcsshim/internal/cosesign1"
+	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
 )
 
-func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAFile string, chainFilename string, didString string, requireKnownAuthority bool, verbose bool) (cosesign1.UnpackedCoseSign1, error) {
+func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAFile string, chainFilename string, didString string, verbose bool) (cosesign1.UnpackedCoseSign1, error) {
 	coseBlob := cosesign1.ReadBlob(inputFilename)
 	var optionalPubKeyPEM []byte
 	if optionalPubKeyFilename != "" {
@@ -32,7 +29,7 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 
 	var unpacked cosesign1.UnpackedCoseSign1
 	var err error
-	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(coseBlob, optionalPubKeyPEM, optionalRootCAPEM, requireKnownAuthority, verbose)
+	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(coseBlob, optionalPubKeyPEM, optionalRootCAPEM, verbose)
 	if err != nil {
 		log.Print("checkCoseSign1 failed - " + err.Error())
 	} else {
@@ -61,13 +58,17 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 	return unpacked, err
 }
 
-func createCoseSign1(payloadFilename string, issuer string, feed string, contentType string, chainFilename string, keyFilename string, saltType string, algo cose.Algorithm, verbose bool) ([]byte, error) {
+func createCoseSign1(payloadFilename string, issuer string, feed string, contentType string, chainFilename string, keyFilename string, saltType string, algo string, verbose bool) ([]byte, error) {
 
 	var payloadBlob = cosesign1.ReadBlob(payloadFilename)
 	var keyPem = cosesign1.ReadBlob(keyFilename)
 	var chainPem = cosesign1.ReadBlob(chainFilename)
+	algorithm, err := cosesign1.StringToAlgorithm(algo)
+	if err != nil {
+		return nil, err
+	}
 
-	return cosesign1.CreateCoseSign1(payloadBlob, issuer, feed, contentType, chainPem, keyPem, saltType, algo, verbose)
+	return cosesign1.CreateCoseSign1(payloadBlob, issuer, feed, contentType, chainPem, keyPem, saltType, algorithm, verbose)
 }
 
 // example scitt usage to try tro match
@@ -83,7 +84,6 @@ func main() {
 	var outputKeyFilename string
 	var inputFilename string
 	var saltType string
-	var requireKNownAuthority bool
 	var verbose bool
 	var algo string
 	var feed string
@@ -113,7 +113,6 @@ func main() {
 	checkCmd.StringVar(&rootCAFile, "root", "", "(trusted) root CA certificate filename (PEM)")
 	checkCmd.StringVar(&chainFilename, "chain", "chain.pem", "key or cert file to use (pem)")
 	checkCmd.StringVar(&didString, "did", "", "DID x509 string to resolve against cert chain")
-	checkCmd.BoolVar(&requireKNownAuthority, "requireKNownAuthority", false, "false => allow chain validation to fail")
 	checkCmd.BoolVar(&verbose, "verbose", false, "verbose output")
 
 	printCmd := flag.NewFlagSet("print", flag.ExitOnError)
@@ -145,10 +144,9 @@ func main() {
 		case "create":
 			err := createCmd.Parse(os.Args[2:])
 			if err == nil {
-				algorithm, err := cosesign1.StringToAlgorithm(algo)
 				var raw []byte
 				if err == nil {
-					raw, err = createCoseSign1(payloadFilename, issuer, feed, contentType, chainFilename, keyFilename, saltType, algorithm, verbose)
+					raw, err = createCoseSign1(payloadFilename, issuer, feed, contentType, chainFilename, keyFilename, saltType, algo, verbose)
 				}
 
 				if err != nil {
@@ -168,7 +166,7 @@ func main() {
 		case "check":
 			err := checkCmd.Parse(os.Args[2:])
 			if err == nil {
-				_, err := checkCoseSign1(inputFilename, keyFilename, rootCAFile, chainFilename, didString, requireKNownAuthority, verbose)
+				_, err := checkCoseSign1(inputFilename, keyFilename, rootCAFile, chainFilename, didString, verbose)
 				if err != nil {
 					log.Print("failed check: " + err.Error())
 				}
@@ -179,7 +177,7 @@ func main() {
 		case "print":
 			err := printCmd.Parse(os.Args[2:])
 			if err == nil {
-				_, err := checkCoseSign1(inputFilename, "", rootCAFile, chainFilename, didString, false, true)
+				_, err := checkCoseSign1(inputFilename, "", rootCAFile, chainFilename, didString, true)
 				if err != nil {
 					log.Print("failed print: " + err.Error())
 				}
@@ -190,7 +188,7 @@ func main() {
 		case "leaf":
 			err := leafCmd.Parse(os.Args[2:])
 			if err == nil {
-				unpacked, err := checkCoseSign1(inputFilename, "", rootCAFile, chainFilename, didString, false, verbose)
+				unpacked, err := checkCoseSign1(inputFilename, "", rootCAFile, chainFilename, didString, verbose)
 				if err == nil {
 					err = cosesign1.WriteString(outputKeyFilename, unpacked.Pubkey)
 					if err != nil {

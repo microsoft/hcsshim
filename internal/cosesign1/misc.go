@@ -65,7 +65,6 @@ func x509ToBase64(cert *x509.Certificate) string {
 }
 
 func keyToBase64(key any) string {
-
 	derKey, err := x509.MarshalPKIXPublicKey(key)
 	if err != nil {
 		return ""
@@ -86,13 +85,11 @@ single line base64 standard encoded raw DER certificate
 */
 
 func x509ToPEM(cert *x509.Certificate) string {
-
 	base64Cert := x509ToBase64(cert)
 	return base64CertToPEM(base64Cert)
 }
 
 func base64CertToPEM(base64Cert string) string {
-
 	var begin = "-----BEGIN CERTIFICATE-----\n"
 	var end = "\n-----END CERTIFICATE-----"
 
@@ -108,7 +105,6 @@ func base64CertToPEM(base64Cert string) string {
 // }
 
 func base64PublicKeyToPEM(base64Key string) string {
-
 	var begin = "-----BEGIN PUBLIC KEY-----\n"
 	var end = "\n-----END PUBLIC KEY-----"
 
