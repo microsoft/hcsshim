@@ -129,7 +129,6 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 			return UnpackedCoseSign1{}, err
 		}
 	}
-	
 
 	// A reasonable chain will have 1-100 elements
 	chainLen := len(chain)

@@ -69,10 +69,9 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 	chainDER := pem2der(chainPem)
 	chainCerts, err = x509.ParseCertificates(chainDER)
 	var chainDERArray [][]byte
-	for cert := range(chainCerts) {
+	for cert := range chainCerts {
 		chainDERArray = append(chainDERArray, chainCerts[cert].Raw)
 	}
-
 
 	if err == nil {
 		if verbose {
