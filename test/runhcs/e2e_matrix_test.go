@@ -18,6 +18,7 @@ import (
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/osversion"
 	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
+	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/require"
 	runc "github.com/containerd/go-runc"
@@ -168,6 +169,7 @@ func readPidFile(path string) (int, error) {
 func testWindows(t *testing.T, version int, isolated bool) {
 	t.Helper()
 	var err error
+	ctx := context.Background()
 
 	// Make the bundle
 	bundle := t.TempDir()
@@ -198,8 +200,14 @@ func testWindows(t *testing.T, version int, isolated bool) {
 
 	// Get the LayerFolders
 	imageName := getWindowsImageNameByVersion(t, version)
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	layers := layers.LayerFolders(t, imageName)
+	img := layers.LazyImageLayers{Image: imageName, Platform: constants.PlatformWindows}
+	defer func() {
+		if err := img.Close(ctx); err != nil {
+			t.Errorf("could not close image %s: %v", imageName, err)
+		}
+	}()
+
+	layers := img.Layers(ctx, t)
 	for _, layer := range layers {
 		g.AddWindowsLayerFolders(layer)
 	}
@@ -219,7 +227,6 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	cf.Close()
 
 	// Create the Argon, Xenon, or UVM
-	ctx := context.TODO()
 	rhcs := runhcs.Runhcs{
 		Debug: true,
 	}

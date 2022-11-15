@@ -24,7 +24,6 @@ import (
 
 	testutilities "github.com/Microsoft/hcsshim/test/internal"
 	testcmd "github.com/Microsoft/hcsshim/test/internal/cmd"
-	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/require"
 	testuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
@@ -165,8 +164,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureContainer)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	alpineLayers := layers.LayerFolders(t, "alpine")
+	layers := linuxImageLayers(context.Background(), t)
 
 	cacheDir := t.TempDir()
 	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
@@ -201,7 +199,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	c1Spec := testutilities.GetDefaultLinuxSpec(t)
-	c1Folders := append(alpineLayers, c1ScratchDir)
+	c1Folders := append(layers, c1ScratchDir)
 	c1Spec.Windows.LayerFolders = c1Folders
 	c1Spec.Process.Args = []string{"echo", "hello", "lcow", "container", "one"}
 	c1Opts := &hcsoci.CreateOptions{
@@ -214,7 +212,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	c2Spec := testutilities.GetDefaultLinuxSpec(t)
-	c2Folders := append(alpineLayers, c2ScratchDir)
+	c2Folders := append(layers, c2ScratchDir)
 	c2Spec.Windows.LayerFolders = c2Folders
 	c2Spec.Process.Args = []string{"echo", "hello", "lcow", "container", "two"}
 	c2Opts := &hcsoci.CreateOptions{
