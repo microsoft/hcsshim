@@ -238,6 +238,11 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 		lopts.AllowOvercommit = false
 		lopts.SecurityPolicyEnabled = true
 	}
+
+	if len(lopts.SecurityPolicy) > 0 {
+		// will only be false if explicitly set false by the annotation. We will otherwise default to true when there is a security policy
+		lopts.EnableScratchEncryption = ParseAnnotationsBool(ctx, a, annotations.EncryptedScratchDisk, true)
+	}
 }
 
 // sets options common to both WCOW and LCOW from annotations
@@ -269,6 +274,15 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
 		specToUVMCreateOptionsCommon(ctx, lopts.Options, s)
+
+		/*
+			WARNING!!!!!!!!!!
+
+			When adding an option here which must match some security policy by default, make sure that the correct default (ie matches
+			a default security policy) is applied in handleSecurityPolicy. Inadvertantly adding an "option" which defaults to false but MUST be
+			true for a default security	policy to work will force the annotation to have be set by the team that owns the box. That will
+			be practically difficult and we	might not find out until a little late in the process.
+		*/
 
 		lopts.EnableColdDiscardHint = ParseAnnotationsBool(ctx, s.Annotations, annotations.EnableColdDiscardHint, lopts.EnableColdDiscardHint)
 		lopts.VPMemDeviceCount = parseAnnotationsUint32(ctx, s.Annotations, annotations.VPMemCount, lopts.VPMemDeviceCount)
