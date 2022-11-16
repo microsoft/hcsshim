@@ -191,6 +191,9 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 
 	var chainPEM string
 	for i := range chain {
+		if i > 0 {
+			chainPEM += "\n"
+		}
 		chainPEM += x509ToPEM(chain[i])
 	}
 

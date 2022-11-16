@@ -2,8 +2,9 @@ package main
 
 import (
 	"flag"
-	"os"
 	"log"
+	"os"
+
 	"github.com/Microsoft/hcsshim/internal/cosesign1"
 	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
 )

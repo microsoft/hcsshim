@@ -20,7 +20,9 @@ import (
 
 	"encoding/base64"
 
+	"github.com/Microsoft/hcsshim/internal/cosesign1"
 	"github.com/Microsoft/hcsshim/internal/debug"
+	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/policy"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
@@ -39,8 +41,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/internal/cosesign1"
-	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
@@ -147,12 +147,6 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 // Short term we cannot store the issuer and feed in the COSE Sign1 protected header, so wrap the payload in some json
 // and put those values in there. Fix is due very soon.
 
-type PayloadWrapper struct {
-	Issuer   string `json:"issuer,omitempty"`
-	Feed     string `json:"feed,omitempty"`
-	Fragment string `json:"fragment,omitempty"`
-}
-
 func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, error) {
 	// Try the DID first
 	didDoc, err := didx509resolver.Resolve(unpacked.ChainPem, did, true)
@@ -164,8 +158,18 @@ func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, er
 	return false, err
 }
 
-// InjectFragment extends current security policy with additional constraints
-// from the incoming fragment.
+/*
+   InjectFragment extends current security policy with additional constraints
+   from the incoming fragment. Note that it is base64 encoded over the bridge/
+
+   There are three checking steps:
+
+	1 - Unpack the cose document and check it was actually signed with the cert chain inside its header
+	2 - Check that the issuer field did:x509 identifier is for that cert chain (ie fingerprint of a non leaf cert
+	    and the subject matches the leaf cert)
+	3 - Check that this issuer/feed match the requirement of the user provided security policy (done in the rego
+	    by LoadFragment)
+*/
 
 func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
 	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
@@ -180,41 +184,22 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 	var unpacked cosesign1.UnpackedCoseSign1
 	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, nil, true)
 
-	// Since EPRS cannot cope with iss/feed today (maybe next week) we MAY have a json payload with issuer and feed tags OR have them in the header
-
 	if err != nil {
 		return fmt.Errorf("InjectFragment failed COSE validation: %s", err.Error())
 	} else {
 		var payloadString = string(unpacked.Payload[:])
 		var issuer = unpacked.Issuer
 		var feed = unpacked.Feed
-		var pubkey = unpacked.Pubkey
 		var chainPem = unpacked.ChainPem
-		var pubcert = unpacked.Pubcert
-		var payload = unpacked.Payload
 
-		log.G(ctx).Tracef("issuer:%s", issuer) // eg the DID:x509:blah....
-		log.G(ctx).Tracef("feed: %s", feed)
-		log.G(ctx).Tracef("cty: %s", unpacked.ContentType)
-		log.G(ctx).Tracef("pubkey: %s", pubkey)
-		log.G(ctx).Tracef("chainPem: %s", chainPem)
-		log.G(ctx).Tracef("pubcert: %s", pubcert)
+		log.G(ctx).Debugf("issuer:%s", issuer) // eg the DID:x509:blah....
+		log.G(ctx).Debugf("feed: %s", feed)
+		log.G(ctx).Debugf("cty: %s", unpacked.ContentType)
+		log.G(ctx).Debugf("chainPem: %s", chainPem)
 		log.G(ctx).Tracef("payload:\n%s\n", payloadString)
 
-		// If the issuer and feed were not present in the COSE_Sign1 protected header assume the
-		// payload is a json document wrapping them along with the rego fragment.
-
-		if len(issuer) == 0 && len(feed) == 0 { // assume payload is json, unwrap that
-			var payloadWrapper PayloadWrapper
-			var err = json.Unmarshal(payload, &payloadWrapper)
-			if err != nil {
-				return fmt.Errorf("failed to decode json fragment wrapper: " + err.Error())
-			}
-			issuer = payloadWrapper.Issuer
-			feed = payloadWrapper.Feed
-			payloadString = payloadWrapper.Fragment
-		} else if len(issuer) == 0 || len(feed) == 0 { // must both be present or neither present
-			return fmt.Errorf("either issuer and feed must both be provided or neither provided in the COSE_Sign1 protected header")
+		if len(issuer) == 0 || len(feed) == 0 { // must both be present
+			return fmt.Errorf("either issuer and feed must both be provided in the COSE_Sign1 protected header")
 		}
 
 		var didMatchesChain, err = checkDIDvsChain(issuer, unpacked)
@@ -223,26 +208,8 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 			return err
 		}
 
-		codeBin, err := base64.StdEncoding.DecodeString(payloadString)
-		if err != nil {
-			log.G(ctx).Printf("failed to decode payload as base64: %s", payloadString)
-			return err
-		}
-		var code = string(codeBin[:])
-
-		// today we will use the public cert in place of the issuer (which ought to be a DID
-		// we can use to check the cert chain that signed this fragment was allowed by the user)
-		// If we were to allow the raw leaf cert like this we would need a framework change to
-		// take the cert in place of DID verification here so then it would be
-		//
-		// err = h.securityPolicyEnforcer.LoadFragment(pubcert, issuer, feed, code)
-		//
-		// There is a debate as to whether we should ignore the issuer in that case, probably not.
-
-		_ = pubkey
-
 		// now offer the payload fragment to the policy
-		err = h.securityPolicyEnforcer.LoadFragment(issuer, feed, code)
+		err = h.securityPolicyEnforcer.LoadFragment(issuer, feed, payloadString)
 		if err != nil {
 			return fmt.Errorf("InjectFragment failed policy load: %s", err.Error())
 		} else {
