@@ -48,11 +48,11 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           path: "go/src/github.com/Microsoft/hcsshim"
       # Install protoc-gen-gogoctrd in D:\bin
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: containerd/containerd
           ref: v1.6.2
@@ -92,7 +92,7 @@ jobs:
     env:
       GOPROXY: "https://proxy.golang.org,direct"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -127,8 +127,8 @@ jobs:
     name: Go Generate
     runs-on: "windows-2019"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Validate go generate
@@ -156,7 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install go
         uses: actions/setup-go@v3
@@ -176,7 +176,7 @@ jobs:
       matrix:
         os: [windows-2019, windows-2022]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -195,7 +195,7 @@ jobs:
       - run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
         working-directory: test
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: test_binaries_${{ matrix.os }}
@@ -228,12 +228,12 @@ jobs:
           echo "${{ github.workspace }}/bin" >> $GITHUB_PATH
           echo "${{ github.workspace }}/src/github.com/containerd/containerd/bin" >> $GITHUB_PATH
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           path: src/github.com/containerd/containerd
           repository: "containerd/containerd"
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           path: src/github.com/Microsoft/hcsshim
 
@@ -344,7 +344,7 @@ jobs:
     needs: [test-windows, test-linux]
     runs-on: "windows-2019"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -366,7 +366,7 @@ jobs:
       - run: go build ./internal/tools/uvmboot
       - run: go build ./internal/tools/zapdir
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: binaries
@@ -390,7 +390,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install go
         uses: actions/setup-go@v3
