@@ -20,9 +20,11 @@ import (
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -84,10 +86,8 @@ var allFeatures = []string{
 var (
 	flagPauseAfterCreateContainerFailure time.Duration
 
-	flagFeatures = testflag.NewFeatureFlag(allFeatures)
-	flagDebug    = flag.Bool("debug",
-		os.Getenv("HCSSHIM_FUNCTIONAL_TESTS_DEBUG") != "",
-		"set logging level to debug [%HCSSHIM_FUNCTIONAL_TESTS_DEBUG%]")
+	flagLogLevel            = testflag.NewLogrusLevel("log-level", defaultLogLevel(), "logrus logging `level`")
+	flagFeatures            = testflag.NewFeatureFlag(allFeatures)
 	flagContainerdNamespace = flag.String("ctr-namespace", hcsOwner,
 		"containerd `namespace` to use when creating OCI specs")
 	flagLCOWLayerPaths = testflag.NewStringSlice("lcow-layer-paths",
@@ -124,13 +124,16 @@ func init() {
 func TestMain(m *testing.M) {
 	flag.Parse()
 
-	lvl := logrus.WarnLevel
-	if *flagDebug {
-		lvl = logrus.DebugLevel
-	}
-	logrus.SetLevel(lvl)
+	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
+	trace.RegisterExporter(&oc.LogrusExporter{})
+
+	// default is stderr, but test2json does not consume stderr, so logs would be out of sync
+	// and powershell considers output on stderr as an error when execing
+	logrus.SetOutput(os.Stdout)
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
-	logrus.Infof("using features %q", flagFeatures.S.Strings())
+	logrus.SetLevel(flagLogLevel.Level)
+
+	logrus.Debugf("using features %q", flagFeatures.S.Strings())
 
 	images := []*layers.LazyImageLayers{alpineImagePaths, nanoserverImagePaths, servercoreImagePaths}
 	for _, l := range images {
@@ -232,4 +235,11 @@ func windowsServercoreImageLayers(ctx context.Context, tb testing.TB) []string {
 // [github.com/containerd/containerd/namespaces.WithNamespace].
 func namespacedContext() context.Context {
 	return namespaces.WithNamespace(context.Background(), *flagContainerdNamespace)
+}
+
+func defaultLogLevel() string {
+	if os.Getenv("HCSSHIM_FUNCTIONAL_TESTS_DEBUG") != "" {
+		return logrus.DebugLevel.String()
+	}
+	return logrus.WarnLevel.String()
 }

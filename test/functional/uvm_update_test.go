@@ -10,12 +10,17 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 
+	"github.com/Microsoft/hcsshim/test/internal/require"
 	"github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 func Test_LCOW_Update_Resources(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+	require.Build(t, osversion.RS5)
+
 	for _, config := range []struct {
 		name     string
 		resource interface{}
