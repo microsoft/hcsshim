@@ -331,6 +331,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
 
+	// TOD SEAN dont use vsock for c.vsock
 	h.containerIDToStdioAccessMutex.Lock()
 	h.containerIDToStdioAccess[id] = allowStdio
 	h.containerIDToStdioAccessMutex.Unlock()
@@ -593,6 +594,8 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 		if params.OCIProcess == nil {
 			// We've already done policy enforcement for creating a container so
 			// there's no policy enforcement to do for starting
+
+			// TODO not needed
 			h.containerIDToStdioAccessMutex.Lock()
 			allowStdioAccess := h.containerIDToStdioAccess[containerID]
 			h.containerIDToStdioAccessMutex.Unlock()
@@ -691,6 +694,7 @@ func (h *Host) runExternalProcess(
 	conSettings stdio.ConnectionSettings,
 ) (_ int, err error) {
 	var stdioSet *stdio.ConnectionSet
+	// TODO SEAN: can't be vsock here
 	stdioSet, err = stdio.Connect(h.vsock, conSettings)
 	if err != nil {
 		return -1, err
