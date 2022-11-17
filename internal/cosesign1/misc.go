@@ -99,8 +99,8 @@ func base64CertToPEM(base64Cert string) string {
 }
 
 func keyToPEM(key any) string {
- 	base64Key := keyToBase64(key)
- 	return base64PublicKeyToPEM(base64Key)
+	base64Key := keyToBase64(key)
+	return base64PublicKeyToPEM(base64Key)
 }
 
 func base64PublicKeyToPEM(base64Key string) string {
