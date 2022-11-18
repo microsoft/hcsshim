@@ -293,7 +293,7 @@ func (p containerExecProcess) marshalRego() string {
 	command := stringArray(p.Command).marshalRego()
 	signals := signalArray(p.Signals).marshalRego()
 
-	return fmt.Sprintf(`{"command": %s, "signals": %s, "allow_stdio_access": %t}`, command, signals, p.AllowStdioAccess)
+	return fmt.Sprintf(`{"command": %s, "signals": %s}`, command, signals)
 }
 
 func writeExecProcesses(builder *strings.Builder, execProcesses []containerExecProcess, indent string) {

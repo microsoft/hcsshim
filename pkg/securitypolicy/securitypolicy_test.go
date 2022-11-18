@@ -943,9 +943,8 @@ func generateContainerInitProcess(r *rand.Rand) containerInitProcess {
 
 func generateContainerExecProcess(r *rand.Rand) containerExecProcess {
 	return containerExecProcess{
-		Command:          generateCommand(r),
-		Signals:          generateListOfSignals(r, 0, maxSignalNumber),
-		AllowStdioAccess: randBool(r),
+		Command: generateCommand(r),
+		Signals: generateListOfSignals(r, 0, maxSignalNumber),
 	}
 }
 

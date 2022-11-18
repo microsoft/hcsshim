@@ -93,9 +93,8 @@ type MountConfig struct {
 // ExecProcessConfig contains toml or JSON config for exec process security
 // policy constraint description
 type ExecProcessConfig struct {
-	Command          []string         `json:"command" toml:"command"`
-	Signals          []syscall.Signal `json:"signals" toml:"signals"`
-	AllowStdioAccess bool             `json:"allow_stdio_access" toml:"allow_stdio_access"`
+	Command []string         `json:"command" toml:"command"`
+	Signals []syscall.Signal `json:"signals" toml:"signals"`
 }
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables

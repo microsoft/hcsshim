@@ -3135,7 +3135,6 @@ func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
 func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
 	gc.containers[0].AllowStdioAccess = true
-	gc.containers[0].ExecProcesses[0].AllowStdioAccess = true
 	gc.externalProcesses = generateExternalProcesses(testRand)
 	gc.externalProcesses[0].AllowStdioAccess = true
 	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
@@ -3213,7 +3212,6 @@ func Test_Rego_Container_StdioAccess_NotDecidable(t *testing.T) {
 	gc.containers = append(gc.containers, container1)
 
 	container0.ExecProcesses = append(container0.ExecProcesses, container0.ExecProcesses[0].clone())
-	container0.ExecProcesses[0].AllowStdioAccess = true
 
 	gc.externalProcesses = generateExternalProcesses(testRand)
 	gc.externalProcesses = append(gc.externalProcesses, gc.externalProcesses[0].clone())
@@ -4308,9 +4306,8 @@ func (p externalProcess) clone() *externalProcess {
 
 func (p containerExecProcess) clone() containerExecProcess {
 	return containerExecProcess{
-		Command:          copyStrings(p.Command),
-		Signals:          p.Signals,
-		AllowStdioAccess: p.AllowStdioAccess,
+		Command: copyStrings(p.Command),
+		Signals: p.Signals,
 	}
 }
 

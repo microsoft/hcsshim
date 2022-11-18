@@ -137,8 +137,6 @@ type containerExecProcess struct {
 	Command []string `json:"command"`
 	// A list of signals that are allowed to be sent to this process
 	Signals []syscall.Signal `json:"signals"`
-	// Whether to allow the capture of standard out and standard error
-	AllowStdioAccess bool
 }
 
 type externalProcess struct {
