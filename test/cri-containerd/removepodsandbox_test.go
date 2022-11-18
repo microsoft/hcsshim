@@ -85,6 +85,8 @@ func runContainerInSandboxTest(t *testing.T, tc *TestConfig) {
 }
 
 func Test_RunPodSandbox_Without_Sandbox_Stop(t *testing.T) {
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	tests := []TestConfig{
 		{
 			name:             "WCOW_Process",
@@ -123,6 +125,8 @@ func Test_RunPodSandbox_Without_Sandbox_Stop(t *testing.T) {
 }
 
 func Test_RunContainer_Without_Sandbox_Stop(t *testing.T) {
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	tests := []TestConfig{
 		{
 			name:             "WCOW_Process",

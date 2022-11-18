@@ -419,9 +419,10 @@ func Test_RunContainer_HostVolumes_JobContainer_WCOW(t *testing.T) {
 }
 
 func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
-	client := newTestRuntimeClient(t)
+	requireFeatures(t, featureWCOWProcess, featureHostProcess)
 	require.ExactBuild(t, osversion.RS5)
 
+	client := newTestRuntimeClient(t)
 	dir := t.TempDir()
 
 	tmpfn := filepath.Join(dir, "tmpfile")
@@ -451,49 +452,43 @@ func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
 	}
 
 	type config struct {
-		name             string
-		containerName    string
-		requiredFeatures []string
-		sandboxImage     string
-		containerImage   string
-		exec             []string
-		mounts           []*runtime.Mount
+		name           string
+		containerName  string
+		sandboxImage   string
+		containerImage string
+		exec           []string
+		mounts         []*runtime.Mount
 	}
 
 	tests := []config{
 		{
-			name:             "JobContainer_VolumeMount_DriveLetter",
-			containerName:    t.Name() + "-Container-DriveLetter",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageWindowsNanoserver,
-			mounts:           mountDriveLetter,
-			exec:             []string{"cmd", "/c", "dir", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\tmpfile"},
+			name:           "JobContainer_VolumeMount_DriveLetter",
+			containerName:  t.Name() + "-Container-DriveLetter",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
+			mounts:         mountDriveLetter,
+			exec:           []string{"cmd", "/c", "dir", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\tmpfile"},
 		},
 		{
-			name:             "JobContainer_VolumeMount_NoDriveLetter",
-			containerName:    t.Name() + "-Container-NoDriveLetter",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageWindowsNanoserver,
-			mounts:           mountNoDriveLetter,
-			exec:             []string{"cmd", "/c", "dir", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\tmpfile"},
+			name:           "JobContainer_VolumeMount_NoDriveLetter",
+			containerName:  t.Name() + "-Container-NoDriveLetter",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
+			mounts:         mountNoDriveLetter,
+			exec:           []string{"cmd", "/c", "dir", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\tmpfile"},
 		},
 		{
-			name:             "JobContainer_VolumeMount_SingleFile",
-			containerName:    t.Name() + "-Container-SingleFile",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageWindowsNanoserver,
-			mounts:           mountSingleFile,
-			exec:             []string{"cmd", "/c", "type", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\testfile"},
+			name:           "JobContainer_VolumeMount_SingleFile",
+			containerName:  t.Name() + "-Container-SingleFile",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
+			mounts:         mountSingleFile,
+			exec:           []string{"cmd", "/c", "type", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\testfile"},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			requireFeatures(t, test.requiredFeatures...)
-
 			requiredImages := []string{test.sandboxImage, test.containerImage}
 			pullRequiredImages(t, requiredImages)
 
@@ -525,25 +520,25 @@ func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
 }
 
 func Test_RunContainer_JobContainer_Environment(t *testing.T) {
+	requireFeatures(t, featureWCOWProcess, featureHostProcess)
+
 	client := newTestRuntimeClient(t)
 
 	type config struct {
-		name             string
-		containerName    string
-		requiredFeatures []string
-		sandboxImage     string
-		containerImage   string
-		env              []*runtime.KeyValue
-		exec             []string
+		name           string
+		containerName  string
+		sandboxImage   string
+		containerImage string
+		env            []*runtime.KeyValue
+		exec           []string
 	}
 
 	tests := []config{
 		{
-			name:             "JobContainer_Env_NoMountPoint",
-			containerName:    t.Name() + "-Container-WithNoMountPoint",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageWindowsNanoserver,
+			name:           "JobContainer_Env_NoMountPoint",
+			containerName:  t.Name() + "-Container-WithNoMountPoint",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
 			env: []*runtime.KeyValue{
 				{
 					Key: "PATH", Value: "C:\\Windows\\system32;C:\\Windows",
@@ -552,11 +547,10 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 			exec: []string{"cmd", "/c", "IF", "%PATH%", "==", "C:\\Windows\\system32;C:\\Windows", "( exit 0 )", "ELSE", "(exit -1)"},
 		},
 		{
-			name:             "JobContainer_VolumeMount_WithMountPoint",
-			containerName:    t.Name() + "-Container-WithMountPoint",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageWindowsNanoserver,
+			name:           "JobContainer_VolumeMount_WithMountPoint",
+			containerName:  t.Name() + "-Container-WithMountPoint",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
 			env: []*runtime.KeyValue{
 				{
 					Key: "PATH", Value: "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows",
@@ -568,8 +562,6 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			requireFeatures(t, test.requiredFeatures...)
-
 			requiredImages := []string{test.sandboxImage, test.containerImage}
 			pullRequiredImages(t, requiredImages)
 
@@ -602,57 +594,52 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 }
 
 func Test_RunContainer_WorkingDirectory_JobContainer_WCOW(t *testing.T) {
-	client := newTestRuntimeClient(t)
+	requireFeatures(t, featureWCOWProcess, featureHostProcess)
 	require.ExactBuild(t, osversion.RS5)
 
+	client := newTestRuntimeClient(t)
+
 	type config struct {
-		name             string
-		containerName    string //nolint:unused // may be used in future tests
-		workDir          string
-		requiredFeatures []string
-		sandboxImage     string
-		containerImage   string
-		cmd              []string
+		name           string
+		containerName  string //nolint:unused // may be used in future tests
+		workDir        string
+		sandboxImage   string
+		containerImage string
+		cmd            []string
 	}
 
 	tests := []config{
 		{
-			name:             "JobContainer_WorkDir_DriveLetter",
-			workDir:          "C:\\go\\",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageJobContainerWorkDir,
-			cmd:              []string{"src\\workdir\\workdir.exe"},
+			name:           "JobContainer_WorkDir_DriveLetter",
+			workDir:        "C:\\go\\",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageJobContainerWorkDir,
+			cmd:            []string{"src\\workdir\\workdir.exe"},
 		},
 		{
-			name:             "JobContainer_WorkDir_NoDriveLetter",
-			workDir:          "/go",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageJobContainerWorkDir,
-			cmd:              []string{"src/workdir/workdir.exe"},
+			name:           "JobContainer_WorkDir_NoDriveLetter",
+			workDir:        "/go",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageJobContainerWorkDir,
+			cmd:            []string{"src/workdir/workdir.exe"},
 		},
 		{
-			name:             "JobContainer_WorkDir_Default", // Just use the workdir from the image, which is C:\\go\\src\\workdir
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageJobContainerWorkDir,
-			cmd:              []string{"workdir.exe"},
+			name:           "JobContainer_WorkDir_Default", // Just use the workdir from the image, which is C:\\go\\src\\workdir
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageJobContainerWorkDir,
+			cmd:            []string{"workdir.exe"},
 		},
 		{
-			name:             "JobContainer_WorkDir_EnvVar", // Test that putting the envvar in the workdir functions.
-			workDir:          "$env:CONTAINER_SANDBOX_MOUNT_POINT\\go\\src\\workdir\\",
-			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
-			sandboxImage:     imageWindowsNanoserver,
-			containerImage:   imageJobContainerWorkDir,
-			cmd:              []string{"workdir.exe"},
+			name:           "JobContainer_WorkDir_EnvVar", // Test that putting the envvar in the workdir functions.
+			workDir:        "$env:CONTAINER_SANDBOX_MOUNT_POINT\\go\\src\\workdir\\",
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageJobContainerWorkDir,
+			cmd:            []string{"workdir.exe"},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			requireFeatures(t, test.requiredFeatures...)
-
 			requiredImages := []string{test.sandboxImage, test.containerImage}
 			pullRequiredImages(t, requiredImages)
 

@@ -183,6 +183,7 @@ func Test_StopContainer_ReusePod_LCOW(t *testing.T) {
 func Test_GracefulTermination(t *testing.T) {
 	// The test image is based on 2022 servercore and nanoserver images. Ensure
 	// that we are running on the correct OS version
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 	require.Build(t, osversion.V21H2Server)
 
 	for name, tc := range map[string]struct {
