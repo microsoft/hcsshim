@@ -157,7 +157,7 @@ valid_envs_for_all(items) := envs {
         some item in items
         envs := valid_envs_subset(item.env_rules)
     ]
-    
+
     # we want to select the most specific matches, which in this
     # case consists of those matches which require dropping the
     # fewest environment variables (i.e. the longest lists)
@@ -315,7 +315,6 @@ default exec_in_container := {"allowed": false}
 
 exec_in_container := {"matches": matches,
                       "env_list": env_list,
-                      "allow_stdio_access": allow_stdio_access,
                       "allowed": true} {
     container_started
     # narrow our matches based upon the process requested
@@ -337,17 +336,6 @@ exec_in_container := {"matches": matches,
     ]
 
     count(containers) > 0
-
-    stdio_flags := [process.allow_stdio_access |
-        container := containers[_]
-        some process in container.exec_processes
-        command_ok(process.command)
-    ]
-    
-    allow_stdio_access := stdio_flags[0]
-    every flag in stdio_flags {
-        flag == allow_stdio_access
-    }
 
     matches := {
         "action": "update",
@@ -746,11 +734,11 @@ env_matches(env) {
 
 errors[envError] {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
-    bad_envs := [env | 
+    bad_envs := [env |
         env := input.envList[_]
         not env_matches(env)]
     count(bad_envs) > 0
-    envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])    
+    envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])
 }
 
 default workingDirectory_matches := false
@@ -779,7 +767,7 @@ mount_matches(mount) {
 
 errors[mountError] {
     input.rule == "create_container"
-    bad_mounts := [mount.destination | 
+    bad_mounts := [mount.destination |
         mount := input.mounts[_]
         not mount_matches(mount)]
     count(bad_mounts) > 0

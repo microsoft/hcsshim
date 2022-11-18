@@ -779,7 +779,7 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
 }
 
-func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (toKeep EnvList, stdioAccessAllowed bool, err error) {
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
 	input := inputData{
 		"containerID": containerID,
 		"argList":     argList,
@@ -789,30 +789,15 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, arg
 
 	results, err := policy.enforce("exec_in_container", input)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	toKeep, err = getEnvsToKeep(envList, results)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
-	if value, ok := results["allow_stdio_access"]; ok {
-		if value, ok := value.(bool); ok {
-			stdioAccessAllowed = value
-		} else {
-			// we got a non-boolean. that's a clear error
-			// alert that we got an error rather than setting a default value
-			return nil, false, errors.New("`allow_stdio_access` needs to be a boolean")
-		}
-	} else {
-		// Policy writer didn't specify an `allow_studio_access` value.
-		// We have two options, return an error or set a default value.
-		// We are setting a default value: do not allow
-		stdioAccessAllowed = false
-	}
-
-	return toKeep, stdioAccessAllowed, err
+	return toKeep, err
 }
 
 func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (toKeep EnvList, stdioAccessAllowed bool, err error) {

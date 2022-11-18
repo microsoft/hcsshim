@@ -1293,7 +1293,7 @@ func Test_Rego_ExecInContainerPolicy(t *testing.T) {
 		process := selectExecProcess(container.container.ExecProcesses, testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -1322,7 +1322,7 @@ func Test_Rego_ExecInContainerPolicy_No_Matches(t *testing.T) {
 		process := generateContainerExecProcess(testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
 		if err == nil {
 			t.Error("Test unexpectedly passed")
 			return false
@@ -1348,7 +1348,7 @@ func Test_Rego_ExecInContainerPolicy_Command_No_Match(t *testing.T) {
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
 
 		command := generateCommand(testRand)
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, command, envList, container.container.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, command, envList, container.container.WorkingDir)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1377,7 +1377,7 @@ func Test_Rego_ExecInContainerPolicy_Some_Env_Not_Allowed(t *testing.T) {
 
 		envList := generateEnvironmentVariables(testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1406,7 +1406,7 @@ func Test_Rego_ExecInContainerPolicy_WorkingDir_No_Match(t *testing.T) {
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
 		workingDir := generateWorkingDir(testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, workingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, workingDir)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1439,7 +1439,7 @@ func Test_Rego_ExecInContainerPolicy_DropEnvs(t *testing.T) {
 		extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 		envList := append(expected, extraEnvs...)
-		actual, _, err := tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
+		actual, err := tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir)
 
 		if err != nil {
 			t.Errorf("expected exec in container process to be allowed. It wasn't: %v", err)
@@ -1507,7 +1507,7 @@ exec_external := {
 		}
 
 		envList = generateEnvs(envSet)
-		toKeep, _, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "")
+		toKeep, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "")
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from exec_in_container")
 			return false
@@ -1534,12 +1534,12 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 		"allowed": true,
 		"env_list": {"an_object": 1}
 	}
-	
+
 	exec_in_container := {
 		"allowed": true,
 		"env_list": "string"
 	}
-	
+
 	exec_external := {
 		"allowed": true,
 		"env_list": true
@@ -1557,7 +1557,7 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 		t.Errorf("incorrected error message from call to create_container")
 	}
 
-	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
+	_, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received string" {
@@ -1578,12 +1578,12 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 		"allowed": true,
 		"env_list": ["one", "two", 3]
 	}
-	
+
 	exec_in_container := {
 		"allowed": true,
 		"env_list": ["one", true, "three"]
 	}
-	
+
 	exec_external := {
 		"allowed": true,
 		"env_list": ["one", ["two"], "three"]
@@ -1601,7 +1601,7 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 		t.Errorf("incorrected error message from call to create_container")
 	}
 
-	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
+	_, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received bool" {
@@ -2089,7 +2089,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Allowed(t *testing.T) {
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -2140,7 +2140,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Not_Allowed(t *testing.T
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -2191,7 +2191,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_Command(t *testing.T
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -2243,7 +2243,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID(t *testi
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		_, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -3159,21 +3159,6 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 		t.Errorf("expected allow_stdio_access to be true")
 	}
 
-	_, allow_stdio_access, err = tc.policy.EnforceExecInContainerPolicy(
-		tc.containerID,
-		gc.containers[0].ExecProcesses[0].Command,
-		tc.envList,
-		tc.workingDir,
-	)
-
-	if err != nil {
-		t.Errorf("exec_in_container not allowed: %v", err)
-	}
-
-	if !allow_stdio_access {
-		t.Errorf("expected allow_stdio_access to be true")
-	}
-
 	envList := buildEnvironmentVariablesFromEnvRules(gc.externalProcesses[0].envRules, testRand)
 	_, allow_stdio_access, err = tc.policy.EnforceExecExternalProcessPolicy(
 		gc.externalProcesses[0].command,
@@ -3254,50 +3239,6 @@ func Test_Rego_Container_StdioAccess_NotDecidable(t *testing.T) {
 	if allow_stdio_access {
 		t.Errorf("expected allow_stdio_access to be false")
 	}
-}
-
-func Test_Rego_ExecInContainer_StdioAccess_NotAllowed(t *testing.T) {
-	gc := generateConstraints(testRand, 1)
-	container0 := gc.containers[0]
-	container1, err := container0.clone()
-	if err != nil {
-		t.Fatalf("unable to clone container: %v", err)
-	}
-
-	gc.containers = append(gc.containers, container1)
-
-	container0.ExecProcesses[0].AllowStdioAccess = !container0.ExecProcesses[0].AllowStdioAccess
-
-	policy, err := newRegoPolicy(gc.toPolicy().marshalRego(), []oci.Mount{}, []oci.Mount{})
-	if err != nil {
-		t.Fatalf("error marshaling policy: %v", err)
-	}
-
-	run0, err := runContainer(policy, container0, []mountInternal{}, []mountInternal{})
-	if err != nil {
-		t.Fatalf("error running container 0: %v", err)
-	}
-
-	_, err = runContainer(policy, container1, []mountInternal{}, []mountInternal{})
-	if err != nil {
-		t.Fatalf("error running container 1: %v", err)
-	}
-
-	_, allow_stdio_access, err := policy.EnforceExecInContainerPolicy(
-		run0.containerID,
-		run0.container.ExecProcesses[0].Command,
-		run0.envList,
-		run0.container.WorkingDir,
-	)
-
-	if err == nil {
-		t.Errorf("expected exec_in_container to not be allowed")
-	}
-
-	if allow_stdio_access {
-		t.Errorf("expected allow_stdio_access to be false")
-	}
-
 }
 
 func Test_Rego_ExecExternal_StdioAccess_NotAllowed(t *testing.T) {

@@ -58,17 +58,15 @@ type Host struct {
 	externalProcesses      map[int]*externalProcess
 
 	// Rtime is the Runtime interface used by the GCS core.
-	rtime runtime.Runtime
-	vsock transport.Transport
+	rtime            runtime.Runtime
+	vsock            transport.Transport
+	devNullTransport transport.Transport
 
 	// state required for the security policy enforcement
 	policyMutex               sync.Mutex
 	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
 	securityPolicyEnforcerSet bool
 	uvmReferenceInfo          string
-
-	containerIDToStdioAccessMutex sync.Mutex
-	containerIDToStdioAccess      map[string]bool
 
 	// logging target
 	logWriter io.Writer
@@ -83,11 +81,11 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		externalProcesses:         make(map[int]*externalProcess),
 		rtime:                     rtime,
 		vsock:                     vsock,
+		devNullTransport:          &transport.DevNullTransport{},
 		securityPolicyEnforcerSet: false,
 		securityPolicyEnforcer:    initialEnforcer,
 		logWriter:                 logWriter,
 		hostMounts:                newHostMounts(),
-		containerIDToStdioAccess:  make(map[string]bool),
 	}
 }
 
@@ -331,10 +329,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
 
-	// TOD SEAN dont use vsock for c.vsock
-	h.containerIDToStdioAccessMutex.Lock()
-	h.containerIDToStdioAccess[id] = allowStdio
-	h.containerIDToStdioAccessMutex.Unlock()
+	if !allowStdio {
+		// stdio access isn't allow for this container. Switch to the /dev/null
+		// transport that will eat all input/ouput.
+		c.vsock = h.devNullTransport
+	}
 
 	if envToKeep != nil {
 		settings.OCISpecification.Process.Env = []string(envToKeep)
@@ -582,48 +581,27 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			params.Environment = processOCIEnvToParam(envToKeep)
 		}
 
+		var transport = h.vsock
 		if !allowStdioAccess {
-			conSettings.StdIn = nil
-			conSettings.StdOut = nil
-			conSettings.StdErr = nil
+			transport = h.devNullTransport
 		}
-
-		pid, err = h.runExternalProcess(ctx, params, conSettings)
+		pid, err = h.runExternalProcess(ctx, params, conSettings, transport)
 	} else if c, err = h.GetCreatedContainer(containerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
 		if params.OCIProcess == nil {
 			// We've already done policy enforcement for creating a container so
 			// there's no policy enforcement to do for starting
-
-			// TODO not needed
-			h.containerIDToStdioAccessMutex.Lock()
-			allowStdioAccess := h.containerIDToStdioAccess[containerID]
-			h.containerIDToStdioAccessMutex.Unlock()
-
-			if !allowStdioAccess {
-				conSettings.StdIn = nil
-				conSettings.StdOut = nil
-				conSettings.StdErr = nil
-			}
-
 			pid, err = c.Start(ctx, conSettings)
 		} else {
 			// Windows uses a different field for command, there's no enforcement
 			// around this yet for Windows so this is Linux specific at the moment.
-			var allowStdioAccess bool
-			envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(containerID, params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
+			envToKeep, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(containerID, params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
 			if err != nil {
 				return pid, errors.Wrapf(err, "exec in container denied due to policy")
 			}
 
 			if envToKeep != nil {
 				params.OCIProcess.Env = envToKeep
-			}
-
-			if !allowStdioAccess {
-				conSettings.StdIn = nil
-				conSettings.StdOut = nil
-				conSettings.StdErr = nil
 			}
 
 			pid, err = c.ExecProcess(ctx, params.OCIProcess, conSettings)
@@ -692,10 +670,10 @@ func (h *Host) runExternalProcess(
 	ctx context.Context,
 	params prot.ProcessParameters,
 	conSettings stdio.ConnectionSettings,
+	transport transport.Transport,
 ) (_ int, err error) {
 	var stdioSet *stdio.ConnectionSet
-	// TODO SEAN: can't be vsock here
-	stdioSet, err = stdio.Connect(h.vsock, conSettings)
+	stdioSet, err = stdio.Connect(transport, conSettings)
 	if err != nil {
 		return -1, err
 	}
