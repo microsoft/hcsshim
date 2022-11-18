@@ -4,9 +4,12 @@ package main
 
 import (
 	gcontext "context"
+	"os"
+	"path/filepath"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -56,6 +59,20 @@ var createScratchCommand = cli.Command{
 		// Default SCSI controller count is 4, we don't need that for this UVM,
 		// bring it back to 1 to avoid any confusion with SCSI controller numbers.
 		opts.SCSIControllerCount = 1
+
+		// Check if a guest state file is present, if so, use that to boot scratch UVM.
+		_, stErr := os.Stat(filepath.Join(uvm.DefaultLCOWOSBootFilesPath(), uvm.GuestStateFile))
+		if stErr != nil {
+			log.G(ctx).Debug("unable to stat GuestStateFile")
+		} else {
+			// SNP UVMs use more memory, so bump it to 512MB
+			opts.MemorySizeInMB = 512
+			// This will enable the VMGS code path
+			opts.SecurityPolicyEnabled = true
+			opts.PreferredRootFSType = uvm.PreferredRootFSTypeNA
+			opts.GuestStateFile = uvm.GuestStateFile
+			opts.AllowOvercommit = false
+		}
 
 		sizeGB := uint32(context.Uint("sizeGB"))
 		if sizeGB == 0 {

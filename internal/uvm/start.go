@@ -285,7 +285,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		if err := uvm.SetConfidentialUVMOptions(ctx,
 			WithSecurityPolicy(uvm.confidentialUVMOptions.SecurityPolicy),
 			WithSecurityPolicyEnforcer(uvm.confidentialUVMOptions.SecurityPolicyEnforcer),
-			WithUVMReferenceInfo(defaultLCOWOSBootFilesPath(), uvm.confidentialUVMOptions.UVMReferenceInfoFile),
+			WithUVMReferenceInfo(DefaultLCOWOSBootFilesPath(), uvm.confidentialUVMOptions.UVMReferenceInfoFile),
 		); err != nil {
 			return err
 		}
