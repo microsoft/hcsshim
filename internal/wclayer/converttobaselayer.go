@@ -20,8 +20,8 @@ import (
 var hiveNames = []string{"DEFAULT", "SAM", "SECURITY", "SOFTWARE", "SYSTEM"}
 
 // Ensure the given file exists as an ordinary file, and create a minimal hive file if not.
-func ensureHive(path string, root *os.File) error {
-	_, err := safefile.LstatRelative(path, root)
+func ensureHive(path string, root *os.File) (err error) {
+	_, err = safefile.LstatRelative(path, root)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("accessing %s: %w", path, err)
 	}
@@ -31,22 +31,33 @@ func ensureHive(path string, root *os.File) error {
 		return fmt.Errorf("failed to get OS version")
 	}
 
-	fullPath, err := longpath.LongAbs(filepath.Join(root.Name(), path))
+	var fullPath string
+	fullPath, err = longpath.LongAbs(filepath.Join(root.Name(), path))
 	if err != nil {
 		return fmt.Errorf("getting path: %w", err)
 	}
 
 	var key syscall.Handle
-	if err := winapi.ORCreateHive(&key); err != nil {
+	err = winapi.ORCreateHive(&key)
+	if err != nil {
 		return fmt.Errorf("creating hive: %w", err)
 	}
 
-	hivePath, err := syscall.UTF16PtrFromString(fullPath)
+	defer func() {
+		closeErr := winapi.ORCloseHive(&key)
+		if closeErr != nil {
+			err = fmt.Errorf("closing hive key: %w", closeErr)
+		}
+	}()
+
+	var hivePath *uint16
+	hivePath, err = syscall.UTF16PtrFromString(fullPath)
 	if err != nil {
 		return fmt.Errorf("getting path: %w", err)
 	}
 
-	if err := winapi.ORSaveHive(key, hivePath, version.MajorVersion, version.MinorVersion); err != nil {
+	err = winapi.ORSaveHive(key, hivePath, version.MajorVersion, version.MinorVersion)
+	if err != nil {
 		return fmt.Errorf("saving hive: %w", err)
 	}
 

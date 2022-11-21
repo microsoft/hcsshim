@@ -85,6 +85,7 @@ var (
 	procRtlNtStatusToDosError                  = modntdll.NewProc("RtlNtStatusToDosError")
 	procORCreateHive                           = modoffreg.NewProc("ORCreateHive")
 	procORSaveHive                             = modoffreg.NewProc("ORSaveHive")
+	procORCloseHive                            = modoffreg.NewProc("ORCloseHive")
 )
 
 func LogonUser(username *uint16, domain *uint16, password *uint16, logonType uint32, logonProvider uint32, token *windows.Token) (err error) {
@@ -390,6 +391,14 @@ func ORCreateHive(key *syscall.Handle) (regerrno error) {
 
 func ORSaveHive(key syscall.Handle, file *uint16, OsMajorVersion uint32, OsMinorVersion uint32) (regerrno error) {
 	r0, _, _ := syscall.Syscall6(procORSaveHive.Addr(), 4, uintptr(key), uintptr(unsafe.Pointer(file)), uintptr(OsMajorVersion), uintptr(OsMinorVersion), 0, 0)
+	if r0 != 0 {
+		regerrno = syscall.Errno(r0)
+	}
+	return
+}
+
+func ORCloseHive(key *syscall.Handle) (regerrno error) {
+	r0, _, _ := syscall.Syscall(procORCloseHive.Addr(), 1, uintptr(unsafe.Pointer(key)), 0, 0)
 	if r0 != 0 {
 		regerrno = syscall.Errno(r0)
 	}
