@@ -4,6 +4,7 @@
 package securitypolicy
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/blang/semver/v4"
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/rego"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -36,6 +38,32 @@ const (
 	maxPlan9MountTargetLength                  = 64
 	maxPlan9MountIndex                         = 16
 )
+
+func Test_RegoTemplates(t *testing.T) {
+	query := rego.New(
+		rego.Query("data.api"),
+		rego.Module("api.rego", apiCode))
+
+	ctx := context.Background()
+	resultSet, err := query.Eval(ctx)
+	if err != nil {
+		t.Fatalf("unable to query API enforcement points: %s", err)
+	}
+
+	apiRules := resultSet[0].Expressions[0].Value.(map[string]interface{})
+	apiSVN := apiRules["svn"].(string)
+	enforcementPoints := apiRules["enforcement_points"].(map[string]interface{})
+
+	err = verifyPolicyRules(apiSVN, enforcementPoints, policyRegoTemplate)
+	if err != nil {
+		t.Errorf("Policy Rego Template is invalid: %s", err)
+	}
+
+	err = verifyPolicyRules(apiSVN, enforcementPoints, openDoorRegoTemplate)
+	if err != nil {
+		t.Errorf("Open Door Rego Template is invalid: %s", err)
+	}
+}
 
 func Test_MarshalRego_Policy(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
@@ -4263,4 +4291,42 @@ func setupRegoScratchMountTest(
 	return &regoScratchMountPolicyTestConfig{
 		policy: policy,
 	}, nil
+}
+
+func verifyPolicyRules(apiSVN string, enforcementPoints map[string]interface{}, policyCode string) error {
+	query := rego.New(
+		rego.Query("data.policy"),
+		rego.Module("policy.rego", policyCode),
+		rego.Module("framework.rego", frameworkCode))
+
+	ctx := context.Background()
+	resultSet, err := query.Eval(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to query policy template rules: %w", err)
+	}
+
+	policyTemplateRules := resultSet[0].Expressions[0].Value.(map[string]interface{})
+	policyTemplateAPISVN := policyTemplateRules["api_svn"].(string)
+
+	if policyTemplateAPISVN != apiSVN {
+		return fmt.Errorf("Policy template SVN != api SVN: %s != %s", apiSVN, policyTemplateAPISVN)
+	}
+
+	for rule := range enforcementPoints {
+		if _, ok := policyTemplateRules[rule]; !ok {
+			return fmt.Errorf("Rule %s in API is missing from policy template", rule)
+		}
+	}
+
+	for rule := range policyTemplateRules {
+		if rule == "api_svn" || rule == "reason" {
+			continue
+		}
+
+		if _, ok := enforcementPoints[rule]; !ok {
+			return fmt.Errorf("Rule %s in policy template is missing from API", rule)
+		}
+	}
+
+	return nil
 }
