@@ -5,6 +5,7 @@ package cri_containerd
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,10 +52,11 @@ func Test_ContainerdRestart_LCOW(t *testing.T) {
 	startContainer(t, client, ctx, containerID)
 	defer stopContainer(t, client, ctx, containerID)
 
-	t.Log("Restart containerd")
+	t.Log("Restarting containerd")
 	stopContainerd(t)
 	startContainerd(t)
 	client = newTestRuntimeClient(t)
+	waitForCRI(ctx, t, client, 15*time.Second)
 
 	containerStatus, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{ContainerId: containerID})
 	if err != nil {
@@ -312,9 +314,7 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 				containerID := createContainer(t, client, ctx, request)
 				startContainer(t, client, ctx, containerID)
 				defer removeContainer(t, client, ctx, containerID)
-				defer func() {
-					stopContainer(t, client, ctx, containerID)
-				}()
+				defer stopContainer(t, client, ctx, containerID)
 
 				startExecRequest := &runtime.ExecSyncRequest{
 					ContainerId: containerID,
@@ -354,6 +354,8 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 					time.Sleep(time.Second * 1)
 					stopContainerd(t)
 					startContainerd(t)
+					client = newTestRuntimeClient(t)
+					waitForCRI(ctx, t, client, 15*time.Second)
 				}
 
 				newPodID := runPodSandbox(t, client, ctx, sandboxRequest)
@@ -373,6 +375,44 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 					t.Fatalf("expected %q, got: %q", tt.ExpectedResult, string(req.Stdout))
 				}
 			})
+		}
+	}
+}
+
+func waitForCRI(ctx context.Context, tb testing.TB, client runtime.RuntimeServiceClient, timeout time.Duration) {
+	tb.Helper()
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ch := make(chan error)
+	defer close(ch)
+
+	go func() {
+		sleep := timeout / 10
+		for {
+			select {
+			case <-ctx.Done():
+				// context timed out or was cancelled
+				return
+			default:
+			}
+
+			_, err := client.Version(ctx, &runtime.VersionRequest{})
+			if err == nil || !strings.Contains(err.Error(), "server is not initialized yet") {
+				ch <- err
+				return
+			}
+			tb.Logf("CRI is not yet initialized, sleeping for %s", sleep.String())
+			time.Sleep(sleep)
+		}
+	}()
+
+	select {
+	case err := <-ctx.Done():
+		tb.Fatalf("could not wait for CRI plugin to initialize: %v", err)
+	case err := <-ch:
+		if err != nil {
+			tb.Fatalf("error while checking CRI plugin to initialization status: %v", err)
 		}
 	}
 }
