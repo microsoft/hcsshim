@@ -13,7 +13,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 type ConfidentialUVMOpt func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error
@@ -21,14 +20,6 @@ type ConfidentialUVMOpt func(ctx context.Context, r *guestresource.LCOWConfident
 // WithSecurityPolicy sets the desired security policy for the resource.
 func WithSecurityPolicy(policy string) ConfidentialUVMOpt {
 	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
-		if policy == "" {
-			openDoorPolicy := securitypolicy.NewOpenDoorPolicy()
-			policyString, err := openDoorPolicy.EncodeToString()
-			if err != nil {
-				return err
-			}
-			policy = policyString
-		}
 		r.EncodedSecurityPolicy = policy
 		return nil
 	}
