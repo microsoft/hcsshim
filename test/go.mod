@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/Microsoft/go-winio v0.6.0
 	github.com/Microsoft/hcsshim v0.9.4
-	github.com/containerd/cgroups v1.0.3
+	github.com/containerd/cgroups v1.0.5-0.20221103113851-f0f76178df2b
 	github.com/containerd/containerd v1.6.6
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.0

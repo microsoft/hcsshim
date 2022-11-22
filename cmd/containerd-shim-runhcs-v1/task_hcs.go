@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
@@ -916,8 +917,8 @@ func (ht *hcsTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error 
 func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_Windows {
 	wcs := &stats.Statistics_Windows{Windows: &stats.WindowsContainerStatistics{}}
 	if props.Statistics != nil {
-		wcs.Windows.Timestamp = props.Statistics.Timestamp
-		wcs.Windows.ContainerStartTime = props.Statistics.ContainerStartTime
+		wcs.Windows.Timestamp = timestamppb.New(props.Statistics.Timestamp)
+		wcs.Windows.ContainerStartTime = timestamppb.New(props.Statistics.ContainerStartTime)
 		wcs.Windows.UptimeNS = props.Statistics.Uptime100ns * 100
 		if props.Statistics.Processor != nil {
 			wcs.Windows.Processor = &stats.WindowsContainerProcessorStatistics{
