@@ -12,10 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"go.opencensus.io/trace"
+
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
-	"go.opencensus.io/trace"
 )
 
 // ContainerError is an error encountered in HCS
@@ -37,6 +39,8 @@ type Process struct {
 	exitCode       int
 	waitError      error
 }
+
+var _ cow.Process = &Process{}
 
 func newProcess(process vmcompute.HcsProcess, processID int, computeSystem *System) *Process {
 	return &Process{
@@ -309,6 +313,16 @@ func (process *Process) ExitCode() (int, error) {
 	}
 }
 
+// Exited returns if the process has exited
+func (process *Process) exited() bool {
+	select {
+	case <-process.waitBlock:
+		return true
+	default:
+		return false
+	}
+}
+
 // StdioLegacy returns the stdin, stdout, and stderr pipes, respectively. Closing
 // these pipes does not close the underlying pipes. Once returned, these pipes
 // are the responsibility of the caller to close.
@@ -352,7 +366,7 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 }
 
 // Stdio returns the stdin, stdout, and stderr pipes, respectively.
-// To close them, close the process handle.
+// To close them, close the process handle, or use the `CloseStd*` functions.
 func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 	process.stdioLock.Lock()
 	defer process.stdioLock.Unlock()
@@ -361,46 +375,60 @@ func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 
 // CloseStdin closes the write side of the stdin pipe so that the process is
 // notified on the read side that there is no more data in stdin.
-func (process *Process) CloseStdin(ctx context.Context) error {
+func (process *Process) CloseStdin(ctx context.Context) (err error) {
+	operation := "hcs::Process::CloseStdin"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", process.SystemID()),
+		trace.Int64Attribute("pid", int64(process.processID)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcs::Process::CloseStdin"
 
 	if process.handle == 0 {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
-	modifyRequest := processModifyRequest{
-		Operation: modifyCloseHandle,
-		CloseHandle: &closeHandle{
-			Handle: stdIn,
-		},
-	}
-
-	modifyRequestb, err := json.Marshal(modifyRequest)
-	if err != nil {
-		return err
-	}
-
-	resultJSON, err := vmcompute.HcsModifyProcess(ctx, process.handle, string(modifyRequestb))
-	events := processHcsResult(ctx, resultJSON)
-	if err != nil {
-		return makeProcessError(process, operation, err, events)
-	}
-
 	process.stdioLock.Lock()
-	if process.stdin != nil {
-		process.stdin.Close()
-		process.stdin = nil
+	defer process.stdioLock.Unlock()
+	if process.stdin == nil {
+		return nil
 	}
-	process.stdioLock.Unlock()
 
-	return nil
+	// The HcsModifyProcess request to close stdin will fail if the process has already
+	// exited or been closed before.
+	if !process.exited() {
+		modifyRequest := processModifyRequest{
+			Operation: modifyCloseHandle,
+			CloseHandle: &closeHandle{
+				Handle: stdIn,
+			},
+		}
+
+		var b []byte
+		b, err = json.Marshal(modifyRequest)
+		// don't return on errors, and still try to close the stream from the host
+		if err == nil {
+			var resultJSON string
+			resultJSON, err = vmcompute.HcsModifyProcess(ctx, process.handle, string(b))
+			events := processHcsResult(ctx, resultJSON)
+			if err != nil {
+				err = makeProcessError(process, operation, err, events)
+			}
+		}
+	}
+
+	process.stdin.Close()
+	process.stdin = nil
+
+	return err
 }
 
 func (process *Process) CloseStdout(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
+	operation := "hcs::Process::CloseStdout"
+	ctx, span := oc.StartSpan(ctx, operation) //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -411,7 +439,7 @@ func (process *Process) CloseStdout(ctx context.Context) (err error) {
 	defer process.handleLock.Unlock()
 
 	if process.handle == 0 {
-		return nil
+		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	process.stdioLock.Lock()
@@ -424,7 +452,8 @@ func (process *Process) CloseStdout(ctx context.Context) (err error) {
 }
 
 func (process *Process) CloseStderr(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
+	operation := "hcs::Process::CloseStderr"
+	ctx, span := oc.StartSpan(ctx, operation) //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -435,7 +464,7 @@ func (process *Process) CloseStderr(ctx context.Context) (err error) {
 	defer process.handleLock.Unlock()
 
 	if process.handle == 0 {
-		return nil
+		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	process.stdioLock.Lock()

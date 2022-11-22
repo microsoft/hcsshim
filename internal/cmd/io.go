@@ -5,11 +5,16 @@ package cmd
 import (
 	"context"
 	"io"
+	"net"
 	"net/url"
+	"os"
 	"time"
 
+	"github.com/Microsoft/go-winio"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/Microsoft/hcsshim/internal/hcs"
 )
 
 // UpstreamIO is an interface describing the IO to connect to above the shim.
@@ -63,8 +68,28 @@ func NewUpstreamIO(ctx context.Context, id, stdout, stderr, stdin string, termin
 	return NewBinaryIO(ctx, id, u)
 }
 
+// check if the error is from the file or channel already being closed
+func isIOChannelClosedErr(err error) bool {
+	for _, e := range []error{
+		os.ErrClosed,
+		net.ErrClosed,
+		io.ErrClosedPipe,
+		winio.ErrFileClosed,
+		hcs.ErrAlreadyClosed,
+	} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
 // relayIO is a glorified io.Copy that also logs when the copy has completed.
-func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, error) {
+//
+// Use skipErr to ignore and not log errors that it returns true for: passing in
+// `isIOChannelClosedErr` will ignore errors raised by reading from or writing to
+// a closed Reader or Writer, respectively. It can be `nil`
+func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string, skipErr func(error) bool) (int64, error) {
 	n, err := io.Copy(w, r)
 	if log != nil {
 		lvl := logrus.DebugLevel
@@ -72,6 +97,9 @@ func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, e
 			"file":  name,
 			"bytes": n,
 		})
+		if err != nil && skipErr != nil && skipErr(err) {
+			err = nil
+		}
 		if err != nil {
 			lvl = logrus.ErrorLevel
 			log = log.WithError(err)

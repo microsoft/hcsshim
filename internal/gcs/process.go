@@ -11,12 +11,14 @@ import (
 	"sync"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
 )
 
 const (
@@ -25,14 +27,16 @@ const (
 
 // Process represents a process in a container or container host.
 type Process struct {
-	gc                    *GuestConnection
-	cid                   string
-	id                    uint32
-	waitCall              *rpc
-	waitResp              containerWaitForProcessResponse
+	gcLock sync.RWMutex
+	gc     *GuestConnection
+
+	cid      string
+	id       uint32
+	waitCall *rpc
+	waitResp containerWaitForProcessResponse
+
+	stdioLock             sync.Mutex
 	stdin, stdout, stderr *ioChannel
-	stdinCloseWriteOnce   sync.Once
-	stdinCloseWriteErr    error
 }
 
 var _ cow.Process = &Process{}
@@ -123,26 +127,53 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 
 // Close releases resources associated with the process and closes the
 // associated standard IO streams.
-func (p *Process) Close() error {
+func (p *Process) Close() (err error) {
 	ctx, span := oc.StartSpan(context.Background(), "gcs::Process::Close")
 	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	if err := p.stdin.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("close stdin failed")
+	if p.gcClosed() {
+		return hcs.ErrAlreadyClosed
 	}
-	if err := p.stdout.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("close stdout failed")
+
+	p.stdioLock.Lock()
+	if p.stdin != nil {
+		if err = p.stdin.Close(); err != nil {
+			log.G(ctx).WithError(err).Warn("close stdin failed")
+		}
+		p.stdin = nil
 	}
-	if err := p.stderr.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("close stderr failed")
+	if p.stdout != nil {
+		if serr := p.stdout.Close(); serr != nil {
+			log.G(ctx).WithError(serr).Warn("close stdout failed")
+			if err == nil {
+				err = serr
+			}
+		}
+		p.stdout = nil
 	}
+	if p.stderr != nil {
+		if serr := p.stderr.Close(); serr != nil {
+			log.G(ctx).WithError(serr).Warn("close stderr failed")
+			if err == nil {
+				err = serr
+			}
+		}
+		p.stderr = nil
+	}
+	p.stdioLock.Unlock()
+
+	p.gcLock.Lock()
+	defer p.gcLock.Unlock()
+	p.gc = nil
+
 	return nil
 }
 
-// CloseStdin causes the process to read EOF on its stdin stream.
+// CloseStdin causes the process to read EOF on its stdin stream, and then closes stdin.
 func (p *Process) CloseStdin(ctx context.Context) (err error) {
 	ctx, span := oc.StartSpan(ctx, "gcs::Process::CloseStdin") //nolint:ineffassign,staticcheck
 	defer span.End()
@@ -151,10 +182,22 @@ func (p *Process) CloseStdin(ctx context.Context) (err error) {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	p.stdinCloseWriteOnce.Do(func() {
-		p.stdinCloseWriteErr = p.stdin.CloseWrite()
-	})
-	return p.stdinCloseWriteErr
+	if p.gcClosed() {
+		return hcs.ErrAlreadyClosed
+	}
+
+	p.stdioLock.Lock()
+	defer p.stdioLock.Unlock()
+	if p.stdin != nil {
+		// First (try to) close the channel for writing, sending an EOF to readers, then
+		// close the file. If CloseWrite fails, close the stream regardless.
+		err = p.stdin.CloseWrite()
+		if cerr := p.stdin.Close(); cerr != nil {
+			err = cerr
+		}
+		p.stdin = nil
+	}
+	return err
 }
 
 func (p *Process) CloseStdout(ctx context.Context) (err error) {
@@ -165,7 +208,17 @@ func (p *Process) CloseStdout(ctx context.Context) (err error) {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	return p.stdout.Close()
+	if p.gcClosed() {
+		return hcs.ErrAlreadyClosed
+	}
+
+	p.stdioLock.Lock()
+	defer p.stdioLock.Unlock()
+	if p.stdout != nil {
+		err = p.stdout.Close()
+		p.stdout = nil
+	}
+	return err
 }
 
 func (p *Process) CloseStderr(ctx context.Context) (err error) {
@@ -176,7 +229,17 @@ func (p *Process) CloseStderr(ctx context.Context) (err error) {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	return p.stderr.Close()
+	if p.gcClosed() {
+		return hcs.ErrAlreadyClosed
+	}
+
+	p.stdioLock.Lock()
+	defer p.stdioLock.Unlock()
+	if p.stderr != nil {
+		err = p.stderr.Close()
+		p.stderr = nil
+	}
+	return err
 }
 
 // ExitCode returns the process's exit code, or an error if the process is still
@@ -220,6 +283,12 @@ func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err 
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
+	p.gcLock.RLock()
+	defer p.gcLock.RUnlock()
+	if p.gc == nil {
+		return hcs.ErrAlreadyClosed
+	}
+
 	req := containerResizeConsole{
 		requestBase: makeRequest(ctx, p.cid),
 		ProcessID:   p.id,
@@ -238,6 +307,12 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 	span.AddAttributes(
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
+
+	p.gcLock.RLock()
+	defer p.gcLock.RUnlock()
+	if p.gc == nil {
+		return false, hcs.ErrAlreadyClosed
+	}
 
 	req := containerSignalProcess{
 		requestBase: makeRequest(ctx, p.cid),
@@ -267,6 +342,8 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 // Stdio returns the standard IO streams associated with the container. They
 // will be closed when Close is called.
 func (p *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
+	p.stdioLock.Lock()
+	defer p.stdioLock.Unlock()
 	return p.stdin, p.stdout, p.stderr
 }
 
@@ -290,4 +367,12 @@ func (p *Process) waitBackground() {
 	}
 	log.G(ctx).WithField("exitCode", ec).Debug("process exited")
 	oc.SetSpanStatus(span, err)
+}
+
+// gcClosed checks if the guest connection has been set to `nil`.
+// Must be able to acquire `gcLock` for reading
+func (p *Process) gcClosed() bool {
+	p.gcLock.RLock()
+	defer p.gcLock.RUnlock()
+	return p.gc == nil
 }

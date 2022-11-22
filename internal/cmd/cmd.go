@@ -5,19 +5,23 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/cow"
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/log"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/hcs"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 // CmdProcessRequest stores information on command requests made through this package.
@@ -43,6 +47,10 @@ type Cmd struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
+	// CloseStdIn attempts to cast `Stdin` to call `CloseRead() error` or `Close() error`
+	// on the upstream StdIn IO stream after the process ends but before `Wait` completes.
+	CloseStdIn bool
+
 	// Log provides a logrus entry to use in logging IO copying status.
 	Log *logrus.Entry
 
@@ -64,7 +72,7 @@ type Cmd struct {
 
 	iogrp     errgroup.Group
 	stdinErr  atomic.Value
-	allDoneCh chan struct{}
+	allDoneCh chan struct{} // closed after Wait finishes
 }
 
 // ExitState contains whether a process has exited and with which exit code.
@@ -136,6 +144,14 @@ func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg 
 // Start starts a command. The caller must ensure that if Start succeeds,
 // Wait is eventually called to clean up resources.
 func (c *Cmd) Start() error {
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if c.Log == nil {
+		c.Log = log.L.Dup()
+	}
+
 	c.allDoneCh = make(chan struct{})
 	var x interface{}
 	if !c.Host.IsOCI() {
@@ -184,10 +200,10 @@ func (c *Cmd) Start() error {
 		}
 		x = lpp
 	}
-	if c.Context != nil && c.Context.Err() != nil {
-		return c.Context.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	p, err := c.Host.CreateProcess(context.TODO(), x)
+	p, err := c.Host.CreateProcess(ctx, x)
 	if err != nil {
 		return err
 	}
@@ -200,18 +216,29 @@ func (c *Cmd) Start() error {
 	stdin, stdout, stderr := p.Stdio()
 	if c.Stdin != nil {
 		// Do not make stdin part of the error group because there is no way for
-		// us or the caller to reliably unblock the c.Stdin read when the
-		// process exits.
+		// us to reliably unblock the c.Stdin read when the process exits.
+		// Even if `stdin` is closed, the runtime can block indefinitely on reading
+		// c.Stdin, so the only reliable way to unblock this is with:
+		// c.Stdin.CloseWrite() (if it implements it) or c.Stdin.Close().
+		// However, we are only passed on the Reader end of Stdin, and closing the
+		// upstream c.Stdin breaks with the functionality that os.exec.Cmd implements.
 		go func() {
-			_, err := relayIO(stdin, c.Stdin, c.Log, "stdin")
+			_, err := relayIO(stdin, c.Stdin, c.Log, "stdin", isIOChannelClosedErr)
 			// Report the stdin copy error. If the process has exited, then the
 			// caller may never see it, but if the error was due to a failure in
 			// stdin read, then it is likely the process is still running.
 			if err != nil {
-				c.stdinErr.Store(err)
+				select {
+				case <-c.allDoneCh:
+					// Wait has returned, err will be ignored.
+					// relayIO will log the error, so no need for logging here
+				default:
+					c.stdinErr.Store(err)
+				}
 			}
-			// Notify the process that there is no more input.
-			if err := p.CloseStdin(context.TODO()); err != nil && c.Log != nil {
+			// Notify the process that there is no more input, in the case that
+			// c.Stdin closed while the process is running
+			if err := p.CloseStdin(ctx); err != nil && !isIOChannelClosedErr(err) && c.Log != nil {
 				c.Log.WithError(err).Warn("failed to close Cmd stdin")
 			}
 		}()
@@ -219,9 +246,11 @@ func (c *Cmd) Start() error {
 
 	if c.Stdout != nil {
 		c.iogrp.Go(func() error {
-			_, err := relayIO(c.Stdout, stdout, c.Log, "stdout")
-			if err := p.CloseStdout(context.TODO()); err != nil {
-				c.Log.WithError(err).Warn("failed to close Cmd stdout")
+			_, err := relayIO(c.Stdout, stdout, c.Log, "stdout", nil /*skipErr*/)
+			// Notify the process that upstream IO closed its std out, if the process
+			// is still running
+			if cerr := p.CloseStdout(ctx); cerr != nil && !isIOChannelClosedErr(cerr) && c.Log != nil {
+				c.Log.WithError(cerr).Warn("failed to close Cmd stdout")
 			}
 			return err
 		})
@@ -229,26 +258,29 @@ func (c *Cmd) Start() error {
 
 	if c.Stderr != nil {
 		c.iogrp.Go(func() error {
-			_, err := relayIO(c.Stderr, stderr, c.Log, "stderr")
-			if err := p.CloseStderr(context.TODO()); err != nil {
-				c.Log.WithError(err).Warn("failed to close Cmd stderr")
+			_, err := relayIO(c.Stderr, stderr, c.Log, "stderr", nil /*skipErr*/)
+			// Notify the process that upstream IO closed its std err, if the process
+			// is still running
+			if cerr := p.CloseStderr(ctx); cerr != nil && !isIOChannelClosedErr(cerr) && c.Log != nil {
+				c.Log.WithError(cerr).Warn("failed to close Cmd stderr")
 			}
 			return err
 		})
 	}
 
+	// if ctx is `Background()`, then don't bother launching this, since ctx will
+	// never be cancelled
 	if c.Context != nil {
 		go func() {
 			select {
 			case <-c.Context.Done():
 				// Process.Kill (via Process.Signal) will not send an RPC if the
 				// provided context in is cancelled (bridge.AsyncRPC will end early)
-				ctx := c.Context
-				if ctx == nil {
-					ctx = context.Background()
+				ctx := context.Background()
+				if c.Context != nil {
+					ctx = log.Copy(context.Background(), c.Context)
 				}
-				kctx := log.Copy(context.Background(), ctx)
-				_, _ = c.Process.Kill(kctx)
+				_, _ = c.Process.Kill(ctx)
 			case <-c.allDoneCh:
 			}
 		}()
@@ -259,7 +291,9 @@ func (c *Cmd) Start() error {
 // Wait waits for a command and its IO to complete and closes the underlying
 // process. It can only be called once. It returns an ExitError if the command
 // runs and returns a non-zero exit code.
-func (c *Cmd) Wait() error {
+func (c *Cmd) Wait() (err error) {
+	// c.Context and c.Log should have been properly initialized in c.Start()
+
 	waitErr := c.Process.Wait()
 	if waitErr != nil && c.Log != nil {
 		c.Log.WithError(waitErr).Warn("process wait failed")
@@ -270,8 +304,26 @@ func (c *Cmd) Wait() error {
 		state.exited = true
 		state.code = code
 	}
+
+	if c.Stdin != nil && c.CloseStdIn {
+		// try to close the stdin to end the `relayIO`/`io.Copy` go routine
+		if cstdin, ok := c.Stdin.(interface{ CloseRead() error }); ok {
+			if stdinErr := cstdin.CloseRead(); !isIOChannelClosedErr(stdinErr) {
+				err = stdinErr
+			}
+		} else if cstdin, ok := c.Stdin.(io.Closer); ok {
+			if stdinErr := cstdin.Close(); !isIOChannelClosedErr(stdinErr) {
+				err = stdinErr
+			}
+		}
+
+		if err != nil {
+			c.Log.WithError(err).Warn("could not close upstram Stdin after process finished")
+		}
+	}
+
 	// Terminate the IO if the copy does not complete in the requested time.
-	if c.CopyAfterExitTimeout != 0 {
+	if c.CopyAfterExitTimeout > 0 {
 		go func() {
 			t := time.NewTimer(c.CopyAfterExitTimeout)
 			defer t.Stop()
@@ -281,17 +333,42 @@ func (c *Cmd) Wait() error {
 				// Close the process to cancel any reads to stdout or stderr.
 				c.Process.Close()
 				if c.Log != nil {
-					c.Log.Warn("timed out waiting for stdio relay")
+					c.Log.WithField(logfields.Timeout, c.CopyAfterExitTimeout.String()).
+						Warn("timed out waiting for stdio relay")
 				}
 			}
 		}()
 	}
+
 	ioErr := c.iogrp.Wait()
-	if ioErr == nil {
-		ioErr, _ = c.stdinErr.Load().(error)
+	if inErr, _ := c.stdinErr.Load().(error); inErr != nil {
+		if ioErr == nil {
+			ioErr = inErr
+		} else {
+			// cannot wrap two errors at once, so one will be wrapped via `%v`
+			ioErr = fmt.Errorf("multiple IO copy errors: %v; %w", inErr, ioErr)
+		}
 	}
+	if err == nil {
+		err = ioErr
+	} else {
+		// wrap (prioritize) IO errors over `afterExit` errors
+		err = fmt.Errorf("io error: %w; other error: %v", ioErr, err)
+	}
+	// close the channel first, to prevent `Process.Kill` being called mid-`Process.Close`
 	close(c.allDoneCh)
-	c.Process.Close()
+	// Process could have been closed by IO timeout handling
+	if cerr := c.Process.Close(); cerr != nil && !errors.Is(cerr, hcs.ErrAlreadyClosed) {
+		if c.Log != nil {
+			c.Log.WithError(cerr).Warn("error closing the process")
+		}
+		if err == nil {
+			err = cerr
+		} else {
+			err = fmt.Errorf("error closing process: %w; other error: %v", cerr, err)
+		}
+	}
+
 	c.ExitState = state
 	if exitErr != nil {
 		return exitErr
@@ -299,7 +376,7 @@ func (c *Cmd) Wait() error {
 	if state.exited && state.code != 0 {
 		return &ExitError{state}
 	}
-	return ioErr
+	return err
 }
 
 // Run is equivalent to Start followed by Wait.

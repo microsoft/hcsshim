@@ -22,12 +22,16 @@ import (
 type localProcessHost struct {
 }
 
+var _ cow.ProcessHost = &localProcessHost{}
+
 type localProcess struct {
 	p                     *os.Process
 	state                 *os.ProcessState
 	ch                    chan struct{}
 	stdin, stdout, stderr *os.File
 }
+
+var _ cow.Process = &localProcess{}
 
 func (h *localProcessHost) OS() string {
 	return "windows"
@@ -152,8 +156,9 @@ func (p *localProcess) Wait() error {
 func TestCmdExitCode(t *testing.T) {
 	cmd := Command(&localProcessHost{}, "cmd", "/c", "exit", "/b", "64")
 	err := cmd.Run()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 64 {
-		t.Fatal("expected exit code 64, got ", err)
+	eerr := &ExitError{}
+	if !errors.As(err, &eerr) || eerr.ExitCode() != 64 {
+		t.Fatalf("expected exit code 64, got %v", err)
 	}
 }
 
@@ -168,21 +173,25 @@ func TestCmdOutput(t *testing.T) {
 	}
 }
 
-func TestCmdContext(t *testing.T) {
+func TestCmdContextCloseStdIn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
+
 	cmd := CommandContext(ctx, &localProcessHost{}, "cmd", "/c", "pause")
 	r, w := io.Pipe()
+	defer w.Close()
 	cmd.Stdin = r
+	cmd.CloseStdIn = true
+
 	err := cmd.Start()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = cmd.Process.Wait()
-	w.Close()
+
 	err = cmd.Wait()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 1 || ctx.Err() == nil {
-		t.Fatal(err)
+	eerr := &ExitError{}
+	if !errors.As(err, &eerr) || eerr.ExitCode() != 1 || ctx.Err() == nil {
+		t.Fatalf("expected context timeout or exit code 1, got: %v", err)
 	}
 }
 
@@ -252,7 +261,32 @@ func TestCmdStuckIo(t *testing.T) {
 	cmd := Command(&stuckIoProcessHost{&localProcessHost{}}, "cmd", "/c", "echo", "hello")
 	cmd.CopyAfterExitTimeout = time.Millisecond * 200
 	_, err := cmd.Output()
-	if err != io.ErrClosedPipe {
+	if !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatal(err)
+	}
+}
+
+// check that io Copy will wait indefintely if pipes are not closed
+func TestCmdStuckStdoutNotClosed(t *testing.T) {
+	cmd := Command(&stuckIoProcessHost{&localProcessHost{}}, "cmd", "/c")
+	r, w := io.Pipe()
+	defer r.Close()
+	cmd.Stdout = w
+
+	done := make(chan error)
+	go func() {
+		done <- cmd.Run()
+		close(done)
+	}()
+
+	tr := time.NewTimer(250 * time.Millisecond) // give the cmd a chance to finish running
+	defer tr.Stop()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("cmd run failed: %v", err)
+		}
+		t.Fatal("command should have blocked indefinitely")
+	case <-tr.C:
 	}
 }
