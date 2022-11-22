@@ -74,7 +74,7 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		}
 		return nil, err
 	}
-	
+
 	chainDERArray := make([][]byte, len(chainCerts))
 	for i, cert := range chainCerts {
 		chainDERArray[i] = cert.Raw
@@ -97,7 +97,7 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		}
 		return nil, err
 	}
-	
+
 	if verbose {
 		log.Printf("cose signer %q\n", signer)
 	}

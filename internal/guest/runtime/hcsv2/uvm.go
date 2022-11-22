@@ -193,7 +193,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 		// we only care if there was an error or not
 		_, err := didx509resolver.Resolve(unpacked.ChainPem, issuer, true)
 		if err != nil {
-			log.G(ctx).Printf("did resolver failed to match chain for issuer %s and feed %s - err %w", issuer, feed, err)
+			log.G(ctx).Printf("did resolver failed to match chain for issuer %s and feed %s - err %s", issuer, feed, err.Error())
 			return err
 		}
 
