@@ -9,7 +9,7 @@ import (
 	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
 )
 
-func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAFile string, chainFilename string, didString string, verbose bool) (cosesign1.UnpackedCoseSign1, error) {
+func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAFile string, chainFilename string, didString string, verbose bool) (*cosesign1.UnpackedCoseSign1, error) {
 	coseBlob := cosesign1.ReadBlob(inputFilename)
 	var optionalPubKeyPEM []byte
 	if optionalPubKeyFilename != "" {
@@ -28,7 +28,7 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 		chainPEMString = string(chainPEM[:])
 	}
 
-	var unpacked cosesign1.UnpackedCoseSign1
+	var unpacked *cosesign1.UnpackedCoseSign1
 	var err error
 	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(coseBlob, optionalPubKeyPEM, optionalRootCAPEM, verbose)
 	if err != nil {
@@ -61,9 +61,9 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 
 func createCoseSign1(payloadFilename string, issuer string, feed string, contentType string, chainFilename string, keyFilename string, saltType string, algo string, verbose bool) ([]byte, error) {
 
-	var payloadBlob = cosesign1.ReadBlob(payloadFilename)
-	var keyPem = cosesign1.ReadBlob(keyFilename)
-	var chainPem = cosesign1.ReadBlob(chainFilename)
+	payloadBlob := cosesign1.ReadBlob(payloadFilename)
+	keyPem := cosesign1.ReadBlob(keyFilename)
+	chainPem := cosesign1.ReadBlob(chainFilename)
 	algorithm, err := cosesign1.StringToAlgorithm(algo)
 	if err != nil {
 		return nil, err

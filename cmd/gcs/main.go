@@ -178,7 +178,7 @@ func main() {
 		uint(kmsg.Warning),
 		"Log all kmsg entries with a priority less than or equal to the supplied level.")
 	logFile := flag.String("logfile",
-		"",
+		"/tmp/gcs.log",
 		"Logging Target: An optional file name/path. Omit for console output.")
 	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
 	useInOutErr := flag.Bool("use-inouterr",

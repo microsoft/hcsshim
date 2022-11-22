@@ -144,20 +144,6 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	return nil
 }
 
-// Short term we cannot store the issuer and feed in the COSE Sign1 protected header, so wrap the payload in some json
-// and put those values in there. Fix is due very soon.
-
-func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, error) {
-	// Try the DID first
-	didDoc, err := didx509resolver.Resolve(unpacked.ChainPem, did, true)
-	_ = didDoc
-	if err == nil {
-		return true, err
-	}
-
-	return false, err
-}
-
 /*
    InjectFragment extends current security policy with additional constraints
    from the incoming fragment. Note that it is base64 encoded over the bridge/
@@ -179,18 +165,19 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 		return err
 	}
 	blob := []byte(fragment.Fragment)
+	// keep a gopy of the fragment so we can manually figure out what went wrong
+	// will be removed eventually.
 	_ = os.WriteFile("/tmp/fragment.blob", blob, 0644)
 
-	var unpacked cosesign1.UnpackedCoseSign1
-	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, nil, true)
+	unpacked, err := cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, nil, true)
 
 	if err != nil {
 		return fmt.Errorf("InjectFragment failed COSE validation: %s", err.Error())
 	} else {
-		var payloadString = string(unpacked.Payload[:])
-		var issuer = unpacked.Issuer
-		var feed = unpacked.Feed
-		var chainPem = unpacked.ChainPem
+		payloadString := string(unpacked.Payload[:])
+		issuer := unpacked.Issuer
+		feed := unpacked.Feed
+		chainPem := unpacked.ChainPem
 
 		log.G(ctx).Debugf("issuer:%s", issuer) // eg the DID:x509:blah....
 		log.G(ctx).Debugf("feed: %s", feed)
@@ -202,20 +189,20 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 			return fmt.Errorf("either issuer and feed must both be provided in the COSE_Sign1 protected header")
 		}
 
-		var didMatchesChain, err = checkDIDvsChain(issuer, unpacked)
-		if !didMatchesChain {
-			log.G(ctx).Printf("did did not match chain for issuer %s and feed %s - err %s", issuer, feed, err.Error())
+		// Resolve returns a did doc that we don't need
+		// we only care if there was an error or not
+		_, err := didx509resolver.Resolve(unpacked.ChainPem, issuer, true)
+		if err != nil {
+			log.G(ctx).Printf("did resolver failed to match chain for issuer %s and feed %s - err %w", issuer, feed, err)
 			return err
 		}
 
 		// now offer the payload fragment to the policy
 		err = h.securityPolicyEnforcer.LoadFragment(issuer, feed, payloadString)
 		if err != nil {
-			return fmt.Errorf("InjectFragment failed policy load: %s", err.Error())
-		} else {
-			log.G(ctx).Printf("succeeded passing fragment into the enforcer.")
+			return fmt.Errorf("InjectFragment failed policy load: %w", err)
 		}
-
+		log.G(ctx).Printf("succeeded passing fragment into the enforcer.")
 	}
 	return nil
 }

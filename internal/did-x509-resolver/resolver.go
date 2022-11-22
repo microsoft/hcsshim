@@ -69,17 +69,18 @@ func checkFingerprint(chain []*x509.Certificate, caFingerprintAlg, caFingerprint
 	return nil
 }
 
-func oidFromString(s string) (asn1.ObjectIdentifier, error) {
+func oidFromString(s string) (*asn1.ObjectIdentifier, error) {
 	tokens := strings.Split(s, ".")
 	var ints []int
 	for _, x := range tokens {
 		i, err := strconv.Atoi(x)
 		if err != nil {
-			return asn1.ObjectIdentifier{}, errors.New("invalid OID")
+			return nil, errors.New("invalid OID")
 		}
 		ints = append(ints, i)
 	}
-	return asn1.ObjectIdentifier(ints), nil
+	result := asn1.ObjectIdentifier(ints)
+	return &result, nil
 }
 
 func checkHasSan(sanType string, value string, cert *x509.Certificate) error {
@@ -113,6 +114,10 @@ func checkHasSan(sanType string, value string, cert *x509.Certificate) error {
 	}
 	return fmt.Errorf("SAN not found: %s", value)
 }
+
+// The x509 package/module doesn't export these.
+// they are derived from https://www.rfc-editor.org/rfc/rfc5280 RFC 5280, 4.2.1.12  Extended Key Usage
+// and can never change
 
 var (
 	oidExtKeyUsageAny                            = asn1.ObjectIdentifier{2, 5, 29, 37, 0}
@@ -215,7 +220,7 @@ func verifyDid(chain []*x509.Certificate, did string) error {
 				v, err := url.QueryUnescape(args[i+1])
 
 				if err != nil {
-					return fmt.Errorf("urlUnescape failed: %s", err)
+					return fmt.Errorf("urlUnescape failed: %w", err)
 				}
 
 				for _, sk := range seenFields {
@@ -275,7 +280,7 @@ func verifyDid(chain []*x509.Certificate, did string) error {
 			sanType := args[0]
 			sanValue, err := url.QueryUnescape(args[1])
 			if err != nil {
-				return fmt.Errorf("url.QueryUnescape failed: %s", err)
+				return fmt.Errorf("url.QueryUnescape failed: %w", err)
 			}
 			err = checkHasSan(sanType, sanValue, chain[0])
 			if err != nil {
@@ -288,7 +293,7 @@ func verifyDid(chain []*x509.Certificate, did string) error {
 
 			ekuOid, err := oidFromString(args[0])
 			if err != nil {
-				return fmt.Errorf("oidFromString failed: %s", err)
+				return fmt.Errorf("oidFromString failed: %w", err)
 			}
 
 			if len(chain[0].UnknownExtKeyUsage) == 0 {
@@ -298,13 +303,13 @@ func verifyDid(chain []*x509.Certificate, did string) error {
 			foundEku := false
 			for _, certEku := range chain[0].ExtKeyUsage {
 				certEkuOid, ok := oidFromExtKeyUsage(certEku)
-				if ok && certEkuOid.Equal(ekuOid) {
+				if ok && certEkuOid.Equal(*ekuOid) {
 					foundEku = true
 					break
 				}
 			}
 			for _, certEkuOid := range chain[0].UnknownExtKeyUsage {
-				if certEkuOid.Equal(ekuOid) {
+				if certEkuOid.Equal(*ekuOid) {
 					foundEku = true
 					break
 				}
@@ -319,16 +324,16 @@ func verifyDid(chain []*x509.Certificate, did string) error {
 			}
 			decodedArg, err := url.QueryUnescape(args[0])
 			if err != nil {
-				return fmt.Errorf("urlUnescape failed: %s", err)
+				return fmt.Errorf("urlUnescape failed: %w", err)
 			}
 			fulcioIssuer := "https://" + decodedArg
 			fulcioIssuerOid, err := oidFromString("1.3.6.1.4.1.57264.1.1")
 			if err != nil {
-				return fmt.Errorf("oidFromString failed: %s", err)
+				return fmt.Errorf("oidFromString failed: %w", err)
 			}
 			found := false
 			for _, ext := range chain[0].Extensions {
-				if ext.Id.Equal(fulcioIssuerOid) {
+				if ext.Id.Equal(*fulcioIssuerOid) {
 					if string(ext.Value) == fulcioIssuer {
 						found = true
 						break
@@ -397,7 +402,7 @@ func parsePemChain(chainPem string) ([]*x509.Certificate, error) {
 		if block.Type == "CERTIFICATE" {
 			cert, err := x509.ParseCertificate(block.Bytes)
 			if err != nil {
-				return []*x509.Certificate{}, fmt.Errorf("certificate parser failed: %s", err)
+				return []*x509.Certificate{}, fmt.Errorf("certificate parser failed: %w", err)
 			}
 			chain = append(chain, cert)
 		}
@@ -423,20 +428,20 @@ func Resolve(chainPem string, did string, ignoreTime bool) (string, error) {
 	chains, err := verifyCertificateChain(chain, roots, ignoreTime)
 
 	if err != nil {
-		return "", fmt.Errorf("certificate chain verification failed: %s", err)
+		return "", fmt.Errorf("certificate chain verification failed: %w", err)
 	}
 
 	for _, chain := range chains {
 		err = verifyDid(chain, did)
 		if err != nil {
-			return "", fmt.Errorf("DID verification failed: %s", err)
+			return "", fmt.Errorf("DID verification failed: %w", err)
 		}
 	}
 
 	doc, err := createDidDocument(did, chain)
 
 	if err != nil {
-		return "", fmt.Errorf("DID document creation failed: %s", err)
+		return "", fmt.Errorf("DID document creation failed: %w", err)
 	}
 
 	return doc, nil

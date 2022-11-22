@@ -22,7 +22,7 @@ func parsePemChain(chainPem string) ([]*x509.Certificate, error) {
 		if block.Type == "CERTIFICATE" {
 			cert, err := x509.ParseCertificate(block.Bytes)
 			if err != nil {
-				return []*x509.Certificate{}, fmt.Errorf("certificate parser failed: %s", err)
+				return []*x509.Certificate{}, fmt.Errorf("certificate parser failed: %w", err)
 			}
 			chain = append(chain, cert)
 		}
@@ -31,7 +31,9 @@ func parsePemChain(chainPem string) ([]*x509.Certificate, error) {
 	return chain, nil
 }
 
-// The x509 package/module doesn't export these...
+// The x509 package/module doesn't export these.
+// they are derived from https://www.rfc-editor.org/rfc/rfc5280 RFC 5280, 4.2.1.12  Extended Key Usage
+// and can never change
 var (
 	oidExtKeyUsageAny                            = asn1.ObjectIdentifier{2, 5, 29, 37, 0}
 	oidExtKeyUsageServerAuth                     = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 1}
@@ -94,23 +96,31 @@ func MakeDidX509(fingerprintAlgorithm string, fingerprintIndex int, chainFilenam
 	fingerprint := base64.RawURLEncoding.EncodeToString(hash[:])
 
 	var policyTokens []string
-	if strings.ToUpper(didPolicy) == "CN" {
-		policyTokens = append(policyTokens, "subject", "CN", chain[0].Subject.CommonName)
-	} else if strings.ToUpper(didPolicy) == "EKU" {
-		// Note: In general there may be many predefined and not predefined key usages.
-		// We pick the first non-predefined one, or, if there are none, the first predefined one.
-		// Others must be specified manually (as in custom, next branch).
-
-		// non-predefined
-		if len(chain[0].UnknownExtKeyUsage) > 0 {
-			policyTokens = append(policyTokens, "eku", chain[0].UnknownExtKeyUsage[0].String())
-		} else if len(chain[0].ExtKeyUsage) > 0 {
-			// predefined
-			policyTokens = append(policyTokens, "eku", extKeyUsageOIDs[chain[0].ExtKeyUsage[0]].oid.String())
+	didPolicyUpper := strings.ToUpper(didPolicy)
+	switch didPolicyUpper {
+	case "CN":
+		{
+			policyTokens = append(policyTokens, "subject", "CN", chain[0].Subject.CommonName)
 		}
-	} else {
-		// Custom policies
-		policyTokens = strings.Split(didPolicy, ":")
+	case "EKU":
+		{
+			// Note: In general there may be many predefined and not predefined key usages.
+			// We pick the first non-predefined one, or, if there are none, the first predefined one.
+			// Others must be specified manually (as in custom, next branch).
+
+			// non-predefined
+			if len(chain[0].UnknownExtKeyUsage) > 0 {
+				policyTokens = append(policyTokens, "eku", chain[0].UnknownExtKeyUsage[0].String())
+			} else if len(chain[0].ExtKeyUsage) > 0 {
+				// predefined
+				policyTokens = append(policyTokens, "eku", extKeyUsageOIDs[chain[0].ExtKeyUsage[0]].oid.String())
+			}
+		}
+	default:
+		{
+			// Custom policies
+			policyTokens = strings.Split(didPolicy, ":")
+		}
 	}
 
 	if len(policyTokens) == 0 {
@@ -140,7 +150,9 @@ func MakeDidX509(fingerprintAlgorithm string, fingerprintIndex int, chainFilenam
 
 	if err != nil {
 		return "", err
-	} else if verbose {
+	}
+
+	if verbose {
 		log.Println("did:x509 resolved correctly")
 	}
 

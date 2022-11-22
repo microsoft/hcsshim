@@ -27,51 +27,42 @@ func pem2der(chainPem []byte) []byte {
 	return r
 }
 
-func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType string, chainPem []byte, keyPem []byte, saltType string, algo cose.Algorithm, verbose bool) ([]byte, error) {
-	var err error
-
-	var remaining []byte
-	var result []byte
-
+func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType string, chainPem []byte, keyPem []byte, saltType string, algo cose.Algorithm, verbose bool) (result []byte, err error) {
 	var signingKey any
 	var keyDer *pem.Block
-	keyDer, remaining = pem.Decode(keyPem)
-	_ = remaining
+	keyDer, _ = pem.Decode(keyPem) // dicard remaining bytes
 	var keyBytes = keyDer.Bytes
 
+	// try parsing the various likely key types in turn
 	signingKey, err = x509.ParseECPrivateKey(keyBytes)
-	if err == nil {
-		if verbose {
-			log.Printf("parsed EC signing (private) key %q\n", signingKey)
-		}
-	} else {
+	if err == nil && verbose {
+		log.Printf("parsed EC signing (private) key %q\n", signingKey)
+	}
+
+	if err != nil {
 		signingKey, err = x509.ParsePKCS8PrivateKey(keyBytes)
-		if err == nil {
-			if verbose {
-				log.Printf("parsed PKCS8 signing (private) key %q\n", signingKey)
-			}
-		} else {
-			signingKey, err = x509.ParsePKCS1PrivateKey(keyBytes)
-			if err == nil {
-				if verbose {
-					log.Printf("parsed PKCS1 signing (private) key %q\n", signingKey)
-				}
-			} else {
-				if verbose {
-					log.Print("Error = " + err.Error())
-				}
-				return result, err
-			}
+		if err == nil && verbose {
+			log.Printf("parsed PKCS8 signing (private) key %q\n", signingKey)
 		}
+	}
+
+	if err != nil {
+		signingKey, err = x509.ParsePKCS1PrivateKey(keyBytes)
+		if err == nil && verbose {
+			log.Printf("parsed PKCS1 signing (private) key %q\n", signingKey)
+		}
+	}
+
+	if err != nil {
+		if verbose {
+			log.Print("failed to decode a key, error = " + err.Error())
+		}
+		return nil, err
 	}
 
 	var chainCerts []*x509.Certificate
 	chainDER := pem2der(chainPem)
 	chainCerts, err = x509.ParseCertificates(chainDER)
-	var chainDERArray [][]byte
-	for cert := range chainCerts {
-		chainDERArray = append(chainDERArray, chainCerts[cert].Raw)
-	}
 
 	if err == nil {
 		if verbose {
@@ -81,7 +72,12 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		if verbose {
 			log.Print("cert parsing failed - " + err.Error())
 		}
-		return result, err
+		return nil, err
+	}
+	
+	chainDERArray := make([][]byte, len(chainCerts))
+	for i, cert := range chainCerts {
+		chainDERArray[i] = cert.Raw
 	}
 
 	var saltReader io.Reader
@@ -99,16 +95,16 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		if verbose {
 			log.Print("cose.NewSigner err = " + err.Error())
 		}
-		return result, err
-	} else {
-		if verbose {
-			log.Printf("cose signer %q\n", signer)
-		}
+		return nil, err
+	}
+	
+	if verbose {
+		log.Printf("cose signer %q\n", signer)
 	}
 
 	// See https://www.iana.org/assignments/cose/cose.xhtml#:~:text=COSE%20Header%20Parameters%20%20%20%20Name%20,algorithm%20to%20use%20%2019%20more%20rows
 
-	var headers = cose.Headers{
+	headers := cose.Headers{
 		Protected: cose.ProtectedHeader{
 			cose.HeaderLabelAlgorithm:   algo,
 			cose.HeaderLabelContentType: contentType,
@@ -131,7 +127,7 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		if verbose {
 			log.Print("cose.Sign1 failed\n" + err.Error())
 		}
-		return result, err
+		return nil, err
 	}
 
 	return result, nil

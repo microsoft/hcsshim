@@ -1,8 +1,6 @@
 package cosesign1
 
-/*
-	Little handy utilities that make logging and a command line tool easier.
-*/
+//	Little handy utilities that make logging and a command line tool easier.
 
 import (
 	"fmt"
@@ -16,8 +14,8 @@ import (
 	"github.com/veraison/go-cose"
 )
 
-func ReadBlob(path string) []byte {
-	content, err := os.ReadFile(path)
+func ReadBlob(filename string) []byte {
+	content, err := os.ReadFile(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -25,14 +23,15 @@ func ReadBlob(path string) []byte {
 	return content
 }
 
-func ReadString(path string) string {
-	content := ReadBlob(path)
-	str := string(content[:])
+func ReadString(filename string) string {
+	content := ReadBlob(filename)
+	str := string(content)
 	return str
 }
 
-// to replace the rand.Reader with a fixed salt to make debugging easier.
-
+// Type to replace the rand.Reader with a source of fixed salt.
+// Can be provided to the cose.Sign1 method instead of rand.Reader such that
+// the signature is deterministic for testing and debugging purposes.
 type fixedReader struct {
 	valueToReturn byte
 }

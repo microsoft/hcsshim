@@ -1,18 +1,36 @@
 #
-# This makefile let's us excercise the libray via the sign1util tool and shows various examples of
+# This makefile lets us exercise the library via the sign1util tool and shows various examples of
 # creating and checking COSE Sign1 documents as well as getting DID:x509 documents out of them
-# Note that today the PEM files that match are not checked in as the credential checker will trigger.
-# I may fix that with some head/tail magic./ Meanwhile you need to build fresh certs with make -f Makefile.certs
-# and these checks below (for infra.rego.cose, not the EPRS one) will fail.
+# Note that today the PEM files that match are not checked in as the github/ADO credential checker will trigger.
+# I may fix that with some head/tail magic. Meanwhile, you need to build fresh certs with make -f Makefile.certs
+# and these checks below (for infra.rego.cose, not the EPRS one) will fail. You will need to update the certificate
+# fingerprints to match the fresh ones.
+# 
+# eg change the following
+#
+#did-check: chain.pem infra.rego.cose sign1util
+#	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U::subject:CN:Test%20Leaf%20%28DO%20NOT%20TRUST%29
+#
+# to
+#
+#did-check: chain.pem infra.rego.cose sign1util
+#	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:my-new-cert-fingerprint::subject:CN:Test%20Leaf%20%28DO%20NOT%20TRUST%29
+#
+# where 
+# 
+#	./sign1util did:x509 -chain chain.pem -i 1 -policy "subject:CN:Test Leaf (DO NOT TRUST)" 
+#
+# will print the new fingerprint of the intermediate cert as part of the did:x509 generated
 #
 
 cose: infra.rego.cose
 
-# from Maksim, these media types have to match containerd. The also need to change and the security policy one ought to be x-ms-ccepolicy-frag
+# from these media types have to match containerd. The also need to change and the security policy one ought to be x-ms-ccepolicy-frag
 #     fragment atrifact type = application/unknown+rego
-#     fragment media type = application/microsoft.security.policy+rego
+#     fragment media type = application/x-ms-ccepolicy-frag
 
-# Use a local linux build of the tool. Usually this is an exe in /mnt/c/ContainerPlat aka c:\ContainerPlat
+# Use a local linux build of the tool for the purposes of this Makefile - ie assume using in wsl.
+# Usually sign1util.exe is a windows exe in /mnt/c/ContainerPlat aka c:\ContainerPlat but that is not certain.
 
 sign1util: ../../internal/tools/sign1util/main.go *.go
 	go build ../../internal/tools/sign1util

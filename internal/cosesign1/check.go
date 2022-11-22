@@ -10,8 +10,6 @@ import (
 	"github.com/veraison/go-cose"
 )
 
-// object to convey results to the caller.
-
 type UnpackedCoseSign1 struct {
 	Issuer      string
 	Feed        string
@@ -28,133 +26,126 @@ type UnpackedCoseSign1 struct {
 
 // issuer and feed MUST be strings or not present
 func isAString(val interface{}) bool {
-	return reflect.TypeOf(val).String() == "string"
-}
-
-// a cose algorithm is really an int64
-func isAnAlgorithm(val interface{}) bool {
-	var algo cose.Algorithm
-	return reflect.TypeOf(val) == reflect.TypeOf(algo)
+	_, ok := val.(string)
+	return ok
 }
 
 // See https://datatracker.ietf.org/doc/draft-ietf-cose-x509/09/ x5chain section,
 // The "chain" can be an array of arrays of bytes or just a single array of bytes
-// in the single cert case.
+// in the single cert case. Each of these two functions handles of of these cases
 
 // a DER chain is an array of arrays of bytes
-func isADERChain(val interface{}) bool {
-	var derArray []interface{}
-	var der []byte
-	if val == nil || reflect.TypeOf(val) != reflect.TypeOf(derArray) {
+func isDERChain(val interface{}) bool {
+	valArray, ok := val.([]interface{})
+	if !ok {
 		return false
 	}
 
-	var valArray = val.([]interface{})
-	if len(valArray) < 1 {
-		return false
+	if len(valArray) > 0 {
+		_, ok = valArray[0].([]byte)
+		return ok
 	}
 
-	return reflect.TypeOf(valArray[0]) == reflect.TypeOf(der)
+	return false
 }
 
 // a DER is an array of bytes
-func isADEROnly(val interface{}) bool {
-	var der []byte
-	if val == nil || reflect.TypeOf(val) != reflect.TypeOf(der) {
-		return false
-	}
-
-	return true
+func isDEROnly(val interface{}) bool {
+	_, ok := val.([]byte)
+	return ok
 }
 
-func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, optionalRootCAPEM []byte, verbose bool) (UnpackedCoseSign1, error) {
+func UnpackAndValidateCOSE1CertChain(raw []byte, optionalPubKeyPEM []byte, optionalRootCAPEM []byte, verbose bool) (*UnpackedCoseSign1, error) {
 	var msg cose.Sign1Message
 	err := msg.UnmarshalCBOR(raw)
 	if err != nil {
-		return UnpackedCoseSign1{}, err
+		return nil, err
 	}
 
 	protected := msg.Headers.Protected
-	val, valPresent := protected[cose.HeaderLabelAlgorithm]
-	if !valPresent || !isAnAlgorithm(val) {
-		return UnpackedCoseSign1{}, fmt.Errorf("algorithm missing")
+	val, ok := protected[cose.HeaderLabelAlgorithm]
+	if !ok {
+		return nil, fmt.Errorf("algorithm missing")
 	}
 
-	algo := val.(cose.Algorithm)
+	algo, ok := val.(cose.Algorithm)
+	if !ok {
+		return nil, fmt.Errorf("algorithm wrong type")
+	}
 
 	if verbose {
 		log.Printf("algo %d aka %s", algo, algo)
 	}
 
-	chainDER, chainPresent := protected[cose.HeaderLabelX5Chain] // The spec says this is ordered - leaf, intermediates, root. X5Bag is unordered and woould need sorting
+	// The spec says this is ordered - leaf, intermediates, root. X5Bag is unordered and would need sorting
+	chainDER, ok := protected[cose.HeaderLabelX5Chain]
 	log.Println(reflect.TypeOf(chainDER).String())
 
-	if !chainPresent {
-		return UnpackedCoseSign1{}, fmt.Errorf("x5Chain missing")
+	if !ok {
+		return nil, fmt.Errorf("x5Chain missing")
 	}
 
-	if !isADERChain(chainDER) && !isADEROnly(chainDER) {
-		return UnpackedCoseSign1{}, fmt.Errorf("x5Chain wrong type")
+	if !isDERChain(chainDER) && !isDEROnly(chainDER) {
+		return nil, fmt.Errorf("x5Chain wrong type")
 	}
 
 	var issuer string
-	val, valPresent = protected["iss" /* HeaderLabelIssuer */]
-	if valPresent && isAString(val) {
+	val, ok = protected["iss" /* HeaderLabelIssuer */]
+	if ok && isAString(val) {
 		issuer = val.(string)
 	}
 
 	var feed string
-	val, valPresent = protected["feed" /* HeaderLabelFeed */]
-	if valPresent && isAString(val) {
+	val, ok = protected["feed" /* HeaderLabelFeed */]
+	if ok && isAString(val) {
 		feed = val.(string)
 	}
 
 	// The HeaderLabelX5Chain entry in the cose header may be a blob (single cert) or an array of blobs (a chain) see https://datatracker.ietf.org/doc/draft-ietf-cose-x509/08/
-
 	var chain []*x509.Certificate
 	var chainIA []interface{}
-	if isADERChain(chainDER) {
+	if isDERChain(chainDER) {
 		chainIA = chainDER.([]interface{})
 	} else {
 		chainIA = append(chainIA, chainDER)
 	}
 
-	for i := range chainIA {
-		cert, err := x509.ParseCertificate(chainIA[i].([]byte))
+	for _, element := range chainIA {
+		cert, err := x509.ParseCertificate(element.([]byte))
 		chain = append(chain, cert)
 		if err != nil {
 			if verbose {
 				log.Print("Parse certificate failed: " + err.Error())
 			}
-			return UnpackedCoseSign1{}, err
+			return nil, err
 		}
 	}
 
-	// A reasonable chain will have 1-100 elements
+	// A reasonable chain will have a handful of certs, typically 3 or 4,
+	// so limit to an arbitary 100 which would be quite unreasonable
 	chainLen := len(chain)
 	if chainLen > 100 || chainLen < 1 {
-		return UnpackedCoseSign1{}, fmt.Errorf("unreasonable number of certs (%d) in COSE_Sign1 document", chainLen)
+		return nil, fmt.Errorf("unreasonable number of certs (%d) in COSE_Sign1 document", chainLen)
 	}
 
 	// We need to split the certs into root, leaf and intermediate to use x509.Certificate.Verify(opts) below
-
 	rootCerts := x509.NewCertPool()
 	intermediateCerts := x509.NewCertPool()
-	var leafCert *x509.Certificate // x509 leaf cert
-	var rootCert *x509.Certificate // x509 root cert
+	var leafCert *x509.Certificate
+	var rootCert *x509.Certificate
 
 	if verbose {
 		log.Print("Certificate chain:")
 	}
-	for which, cert := range chain {
-		if which == 0 {
+	// since the certs come from the ordered HeaderLabelX5Chain we can assume chain[0] is the leaf,
+	// chain[len-1] is the root, and the rest are intermediates.
+	for i, cert := range chain {
+		if i == 0 {
 			leafCert = cert
 			if verbose {
 				log.Println(x509ToPEM(cert))
 			}
-		} else if which == chainLen-1 {
-			// is this the root cert? (NOTE may be absent as per https://microsoft.sharepoint.com/teams/prss/Codesign/SitePages/COSESignOperationsReference.aspx TBC)
-			// cwinter: I think intermediates may be absent, but the root should always be present.
+		} else if i == chainLen-1 {
 			rootCert = cert
 			rootCerts.AddCert(rootCert)
 			if verbose {
@@ -182,7 +173,7 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 	_, err = leafCert.Verify(opts)
 
 	if err != nil {
-		return UnpackedCoseSign1{}, fmt.Errorf("certificate chain verification failed")
+		return nil, fmt.Errorf("certificate chain verification failed")
 	}
 
 	var leafCertBase64 = x509ToBase64(leafCert) // blob of the leaf x509 cert reformatted into pem (base64) style as per the fragment policy rules expect
@@ -190,11 +181,11 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 	var leafPubKeyBase64 = keyToBase64(leafPubKey)
 
 	var chainPEM string
-	for i := range chain {
+	for i, c := range chain {
 		if i > 0 {
 			chainPEM += "\n"
 		}
-		chainPEM += x509ToPEM(chain[i])
+		chainPEM += x509ToPEM(c)
 	}
 
 	var results = UnpackedCoseSign1{
@@ -212,16 +203,16 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 		if verbose {
 			log.Print("leafCert.Verify failed: " + err.Error())
 		}
-		return results, err
+		return nil, err
 	}
 
 	// Use the supplied public key or the one we extracted from the leaf cert.
 	var keyToCheck any
-	if len(optionaPubKeyPEM) == 0 {
+	if len(optionalPubKeyPEM) == 0 {
 		keyToCheck = leafPubKey
 	} else {
 		var keyDer *pem.Block
-		keyDer, _ = pem.Decode(optionaPubKeyPEM)
+		keyDer, _ = pem.Decode(optionalPubKeyPEM) // _ is the remaining. We only care about the first key.
 		var keyBytes = keyDer.Bytes
 
 		keyToCheck, err = x509.ParsePKCS1PublicKey(keyBytes)
@@ -239,7 +230,7 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 				if verbose {
 					log.Print("Failed to parse provided public key - Error = " + err.Error())
 				}
-				return results, err
+				return nil, err
 			}
 		}
 	}
@@ -249,7 +240,7 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 		if verbose {
 			log.Printf("cose.NewVerifier failed (algo %d): %s", algo, err.Error())
 		}
-		return results, err
+		return nil, err
 	}
 
 	err = msg.Verify(nil, verifier)
@@ -257,10 +248,10 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 		if verbose {
 			log.Printf("msg.Verify failed: algo = %d err = %s", algo, err.Error())
 		}
-		return results, err
+		return nil, err
 	}
 
-	return results, err
+	return &results, nil
 }
 
 func PrintChain(inputFilename string) error {
@@ -279,8 +270,8 @@ func PrintChain(inputFilename string) error {
 	}
 
 	chainIA := chainDER.([]interface{})
-	for i := range chainIA {
-		cert, err := x509.ParseCertificate(chainIA[i].([]byte))
+	for _, c := range chainIA {
+		cert, err := x509.ParseCertificate(c.([]byte))
 		if err != nil {
 			return err
 		}
