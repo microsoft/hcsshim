@@ -8,6 +8,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 
+	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
 )
 
@@ -54,8 +55,14 @@ func CreateWCOWUVMFromOptsWithImage(
 		tb.Fatal("opts must be set")
 	}
 
-	//nolint:staticcheck // SA1019: TODO: switch from LayerFolders
-	uvmLayers := layers.LayerFolders(tb, image)
+	img := layers.LazyImageLayers{Image: image, Platform: constants.PlatformWindows}
+	tb.Cleanup(func() {
+		if err := img.Close(ctx); err != nil {
+			tb.Errorf("could not close image %s: %v", image, err)
+		}
+	})
+
+	uvmLayers := img.Layers(ctx, tb)
 	scratchDir := tb.TempDir()
 	opts.LayerFolders = append(opts.LayerFolders, uvmLayers...)
 	opts.LayerFolders = append(opts.LayerFolders, scratchDir)

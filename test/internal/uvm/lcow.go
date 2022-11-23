@@ -45,7 +45,6 @@ func DefaultLCOWOptions(tb testing.TB, id, owner string) *uvm.OptionsLCOW {
 	tb.Helper()
 	opts := uvm.NewDefaultOptionsLCOW(id, owner)
 	if lcowOSBootFiles != "" {
-		tb.Logf("using LCOW bootfiles path: %s", lcowOSBootFiles)
 		opts.BootFilesPath = lcowOSBootFiles
 	}
 	return opts

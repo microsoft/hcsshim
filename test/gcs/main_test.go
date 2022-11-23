@@ -8,19 +8,19 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"testing"
-
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 
 	"github.com/containerd/cgroups"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 
 	testflag "github.com/Microsoft/hcsshim/test/internal/flag"
@@ -38,6 +38,7 @@ var allFeatures = []string{
 }
 
 var (
+	flagLogLevel      = testflag.NewLogrusLevel("log-level", "warning", "logrus logging `level`")
 	flagFeatures      = testflag.NewFeatureFlag(allFeatures)
 	flagJoinGCSCgroup = flag.Bool(
 		"join-gcs-cgroup",
@@ -78,15 +79,16 @@ func TestMain(m *testing.M) {
 func setup() (err error) {
 	_ = os.MkdirAll(guestpath.LCOWRootPrefixInUVM, 0755)
 
-	if vf := flag.Lookup("test.v"); vf != nil {
-		if vf.Value.String() == strconv.FormatBool(true) {
-			logrus.SetLevel(logrus.DebugLevel)
-		} else {
-			logrus.SetLevel(logrus.ErrorLevel)
-		}
-	}
+	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
+	trace.RegisterExporter(&oc.LogrusExporter{})
 
-	// should already start gcs cgroup
+	logrus.SetLevel(flagLogLevel.Level)
+	// test2json does not consume stderr
+	logrus.SetOutput(os.Stdout)
+	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	logrus.Infof("using features %q", flagFeatures.S.Strings())
+
+	// should already start in gcs cgroup
 	if !*flagJoinGCSCgroup {
 		gcsControl, err := cgroups.Load(cgroups.V1, cgroups.StaticPath("/"))
 		if err != nil {

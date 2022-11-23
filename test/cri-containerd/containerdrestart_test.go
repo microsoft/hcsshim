@@ -74,6 +74,8 @@ func Test_ContainerdRestart_LCOW(t *testing.T) {
 
 // test restarting containers and pods
 func Test_Container_CRI_Restart(t *testing.T) {
+	requireFeatures(t, featureCRIPlugin)
+
 	client := newTestRuntimeClient(t)
 	pluginClient := newTestPluginClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -219,6 +221,8 @@ func Test_Container_CRI_Restart(t *testing.T) {
 func Test_Container_CRI_Restart_State(t *testing.T) {
 	testFile := "t.txt"
 	wcowTestFile := `C:\Users\ContainerUser\t.txt`
+
+	requireFeatures(t, featureCRIPlugin)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())

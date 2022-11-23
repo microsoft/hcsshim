@@ -43,28 +43,32 @@ func DefaultLinuxSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecO
 }
 
 // DefaultLinuxSpec returns a default OCI spec for a Linux container.
-// See CreateSpecWithPlatform for more details.
+//
+// See [CreateSpecWithPlatform] for more details.
 func DefaultLinuxSpec(ctx context.Context, tb testing.TB, nns string) *specs.Spec {
 	tb.Helper()
 	return CreateLinuxSpec(ctx, tb, tb.Name(), DefaultLinuxSpecOpts(nns)...)
 }
 
 // CreateLinuxSpec returns the OCI spec for a Linux container.
-// See CreateSpecWithPlatform for more details.
+//
+// See [CreateSpecWithPlatform] for more details.
 func CreateLinuxSpec(ctx context.Context, tb testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
 	tb.Helper()
 	return CreateSpecWithPlatform(ctx, tb, constants.PlatformLinux, id, opts...)
 }
 
 // CreateWindowsSpec returns the OCI spec for a Windows container.
-// See CreateSpecWithPlatform for more details.
+//
+// See [CreateSpecWithPlatform] for more details.
 func CreateWindowsSpec(ctx context.Context, tb testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
 	tb.Helper()
 	return CreateSpecWithPlatform(ctx, tb, constants.PlatformWindows, id, opts...)
 }
 
 // CreateSpecWithPlatform returns the OCI spec for the specified platform.
-// The context must contain a containerd namespace (via "github.com/containerd/containerd/namespaces".WithNamespace)
+// The context must contain a containerd namespace added by
+// [github.com/containerd/containerd/namespaces.WithNamespace]
 func CreateSpecWithPlatform(ctx context.Context, tb testing.TB, plat, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
 	tb.Helper()
 	container := &containers.Container{ID: id}

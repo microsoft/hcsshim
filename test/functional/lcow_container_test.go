@@ -4,7 +4,6 @@
 package functional
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/hcsshim/test/internal/cmd"
-	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/container"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/oci"
@@ -25,10 +23,8 @@ func TestLCOW_ContainerLifecycle(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureContainer)
 	require.Build(t, osversion.RS5)
 
-	ctx, _, client := newContainerdClient(context.Background(), t)
-	ls := layers.FromImage(ctx, t, client, constants.ImageLinuxAlpineLatest,
-		constants.PlatformLinux, constants.SnapshotterLinux)
-
+	ctx := namespacedContext()
+	ls := linuxImageLayers(ctx, t)
 	opts := defaultLCOWOptions(t)
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 
@@ -81,10 +77,8 @@ func TestLCOW_ContainerIO(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureContainer)
 	require.Build(t, osversion.RS5)
 
-	ctx, _, client := newContainerdClient(context.Background(), t)
-	ls := layers.FromImage(ctx, t, client, constants.ImageLinuxAlpineLatest,
-		constants.PlatformLinux, constants.SnapshotterLinux)
-
+	ctx := namespacedContext()
+	ls := linuxImageLayers(ctx, t)
 	opts := defaultLCOWOptions(t)
 	cache := layers.CacheFile(ctx, t, "")
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
@@ -125,10 +119,8 @@ func TestLCOW_ContainerExec(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureContainer)
 	require.Build(t, osversion.RS5)
 
-	ctx, _, client := newContainerdClient(context.Background(), t)
-	ls := layers.FromImage(ctx, t, client, constants.ImageLinuxAlpineLatest,
-		constants.PlatformLinux, constants.SnapshotterLinux)
-
+	ctx := namespacedContext()
+	ls := linuxImageLayers(ctx, t)
 	opts := defaultLCOWOptions(t)
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 

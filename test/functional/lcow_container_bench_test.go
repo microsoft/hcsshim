@@ -4,7 +4,6 @@
 package functional
 
 import (
-	"context"
 	"testing"
 
 	ctrdoci "github.com/containerd/containerd/oci"
@@ -15,7 +14,6 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/hcsshim/test/internal/cmd"
-	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/container"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/oci"
@@ -27,9 +25,8 @@ func BenchmarkLCOW_Container(b *testing.B) {
 	requireFeatures(b, featureLCOW, featureContainer)
 	require.Build(b, osversion.RS5)
 
-	ctx, _, client := newContainerdClient(context.Background(), b)
-	ls := layers.FromImage(ctx, b, client, constants.ImageLinuxAlpineLatest,
-		constants.PlatformLinux, constants.SnapshotterLinux)
+	ctx := namespacedContext()
+	ls := linuxImageLayers(ctx, b)
 
 	// Create a new uvm per benchmark in case any left over state lingers
 

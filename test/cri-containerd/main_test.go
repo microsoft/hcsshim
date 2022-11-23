@@ -106,6 +106,7 @@ const (
 	featureTerminateOnRestart = "TerminateOnRestart"
 	featureLCOWIntegrity      = "LCOWIntegrity"
 	featureLCOWCrypt          = "LCOWCrypt"
+	featureCRIPlugin          = "CRIPlugin"
 )
 
 var allFeatures = []string{
@@ -117,6 +118,9 @@ var allFeatures = []string{
 	featureGPU,
 	featureCRIUpdateContainer,
 	featureTerminateOnRestart,
+	featureLCOWIntegrity,
+	featureLCOWCrypt,
+	featureCRIPlugin,
 }
 
 func init() {

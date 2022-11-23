@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+
 	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
@@ -24,9 +26,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/internal/layers"
+
 	"github.com/Microsoft/hcsshim/test/internal/require"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // Has testing for Windows containers using both the older hcsshim methods,
@@ -347,10 +348,6 @@ func runHcsCommand(t *testing.T,
 	}
 }
 
-// busybox is used as it has lots of layers. Exercises more code.
-// Also the commands are more flexible for verification
-const imageName = "busyboxw"
-
 // Creates two temp folders used for the mounts/mapped directories
 //
 //nolint:unused // unused since tests are skipped
@@ -385,8 +382,7 @@ func TestWCOWArgonShim(t *testing.T) {
 
 	requireFeatures(t, featureWCOW)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	imageLayers := layers.LayerFolders(t, imageName)
+	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	argonShimMounted := false
 
 	argonShimScratchDir := t.TempDir()
@@ -463,8 +459,7 @@ func TestWCOWXenonShim(t *testing.T) {
 
 	requireFeatures(t, featureWCOW)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	imageLayers := layers.LayerFolders(t, imageName)
+	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 
 	xenonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), xenonShimScratchDir, imageLayers); err != nil {
@@ -536,8 +531,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 
 	requireFeatures(t, featureWCOW)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	imageLayers := layers.LayerFolders(t, imageName)
+	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	argonOci1Mounted := false
 	argonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonOci1ScratchDir, imageLayers); err != nil {
@@ -585,8 +579,7 @@ func TestWCOWXenonOciV1(t *testing.T) {
 
 	requireFeatures(t, featureWCOW)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	imageLayers := layers.LayerFolders(t, imageName)
+	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	xenonOci1Mounted := false
 
 	xenonOci1ScratchDir := t.TempDir()
@@ -643,8 +636,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	imageLayers := layers.LayerFolders(t, imageName)
+	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	argonOci2Mounted := false
 
 	argonOci2ScratchDir := t.TempDir()
@@ -694,8 +686,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	imageLayers := layers.LayerFolders(t, imageName)
+	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	xenonOci2Mounted := false
 	xenonOci2UVMCreated := false
 
