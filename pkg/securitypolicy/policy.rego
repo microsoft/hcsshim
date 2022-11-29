@@ -1,9 +1,6 @@
 package policy
 
-api_svn := "0.9.0"
-
-import future.keywords.every
-import future.keywords.in
+api_svn := "0.10.0"
 
 ##OBJECTS##
 
