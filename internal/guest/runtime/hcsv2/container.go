@@ -48,8 +48,9 @@ type Container struct {
 	id    string
 	vsock transport.Transport
 
-	spec      *oci.Spec
-	isSandbox bool
+	spec          *oci.Spec
+	ociBundlePath string
+	isSandbox     bool
 
 	container   runtime.Container
 	initProcess *containerProcess
@@ -206,6 +207,14 @@ func (c *Container) Delete(ctx context.Context) error {
 	if err := os.RemoveAll(c.scratchDirPath); err != nil {
 		if retErr != nil {
 			retErr = fmt.Errorf("errors deleting container state, %s & %s", retErr, err)
+		} else {
+			retErr = err
+		}
+	}
+
+	if err := os.RemoveAll(c.ociBundlePath); err != nil {
+		if retErr != nil {
+			retErr = fmt.Errorf("errors deleting container oci bundle dir, %s & %s", retErr, err)
 		} else {
 			retErr = err
 		}

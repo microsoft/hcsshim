@@ -21,10 +21,6 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
-func getWorkloadRootDir(id string) string {
-	return filepath.Join(guestpath.LCOWRootPrefixInUVM, id)
-}
-
 // os.MkdirAll combines the given permissions with the running process's
 // umask. By default this causes 0777 to become 0755.
 // Temporarily set the umask of this process to 0 so that we can actually

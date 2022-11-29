@@ -230,6 +230,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		id:             id,
 		vsock:          h.vsock,
 		spec:           settings.OCISpecification,
+		ociBundlePath:  settings.OCIBundlePath,
 		isSandbox:      criType == "sandbox",
 		exitType:       prot.NtUnexpectedExit,
 		processes:      make(map[uint32]*containerProcess),
@@ -267,7 +268,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			}
 			defer func() {
 				if err != nil {
-					_ = os.RemoveAll(spec.SandboxRootDir(id))
+					_ = os.RemoveAll(settings.OCIBundlePath)
 				}
 			}()
 
@@ -293,7 +294,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			}
 			defer func() {
 				if err != nil {
-					_ = os.RemoveAll(getWorkloadRootDir(id))
+					_ = os.RemoveAll(settings.OCIBundlePath)
 				}
 			}()
 			if err := policy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityPolicyEnforcer, settings.OCISpecification); err != nil {
@@ -310,7 +311,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 		defer func() {
 			if err != nil {
-				_ = os.RemoveAll(getStandaloneRootDir(id))
+				_ = os.RemoveAll(settings.OCIBundlePath)
 			}
 		}()
 	}
