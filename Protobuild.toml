@@ -2,12 +2,11 @@ version = "1"
 generator = "gogoctrd"
 plugins = ["grpc", "fieldpath"]
 
-# Control protoc include paths. Below are usually some good defaults, but feel
-# free to try it without them if it works for your project.
 [includes]
-  # Include paths that will be added before all others. Typically, you want to
-  # treat the root of the project as an include, but this may not be necessary.
   before = ["./protobuf"]
+
+  # override default of ["usr/local/include", "/usr/include"]
+  after = []
 
   # Paths that should be treated as include roots in relation to the vendor
   # directory. These will be calculated with the vendor directory nearest the

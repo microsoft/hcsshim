@@ -48,44 +48,47 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      # protobuild requires the code to be in $GOPATH to translate from github.com/Microsoft/hcsshim
+      # to the correct path on disk
       - uses: actions/checkout@v3
         with:
-          path: "go/src/github.com/Microsoft/hcsshim"
-      # Install protoc-gen-gogoctrd in D:\bin
-      - uses: actions/checkout@v3
-        with:
-          repository: containerd/containerd
-          ref: v1.6.2
-          path: "containerd"
-      - name: Install protoc-gen-gogoctrd
-        shell: powershell
-        run: |
-          cd containerd
-          go build ./cmd/protoc-gen-gogoctrd
-          mkdir D:\bin
-          mv protoc-gen-gogoctrd.exe D:\bin
+          path: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
+
       # Install protoc in D:\bin
       - name: Install protoc
         shell: powershell
         run: |
-          Invoke-WebRequest -OutFile protoc.zip -Uri https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/protoc-3.19.4-win32.zip
+          curl.exe -L --no-progress-meter -o protoc.zip `
+            https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/protoc-3.19.4-win32.zip
+
           Expand-Archive -Path protoc.zip -DestinationPath .
-          mv include go/src/github.com/Microsoft/hcsshim/protobuf
+
+          mkdir -f ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
+          mv include/* ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
+
+          mkdir -f D:\bin
           mv bin\protoc.exe D:\bin
-      - name: Run Protobuild
+
+      - name: Run protobuild
         shell: powershell
         run: |
-          go install github.com/containerd/protobuild@v0.2.0
-          cd go\src\github.com\Microsoft\hcsshim
+          # Install protobuild and gogoctrd; rely on tools.go to vendor correct dependencies
+          go install github.com/containerd/protobuild
+          go install github.com/containerd/containerd/cmd/protoc-gen-gogoctrd
 
-          $Env:Path += ";D:\bin;" + $Env:GOPATH + "\bin"
-          protobuild $(go list ./... | grep -v /vendor/)
+          $env:Path += ";D:\bin;$env:GOPATH\bin"
+          Write-Output "::group::protobuild"
+          protobuild $( go list ./... | Where-Object { $_ -notmatch 'vendor' } )
+          Write-Output "::endgroup::"
 
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
           git diff --exit-code
+          Write-Output "::endgroup::"
+        working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
         env:
           GOPATH: '${{ github.workspace }}\go'
-          GOFLAGS: ""
-          GOPROXY: ""
 
   verify-vendor:
     runs-on: "windows-2019"

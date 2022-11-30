@@ -2,8 +2,6 @@ syntax = "proto3";
 
 option go_package = "github.com/Microsoft/hcsshim/internal/ncproxyttrpc/;ncproxyttrpc";
 
-import weak "gogoproto/gogo.proto";
-
 service NetworkConfigProxy {
     rpc RegisterComputeAgent(RegisterComputeAgentRequest) returns (RegisterComputeAgentResponse) {}
     rpc UnregisterComputeAgent(UnregisterComputeAgentRequest) returns (UnregisterComputeAgentResponse) {}
@@ -23,9 +21,9 @@ message UnregisterComputeAgentRequest {
 
 message UnregisterComputeAgentResponse {}
 
-enum RequestTypeInternal { 
-    Setup = 0; 
-    Teardown = 1; 
+enum RequestTypeInternal {
+    Setup = 0;
+    Teardown = 1;
 }
 
 message ConfigureNetworkingInternalRequest{

@@ -2,5 +2,11 @@
 
 package hcsshim
 
-import _ "github.com/Microsoft/go-winio/tools/mkwinsyscall"
-import _ "github.com/josephspurrier/goversioninfo/cmd/goversioninfo"
+import (
+	// protobuf generation
+	_ "github.com/containerd/containerd/cmd/protoc-gen-gogoctrd"
+	_ "github.com/containerd/protobuild"
+	// go generate
+	_ "github.com/Microsoft/go-winio/tools/mkwinsyscall"
+	_ "github.com/josephspurrier/goversioninfo/cmd/goversioninfo"
+)

@@ -31,10 +31,13 @@ require (
 	go.opencensus.io v0.23.0
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.48.0
 )
 
-require github.com/josephspurrier/goversioninfo v1.4.0
+require (
+	github.com/containerd/protobuild v0.3.0
+	github.com/josephspurrier/goversioninfo v1.4.0
+)
 
 require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
@@ -61,6 +64,7 @@ require (
 	github.com/moby/sys/mountinfo v0.5.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.3-0.20220114050600-8b9d41f48198 // indirect
+	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
