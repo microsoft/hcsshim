@@ -463,6 +463,25 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 			}
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.Name)
 		}
+		if req.AttachToHost {
+			namespaces, err := hcn.ListNamespaces()
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed list namespaces")
+			}
+
+			for _, namespace := range namespaces {
+				if namespace.Type == hcn.NamespaceTypeHostDefault {
+					req.NamespaceID = namespace.Id
+					log.G(ctx).WithField("namespaceID", req.NamespaceID).Debug("Attaching endpoint to default host namespace")
+					// replace current span namespaceID attribute
+					span.AddAttributes(trace.StringAttribute("namespaceID", req.NamespaceID))
+					break
+				}
+			}
+			if req.NamespaceID == "" {
+				return nil, errors.New("unable to find default host namespace to attach to")
+			}
+		}
 		if err := hcn.AddNamespaceEndpoint(req.NamespaceID, ep.Id); err != nil {
 			return nil, errors.Wrapf(err, "failed to add endpoint with name %q to namespace", req.Name)
 		}
@@ -681,7 +700,7 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 		return nil, errors.Wrapf(err, "failed to get network with name %q", req.Name)
 	}
 
-	return hcnNetworkToNetworkResponse(network)
+	return hcnNetworkToNetworkResponse(ctx, network)
 }
 
 func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetworksRequest) (_ *ncproxygrpc.GetNetworksResponse, err error) {
@@ -702,7 +721,7 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 	}
 
 	for _, network := range rawHCNNetworks {
-		n, err := hcnNetworkToNetworkResponse(&network)
+		n, err := hcnNetworkToNetworkResponse(ctx, &network)
 		if err != nil {
 			return nil, err
 		}
