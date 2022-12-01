@@ -129,6 +129,8 @@ type securityPolicyContainer struct {
 	// A list of signals that are allowed to be sent to the container's init
 	// process.
 	Signals []syscall.Signal `json:"signals"`
+	// Whether to allow the capture of init process standard out and standard error
+	AllowStdioAccess bool
 }
 
 type containerExecProcess struct {
@@ -138,9 +140,10 @@ type containerExecProcess struct {
 }
 
 type externalProcess struct {
-	command    []string
-	envRules   []EnvRuleConfig
-	workingDir string
+	command          []string
+	envRules         []EnvRuleConfig
+	workingDir       string
+	allowStdioAccess bool
 }
 
 // Internal version of Mount
@@ -190,11 +193,12 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		Layers:   layers,
 		// No need to have toInternal(), because WorkingDir is a string both
 		// internally and in the policy.
-		WorkingDir:    c.WorkingDir,
-		Mounts:        mounts,
-		AllowElevated: c.AllowElevated,
-		ExecProcesses: execProcesses,
-		Signals:       c.Signals,
+		WorkingDir:       c.WorkingDir,
+		Mounts:           mounts,
+		AllowElevated:    c.AllowElevated,
+		ExecProcesses:    execProcesses,
+		Signals:          c.Signals,
+		AllowStdioAccess: c.AllowStdioAccess,
 	}, nil
 }
 
@@ -256,7 +260,8 @@ func (p ExternalProcessConfig) toInternal() externalProcess {
 			Rule:     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 			Required: true,
 		}},
-		workingDir: p.WorkingDir,
+		workingDir:       p.WorkingDir,
+		allowStdioAccess: p.AllowStdioAccess,
 	}
 }
 

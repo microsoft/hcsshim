@@ -757,6 +757,10 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 	// and validate later
 	alpineCmd := []string{"ash", "-c", "env && sleep 1"}
 
+	opts := []securitypolicy.ContainerConfigOpt{
+		securitypolicy.WithCommand(alpineCmd),
+		securitypolicy.WithAllowStdioAccess(true),
+	}
 	for _, config := range []struct {
 		name   string
 		policy string
@@ -767,11 +771,11 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 		},
 		{
 			name:   "StandardPolicy",
-			policy: alpineSecurityPolicy(t, "json", false, securitypolicy.WithCommand(alpineCmd)),
+			policy: alpineSecurityPolicy(t, "json", false, opts...),
 		},
 		{
 			name:   "RegoPolicy",
-			policy: alpineSecurityPolicy(t, "rego", false, securitypolicy.WithCommand(alpineCmd)),
+			policy: alpineSecurityPolicy(t, "rego", false, opts...),
 		},
 	} {
 		for _, setPolicyEnv := range []bool{true, false} {
@@ -1005,5 +1009,74 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 	expectedError := "unencrypted scratch not allowed"
 	if !strings.Contains(err.Error(), expectedError) {
 		t.Fatalf("expected '%s' error, got '%s'", expectedError, err)
+	}
+}
+
+func Test_RunContainer_WithPolicy_And_Binary_Logger_Without_Stdio(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	binaryPath := requireBinary(t, "sample-logging-driver.exe")
+
+	logPath := "binary:///" + binaryPath
+
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	for _, tc := range []struct {
+		stdioAllowed   bool
+		expectedOutput string
+	}{
+		{
+			true,
+			"hello\nworld\n",
+		},
+		{
+			false,
+			"",
+		},
+	} {
+		t.Run(fmt.Sprintf("StdioAllowed_%v", tc.stdioAllowed), func(t *testing.T) {
+			cmd := []string{"ash", "-c", "echo hello; sleep 1; echo world"}
+			policy := alpineSecurityPolicy(
+				t,
+				"rego",
+				true,
+				securitypolicy.WithAllowStdioAccess(tc.stdioAllowed),
+				securitypolicy.WithCommand(cmd),
+			)
+			podReq := sandboxRequestWithPolicy(t, policy)
+			podID := runPodSandbox(t, client, ctx, podReq)
+			defer removePodSandbox(t, client, ctx, podID)
+
+			logFileName := fmt.Sprintf(`%s\stdout.txt`, t.TempDir())
+			conReq := getCreateContainerRequest(
+				podID,
+				fmt.Sprintf("alpine-stdio-allowed-%v", tc.stdioAllowed),
+				imageLcowAlpine,
+				cmd,
+				podReq.Config,
+			)
+			conReq.Config.LogPath = logPath + fmt.Sprintf("?%s", logFileName)
+
+			containerID := createContainer(t, client, ctx, conReq)
+			defer removeContainer(t, client, ctx, containerID)
+
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
+			requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_EXITED)
+
+			content, err := os.ReadFile(logFileName)
+			if err != nil {
+				t.Fatalf("failed to read log file: %s", err)
+			}
+			if tc.expectedOutput != string(content) {
+				t.Fatalf("expected output %q, got %q", tc.expectedOutput, string(content))
+			}
+		})
 	}
 }

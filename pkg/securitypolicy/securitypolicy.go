@@ -40,8 +40,9 @@ type PolicyConfig struct {
 
 // ExternalProcessConfig contains toml or JSON config for running external processes in the UVM.
 type ExternalProcessConfig struct {
-	Command    []string `json:"command" toml:"command"`
-	WorkingDir string   `json:"working_dir" toml:"working_dir"`
+	Command          []string `json:"command" toml:"command"`
+	WorkingDir       string   `json:"working_dir" toml:"working_dir"`
+	AllowStdioAccess bool     `json:"allow_stdio_access" toml:"allow_stdio_access"`
 }
 
 // FragmentConfig contains toml or JSON config for including elements from fragments.
@@ -69,15 +70,16 @@ type EnvRuleConfig struct {
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
-	ImageName     string              `json:"image_name" toml:"image_name"`
-	Command       []string            `json:"command" toml:"command"`
-	Auth          AuthConfig          `json:"auth" toml:"auth"`
-	EnvRules      []EnvRuleConfig     `json:"env_rules" toml:"env_rule"`
-	WorkingDir    string              `json:"working_dir" toml:"working_dir"`
-	Mounts        []MountConfig       `json:"mounts" toml:"mount"`
-	AllowElevated bool                `json:"allow_elevated" toml:"allow_elevated"`
-	ExecProcesses []ExecProcessConfig `json:"exec_processes" toml:"exec_process"`
-	Signals       []syscall.Signal    `json:"signals" toml:"signals"`
+	ImageName        string              `json:"image_name" toml:"image_name"`
+	Command          []string            `json:"command" toml:"command"`
+	Auth             AuthConfig          `json:"auth" toml:"auth"`
+	EnvRules         []EnvRuleConfig     `json:"env_rules" toml:"env_rule"`
+	WorkingDir       string              `json:"working_dir" toml:"working_dir"`
+	Mounts           []MountConfig       `json:"mounts" toml:"mount"`
+	AllowElevated    bool                `json:"allow_elevated" toml:"allow_elevated"`
+	ExecProcesses    []ExecProcessConfig `json:"exec_processes" toml:"exec_process"`
+	Signals          []syscall.Signal    `json:"signals" toml:"signals"`
+	AllowStdioAccess bool                `json:"allow_stdio_access" toml:"allow_stdio_access"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -164,14 +166,15 @@ type Containers struct {
 }
 
 type Container struct {
-	Command       CommandArgs         `json:"command"`
-	EnvRules      EnvRules            `json:"env_rules"`
-	Layers        Layers              `json:"layers"`
-	WorkingDir    string              `json:"working_dir"`
-	Mounts        Mounts              `json:"mounts"`
-	AllowElevated bool                `json:"allow_elevated"`
-	ExecProcesses []ExecProcessConfig `json:"-"`
-	Signals       []syscall.Signal    `json:"-"`
+	Command          CommandArgs         `json:"command"`
+	EnvRules         EnvRules            `json:"env_rules"`
+	Layers           Layers              `json:"layers"`
+	WorkingDir       string              `json:"working_dir"`
+	Mounts           Mounts              `json:"mounts"`
+	AllowElevated    bool                `json:"allow_elevated"`
+	ExecProcesses    []ExecProcessConfig `json:"-"`
+	Signals          []syscall.Signal    `json:"-"`
+	AllowStdioAccess bool                `json:"_"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -213,6 +216,7 @@ func CreateContainerPolicy(
 	allowElevated bool,
 	execProcesses []ExecProcessConfig,
 	signals []syscall.Signal,
+	AllowStdioAccess bool,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
@@ -221,14 +225,15 @@ func CreateContainerPolicy(
 		return nil, err
 	}
 	return &Container{
-		Command:       newCommandArgs(command),
-		Layers:        newLayers(layers),
-		EnvRules:      newEnvRules(envRules),
-		WorkingDir:    workingDir,
-		Mounts:        newMountConstraints(mounts),
-		AllowElevated: allowElevated,
-		ExecProcesses: execProcesses,
-		Signals:       signals,
+		Command:          newCommandArgs(command),
+		Layers:           newLayers(layers),
+		EnvRules:         newEnvRules(envRules),
+		WorkingDir:       workingDir,
+		Mounts:           newMountConstraints(mounts),
+		AllowElevated:    allowElevated,
+		ExecProcesses:    execProcesses,
+		Signals:          signals,
+		AllowStdioAccess: AllowStdioAccess,
 	}, nil
 }
 

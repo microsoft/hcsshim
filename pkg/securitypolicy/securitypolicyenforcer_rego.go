@@ -76,6 +76,8 @@ type regoEnforcer struct {
 	compiledModules *ast.Compiler
 	// Debug flag
 	debug bool
+	// Stdio allowed state on a per container id basis
+	stdio map[string]bool
 }
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
@@ -205,6 +207,7 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 		"api.rego":       {namespace: "api", code: apiCode},
 		"framework.rego": {namespace: "framework", code: frameworkCode},
 	}
+	policy.stdio = map[string]bool{}
 
 	err := policy.compile()
 	if err != nil {
@@ -517,9 +520,10 @@ func newMetadataOperation(operation interface{}) (*metadataOperation, error) {
 }
 
 var reservedResultKeys = map[string]struct{}{
-	"allowed":    {},
-	"add_module": {},
-	"env_list":   {},
+	"allowed":            {},
+	"add_module":         {},
+	"env_list":           {},
+	"allow_stdio_access": {},
 }
 
 func (policy *regoEnforcer) getMetadata(name string) (metadataObject, error) {
@@ -704,7 +708,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	envList []string,
 	workingDir string,
 	mounts []oci.Mount,
-) (toKeep EnvList, err error) {
+) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
 		"containerID":  containerID,
 		"argList":      argList,
@@ -717,15 +721,35 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 
 	results, err := policy.enforce("create_container", input)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	toKeep, err = getEnvsToKeep(envList, results)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return toKeep, nil
+	if value, ok := results["allow_stdio_access"]; ok {
+		if value, ok := value.(bool); ok {
+			stdioAccessAllowed = value
+		} else {
+			// we got a non-boolean. that's a clear error
+			// alert that we got an error rather than setting a default value
+			return nil, false, errors.New("`allow_stdio_access` needs to be a boolean")
+		}
+	} else {
+		// Policy writer didn't specify an `allow_studio_access` value.
+		// We have two options, return an error or set a default value.
+		// We are setting a default value: do not allow
+		stdioAccessAllowed = false
+	}
+
+	// Store the result of stdio access allowed for this container so we can use
+	// it if we get queried about allowing exec in container access. Stdio access
+	// is on a per-container, not per-process basis.
+	policy.stdio[containerID] = stdioAccessAllowed
+
+	return toKeep, stdioAccessAllowed, nil
 }
 
 func (policy *regoEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) error {
@@ -763,7 +787,7 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
 }
 
-func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
 		"containerID": containerID,
 		"argList":     argList,
@@ -773,19 +797,19 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, arg
 
 	results, err := policy.enforce("exec_in_container", input)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	toKeep, err = getEnvsToKeep(envList, results)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return toKeep, nil
+	return toKeep, policy.stdio[containerID], nil
 }
 
-func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
-	input := inputData{
+func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (toKeep EnvList, stdioAccessAllowed bool, err error) {
+	input := map[string]interface{}{
 		"argList":    argList,
 		"envList":    envList,
 		"workingDir": workingDir,
@@ -793,15 +817,30 @@ func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, e
 
 	results, err := policy.enforce("exec_external", input)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	toKeep, err = getEnvsToKeep(envList, results)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return toKeep, nil
+	if value, ok := results["allow_stdio_access"]; ok {
+		if value, ok := value.(bool); ok {
+			stdioAccessAllowed = value
+		} else {
+			// we got a non-boolean. that's a clear error
+			// alert that we got an error rather than setting a default value
+			return nil, false, errors.New("`allow_stdio_access` needs to be a boolean")
+		}
+	} else {
+		// Policy writer didn't specify an `allow_studio_access` value.
+		// We have two options, return an error or set a default value.
+		// We are setting a default value: do not allow
+		stdioAccessAllowed = false
+	}
+
+	return toKeep, stdioAccessAllowed, nil
 }
 
 func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) error {

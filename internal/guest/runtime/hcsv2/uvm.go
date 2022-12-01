@@ -58,8 +58,9 @@ type Host struct {
 	externalProcesses      map[int]*externalProcess
 
 	// Rtime is the Runtime interface used by the GCS core.
-	rtime runtime.Runtime
-	vsock transport.Transport
+	rtime            runtime.Runtime
+	vsock            transport.Transport
+	devNullTransport transport.Transport
 
 	// state required for the security policy enforcement
 	policyMutex               sync.Mutex
@@ -80,6 +81,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		externalProcesses:         make(map[int]*externalProcess),
 		rtime:                     rtime,
 		vsock:                     vsock,
+		devNullTransport:          &transport.DevNullTransport{},
 		securityPolicyEnforcerSet: false,
 		securityPolicyEnforcer:    initialEnforcer,
 		logWriter:                 logWriter,
@@ -315,7 +317,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
-	envToKeep, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+	envToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
 		sandboxID,
 		id,
 		settings.OCISpecification.Process.Args,
@@ -325,6 +327,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
+	}
+
+	if !allowStdio {
+		// stdio access isn't allow for this container. Switch to the /dev/null
+		// transport that will eat all input/ouput.
+		c.vsock = h.devNullTransport
 	}
 
 	if envToKeep != nil {
@@ -559,7 +567,8 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var c *Container
 	var envToKeep securitypolicy.EnvList
 	if params.IsExternal || containerID == UVMContainerID {
-		envToKeep, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
+		var allowStdioAccess bool
+		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
 			params.CommandArgs,
 			processParamEnvToOCIEnv(params.Environment),
 			params.WorkingDirectory,
@@ -568,11 +577,21 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			return pid, errors.Wrapf(err, "exec is denied due to policy")
 		}
 
+		// It makes no sense to allow access if stdio access is denied and the
+		// process requires a terminal.
+		if params.EmulateConsole && !allowStdioAccess {
+			return pid, errors.New("exec of process that requires terminal access denied due to policy not allowing stdio access")
+		}
+
 		if envToKeep != nil {
 			params.Environment = processOCIEnvToParam(envToKeep)
 		}
 
-		pid, err = h.runExternalProcess(ctx, params, conSettings)
+		var tport = h.vsock
+		if !allowStdioAccess {
+			tport = h.devNullTransport
+		}
+		pid, err = h.runExternalProcess(ctx, params, conSettings, tport)
 	} else if c, err = h.GetCreatedContainer(containerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
 		if params.OCIProcess == nil {
@@ -580,11 +599,18 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			// there's no policy enforcement to do for starting
 			pid, err = c.Start(ctx, conSettings)
 		} else {
+			var allowStdioAccess bool
 			// Windows uses a different field for command, there's no enforcement
 			// around this yet for Windows so this is Linux specific at the moment.
-			envToKeep, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(containerID, params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
+			envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(containerID, params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
 			if err != nil {
 				return pid, errors.Wrapf(err, "exec in container denied due to policy")
+			}
+
+			// It makes no sense to allow access if stdio access is denied and the
+			// process requires a terminal.
+			if params.OCIProcess.Terminal && !allowStdioAccess {
+				return pid, errors.New("exec in container of process that requires terminal access denied due to policy not allowing stdio access")
 			}
 
 			if envToKeep != nil {
@@ -657,9 +683,10 @@ func (h *Host) runExternalProcess(
 	ctx context.Context,
 	params prot.ProcessParameters,
 	conSettings stdio.ConnectionSettings,
+	tport transport.Transport,
 ) (_ int, err error) {
 	var stdioSet *stdio.ConnectionSet
-	stdioSet, err = stdio.Connect(h.vsock, conSettings)
+	stdioSet, err = stdio.Connect(tport, conSettings)
 	if err != nil {
 		return -1, err
 	}
