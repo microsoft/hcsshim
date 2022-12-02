@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.17
+go 1.18
 
 require (
 	github.com/Microsoft/go-winio v0.6.0
