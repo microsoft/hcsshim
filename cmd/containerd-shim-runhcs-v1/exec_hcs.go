@@ -64,7 +64,10 @@ func newHcsExec(
 		exitStatus:  255, // By design for non-exited process status.
 		exited:      make(chan struct{}),
 	}
-	go he.waitForContainerExit()
+	// Start this go routine for the container task.
+	if id == c.ID() {
+		go he.waitForContainerExit()
+	}
 	return he
 }
 
