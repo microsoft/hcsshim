@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
@@ -42,12 +43,12 @@ func WithSecurityPolicyEnforcer(enforcer string) ConfidentialUVMOpt {
 	}
 }
 
-func base64EncodeContent(filePath string) (string, error) {
+func base64EncodeFileContents(filePath string) (string, error) {
 	if filePath == "" {
 		return "", nil
 	}
 	content, err := os.ReadFile(filePath)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(content), nil
@@ -61,9 +62,14 @@ func WithUVMReferenceInfo(referenceRoot string, referenceName string) Confidenti
 		if referenceName == "" {
 			return nil
 		}
-		encoded, err := base64EncodeContent(filepath.Join(referenceRoot, referenceName))
+		fullFilePath := filepath.Join(referenceRoot, referenceName)
+		encoded, err := base64EncodeFileContents(fullFilePath)
 		if err != nil {
-			return err
+			if os.IsNotExist(err) {
+				log.G(ctx).WithField("filePath", fullFilePath).Debug("UVM reference info file not found")
+				return nil
+			}
+			return fmt.Errorf("failed to read UVM reference info file: %w", err)
 		}
 		r.EncodedUVMReference = encoded
 		return nil
