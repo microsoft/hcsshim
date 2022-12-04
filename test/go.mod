@@ -22,7 +22,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.1.0
+	golang.org/x/sys v0.2.0
 	google.golang.org/grpc v1.47.0
 	k8s.io/cri-api v0.24.1
 )
