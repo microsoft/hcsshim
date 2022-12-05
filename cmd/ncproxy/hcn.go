@@ -306,7 +306,7 @@ func hcnNetworkToNetworkResponse(ctx context.Context, network *hcn.HostComputeNe
 	case n < 1:
 		return nil, fmt.Errorf("network %s(%s) MAC pool is empty", network.Name, network.Id)
 	case n > 1:
-		log.G(ctx).WithField("networkName", network.Name).Debug("network has multiple MAC pools, only returning the first")
+		log.G(ctx).WithField("networkName", network.Name).Warn("network has multiple MAC pools, only returning the first")
 		fallthrough
 	default:
 		startMac = network.MacPool.Ranges[0].StartMacAddress
