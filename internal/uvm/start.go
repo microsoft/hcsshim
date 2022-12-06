@@ -282,11 +282,12 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}
 
 	if uvm.confidentialUVMOptions != nil && uvm.OS() == "linux" {
-		if err := uvm.SetConfidentialUVMOptions(ctx,
+		copts := []ConfidentialUVMOpt{
 			WithSecurityPolicy(uvm.confidentialUVMOptions.SecurityPolicy),
 			WithSecurityPolicyEnforcer(uvm.confidentialUVMOptions.SecurityPolicyEnforcer),
 			WithUVMReferenceInfo(defaultLCOWOSBootFilesPath(), uvm.confidentialUVMOptions.UVMReferenceInfoFile),
-		); err != nil {
+		}
+		if err := uvm.SetConfidentialUVMOptions(ctx, copts...); err != nil {
 			return err
 		}
 	}

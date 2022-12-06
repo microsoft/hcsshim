@@ -271,12 +271,16 @@ const (
 	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
 	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
 
-	// UVMSecurityPolicyEnv specifies if UVM_SECURITY_POLICY and
-	// UVM_REFERENCE_INFO variables should be injected for a container.
+	// UVMSecurityPolicyEnv specifies if UVM_SECURITY_POLICY, UVM_REFERENCE_INFO
+	// and UVM_HOST_AMD_CERTIFICATE variables should be injected for a container.
 	UVMSecurityPolicyEnv = "io.microsoft.virtualmachine.lcow.securitypolicy.env"
 
 	// UVMReferenceInfoFile specifies the filename of a signed UVM reference file to be passed to UVM.
 	UVMReferenceInfoFile = "io.microsoft.virtualmachine.lcow.uvm-reference-info-file"
+
+	// HostAMDCertificate specifies the filename of the AMD certificates to be passed to UVM.
+	// The certificate is expected to be located in the same directory as the shim executable.
+	HostAMDCertificate = "io.microsoft.virtualmachine.lcow.amd-certificate"
 
 	// DisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.
