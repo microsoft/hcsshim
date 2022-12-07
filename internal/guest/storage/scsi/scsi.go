@@ -163,6 +163,8 @@ func Mount(
 		source = encryptedSource
 	}
 
+	// FIXME: since ControllerLunToName waits for the device to appear under /dev/sd*
+	// do we still need this retry loop?
 	for {
 		if err := unixMount(source, target, "ext4", flags, data); err != nil {
 			// The `source` found by controllerLunToName can take some time
@@ -275,6 +277,22 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 	}
 
 	devicePath := filepath.Join("/dev", deviceNames[0].Name())
+	// wait for device to appear at /dev/sd*
+	for {
+		_, err = os.Stat(devicePath)
+		if err == nil {
+			break
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+			time.Sleep(time.Millisecond * 10)
+		}
+	}
 	log.G(ctx).WithField("devicePath", devicePath).Debug("found device path")
 	return devicePath, nil
 }
