@@ -80,6 +80,9 @@ github.com/coreos/go-systemd/v22/dbus
 # github.com/cpuguy83/go-md2man/v2 v2.0.2
 ## explicit; go 1.11
 github.com/cpuguy83/go-md2man/v2/md2man
+# github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.0-20210816181553-5444fa50b93d
+## explicit; go 1.13
+github.com/decred/dcrd/dcrec/secp256k1/v4
 # github.com/docker/cli v20.10.20+incompatible
 ## explicit
 github.com/docker/cli/cli/config
@@ -127,6 +130,9 @@ github.com/docker/go-events
 # github.com/docker/go-units v0.5.0
 ## explicit
 github.com/docker/go-units
+# github.com/fxamacker/cbor/v2 v2.4.0
+## explicit; go 1.12
+github.com/fxamacker/cbor/v2
 # github.com/ghodss/yaml v1.0.0
 ## explicit
 github.com/ghodss/yaml
@@ -140,6 +146,17 @@ github.com/gobwas/glob/syntax/ast
 github.com/gobwas/glob/syntax/lexer
 github.com/gobwas/glob/util/runes
 github.com/gobwas/glob/util/strings
+# github.com/goccy/go-json v0.9.7
+## explicit; go 1.12
+github.com/goccy/go-json
+github.com/goccy/go-json/internal/decoder
+github.com/goccy/go-json/internal/encoder
+github.com/goccy/go-json/internal/encoder/vm
+github.com/goccy/go-json/internal/encoder/vm_color
+github.com/goccy/go-json/internal/encoder/vm_color_indent
+github.com/goccy/go-json/internal/encoder/vm_indent
+github.com/goccy/go-json/internal/errors
+github.com/goccy/go-json/internal/runtime
 # github.com/godbus/dbus/v5 v5.0.6
 ## explicit; go 1.12
 github.com/godbus/dbus/v5
@@ -200,6 +217,32 @@ github.com/klauspost/compress/internal/cpuinfo
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
+# github.com/lestrrat-go/backoff/v2 v2.0.8
+## explicit; go 1.16
+github.com/lestrrat-go/backoff/v2
+# github.com/lestrrat-go/blackmagic v1.0.0
+## explicit; go 1.16
+github.com/lestrrat-go/blackmagic
+# github.com/lestrrat-go/httpcc v1.0.1
+## explicit; go 1.16
+github.com/lestrrat-go/httpcc
+# github.com/lestrrat-go/iter v1.0.1
+## explicit; go 1.13
+github.com/lestrrat-go/iter/arrayiter
+github.com/lestrrat-go/iter/mapiter
+# github.com/lestrrat-go/jwx v1.2.25
+## explicit; go 1.15
+github.com/lestrrat-go/jwx/internal/base64
+github.com/lestrrat-go/jwx/internal/ecutil
+github.com/lestrrat-go/jwx/internal/iter
+github.com/lestrrat-go/jwx/internal/json
+github.com/lestrrat-go/jwx/internal/pool
+github.com/lestrrat-go/jwx/jwa
+github.com/lestrrat-go/jwx/jwk
+github.com/lestrrat-go/jwx/x25519
+# github.com/lestrrat-go/option v1.0.0
+## explicit; go 1.16
+github.com/lestrrat-go/option
 # github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 ## explicit
 github.com/linuxkit/virtsock/pkg/vsock
@@ -317,6 +360,9 @@ github.com/vektah/gqlparser/v2/lexer
 github.com/vektah/gqlparser/v2/parser
 github.com/vektah/gqlparser/v2/validator
 github.com/vektah/gqlparser/v2/validator/rules
+# github.com/veraison/go-cose v1.0.0-rc.1
+## explicit; go 1.18
+github.com/veraison/go-cose
 # github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 ## explicit; go 1.12
 github.com/vishvananda/netlink
@@ -324,6 +370,9 @@ github.com/vishvananda/netlink/nl
 # github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 ## explicit; go 1.12
 github.com/vishvananda/netns
+# github.com/x448/float16 v0.8.4
+## explicit; go 1.11
+github.com/x448/float16
 # github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb
 ## explicit
 github.com/xeipuuv/gojsonpointer
@@ -353,6 +402,10 @@ go.opencensus.io/trace
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/propagation
 go.opencensus.io/trace/tracestate
+# golang.org/x/crypto v0.1.0
+## explicit; go 1.17
+golang.org/x/crypto/curve25519
+golang.org/x/crypto/curve25519/internal/field
 # golang.org/x/mod v0.6.0
 ## explicit; go 1.17
 golang.org/x/mod/semver
