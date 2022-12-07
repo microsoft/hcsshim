@@ -42,3 +42,11 @@ func WithCommand(cmd []string) ContainerConfigOpt {
 		return nil
 	}
 }
+
+// WithAllowStdioAccess enables or disables container init process stdio.
+func WithAllowStdioAccess(stdio bool) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.AllowStdioAccess = stdio
+		return nil
+	}
+}

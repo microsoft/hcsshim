@@ -157,7 +157,7 @@ valid_envs_for_all(items) := envs {
         some item in items
         envs := valid_envs_subset(item.env_rules)
     ]
-    
+
     # we want to select the most specific matches, which in this
     # case consists of those matches which require dropping the
     # fewest environment variables (i.e. the longest lists)
@@ -201,7 +201,11 @@ container_started {
 
 default create_container := {"allowed": false}
 
-create_container := {"matches": matches, "env_list": env_list, "started": started, "allowed": true} {
+create_container := {"matches": matches,
+                     "env_list": env_list,
+                     "allow_stdio_access": allow_stdio_access,
+                     "started": started,
+                     "allowed": true} {
     not container_started
     # narrow the matches based upon command, working directory, and
     # mount list
@@ -223,6 +227,16 @@ create_container := {"matches": matches, "env_list": env_list, "started": starte
     ]
 
     count(containers) > 0
+
+    # we can't do narrowing based on allowing stdio access so at this point
+    # every container from the policy that might match this create request
+    # must have the same allow stdio value otherwise, we are in an undecidable
+    # state
+    allow_stdio_access := containers[0].allow_stdio_access
+    every c in containers {
+        c.allow_stdio_access == allow_stdio_access
+    }
+
     matches := {
         "action": "update",
         "key": input.containerID,
@@ -303,7 +317,9 @@ mountList_ok(mounts, allow_elevated) {
 
 default exec_in_container := {"allowed": false}
 
-exec_in_container := {"matches": matches, "env_list": env_list, "allowed": true} {
+exec_in_container := {"matches": matches,
+                      "env_list": env_list,
+                      "allowed": true} {
     container_started
     # narrow our matches based upon the process requested
     possible_containers := [container |
@@ -432,7 +448,9 @@ external_process_ok(process) {
 
 default exec_external := {"allowed": false}
 
-exec_external := {"allowed": true, "env_list": env_list} {
+exec_external := {"allowed": true,
+                  "allow_stdio_access": allow_stdio_access,
+                  "env_list": env_list} {
     # we need to assemble a list of all possible external processes which
     # have a matching working directory and command
     policy_processes := [process |
@@ -460,6 +478,11 @@ exec_external := {"allowed": true, "env_list": env_list} {
     ]
 
     count(processes) > 0
+
+    allow_stdio_access := processes[0].allow_stdio_access
+    every p in processes {
+        p.allow_stdio_access == allow_stdio_access
+    }
 }
 
 default get_properties := {"allowed": false}
@@ -715,11 +738,11 @@ env_matches(env) {
 
 errors[envError] {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
-    bad_envs := [env | 
+    bad_envs := [env |
         env := input.envList[_]
         not env_matches(env)]
     count(bad_envs) > 0
-    envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])    
+    envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])
 }
 
 default workingDirectory_matches := false
@@ -748,7 +771,7 @@ mount_matches(mount) {
 
 errors[mountError] {
     input.rule == "create_container"
-    bad_mounts := [mount.destination | 
+    bad_mounts := [mount.destination |
         mount := input.mounts[_]
         not mount_matches(mount)]
     count(bad_mounts) > 0

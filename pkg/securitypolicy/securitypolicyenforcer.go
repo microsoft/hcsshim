@@ -45,11 +45,11 @@ type SecurityPolicyEnforcer interface {
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) (err error)
 	EnforceOverlayUnmountPolicy(target string) (err error)
 	EnforceCreateContainerPolicy(sandboxID string, containerID string,
-		argList []string, envList []string, workingDir string, mounts []oci.Mount) (toKeep EnvList, err error)
+		argList []string, envList []string, workingDir string, mounts []oci.Mount) (EnvList, bool, error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
-	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (EnvList, error)
-	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (EnvList, error)
+	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (EnvList, bool, error)
+	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (EnvList, bool, error)
 	EnforceShutdownContainerPolicy(containerID string) error
 	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
 	EnforcePlan9MountPolicy(target string) (err error)
@@ -434,50 +434,50 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	envList []string,
 	workingDir string,
 	mounts []oci.Mount,
-) (toKeep EnvList, err error) {
+) (allowedEnvs EnvList, stdioAccessAllowed bool, err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
 	if len(pe.Containers) < 1 {
-		return nil, errors.New("policy doesn't allow mounting containers")
+		return nil, true, errors.New("policy doesn't allow mounting containers")
 	}
 
 	if _, e := pe.startedContainers[containerID]; e {
-		return nil, errors.New("container has already been started")
+		return nil, true, errors.New("container has already been started")
 	}
 
 	if err = pe.enforceCommandPolicy(containerID, argList); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 
 	if err = pe.enforceEnvironmentVariablePolicy(containerID, envList); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 
 	if err = pe.enforceWorkingDirPolicy(containerID, workingDir); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 
 	if err = pe.enforceMountPolicy(sandboxID, containerID, mounts); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 
 	// record that we've allowed this container to start
 	pe.startedContainers[containerID] = struct{}{}
 
-	return envList, nil
+	return envList, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, error) {
-	return envList, nil
+func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, bool, error) {
+	return envList, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, error) {
-	return envList, nil
+func (*StandardSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, bool, error) {
+	return envList, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
@@ -835,16 +835,16 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount) (EnvList, error) {
-	return envList, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount) (EnvList, bool, error) {
+	return envList, true, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, error) {
-	return envList, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, bool, error) {
+	return envList, true, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, error) {
-	return envList, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, bool, error) {
+	return envList, true, nil
 }
 
 func (*OpenDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
@@ -917,16 +917,16 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) erro
 	return errors.New("removing an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount) (EnvList, error) {
-	return nil, errors.New("running commands is denied by policy")
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount) (EnvList, bool, error) {
+	return nil, false, errors.New("running commands is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string) (EnvList, error) {
-	return nil, errors.New("starting additional processes in a container is denied by policy")
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string) (EnvList, bool, error) {
+	return nil, false, errors.New("starting additional processes in a container is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) (EnvList, error) {
-	return nil, errors.New("starting additional processes in uvm is denied by policy")
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) (EnvList, bool, error) {
+	return nil, false, errors.New("starting additional processes in uvm is denied by policy")
 }
 
 func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
