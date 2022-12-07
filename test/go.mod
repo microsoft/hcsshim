@@ -4,9 +4,9 @@ go 1.18
 
 require (
 	github.com/Microsoft/go-winio v0.6.0
-	github.com/Microsoft/hcsshim v0.9.4
+	github.com/Microsoft/hcsshim v0.9.5
 	github.com/containerd/cgroups v1.0.3
-	github.com/containerd/containerd v1.6.6
+	github.com/containerd/containerd v1.6.12
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
@@ -24,7 +24,7 @@ require (
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.2.0
 	google.golang.org/grpc v1.47.0
-	k8s.io/cri-api v0.24.1
+	k8s.io/cri-api v0.25.0
 )
 
 require (
@@ -34,7 +34,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.2.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
-	github.com/containerd/continuity v0.2.2 // indirect
+	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.12.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
