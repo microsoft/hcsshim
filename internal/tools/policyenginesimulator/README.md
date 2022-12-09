@@ -83,7 +83,8 @@ the policy. These commands take the form of JSON, *e.g.*:
 ```
 
 Each command has a name (corresponding to the API enforcement point) and then
-an input which will be passed directly to the policy.
+an input which will be passed directly to the policy. The API being tested
+is defined in [`api.rego`](../../../pkg/securitypolicy/api.rego).
 
 ## Data
 
@@ -123,7 +124,9 @@ policy enforcement:
 
 This can be any Rego with a package name of `policy`, though policies which do
 not define the required enforcement point rules will result in enforcement
-failures. Here are some example policies:
+failures. We include some straightforward samples below, but see
+[simple_custom](simple_custom) and [simple_framework](simple_framework)
+for more detail.
 
 ### Framework-based policy
 
