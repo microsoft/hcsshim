@@ -26,6 +26,10 @@ type Container struct {
 	notifyCh  chan struct{}
 	closeCh   chan struct{}
 	closeOnce sync.Once
+	// waitBlock is the channel used to wait for container shutdown or termination
+	waitBlock chan struct{}
+	// waitError indicates the container termination error if any
+	waitError error
 }
 
 var _ cow.Container = &Container{}
@@ -39,10 +43,11 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	span.AddAttributes(trace.StringAttribute("cid", cid))
 
 	c := &Container{
-		gc:       gc,
-		id:       cid,
-		notifyCh: make(chan struct{}),
-		closeCh:  make(chan struct{}),
+		gc:        gc,
+		id:        cid,
+		notifyCh:  make(chan struct{}),
+		closeCh:   make(chan struct{}),
+		waitBlock: make(chan struct{}),
 	}
 	err = gc.requestNotify(cid, c.notifyCh)
 	if err != nil {
@@ -65,10 +70,11 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 // container that is already running inside the UVM (after cloning).
 func (gc *GuestConnection) CloneContainer(ctx context.Context, cid string) (_ *Container, err error) {
 	c := &Container{
-		gc:       gc,
-		id:       cid,
-		notifyCh: make(chan struct{}),
-		closeCh:  make(chan struct{}),
+		gc:        gc,
+		id:        cid,
+		notifyCh:  make(chan struct{}),
+		closeCh:   make(chan struct{}),
+		waitBlock: make(chan struct{}),
 	}
 	err = gc.requestNotify(cid, c.notifyCh)
 	if err != nil {
@@ -95,6 +101,8 @@ func (c *Container) Close() error {
 		_, span := oc.StartSpan(context.Background(), "gcs::Container::Close")
 		defer span.End()
 		span.AddAttributes(trace.StringAttribute("cid", c.id))
+
+		close(c.closeCh)
 	})
 	return nil
 }
@@ -224,15 +232,19 @@ func (c *Container) Terminate(ctx context.Context) (err error) {
 	return c.shutdown(ctx, rpcShutdownForced)
 }
 
+func (c *Container) WaitChannel() <-chan struct{} {
+	return c.waitBlock
+}
+
+func (c *Container) WaitError() error {
+	return c.waitError
+}
+
 // Wait waits for the container to terminate (or Close to be called, or the
 // guest connection to terminate).
 func (c *Container) Wait() error {
-	select {
-	case <-c.notifyCh:
-		return nil
-	case <-c.closeCh:
-		return errors.New("container closed")
-	}
+	<-c.WaitChannel()
+	return c.WaitError()
 }
 
 func (c *Container) waitBackground() {
@@ -240,7 +252,13 @@ func (c *Container) waitBackground() {
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	err := c.Wait()
+	select {
+	case <-c.notifyCh:
+	case <-c.closeCh:
+		c.waitError = errors.New("container closed")
+	}
+	close(c.waitBlock)
+
 	log.G(ctx).Debug("container exited")
-	oc.SetSpanStatus(span, err)
+	oc.SetSpanStatus(span, c.waitError)
 }
