@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -399,6 +400,10 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+
+	if len(req.Annotations) > 0 {
+		span.AddAttributes(trace.StringAttribute("annotations", fmt.Sprintf("%+v", req.Annotations)))
+	}
 
 	if s.isSandbox {
 		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))

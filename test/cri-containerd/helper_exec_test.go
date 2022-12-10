@@ -17,11 +17,27 @@ import (
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
-func execSync(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
-	t.Helper()
+// execSuccess calls [execSync], but expects the exec to execute with exit code 0 and an empty Stderr.
+func execSuccess(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) string {
+	tb.Helper()
+
+	resp := execSync(tb, client, ctx, request)
+	if resp.ExitCode != 0 {
+		tb.Fatalf("exec %v: failed with exit code %d: %s %s", request.Cmd, resp.ExitCode, string(resp.Stdout), string(resp.Stderr))
+	}
+
+	if err := strings.TrimSpace(string(resp.Stderr)); err != "" {
+		tb.Fatalf("exec %v: got stderr %q", request.Cmd, err)
+	}
+
+	return string(resp.Stdout)
+}
+
+func execSync(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
+	tb.Helper()
 	response, err := client.ExecSync(ctx, request)
 	if err != nil {
-		t.Fatalf("failed ExecSync request with: %v", err)
+		tb.Fatalf("failed ExecSync request with: %v", err)
 	}
 	return response
 }

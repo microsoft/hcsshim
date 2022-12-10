@@ -5,8 +5,11 @@ package cri_containerd
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
+	criserver "github.com/containerd/containerd/pkg/cri/server"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -64,6 +67,29 @@ func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 	if err != nil {
 		t.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
 	}
+}
+
+func getPodSandboxOCISpec(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *oci.Spec {
+	tb.Helper()
+	status, err := client.PodSandboxStatus(ctx, &runtime.PodSandboxStatusRequest{
+		PodSandboxId: podID,
+		Verbose:      true,
+	})
+	if err != nil {
+		tb.Fatalf("failed PodSandboxStatus for container %q: %v", podID, err)
+	}
+
+	i := status.Info["info"]
+	var info criserver.SandboxInfo
+	if err := json.Unmarshal([]byte(i), &info); err != nil {
+		tb.Fatalf("could not unmarshal sandbox info %q: %v", i, err)
+	}
+
+	spec := info.RuntimeSpec
+	if spec == nil {
+		tb.Fatalf("sandbox %q returned a nil spec", podID)
+	}
+	return spec
 }
 
 func getPodSandboxStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *runtime.PodSandboxStatus {

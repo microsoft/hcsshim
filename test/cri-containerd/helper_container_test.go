@@ -5,10 +5,13 @@ package cri_containerd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
+	criserver "github.com/containerd/containerd/pkg/cri/server"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/require"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -84,6 +87,29 @@ func assertContainerState(t *testing.T, client runtime.RuntimeServiceClient, ctx
 	if st := getContainerStatus(t, client, ctx, containerID); st != state {
 		t.Fatalf("got container %q state %q; wanted %v", containerID, st.String(), state.String())
 	}
+}
+
+func getContainerOCISpec(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) *oci.Spec {
+	tb.Helper()
+	status, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{
+		ContainerId: containerID,
+		Verbose:     true,
+	})
+	if err != nil {
+		tb.Fatalf("failed ContainerStatus for container %q: %v", containerID, err)
+	}
+
+	i := status.Info["info"]
+	var info criserver.ContainerInfo
+	if err := json.Unmarshal([]byte(i), &info); err != nil {
+		tb.Fatalf("could not unmarshal container info %q: %v", i, err)
+	}
+
+	spec := info.RuntimeSpec
+	if spec == nil {
+		tb.Fatalf("container %q returned a nil spec", containerID)
+	}
+	return spec
 }
 
 func getContainerStatusFull(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) *runtime.ContainerStatus {

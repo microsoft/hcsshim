@@ -105,9 +105,9 @@ func parseAnnotationsUint32(ctx context.Context, a map[string]string, key string
 	return def
 }
 
-// parseAnnotationsUint64 searches `a` for `key` and if found verifies that the
+// ParseAnnotationsUint64 searches `a` for `key` and if found verifies that the
 // value is a 64 bit unsigned integer. If `key` is not found returns `def`.
-func parseAnnotationsUint64(ctx context.Context, a map[string]string, key string, def uint64) uint64 {
+func ParseAnnotationsUint64(ctx context.Context, a map[string]string, key string, def uint64) uint64 {
 	if v, ok := a[key]; ok {
 		countu, err := strconv.ParseUint(v, 10, 64)
 		if err == nil {

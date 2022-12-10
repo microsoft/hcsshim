@@ -983,9 +983,17 @@ func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) erro
 	}
 
 	if ht.ownsHost && ht.host != nil {
+		resources, err = hcsoci.NormalizeUVMUpdateResourcesRequest(ctx, resources, req.Annotations)
+		if err != nil {
+			return fmt.Errorf("could not normalize resource annotations: %w", err)
+		}
 		return ht.host.Update(ctx, resources, req.Annotations)
 	}
 
+	resources, err = hcsoci.NormalizeContainerUpdateResourcesRequest(ctx, resources, req.Annotations)
+	if err != nil {
+		return fmt.Errorf("could not normalize resource annotations: %w", err)
+	}
 	return ht.updateTaskContainerResources(ctx, resources, req.Annotations)
 }
 

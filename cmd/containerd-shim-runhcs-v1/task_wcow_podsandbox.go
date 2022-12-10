@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/cmd"
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
@@ -285,6 +287,11 @@ func (wpst *wcowPodSandboxTask) Update(ctx context.Context, req *task.UpdateTask
 
 	if err := verifyTaskUpdateResourcesType(resources); err != nil {
 		return err
+	}
+
+	resources, err = hcsoci.NormalizeUVMUpdateResourcesRequest(ctx, resources, req.Annotations)
+	if err != nil {
+		return fmt.Errorf("could not normalize resource annotations: %w", err)
 	}
 
 	return wpst.host.Update(ctx, resources, req.Annotations)

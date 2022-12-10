@@ -23,7 +23,7 @@ import (
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPUCount(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
+	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -40,7 +40,7 @@ func ParseAnnotationsCPUCount(ctx context.Context, s *specs.Spec, annotation str
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPULimit(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
+	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -57,7 +57,7 @@ func ParseAnnotationsCPULimit(ctx context.Context, s *specs.Spec, annotation str
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPUWeight(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
+	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -74,7 +74,7 @@ func ParseAnnotationsCPUWeight(ctx context.Context, s *specs.Spec, annotation st
 // annotation. If not found searches `s` for the Windows Storage section. If
 // neither are found returns `def`.
 func ParseAnnotationsStorageIops(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
+	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -91,7 +91,7 @@ func ParseAnnotationsStorageIops(ctx context.Context, s *specs.Spec, annotation 
 // If not found searches `s` for the Windows Storage section. If neither are
 // found returns `def`.
 func ParseAnnotationsStorageBps(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
+	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -110,7 +110,7 @@ func ParseAnnotationsStorageBps(ctx context.Context, s *specs.Spec, annotation s
 //
 // Note: The returned value is in `MB`.
 func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def uint64) uint64 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
+	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return m
 	}
 	if s.Windows != nil &&
@@ -243,9 +243,9 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 // sets options common to both WCOW and LCOW from annotations
 func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) {
 	opts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, opts.MemorySizeInMB)
-	opts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, opts.LowMMIOGapInMB)
-	opts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, opts.HighMMIOBaseInMB)
-	opts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOGapInMB, opts.HighMMIOGapInMB)
+	opts.LowMMIOGapInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, opts.LowMMIOGapInMB)
+	opts.HighMMIOBaseInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, opts.HighMMIOBaseInMB)
+	opts.HighMMIOGapInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOGapInMB, opts.HighMMIOGapInMB)
 	opts.AllowOvercommit = ParseAnnotationsBool(ctx, s.Annotations, annotations.AllowOvercommit, opts.AllowOvercommit)
 	opts.EnableDeferredCommit = ParseAnnotationsBool(ctx, s.Annotations, annotations.EnableDeferredCommit, opts.EnableDeferredCommit)
 	opts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotations.ProcessorCount, opts.ProcessorCount)
@@ -272,7 +272,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 
 		lopts.EnableColdDiscardHint = ParseAnnotationsBool(ctx, s.Annotations, annotations.EnableColdDiscardHint, lopts.EnableColdDiscardHint)
 		lopts.VPMemDeviceCount = parseAnnotationsUint32(ctx, s.Annotations, annotations.VPMemCount, lopts.VPMemDeviceCount)
-		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, annotations.VPMemSize, lopts.VPMemSizeBytes)
+		lopts.VPMemSizeBytes = ParseAnnotationsUint64(ctx, s.Annotations, annotations.VPMemSize, lopts.VPMemSizeBytes)
 		lopts.VPMemNoMultiMapping = ParseAnnotationsBool(ctx, s.Annotations, annotations.VPMemNoMultiMapping, lopts.VPMemNoMultiMapping)
 		lopts.VPCIEnabled = ParseAnnotationsBool(ctx, s.Annotations, annotations.VPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotations.BootFilesRootPath, lopts.BootFilesPath)
