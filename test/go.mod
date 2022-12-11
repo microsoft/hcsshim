@@ -22,9 +22,9 @@ require (
 	github.com/stretchr/testify v1.8.1
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.2.0
-	google.golang.org/grpc v1.47.0
-	k8s.io/cri-api v0.24.1
+	golang.org/x/sys v0.3.0
+	google.golang.org/grpc v1.49.0
+	k8s.io/cri-api v0.26.0
 )
 
 require (
@@ -79,8 +79,8 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/yashtewari/glob-intersection v0.1.0 // indirect
 	golang.org/x/mod v0.6.0 // indirect
-	golang.org/x/net v0.1.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10 // indirect
+	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/genproto v0.0.0-20220616135557-88e70c0c3a90 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
