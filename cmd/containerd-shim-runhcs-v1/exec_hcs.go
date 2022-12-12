@@ -493,13 +493,9 @@ func (he *hcsExec) waitForContainerExit() {
 		trace.StringAttribute("tid", he.tid),
 		trace.StringAttribute("eid", he.id))
 
-	cexit := make(chan struct{})
-	go func() {
-		_ = he.c.Wait()
-		close(cexit)
-	}()
+	// wait for container or process to exit and ckean up resrources
 	select {
-	case <-cexit:
+	case <-he.c.WaitChannel():
 		// Container exited first. We need to force the process into the exited
 		// state and cleanup any resources
 		he.sl.Lock()

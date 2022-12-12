@@ -626,11 +626,19 @@ func (c *JobContainer) Terminate(ctx context.Context) error {
 	return nil
 }
 
+func (c *JobContainer) WaitChannel() <-chan struct{} {
+	return c.waitBlock
+}
+
+func (c *JobContainer) WaitError() error {
+	return c.waitError
+}
+
 // Wait synchronously waits for the container to shutdown or terminate. If
 // the container has already exited returns the previous error (if any).
 func (c *JobContainer) Wait() error {
-	<-c.waitBlock
-	return c.waitError
+	<-c.WaitChannel()
+	return c.WaitError()
 }
 
 func (c *JobContainer) waitBackground(ctx context.Context) {
