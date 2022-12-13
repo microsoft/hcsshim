@@ -179,9 +179,9 @@ func main() {
 
 		addModule, _ := result.Bool("add_module")
 
-		removeModule := false
+		removeModule := true
 		if fragment != nil && addModule {
-			removeModule = true
+			removeModule = false
 		}
 
 		allowed, err := result.Bool("allowed")
@@ -205,7 +205,7 @@ func main() {
 			}
 		}
 
-		if removeModule {
+		if removeModule && fragment != nil {
 			rego.RemoveModule(fragment.ID())
 		}
 	}
