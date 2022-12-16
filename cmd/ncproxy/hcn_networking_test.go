@@ -16,6 +16,11 @@ import (
 	"github.com/golang/mock/gomock"
 )
 
+const (
+	startMACAddress = "00-15-5D-52-C0-00"
+	endMACAddress   = "00-15-5D-52-CF-FF"
+)
+
 func getTestIPv4Subnets() []hcn.Subnet {
 	testSubnet := hcn.Subnet{
 		IpAddressPrefix: "192.168.100.0/24",
@@ -63,8 +68,8 @@ func createTestIPv4NATNetwork(name string) (*hcn.HostComputeNetwork, error) {
 		MacPool: hcn.MacPool{
 			Ranges: []hcn.MacRange{
 				{
-					StartMacAddress: "00-15-5D-52-C0-00",
-					EndMacAddress:   "00-15-5D-52-CF-FF",
+					StartMacAddress: startMACAddress,
+					EndMacAddress:   endMACAddress,
 				},
 			},
 		},
@@ -86,8 +91,8 @@ func createTestDualStackNATNetwork(name string) (*hcn.HostComputeNetwork, error)
 		MacPool: hcn.MacPool{
 			Ranges: []hcn.MacRange{
 				{
-					StartMacAddress: "00-15-5D-52-C0-00",
-					EndMacAddress:   "00-15-5D-52-CF-FF",
+					StartMacAddress: startMACAddress,
+					EndMacAddress:   endMACAddress,
 				},
 			},
 		},
@@ -953,6 +958,7 @@ func TestAddEndpoint_NoError(t *testing.T) {
 	type config struct {
 		name              string
 		networkCreateFunc func(string) (*hcn.HostComputeNetwork, error)
+		attachToHost      bool
 	}
 	tests := []config{
 		{
@@ -964,12 +970,18 @@ func TestAddEndpoint_NoError(t *testing.T) {
 			networkCreateFunc: createTestDualStackNATNetwork,
 		},
 	}
+	for i, n := 0, len(tests); i < n; i++ {
+		t := tests[i]
+		t.name += " - host attach"
+		t.attachToHost = true
+		tests = append(tests, t)
+	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(subtest *testing.T) {
 			// test network
 			networkName := subtest.Name() + "-network"
-			network, err := createTestIPv4NATNetwork(networkName)
+			network, err := test.networkCreateFunc(networkName)
 			if err != nil {
 				subtest.Fatalf("failed to create test network with %v", err)
 			}
@@ -987,8 +999,9 @@ func TestAddEndpoint_NoError(t *testing.T) {
 			}()
 
 			req := &ncproxygrpc.AddEndpointRequest{
-				Name:        endpointName,
-				NamespaceID: namespace.Id,
+				Name:         endpointName,
+				NamespaceID:  namespace.Id,
+				AttachToHost: test.attachToHost,
 			}
 
 			_, err = gService.AddEndpoint(ctx, req)
@@ -1558,9 +1571,19 @@ func TestGetNetwork_NoError(t *testing.T) {
 			req := &ncproxygrpc.GetNetworkRequest{
 				Name: networkName,
 			}
-			_, err = gService.GetNetwork(ctx, req)
+			resp, err := gService.GetNetwork(ctx, req)
 			if err != nil {
 				subtest.Fatalf("expected no error, instead got %v", err)
+			}
+			mac := resp.MacRange
+			if mac == nil {
+				subtest.Fatal("received nil MAC Range")
+			}
+			if mac.StartMacAddress != startMACAddress {
+				subtest.Errorf("got start MAC address %q, wanted %q", mac.StartMacAddress, startMACAddress)
+			}
+			if mac.StartMacAddress != startMACAddress {
+				subtest.Errorf("got end MAC address %q, wanted %q", mac.EndMacAddress, endMACAddress)
 			}
 		})
 	}
