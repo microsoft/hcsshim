@@ -4,15 +4,15 @@ This tool provides a means to test out security policies. Usage:
 
 ```
   -commands string
-        commands JSON
+        path to commands JSON file
   -data string
-        initial data state
+        path to initial data state JSON file (optional)
   -log string
-        log path
+        path to output log file
   -logLevel string
         None|Info|Results|Metadata (default "Info")
   -policy string
-        policy Rego
+        path to policy Rego file
 ```
 
 ## Getting started

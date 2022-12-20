@@ -19,10 +19,10 @@ type command struct {
 }
 
 var (
-	commandsPath = flag.String("commands", "", "commands JSON")
-	policyPath   = flag.String("policy", "", "policy Rego")
-	dataPath     = flag.String("data", "", "initial data state")
-	logPath      = flag.String("log", "", "log path")
+	commandsPath = flag.String("commands", "", "path commands JSON file")
+	policyPath   = flag.String("policy", "", "path to policy Rego file")
+	dataPath     = flag.String("data", "", "path initial data state JSON file (optional)")
+	logPath      = flag.String("log", "", "path to output log file")
 	logLevelName = flag.String("logLevel", "Info", "None|Info|Results|Metadata")
 )
 

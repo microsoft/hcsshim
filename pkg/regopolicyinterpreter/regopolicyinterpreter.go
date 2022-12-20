@@ -113,7 +113,7 @@ func copyValue(value interface{}) (interface{}, error) {
 	return valueCopy, nil
 }
 
-// Create a new RegoPolicyInterpreter, using the code provided.
+// NewRegoPolicyInterpreter creates a new RegoPolicyInterpreter, using the code provided.
 // inputData is the Rego data which should be used as the initial state
 // of the interpreter. A deep copy is performed on it such that it will
 // not be modified.
@@ -137,7 +137,7 @@ func NewRegoPolicyInterpreter(code string, inputData map[string]interface{}) (*R
 	return policy, nil
 }
 
-// Adds the specified module to the interpreter such that it will be
+// AddModule adds the specified module to the interpreter such that it will be
 // loaded along with the policy during query execution. The provided id
 // should be used to refer to it for other methods. This will also
 // invalidate the compliation artifact (i.e. Compile must be called again)
@@ -148,7 +148,7 @@ func (r *RegoPolicyInterpreter) AddModule(id string, module *RegoModule) {
 	r.compiledModules = nil
 }
 
-// Removes the specified module such that it will no longer be loaded.
+// RemoveModule removes the specified module such that it will no longer be loaded.
 // This will also invalidate the compliation artifact (i.e. Compile must be
 // called again)
 func (r *RegoPolicyInterpreter) RemoveModule(id string) {
@@ -158,7 +158,7 @@ func (r *RegoPolicyInterpreter) RemoveModule(id string) {
 	r.compiledModules = nil
 }
 
-// Returns whether the specified module is currently active, i.e. being loaded
+// IsModuleActive returns whether the specified module is currently active, i.e. being loaded
 // along with the policy.
 func (r *RegoPolicyInterpreter) IsModuleActive(id string) bool {
 	r.mutex.Lock()
@@ -167,7 +167,7 @@ func (r *RegoPolicyInterpreter) IsModuleActive(id string) bool {
 	return ok
 }
 
-// This will perform an update to a value which is already within the data
+// UpdateData will perform an update to a value which is already within the data
 // A deep copy will be performed on the value.
 func (r *RegoPolicyInterpreter) UpdateData(key string, value interface{}) error {
 	r.mutex.Lock()
@@ -185,12 +185,15 @@ func (r *RegoPolicyInterpreter) UpdateData(key string, value interface{}) error 
 	}
 }
 
-// Retrieves a copy of a single metadata item from the policy.
+// GetMetadata retrieves a copy of a single metadata item from the policy.
 func (r *RegoPolicyInterpreter) GetMetadata(name string, key string) (interface{}, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	metadataRoot := r.data["metadata"].(regoMetadata)
+	metadataRoot, ok := r.data["metadata"].(regoMetadata)
+	if !ok {
+		return nil, errors.New("illegal interpreter state: invalid metadata object type")
+	}
 
 	if metadata, ok := metadataRoot[name]; ok {
 		if value, ok := metadata[key]; ok {
@@ -280,7 +283,7 @@ func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) err
 	return nil
 }
 
-// Enables logging to the provided path at the specified level.
+// EnableLogging enables logging to the provided path at the specified level.
 func (r *RegoPolicyInterpreter) EnableLogging(path string, level LogLevel) error {
 	r.logLevel = level
 
@@ -297,13 +300,13 @@ func (r *RegoPolicyInterpreter) EnableLogging(path string, level LogLevel) error
 	return nil
 }
 
-// Sets the logging level. To actually produce a log, however, EnableLogging
+// SetLogLevel sets the logging level. To actually produce a log, however, EnableLogging
 // must be called first.
 func (r *RegoPolicyInterpreter) SetLogLevel(level LogLevel) {
 	r.logLevel = level
 }
 
-// Disables logging and closes the underlying log file.
+// DisableLogging disables logging and closes the underlying log file.
 func (r *RegoPolicyInterpreter) DisableLogging() error {
 	r.logLevel = LogNone
 	if r.logFile != nil {
@@ -322,7 +325,7 @@ func (r *RegoPolicyInterpreter) DisableLogging() error {
 	return nil
 }
 
-// Compiles the policy and its modules. This will increase the speed of policy
+// Compile compiles the policy and its modules. This will increase the speed of policy
 // execution.
 func (r *RegoPolicyInterpreter) Compile() error {
 	r.mutex.Lock()
@@ -426,7 +429,7 @@ func (r *RegoPolicyInterpreter) logMetadata() {
 	}
 }
 
-// Returns the raw value from a Rego query result.
+// Value returns the raw value from a Rego query result.
 func (r RegoQueryResult) Value(key string) (interface{}, error) {
 	if value, ok := r[key]; ok {
 		return value, nil
@@ -435,7 +438,7 @@ func (r RegoQueryResult) Value(key string) (interface{}, error) {
 	}
 }
 
-// Attempts to interpret a result value as a boolean.
+// Bool attempts to interpret a result value as a boolean.
 func (r RegoQueryResult) Bool(key string) (bool, error) {
 	if flag, ok := r[key]; ok {
 		if value, ok := flag.(bool); ok {
@@ -448,7 +451,7 @@ func (r RegoQueryResult) Bool(key string) (bool, error) {
 	}
 }
 
-// Attempts to interpret the result value as a string.
+// String attempts to interpret the result value as a string.
 func (r RegoQueryResult) String(key string) (string, error) {
 	if flag, ok := r[key]; ok {
 		if value, ok := flag.(string); ok {
@@ -461,7 +464,7 @@ func (r RegoQueryResult) String(key string) (string, error) {
 	}
 }
 
-// Attempts to interpret the result value as a floating point number.
+// Float attempts to interpret the result value as a floating point number.
 func (r RegoQueryResult) Float(key string) (float64, error) {
 	if value, ok := r[key]; ok {
 		if number, ok := value.(json.Number); ok {
@@ -478,7 +481,7 @@ func (r RegoQueryResult) Float(key string) (float64, error) {
 	}
 }
 
-// Attempts to interpret the result value as an integer.
+// Int attempts to interpret the result value as an integer.
 func (r RegoQueryResult) Int(key string) (int, error) {
 	if value, ok := r[key]; ok {
 		if number, ok := value.(json.Number); ok {
@@ -495,12 +498,12 @@ func (r RegoQueryResult) Int(key string) (int, error) {
 	}
 }
 
-// Tests if the query result is empty.
+// IsEmpty tests if the query result is empty.
 func (r RegoQueryResult) IsEmpty() bool {
 	return len(r) == 0
 }
 
-// Queries the policy with the given rule and input data and returns the result.
+// Query queries the policy with the given rule and input data and returns the result.
 func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{}) (RegoQueryResult, error) {
 	resultSet, output, err := r.query(rule, input)
 
@@ -518,20 +521,24 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 	}
 
 	ops := []*regoMetadataOperation{}
-	if metadata, ok := resultSet["metadata"].([]interface{}); ok {
-		for _, value := range metadata {
-			op, err := newRegoMetadataOperation(value)
-			if err != nil {
-				return nil, fmt.Errorf("error loading metadata operation: %w", err)
+	if rawMetadata, ok := resultSet["metadata"]; ok {
+		if metadata, ok := rawMetadata.([]interface{}); ok {
+			for _, value := range metadata {
+				op, err := newRegoMetadataOperation(value)
+				if err != nil {
+					return nil, fmt.Errorf("error loading metadata operation: %w", err)
+				}
+				ops = append(ops, op)
 			}
-			ops = append(ops, op)
-		}
 
-		if len(ops) > 0 {
-			err = r.updateMetadata(ops)
-			if err != nil {
-				return nil, fmt.Errorf("error applying metadata operations: %w", err)
+			if len(ops) > 0 {
+				err = r.updateMetadata(ops)
+				if err != nil {
+					return nil, fmt.Errorf("error applying metadata operations: %w", err)
+				}
 			}
+		} else {
+			return nil, errors.New("error loading metadata array: invalid type")
 		}
 	}
 
@@ -546,12 +553,12 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 	return result, nil
 }
 
-// Computes a unique ID for a Module from its issuer and feed.
+// ModuleID computes a unique ID for a Module from its issuer and feed.
 func ModuleID(issuer string, feed string) string {
 	return issuer + ">" + feed
 }
 
-// The unique ID of a module.
+// ID is the unique ID of a module.
 func (f RegoModule) ID() string {
 	return ModuleID(f.Issuer, f.Feed)
 }
