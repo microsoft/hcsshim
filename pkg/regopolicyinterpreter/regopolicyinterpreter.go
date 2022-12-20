@@ -256,7 +256,11 @@ func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) err
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	metadataRoot := r.data["metadata"].(regoMetadata)
+	metadataRoot, ok := r.data["metadata"].(regoMetadata)
+	if !ok {
+		return errors.New("illegal interpreter state: invalid metadata object type")
+	}
+
 	for _, op := range ops {
 		metadata := metadataRoot.getOrCreate(op.Name)
 		switch op.Action {
