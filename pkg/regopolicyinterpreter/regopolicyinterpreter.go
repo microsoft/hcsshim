@@ -526,23 +526,24 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 
 	ops := []*regoMetadataOperation{}
 	if rawMetadata, ok := resultSet["metadata"]; ok {
-		if metadata, ok := rawMetadata.([]interface{}); ok {
-			for _, value := range metadata {
-				op, err := newRegoMetadataOperation(value)
-				if err != nil {
-					return nil, fmt.Errorf("error loading metadata operation: %w", err)
-				}
-				ops = append(ops, op)
-			}
-
-			if len(ops) > 0 {
-				err = r.updateMetadata(ops)
-				if err != nil {
-					return nil, fmt.Errorf("error applying metadata operations: %w", err)
-				}
-			}
-		} else {
+		metadata, ok := rawMetadata.([]interface{})
+		if !ok {
 			return nil, errors.New("error loading metadata array: invalid type")
+		}
+
+		for _, value := range metadata {
+			op, err := newRegoMetadataOperation(value)
+			if err != nil {
+				return nil, fmt.Errorf("error loading metadata operation: %w", err)
+			}
+			ops = append(ops, op)
+		}
+
+		if len(ops) > 0 {
+			err = r.updateMetadata(ops)
+			if err != nil {
+				return nil, fmt.Errorf("error applying metadata operations: %w", err)
+			}
 		}
 	}
 
