@@ -5,6 +5,7 @@ on:
 
 env:
   GO_VERSION: "1.18.x"
+  PROTOC_VERSION: "3.19.4"
 
 jobs:
   lint:
@@ -60,7 +61,7 @@ jobs:
         shell: powershell
         run: |
           curl.exe -L --no-progress-meter -o protoc.zip `
-            https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/protoc-3.19.4-win32.zip
+            https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-win32.zip
 
           Expand-Archive -Path protoc.zip -DestinationPath .
 
