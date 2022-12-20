@@ -969,12 +969,16 @@ func TestAddEndpoint_NoError(t *testing.T) {
 			name:              "AddEndpoint dual stack returns no error",
 			networkCreateFunc: createTestDualStackNATNetwork,
 		},
-	}
-	for i, n := 0, len(tests); i < n; i++ {
-		t := tests[i]
-		t.name += " - host attach"
-		t.attachToHost = true
-		tests = append(tests, t)
+		{
+			name:              "AddEndpoint with host attach returns no error",
+			networkCreateFunc: createTestIPv4NATNetwork,
+			attachToHost:      false,
+		},
+		{
+			name:              "AddEndpoint dual stack with host attach returns no error",
+			networkCreateFunc: createTestDualStackNATNetwork,
+			attachToHost:      false,
+		},
 	}
 
 	for _, test := range tests {
@@ -1582,7 +1586,7 @@ func TestGetNetwork_NoError(t *testing.T) {
 			if mac.StartMacAddress != startMACAddress {
 				subtest.Errorf("got start MAC address %q, wanted %q", mac.StartMacAddress, startMACAddress)
 			}
-			if mac.StartMacAddress != startMACAddress {
+			if mac.EndMacAddress != endMACAddress {
 				subtest.Errorf("got end MAC address %q, wanted %q", mac.EndMacAddress, endMACAddress)
 			}
 		})
