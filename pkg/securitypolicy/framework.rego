@@ -80,6 +80,8 @@ mount_overlay := {"matches": matches, "overlayTargets": overlay_targets, "allowe
         container := fragment.containers[_]
         layerPaths_ok(container.layers)
     ]
+    # TODO these containers need to be "normalized" via an object
+    # union with a defaults container created using `framework.json`
     containers := array.concat(policy_containers, fragment_containers)
     count(containers) > 0
     matches := {
@@ -467,6 +469,8 @@ exec_external := {"allowed": true,
         command_ok(process.command)
     ]
 
+    # TODO these processes need to be normalized via an object union
+    # with a defaults object created using `framework.json`
     possible_processes := array.concat(policy_processes, fragment_processes)
 
     # check to see if the environment variables match, dropping
@@ -606,6 +610,7 @@ matching_fragment := subfragment {
 }
 
 load_fragment := {"issuers": issuers, "add_module": add_module, "allowed": true} {
+    # need to normalize fragments using `framework.json`
     fragment := matching_fragment
     issuer := update_issuer(fragment.includes)
     issuers := {

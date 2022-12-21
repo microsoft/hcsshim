@@ -1,0 +1,13 @@
+{
+    "framework_templates": {
+        "__comment__": "These templates provide backwards compabitilty for the framework data objects",
+        "container": {
+            "allow_stdio_access": {
+                "introducedVersion": "0.11.0",
+                "defaultValue": "false"
+            }
+        },
+        "externalProcess": {},
+        "fragment": {}
+    }
+}
