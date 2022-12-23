@@ -47,6 +47,9 @@ var frameworkCode string
 //go:embed api.rego
 var apiCode string
 
+//go:embed api.json
+var apiTemplates string
+
 const plan9Prefix = "plan9://"
 
 type module struct {
@@ -189,11 +192,15 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	policy := new(regoEnforcer)
 	policy.code = code
 
+	templates := make(map[string]interface{})
+	json.Unmarshal([]byte(apiTemplates), &templates)
+
 	defaultMountData := make([]interface{}, 0, len(defaultMounts))
 	privilegedMountData := make([]interface{}, 0, len(privilegedMounts))
 	policy.data = map[string]interface{}{
 		// for more information on metadata, see the `updateMetadata` method
 		"metadata":         make(metadataStore),
+		"apiTemplates":     templates,
 		"defaultMounts":    appendMountData(defaultMountData, defaultMounts),
 		"privilegedMounts": appendMountData(privilegedMountData, privilegedMounts),
 		"sandboxPrefix":    guestpath.SandboxMountPrefix,

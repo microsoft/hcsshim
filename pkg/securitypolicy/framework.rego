@@ -80,9 +80,11 @@ mount_overlay := {"matches": matches, "overlayTargets": overlay_targets, "allowe
         container := fragment.containers[_]
         layerPaths_ok(container.layers)
     ]
-    # TODO these containers need to be "normalized" via an object
-    # union with a defaults container created using `framework.json`
-    containers := array.concat(policy_containers, fragment_containers)
+
+    container_template = load_template("container")
+    containers := [object.union(container_template, container) | 
+                   raw_containers := array.concat(policy_containers, fragment_containers)
+                   container := raw_containers[_]]
     count(containers) > 0
     matches := {
         "action": "add",
@@ -469,9 +471,10 @@ exec_external := {"allowed": true,
         command_ok(process.command)
     ]
 
-    # TODO these processes need to be normalized via an object union
-    # with a defaults object created using `framework.json`
-    possible_processes := array.concat(policy_processes, fragment_processes)
+    process_template := load_template("external_process")
+    possible_processes := [object.union(process_template, process) |
+                           raw_processes := array.concat(policy_processes, fragment_processes)
+                           process := raw_processes[_]]
 
     # check to see if the environment variables match, dropping
     # them if allowed (and necessary)
@@ -594,24 +597,27 @@ fragment_ok(fragment) {
     semver.compare(data[input.namespace].svn, fragment.minimum_svn) >= 0
 }
 
-
-# test if there is a matching fragment in the policy
-matching_fragment := fragment {
-    some fragment in data.policy.fragments
-    fragment_ok(fragment)
-}
-
-# test if there is a matching fragment in a fragment
-matching_fragment := subfragment {
-    feed := data.metadata.issuers[_].feeds[_]
-    some fragment in feed
-    some subfragment in fragment.fragments
-    fragment_ok(subfragment)
-}
-
 load_fragment := {"issuers": issuers, "add_module": add_module, "allowed": true} {
-    # need to normalize fragments using `framework.json`
-    fragment := matching_fragment
+    # test if there is a matching fragment in the policy
+    policy_fragments := [fragment |
+        fragment := data.policy.fragments[_]
+    ]
+
+    # test if there is a matching subfragment in a fragment
+    fragment_subfragments := [subfragment |
+        feed := data.metadata.issuers[_].feeds[_]
+        some fragment in feed
+        subfragment := fragment.fragments[_]
+    ]
+
+    fragment_template := load_template("fragment")
+    possible_fragments := [object.union(fragment_template, fragment) |
+                           raw_fragments := array.concat(policy_fragments, fragment_subfragments)
+                           fragment := raw_fragments[_]]
+
+    some fragment in possible_fragments
+    fragment_ok(fragment)
+
     issuer := update_issuer(fragment.includes)
     issuers := {
         "action": "update",
@@ -642,6 +648,23 @@ scratch_unmount := {"scratch_mounts": scratch_mounts, "allowed": true} {
     scratch_mounts := {
         "action": "remove",
         "key": input.unmountTarget
+    }
+}
+
+template_default(info) := value {
+    semver.compare(data.policy.api_svn, info.introduced_version) >= 0
+    value := null
+}
+
+template_default(info) := value {
+    semver.compare(data.policy.api_svn, info.introduced_version) < 0
+    value := info.default_value
+}
+
+load_template(name) := template {
+    version_info := data.apiTemplates[name]
+    template := {
+        name: template_default(version_info[name]) | name := version_info[_]
     }
 }
 

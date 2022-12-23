@@ -1,0 +1,77 @@
+{
+    "__comment__": "These templates provide backwards compatability for the framework data objects",
+    "container": {
+        "command": {
+            "introduced_version": "0.1.0",
+            "default_value": null
+        },
+        "env_rules": {
+            "introduced_version": "0.1.0",
+            "default_value": null
+        },
+        "layers": {
+            "introduced_version": "0.1.0",
+            "default_value": null
+        },
+        "mounts": {
+            "introduced_version": "0.1.0",
+            "default_value": null
+        },
+        "allow_elevated": {
+            "introduced_version": "0.1.0",
+            "default_value": null
+        },
+        "working_dir": {
+            "introduced_version": "0.1.0",
+            "default_value": null
+        },
+        "exec_processes": {
+            "introduced_version": "0.2.0",
+            "default_value": []
+        },
+        "signals": {
+            "introduced_version": "0.5.0",
+            "default_value": null
+        },
+        "allow_stdio_access": {
+            "introduced_version": "0.11.0",
+            "default_value": false
+        }
+    },
+    "external_process": {
+        "command": {
+            "introduced_version": "0.2.0",
+            "default_value": null
+        },
+        "env_rules": {
+            "introduced_version": "0.2.0",
+            "default_value": null
+        },
+        "working_dir": {
+            "introduced_version": "0.2.0",
+            "default_value": null
+        },
+        "allow_stdio_access": {
+            "introduced_version": "0.11.0",
+            "default_value": false
+        }
+    },
+    "fragment": {
+        "iss": {
+            "introduced_version": "0.9.0",
+            "default_value": null
+        },
+        "feed": {
+            "introduced_version": "0.9.0",
+            "default_value": null
+        },
+        "minimum_svn": {
+            "introduced_version": "0.9.0",
+            "default_value": null
+        },
+        "includes": {
+            "introduced_version": "0.9.0",
+            "default_value": null
+        }
+    }
+}
