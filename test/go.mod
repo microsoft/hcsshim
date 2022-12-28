@@ -4,9 +4,9 @@ go 1.18
 
 require (
 	github.com/Microsoft/go-winio v0.6.0
-	github.com/Microsoft/hcsshim v0.9.4
+	github.com/Microsoft/hcsshim v0.10.0-rc.3
 	github.com/containerd/cgroups v1.0.3
-	github.com/containerd/containerd v1.6.6
+	github.com/containerd/containerd v1.6.12
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
@@ -22,9 +22,9 @@ require (
 	github.com/stretchr/testify v1.8.1
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.2.0
-	google.golang.org/grpc v1.47.0
-	k8s.io/cri-api v0.24.1
+	golang.org/x/sys v0.3.0
+	google.golang.org/grpc v1.51.0
+	k8s.io/cri-api v0.25.0
 )
 
 require (
@@ -34,7 +34,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.2.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
-	github.com/containerd/continuity v0.2.2 // indirect
+	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.12.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
@@ -82,7 +82,7 @@ require (
 	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
-	google.golang.org/genproto v0.0.0-20220616135557-88e70c0c3a90 // indirect
+	google.golang.org/genproto v0.0.0-20220915135415-7fd63a7952de // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
