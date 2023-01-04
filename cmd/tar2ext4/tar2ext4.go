@@ -1,62 +1,91 @@
 package main
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
+	cli "github.com/urfave/cli/v2"
 )
 
-var (
-	input      = flag.String("i", "", "input file")
-	output     = flag.String("o", "", "output file")
-	overlay    = flag.Bool("overlay", false, "produce overlayfs-compatible layer image")
-	vhd        = flag.Bool("vhd", false, "add a VHD footer to the end of the image")
-	inlineData = flag.Bool("inline", false, "write small file data into the inode; not compatible with DAX")
+const (
+	// tar2ext4 convert flags
+	inputFlag   = "input"
+	outputFlag  = "output"
+	overlayFlag = "overlay"
+	vhdFlag     = "vhd"
+	inlineFlag  = "inline"
 )
 
 func main() {
-	flag.Parse()
-	if flag.NArg() != 0 || len(*output) == 0 {
-		flag.Usage()
-		os.Exit(1)
+	app := cli.NewApp()
+	app.Name = "tar2ext4"
+	app.Usage = "converts tar file(s) into vhd(s)"
+	app.Commands = []*cli.Command{}
+	app.Flags = []cli.Flag{
+		&cli.StringFlag{
+			Name:    outputFlag,
+			Aliases: []string{"o"},
+			Usage:   "output file",
+		},
+		&cli.BoolFlag{
+			Name:  overlayFlag,
+			Usage: "produce overlayfs-compatible layer image",
+		},
+		&cli.BoolFlag{
+			Name:  vhdFlag,
+			Usage: "add a VHD footer to the end of the image",
+		},
+		&cli.BoolFlag{
+			Name:  inlineFlag,
+			Usage: "write small file data into the inode; not compatible with DAX",
+		},
+		&cli.StringSliceFlag{
+			Name:    inputFlag,
+			Aliases: []string{"i"},
+			Usage:   "input file",
+		},
 	}
-
-	err := func() (err error) {
+	app.Action = func(cliCtx *cli.Context) (err error) {
 		in := os.Stdin
-		if *input != "" {
-			in, err = os.Open(*input)
+		if cliCtx.String(inputFlag) != "" {
+			in, err = os.Open(cliCtx.String(inputFlag))
 			if err != nil {
 				return err
 			}
 		}
-		out, err := os.Create(*output)
+
+		outputName := cliCtx.String(outputFlag)
+		if outputName == "" {
+			return errors.New("output name must not be empty")
+		}
+		out, err := os.Create(outputName)
 		if err != nil {
 			return err
 		}
 
 		var opts []tar2ext4.Option
-		if *overlay {
+		if cliCtx.Bool(overlayFlag) {
 			opts = append(opts, tar2ext4.ConvertWhiteout)
 		}
-		if *vhd {
+		if cliCtx.Bool(vhdFlag) {
 			opts = append(opts, tar2ext4.AppendVhdFooter)
 		}
-		if *inlineData {
+		if cliCtx.Bool(inlineFlag) {
 			opts = append(opts, tar2ext4.InlineData)
 		}
-		err = tar2ext4.Convert(in, out, opts...)
-		if err != nil {
+
+		if err = tar2ext4.Convert(in, out, opts...); err != nil {
 			return err
 		}
-
 		// Exhaust the tar stream.
 		_, _ = io.Copy(io.Discard, in)
+
 		return nil
-	}()
-	if err != nil {
+	}
+	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
