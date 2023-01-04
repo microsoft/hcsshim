@@ -385,3 +385,19 @@ func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req
 
 	return endpoint, nil
 }
+
+// getHostDefaultNamespace returns the first namespace found that has type [hcn.NamespaceTypeHostDefault],
+// or an error if none is found.
+func getHostDefaultNamespace() (string, error) {
+	namespaces, err := hcn.ListNamespaces()
+	if err != nil {
+		return "", errors.Wrapf(err, "failed list namespaces")
+	}
+
+	for _, ns := range namespaces {
+		if ns.Type == hcn.NamespaceTypeHostDefault {
+			return ns.Id, nil
+		}
+	}
+	return "", errors.New("unable to find default host namespace to attach to")
+}

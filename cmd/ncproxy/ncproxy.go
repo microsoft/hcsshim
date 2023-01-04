@@ -464,23 +464,15 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.Name)
 		}
 		if req.AttachToHost {
-			namespaces, err := hcn.ListNamespaces()
+			nsID, err := getHostDefaultNamespace()
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed list namespaces")
+				return nil, err
 			}
 
-			for _, namespace := range namespaces {
-				if namespace.Type == hcn.NamespaceTypeHostDefault {
-					req.NamespaceID = namespace.Id
-					log.G(ctx).WithField("namespaceID", req.NamespaceID).Debug("Attaching endpoint to default host namespace")
-					// replace current span namespaceID attribute
-					span.AddAttributes(trace.StringAttribute("namespaceID", req.NamespaceID))
-					break
-				}
-			}
-			if req.NamespaceID == "" {
-				return nil, errors.New("unable to find default host namespace to attach to")
-			}
+			req.NamespaceID = nsID
+			log.G(ctx).WithField("namespaceID", req.NamespaceID).Debug("Attaching endpoint to default host namespace")
+			// replace current span namespaceID attribute
+			span.AddAttributes(trace.StringAttribute("namespaceID", req.NamespaceID))
 		}
 		if err := hcn.AddNamespaceEndpoint(req.NamespaceID, ep.Id); err != nil {
 			return nil, errors.Wrapf(err, "failed to add endpoint with name %q to namespace", req.Name)

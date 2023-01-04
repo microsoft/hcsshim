@@ -946,7 +946,7 @@ func TestAddEndpoint_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache, networkingStore)
 
 	// create test network namespace
-	namespace := hcn.NewNamespace(hcn.NamespaceTypeHostDefault)
+	namespace := hcn.NewNamespace(hcn.NamespaceTypeHost)
 	namespace, err = namespace.Create()
 	if err != nil {
 		t.Fatalf("failed to create test namespace with %v", err)
@@ -954,6 +954,11 @@ func TestAddEndpoint_NoError(t *testing.T) {
 	defer func() {
 		_ = namespace.Delete()
 	}()
+
+	hostDefaultNSID, err := getHostDefaultNamespace()
+	if err != nil {
+		t.Fatalf("could not get host default namespace: %v", err)
+	}
 
 	type config struct {
 		name              string
@@ -972,12 +977,12 @@ func TestAddEndpoint_NoError(t *testing.T) {
 		{
 			name:              "AddEndpoint with host attach returns no error",
 			networkCreateFunc: createTestIPv4NATNetwork,
-			attachToHost:      false,
+			attachToHost:      true,
 		},
 		{
 			name:              "AddEndpoint dual stack with host attach returns no error",
 			networkCreateFunc: createTestDualStackNATNetwork,
-			attachToHost:      false,
+			attachToHost:      true,
 		},
 	}
 
@@ -1004,7 +1009,7 @@ func TestAddEndpoint_NoError(t *testing.T) {
 
 			req := &ncproxygrpc.AddEndpointRequest{
 				Name:         endpointName,
-				NamespaceID:  namespace.Id,
+				NamespaceID:  namespace.Id, // will be ignored if AttachToHost is true
 				AttachToHost: test.attachToHost,
 			}
 
@@ -1013,7 +1018,11 @@ func TestAddEndpoint_NoError(t *testing.T) {
 				subtest.Fatalf("expected AddEndpoint to return no error, instead got %v", err)
 			}
 			// validate endpoint was added to namespace
-			endpoints, err := hcn.GetNamespaceEndpointIds(namespace.Id)
+			nsID := namespace.Id
+			if test.attachToHost {
+				nsID = hostDefaultNSID
+			}
+			endpoints, err := hcn.GetNamespaceEndpointIds(nsID)
 			if err != nil {
 				subtest.Fatalf("failed to get the namespace's endpoints with %v", err)
 			}
