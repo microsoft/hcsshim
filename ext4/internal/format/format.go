@@ -189,26 +189,26 @@ type GroupDescriptor64 struct {
 	Reserved            uint32
 }
 
-const (
-	S_IXOTH  = 0x1
-	S_IWOTH  = 0x2
-	S_IROTH  = 0x4
-	S_IXGRP  = 0x8
-	S_IWGRP  = 0x10
-	S_IRGRP  = 0x20
-	S_IXUSR  = 0x40
-	S_IWUSR  = 0x80
-	S_IRUSR  = 0x100
-	S_ISVTX  = 0x200
-	S_ISGID  = 0x400
-	S_ISUID  = 0x800
-	S_IFIFO  = 0x1000
-	S_IFCHR  = 0x2000
-	S_IFDIR  = 0x4000
-	S_IFBLK  = 0x6000
-	S_IFREG  = 0x8000
-	S_IFLNK  = 0xA000
-	S_IFSOCK = 0xC000
+const ( // see https://man7.org/linux/man-pages/man7/inode.7.html
+	S_IXOTH  = 0x1    // others have execute permission
+	S_IWOTH  = 0x2    // others have write permission
+	S_IROTH  = 0x4    // others have read permission
+	S_IXGRP  = 0x8    // group has execute permission
+	S_IWGRP  = 0x10   // group has write permission
+	S_IRGRP  = 0x20   // group has read permission
+	S_IXUSR  = 0x40   // owner has execute permission
+	S_IWUSR  = 0x80   // owner has write permission
+	S_IRUSR  = 0x100  // owner has read permission
+	S_ISVTX  = 0x200  // sticky bit
+	S_ISGID  = 0x400  // set-group-ID bit
+	S_ISUID  = 0x800  // set-user-ID bit
+	S_IFIFO  = 0x1000 // FIFO
+	S_IFCHR  = 0x2000 // character device
+	S_IFDIR  = 0x4000 // directory
+	S_IFBLK  = 0x6000 // block device
+	S_IFREG  = 0x8000 // regular file
+	S_IFLNK  = 0xA000 // symbolic link
+	S_IFSOCK = 0xC000 // socket
 
 	TypeMask uint16 = 0xF000
 )

@@ -23,7 +23,8 @@ type Writer struct {
 	inodes               []*inode
 	curName              string
 	curInode             *inode
-	pos                  int64
+	pos                  int64 // in bytes
+	startOffset          int64 // offset in the underlying writter to write the data to
 	dataWritten, dataMax int64
 	err                  error
 	initialized          bool
@@ -96,7 +97,8 @@ const (
 	inodeFirst        = 11
 	inodeLostAndFound = inodeFirst
 
-	BlockSize               = 4096
+	BlockSize               = 4096 // physical block size
+	BlockSizeLogical        = 512  // logical block size in bytes
 	blocksPerGroup          = BlockSize * 8
 	inodeSize               = 256
 	maxInodesPerGroup       = BlockSize * 8 // Limited by the inode bitmap
@@ -740,6 +742,11 @@ func (w *Writer) block() uint32 {
 	return uint32(w.pos / BlockSize)
 }
 
+// helper to get the end position of an ext4 partition in bytes
+func (w *Writer) Position() uint64 {
+	return uint64(w.pos)
+}
+
 func (w *Writer) seekBlock(block uint32) {
 	w.pos = int64(block) * BlockSize
 	if w.err != nil {
@@ -749,7 +756,7 @@ func (w *Writer) seekBlock(block uint32) {
 	if w.err != nil {
 		return
 	}
-	_, w.err = w.f.Seek(w.pos, io.SeekStart)
+	_, w.err = w.f.Seek(w.startOffset+w.pos, io.SeekStart)
 }
 
 func (w *Writer) nextBlock() {
@@ -922,6 +929,7 @@ func (w *Writer) writeDirectory(dir, parent *inode) error {
 	w.startInode("", dir, 0x7fffffffffffffff)
 	left := BlockSize
 	finishBlock := func() error {
+		// finish block by making a directory entry with just zeros
 		if left > 0 {
 			e := format.DirectoryEntry{
 				RecordLength: uint16(left),
@@ -944,7 +952,7 @@ func (w *Writer) writeDirectory(dir, parent *inode) error {
 	}
 
 	writeEntry := func(ino format.InodeNumber, name string) error {
-		rlb := directoryEntrySize + len(name)
+		rlb := directoryEntrySize + len(name) // record length in bytes
 		rl := (rlb + 3) & ^3
 		if left < rl+12 {
 			if err := finishBlock(); err != nil {
@@ -1001,6 +1009,8 @@ func (w *Writer) writeDirectory(dir, parent *inode) error {
 			return err
 		}
 	}
+	// finish the current block with zeros when we're done
+	// with writing children entries
 	if err := finishBlock(); err != nil {
 		return err
 	}
@@ -1009,6 +1019,8 @@ func (w *Writer) writeDirectory(dir, parent *inode) error {
 	return nil
 }
 
+// helper function to write the current directory then recursively
+// write children directory entries.
 func (w *Writer) writeDirectoryRecursive(dir, parent *inode) error {
 	if err := w.writeDirectory(dir, parent); err != nil {
 		return err
@@ -1139,6 +1151,12 @@ func MaximumDiskSize(size int64) Option {
 	}
 }
 
+func StartWritePosition(start int64) Option {
+	return func(w *Writer) {
+		w.startOffset = start
+	}
+}
+
 func (w *Writer) init() error {
 	// Skip the defective block inode.
 	w.inodes = make([]*inode, 1, 32)
@@ -1204,7 +1222,7 @@ func (w *Writer) Close() error {
 	}
 
 	// Write the inode table
-	inodeTableOffset := w.block()
+	inodeTableOffset := w.block() // get the number of blocks we've written
 	groups, inodesPerGroup := bestGroupCount(inodeTableOffset, uint32(len(w.inodes)))
 	err := w.writeInodeTable(groups * inodesPerGroup * inodeSize)
 	if err != nil {
@@ -1213,6 +1231,7 @@ func (w *Writer) Close() error {
 
 	// Write the bitmaps.
 	bitmapOffset := w.block()
+
 	bitmapSize := groups * 2
 	validDataSize := bitmapOffset + bitmapSize
 	diskSize := validDataSize
