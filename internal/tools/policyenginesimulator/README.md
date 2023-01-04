@@ -32,7 +32,12 @@ custom policies:
 ## Commands
 
 Consists of a sequential list of commands that will be issued for enforcement to
-the policy. These commands take the form of JSON, *e.g.*:
+the policy. Some sample commands can be seen here:
+
+- [Framework Example Commands](samples/simple_custom/commands.json)
+- [Custom Example Commands](samples/simple_framework/commands.json)
+
+These commands take the form of JSON objects, *e.g.*:
 
 ``` json
 [

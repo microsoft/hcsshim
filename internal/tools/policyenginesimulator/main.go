@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	rpi "github.com/Microsoft/hcsshim/pkg/regopolicyinterpreter"
+	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -50,7 +50,7 @@ func createInterpreter() *rpi.RegoPolicyInterpreter {
 	policyCode := string(content)
 
 	var logLevel rpi.LogLevel
-	switch *logLevelName {
+	switch strings.ToLower(*logLevelName) {
 	case "None":
 		logLevel = rpi.LogNone
 
