@@ -17,7 +17,7 @@ import (
 	"testing/quick"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	rpi "github.com/Microsoft/hcsshim/pkg/regopolicyinterpreter"
+	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/blang/semver/v4"
 	"github.com/open-policy-agent/opa/rego"
 	oci "github.com/opencontainers/runtime-spec/specs-go"

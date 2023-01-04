@@ -170,7 +170,7 @@ jobs:
         run: go test --tags=rego -timeout=30m -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
     
       - name: Test rego policy interpreter
-        run: go test -mod=mod -gcflags=all=-d=checkptr -v ./pkg/regopolicyinterpreter
+        run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal/regopolicyinterpreter
 
   test-windows:
     needs: [lint, protos, verify-vendor, go-gen]
