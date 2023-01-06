@@ -957,7 +957,15 @@ func TestAddEndpoint_NoError(t *testing.T) {
 
 	hostDefaultNSID, err := getHostDefaultNamespace()
 	if err != nil {
-		t.Fatalf("could not get host default namespace: %v", err)
+		ns := hcn.NewNamespace(hcn.NamespaceTypeHostDefault)
+		ns, err = ns.Create()
+		if err != nil {
+			t.Fatalf("failed to create host-default test namespace: %v", err)
+		}
+		defer func() {
+			_ = ns.Delete()
+		}()
+		hostDefaultNSID = ns.Id
 	}
 
 	type config struct {
