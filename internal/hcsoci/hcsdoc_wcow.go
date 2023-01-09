@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -402,6 +404,31 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		dumpPath = specDumpPath
 	}
 
+	// Servercore images block on signaling and wait until the target process
+	// is terminated to return to its caller. By default, servercore waits for
+	// 5 seconds (default value of 'WaitToKillServiceTimeout') before sending
+	// a SIGKILL to terminate the process. This causes issues when graceful
+	// termination of containers is requested (Bug36689012).
+	// The regkey 'WaitToKillServiceTimeout' value is overridden here to help
+	// honor graceful termination of containers by waiting for the requested
+	// amount of time before stopping the container.
+	// More details on the implementation of this fix can be found in the Kill()
+	// function of exec_hcs.go
+
+	// 'WaitToKillServiceTimeout' reg key value is arbitrarily chosen and set to a
+	// value that is long enough that no one will want to wait longer
+	registryAdd := []hcsschema.RegistryValue{
+		{
+			Key: &hcsschema.RegistryKey{
+				Hive: "System",
+				Name: "ControlSet001\\Control",
+			},
+			Name:        "WaitToKillServiceTimeout",
+			StringValue: strconv.Itoa(math.MaxInt32),
+			Type_:       "String",
+		},
+	}
+
 	if dumpPath != "" {
 		dumpType, err := parseDumpType(coi.Spec.Annotations)
 		if err != nil {
@@ -410,30 +437,31 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 
 		// Setup WER registry keys for local process dump creation if specified.
 		// https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps
-		v2Container.RegistryChanges = &hcsschema.RegistryChanges{
-			AddValues: []hcsschema.RegistryValue{
-				{
-					Key: &hcsschema.RegistryKey{
-						Hive: "Software",
-						Name: "Microsoft\\Windows\\Windows Error Reporting\\LocalDumps",
-					},
-					Name:        "DumpFolder",
-					StringValue: dumpPath,
-					Type_:       "String",
+		registryAdd = append(registryAdd, []hcsschema.RegistryValue{
+			{
+				Key: &hcsschema.RegistryKey{
+					Hive: "Software",
+					Name: "Microsoft\\Windows\\Windows Error Reporting\\LocalDumps",
 				},
-				{
-					Key: &hcsschema.RegistryKey{
-						Hive: "Software",
-						Name: "Microsoft\\Windows\\Windows Error Reporting\\LocalDumps",
-					},
-					Name:       "DumpType",
-					DWordValue: dumpType,
-					Type_:      "DWord",
-				},
+				Name:        "DumpFolder",
+				StringValue: dumpPath,
+				Type_:       "String",
 			},
-		}
+			{
+				Key: &hcsschema.RegistryKey{
+					Hive: "Software",
+					Name: "Microsoft\\Windows\\Windows Error Reporting\\LocalDumps",
+				},
+				Name:       "DumpType",
+				DWordValue: dumpType,
+				Type_:      "DWord",
+			},
+		}...)
 	}
 
+	v2Container.RegistryChanges = &hcsschema.RegistryChanges{
+		AddValues: registryAdd,
+	}
 	return v1, v2Container, nil
 }
 
