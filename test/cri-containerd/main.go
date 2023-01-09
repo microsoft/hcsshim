@@ -63,7 +63,9 @@ const (
 	// Default account name for use with GMSA related tests. This will not be
 	// present/you will not have access to the account on your machine unless
 	// your environment is configured properly.
-	gmsaAccount = "cplat"
+	gmsaAccount                   = "cplat"
+	gracefulTerminationServercore = "cplatpublic.azurecr.io/servercore-gracefultermination-repro:latest"
+	gracefulTerminationNanoserver = "cplatpublic.azurecr.io/nanoserver-gracefultermination-repro:latest"
 )
 
 // Image definitions
