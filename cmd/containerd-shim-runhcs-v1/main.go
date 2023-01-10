@@ -26,7 +26,7 @@ const usage = ``
 const ttrpcAddressEnv = "TTRPC_ADDRESS"
 
 // Add a manifest to get proper Windows version detection.
-//go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
+//go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0 -platform-specific
 
 // version will be populated by the Makefile, read from
 // VERSION file of the source code.

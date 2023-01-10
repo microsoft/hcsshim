@@ -34,12 +34,9 @@ require (
 	google.golang.org/grpc v1.47.0
 )
 
-require github.com/josephspurrier/goversioninfo v1.4.0
-
 require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.0.1 // indirect
-	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.12.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
