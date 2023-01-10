@@ -69,8 +69,8 @@ func getDeviceUtilHostPath() string {
 }
 
 func isDeviceExtensionsSupported() bool {
-	// device extensions support was added from 20348 onwards.
-	return osversion.Build() >= 20348
+	// device extensions support was added from LTSC2022 (20348) onwards.
+	return osversion.Build() >= osversion.LTSC2022
 }
 
 // getDeviceExtensions is a helper function to read the files at `extensionPaths` and unmarshal the contents
