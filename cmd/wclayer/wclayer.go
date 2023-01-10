@@ -13,7 +13,7 @@ import (
 )
 
 // Add a manifest to get proper Windows version detection.
-//go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
+//go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0 -platform-specific
 
 var usage = `Windows Container layer utility
 
