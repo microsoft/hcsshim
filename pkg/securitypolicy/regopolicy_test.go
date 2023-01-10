@@ -17,8 +17,8 @@ import (
 	"testing/quick"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/blang/semver/v4"
-	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -42,7 +42,7 @@ const (
 func Test_RegoTemplates(t *testing.T) {
 	query := rego.New(
 		rego.Query("data.api"),
-		rego.Module("api.rego", apiCode))
+		rego.Module("api.rego", APICode))
 
 	ctx := context.Background()
 	resultSet, err := query.Eval(ctx)
@@ -283,16 +283,19 @@ func Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 
 		err = policy.EnforceDeviceMountPolicy(target, rootHash)
 		if err != nil {
+			t.Errorf("unable to mount device: %v", err)
 			return false
 		}
 
 		err = policy.EnforceDeviceUnmountPolicy(target)
 		if err != nil {
+			t.Errorf("unable to unmount device: %v", err)
 			return false
 		}
 
 		err = policy.EnforceDeviceMountPolicy(target, rootHash)
 		if err != nil {
+			t.Errorf("unable to remount device: %v", err)
 			return false
 		}
 
@@ -1289,8 +1292,8 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	input := make(map[string]interface{})
-	allowed, err := policy.allowed("__fixture_for_allowed_test_false__", input)
+	result := make(rpi.RegoQueryResult)
+	allowed, err := policy.allowed("__fixture_for_allowed_test_false__", result)
 	if err != nil {
 		t.Fatalf("asked whether an enforcement point was allowed and receieved an error: %v", err)
 	}
@@ -1299,7 +1302,7 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 		t.Fatal("result of allowed for an unavailable enforcement point was not the specified default (false)")
 	}
 
-	allowed, err = policy.allowed("__fixture_for_allowed_test_true__", input)
+	allowed, err = policy.allowed("__fixture_for_allowed_test_true__", result)
 	if err != nil {
 		t.Fatalf("asked whether an enforcement point was allowed and receieved an error: %v", err)
 	}
@@ -2571,7 +2574,7 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 			return false
 		}
 
-		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
 			t.Error("module not removed after load")
 			return false
 		}
@@ -2614,7 +2617,7 @@ func Test_Rego_LoadFragment_Fragment(t *testing.T) {
 			return false
 		}
 
-		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
 			t.Error("module not removed after load")
 			return false
 		}
@@ -2651,7 +2654,7 @@ func Test_Rego_LoadFragment_ExternalProcess(t *testing.T) {
 			return false
 		}
 
-		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
 			t.Error("module not removed after load")
 			return false
 		}
@@ -2685,7 +2688,7 @@ func Test_Rego_LoadFragment_BadIssuer(t *testing.T) {
 			return false
 		}
 
-		if _, ok := tc.policy.modules[moduleID(issuer, fragment.info.feed)]; ok {
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(issuer, fragment.info.feed)) {
 			t.Error("module not removed upon failure")
 			return false
 		}
@@ -2719,7 +2722,7 @@ func Test_Rego_LoadFragment_BadFeed(t *testing.T) {
 			return false
 		}
 
-		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, feed)]; ok {
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, feed)) {
 			t.Error("module not removed upon failure")
 			return false
 		}
@@ -2752,7 +2755,7 @@ func Test_Rego_LoadFragment_InvalidVersion(t *testing.T) {
 			return false
 		}
 
-		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
 			t.Error("module not removed upon failure")
 			return false
 		}
@@ -3008,9 +3011,10 @@ svn := "1.0.0"
 
 layer := "%s"
 
-mount_device := {"allowed": allowed, "custom": custom} {
+mount_device := {"allowed": allowed, "metadata": [addCustom]} {
 	allowed := input.deviceHash == layer
-	custom := {
+	addCustom := {
+		"name": "custom",
         "action": "add",
         "key": "%s",
         "value": "%s"
@@ -3047,17 +3051,12 @@ mount_device := data.fragment.mount_device
 		t.Fatalf("unable to mount device: %v", err)
 	}
 
-	custom, err := policy.getMetadata("custom")
-	if err != nil {
-		t.Error("expected metadata stored by fragment is missing")
-	}
-
-	if test, ok := custom[key]; ok {
+	if test, err := policy.rego.GetMetadata("custom", key); err == nil {
 		if test != value {
 			t.Error("incorrect metadata value stored by fragment")
 		}
 	} else {
-		t.Error("unable to located metadata key stored by fragment")
+		t.Errorf("unable to located metadata key stored by fragment: %v", err)
 	}
 }
 
@@ -4167,26 +4166,11 @@ func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *r
 //go:embed api_test.rego
 var apiTestCode string
 
-func (policy *regoEnforcer) injectTestAPI() error {
-	modules := map[string]string{
-		"policy.rego":    policy.code,
-		"api.rego":       apiTestCode,
-		"framework.rego": frameworkCode,
-	}
+func (p *regoEnforcer) injectTestAPI() error {
+	p.rego.RemoveModule("api.rego")
+	p.rego.AddModule("api.rego", &rpi.RegoModule{Namespace: "api", Code: apiTestCode})
 
-	// TODO temporary hack for debugging policies until GCS logging design
-	// and implementation is finalized. This option should be changed to
-	// "true" if debugging is desired.
-	options := ast.CompileOpts{
-		EnablePrintStatements: false,
-	}
-
-	if compiled, err := ast.CompileModulesWithOpt(modules, options); err == nil {
-		policy.compiledModules = compiled
-		return nil
-	} else {
-		return fmt.Errorf("rego compilation failed: %w", err)
-	}
+	return p.rego.Compile()
 }
 
 func selectContainerFromRunningContainers(containers []regoRunningContainer, r *rand.Rand) regoRunningContainer {
@@ -4461,7 +4445,7 @@ func verifyPolicyRules(apiSVN string, enforcementPoints map[string]interface{}, 
 	query := rego.New(
 		rego.Query("data.policy"),
 		rego.Module("policy.rego", policyCode),
-		rego.Module("framework.rego", frameworkCode))
+		rego.Module("framework.rego", FrameworkCode))
 
 	ctx := context.Background()
 	resultSet, err := query.Eval(ctx)

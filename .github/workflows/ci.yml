@@ -168,6 +168,9 @@ jobs:
 
       - name: Test rego security policy
         run: go test --tags=rego -timeout=30m -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
+    
+      - name: Test rego policy interpreter
+        run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal/regopolicyinterpreter
 
   test-windows:
     needs: [lint, protos, verify-vendor, go-gen]
@@ -194,6 +197,9 @@ jobs:
         working-directory: test
       - run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
         working-directory: test
+
+      - name: Test rego policy interpreter
+        run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal/regopolicyinterpreter
 
       - uses: actions/upload-artifact@v3
         if: ${{ github.event_name == 'pull_request' }}

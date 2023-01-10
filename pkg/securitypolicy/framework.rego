@@ -25,23 +25,25 @@ deviceHash_ok {
 
 default mount_device := {"allowed": false}
 
-mount_device := {"devices": devices, "allowed": true} {
+mount_device := {"metadata": [addDevice], "allowed": true} {
     not device_mounted(input.target)
     deviceHash_ok
-    devices := {
+    addDevice := {
+        "name": "devices",
         "action": "add",
         "key": input.target,
-        "value": input.deviceHash
+        "value": input.deviceHash,
     }
 }
 
 default unmount_device := {"allowed": false}
 
-unmount_device := {"devices": devices, "allowed": true} {
+unmount_device := {"metadata": [removeDevice], "allowed": true} {
     device_mounted(input.unmountTarget)
-    devices := {
+    removeDevice := {
+        "name": "devices",
         "action": "remove",
-        "key": input.unmountTarget
+        "key": input.unmountTarget,
     }
 }
 
@@ -65,8 +67,9 @@ overlay_mounted(target) {
 
 default mount_overlay := {"allowed": false}
 
-mount_overlay := {"matches": matches, "overlayTargets": overlay_targets, "allowed": true} {
+mount_overlay := {"metadata": [addMatches, addOverlayTarget], "allowed": true} {
     not overlay_exists
+
     # we need to assemble a list of all possible containers
     # which match the overlay requested, including both
     # containers in the policy and those included from fragments.
@@ -74,33 +77,39 @@ mount_overlay := {"matches": matches, "overlayTargets": overlay_targets, "allowe
         container := data.policy.containers[_]
         layerPaths_ok(container.layers)
     ]
+
     fragment_containers := [container |
         feed := data.metadata.issuers[_].feeds[_]
         some fragment in feed
         container := fragment.containers[_]
         layerPaths_ok(container.layers)
     ]
+
     containers := array.concat(policy_containers, fragment_containers)
     count(containers) > 0
-    matches := {
+    addMatches := {
+        "name": "matches",
         "action": "add",
         "key": input.containerID,
-        "value": containers
+        "value": containers,
     }
-    overlay_targets := {
+
+    addOverlayTarget := {
+        "name": "overlayTargets",
         "action": "add",
         "key": input.target,
-        "value": true
+        "value": true,
     }
 }
 
 default unmount_overlay := {"allowed": false}
 
-unmount_overlay := {"overlayTargets": overlay_targets, "allowed": true} {
+unmount_overlay := {"metadata": [removeOverlayTarget], "allowed": true} {
     overlay_mounted(input.unmountTarget)
-    overlay_targets := {
+    removeOverlayTarget := {
+        "name": "overlayTargets",
         "action": "remove",
-        "key": input.unmountTarget
+        "key": input.unmountTarget,
     }
 }
 
@@ -185,6 +194,7 @@ valid_envs_for_all(items) := envs {
 
 valid_envs_for_all(items) := envs {
     not data.policy.allow_environment_variable_dropping
+
     # no dropping allowed, so we just return the input
     envs := input.envList
 }
@@ -201,12 +211,12 @@ container_started {
 
 default create_container := {"allowed": false}
 
-create_container := {"matches": matches,
+create_container := {"metadata": [updateMatches, addStarted],
                      "env_list": env_list,
                      "allow_stdio_access": allow_stdio_access,
-                     "started": started,
                      "allowed": true} {
     not container_started
+
     # narrow the matches based upon command, working directory, and
     # mount list
     possible_containers := [container |
@@ -237,15 +247,18 @@ create_container := {"matches": matches,
         c.allow_stdio_access == allow_stdio_access
     }
 
-    matches := {
+    updateMatches := {
+        "name": "matches",
         "action": "update",
         "key": input.containerID,
-        "value": containers
+        "value": containers,
     }
-    started := {
+
+    addStarted := {
+        "name": "started",
         "action": "add",
         "key": input.containerID,
-        "value": true
+        "value": true,
     }
 }
 
@@ -317,10 +330,11 @@ mountList_ok(mounts, allow_elevated) {
 
 default exec_in_container := {"allowed": false}
 
-exec_in_container := {"matches": matches,
+exec_in_container := {"metadata": [updateMatches],
                       "env_list": env_list,
                       "allowed": true} {
     container_started
+
     # narrow our matches based upon the process requested
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
@@ -340,19 +354,20 @@ exec_in_container := {"matches": matches,
     ]
 
     count(containers) > 0
-
-    matches := {
+    updateMatches := {
+        "name": "matches",
         "action": "update",
         "key": input.containerID,
-        "value": containers
+        "value": containers,
     }
 }
 
 default shutdown_container := {"allowed": false}
 
-shutdown_container := {"started": remove, "matches": remove, "allowed": true} {
+shutdown_container := {"started": remove, "metadata": [remove], "allowed": true} {
     container_started
     remove := {
+        "name": "matches",
         "action": "remove",
         "key": input.containerID,
     }
@@ -360,22 +375,24 @@ shutdown_container := {"started": remove, "matches": remove, "allowed": true} {
 
 default signal_container_process := {"allowed": false}
 
-signal_container_process := {"matches": matches, "allowed": true} {
+signal_container_process := {"metadata": [updateMatches], "allowed": true} {
     container_started
     input.isInitProcess
     containers := [container |
         container := data.metadata.matches[input.containerID][_]
         signal_ok(container.signals)
     ]
+
     count(containers) > 0
-    matches := {
+    updateMatches := {
+        "name": "matches",
         "action": "update",
         "key": input.containerID,
-        "value": containers
+        "value": containers,
     }
 }
 
-signal_container_process := {"matches": matches, "allowed": true} {
+signal_container_process := {"metadata": [updateMatches], "allowed": true} {
     container_started
     not input.isInitProcess
     containers := [container |
@@ -384,11 +401,13 @@ signal_container_process := {"matches": matches, "allowed": true} {
         command_ok(process.command)
         signal_ok(process.signals)
     ]
+
     count(containers) > 0
-    matches := {
+    updateMatches := {
+        "name": "matches",
         "action": "update",
         "key": input.containerID,
-        "value": containers
+        "value": containers,
     }
 }
 
@@ -403,28 +422,29 @@ plan9_mounted(target) {
 
 default plan9_mount := {"allowed": false}
 
-plan9_mount := {"p9mounts": p9mounts, "allowed": true} {
+plan9_mount := {"metadata": [addPlan9Target], "allowed": true} {
     not plan9_mounted(input.target)
     some containerID, _ in data.metadata.matches
     pattern := concat("", [input.rootPrefix, "/", containerID, input.mountPathPrefix])
     regex.match(pattern, input.target)
-    p9mounts := {
+    addPlan9Target := {
+        "name": "p9mounts",
         "action": "add",
         "key": input.target,
-        "value": containerID
+        "value": containerID,
     }
 }
 
 default plan9_unmount := {"allowed": false}
 
-plan9_unmount := {"p9mounts": p9mounts, "allowed": true} {
+plan9_unmount := {"metadata": [removePlan9Target], "allowed": true} {
     plan9_mounted(input.unmountTarget)
-    p9mounts := {
+    removePlan9Target := {
+        "name": "p9mounts",
         "action": "remove",
         "key": input.unmountTarget,
     }
 }
-
 
 default enforcement_point_info := {"available": false, "allowed": false, "unknown": true, "invalid": false}
 
@@ -504,24 +524,25 @@ runtime_logging := {"allowed": true} {
 }
 
 default fragment_containers := []
+
 fragment_containers := data[input.namespace].containers
 
 default fragment_fragments := []
+
 fragment_fragments := data[input.namespace].fragments
 
 default fragment_external_processes := []
+
 fragment_external_processes := data[input.namespace].external_processes
 
 extract_fragment_includes(includes) := fragment {
     objects := {
         "containers": fragment_containers,
         "fragments": fragment_fragments,
-        "external_processes": fragment_external_processes
+        "external_processes": fragment_external_processes,
     }
 
-    fragment := {
-        include: objects[include] | include := includes[_]
-    }
+    fragment := {include: objects[include] | include := includes[_]}
 }
 
 issuer_exists(iss) {
@@ -536,50 +557,22 @@ update_issuer(includes) := issuer {
     feed_exists(input.issuer, input.feed)
     old_issuer := data.metadata.issuers[input.issuer]
     old_fragments := old_issuer.feeds[input.feed]
-    new_issuer := {
-        "feeds": {
-            input.feed: array.concat([extract_fragment_includes(includes)], old_fragments)
-        }
-    }
+    new_issuer := {"feeds": {input.feed: array.concat([extract_fragment_includes(includes)], old_fragments)}}
+
     issuer := object.union(old_issuer, new_issuer)
 }
 
 update_issuer(includes) := issuer {
     not feed_exists(input.issuer, input.feed)
     old_issuer := data.metadata.issuers[input.issuer]
-    new_issuer := {
-        "feeds": {
-            input.feed: [extract_fragment_includes(includes)]
-        }
-    }
+    new_issuer := {"feeds": {input.feed: [extract_fragment_includes(includes)]}}
+
     issuer := object.union(old_issuer, new_issuer)
 }
 
 update_issuer(includes) := issuer {
     not issuer_exists(input.issuer)
-    issuer := {
-        "feeds": {
-            input.feed: [extract_fragment_includes(includes)]
-        }
-    }
-}
-
-default scratch_mount := {"allowed": false}
-
-scratch_mounted(target) {
-    data.metadata.scratch_mounts[target]
-}
-
-scratch_mount := {"scratch_mounts": scratch_mounts, "allowed": true} {
-    not scratch_mounted(input.target)
-    data.policy.allow_unencrypted_scratch
-    scratch_mounts := {
-        "action": "add",
-        "key": input.target,
-        "value": {
-            "encrypted": input.encrypted,
-        }
-    }
+    issuer := {"feeds": {input.feed: [extract_fragment_includes(includes)]}}
 }
 
 default load_fragment := {"allowed": false}
@@ -589,7 +582,6 @@ fragment_ok(fragment) {
     input.feed == fragment.feed
     semver.compare(data[input.namespace].svn, fragment.minimum_svn) >= 0
 }
-
 
 # test if there is a matching fragment in the policy
 matching_fragment := fragment {
@@ -605,38 +597,56 @@ matching_fragment := subfragment {
     fragment_ok(subfragment)
 }
 
-load_fragment := {"issuers": issuers, "add_module": add_module, "allowed": true} {
+load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed": true} {
     fragment := matching_fragment
     issuer := update_issuer(fragment.includes)
-    issuers := {
+    updateIssuer := {
+        "name": "issuers",
         "action": "update",
         "key": input.issuer,
-        "value": issuer
+        "value": issuer,
     }
 
     add_module := "namespace" in fragment.includes
 }
 
-scratch_mount := {"scratch_mounts": scratch_mounts, "allowed": true} {
+default scratch_mount := {"allowed": false}
+
+scratch_mounted(target) {
+    data.metadata.scratch_mounts[target]
+}
+
+scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} {
+    not scratch_mounted(input.target)
+    data.policy.allow_unencrypted_scratch
+    add_scratch_mount := {
+        "name": "scratch_mounts",
+        "action": "add",
+        "key": input.target,
+        "value": {"encrypted": input.encrypted},
+    }
+}
+
+scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} {
     not scratch_mounted(input.target)
     not data.policy.allow_unencrypted_scratch
     input.encrypted
-    scratch_mounts := {
+    add_scratch_mount := {
+        "name": "scratch_mounts",
         "action": "add",
         "key": input.target,
-        "value": {
-            "encrypted": input.encrypted,
-        }
+        "value": {"encrypted": input.encrypted},
     }
 }
 
 default scratch_unmount := {"allowed": false}
 
-scratch_unmount := {"scratch_mounts": scratch_mounts, "allowed": true} {
+scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
     scratch_mounted(input.unmountTarget)
-    scratch_mounts := {
+    remove_scratch_mount := {
+        "name": "scratch_mounts",
         "action": "remove",
-        "key": input.unmountTarget
+        "key": input.unmountTarget,
     }
 }
 
@@ -740,7 +750,9 @@ errors[envError] {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
     bad_envs := [env |
         env := input.envList[_]
-        not env_matches(env)]
+        not env_matches(env)
+    ]
+
     count(bad_envs) > 0
     envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])
 }
@@ -773,7 +785,9 @@ errors[mountError] {
     input.rule == "create_container"
     bad_mounts := [mount.destination |
         mount := input.mounts[_]
-        not mount_matches(mount)]
+        not mount_matches(mount)
+    ]
+
     count(bad_mounts) > 0
     mountError := concat(" ", ["invalid mount list:", concat(",", bad_mounts)])
 }
