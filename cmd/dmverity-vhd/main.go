@@ -10,6 +10,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -26,7 +27,8 @@ const (
 	imageFlag         = "image"
 	verboseFlag       = "verbose"
 	outputDirFlag     = "out-dir"
-	sourceFlag        = "docker"
+	dockerFlag        = "docker"
+	tarballFlag       = "tarball"
 	hashDeviceVhdFlag = "hash-dev-vhd"
 	maxVHDSize        = dmverity.RecommendedVHDSizeGB
 )
@@ -59,8 +61,12 @@ func main() {
 			Usage: "Optional: verbose output",
 		},
 		cli.BoolFlag{
-			Name:  sourceFlag + ",d",
+			Name:  dockerFlag + ",d",
 			Usage: "Optional: use local docker daemon",
+		},
+		cli.StringFlag{
+			Name:  tarballFlag + ",t",
+			Usage: "Optional: path to tarball containing image info",
 		},
 	}
 
@@ -72,16 +78,31 @@ func main() {
 
 func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 	image := ctx.String(imageFlag)
+	tarballPath := ctx.GlobalString(tarballFlag)
 	ref, err := name.ParseReference(image)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse image reference: %s", image)
 	}
 
-	local := ctx.GlobalBool(sourceFlag)
+	dockerDaemon := ctx.GlobalBool(dockerFlag)
+
+	// error check to make sure docker and tarball are not both defined
+	if dockerDaemon && tarballPath != "" {
+		return nil, errors.Errorf("cannot use both docker and tarball for image source")
+	}
 
 	// by default, using remote as source
 	var img v1.Image
-	if local {
+	if tarballPath != "" {
+		// create a tag and search the tarball for the image specified
+		var imageNameAndTag name.Tag
+		imageNameAndTag, err = name.NewTag(image)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to failed to create a tag to search tarball for: %s", image)
+		}
+		// if only an image name is provided and not a tag, the default is "latest"
+		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
+	} else if dockerDaemon {
 		img, err = daemon.Image(ref)
 	} else {
 		var remoteOpts []remote.Option
