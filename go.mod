@@ -3,7 +3,6 @@ module github.com/Microsoft/hcsshim
 go 1.18
 
 require (
-	github.com/BurntSushi/toml v1.2.1
 	github.com/Microsoft/go-winio v0.6.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.2.0
@@ -22,6 +21,7 @@ require (
 	github.com/open-policy-agent/opa v0.42.2
 	github.com/opencontainers/runc v1.1.2
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
+	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/urfave/cli v1.22.4

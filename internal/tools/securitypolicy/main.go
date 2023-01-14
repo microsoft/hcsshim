@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/BurntSushi/toml"
+	"github.com/pelletier/go-toml"
 
 	"github.com/Microsoft/hcsshim/internal/tools/securitypolicy/helpers"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"

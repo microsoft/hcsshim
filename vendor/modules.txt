@@ -1,7 +1,3 @@
-# github.com/BurntSushi/toml v1.2.1
-## explicit; go 1.16
-github.com/BurntSushi/toml
-github.com/BurntSushi/toml/internal
 # github.com/Microsoft/go-winio v0.6.0
 ## explicit; go 1.17
 github.com/Microsoft/go-winio
@@ -290,6 +286,9 @@ github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
+# github.com/pelletier/go-toml v1.9.5
+## explicit; go 1.12
+github.com/pelletier/go-toml
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
