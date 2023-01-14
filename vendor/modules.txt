@@ -317,7 +317,7 @@ github.com/vektah/gqlparser/v2/lexer
 github.com/vektah/gqlparser/v2/parser
 github.com/vektah/gqlparser/v2/validator
 github.com/vektah/gqlparser/v2/validator/rules
-# github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
+# github.com/vishvananda/netlink v1.2.1-beta.2
 ## explicit; go 1.12
 github.com/vishvananda/netlink
 github.com/vishvananda/netlink/nl
