@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/containerd/cgroups"
-	v1 "github.com/containerd/cgroups/stats/v1"
+	"github.com/containerd/cgroups/v3/cgroup1"
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -140,7 +140,7 @@ func (c *Container) InitProcess() Process {
 // GetProcess returns the Process with the matching 'pid'. If the 'pid' does
 // not exit returns error.
 func (c *Container) GetProcess(pid uint32) (Process, error) {
-	//todo: thread a context to this function call
+	// todo: thread a context to this function call
 	logrus.WithFields(logrus.Fields{
 		logfields.ContainerID: c.id,
 		logfields.ProcessID:   pid,
@@ -260,12 +260,12 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	cgroupPath := c.spec.Linux.CgroupsPath
-	cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(cgroupPath))
+	cg, err := cgroup1.Load(cgroup1.StaticPath(cgroupPath))
 	if err != nil {
 		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
 	}
 
-	return cg.Stat(cgroups.IgnoreNotExist)
+	return cg.Stat(cgroup1.IgnoreNotExist)
 }
 
 func (c *Container) modifyContainerConstraints(ctx context.Context, rt guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {

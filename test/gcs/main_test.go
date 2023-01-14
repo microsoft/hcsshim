@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/containerd/cgroups"
+	"github.com/containerd/cgroups/v3/cgroup1"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
@@ -90,11 +90,11 @@ func setup() (err error) {
 
 	// should already start in gcs cgroup
 	if !*flagJoinGCSCgroup {
-		gcsControl, err := cgroups.Load(cgroups.V1, cgroups.StaticPath("/"))
+		gcsControl, err := cgroup1.Load(cgroup1.StaticPath("/"))
 		if err != nil {
 			return fmt.Errorf("failed to load root cgroup: %w", err)
 		}
-		if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
+		if err := gcsControl.Add(cgroup1.Process{Pid: os.Getpid()}); err != nil {
 			return fmt.Errorf("failed join root cgroup: %w", err)
 		}
 		logrus.Debug("joined root cgroup")

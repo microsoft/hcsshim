@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/containerd/cgroups"
-	cgroupstats "github.com/containerd/cgroups/stats/v1"
+	"github.com/containerd/cgroups/v3/cgroup1"
+	cgroupstats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -46,7 +46,7 @@ func memoryLogFormat(metrics *cgroupstats.Metrics) logrus.Fields {
 	}
 }
 
-func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, threshold int64, cg cgroups.Cgroup) {
+func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, threshold int64, cg cgroup1.Cgroup) {
 	// Buffer must be >= 8 bytes for eventfd reads
 	// http://man7.org/linux/man-pages/man2/eventfd.2.html
 	count := 0
@@ -77,7 +77,7 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 		// Sleep for one second in case there is a series of allocations slightly after
 		// reaching threshold.
 		time.Sleep(time.Second)
-		metrics, err := cg.Stat(cgroups.IgnoreNotExist)
+		metrics, err := cg.Stat(cgroup1.IgnoreNotExist)
 		if err != nil {
 			// Don't return on Stat err as it will return an error if
 			// any of the cgroup subsystems Stat calls failed for any reason.
@@ -342,7 +342,7 @@ func main() {
 		logrus.WithError(err).Fatal("failed to get sys info")
 	}
 	containersLimit := int64(sinfo.Totalram - *rootMemReserveBytes)
-	containersControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/containers"), &oci.LinuxResources{
+	containersControl, err := cgroup1.New(cgroup1.StaticPath("/containers"), &oci.LinuxResources{
 		Memory: &oci.LinuxMemory{
 			Limit: &containersLimit,
 		},
@@ -352,16 +352,16 @@ func main() {
 	}
 	defer containersControl.Delete() //nolint:errcheck
 
-	gcsControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/gcs"), &oci.LinuxResources{})
+	gcsControl, err := cgroup1.New(cgroup1.StaticPath("/gcs"), &oci.LinuxResources{})
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to create gcs cgroup")
 	}
 	defer gcsControl.Delete() //nolint:errcheck
-	if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
+	if err := gcsControl.Add(cgroup1.Process{Pid: os.Getpid()}); err != nil {
 		logrus.WithError(err).Fatal("failed add gcs pid to gcs cgroup")
 	}
 
-	event := cgroups.MemoryThresholdEvent(*gcsMemLimitBytes, false)
+	event := cgroup1.MemoryThresholdEvent(*gcsMemLimitBytes, false)
 	gefd, err := gcsControl.RegisterMemoryEvent(event)
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to register memory threshold for gcs cgroup")
