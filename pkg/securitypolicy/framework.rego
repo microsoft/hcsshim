@@ -3,6 +3,8 @@ package framework
 import future.keywords.every
 import future.keywords.in
 
+svn := "@@FRAMEWORK_SVN@@"
+
 device_mounted(target) {
     data.metadata.devices[target]
 }
@@ -65,27 +67,44 @@ overlay_mounted(target) {
     data.metadata.overlayTargets[target]
 }
 
+default candidate_containers := []
+
+candidate_containers := containers {
+    semver.compare(data.policy.framework_svn, svn) == 0    
+
+    policy_containers := [c | c := data.policy.containers[_]]
+    fragment_containers := [c |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        c := fragment.containers[_]
+    ]
+
+    containers := array.concat(policy_containers, fragment_containers)
+}
+
+candidate_containers := containers {
+    semver.compare(data.policy.framework_svn, svn) < 0
+
+    policy_containers := apply_defaults("container", data.policy.containers, data.policy.framework_svn)
+    fragment_containers := [c |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        c := fragment.containers[_]
+    ]
+
+    containers := array.concat(policy_containers, fragment_containers)  
+}
+
 default mount_overlay := {"allowed": false}
 
 mount_overlay := {"metadata": [addMatches, addOverlayTarget], "allowed": true} {
     not overlay_exists
 
-    # we need to assemble a list of all possible containers
-    # which match the overlay requested, including both
-    # containers in the policy and those included from fragments.
-    policy_containers := [container |
-        container := data.policy.containers[_]
+    containers := [container |
+        container := candidate_containers[_]
         layerPaths_ok(container.layers)
     ]
 
-    fragment_containers := [container |
-        feed := data.metadata.issuers[_].feeds[_]
-        some fragment in feed
-        container := fragment.containers[_]
-        layerPaths_ok(container.layers)
-    ]
-
-    containers := array.concat(policy_containers, fragment_containers)
     count(containers) > 0
     addMatches := {
         "name": "matches",
@@ -456,18 +475,47 @@ plan9_unmount := {"metadata": [removePlan9Target], "allowed": true} {
     }
 }
 
-default enforcement_point_info := {"available": false, "allowed": false, "unknown": true, "invalid": false}
 
-enforcement_point_info := {"available": available, "allowed": allowed, "unknown": false, "invalid": false} {
+default enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": true, "invalid": false}
+
+enforcement_point_info := {"available": available, "default_results": default_results, "unknown": false, "invalid": false} {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.svn, enforcement_point.introducedVersion) >= 0
     available := semver.compare(data.policy.api_svn, enforcement_point.introducedVersion) >= 0
-    allowed := enforcement_point.allowedByDefault
+    default_results := enforcement_point.default_results
 }
 
-enforcement_point_info := {"available": false, "allowed": false, "unknown": false, "invalid": true} {
+enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": true} {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.svn, enforcement_point.introducedVersion) < 0
+}
+
+default candidate_external_processes := []
+
+candidate_external_processes := external_processes {
+    semver.compare(data.policy.framework_svn, svn) == 0    
+
+    policy_external_processes := [e | e := data.policy.external_processes[_]]
+    fragment_external_processes := [e |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        e := fragment.external_processes[_]
+    ]
+
+    external_processes := array.concat(policy_external_processes, fragment_external_processes)
+}
+
+candidate_external_processes := external_processes {
+    semver.compare(data.policy.framework_svn, svn) < 0
+
+    policy_external_processes := apply_defaults("external_process", data.policy.external_processes, data.policy.framework_svn)
+    fragment_external_processes := [e |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        e := fragment.external_processes[_]
+    ]
+
+    external_processes := array.concat(policy_external_processes, fragment_external_processes)  
 }
 
 external_process_ok(process) {
@@ -481,24 +529,15 @@ default exec_external := {"allowed": false}
 exec_external := {"allowed": true,
                   "allow_stdio_access": allow_stdio_access,
                   "env_list": env_list} {
-    # we need to assemble a list of all possible external processes which
-    # have a matching working directory and command
-    policy_processes := [process |
-        some process in data.policy.external_processes
+    print(count(candidate_external_processes))
+
+    possible_processes := [process |
+        process := candidate_external_processes[_]
         workingDirectory_ok(process.working_dir)
         command_ok(process.command)
     ]
 
-    fragment_processes := [process |
-        feed := data.metadata.issuers[_].feeds[_]
-        some fragment in feed
-        some process in fragment.external_processes
-        workingDirectory_ok(process.working_dir)
-        command_ok(process.command)
-    ]
-
-    possible_processes := array.concat(policy_processes, fragment_processes)
-
+    print(count(possible_processes))
     # check to see if the environment variables match, dropping
     # them if allowed (and necessary)
     env_list := valid_envs_for_all(possible_processes)
@@ -545,14 +584,28 @@ default fragment_external_processes := []
 
 fragment_external_processes := data[input.namespace].external_processes
 
+apply_defaults(name, raw_values, framework_svn) := values {
+    semver.compare(framework_svn, svn) == 0
+    values := raw_values
+}
+
+apply_defaults(name, raw_values, framework_svn) := values {
+    semver.compare(framework_svn, svn) < 0
+    template := load_defaults(name, framework_svn)
+    values := [object.union(template, raw) | raw := raw_values[_]]
+}
+
 extract_fragment_includes(includes) := fragment {
+    framework_svn := data[input.namespace].framework_svn
     objects := {
-        "containers": fragment_containers,
-        "fragments": fragment_fragments,
-        "external_processes": fragment_external_processes,
+        "containers": apply_defaults("container", fragment_containers, framework_svn),
+        "fragments": apply_defaults("fragment", fragment_fragments, framework_svn),
+        "external_processes": apply_defaults("external_process", fragment_external_processes, framework_svn)
     }
 
-    fragment := {include: objects[include] | include := includes[_]}
+    fragment := {
+        include: objects[include] | include := includes[_]
+    }
 }
 
 issuer_exists(iss) {
@@ -585,6 +638,34 @@ update_issuer(includes) := issuer {
     issuer := {"feeds": {input.feed: [extract_fragment_includes(includes)]}}
 }
 
+default candidate_fragments := []
+
+candidate_fragments := fragments {
+    semver.compare(data.policy.framework_svn, svn) == 0    
+    
+    policy_fragmemnts := [f | f := data.policy.fragments[_]]
+    fragment_fragments := [f |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        f := fragment.fragments[_]
+    ]
+
+    fragments := array.concat(policy_fragmemnts, fragment_fragments)
+}
+
+candidate_fragments := fragments {
+    semver.compare(data.policy.framework_svn, svn) < 0
+
+    policy_fragments := apply_defaults("fragment", data.policy.fragments, data.policy.framework_svn)
+    fragment_fragments := [f |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        f := fragment.fragments[_]
+    ]
+
+    fragments := array.concat(policy_fragments, fragment_fragments)  
+}
+
 default load_fragment := {"allowed": false}
 
 fragment_ok(fragment) {
@@ -593,22 +674,10 @@ fragment_ok(fragment) {
     semver.compare(data[input.namespace].svn, fragment.minimum_svn) >= 0
 }
 
-# test if there is a matching fragment in the policy
-matching_fragment := fragment {
-    some fragment in data.policy.fragments
-    fragment_ok(fragment)
-}
-
-# test if there is a matching fragment in a fragment
-matching_fragment := subfragment {
-    feed := data.metadata.issuers[_].feeds[_]
-    some fragment in feed
-    some subfragment in fragment.fragments
-    fragment_ok(subfragment)
-}
-
 load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed": true} {
-    fragment := matching_fragment
+    some fragment in candidate_fragments
+    fragment_ok(fragment)
+
     issuer := update_issuer(fragment.includes)
     updateIssuer := {
         "name": "issuers",
@@ -657,6 +726,25 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
         "name": "scratch_mounts",
         "action": "remove",
         "key": input.unmountTarget,
+    }
+}
+
+object_default(info, svn) := value {
+    semver.compare(svn, info.introduced_version) >= 0
+    value := null
+}
+
+object_default(info, svn) := value {
+    semver.compare(svn, info.introduced_version) < 0
+    value := info.default_value
+}
+
+load_defaults(name, svn) := defaults {
+    version_info := data.objectDefaults[name]
+    defaults := {
+        key: value | 
+            some key
+            value := object_default(version_info[key], svn)
     }
 }
 
@@ -912,4 +1000,24 @@ errors["unencrypted scratch not allowed"] {
 errors["no scratch at path to unmount"] {
     input.rule == "scratch_unmount"
     not scratch_mounted(input.unmountTarget)
+}
+
+errors[framework_svn_error] {
+    not data.policy.framework_svn
+    framework_svn_error := concat(" ", ["framework_svn is missing. Current svn:", svn])
+}
+
+errors[framework_svn_error] {
+    semver.compare(data.policy.framework_svn, svn) > 0
+    framework_svn_error := concat(" ", ["framework_svn is ahead of the current svn:", data.policy.framework_svn, ">", svn])
+}
+
+errors[fragment_framework_svn_error] {
+    not data[input.namespace].framework_svn   
+    fragment_framework_svn_error := concat(" ", ["fragment framework_svn is missing. Current svn:", svn])     
+}
+
+errors[fragment_framework_svn_error] {
+    semver.compare(data[input.namespace].framework_svn, svn) > 0
+    fragment_framework_svn_error := concat(" ", ["fragment framework_svn is ahead of the current svn:", data[input.namespace].framework_svn, ">", svn])
 }

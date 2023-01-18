@@ -14,9 +14,12 @@ import (
 )
 
 const (
-	maxValue         = 1000
-	maxNumberOfPairs = 30
-	stringLength     = 10
+	maxValue          = 1000
+	maxNumberOfPairs  = 30
+	stringLength      = 10
+	maxNumberOfFields = 30
+	maxArrayLength    = 10
+	maxObjectDepth    = 4
 )
 
 var testRand *rand.Rand
@@ -35,6 +38,38 @@ func init() {
 	testRand = rand.New(rand.NewSource(seed))
 	fmt.Fprintf(os.Stdout, "regopolicyinterpreter_test seed: %d\n", seed)
 	uniqueStrings = make(map[string]struct{})
+}
+
+func Test_copyObject(t *testing.T) {
+	f := func(orig testObject) bool {
+		copy, err := copyObject(orig)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		return assertObjectsEqual(orig, copy)
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
+		t.Errorf("Test_copyObject: %v", err)
+	}
+}
+
+func Test_copyValue(t *testing.T) {
+	f := func(orig testValue) bool {
+		valueCopy, err := copyValue(orig.value)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		return assertValuesEqual(orig.value, valueCopy)
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
+		t.Errorf("Test_copyValue: %v", err)
+	}
 }
 
 //go:embed test.rego
@@ -70,7 +105,7 @@ func Test_Bool(t *testing.T) {
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
-		t.Errorf("Test_Flag: %v", err)
+		t.Errorf("Test_Bool: %v", err)
 	}
 }
 
@@ -366,14 +401,6 @@ func Test_Module(t *testing.T) {
 	}
 
 	if err = quick.Check(f, &quick.Config{MaxCount: 100, Rand: testRand}); err != nil {
-		t.Errorf("Test_Module_Uncompiled: %v", err)
-	}
-
-	if err := rego.Compile(); err != nil {
-		t.Errorf("error compiling module: %v", err)
-	}
-
-	if err = quick.Check(f, &quick.Config{MaxCount: 100, Rand: testRand}); err != nil {
 		t.Errorf("Test_Module_Compiled: %v", err)
 	}
 
@@ -473,6 +500,83 @@ type metadataName string
 
 func (metadataName) Generate(r *rand.Rand, _ int) reflect.Value {
 	value := metadataName(uniqueString(r))
+	return reflect.ValueOf(value)
+}
+
+type testValue struct {
+	value interface{}
+}
+type testArray []interface{}
+type testObject map[string]interface{}
+
+type testValueType int
+
+const (
+	testValueObject testValueType = iota
+	testValueArray
+	testValueString
+	testValueFloat
+	testValueBool
+	testValueNull
+)
+
+func generateValue(r *rand.Rand, depth int) interface{} {
+	choices := []testValueType{testValueArray, testValueString, testValueFloat, testValueBool, testValueNull}
+	if depth < maxObjectDepth {
+		choices = append(choices, testValueObject)
+	}
+
+	switch choices[r.Intn(len(choices))] {
+	case testValueObject:
+		return generateObject(r, depth+1)
+
+	case testValueArray:
+		return generateArray(r, depth+1)
+
+	case testValueString:
+		return randString(r)
+
+	case testValueFloat:
+		return r.Float64()
+
+	case testValueBool:
+		return r.Intn(2) == 1
+
+	case testValueNull:
+		return nil
+
+	default:
+		panic("invalid test value type")
+	}
+}
+
+func generateArray(r *rand.Rand, depth int) testArray {
+	numElements := r.Intn(maxArrayLength)
+	values := make(testArray, numElements)
+	for i := 0; i < numElements; i++ {
+		values[i] = generateValue(r, depth+1)
+	}
+	return values
+}
+
+func generateObject(r *rand.Rand, depth int) testObject {
+	result := make(testObject)
+	numFields := r.Intn(maxNumberOfFields)
+	for f := 0; f < numFields; f++ {
+		name := uniqueString(r)
+		result[name] = generateValue(r, depth)
+	}
+
+	return result
+}
+
+func (testValue) Generate(r *rand.Rand, _ int) reflect.Value {
+	value := testValue{value: generateValue(r, 0)}
+	return reflect.ValueOf(value)
+}
+
+func (testObject) Generate(r *rand.Rand, _ int) reflect.Value {
+	value := generateObject(r, 0)
 	return reflect.ValueOf(value)
 }
 
@@ -615,4 +719,88 @@ func uniqueString(r *rand.Rand) string {
 			return s
 		}
 	}
+}
+
+func assertValuesEqual(lhs interface{}, rhs interface{}) bool {
+	if lhsObject, ok := lhs.(testObject); ok {
+		if rhsObject, ok := rhs.(testObject); ok {
+			return assertObjectsEqual(lhsObject, rhsObject)
+		} else if rhsObject, ok := rhs.(map[string]interface{}); ok {
+			return assertObjectsEqual(lhsObject, rhsObject)
+		} else {
+			return false
+		}
+	}
+
+	if lhsArray, ok := lhs.(testArray); ok {
+		if rhsArray, ok := rhs.(testArray); ok {
+			return assertArraysEqual(lhsArray, rhsArray)
+		} else if rhsArray, ok := rhs.([]interface{}); ok {
+			return assertArraysEqual(lhsArray, rhsArray)
+		} else {
+			return false
+		}
+	}
+
+	if lhsString, ok := lhs.(string); ok {
+		if rhsString, ok := rhs.(string); ok {
+			return lhsString == rhsString
+		} else {
+			return false
+		}
+	}
+
+	if lhsFloat, ok := lhs.(float64); ok {
+		if rhsFloat, ok := rhs.(float64); ok {
+			return lhsFloat == rhsFloat
+		} else {
+			return false
+		}
+	}
+
+	if lhsBool, ok := lhs.(bool); ok {
+		if rhsBool, ok := rhs.(bool); ok {
+			return lhsBool == rhsBool
+		} else {
+			return false
+		}
+	}
+
+	if lhs == nil && rhs == nil {
+		return true
+	}
+
+	return false
+}
+
+func assertArraysEqual(lhs testArray, rhs testArray) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i := range lhs {
+		if !assertValuesEqual(lhs[i], rhs[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func assertObjectsEqual(lhs testObject, rhs testObject) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for key, lhsValue := range lhs {
+		if rhsValue, ok := lhs[key]; ok {
+			if !assertValuesEqual(lhsValue, rhsValue) {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+
+	return true
 }

@@ -93,9 +93,6 @@ func (a stringSet) intersect(b stringSet) stringSet {
 	return s
 }
 
-type policyResults map[string]interface{}
-type metadataObject map[string]interface{}
-type metadataStore map[string]metadataObject
 type inputData map[string]interface{}
 
 func createRegoEnforcer(base64EncodedPolicy string,
@@ -166,9 +163,16 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	policy.defaultMounts = make([]oci.Mount, len(defaultMounts))
 	copy(policy.defaultMounts, defaultMounts)
 
+	objectDefaults := make(map[string]interface{})
+	err = json.Unmarshal([]byte(FrameworkObjects), &objectDefaults)
+	if err != nil {
+		return nil, fmt.Errorf("unable to unmarshal framework object defaults: %w", err)
+	}
+
 	defaultMountData := make([]interface{}, 0, len(defaultMounts))
 	privilegedMountData := make([]interface{}, 0, len(privilegedMounts))
 	data := map[string]interface{}{
+		"objectDefaults":   objectDefaults,
 		"defaultMounts":    appendMountData(defaultMountData, defaultMounts),
 		"privilegedMounts": appendMountData(privilegedMountData, privilegedMounts),
 		"sandboxPrefix":    guestpath.SandboxMountPrefix,
@@ -194,33 +198,24 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	return policy, nil
 }
 
-func (policy *regoEnforcer) allowed(enforcementPoint string, result rpi.RegoQueryResult) (bool, error) {
-	if result.IsEmpty() {
-		info, err := policy.queryEnforcementPoint(enforcementPoint)
-		if err != nil {
-			return false, err
-		}
-
-		if info.availableByPolicyVersion {
-			// policy should define this rule but it is missing
-			return false, fmt.Errorf("rule for %s is missing from policy", enforcementPoint)
-		} else {
-			// rule added after policy was authored
-			return info.allowedByDefault, nil
-		}
-	}
-
-	allowed, err := result.Bool("allowed")
+func (policy *regoEnforcer) applyDefaults(enforcementPoint string, results rpi.RegoQueryResult) (rpi.RegoQueryResult, error) {
+	deny := rpi.RegoQueryResult{"allowed": false}
+	info, err := policy.queryEnforcementPoint(enforcementPoint)
 	if err != nil {
-		return false, err
+		return deny, err
 	}
 
-	return allowed, nil
+	if results.IsEmpty() && info.availableByPolicyVersion {
+		// policy should define this rule but it is missing
+		return deny, fmt.Errorf("rule for %s is missing from policy", enforcementPoint)
+	}
+
+	return info.defaultResults.Union(results), nil
 }
 
 type enforcementPointInfo struct {
 	availableByPolicyVersion bool
-	allowedByDefault         bool
+	defaultResults           rpi.RegoQueryResult
 }
 
 func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (*enforcementPointInfo, error) {
@@ -252,19 +247,19 @@ func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (*enf
 		return nil, fmt.Errorf("enforcement point rule %s is invalid", enforcementPoint)
 	}
 
-	availableByPolicyVersion, err := result.Bool("available")
+	defaultResults, err := result.Object("default_results")
 	if err != nil {
-		return nil, err
+		return nil, errors.New("enforcement point result missing defaults")
 	}
 
-	allowedByDefault, err := result.Bool("allowed")
+	availableByPolicyVersion, err := result.Bool("available")
 	if err != nil {
-		return nil, err
+		return nil, errors.New("enforcement point result missing availability info")
 	}
 
 	return &enforcementPointInfo{
 		availableByPolicyVersion: availableByPolicyVersion,
-		allowedByDefault:         allowedByDefault,
+		defaultResults:           defaultResults,
 	}, nil
 }
 
@@ -275,9 +270,14 @@ func (policy *regoEnforcer) enforce(enforcementPoint string, input inputData) (r
 		return nil, err
 	}
 
-	allowed, err := policy.allowed(rule, result)
+	result, err = policy.applyDefaults(enforcementPoint, result)
 	if err != nil {
 		return result, err
+	}
+
+	allowed, err := result.Bool("allowed")
+	if err != nil {
+		return nil, err
 	}
 
 	if !allowed {

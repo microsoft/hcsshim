@@ -16,10 +16,17 @@ import (
 )
 
 //go:embed framework.rego
-var FrameworkCode string
+var frameworkCodeTemplate string
 
 //go:embed api.rego
-var APICode string
+var apiCodeTemplate string
+
+//go:embed framework_objects.json
+var frameworkObjectsTemplate string
+
+var APICode = strings.Replace(apiCodeTemplate, "@@API_SVN@@", apiSVN, 1)
+var FrameworkCode = strings.Replace(frameworkCodeTemplate, "@@FRAMEWORK_SVN@@", frameworkSVN, 1)
+var FrameworkObjects = strings.Replace(frameworkObjectsTemplate, "@@FRAMEWORK_SVN@@", frameworkSVN, 1)
 
 var ErrInvalidOpenDoorPolicy = errors.New("allow_all cannot be set to 'true' when Containers are non-empty")
 
@@ -103,6 +110,9 @@ type ExecProcessConfig struct {
 	Command []string         `json:"command" toml:"command"`
 	Signals []syscall.Signal `json:"signals" toml:"signals"`
 }
+
+const apiSVN = "0.10.0"
+const frameworkSVN = "0.1.0"
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
 // strings slice.
