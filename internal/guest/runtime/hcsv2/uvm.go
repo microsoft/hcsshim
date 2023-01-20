@@ -39,6 +39,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -324,6 +325,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Process.Env,
 		settings.OCISpecification.Process.Cwd,
 		settings.OCISpecification.Mounts,
+		isPrivilegedContainerCreationRequest(settings.OCISpecification),
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
@@ -988,4 +990,10 @@ func processOCIEnvToParam(envs []string) map[string]string {
 	}
 
 	return paramEnv
+}
+
+// isPrivilegedContainerCreationRequest returns if a given container
+// creation request would create a privileged container
+func isPrivilegedContainerCreationRequest(spec *specs.Spec) bool {
+	return spec.Annotations[annotations.LCOWPrivileged] == "true"
 }

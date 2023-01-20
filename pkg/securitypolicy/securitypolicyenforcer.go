@@ -45,7 +45,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) (err error)
 	EnforceOverlayUnmountPolicy(target string) (err error)
 	EnforceCreateContainerPolicy(sandboxID string, containerID string,
-		argList []string, envList []string, workingDir string, mounts []oci.Mount) (EnvList, bool, error)
+		argList []string, envList []string, workingDir string, mounts []oci.Mount, privileged bool) (EnvList, bool, error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
 	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (EnvList, bool, error)
@@ -434,6 +434,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	envList []string,
 	workingDir string,
 	mounts []oci.Mount,
+	privileged bool,
 ) (allowedEnvs EnvList, stdioAccessAllowed bool, err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
@@ -455,6 +456,10 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	}
 
 	if err = pe.enforceWorkingDirPolicy(containerID, workingDir); err != nil {
+		return nil, true, err
+	}
+
+	if err = pe.enforcePrivilegedPolicy(containerID, privileged); err != nil {
 		return nil, true, err
 	}
 
@@ -619,6 +624,29 @@ func (pe *StandardSecurityPolicyEnforcer) enforceWorkingDirPolicy(containerID st
 	}
 	if !matched {
 		return fmt.Errorf("working_dir %q unmatched by policy rule", workingDir)
+	}
+	return nil
+}
+
+func (pe *StandardSecurityPolicyEnforcer) enforcePrivilegedPolicy(containerID string, privileged bool) error {
+	possibleIndices := pe.possibleIndicesForID(containerID)
+
+	// We only need to check for privilege escalation
+	if !privileged {
+		return nil
+	}
+
+	matched := false
+	for _, pIndex := range possibleIndices {
+		pAllowElevated := pe.Containers[pIndex].AllowElevated
+		if pAllowElevated {
+			matched = true
+		} else {
+			pe.narrowMatchesForContainerIndex(pIndex, containerID)
+		}
+	}
+	if !matched {
+		return errors.New("privileged escalation unmatched by policy rule")
 	}
 	return nil
 }
@@ -835,7 +863,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount) (EnvList, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
@@ -917,7 +945,7 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) erro
 	return errors.New("removing an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount) (EnvList, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool) (EnvList, bool, error) {
 	return nil, false, errors.New("running commands is denied by policy")
 }
 
