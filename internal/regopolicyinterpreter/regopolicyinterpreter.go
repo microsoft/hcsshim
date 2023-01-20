@@ -270,6 +270,8 @@ func (m regoMetadata) getOrCreate(name string) map[string]interface{} {
 }
 
 func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) error {
+	// dataAndModulesMutex must be held before calling this
+
 	metadataRoot, ok := r.data["metadata"].(regoMetadata)
 	if !ok {
 		return errors.New("illegal interpreter state: invalid metadata object type")
@@ -303,6 +305,11 @@ func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) err
 
 // EnableLogging enables logging to the provided path at the specified level.
 func (r *RegoPolicyInterpreter) EnableLogging(path string, level LogLevel) error {
+	// this mutex ensures no-one reads compiledModules before we clear it
+	r.dataAndModulesMutex.Lock()
+	defer r.dataAndModulesMutex.Unlock()
+
+	r.compiledModules = nil
 	r.logLevel = level
 
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
@@ -316,21 +323,28 @@ func (r *RegoPolicyInterpreter) EnableLogging(path string, level LogLevel) error
 	r.metadataLogger = log.New(file, "METADATA: ", log.Ldate|log.Ltime)
 	r.logInfo("Logging Enabled at level %d", level)
 
-	r.compiledModules = nil
 	return nil
 }
 
 // SetLogLevel sets the logging level. To actually produce a log, however, EnableLogging
 // must be called first.
 func (r *RegoPolicyInterpreter) SetLogLevel(level LogLevel) {
-	r.logLevel = level
+	// this mutex ensures no-one reads compiledModules before we clear it
+	r.dataAndModulesMutex.Lock()
+	defer r.dataAndModulesMutex.Unlock()
+
 	r.compiledModules = nil
+	r.logLevel = level
 }
 
 // DisableLogging disables logging and closes the underlying log file.
 func (r *RegoPolicyInterpreter) DisableLogging() error {
-	r.logLevel = LogNone
+	// this mutex ensures no-one reads compiledModules before we clear it
+	r.dataAndModulesMutex.Lock()
+	defer r.dataAndModulesMutex.Unlock()
+
 	r.compiledModules = nil
+	r.logLevel = LogNone
 	if r.logFile != nil {
 		r.logInfo("Logging disabled")
 		r.infoLogger = nil
@@ -348,6 +362,8 @@ func (r *RegoPolicyInterpreter) DisableLogging() error {
 }
 
 func (r *RegoPolicyInterpreter) compile() error {
+	// dataAndModulesMutex must be held before calling this
+
 	modules := make(map[string]string)
 	for _, module := range r.modules {
 		modules[module.Namespace+".rego"] = module.Code
@@ -510,6 +526,8 @@ func (r RegoQueryResult) Union(other RegoQueryResult) RegoQueryResult {
 }
 
 func (r *RegoPolicyInterpreter) query(rule string, input map[string]interface{}) (rego.ResultSet, error) {
+	// dataAndModulesMutex must be held before calling this
+
 	store := inmem.NewFromObject(r.data)
 
 	var buf bytes.Buffer
