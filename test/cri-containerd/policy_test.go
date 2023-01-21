@@ -427,6 +427,28 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 					},
 				)},
 		},
+		{
+			name: "ContainerPathRegex",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithMountConstraints(
+					[]securitypolicy.MountConfig{
+						{
+							HostPath:      "sandbox://sandbox/path",
+							ContainerPath: "/container/.*",
+						},
+					},
+				)},
+		},
 	} {
 		for _, pc := range policyTestMatrix {
 			t.Run(testConfig.name+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
@@ -507,7 +529,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
 						HostPath:      "sandbox://sandbox/path",
-						ContainerPath: "/container/path/invalid",
+						ContainerPath: "/container/invalid/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 					},
 				)
@@ -574,6 +596,29 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 						{
 							HostPath:      "sandbox://sandbox/path/R.+",
 							ContainerPath: "/container/path",
+						},
+					},
+				)},
+			expectedError: "is not allowed by mount constraints",
+		},
+		{
+			name: "InvalidContainerPathForRegex",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path",
+						ContainerPath: "/container/invalid/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithMountConstraints(
+					[]securitypolicy.MountConfig{
+						{
+							HostPath:      "sandbox://sandbox/path",
+							ContainerPath: "/container/I.*",
 						},
 					},
 				)},
