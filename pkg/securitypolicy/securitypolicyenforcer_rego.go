@@ -389,6 +389,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	envList []string,
 	workingDir string,
 	mounts []oci.Mount,
+	privileged bool,
 ) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
 		"containerID":  containerID,
@@ -398,6 +399,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"sandboxDir":   sandboxMountsDir(sandboxID),
 		"hugePagesDir": hugePagesMountsDir(sandboxID),
 		"mounts":       appendMountData([]interface{}{}, mounts),
+		"privileged":   privileged,
 	}
 
 	results, err := policy.enforce("create_container", input)
