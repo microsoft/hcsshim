@@ -412,19 +412,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		return nil, false, err
 	}
 
-	if value, ok := results["allow_stdio_access"]; ok {
-		if value, ok := value.(bool); ok {
-			stdioAccessAllowed = value
-		} else {
-			// we got a non-boolean. that's a clear error
-			// alert that we got an error rather than setting a default value
-			return nil, false, errors.New("`allow_stdio_access` needs to be a boolean")
-		}
-	} else {
-		// Policy writer didn't specify an `allow_studio_access` value.
-		// We have two options, return an error or set a default value.
-		// We are setting a default value: do not allow
-		stdioAccessAllowed = false
+	stdioAccessAllowed, err = results.Bool("allow_stdio_access")
+	if err != nil {
+		return nil, false, err
 	}
 
 	// Store the result of stdio access allowed for this container so we can use
@@ -505,19 +495,9 @@ func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, e
 		return nil, false, err
 	}
 
-	if value, ok := results["allow_stdio_access"]; ok {
-		if value, ok := value.(bool); ok {
-			stdioAccessAllowed = value
-		} else {
-			// we got a non-boolean. that's a clear error
-			// alert that we got an error rather than setting a default value
-			return nil, false, errors.New("`allow_stdio_access` needs to be a boolean")
-		}
-	} else {
-		// Policy writer didn't specify an `allow_studio_access` value.
-		// We have two options, return an error or set a default value.
-		// We are setting a default value: do not allow
-		stdioAccessAllowed = false
+	stdioAccessAllowed, err = results.Bool("allow_stdio_access")
+	if err != nil {
+		return nil, false, err
 	}
 
 	return toKeep, stdioAccessAllowed, nil

@@ -5,11 +5,11 @@ svn := "@@API_SVN@@"
 enforcement_points := {
     "mount_device": {"introducedVersion": "0.1.0", "default_results": {"allowed": false}},
     "mount_overlay": {"introducedVersion": "0.1.0", "default_results": {"allowed": false}},
-    "create_container": {"introducedVersion": "0.1.0", "default_results": {"allowed": false, "env_list": null, "allow_stdio_access": true}},
+    "create_container": {"introducedVersion": "0.1.0", "default_results": {"allowed": false, "env_list": null, "allow_stdio_access": false}},
     "unmount_device": {"introducedVersion": "0.2.0", "default_results": {"allowed": true}},
     "unmount_overlay": {"introducedVersion": "0.6.0", "default_results": {"allowed": true}},
     "exec_in_container": {"introducedVersion": "0.2.0", "default_results": {"allowed": true, "env_list": null}},
-    "exec_external": {"introducedVersion": "0.3.0", "default_results": {"allowed": true, "env_list": null, "allow_stdio_access": true}},
+    "exec_external": {"introducedVersion": "0.3.0", "default_results": {"allowed": true, "env_list": null, "allow_stdio_access": false}},
     "shutdown_container": {"introducedVersion": "0.4.0", "default_results": {"allowed": true}},
     "signal_container_process": {"introducedVersion": "0.5.0", "default_results": {"allowed": true}},
     "plan9_mount": {"introducedVersion": "0.6.0", "default_results": {"allowed": true}},
