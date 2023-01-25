@@ -3501,14 +3501,38 @@ func Test_Rego_CreateContainer_Framework_SVN(t *testing.T) {
 		t.Error("incorrect number of candidate containers.")
 	}
 
+	err = verifyAllObjectsContainKeyValue(containers, "__test__", "containerExtra")
+	if err != nil {
+		t.Error(err)
+	}
+
 	for _, rawContainer := range containers {
 		container := rawContainer.(map[string]interface{})
-		if test, ok := container["__test__"].(string); ok {
-			if test != "containerExtra" {
-				t.Errorf("incorrect default value applied")
+		if envRules, ok := container["env_rules"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(envRules, "__test__", "containerEnvRuleExtra")
+			if err != nil {
+				t.Error(err)
 			}
 		} else {
-			t.Errorf("default value missing")
+			t.Error("unable to obtain env_rules")
+		}
+
+		if mounts, ok := container["mounts"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(mounts, "__test__", "containerMountExtra")
+			if err != nil {
+				t.Error(err)
+			}
+		} else {
+			t.Error("unable to obtain mounts")
+		}
+
+		if processes, ok := container["exec_processes"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(processes, "__test__", "containerExecProcessExtra")
+			if err != nil {
+				t.Error(err)
+			}
+		} else {
+			t.Error("unable to obtain exec_processes")
 		}
 	}
 }
@@ -3546,14 +3570,38 @@ func Test_Rego_CreateContainer_Fragment_Framework_SVN(t *testing.T) {
 		t.Error("incorrect number of candidate containers.")
 	}
 
+	err = verifyAllObjectsContainKeyValue(containers, "__test__", "containerExtra")
+	if err != nil {
+		t.Error(err)
+	}
+
 	for _, rawContainer := range containers {
 		container := rawContainer.(map[string]interface{})
-		if test, ok := container["__test__"].(string); ok {
-			if test != "containerExtra" {
-				t.Errorf("incorrect default value applied")
+		if envRules, ok := container["env_rules"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(envRules, "__test__", "containerEnvRuleExtra")
+			if err != nil {
+				t.Error(err)
 			}
 		} else {
-			t.Errorf("default value missing")
+			t.Error("unable to obtain env_rules")
+		}
+
+		if mounts, ok := container["mounts"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(mounts, "__test__", "containerMountExtra")
+			if err != nil {
+				t.Error(err)
+			}
+		} else {
+			t.Error("unable to obtain mounts")
+		}
+
+		if processes, ok := container["exec_processes"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(processes, "__test__", "containerExecProcessExtra")
+			if err != nil {
+				t.Error(err)
+			}
+		} else {
+			t.Error("unable to obtain exec_processes")
 		}
 	}
 }
@@ -3582,14 +3630,20 @@ func Test_Rego_ExecProcess_Framework_SVN(t *testing.T) {
 		t.Error("incorrect number of candidate external processes.")
 	}
 
+	err = verifyAllObjectsContainKeyValue(external_processes, "__test__", "externalProcessExtra")
+	if err != nil {
+		t.Error(err)
+	}
+
 	for _, rawProcess := range external_processes {
 		process := rawProcess.(map[string]interface{})
-		if test, ok := process["__test__"].(string); ok {
-			if test != "externalProcessExtra" {
-				t.Errorf("incorrect default value applied")
+		if envRules, ok := process["env_rules"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(envRules, "__test__", "externalProcessEnvRuleExtra")
+			if err != nil {
+				t.Error(err)
 			}
 		} else {
-			t.Errorf("default value missing")
+			t.Error("unable to obtain env_rules")
 		}
 	}
 }
@@ -3628,14 +3682,20 @@ func Test_Rego_ExecProcess_Fragment_Framework_SVN(t *testing.T) {
 		t.Error("incorrect number of candidate external processes.")
 	}
 
+	err = verifyAllObjectsContainKeyValue(external_processes, "__test__", "externalProcessExtra")
+	if err != nil {
+		t.Error(err)
+	}
+
 	for _, rawProcess := range external_processes {
 		process := rawProcess.(map[string]interface{})
-		if test, ok := process["__test__"].(string); ok {
-			if test != "externalProcessExtra" {
-				t.Errorf("incorrect default value applied")
+		if envRules, ok := process["env_rules"].([]interface{}); ok {
+			err = verifyAllObjectsContainKeyValue(envRules, "__test__", "externalProcessEnvRuleExtra")
+			if err != nil {
+				t.Error(err)
 			}
 		} else {
-			t.Errorf("default value missing")
+			t.Error("unable to obtain env_rules")
 		}
 	}
 }
@@ -3664,15 +3724,9 @@ func Test_Rego_Fragment_Framework_SVN(t *testing.T) {
 		t.Error("incorrect number of candidate external processes.")
 	}
 
-	for _, rawFragment := range fragments {
-		fragment := rawFragment.(map[string]interface{})
-		if test, ok := fragment["__test__"].(string); ok {
-			if test != "fragmentExtra" {
-				t.Errorf("incorrect default value applied")
-			}
-		} else {
-			t.Errorf("default value missing")
-		}
+	err = verifyAllObjectsContainKeyValue(fragments, "__test__", "fragmentExtra")
+	if err != nil {
+		t.Error(err)
 	}
 }
 
@@ -4588,11 +4642,37 @@ func setupFrameworkSVNTest(gc *generatedConstraints, policy_svn string, svn stri
 		"introduced_version": svn,
 		"default_value":      "containerExtra",
 	}
+	containerEnvRules := containerDefaults["env_rules"].(map[string]interface{})
+	containerEnvRuleItem := containerEnvRules["item"].(map[string]interface{})
+	containerEnvRuleItem["__test__"] = map[string]interface{}{
+		"introduced_version": svn,
+		"default_value":      "containerEnvRuleExtra",
+	}
+	containerMounts := containerDefaults["mounts"].(map[string]interface{})
+	containerMountItem := containerMounts["item"].(map[string]interface{})
+	containerMountItem["__test__"] = map[string]interface{}{
+		"introduced_version": svn,
+		"default_value":      "containerMountExtra",
+	}
+	containerExecProcesses := containerDefaults["exec_processes"].(map[string]interface{})
+	containerExecProcessItem := containerExecProcesses["item"].(map[string]interface{})
+	containerExecProcessItem["__test__"] = map[string]interface{}{
+		"introduced_version": svn,
+		"default_value":      "containerExecProcessExtra",
+	}
+
 	externalProcessDefaults := objectDefaults["external_process"].(map[string]interface{})
 	externalProcessDefaults["__test__"] = map[string]interface{}{
 		"introduced_version": svn,
 		"default_value":      "externalProcessExtra",
 	}
+	externalProcessEnvRules := externalProcessDefaults["env_rules"].(map[string]interface{})
+	externalProcessEnvRuleItem := externalProcessEnvRules["item"].(map[string]interface{})
+	externalProcessEnvRuleItem["__test__"] = map[string]interface{}{
+		"introduced_version": svn,
+		"default_value":      "externalProcessEnvRuleExtra",
+	}
+
 	fragmentDefaults := objectDefaults["fragment"].(map[string]interface{})
 	fragmentDefaults["__test__"] = map[string]interface{}{
 		"introduced_version": svn,
@@ -5043,6 +5123,21 @@ func verifyPolicyRules(apiSVN string, enforcementPoints map[string]interface{}, 
 
 		if _, ok := enforcementPoints[rule]; !ok {
 			return fmt.Errorf("Rule %s in policy template is missing from API", rule)
+		}
+	}
+
+	return nil
+}
+
+func verifyAllObjectsContainKeyValue(objects []interface{}, key string, expectedValue string) error {
+	for _, rawObject := range objects {
+		object := rawObject.(map[string]interface{})
+		if actualValue, ok := object[key].(string); ok {
+			if actualValue != expectedValue {
+				return fmt.Errorf("incorrect value for %s: %s != %s (expected)", key, actualValue, expectedValue)
+			}
+		} else {
+			return fmt.Errorf("missing value for %s", key)
 		}
 	}
 

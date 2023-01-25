@@ -4,75 +4,127 @@
     "container": {
         "command": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": []
         },
         "env_rules": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": [],
+            "item": {
+                "pattern": {
+                    "introduced_version": "0.1.0",
+                    "default_value": ""
+                },
+                "strategy": {
+                    "introduced_version": "0.1.0",
+                    "default_value": "string"
+                },
+                "required": {
+                    "introduced_version": "0.1.0",
+                    "default_value": false
+                }
+            }
         },
         "layers": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": []
         },
         "mounts": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": [],
+            "item": {
+                "source": {
+                    "introduced_version": "0.1.0",
+                    "default_value": ""
+                },
+                "destination": {
+                    "introduced_version": "0.1.0",
+                    "default_value": ""
+                },
+                "options": {
+                    "introduced_version": "0.1.0",
+                    "default_value": []
+                },
+                "type": {
+                    "introduced_version": "0.1.0",
+                    "default_value": ""
+                }
+            }
         },
         "allow_elevated": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": false
         },
         "working_dir": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": ""
         },
         "exec_processes": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": [],
+            "item": {
+                "command": {
+                    "introduced_version": "0.1.0",
+                    "default_value": []
+                },
+                "signals": {
+                    "introduced_version": "0.1.0",
+                    "default_value": []
+                }
+            }
         },
         "signals": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": []
         },
         "allow_stdio_access": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": false
         }
     },
     "external_process": {
         "command": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": []
         },
         "env_rules": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": [],
+            "item": {
+                "command": {
+                    "introduced_version": "0.1.0",
+                    "default_value": []
+                },
+                "signals": {
+                    "introduced_version": "0.1.0",
+                    "default_value": []
+                }
+            }
         },
         "working_dir": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": ""
         },
         "allow_stdio_access": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": false
         }
     },
     "fragment": {
         "iss": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": ""
         },
         "feed": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": ""
         },
         "minimum_svn": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": ""
         },
         "includes": {
             "introduced_version": "0.1.0",
-            "default_value": null
+            "default_value": []
         }
     }
 }

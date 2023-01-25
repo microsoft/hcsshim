@@ -592,7 +592,17 @@ apply_defaults(name, raw_values, framework_svn) := values {
 apply_defaults(name, raw_values, framework_svn) := values {
     semver.compare(framework_svn, svn) < 0
     template := load_defaults(name, framework_svn)
-    values := [object.union(template, raw) | raw := raw_values[_]]
+    print(template)
+    values := [updated | 
+        raw := raw_values[_]
+        flat := object.union(template, raw)
+        arrays := {key: values |            
+            template[key]["__array__"]
+            item_template := template[key]["item"]
+            values := [object.union(item_template, raw) | raw := raw[key][_]]
+        }
+        updated := object.union(flat, arrays)
+    ]
 }
 
 extract_fragment_includes(includes) := fragment {
@@ -730,22 +740,38 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
 }
 
 object_default(info, svn) := value {
+    not info["item"]
     semver.compare(svn, info.introduced_version) >= 0
     value := null
 }
 
 object_default(info, svn) := value {
+    not info["item"]
     semver.compare(svn, info.introduced_version) < 0
     value := info.default_value
 }
 
+item_default(info, svn) := value {
+    semver.compare(svn, info.introduced_version) >= 0
+    value := null    
+}
+
+item_default(info, svn) := value {
+    semver.compare(svn, info.introduced_version) < 0
+    value := info.default_value
+}
+
+object_default(info, svn) := value {
+    info["item"]
+    value := {
+        "__array__": true,
+        "item": {key: value | value := item_default(info["item"][key], svn)}
+    }
+}
+
 load_defaults(name, svn) := defaults {
     version_info := data.objectDefaults[name]
-    defaults := {
-        key: value | 
-            some key
-            value := object_default(version_info[key], svn)
-    }
+    defaults := {key: value | value := object_default(version_info[key], svn)}
 }
 
 # error messages
