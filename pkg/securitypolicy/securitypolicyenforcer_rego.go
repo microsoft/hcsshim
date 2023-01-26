@@ -357,7 +357,7 @@ func hugePagesMountsDir(sandboxID string) string {
 
 func getEnvsToKeep(envList []string, results rpi.RegoQueryResult) ([]string, error) {
 	value, err := results.Value("env_list")
-	if err != nil {
+	if err != nil || value == nil {
 		// policy did not return an 'env_list'. This is interpreted
 		// as "proceed with provided env list".
 		return envList, nil

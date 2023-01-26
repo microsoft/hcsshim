@@ -3864,6 +3864,65 @@ func Test_Fragment_FrameworkSVN_In_Future(t *testing.T) {
 	}
 }
 
+func Test_Rego_MissingEnvList(t *testing.T) {
+	code := fmt.Sprintf(`package policy
+
+	api_svn := "%s"
+
+	create_container := {"allowed": true}
+	exec_in_container := {"allowed": true}
+	exec_external := {"allowed": true}
+	`, apiSVN)
+
+	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("error compiling the rego policy: %v", err)
+	}
+
+	sandboxID := generateSandboxID(testRand)
+	containerID := generateContainerID(testRand)
+	command := generateCommand(testRand)
+	expectedEnvs := generateEnvironmentVariables(testRand)
+	workingDir := generateWorkingDir(testRand)
+
+	actualEnvs, _, err := policy.EnforceCreateContainerPolicy(
+		sandboxID,
+		containerID,
+		command,
+		expectedEnvs,
+		workingDir,
+		[]oci.Mount{},
+	)
+
+	if err != nil {
+		t.Errorf("unexpected error when calling EnforceCreateContainerPolicy: %v", err)
+	}
+
+	if !areStringArraysEqual(actualEnvs, expectedEnvs) {
+		t.Error("invalid envList returned from EnforceCreateContainerPolicy")
+	}
+
+	actualEnvs, _, err = policy.EnforceExecInContainerPolicy(containerID, command, expectedEnvs, workingDir)
+
+	if err != nil {
+		t.Errorf("unexpected error when calling EnforceExecInContainerPolicy: %v", err)
+	}
+
+	if !areStringArraysEqual(actualEnvs, expectedEnvs) {
+		t.Error("invalid envList returned from EnforceExecInContainerPolicy")
+	}
+
+	actualEnvs, _, err = policy.EnforceExecExternalProcessPolicy(command, expectedEnvs, workingDir)
+
+	if err != nil {
+		t.Errorf("unexpected error when calling EnforceExecExternalProcessPolicy: %v", err)
+	}
+
+	if !areStringArraysEqual(actualEnvs, expectedEnvs) {
+		t.Error("invalid envList returned from EnforceExecExternalProcessPolicy")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
