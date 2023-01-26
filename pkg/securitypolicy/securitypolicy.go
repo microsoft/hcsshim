@@ -111,8 +111,11 @@ type ExecProcessConfig struct {
 	Signals []syscall.Signal `json:"signals" toml:"signals"`
 }
 
-const apiSVN = "0.10.0"
-const frameworkSVN = "0.1.0"
+//go:embed svn_api
+var apiSVN string
+
+//go:embed svn_framework
+var frameworkSVN string
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
 // strings slice.

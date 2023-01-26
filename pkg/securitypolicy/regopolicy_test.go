@@ -3884,6 +3884,7 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 	command := generateCommand(testRand)
 	expectedEnvs := generateEnvironmentVariables(testRand)
 	workingDir := generateWorkingDir(testRand)
+	privileged := randBool(testRand)
 
 	actualEnvs, _, err := policy.EnforceCreateContainerPolicy(
 		sandboxID,
@@ -3892,6 +3893,7 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 		expectedEnvs,
 		workingDir,
 		[]oci.Mount{},
+		privileged,
 	)
 
 	if err != nil {
