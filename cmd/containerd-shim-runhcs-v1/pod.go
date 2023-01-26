@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -228,10 +229,20 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 	} else {
 		if isWCOW {
-			// The pause container activation will immediately exit on Windows
+			defaultArgs := "c:\\windows\\system32\\cmd.exe"
+			// For the default pause image, the  entrypoint
+			// used is pause.exe
+			// If the default pause image is not used for pause containers,
+			// the activation will immediately exit on Windows
 			// because there is no command. We forcibly update the command here
-			// to keep it alive.
-			s.Process.CommandLine = "cmd /c ping -t 127.0.0.1 > nul"
+			// to keep it alive only for non-default pause images.
+			// TODO: This override can be completely removed from containerd/1.7
+			if (len(s.Process.Args) == 1 && strings.EqualFold(s.Process.Args[0], defaultArgs)) ||
+				strings.EqualFold(s.Process.CommandLine, defaultArgs) {
+				log.G(ctx).Warning("Detected CMD override for pause container entrypoint." +
+					"Please consider switching to a pause image with an explicit cmd set")
+				s.Process.CommandLine = "cmd /c ping -t 127.0.0.1 > nul"
+			}
 		}
 		// LCOW (and WCOW Process Isolated for the time being) requires a real
 		// task for the sandbox.
