@@ -592,8 +592,7 @@ func parseNamespace(rego string) (string, error) {
 		return "", errors.New("package definition required on first line")
 	}
 
-	namespace := parts[1]
-	return namespace, nil
+	return strings.TrimSpace(parts[1]), nil
 }
 
 func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string) error {
