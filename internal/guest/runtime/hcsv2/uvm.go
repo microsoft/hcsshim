@@ -326,7 +326,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Process.Env,
 		settings.OCISpecification.Process.Cwd,
 		settings.OCISpecification.Mounts,
-		isPrivilegedContainerCreationRequest(settings.OCISpecification),
+		isPrivilegedContainerCreationRequest(ctx, settings.OCISpecification),
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
@@ -995,6 +995,6 @@ func processOCIEnvToParam(envs []string) map[string]string {
 
 // isPrivilegedContainerCreationRequest returns if a given container
 // creation request would create a privileged container
-func isPrivilegedContainerCreationRequest(spec *specs.Spec) bool {
-	return spec.Annotations[annotations.LCOWPrivileged] == "true"
+func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec) bool {
+	return oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false)
 }

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	int_oci "github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -204,7 +205,7 @@ func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 	}
 
 	// Check if we need to do any capability/device mappings
-	if spec.Annotations[annotations.LCOWPrivileged] == "true" {
+	if int_oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false) {
 		log.G(ctx).Debugf("'%s' set for privileged container", annotations.LCOWPrivileged)
 
 		// Add all host devices
