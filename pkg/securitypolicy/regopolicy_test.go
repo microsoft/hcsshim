@@ -685,7 +685,7 @@ func Test_Rego_EnforceCommandPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, generateCommand(testRand), tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, generateCommand(testRand), tc.envList, tc.workingDir, tc.mounts, false)
 
 		if err == nil {
 			return false
@@ -717,7 +717,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 		}
 
 		envList := append(tc.envList, "PREFIX_FOO=BAR")
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -742,7 +742,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 		}
 
 		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -777,7 +777,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs(t *testing.T) {
 		extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 		envList := append(tc.envList, extraEnvs...)
-		actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts)
+		actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -808,7 +808,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs_Multiple(t *testing.T) 
 	extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 	envList := append(tc.envList, extraEnvs...)
-	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts)
+	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false)
 
 	// getting an error means something is broken
 	if err != nil {
@@ -830,7 +830,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs_Multiple_NoMatch(t *tes
 	extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 	envList := append(tc.envList, extraEnvs...)
-	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts)
+	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -850,7 +850,7 @@ func Test_Rego_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false)
 		// not getting an error means something is broken
 		if err == nil {
 			return false
@@ -872,7 +872,7 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// getting an error means something is broken
 		return err == nil
@@ -914,7 +914,7 @@ func Test_Rego_Enforce_CreateContainer_Start_All_Containers(t *testing.T) {
 			}
 			mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
 
-			_, _, err = policy.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts)
+			_, _, err = policy.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false)
 
 			// getting an error means something is broken
 			if err != nil {
@@ -941,7 +941,7 @@ func Test_Rego_EnforceCreateContainer_Invalid_ContainerID(t *testing.T) {
 		}
 
 		containerID := testDataGenerator.uniqueContainerID()
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		return err != nil
@@ -960,12 +960,12 @@ func Test_Rego_EnforceCreateContainer_Same_Container_Twice(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 		if err != nil {
 			t.Error("Unable to start valid container.")
 			return false
 		}
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 		if err == nil {
 			t.Error("Able to start a container with already used id.")
 			return false
@@ -993,7 +993,7 @@ func Test_Rego_ExtendDefaultMounts(t *testing.T) {
 		additionalMounts := buildMountSpecFromMountArray(defaultMounts, tc.sandboxID, testRand)
 		tc.mounts = append(tc.mounts, additionalMounts.Mounts...)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		if err != nil {
 			t.Error(err)
@@ -1020,7 +1020,7 @@ func Test_Rego_MountPolicy_NoMatches(t *testing.T) {
 		additionalMounts := buildMountSpecFromMountArray(invalidMounts, tc.sandboxID, testRand)
 		tc.mounts = append(tc.mounts, additionalMounts.Mounts...)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1049,7 +1049,7 @@ func Test_Rego_MountPolicy_NotAllOptionsFromConstraints(t *testing.T) {
 		options := inputMounts[mindex].Options
 		inputMounts[mindex].Options = options[:len(options)-1]
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1075,7 +1075,7 @@ func Test_Rego_MountPolicy_BadSource(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Source = randString(testRand, maxGeneratedMountSourceLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1101,7 +1101,7 @@ func Test_Rego_MountPolicy_BadDestination(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Destination = randString(testRand, maxGeneratedMountDestinationLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1127,7 +1127,7 @@ func Test_Rego_MountPolicy_BadType(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Type = randString(testRand, 4)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1155,7 +1155,7 @@ func Test_Rego_MountPolicy_BadOption(t *testing.T) {
 		oindex := randMinMax(testRand, 0, int32(len(mountToChange.Options)-1))
 		tc.mounts[mindex].Options[oindex] = randString(testRand, maxGeneratedMountOptionLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1184,7 +1184,7 @@ func Test_Rego_MountPolicy_MountPrivilegedWhenNotAllowed(t *testing.T) {
 		oindex := randMinMax(testRand, 0, int32(len(mountToChange.Options)-1))
 		tc.mounts[mindex].Options[oindex] = randString(testRand, maxGeneratedMountOptionLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1531,7 +1531,7 @@ exec_external := {
 		}
 
 		envList := generateEnvs(envSet)
-		toKeep, _, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{})
+		toKeep, _, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{}, false)
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from create_container")
 			return false
@@ -1579,7 +1579,7 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
-	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
+	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false)
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received map[string]interface {}" {
@@ -1621,7 +1621,7 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
-	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
+	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false)
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received json.Number" {
@@ -1668,7 +1668,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 			}
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2312,7 +2312,8 @@ func Test_Rego_Plan9MountPolicy(t *testing.T) {
 		tc.argList,
 		tc.envList,
 		tc.workingDir,
-		tc.mounts)
+		tc.mounts,
+		false)
 
 	if err != nil {
 		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
@@ -2346,7 +2347,8 @@ func Test_Rego_Plan9MountPolicy_No_Matches(t *testing.T) {
 		tc.argList,
 		tc.envList,
 		tc.workingDir,
-		tc.mounts)
+		tc.mounts,
+		false)
 
 	if err == nil {
 		t.Fatal("Policy enforcement unexpectedly was allowed")
@@ -2392,7 +2394,8 @@ func Test_Rego_Plan9UnmountPolicy(t *testing.T) {
 		tc.argList,
 		tc.envList,
 		tc.workingDir,
-		tc.mounts)
+		tc.mounts,
+		false)
 
 	if err == nil {
 		t.Fatal("Policy enforcement unexpectedly was allowed")
@@ -2567,7 +2570,8 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 			copyStrings(container.container.Command),
 			copyStrings(container.envList),
 			container.container.WorkingDir,
-			copyMounts(container.mounts))
+			copyMounts(container.mounts),
+			false)
 
 		if err != nil {
 			t.Error("unable to create container from fragment: %w", err)
@@ -2797,7 +2801,8 @@ func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 				copyStrings(container.container.Command),
 				copyStrings(container.envList),
 				container.container.WorkingDir,
-				copyMounts(container.mounts))
+				copyMounts(container.mounts),
+				false)
 
 			if err != nil {
 				t.Error("unable to create container from fragment: %w", err)
@@ -2842,7 +2847,8 @@ func Test_Rego_LoadFragment_TwoFeeds(t *testing.T) {
 				copyStrings(container.container.Command),
 				copyStrings(container.envList),
 				container.container.WorkingDir,
-				copyMounts(container.mounts))
+				copyMounts(container.mounts),
+				false)
 
 			if err != nil {
 				t.Error("unable to create container from fragment: %w", err)
@@ -2891,7 +2897,8 @@ func Test_Rego_LoadFragment_SameFeedTwice(t *testing.T) {
 				copyStrings(container.container.Command),
 				copyStrings(container.envList),
 				container.container.WorkingDir,
-				copyMounts(container.mounts))
+				copyMounts(container.mounts),
+				false)
 
 			if err != nil {
 				t.Error("unable to create container from fragment: %w", err)
@@ -3171,7 +3178,8 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 		tc.argList,
 		tc.envList,
 		tc.workingDir,
-		tc.mounts)
+		tc.mounts,
+		false)
 
 	if err != nil {
 		t.Errorf("create_container not allowed: %v", err)
@@ -3227,7 +3235,8 @@ func Test_Rego_EnforeCreateContainerPolicy_StdioAccess_NotAllowed(t *testing.T) 
 		tc.argList,
 		tc.envList,
 		tc.workingDir,
-		tc.mounts)
+		tc.mounts,
+		false)
 
 	if err != nil {
 		t.Errorf("create_container not allowed: %v", err)
@@ -3267,7 +3276,8 @@ func Test_Rego_Container_StdioAccess_NotDecidable(t *testing.T) {
 		tc.argList,
 		tc.envList,
 		tc.workingDir,
-		tc.mounts)
+		tc.mounts,
+		false)
 
 	if err == nil {
 		t.Errorf("expected create_container to not be allowed")
@@ -3302,6 +3312,94 @@ func Test_Rego_ExecExternal_StdioAccess_NotAllowed(t *testing.T) {
 
 	if allow_stdio_access {
 		t.Errorf("expected allow_stdio_access to be false")
+	}
+}
+
+func Test_Rego_EnforceCreateContainerPolicy_AllowElevatedAllowsPrivilegedContainer(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].AllowElevated = true
+	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts,
+		true)
+
+	if err != nil {
+		t.Fatalf("expected privilege escalation to be allowed: %s", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainerPolicy_AllowElevatedAllowsUnprivilegedContainer(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].AllowElevated = true
+	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts,
+		false)
+
+	if err != nil {
+		t.Fatalf("expected lack of escalation to be fine: %s", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainerPolicy_NoAllowElevatedDenysPrivilegedContainer(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].AllowElevated = false
+	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts,
+		true)
+
+	if err == nil {
+		t.Fatal("expected escalation to be denied")
+	}
+}
+
+func Test_Rego_EnforceCreateContainerPolicy_NoAllowElevatedAllowsUnprivilegedContainer(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].AllowElevated = false
+	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts,
+		false)
+
+	if err != nil {
+		t.Fatalf("expected lack of escalation to be fine: %s", err)
 	}
 }
 
@@ -3601,7 +3699,7 @@ func runContainer(enforcer *regoEnforcer, container *securityPolicyContainer, de
 	}
 	mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
 
-	_, _, err = enforcer.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts)
+	_, _, err = enforcer.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false)
 	if err != nil {
 		return nil, err
 	}

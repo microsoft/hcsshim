@@ -790,6 +790,82 @@ func Test_EnforceDeviceMountPolicy_DifferentTargetsWithTheSameHash(t *testing.T)
 	}
 }
 
+func Test_EnforcePrivileged_AllowElevatedAllowsPrivilegedContainer(t *testing.T) {
+	c := generateConstraints(testRand, 1)
+	c.containers[0].AllowElevated = true
+
+	tc, err := setupContainerWithOverlay(c, true)
+	if err != nil {
+		t.Fatalf("unexpected error during test setup: %s", err)
+	}
+
+	if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, generateMountTarget(testRand)); err != nil {
+		t.Fatalf("failed to enforce overlay mount policy: %s", err)
+	}
+
+	err = tc.policy.enforcePrivilegedPolicy(tc.containerID, true)
+	if err != nil {
+		t.Fatalf("expected privilege escalation to be allowed: %s", err)
+	}
+}
+
+func Test_EnforcePrivileged_AllowElevatedAllowsUnprivilegedContainer(t *testing.T) {
+	c := generateConstraints(testRand, 1)
+	c.containers[0].AllowElevated = true
+
+	tc, err := setupContainerWithOverlay(c, true)
+	if err != nil {
+		t.Fatalf("unexpected error during test setup: %s", err)
+	}
+
+	if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, generateMountTarget(testRand)); err != nil {
+		t.Fatalf("failed to enforce overlay mount policy: %s", err)
+	}
+
+	err = tc.policy.enforcePrivilegedPolicy(tc.containerID, true)
+	if err != nil {
+		t.Fatalf("expected lack of escalation to be fine: %s", err)
+	}
+}
+
+func Test_EnforcePrivileged_NoAllowElevatedDenysPrivilegedContainer(t *testing.T) {
+	c := generateConstraints(testRand, 1)
+	c.containers[0].AllowElevated = false
+
+	tc, err := setupContainerWithOverlay(c, true)
+	if err != nil {
+		t.Fatalf("unexpected error during test setup: %s", err)
+	}
+
+	if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, generateMountTarget(testRand)); err != nil {
+		t.Fatalf("failed to enforce overlay mount policy: %s", err)
+	}
+
+	err = tc.policy.enforcePrivilegedPolicy(tc.containerID, true)
+	if err == nil {
+		t.Fatal("expected escalation to be denied")
+	}
+}
+
+func Test_EnforcePrivileged_NoAllowElevatedAllowsUnprivilegedContainer(t *testing.T) {
+	c := generateConstraints(testRand, 1)
+	c.containers[0].AllowElevated = false
+
+	tc, err := setupContainerWithOverlay(c, true)
+	if err != nil {
+		t.Fatalf("unexpected error during test setup: %s", err)
+	}
+
+	if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, generateMountTarget(testRand)); err != nil {
+		t.Fatalf("failed to enforce overlay mount policy: %s", err)
+	}
+
+	err = tc.policy.enforcePrivilegedPolicy(tc.containerID, false)
+	if err != nil {
+		t.Fatalf("expected lack of escalation to be fine: %s", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //

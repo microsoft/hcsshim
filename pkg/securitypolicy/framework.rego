@@ -203,6 +203,15 @@ workingDirectory_ok(working_dir) {
     input.workingDir == working_dir
 }
 
+privileged_ok(elevation_allowed) {
+    not input.privileged
+}
+
+privileged_ok(elevation_allowed) {
+    input.privileged
+    input.privileged == elevation_allowed
+}
+
 default container_started := false
 
 container_started {
@@ -221,6 +230,7 @@ create_container := {"metadata": [updateMatches, addStarted],
     # mount list
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
+        privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
         mountList_ok(container.mounts, container.allow_elevated)
@@ -704,6 +714,19 @@ errors["no overlay at path to unmount"] {
 errors["no matching containers for overlay"] {
     input.rule == "mount_overlay"
     not overlay_matches
+}
+
+default privileged_matches := false
+
+privileged_matches {
+    input.rule == "create_container"
+    some container in data.metadata.matches[input.containerID]
+    privileged_ok(container.allow_elevated)
+}
+
+errors["privileged escalation not allowed"] {
+    input.rule in ["create_container"]
+    not privileged_matches
 }
 
 default command_matches := false

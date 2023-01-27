@@ -702,9 +702,8 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 	); err == nil {
 		t.Fatalf("expected to fail")
 	} else {
-		expectedStr1 := "Destination:/sys"
-		expectedStr2 := "is not allowed by mount constraints"
-		if !strings.Contains(err.Error(), expectedStr1) || !strings.Contains(err.Error(), expectedStr2) {
+		expectedErrStr := "privileged escalation unmatched by policy rule"
+		if !strings.Contains(err.Error(), expectedErrStr) {
 			t.Fatalf("expected different error: %s", err)
 		}
 	}
