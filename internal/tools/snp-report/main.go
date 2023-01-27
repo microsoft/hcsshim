@@ -84,7 +84,7 @@ func main() {
 	if *binaryFmtFlag {
 		var binaryReport []byte
 		var err error
-		if !*fakeReportFlag {
+		if *fakeReportFlag {
 			binaryReport, err = fake.FetchRawSNPReport()
 		} else {
 			binaryReport, err = amdsevsnp.FetchRawSNPReport(reportBytes)
