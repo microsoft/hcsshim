@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"syscall"
@@ -345,16 +344,6 @@ func (policy *regoEnforcer) EnforceOverlayUnmountPolicy(target string) error {
 	return err
 }
 
-// Rego does not have a way to determine the OS path separator
-// so we append it via these methods.
-func sandboxMountsDir(sandboxID string) string {
-	return fmt.Sprintf("%s%c", spec.SandboxMountsDir(sandboxID), os.PathSeparator)
-}
-
-func hugePagesMountsDir(sandboxID string) string {
-	return fmt.Sprintf("%s%c", spec.HugePagesMountsDir(sandboxID), os.PathSeparator)
-}
-
 func getEnvsToKeep(envList []string, results rpi.RegoQueryResult) ([]string, error) {
 	value, err := results.Value("env_list")
 	if err != nil {
@@ -395,8 +384,8 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"argList":      argList,
 		"envList":      envList,
 		"workingDir":   workingDir,
-		"sandboxDir":   sandboxMountsDir(sandboxID),
-		"hugePagesDir": hugePagesMountsDir(sandboxID),
+		"sandboxDir":   spec.SandboxMountsDir(sandboxID),
+		"hugePagesDir": spec.HugePagesMountsDir(sandboxID),
 		"mounts":       appendMountData([]interface{}{}, mounts),
 	}
 

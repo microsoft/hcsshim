@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1105,7 +1106,7 @@ func generateMounts(r *rand.Rand) []mountInternal {
 			sourcePrefix = guestpath.HugePagesMountPrefix
 		}
 
-		source := sourcePrefix + randVariableString(r, maxGeneratedMountSourceLength)
+		source := filepath.Join(sourcePrefix, randVariableString(r, maxGeneratedMountSourceLength))
 		destination := randVariableString(r, maxGeneratedMountDestinationLength)
 
 		mounts[i] = mountInternal{
