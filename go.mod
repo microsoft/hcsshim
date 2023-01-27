@@ -34,7 +34,10 @@ require (
 	google.golang.org/grpc v1.47.0
 )
 
-require github.com/josephspurrier/goversioninfo v1.4.0
+require (
+	github.com/josephspurrier/goversioninfo v1.4.0
+	github.com/urfave/cli/v2 v2.24.1
+)
 
 require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
@@ -67,6 +70,7 @@ require (
 	github.com/vektah/gqlparser/v2 v2.4.5 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
+	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yashtewari/glob-intersection v0.1.0 // indirect
 	golang.org/x/mod v0.6.0 // indirect
 	golang.org/x/net v0.1.0 // indirect
