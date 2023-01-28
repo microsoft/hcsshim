@@ -51,16 +51,16 @@ func createInterpreter() *rpi.RegoPolicyInterpreter {
 
 	var logLevel rpi.LogLevel
 	switch strings.ToLower(*logLevelName) {
-	case "None":
+	case "none":
 		logLevel = rpi.LogNone
 
-	case "Info":
+	case "info":
 		logLevel = rpi.LogInfo
 
-	case "Results":
+	case "results":
 		logLevel = rpi.LogResults
 
-	case "Metadata":
+	case "metadata":
 		logLevel = rpi.LogMetadata
 
 	default:
@@ -79,7 +79,13 @@ func createInterpreter() *rpi.RegoPolicyInterpreter {
 			log.Fatalf("error loading initial data state: %v", err)
 		}
 	} else {
+		objectDefaults := make(map[string]interface{})
+		err = json.Unmarshal([]byte(securitypolicy.FrameworkObjects), &objectDefaults)
+		if err != nil {
+			log.Fatalf("unable to unmarshal framework object defaults: %v", err)
+		}
 		data = map[string]interface{}{
+			"objectDefaults":   objectDefaults,
 			"defaultMounts":    []interface{}{},
 			"privilegedMounts": []interface{}{},
 			"sandboxPrefix":    guestpath.SandboxMountPrefix,

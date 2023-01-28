@@ -46,6 +46,8 @@ var policyRegoTemplate string
 //go:embed open_door.rego
 var openDoorRegoTemplate string
 
+var openDoorRego = strings.Replace(openDoorRegoTemplate, "@@API_SVN@@", apiSVN, 1)
+
 func marshalJSON(
 	allowAll bool,
 	containers []*Container,
@@ -92,7 +94,7 @@ func marshalRego(
 			return "", ErrInvalidOpenDoorPolicy
 		}
 
-		return openDoorRegoTemplate, nil
+		return openDoorRego, nil
 	}
 
 	policy, err := newSecurityPolicyInternal(
@@ -385,7 +387,10 @@ func (p securityPolicyInternal) marshalRego() string {
 	writeLine(builder, `allow_runtime_logging := %v`, p.AllowRuntimeLogging)
 	writeLine(builder, "allow_environment_variable_dropping := %v", p.AllowEnvironmentVariableDropping)
 	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
-	return strings.Replace(policyRegoTemplate, "##OBJECTS##", builder.String(), 1)
+	result := strings.Replace(policyRegoTemplate, "@@OBJECTS@@", builder.String(), 1)
+	result = strings.Replace(result, "@@API_SVN@@", apiSVN, 1)
+	result = strings.Replace(result, "@@FRAMEWORK_SVN@@", frameworkSVN, 1)
+	return result
 }
 
 func (p securityPolicyFragment) marshalRego() string {
@@ -393,5 +398,5 @@ func (p securityPolicyFragment) marshalRego() string {
 	addFragments(builder, p.Fragments)
 	addContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
-	return fmt.Sprintf("package %s\n\nsvn := \"%s\"\n\n%s", p.Namespace, p.SVN, builder.String())
+	return fmt.Sprintf("package %s\n\nsvn := \"%s\"\nframework_svn := \"%s\"\n\n%s", p.Namespace, p.SVN, frameworkSVN, builder.String())
 }

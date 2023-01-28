@@ -1,6 +1,7 @@
 package fragment
 
 svn := "1.0.0"
+framework_svn := "0.1.0"
 
 containers := [
     {
@@ -36,6 +37,7 @@ containers := [
         "exec_processes": [],
         "signals": [],
         "allow_elevated": true,
-        "working_dir": "/demo-attestion"
+        "working_dir": "/demo-attestion",
+        "allow_stdio_access": true,
     }
 ]

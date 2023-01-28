@@ -1,6 +1,7 @@
 package policy
 
 api_svn := "0.7.0"
+framework_svn := "0.1.0"
 
 import future.keywords.every
 import future.keywords.in
@@ -28,7 +29,8 @@ containers := [
         "exec_processes": [],
         "signals": [],
         "allow_elevated": false,
-        "working_dir": "/"
+        "working_dir": "/",
+        "allow_stdio_access": true,
     },
     {
         "id": "user_0",
@@ -85,7 +87,8 @@ containers := [
         ],
 
         "allow_elevated": true,
-        "working_dir": "/"
+        "working_dir": "/",
+        "allow_stdio_access": true,
     },
 ]
 

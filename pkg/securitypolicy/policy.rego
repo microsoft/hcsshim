@@ -1,8 +1,9 @@
 package policy
 
-api_svn := "0.10.0"
+api_svn := "@@API_SVN@@"
+framework_svn := "@@FRAMEWORK_SVN@@"
 
-##OBJECTS##
+@@OBJECTS@@
 
 mount_device := data.framework.mount_device
 unmount_device := data.framework.unmount_device
