@@ -36,12 +36,14 @@ func securityPolicyFromContainers(
 	policyString, err := securitypolicy.MarshalPolicy(policyType, false, pc,
 		[]securitypolicy.ExternalProcessConfig{
 			{
-				Command:    []string{"ls", "-l", "/dev/mapper"},
-				WorkingDir: "/",
+				Command:          []string{"ls", "-l", "/dev/mapper"},
+				WorkingDir:       "/",
+				AllowStdioAccess: true,
 			},
 			{
-				Command:    []string{"bash"},
-				WorkingDir: "/",
+				Command:          []string{"bash"},
+				WorkingDir:       "/",
+				AllowStdioAccess: true,
 			},
 		},
 		[]securitypolicy.FragmentConfig{},
@@ -57,10 +59,10 @@ func securityPolicyFromContainers(
 	return base64.StdEncoding.EncodeToString([]byte(policyString)), nil
 }
 
-func sandboxSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool) string {
+func sandboxSecurityPolicy(t *testing.T, policyType string, unencryptedOk bool, dropEnvOk bool) string {
 	t.Helper()
 	defaultContainers := helpers.DefaultContainerConfigs()
-	policyString, err := securityPolicyFromContainers(policyType, true, defaultContainers, allowEnvironmentVariableDropping)
+	policyString, err := securityPolicyFromContainers(policyType, unencryptedOk, defaultContainers, dropEnvOk)
 	if err != nil {
 		t.Fatalf("failed to create security policy string: %s", err)
 	}
@@ -135,7 +137,7 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, false)
+			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, true, true)
 			sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -364,7 +366,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/path",
+						HostPath:      "sandbox:///sandbox/path",
 						ContainerPath: "/container/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 					},
@@ -375,7 +377,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 				securitypolicy.WithMountConstraints(
 					[]securitypolicy.MountConfig{
 						{
-							HostPath:      "sandbox://sandbox/path",
+							HostPath:      "sandbox:///sandbox/path",
 							ContainerPath: "/container/path",
 						},
 					},
@@ -386,7 +388,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/path",
+						HostPath:      "sandbox:///sandbox/path",
 						ContainerPath: "/container/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 						Readonly:      true,
@@ -398,7 +400,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 				securitypolicy.WithMountConstraints(
 					[]securitypolicy.MountConfig{
 						{
-							HostPath:      "sandbox://sandbox/path",
+							HostPath:      "sandbox:///sandbox/path",
 							ContainerPath: "/container/path",
 							Readonly:      true,
 						},
@@ -410,7 +412,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/path/regexp",
+						HostPath:      "sandbox:///sandbox/path/regexp",
 						ContainerPath: "/container/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 					},
@@ -421,7 +423,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 				securitypolicy.WithMountConstraints(
 					[]securitypolicy.MountConfig{
 						{
-							HostPath:      "sandbox://sandbox/path/r.+",
+							HostPath:      "sandbox:///sandbox/path/r.+",
 							ContainerPath: "/container/path",
 						},
 					},
@@ -479,7 +481,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 		securitypolicy.WithMountConstraints(
 			[]securitypolicy.MountConfig{
 				{
-					HostPath:      "sandbox://sandbox/path",
+					HostPath:      "sandbox:///sandbox/path",
 					ContainerPath: "/container/path",
 				},
 			},
@@ -491,7 +493,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/invalid/path",
+						HostPath:      "sandbox:///sandbox/invalid/path",
 						ContainerPath: "/container/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 					},
@@ -506,7 +508,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/path",
+						HostPath:      "sandbox:///sandbox/path",
 						ContainerPath: "/container/path/invalid",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 					},
@@ -521,7 +523,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/path",
+						HostPath:      "sandbox:///sandbox/path",
 						ContainerPath: "/container/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 						Readonly:      true,
@@ -537,7 +539,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/path",
+						HostPath:      "sandbox:///sandbox/path",
 						ContainerPath: "/container/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 					},
@@ -548,7 +550,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 				securitypolicy.WithMountConstraints(
 					[]securitypolicy.MountConfig{
 						{
-							HostPath:      "sandbox://sandbox/path",
+							HostPath:      "sandbox:///sandbox/path",
 							ContainerPath: "/container/path",
 							Readonly:      true,
 						},
@@ -561,7 +563,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			sideEffect: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Mounts = append(
 					req.Config.Mounts, &runtime.Mount{
-						HostPath:      "sandbox://sandbox/path/regex/no/match",
+						HostPath:      "sandbox:///sandbox/path/regex/no/match",
 						ContainerPath: "/container/path",
 						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
 					},
@@ -572,7 +574,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 				securitypolicy.WithMountConstraints(
 					[]securitypolicy.MountConfig{
 						{
-							HostPath:      "sandbox://sandbox/path/R.+",
+							HostPath:      "sandbox:///sandbox/path/R.+",
 							ContainerPath: "/container/path",
 						},
 					},
@@ -965,7 +967,7 @@ func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("AllowUnencrypted_%t_EncryptionEnabled_%t", tc.allowUnencrypted, tc.encryptAnnotation), func(t *testing.T) {
-			policy := sandboxSecurityPolicy(t, "rego", tc.allowUnencrypted)
+			policy := sandboxSecurityPolicy(t, "rego", tc.allowUnencrypted, true)
 			sandboxRequest := sandboxRequestWithPolicy(t, policy)
 			// sandboxRequestWithPolicy sets security policy annotation, so we
 			// won't get a nil point deref here.
@@ -995,7 +997,7 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	policy := sandboxSecurityPolicy(t, "rego", false)
+	policy := sandboxSecurityPolicy(t, "rego", false, true)
 	sandboxRequest := sandboxRequestWithPolicy(t, policy)
 
 	// we didn't pass encrypt scratch annotation and policy should reject pod creation

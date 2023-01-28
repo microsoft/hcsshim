@@ -28,12 +28,12 @@ strategy = "re2"
 rule = "PREFIX_.+=.+"
 
 [[container.mount]]
-host_path = "sandbox://host/path/one"
+host_path = "sandbox:///host/path/one"
 container_path = "/container/path/one"
 readonly = false
 
 [[container.mount]]
-host_path = "sandbox://host/path/two"
+host_path = "sandbox:///host/path/two"
 container_path = "/container/path/two"
 readonly = true
 
@@ -130,7 +130,7 @@ represented in JSON.
           "length": 2,
           "elements": {
             "0": {
-              "source": "sandbox://host/path/one",
+              "source": "sandbox:///host/path/one",
               "destination": "/container/path/one",
               "type": "bind",
               "options": {
@@ -143,7 +143,7 @@ represented in JSON.
               }
             },
             "1": {
-              "source": "sandbox://host/path/two",
+              "source": "sandbox:///host/path/two",
               "destination": "/container/path/two",
               "type": "bind",
               "options": {
@@ -223,7 +223,7 @@ containers := [
         "command": ["rustc","--help"],
         "env_rules": [{"pattern": "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "strategy": "string", "required": false},{"pattern": "RUSTUP_HOME=/usr/local/rustup", "strategy": "string", "required": false},{"pattern": "CARGO_HOME=/usr/local/cargo", "strategy": "string", "required": false},{"pattern": "RUST_VERSION=1.52.1", "strategy": "string", "required": false},{"pattern": "TERM=xterm", "strategy": "string", "required": false},{"pattern": "PREFIX_.+=.+", "strategy": "re2", "required": false}],
         "layers": ["fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a","4dedae42847c704da891a28c25d32201a1ae440bce2aecccfa8e6f03b97a6a6c","41d64cdeb347bf236b4c13b7403b633ff11f1cf94dbc7cf881a44d6da88c5156","eb36921e1f82af46dfe248ef8f1b3afb6a5230a64181d960d10237a08cd73c79","e769d7487cc314d3ee748a4440805317c19262c7acd2fdbdb0d47d2e4613a15c","1b80f120dbd88e4355d6241b519c3e25290215c469516b49dece9cf07175a766"],
-        "mounts": [{"destination": "/container/path/one", "options": ["rbind","rshared","rw"], "source": "sandbox://host/path/one", "type": "bind"},{"destination": "/container/path/two", "options": ["rbind","rshared","ro"], "source": "sandbox://host/path/two", "type": "bind"}],
+        "mounts": [{"destination": "/container/path/one", "options": ["rbind","rshared","rw"], "source": "sandbox:///host/path/one", "type": "bind"},{"destination": "/container/path/two", "options": ["rbind","rshared","ro"], "source": "sandbox://host/path/two", "type": "bind"}],
         "exec_processes": [{"command": ["top"], "signals": []}],
         "signals": [],
         "allow_elevated": true,
@@ -287,7 +287,7 @@ containers := [
         "command": ["rustc","--help"],
         "env_rules": [{"pattern": "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "strategy": "string", "required": false},{"pattern": "RUSTUP_HOME=/usr/local/rustup", "strategy": "string", "required": false},{"pattern": "CARGO_HOME=/usr/local/cargo", "strategy": "string", "required": false},{"pattern": "RUST_VERSION=1.52.1", "strategy": "string", "required": false},{"pattern": "TERM=xterm", "strategy": "string", "required": false},{"pattern": "PREFIX_.+=.+", "strategy": "re2", "required": false}],
         "layers": ["fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a","4dedae42847c704da891a28c25d32201a1ae440bce2aecccfa8e6f03b97a6a6c","41d64cdeb347bf236b4c13b7403b633ff11f1cf94dbc7cf881a44d6da88c5156","eb36921e1f82af46dfe248ef8f1b3afb6a5230a64181d960d10237a08cd73c79","e769d7487cc314d3ee748a4440805317c19262c7acd2fdbdb0d47d2e4613a15c","1b80f120dbd88e4355d6241b519c3e25290215c469516b49dece9cf07175a766"],
-        "mounts": [{"destination": "/container/path/one", "options": ["rbind","rshared","rw"], "source": "sandbox://host/path/one", "type": "bind"},{"destination": "/container/path/two", "options": ["rbind","rshared","ro"], "source": "sandbox://host/path/two", "type": "bind"}],
+        "mounts": [{"destination": "/container/path/one", "options": ["rbind","rshared","rw"], "source": "sandbox:///host/path/one", "type": "bind"},{"destination": "/container/path/two", "options": ["rbind","rshared","ro"], "source": "sandbox://host/path/two", "type": "bind"}],
         "exec_processes": [{"command": ["top"], "signals": []}],
         "signals": [],
         "allow_elevated": true,
