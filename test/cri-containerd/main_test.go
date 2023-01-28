@@ -99,6 +99,7 @@ var (
 	flagVirtstack             = flag.String("virtstack", "", "Virtstack to use for hypervisor isolated containers")
 	flagVMServiceBinary       = flag.String("vmservice-binary", "", "Path to a binary implementing the vmservice ttrpc service")
 	flagContainerdServiceName = flag.String("containerd-service-name", "containerd", "Name of the containerd Windows service")
+	flagSevSnp                = flag.Bool("sev-snp", false, "Indicates that the tests are running on hardware with SEV-SNP support")
 )
 
 // Features
