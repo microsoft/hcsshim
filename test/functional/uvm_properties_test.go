@@ -6,7 +6,6 @@ package functional
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/osversion"
@@ -37,8 +36,7 @@ func TestPropertiesGuestConnection_WCOW(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW)
 
-	uvm, _, uvmScratchDir := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
-	defer os.RemoveAll(uvmScratchDir)
+	uvm, _, _ := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
 	defer uvm.Close()
 
 	p, gc := uvm.Capabilities()

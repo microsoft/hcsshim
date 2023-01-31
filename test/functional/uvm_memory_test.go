@@ -4,7 +4,6 @@ package functional
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -56,8 +55,7 @@ func TestUVMMemoryUpdateWCOW(t *testing.T) {
 	opts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
 	opts.MemorySizeInMB = 1024 * 2
 
-	u, _, uvmScratchDir := tuvm.CreateWCOWUVMFromOptsWithImage(ctx, t, opts, "mcr.microsoft.com/windows/nanoserver:1909")
-	defer os.RemoveAll(uvmScratchDir)
+	u, _, _ := tuvm.CreateWCOWUVMFromOptsWithImage(ctx, t, opts, "mcr.microsoft.com/windows/nanoserver:1909")
 	defer u.Close()
 
 	newMemoryInBytes := uint64(opts.MemorySizeInMB/2) * memory.MiB

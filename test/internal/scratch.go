@@ -34,7 +34,7 @@ func init() {
 func CreateWCOWBlankBaseLayer(ctx context.Context, t *testing.T) []string {
 	t.Helper()
 	tempDir := t.TempDir()
-	if err := wclayer.ConvertToBaseLayer(context.Background(), tempDir); err != nil {
+	if err := wclayer.ConvertToBaseLayer(ctx, tempDir); err != nil {
 		t.Fatalf("Failed ConvertToBaseLayer: %s", err)
 	}
 	return []string{tempDir}

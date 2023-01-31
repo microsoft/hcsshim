@@ -48,10 +48,8 @@ func TestSCSIAddRemoveWCOW(t *testing.T) {
 	requireFeatures(t, featureWCOW, featureSCSI)
 
 	// TODO make the image configurable to the build we're testing on
-	u, layers, uvmScratchDir := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "mcr.microsoft.com/windows/nanoserver:1903")
-	defer os.RemoveAll(uvmScratchDir)
+	u, layers, _ := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "mcr.microsoft.com/windows/nanoserver:1903")
 	defer u.Close()
-	defer os.RemoveAll(layers[0])
 
 	testSCSIAddRemoveSingle(t, u, `c:\`, "windows", layers)
 }

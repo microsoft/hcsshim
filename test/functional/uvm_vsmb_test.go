@@ -7,7 +7,6 @@ package functional
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -25,8 +24,7 @@ func TestVSMB(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW, featureVSMB)
 
-	uvm, _, uvmScratchDir := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
-	defer os.RemoveAll(uvmScratchDir)
+	uvm, _, _ := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
 	defer uvm.Close()
 
 	dir := t.TempDir()
@@ -57,8 +55,7 @@ func TestVSMB_Writable(t *testing.T) {
 
 	opts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
 	opts.NoWritableFileShares = true
-	vm, _, uvmScratchDir := tuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
-	defer os.RemoveAll(uvmScratchDir)
+	vm, _, _ := tuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
 	defer vm.Close()
 
 	dir := t.TempDir()
