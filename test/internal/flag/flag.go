@@ -25,7 +25,8 @@ func NewFeatureFlag(all []string) *StringSet {
 // but it only tracks unique instances.
 // It takes either a comma-separated list of strings, or repeated invocations.
 type StringSet struct {
-	s  map[string]struct{}
+	s map[string]struct{}
+	// cs indicates if the set is case sensitive or not
 	cs bool
 }
 
