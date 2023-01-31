@@ -7,6 +7,7 @@ package functional
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"

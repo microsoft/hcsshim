@@ -6,6 +6,7 @@ package functional
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/osversion"

@@ -32,7 +32,8 @@ func init() {
 // can be used as the base of a WCOW RW layer when it's not going to be the container's
 // scratch mount.
 func CreateWCOWBlankBaseLayer(ctx context.Context, t *testing.T) []string {
-	tempDir := CreateTempDir(t)
+	t.Helper()
+	tempDir := t.TempDir()
 	if err := wclayer.ConvertToBaseLayer(context.Background(), tempDir); err != nil {
 		t.Fatalf("Failed ConvertToBaseLayer: %s", err)
 	}

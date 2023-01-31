@@ -51,7 +51,6 @@ func TestSCSIAddRemoveWCOW(t *testing.T) {
 	u, layers, uvmScratchDir := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "mcr.microsoft.com/windows/nanoserver:1903")
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
-	layers := testutilities.CreateWCOWBlankBaseLayer(context.Background(), t)
 	defer os.RemoveAll(layers[0])
 
 	testSCSIAddRemoveSingle(t, u, `c:\`, "windows", layers)

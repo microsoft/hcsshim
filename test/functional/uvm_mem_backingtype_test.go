@@ -7,6 +7,7 @@ package functional
 import (
 	"context"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
