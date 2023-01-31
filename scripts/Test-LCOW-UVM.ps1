@@ -1,4 +1,4 @@
-#ex: .\scripts\Test-LCOW-UVM.ps1 -vb -Action Bench -BootFilesPath C:\ContainerPlat\LinuxBootFiles\ -MountGCSTest -Count 2 -Benchtime '3s'
+#ex: .\scripts\Test-LCOW-UVM.ps1 -vb -Count 2 -Benchtime '3s'
 # benchstat via  `go install golang.org/x/perf/cmd/benchstat@latest`
 
 [CmdletBinding()]
@@ -12,6 +12,9 @@ param (
     $Note = '',
 
     # test parameters
+    [switch]
+    $Shuffle,
+
     [int]
     $Count = 1,
 
@@ -26,15 +29,15 @@ param (
     $TestVerbose,
 
     [string]
-    $Run = '',
-
-    [string]
-    $CodePath = '.',
+    $Run,
 
     [string]
     $OutDirectory = '.\test\results',
 
     # uvm parameters
+
+    [string]
+    $UVMBootPath = '.\bin\cmd\uvmboot.exe',
 
     [string]
     $BootFilesPath = 'C:\ContainerPlat\LinuxBootFiles',
@@ -61,19 +64,18 @@ param (
     $GCSTestPath = '.\bin\test\gcs.test',
 
     [switch]
-    $MountGCSTest,
+    $SkipGCSTestMount,
 
-    [string]
-    $Feature = ''
+    [string[]]
+    $Features
 )
-
+$ErrorActionPreference = 'Stop'
 Import-Module ( Join-Path $PSScriptRoot Testing.psm1 ) -Force
 
-$CodePath = Resolve-Path $CodePath
-$OutDirectory = Resolve-Path $OutDirectory
 $BootFilesPath = Resolve-Path $BootFilesPath
 $ContainerRootFSPath = Resolve-Path $ContainerRootFSPath
 $GCSTestPath = Resolve-Path $GCSTestPath
+$UVMBootPath = Resolve-Path $UVMBootPath
 
 $shell = ( $Action -eq 'Shell' )
 
@@ -83,7 +85,7 @@ if ( $shell ) {
     $date = Get-Date
     $waitfiles = "$ContainerRootFSMount"
     $gcspath = 'gcs.test'
-    if ( $MountGCSTest ) {
+    if ( -not $SkipGCSTestMount ) {
         $waitfiles += ",$GCSTestMount"
         $gcspath = "$GCSTestMount/gcs.test"
     }
@@ -104,26 +106,27 @@ if ( $shell ) {
         -OutDirectory $OutDirectory `
         -Date $date `
         -Note $Note `
+        -Shuffle:$Shuffle `
         -TestVerbose:$TestVerbose `
         -Count $Count `
         -BenchTime $BenchTime `
         -Timeout $Timeout `
         -Run $Run `
-        -Feature $Feature `
+        -Features $Features `
         -Verbose:$Verbose
 
     $testcmd += " `'-rootfs-path=$ContainerRootFSMount`' "
     $cmd = $pre + $testcmd
 }
 
-$boot = '.\bin\tool\uvmboot.exe -gcs lcow ' + `
+$boot = "$UVMBootPath -gcs lcow " + `
     '-fwd-stdout -fwd-stderr -output-handling stdout ' + `
     "-boot-files-path $BootFilesPath " + `
     "-root-fs-type $BootFSType " + `
     '-kernel-file vmlinux ' + `
     "-mount-scsi `"$ContainerRootFSPath,$ContainerRootFSMount`" "
 
-if ( $MountGCSTest ) {
+if ( -not $SkipGCSTestMount ) {
     $boot += "-share `"$GCSTestPath,$GCSTestMount`" "
 }
 
@@ -140,8 +143,8 @@ $boot += " -exec `"$cmd`" "
 Invoke-TestCommand `
     -TestCmd $boot `
     -TestCmdPreamble $testcmd `
-    -OutputFile (&{ if ( $Action -ne 'Shell' ) { $out } }) `
-    -OutputCmd (&{ if ( $Action -eq 'Bench' ) { 'benchstat' } }) `
+    -OutputFile (& { if ( $Action -ne 'Shell' ) { $out } }) `
+    -OutputCmd (& { if ( $Action -eq 'Bench' ) { 'benchstat' } }) `
     -Preamble `
     -Date $Date `
     -Note $Note `

@@ -12,69 +12,73 @@ import (
 
 const FeatureFlagName = "feature"
 
-func NewFeatureFlag(all []string) *StringSlice {
-	return NewStringSlice(FeatureFlagName,
-		"the sets of functionality to test; can be set multiple times, or separated with commas. "+
-			"Supported features: "+strings.Join(all, ", "),
+func NewFeatureFlag(all []string) *StringSet {
+	return NewStringSet(FeatureFlagName,
+		"set of `features` to test; can be set multiple times, with a comma-separated list, or both "+
+			"(supported features: "+strings.Join(all, ", ")+")",
+		false,
 	)
 }
 
-// StringSlice is a type to be used with the standard library's flag.Var
-// function as a custom flag value, similar to "github.com/urfave/cli".StringSlice.
+// StringSet is a type to be used with the standard library's flag.Var
+// function as a custom flag value, similar to "github.com/urfave/cli".StringSet,
+// but it only tracks unique instances.
 // It takes either a comma-separated list of strings, or repeated invocations.
-type StringSlice struct {
-	S StringSet
+type StringSet struct {
+	s map[string]struct{}
+	// cs indicates if the set is case sensitive or not
+	cs bool
 }
 
-var _ flag.Value = &StringSlice{}
+var _ flag.Value = &StringSet{}
 
-// NewStringSetFlag returns a new StringSetFlag with an empty set.
-func NewStringSlice(name, usage string) *StringSlice {
-	ss := &StringSlice{
-		S: make(StringSet),
+// NewStringSet returns a new StringSetFlag with an empty set.
+func NewStringSet(name, usage string, caseSensitive bool) *StringSet {
+	ss := &StringSet{
+		s:  make(map[string]struct{}),
+		cs: caseSensitive,
 	}
 	flag.Var(ss, name, usage)
 	return ss
 }
 
 // Strings returns a string slice of the flags provided to the flag
-func (ss *StringSlice) Strings() []string {
-	return ss.S.Strings()
-}
-
-func (ss *StringSlice) String() string {
-	return ss.S.String()
-}
-
-// Set is called by `flag` each time the flag is seen when parsing the
-// command line.
-func (ss *StringSlice) Set(s string) error {
-	for _, f := range strings.Split(s, ",") {
-		f = Standardize(f)
-		ss.S[f] = struct{}{}
-	}
-
-	return nil
-}
-
-type StringSet map[string]struct{}
-
-func (ss StringSet) Strings() []string {
-	a := make([]string, 0, len(ss))
-	for k := range ss {
+func (ss *StringSet) Strings() []string {
+	a := make([]string, 0, len(ss.s))
+	for k := range ss.s {
 		a = append(a, k)
 	}
 
 	return a
 }
 
-func (ss StringSet) String() string {
+func (ss *StringSet) String() string {
 	return "[" + strings.Join(ss.Strings(), ", ") + "]"
 }
 
+func (ss *StringSet) Len() int { return len(ss.s) }
+
+func (ss *StringSet) IsSet(s string) bool {
+	_, ok := ss.s[ss.standardize(s)]
+	return ok
+}
+
+// Set is called by `flag` each time the flag is seen when parsing the
+// command line.
+func (ss *StringSet) Set(s string) error {
+	for _, f := range strings.Split(s, ",") {
+		ss.s[ss.standardize(f)] = struct{}{}
+	}
+	return nil
+}
+
 // Standardize formats the feature flag s to be consistent (ie, trim and to lowercase)
-func Standardize(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
+func (ss *StringSet) standardize(s string) string {
+	s = strings.TrimSpace(s)
+	if !ss.cs {
+		s = strings.ToLower(s)
+	}
+	return s
 }
 
 // LogrusLevel is a flag that accepts logrus logging levels, as strings.

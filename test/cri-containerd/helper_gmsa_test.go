@@ -30,15 +30,15 @@ func generateCredSpec(path string) error {
 
 // Tries to generate a cred spec to use for gmsa test cases. Returns the cred
 // spec and an error if any.
-func gmsaSetup(t *testing.T) string {
-	t.Helper()
-	csPath := filepath.Join(t.TempDir(), "credspec.json")
+func gmsaSetup(tb testing.TB) string {
+	tb.Helper()
+	csPath := filepath.Join(tb.TempDir(), "credspec.json")
 	if err := generateCredSpec(csPath); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	credSpec, err := os.ReadFile(csPath)
 	if err != nil {
-		t.Fatalf("failed to read credential spec: %s", err)
+		tb.Fatalf("failed to read credential spec: %s", err)
 	}
 	return string(credSpec)
 }
