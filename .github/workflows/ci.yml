@@ -388,6 +388,67 @@ jobs:
           # verify mingw32-make was installed
           Get-Command -CommandType Application -ErrorAction Stop mingw32-make.exe
 
+      - name: Install crictl
+        shell: powershell
+        run: |
+          $VerbosePreference = 'Continue'
+          $ErrorActionPreference = 'Stop'
+
+          $crictlVersion = 'v1.24.2'
+          $url = "https://github.com/kubernetes-sigs/cri-tools/releases/download/${crictlVersion}/crictl-${crictlVersion}-windows-amd64.tar.gz"
+          curl.exe -L --no-progress-meter -o c:\crictl.tar.gz $url
+          tar.exe xf c:\crictl.tar.gz -C "${{ github.workspace }}/bin"
+
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not install crictl.'
+            exit $LASTEXITCODE
+          }
+
+      - name: Install mingw
+        shell: powershell
+        run: |
+          $VerbosePreference = 'Continue'
+          # dont set $ErrorActionPreference since we want to allow choco install to fail later on
+
+          Write-Output '::group::Update chocolaty'
+          choco upgrade -y chocolatey
+          Write-Output '::endgroup::'
+
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not update chocolatey.'
+            exit $LASTEXITCODE
+          }
+
+          Write-Output 'Install mingw'
+          # Install sometimes fails when downloading mingw zip from source-forge with:
+          #  "ERROR: The remote file either doesn't exist, is unauthorized, or is forbidden for url"
+          # Issue is with accessing from source-forge, which version 10.3+ do not use, but cannot upgrade versions.
+
+          # Add retry and backoff
+          foreach ( $i in 1..3 ) {
+            Write-Output "::group::Attempt $i"
+            if ( $i -gt 1 ) {
+              # remove any left-over state
+              choco uninstall -y --no-progress --force mingw
+
+              Write-Output 'Sleeping for 2 seconds'
+              Sleep -Seconds 2
+            }
+
+            choco install -y --no-progress --stop-on-first-failure --force mingw --allow-downgrade --version 10.2.0
+            Write-Output '::endgroup::'
+            if ( -not $LASTEXITCODE ) {
+              Write-Output "Attempt $i succeeded (exit code: $LASTEXITCODE)"
+              break
+            }
+            Write-Output "::warning title=mingw::Attempt $i failed (exit code: $LASTEXITCODE)"
+          }
+
+          if ( $LASTEXITCODE ) {
+            Write-Output "::error::Could not install mingw after $i attempts."
+            exit $LASTEXITCODE
+          }
+
       - name: Build binaries
         shell: bash
         working-directory: src/github.com/containerd/containerd
