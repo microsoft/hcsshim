@@ -22,11 +22,17 @@ const (
 
 func validateTargets(ctx context.Context, t *testing.T, deviceNumber int, podID string, expected int) {
 	t.Helper()
-	dmDiag := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+	dmDiag, err := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dmPattern := fmt.Sprintf("dm-linear-pmem%d", deviceNumber)
 	dmLines := filterStrings(strings.Split(dmDiag, "\n"), dmPattern)
 
-	lrDiag := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/run/layers"})
+	lrDiag, err := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/run/layers"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	lrPattern := fmt.Sprintf("p%d", deviceNumber)
 	lrLines := filterStrings(strings.Split(lrDiag, "\n"), lrPattern)
 	if len(lrLines) != len(dmLines) {
@@ -149,7 +155,10 @@ func Test_Annotation_Disable_Multi_Mapping(t *testing.T) {
 	startContainer(t, client, ctx, containerID)
 	defer stopContainer(t, client, ctx, containerID)
 
-	dmDiag := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+	dmDiag, err := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	filtered := filterStrings(strings.Split(dmDiag, "\n"), "dm-linear")
 	if len(filtered) > 0 {
 		t.Fatalf("no linear devices should've been created.\n%s", dmDiag)

@@ -78,12 +78,12 @@ func execInHost(ctx context.Context, client shimdiag.ShimDiagService, args []str
 }
 
 // shimDiagExecOutput is a small wrapper on top of execInHost, that returns the exec output
-func shimDiagExecOutput(ctx context.Context, tb testing.TB, podID string, cmd []string) string {
-	tb.Helper()
+func shimDiagExecOutput(ctx context.Context, t *testing.T, podID string, cmd []string) (string, error) {
+	t.Helper()
 	shimName := fmt.Sprintf("k8s.io-%s", podID)
 	shim, err := shimdiag.GetShim(shimName)
 	if err != nil {
-		tb.Fatalf("failed to find shim %v: %v", shimName, err)
+		return "", err
 	}
 	shimClient := shimdiag.NewShimDiagClient(shim)
 
@@ -94,13 +94,13 @@ func shimDiagExecOutput(ctx context.Context, tb testing.TB, podID string, cmd []
 
 	exitCode, err := execInHost(ctx, shimClient, cmd, nil, bw, bwErr)
 	if err != nil {
-		tb.Fatalf("failed to exec request in the host with: %v and %v", err, bufErr.String())
+		return "", fmt.Errorf("failed to exec request in the host with: %v and %v", err, bufErr.String())
 	}
 	if exitCode != 0 {
-		tb.Fatalf("exec request in host failed with exit code %v: %v", exitCode, bufErr.String())
+		return "", fmt.Errorf("exec request in host failed with exit code %v: %v", exitCode, bufErr.String())
 	}
 
-	return strings.TrimSpace(bufOut.String())
+	return strings.TrimSpace(bufOut.String()), nil
 }
 
 func filterStrings(input []string, include string) []string {

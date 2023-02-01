@@ -84,7 +84,10 @@ func Test_LCOW_Layer_Integrity(t *testing.T) {
 			defer stopContainer(t, client, ctx, contID)
 
 			// Validate that verity target(s) present
-			output := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+			output, err := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+			if err != nil {
+				t.Fatal(err)
+			}
 			filtered := filterStrings(strings.Split(output, "\n"), fmt.Sprintf("dm-verity-%s", scenario.layerType))
 			if len(filtered) == 0 {
 				t.Fatalf("expected verity targets for %s devices, none found.\n%s\n", scenario.layerType, output)

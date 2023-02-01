@@ -105,9 +105,10 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(
 			map[string]string{
-				annotations.NoSecurityHardware:   strconv.FormatBool(!*flagSevSnp),
-				annotations.SecurityPolicy:       policy,
-				annotations.VPMemNoMultiMapping:  "true",
+				annotations.NoSecurityHardware:  strconv.FormatBool(!*flagSevSnp),
+				annotations.SecurityPolicy:      policy,
+				annotations.VPMemNoMultiMapping: "true",
+				// This allows for better experience for policy only tests.
 				annotations.EncryptedScratchDisk: strconv.FormatBool(*flagSevSnp),
 			},
 		),
@@ -1000,7 +1001,10 @@ func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
 			defer stopPodSandbox(t, client, ctx, podID)
 
 			if tc.encryptAnnotation {
-				output := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+				output, err := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+				if err != nil {
+					t.Fatal(err)
+				}
 				if !strings.Contains(output, "dm-crypt-scsi-contr") {
 					t.Log(output)
 					t.Fatal("expected to find dm-crypt target")
@@ -1191,6 +1195,65 @@ func Test_ExecInContainer_WithPolicy(t *testing.T) {
 				}
 				if !strings.Contains(err.Error(), "invalid command") {
 					t.Fatalf("expected 'invalid command' error, got '%s' instead", err)
+				}
+			}
+		})
+	}
+}
+
+func Test_ExecInUVM_WithPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, tc := range []struct {
+		execInUVMConfig  securitypolicy.ExternalProcessConfig
+		execInUVMRequest []string
+		shouldFail       bool
+	}{
+		{
+			execInUVMConfig: securitypolicy.ExternalProcessConfig{
+				Command:          []string{"ls"},
+				WorkingDir:       "/",
+				AllowStdioAccess: true,
+			},
+			execInUVMRequest: []string{"ls"},
+			shouldFail:       false,
+		},
+		{
+			execInUVMConfig: securitypolicy.ExternalProcessConfig{
+				Command:          []string{"ls"},
+				WorkingDir:       "/",
+				AllowStdioAccess: true,
+			},
+			execInUVMRequest: []string{"ls", "-l"},
+			shouldFail:       true,
+		},
+	} {
+		t.Run(fmt.Sprintf("ExecInUVM_ShouldFail_%t", tc.shouldFail), func(t *testing.T) {
+			policy := policyFromOpts(t, "rego",
+				securitypolicy.WithExternalProcesses([]securitypolicy.ExternalProcessConfig{tc.execInUVMConfig}),
+				securitypolicy.WithAllowRuntimeLogging(true),
+				securitypolicy.WithAllowUnencryptedScratch(true),
+			)
+			sandboxRequest := sandboxRequestWithPolicy(t, policy)
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			_, err := shimDiagExecOutput(ctx, t, podID, tc.execInUVMRequest)
+			if err != nil {
+				if !tc.shouldFail {
+					t.Fatalf("external process exec should succeed, got error instead: %s", err)
+				}
+				if !strings.Contains(err.Error(), "invalid command") {
+					t.Fatalf("expected invalid command error, got %s", err)
+				}
+			} else {
+				if tc.shouldFail {
+					t.Fatal("external process exec should have failed")
 				}
 			}
 		})
