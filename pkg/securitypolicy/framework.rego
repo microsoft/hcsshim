@@ -529,15 +529,12 @@ default exec_external := {"allowed": false}
 exec_external := {"allowed": true,
                   "allow_stdio_access": allow_stdio_access,
                   "env_list": env_list} {
-    print(count(candidate_external_processes))
-
     possible_processes := [process |
         process := candidate_external_processes[_]
         workingDirectory_ok(process.working_dir)
         command_ok(process.command)
     ]
 
-    print(count(possible_processes))
     # check to see if the environment variables match, dropping
     # them if allowed (and necessary)
     env_list := valid_envs_for_all(possible_processes)
@@ -592,7 +589,6 @@ apply_defaults(name, raw_values, framework_svn) := values {
 apply_defaults(name, raw_values, framework_svn) := values {
     semver.compare(framework_svn, svn) < 0
     template := load_defaults(name, framework_svn)
-    print(template)
     values := [updated | 
         raw := raw_values[_]
         flat := object.union(template, raw)

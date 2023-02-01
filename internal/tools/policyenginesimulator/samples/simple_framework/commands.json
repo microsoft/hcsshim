@@ -4,7 +4,6 @@
         "input": {
             "issuer": "did:web:contoso.github.io",
             "feed": "contoso.azurecr.io/fragment",
-            "namespace": "fragment",
             "local_path": "fragment.rego"
         }
     },

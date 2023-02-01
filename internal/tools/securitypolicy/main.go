@@ -40,8 +40,11 @@ func main() {
 			return err
 		}
 
-		defaultContainers := helpers.DefaultContainerConfigs()
-		config.Containers = append(config.Containers, defaultContainers...)
+		if *outputType != "fragment" {
+			defaultContainers := helpers.DefaultContainerConfigs()
+			config.Containers = append(config.Containers, defaultContainers...)
+		}
+
 		policyContainers, err := helpers.PolicyContainersFromConfigs(config.Containers)
 		if err != nil {
 			return err
