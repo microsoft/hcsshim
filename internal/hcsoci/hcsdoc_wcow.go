@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Microsoft/go-winio/pkg/fs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 
@@ -62,9 +63,9 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 				// if the path includes a symlink. Therefore, we resolve the path here before
 				// passing it in. The issue does not occur with VSMB, so don't need to worry
 				// about the isolated case.
-				src, err := filepath.EvalSymlinks(mount.Source)
+				src, err := fs.ResolvePath(mount.Source)
 				if err != nil {
-					return nil, fmt.Errorf("failed to eval symlinks for mount source %q: %s", mount.Source, err)
+					return nil, fmt.Errorf("failed to resolve path for mount source %q: %s", mount.Source, err)
 				}
 				mdv2.HostPath = src
 			} else if mount.Type == "virtual-disk" || mount.Type == "physical-disk" || mount.Type == "extensible-virtual-disk" {

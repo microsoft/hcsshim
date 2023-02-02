@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Microsoft/go-winio/pkg/fs"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
@@ -523,9 +524,9 @@ func getScratchVHDPath(layerFolders []string) (string, error) {
 	// When not sharing a scratch space, `hostPath` will be the path to the sandbox.vhdx to use.
 	//
 	// Evaluate the symlink here (if there is one).
-	hostPath, err := filepath.EvalSymlinks(hostPath)
+	hostPath, err := fs.ResolvePath(hostPath)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to eval symlinks")
+		return "", errors.Wrap(err, "failed to resolve path")
 	}
 	return hostPath, nil
 }
