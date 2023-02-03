@@ -39,10 +39,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/tools/securitypolicy/helpers"
 	sp "github.com/Microsoft/hcsshim/pkg/securitypolicy"
@@ -117,6 +117,38 @@ func externalProcessToCommand(process sp.ExternalProcessConfig) command {
 	}
 }
 
+// BEGIN COPY
+// These functions reproduce the functionality of exported functions with
+// the same name from github.com/Microsoft/hcsshim/internal/guest/spec
+// which are not built on windows and thus cannot be used by this tool.
+// If they change, then this tool will no longer work correctly.
+
+func sandboxRootDir(sandboxID string) string {
+	return filepath.Join(guestpath.LCOWRootPrefixInUVM, sandboxID)
+}
+
+func sandboxMountsDir(sandboxID string) string {
+	return filepath.Join(sandboxRootDir(sandboxID), "sandboxMounts")
+}
+
+func hugePagesMountsDir(sandboxID string) string {
+	return filepath.Join(sandboxRootDir(sandboxID), "hugepages")
+}
+
+func sandboxMountSource(sandboxID, path string) string {
+	mountsDir := sandboxMountsDir(sandboxID)
+	subPath := strings.TrimPrefix(path, guestpath.SandboxMountPrefix)
+	return filepath.Join(mountsDir, subPath)
+}
+
+func hugePagesMountSource(sandboxID, path string) string {
+	mountsDir := hugePagesMountsDir(sandboxID)
+	subPath := strings.TrimPrefix(path, guestpath.HugePagesMountPrefix)
+	return filepath.Join(mountsDir, subPath)
+}
+
+// END COPY
+
 func toArray(array sp.StringArrayMap) []string {
 	numElements := len(array.Elements)
 	elements := make([]string, 0, numElements)
@@ -189,9 +221,9 @@ func containerToCommands(container *sp.Container) []command {
 				},
 			})
 		} else if strings.HasPrefix(source, guestpath.SandboxMountPrefix) {
-			source = spec.SandboxMountSource(sandboxID, source)
+			source = sandboxMountSource(sandboxID, source)
 		} else if strings.HasPrefix(source, guestpath.HugePagesMountPrefix) {
-			source = spec.HugePagesMountSource(sandboxID, source)
+			source = hugePagesMountSource(sandboxID, source)
 		}
 
 		mounts = append(mounts, map[string]interface{}{
@@ -211,8 +243,8 @@ func containerToCommands(container *sp.Container) []command {
 			"argList":      argList,
 			"envList":      envList,
 			"workingDir":   container.WorkingDir,
-			"sandboxDir":   spec.SandboxMountsDir(sandboxID),
-			"hugePagesDir": spec.HugePagesMountsDir(sandboxID),
+			"sandboxDir":   sandboxMountsDir(sandboxID),
+			"hugePagesDir": hugePagesMountsDir(sandboxID),
 			"mounts":       mounts,
 		},
 	})
