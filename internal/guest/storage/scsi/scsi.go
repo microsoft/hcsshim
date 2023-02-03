@@ -168,10 +168,11 @@ func Mount(
 			// The `source` found by controllerLunToName can take some time
 			// before its actually available under `/dev/sd*`. Retry while we
 			// wait for `source` to show up.
-			if errors.Is(err, unix.ENOENT) {
+			if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ENXIO) {
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					log.G(ctx).Warnf("mount system call failed with %s, context timed out while retrying", err)
+					return err
 				default:
 					time.Sleep(10 * time.Millisecond)
 					continue

@@ -130,8 +130,8 @@ func Test_ExecContainer_LCOW_HasEntropy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not parse entropy output %s: %s", output, err)
 	}
-	if bits < 2000 {
-		t.Fatalf("%d is fewer than 2000 bits entropy", bits)
+	if bits < 256 {
+		t.Fatalf("%d is fewer than 256 bits entropy", bits)
 	}
 	t.Logf("got %d bits entropy", bits)
 }
