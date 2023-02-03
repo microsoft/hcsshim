@@ -44,7 +44,7 @@ func ensureHive(path string, root *os.File) (err error) {
 	}
 
 	defer func() {
-		closeErr := winapi.ORCloseHive(&key)
+		closeErr := winapi.ORCloseHive(key)
 		if closeErr != nil {
 			err = fmt.Errorf("closing hive key: %w", closeErr)
 		}

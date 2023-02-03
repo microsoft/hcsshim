@@ -381,8 +381,8 @@ func RtlNtStatusToDosError(status uint32) (winerr error) {
 	return
 }
 
-func ORCloseHive(key *syscall.Handle) (regerrno error) {
-	r0, _, _ := syscall.Syscall(procORCloseHive.Addr(), 1, uintptr(unsafe.Pointer(key)), 0, 0)
+func ORCloseHive(key syscall.Handle) (regerrno error) {
+	r0, _, _ := syscall.Syscall(procORCloseHive.Addr(), 1, uintptr(key), 0, 0)
 	if r0 != 0 {
 		regerrno = syscall.Errno(r0)
 	}
