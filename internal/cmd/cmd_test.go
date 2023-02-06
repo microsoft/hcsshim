@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -154,6 +155,15 @@ func TestCmdExitCode(t *testing.T) {
 	err := cmd.Run()
 	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 64 {
 		t.Fatal("expected exit code 64, got ", err)
+	}
+}
+
+func TestCmdQuotesInCommand(t *testing.T) {
+	tempDir := t.TempDir()
+	cmd := Command(&localProcessHost{}, "cmd", "/S", "/C", fmt.Sprintf(`mkdir %s\test_dir && icacls %s\test_dir /grant "CREATOR OWNER":(OI)(CI)(IO)F /T`, tempDir, tempDir))
+	err := cmd.Run()
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
