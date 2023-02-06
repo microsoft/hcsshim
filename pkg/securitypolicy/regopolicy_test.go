@@ -3176,7 +3176,7 @@ func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
 				t.Fatalf("unable to setup test: %s", err)
 			}
 
-			scratchPath := generateMountTarget(testRand)
+			scratchPath := testDataGenerator.generateMountTarget()
 			err = smConfig.policy.EnforceScratchMountPolicy(scratchPath, tc.encrypted)
 			if tc.failureExpected {
 				if err == nil {
@@ -3223,7 +3223,7 @@ func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
 				t.Fatalf("unable to setup test: %s", err)
 			}
 
-			scratchPath := generateMountTarget(testRand)
+			scratchPath := testDataGenerator.generateMountTarget()
 			err = smConfig.policy.EnforceScratchMountPolicy(scratchPath, tc.encrypted)
 			if err != nil {
 				t.Fatalf("scratch_mount policy enforcement unexpectedly was denied: %s", err)
