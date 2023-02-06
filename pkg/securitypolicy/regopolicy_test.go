@@ -705,7 +705,7 @@ func Test_Rego_EnforceCommandPolicy_NoMatches(t *testing.T) {
 
 func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 	testFunc := func(gc *generatedConstraints) bool {
-		container := selectContainerFromConstraints(gc, testRand)
+		container := selectContainerFromContainerList(gc.containers, testRand)
 		// add a rule to re2 match
 		re2MatchRule := EnvRuleConfig{
 			Strategy: EnvVarRuleRegex,
@@ -769,7 +769,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs(t *testing.T) {
 	testFunc := func(gc *generatedConstraints) bool {
 		gc.allowEnvironmentVariableDropping = true
-		container := selectContainerFromConstraints(gc, testRand)
+		container := selectContainerFromContainerList(gc.containers, testRand)
 
 		tc, err := setupRegoCreateContainerTest(gc, container, false)
 		if err != nil {
@@ -1337,7 +1337,7 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 
 func Test_Rego_Enforcement_Point_Extra(t *testing.T) {
 	code := `package policy
-	
+
 api_svn := "0.0.1"
 
 __fixture_for_allowed_extra__ := {"allowed": true}
@@ -1716,7 +1716,7 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 
 func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 	testFunc := func(gc *generatedConstraints) bool {
-		container := selectContainerFromConstraints(gc, testRand)
+		container := selectContainerFromContainerList(gc.containers, testRand)
 		// add a rule to re2 match
 		requiredRule := EnvRuleConfig{
 			Strategy: "string",
@@ -2685,7 +2685,7 @@ func Test_Rego_LoadFragment_Fragment(t *testing.T) {
 			return false
 		}
 
-		container := selectContainerFromConstraints(subFragment.constraints, testRand)
+		container := selectContainerFromContainerList(subFragment.constraints.containers, testRand)
 		_, err = mountImageForContainer(tc.policy, container)
 		if err != nil {
 			t.Error("unable to mount image for sub-fragment container: %w", err)
@@ -3784,7 +3784,7 @@ func Test_FrameworkSVN_Missing(t *testing.T) {
 	}
 
 	containerID := testDataGenerator.uniqueContainerID()
-	c := selectContainerFromConstraints(gc, testRand)
+	c := selectContainerFromContainerList(gc.containers, testRand)
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(tc.policy, c)
 
@@ -3828,7 +3828,7 @@ func Test_FrameworkSVN_In_Future(t *testing.T) {
 	}
 
 	containerID := testDataGenerator.uniqueContainerID()
-	c := selectContainerFromConstraints(gc, testRand)
+	c := selectContainerFromContainerList(gc.containers, testRand)
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(tc.policy, c)
 
@@ -4087,7 +4087,7 @@ func setupRegoOverlayTest(gc *generatedConstraints, valid bool) (tc *regoOverlay
 	}
 
 	containerID := testDataGenerator.uniqueContainerID()
-	c := selectContainerFromConstraints(gc, testRand)
+	c := selectContainerFromContainerList(gc.containers, testRand)
 
 	var layerPaths []string
 	if valid {
@@ -4121,12 +4121,12 @@ type regoContainerTestConfig struct {
 }
 
 func setupSimpleRegoCreateContainerTest(gc *generatedConstraints) (tc *regoContainerTestConfig, err error) {
-	c := selectContainerFromConstraints(gc, testRand)
+	c := selectContainerFromContainerList(gc.containers, testRand)
 	return setupRegoCreateContainerTest(gc, c, false)
 }
 
 func setupRegoPrivilegedMountTest(gc *generatedConstraints) (tc *regoContainerTestConfig, err error) {
-	c := selectContainerFromConstraints(gc, testRand)
+	c := selectContainerFromContainerList(gc.containers, testRand)
 	return setupRegoCreateContainerTest(gc, c, true)
 }
 
@@ -4273,7 +4273,7 @@ func setupPlan9MountTest(gc *generatedConstraints) (tc *regoPlan9MountTestConfig
 	defaultMounts := generateMounts(testRand)
 	privilegedMounts := generateMounts(testRand)
 
-	testContainer := selectContainerFromConstraints(gc, testRand)
+	testContainer := selectContainerFromContainerList(gc.containers, testRand)
 	mountIndex := atMost(testRand, int32(len(testContainer.Mounts)-1))
 	testMount := &testContainer.Mounts[mountIndex]
 	testMount.Source = plan9Prefix
@@ -4759,7 +4759,7 @@ type regoFragment struct {
 }
 
 func (f *regoFragment) selectContainer() *securityPolicyContainer {
-	return selectContainerFromConstraints(f.constraints, testRand)
+	return selectContainerFromContainerList(f.constraints.containers, testRand)
 }
 
 func selectFragmentsFromConstraints(gc *generatedConstraints, numFragments int, includes []string, excludes []string, versionError bool, fragmentFrameworkSVN string) []*regoFragment {
