@@ -313,10 +313,6 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		return nil, err
 	}
 
-	if opts.BundleDirectory == "" {
-		opts.BundleDirectory = os.TempDir()
-	}
-
 	vmgsFile, err := os.Create(filepath.Join(opts.BundleDirectory, opts.GuestStateFile))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary VMGS file: %w", err)
