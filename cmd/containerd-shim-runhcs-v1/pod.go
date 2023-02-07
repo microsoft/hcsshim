@@ -116,6 +116,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		switch opts.(type) {
 		case *uvm.OptionsLCOW:
 			lopts = (opts).(*uvm.OptionsLCOW)
+			lopts.BundleDirectory = req.Bundle
 			parent, err = uvm.CreateLCOW(ctx, lopts)
 			if err != nil {
 				return nil, err

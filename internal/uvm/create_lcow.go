@@ -14,6 +14,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/security"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -90,6 +91,7 @@ type ConfidentialOptions struct {
 	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
 	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
 	UVMReferenceInfoFile   string // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
+	BundleDirectory        string // pod bundle directory
 }
 
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
@@ -294,15 +296,48 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 // Make a hcsschema.ComputeSytem with the parts that target booting from a VMGS file
 func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
 	// Kernel and initrd are combined into a single vmgs file.
-	vmgsFullPath := filepath.Join(opts.BootFilesPath, opts.GuestStateFile)
-	if _, err := os.Stat(vmgsFullPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("the GuestState vmgs file '%s' was not found", vmgsFullPath)
+	vmgsTemplatePath := filepath.Join(opts.BootFilesPath, opts.GuestStateFile)
+	if _, err := os.Stat(vmgsTemplatePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("the GuestState vmgs file '%s' was not found", vmgsTemplatePath)
+	}
+
+	// The rootfs must be provided as an initrd within the VMGS file.
+	// Raise an error if instructed to use a particular sort of rootfs.
+	if opts.PreferredRootFSType != PreferredRootFSTypeNA {
+		return nil, fmt.Errorf("cannot override rootfs when using VMGS file")
 	}
 
 	var processor *hcsschema.Processor2
 	processor, err = fetchProcessor(ctx, opts, uvm)
 	if err != nil {
 		return nil, err
+	}
+
+	vmgsFile, err := os.Create(filepath.Join(opts.BundleDirectory, opts.GuestStateFile))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary VMGS file: %w", err)
+	}
+	defer func() {
+		_ = vmgsFile.Close()
+		if err != nil {
+			if rmErr := os.RemoveAll(vmgsFile.Name()); rmErr != nil {
+				log.G(ctx).WithError(rmErr).Error("failed to remove temporary VMGS file")
+			}
+		}
+	}()
+
+	templateFile, err := os.Open(vmgsTemplatePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open template VMGS file for copy: %w", err)
+	}
+	defer templateFile.Close()
+
+	if _, err := io.Copy(vmgsFile, templateFile); err != nil {
+		return nil, fmt.Errorf("failed to copy template VMGS file: %w", err)
+	}
+
+	if err := security.GrantVmGroupAccessWithMask(vmgsFile.Name(), security.AccessMaskAll); err != nil {
+		return nil, fmt.Errorf("failed to grant VM group access ALL: %w", err)
 	}
 
 	// Align the requested memory size.
@@ -346,7 +381,6 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	//		entropyVsockPort - 1 is the entropy port,
 	//		linuxLogVsockPort - 109 used by vsockexec to log stdout/stderr logging,
 	//		0x40000000 + 1 (LinuxGcsVsockPort + 1) is the bridge (see guestconnectiuon.go)
-
 	hvSockets := [...]uint32{entropyVsockPort, linuxLogVsockPort, gcs.LinuxGcsVsockPort, gcs.LinuxGcsVsockPort + 1}
 	for _, whichSocket := range hvSockets {
 		key := fmt.Sprintf("%08x-facb-11e6-bd58-64006a7986d3", whichSocket) // format of a linux hvsock GUID is port#-facb-11e6-bd58-64006a7986d3
@@ -374,16 +408,8 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		}
 	}
 
-	// The rootfs must be provided as an initrd within the VMGS file.
-	// Raise an error if instructed to use a particular sort of rootfs.
-
-	if opts.PreferredRootFSType != PreferredRootFSTypeNA {
-		return nil, fmt.Errorf("cannot override rootfs when using VMGS file")
-	}
-
 	// Required by HCS for the isolated boot scheme, see also https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/learn-more/generation-2-virtual-machine-security-settings-for-hyper-v
 	// A complete explanation of the why's and wherefores of starting an encrypted, isolated VM are beond the scope of these comments.
-
 	doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
 		ApplySecureBootTemplate: "Apply",
 		SecureBootTemplateId:    "1734c6e8-3154-4dda-ba5f-a874cc483422", // aka MicrosoftWindowsSecureBootTemplateGUID equivalent to "Microsoft Windows" template from Get-VMHost | select SecureBootTemplates,
@@ -391,9 +417,8 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	// Point at the file that contains the linux kernel and initrd images.
-
 	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
-		GuestStateFilePath:  vmgsFullPath,
+		GuestStateFilePath:  vmgsFile.Name(),
 		GuestStateFileType:  "FileMode",
 		ForceTransientState: true, // tell HCS that this is just the source of the images, not ongoing state
 	}

@@ -270,9 +270,19 @@ func (uvm *UtilityVM) Close() (err error) {
 		uvm.outputListener.Close()
 		uvm.outputListener = nil
 	}
+
+	if uvm.confidentialUVMOptions != nil && uvm.confidentialUVMOptions.GuestStateFile != "" {
+		vmgsFullPath := filepath.Join(uvm.confidentialUVMOptions.BundleDirectory, uvm.confidentialUVMOptions.GuestStateFile)
+		log.G(context.Background()).WithField("VMGS file", vmgsFullPath).Debug("removing VMGS file")
+		if err := os.Remove(vmgsFullPath); err != nil {
+			log.G(ctx).WithError(err).Error("failed to remove VMGS file")
+		}
+	}
+
 	if uvm.hcsSystem != nil {
 		return uvm.hcsSystem.Close()
 	}
+
 	return nil
 }
 
