@@ -643,7 +643,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				Path:     rootfsFullPath,
 				ReadOnly: true,
 			}
-			uvm.scsiLocations[0][0] = newSCSIMount(uvm, rootfsFullPath, "/", "VirtualDisk", "", 1, 0, 0, true, false)
+			uvm.scsiLocations[0][0] = newSCSIAttachment(rootfsFullPath, "VirtualDisk", "", 1, 0, 0, true, false, false)
 		}
 	}
 

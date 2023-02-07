@@ -343,14 +343,14 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 			Type_: "VirtualDisk",
 		}
 
-		uvm.scsiLocations[0][0] = newSCSIMount(uvm,
+		uvm.scsiLocations[0][0] = newSCSIAttachment(
 			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"].Path,
-			"",
 			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"].Type_,
 			"",
 			1,
 			0,
 			0,
+			false,
 			false,
 			false)
 	} else {

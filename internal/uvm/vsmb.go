@@ -37,7 +37,7 @@ type VSMBShare struct {
 	refCount        uint32
 	name            string
 	allowedFiles    []string
-	guestPath       string
+	GuestPath       string
 	options         hcsschema.VirtualSmbShareOptions
 	serialVersionID uint32
 }
@@ -214,7 +214,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		share = &VSMBShare{
 			vm:              uvm,
 			name:            shareName,
-			guestPath:       vsmbSharePrefix + shareName,
+			GuestPath:       vsmbSharePrefix + shareName,
 			HostPath:        hostPath,
 			serialVersionID: vsmbCurrentSerialVersionID,
 		}
@@ -326,7 +326,7 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string, readO
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(share.guestPath, f), nil
+	return filepath.Join(share.GuestPath, f), nil
 }
 
 var _ = (Cloneable)(&VSMBShare{})
@@ -351,7 +351,7 @@ func (vsmb *VSMBShare) GobEncode() ([]byte, error) {
 	if err := encoder.Encode(vsmb.allowedFiles); err != nil {
 		return nil, fmt.Errorf(errMsgFmt, err)
 	}
-	if err := encoder.Encode(vsmb.guestPath); err != nil {
+	if err := encoder.Encode(vsmb.GuestPath); err != nil {
 		return nil, fmt.Errorf(errMsgFmt, err)
 	}
 	if err := encoder.Encode(vsmb.options); err != nil {
@@ -383,7 +383,7 @@ func (vsmb *VSMBShare) GobDecode(data []byte) error {
 	if err := decoder.Decode(&vsmb.allowedFiles); err != nil {
 		return fmt.Errorf(errMsgFmt, err)
 	}
-	if err := decoder.Decode(&vsmb.guestPath); err != nil {
+	if err := decoder.Decode(&vsmb.GuestPath); err != nil {
 		return fmt.Errorf(errMsgFmt, err)
 	}
 	if err := decoder.Decode(&vsmb.options); err != nil {
@@ -411,7 +411,7 @@ func (vsmb *VSMBShare) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) 
 		name:            vsmb.name,
 		options:         vsmb.options,
 		allowedFiles:    vsmb.allowedFiles,
-		guestPath:       vsmb.guestPath,
+		GuestPath:       vsmb.GuestPath,
 		serialVersionID: vsmbCurrentSerialVersionID,
 	}
 	shareKey := getVSMBShareKey(vsmb.HostPath, vsmb.options.ReadOnly)
