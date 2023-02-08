@@ -71,7 +71,7 @@ func NewLayerReader(ctx context.Context, path string, parentLayerPaths []string)
 
 	if len(parentLayerPaths) == 0 {
 		// This is a base layer. It gets exported differently.
-		return newBaseLayerReader(ctx, path, span), nil
+		return newBaseLayerReader(path, span), nil
 	}
 
 	exportPath, err := os.MkdirTemp("", "hcs")

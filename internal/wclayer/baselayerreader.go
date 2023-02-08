@@ -1,7 +1,6 @@
 package wclayer
 
 import (
-	"context"
 	"errors"
 	"io"
 	"os"
@@ -16,7 +15,6 @@ import (
 )
 
 type baseLayerReader struct {
-	ctx          context.Context
 	s            *trace.Span
 	root         string
 	result       chan *fileEntry
@@ -25,9 +23,8 @@ type baseLayerReader struct {
 	backupReader *winio.BackupFileReader
 }
 
-func newBaseLayerReader(ctx context.Context, root string, s *trace.Span) (r *baseLayerReader) {
+func newBaseLayerReader(root string, s *trace.Span) (r *baseLayerReader) {
 	r = &baseLayerReader{
-		ctx:     ctx,
 		s:       s,
 		root:    root,
 		result:  make(chan *fileEntry),
