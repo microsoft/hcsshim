@@ -59,12 +59,12 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
 		containerRootInUVM := r.ContainerRootInUVM()
-		containerRootPath, err := layers.MountWCOWLayers(ctx, coi.actualID, coi.Spec.Windows.LayerFolders, containerRootInUVM, "", coi.HostingSystem)
+		containerRootPath, layerMounts, err := layers.MountWCOWLayers(ctx, coi.actualID, coi.Spec.Windows.LayerFolders, containerRootInUVM, "", coi.HostingSystem)
 		if err != nil {
 			return errors.Wrap(err, "failed to mount container storage")
 		}
 		coi.Spec.Root.Path = containerRootPath
-		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, coi.Spec.Windows.LayerFolders, "", isSandbox)
+		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, layerMounts, "", isSandbox)
 		r.SetLayers(layers)
 	}
 

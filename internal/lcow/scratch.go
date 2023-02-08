@@ -84,18 +84,23 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 	removeSCSI := true
 	defer func() {
 		if removeSCSI {
-			_ = lcowUVM.RemoveSCSI(ctx, destFile)
+			_ = lcowUVM.RemoveSCSIMount(ctx, destFile, scsi.UVMPath)
 		}
 	}()
 
+	scsiAttachment, err := lcowUVM.GetSCSIAttachment(ctx, destFile)
+	if err != nil {
+		return err
+	}
+
 	log.G(ctx).WithFields(logrus.Fields{
 		"dest":       destFile,
-		"controller": scsi.Controller,
-		"lun":        scsi.LUN,
+		"controller": scsiAttachment.Controller,
+		"lun":        scsiAttachment.LUN,
 	}).Debug("lcow::CreateScratch device attached")
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
-	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", scsi.Controller, scsi.LUN)
+	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", scsiAttachment.Controller, scsiAttachment.LUN)
 	testdCtx, cancel := context.WithTimeout(ctx, timeout.TestDRetryLoop)
 	defer cancel()
 	for {
@@ -138,7 +143,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 
 	// Hot-Remove before we copy it
 	removeSCSI = false
-	if err := lcowUVM.RemoveSCSI(ctx, destFile); err != nil {
+	if err := lcowUVM.RemoveSCSIMount(ctx, destFile, scsi.UVMPath); err != nil {
 		return fmt.Errorf("failed to hot-remove: %s", err)
 	}
 

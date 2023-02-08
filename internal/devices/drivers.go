@@ -54,7 +54,7 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string, gpuDri
 	}
 
 	// no need to reinstall if the driver has already been added in LCOW, return early
-	if _, err := vm.GetScsiUvmPath(ctx, share); err != uvm.ErrNotAttached {
+	if _, err := vm.GetSCSIMountUVMPath(ctx, share); err != uvm.ErrNotAttached {
 		return nil, err
 	}
 

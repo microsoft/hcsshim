@@ -44,7 +44,7 @@ type TemplateConfig struct {
 func init() {
 	// Register the pointer to structs because that is what is being stored.
 	gob.Register(&uvm.VSMBShare{})
-	gob.Register(&uvm.SCSIMount{})
+	gob.Register(&uvm.SCSIAttachment{})
 }
 
 func encodeTemplateConfig(templateConfig *TemplateConfig) ([]byte, error) {

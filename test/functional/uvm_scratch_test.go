@@ -23,15 +23,17 @@ func TestScratchCreateLCOW(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureScratch)
 
+	ctx := context.Background()
+
 	tempDir := t.TempDir()
-	firstUVM := tuvm.CreateAndStartLCOW(context.Background(), t, "TestCreateLCOWScratch")
+	firstUVM := tuvm.CreateAndStartLCOW(ctx, t, "TestCreateLCOWScratch")
 	defer firstUVM.Close()
 
 	cacheFile := filepath.Join(tempDir, "cache.vhdx")
 	destOne := filepath.Join(tempDir, "destone.vhdx")
 	destTwo := filepath.Join(tempDir, "desttwo.vhdx")
 
-	if err := lcow.CreateScratch(context.Background(), firstUVM, destOne, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
+	if err := lcow.CreateScratch(ctx, firstUVM, destOne, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(destOne); err != nil {
@@ -41,21 +43,25 @@ func TestScratchCreateLCOW(t *testing.T) {
 		t.Fatalf("cacheFile wasn't created!")
 	}
 
-	targetUVM := tuvm.CreateAndStartLCOW(context.Background(), t, "TestCreateLCOWScratch_target")
+	targetUVM := tuvm.CreateAndStartLCOW(ctx, t, "TestCreateLCOWScratch_target")
 	defer targetUVM.Close()
 
 	// A non-cached create
-	if err := lcow.CreateScratch(context.Background(), firstUVM, destTwo, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
+	if err := lcow.CreateScratch(ctx, firstUVM, destTwo, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure it can be added (verifies it has access correctly)
 	var options []string
-	scsiMount, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false, false, options, uvm.VMAccessTypeIndividual)
+	_, err := targetUVM.AddSCSI(ctx, destTwo, "", false, false, options, uvm.VMAccessTypeIndividual)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scsiMount.Controller != 0 && scsiMount.LUN != 0 {
+	scsiAttachment, err := targetUVM.GetSCSIAttachment(ctx, destTwo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scsiAttachment.Controller != 0 && scsiAttachment.LUN != 0 {
 		t.Fatal(err)
 	}
 	// TODO Could consider giving it a host path and verifying it's contents somehow

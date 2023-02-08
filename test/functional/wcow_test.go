@@ -383,7 +383,6 @@ func TestWCOWArgonShim(t *testing.T) {
 	requireFeatures(t, featureWCOW)
 
 	imageLayers := windowsServercoreImageLayers(context.Background(), t)
-	argonShimMounted := false
 
 	argonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonShimScratchDir, imageLayers); err != nil {
@@ -393,11 +392,19 @@ func TestWCOWArgonShim(t *testing.T) {
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
 	layers := generateShimLayersStruct(t, imageLayers)
 
+	id := "argon"
+	// This is a cheat but stops us re-writing exactly the same code just for test
+	argonShimLocalMountPath, layerMounts, err := layerspkg.MountWCOWLayers(context.Background(), id, append(imageLayers, argonShimScratchDir), "", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argonShimMounted := true
+
 	// For cleanup on failure
 	defer func() {
 		if argonShimMounted {
 			_ = layerspkg.UnmountContainerLayers(context.Background(),
-				append(imageLayers, argonShimScratchDir),
+				layerMounts,
 				"",
 				"",
 				nil,
@@ -405,13 +412,6 @@ func TestWCOWArgonShim(t *testing.T) {
 		}
 	}()
 
-	id := "argon"
-	// This is a cheat but stops us re-writing exactly the same code just for test
-	argonShimLocalMountPath, err := layerspkg.MountWCOWLayers(context.Background(), id, append(imageLayers, argonShimScratchDir), "", "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	argonShimMounted = true
 	argonShim, err := hcsshim.CreateContainer(id, &hcsshim.ContainerConfig{
 		SystemType:      "Container",
 		Name:            "argonShim",
@@ -442,7 +442,7 @@ func TestWCOWArgonShim(t *testing.T) {
 	stopContainer(t, argonShim)
 	if err := layerspkg.UnmountContainerLayers(
 		context.Background(),
-		append(imageLayers, argonShimScratchDir),
+		layerMounts,
 		"",
 		"",
 		nil,

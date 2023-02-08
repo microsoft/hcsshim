@@ -76,7 +76,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 						return nil, err
 					}
 				}
-				uvmPath, err := coi.HostingSystem.GetScsiUvmPath(ctx, mountPath)
+				uvmPath, err := coi.HostingSystem.GetSCSIMountUVMPath(ctx, mountPath)
 				if err != nil {
 					return nil, err
 				}

@@ -897,7 +897,10 @@ func modifyMappedVirtualDisk(
 				return err
 			}
 		}
-		return scsi.UnplugDevice(ctx, mvd.Controller, mvd.Lun)
+		if mvd.UnplugDevice {
+			return scsi.UnplugDevice(ctx, mvd.Controller, mvd.Lun)
+		}
+		return nil
 	default:
 		return newInvalidRequestTypeError(rt)
 	}

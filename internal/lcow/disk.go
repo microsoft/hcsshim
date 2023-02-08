@@ -40,13 +40,18 @@ func FormatDisk(ctx context.Context, lcowUVM *uvm.UtilityVM, destPath string) er
 		_ = scsi.Release(ctx)
 	}()
 
+	scsiAttachment, err := lcowUVM.GetSCSIAttachment(ctx, destPath)
+	if err != nil {
+		return err
+	}
+
 	log.G(ctx).WithFields(logrus.Fields{
 		"dest":       destPath,
-		"controller": scsi.Controller,
-		"lun":        scsi.LUN,
+		"controller": scsiAttachment.Controller,
+		"lun":        scsiAttachment.LUN,
 	}).Debug("lcow::FormatDisk device attached")
 
-	if err := formatDiskUvm(ctx, lcowUVM, scsi.Controller, scsi.LUN, destPath); err != nil {
+	if err := formatDiskUvm(ctx, lcowUVM, scsiAttachment.Controller, scsiAttachment.LUN, destPath); err != nil {
 		return err
 	}
 	log.G(ctx).WithField("dest", destPath).Debug("lcow::FormatDisk complete")

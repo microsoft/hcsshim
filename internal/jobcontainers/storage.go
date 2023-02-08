@@ -25,23 +25,23 @@ const fallbackRootfsFormat = `C:\hpc\%s\`
 // C:\hpc\<containerID>
 const defaultSiloRootfsLocation = `C:\hpc\`
 
-func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) (err error) {
+func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) (_ []*layers.LayerMount, err error) {
 	if s == nil || s.Windows == nil || s.Windows.LayerFolders == nil {
-		return errors.New("field 'Spec.Windows.Layerfolders' is not populated")
+		return nil, errors.New("field 'Spec.Windows.Layerfolders' is not populated")
 	}
 
 	// Last layer always contains the sandbox.vhdx, or 'scratch' space for the container.
 	scratchFolder := s.Windows.LayerFolders[len(s.Windows.LayerFolders)-1]
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
-			return fmt.Errorf("failed to auto-create container scratch folder %s: %w", scratchFolder, err)
+			return nil, fmt.Errorf("failed to auto-create container scratch folder %s: %w", scratchFolder, err)
 		}
 	}
 
 	// Create sandbox.vhdx if it doesn't exist in the scratch folder.
 	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
 		if err := wclayer.CreateScratchLayer(ctx, scratchFolder, s.Windows.LayerFolders[:len(s.Windows.LayerFolders)-1]); err != nil {
-			return fmt.Errorf("failed to CreateSandboxLayer: %w", err)
+			return nil, fmt.Errorf("failed to CreateSandboxLayer: %w", err)
 		}
 	}
 
@@ -51,14 +51,15 @@ func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *s
 
 	if s.Root.Path == "" {
 		log.G(ctx).Debug("mounting job container storage")
-		rootPath, err := layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
+		rootPath, layersMounted, err := layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
 		if err != nil {
-			return fmt.Errorf("failed to mount job container storage: %w", err)
+			return nil, fmt.Errorf("failed to mount job container storage: %w", err)
 		}
 		s.Root.Path = rootPath + "\\"
+		return layersMounted, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
 // setupRootfsBinding binds the copy on write volume for the container to a static path

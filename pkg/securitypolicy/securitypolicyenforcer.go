@@ -87,7 +87,7 @@ func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolic
 	securityPolicy := new(SecurityPolicy)
 	err = json.Unmarshal(jsonPolicy, securityPolicy)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to unmarshal JSON policy")
+		return nil, errors.Wrapf(err, "unable to unmarshal JSON policy: %v", jsonPolicy)
 	}
 
 	return securityPolicy, nil

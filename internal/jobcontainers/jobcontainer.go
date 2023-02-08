@@ -189,12 +189,15 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 		}
 	})
 
+	var layerMounts []*layers.LayerMount
 	if fileBindingSupport {
-		if err := container.bindSetup(ctx, s); err != nil {
+		layerMounts, err = container.bindSetup(ctx, s)
+		if err != nil {
 			return nil, nil, err
 		}
 	} else {
-		if err := container.fallbackSetup(ctx, s); err != nil {
+		layerMounts, err = container.fallbackSetup(ctx, s)
+		if err != nil {
 			return nil, nil, err
 		}
 	}
@@ -206,7 +209,7 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 	if !fileBindingSupport {
 		rootfsMountPoint = container.rootfsLocation
 	}
-	layers := layers.NewImageLayers(nil, "", s.Windows.LayerFolders, rootfsMountPoint, false)
+	layers := layers.NewImageLayers(nil, "", layerMounts, rootfsMountPoint, false)
 	r.SetLayers(layers)
 
 	volumeGUIDRegex := `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
@@ -775,14 +778,15 @@ func (c *JobContainer) replaceWithMountPoint(str string) (string, bool) {
 	return newStr, str != newStr
 }
 
-func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error) {
+func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) ([]*layers.LayerMount, error) {
 	// Must be upgraded to a silo so we can get per silo bindings for the container.
 	if err := c.job.PromoteToSilo(); err != nil {
-		return err
+		return nil, err
 	}
 	// Union the container layers.
-	if err := c.mountLayers(ctx, c.id, s, ""); err != nil {
-		return fmt.Errorf("failed to mount container layers: %w", err)
+	layers, err := c.mountLayers(ctx, c.id, s, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to mount container layers: %w", err)
 	}
 	rootfsLocation := defaultSiloRootfsLocation
 	if loc := customRootfsLocation(s.Annotations); loc != "" {
@@ -790,22 +794,23 @@ func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error)
 	}
 
 	if err := c.setupRootfsBinding(rootfsLocation, s.Root.Path); err != nil {
-		return err
+		return nil, err
 	}
 	c.rootfsLocation = rootfsLocation
-	return c.setupMounts(ctx, s)
+	return layers, c.setupMounts(ctx, s)
 }
 
 // This handles the fallback case where bind mounting isn't available on the machine. This mounts the
 // container layers on the host and sets up any mounts present in the OCI runtime spec.
-func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec) (err error) {
+func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec) ([]*layers.LayerMount, error) {
 	rootfsLocation := fmt.Sprintf(fallbackRootfsFormat, c.id)
 	if loc := customRootfsLocation(s.Annotations); loc != "" {
 		rootfsLocation = filepath.Join(loc, c.id)
 	}
-	if err := c.mountLayers(ctx, c.id, s, rootfsLocation); err != nil {
-		return fmt.Errorf("failed to mount container layers: %w", err)
+	layers, err := c.mountLayers(ctx, c.id, s, rootfsLocation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to mount container layers: %w", err)
 	}
 	c.rootfsLocation = rootfsLocation
-	return fallbackMountSetup(s, c.rootfsLocation)
+	return layers, fallbackMountSetup(s, c.rootfsLocation)
 }
