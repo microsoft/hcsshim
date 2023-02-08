@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -99,16 +100,12 @@ func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVaria
 
 func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandboxRequest {
 	t.Helper()
-	securityHardware := false
-	if *flagSevSnp {
-		securityHardware = true
-	}
 	return getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(
 			map[string]string{
-				annotations.NoSecurityHardware:  fmt.Sprintf("%t", !securityHardware),
+				annotations.NoSecurityHardware:  strconv.FormatBool(!*flagSevSnp),
 				annotations.SecurityPolicy:      policy,
 				annotations.VPMemNoMultiMapping: "true",
 			},
