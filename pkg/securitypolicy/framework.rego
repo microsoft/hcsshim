@@ -70,7 +70,7 @@ overlay_mounted(target) {
 default candidate_containers := []
 
 candidate_containers := containers {
-    semver.compare(data.policy.framework_svn, svn) == 0    
+    semver.compare(data.policy.framework_svn, svn) == 0
 
     policy_containers := [c | c := data.policy.containers[_]]
     fragment_containers := [c |
@@ -92,7 +92,7 @@ candidate_containers := containers {
         c := fragment.containers[_]
     ]
 
-    containers := array.concat(policy_containers, fragment_containers)  
+    containers := array.concat(policy_containers, fragment_containers)
 }
 
 default mount_overlay := {"allowed": false}
@@ -493,7 +493,7 @@ enforcement_point_info := {"available": false, "default_results": {"allow": fals
 default candidate_external_processes := []
 
 candidate_external_processes := external_processes {
-    semver.compare(data.policy.framework_svn, svn) == 0    
+    semver.compare(data.policy.framework_svn, svn) == 0
 
     policy_external_processes := [e | e := data.policy.external_processes[_]]
     fragment_external_processes := [e |
@@ -515,7 +515,7 @@ candidate_external_processes := external_processes {
         e := fragment.external_processes[_]
     ]
 
-    external_processes := array.concat(policy_external_processes, fragment_external_processes)  
+    external_processes := array.concat(policy_external_processes, fragment_external_processes)
 }
 
 external_process_ok(process) {
@@ -593,10 +593,10 @@ apply_defaults(name, raw_values, framework_svn) := values {
     semver.compare(framework_svn, svn) < 0
     template := load_defaults(name, framework_svn)
     print(template)
-    values := [updated | 
+    values := [updated |
         raw := raw_values[_]
         flat := object.union(template, raw)
-        arrays := {key: values |            
+        arrays := {key: values |
             template[key]["__array__"]
             item_template := template[key]["item"]
             values := [object.union(item_template, raw) | raw := raw[key][_]]
@@ -651,8 +651,8 @@ update_issuer(includes) := issuer {
 default candidate_fragments := []
 
 candidate_fragments := fragments {
-    semver.compare(data.policy.framework_svn, svn) == 0    
-    
+    semver.compare(data.policy.framework_svn, svn) == 0
+
     policy_fragmemnts := [f | f := data.policy.fragments[_]]
     fragment_fragments := [f |
         feed := data.metadata.issuers[_].feeds[_]
@@ -673,7 +673,7 @@ candidate_fragments := fragments {
         f := fragment.fragments[_]
     ]
 
-    fragments := array.concat(policy_fragments, fragment_fragments)  
+    fragments := array.concat(policy_fragments, fragment_fragments)
 }
 
 default load_fragment := {"allowed": false}
@@ -753,7 +753,7 @@ object_default(info, svn) := value {
 
 item_default(info, svn) := value {
     semver.compare(svn, info.introduced_version) >= 0
-    value := null    
+    value := null
 }
 
 item_default(info, svn) := value {
@@ -885,9 +885,11 @@ env_matches(env) {
 
 errors[envError] {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
-    bad_envs := [env |
+    bad_envs := [invalid |
         env := input.envList[_]
         not env_matches(env)
+        parts := split(env, "=")
+        invalid = parts[0]
     ]
 
     count(bad_envs) > 0
@@ -1039,8 +1041,8 @@ errors[framework_svn_error] {
 }
 
 errors[fragment_framework_svn_error] {
-    not data[input.namespace].framework_svn   
-    fragment_framework_svn_error := concat(" ", ["fragment framework_svn is missing. Current svn:", svn])     
+    not data[input.namespace].framework_svn
+    fragment_framework_svn_error := concat(" ", ["fragment framework_svn is missing. Current svn:", svn])
 }
 
 errors[fragment_framework_svn_error] {
