@@ -1337,7 +1337,7 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 
 func Test_Rego_Enforcement_Point_Extra(t *testing.T) {
 	code := `package policy
-	
+
 api_svn := "0.0.1"
 
 __fixture_for_allowed_extra__ := {"allowed": true}
@@ -3922,6 +3922,38 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 
 	if !areStringArraysEqual(actualEnvs, expectedEnvs) {
 		t.Error("invalid envList returned from EnforceExecExternalProcessPolicy")
+	}
+}
+
+func Test_Rego_EnvListGetsRedacted(t *testing.T) {
+	c := generateConstraints(testRand, 1)
+	// don't allow env dropping. with dropping we aren't testing the
+	// "invalid env list" message, only the input
+	c.allowEnvironmentVariableDropping = false
+
+	// No environment variables are allowed
+	tc, err := setupRegoCreateContainerTest(c, c.containers[0], false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var envList []string
+	envVar := "FOO=BAR"
+	envList = append(envList, envVar)
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, "bunk", tc.mounts, false)
+
+	// not getting an error means something is broken
+	if err == nil {
+		t.Fatal("Unexpected success when enforcing policy")
+	}
+
+	if strings.Contains(err.Error(), envVar) {
+		t.Fatal("EnvList wasn't redacted in error message")
+	}
+
+	if !strings.Contains(err.Error(), `FOO=\u003c\u003credacted\u003e\u003e`) {
+		t.Fatal("EnvList redaction format wasn't as expected")
 	}
 }
 

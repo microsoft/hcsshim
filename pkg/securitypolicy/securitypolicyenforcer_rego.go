@@ -297,7 +297,7 @@ func errorString(errors interface{}) string {
 }
 
 func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input inputData) error {
-	inputJSON, err := json.Marshal(input)
+	inputJSON, err := json.Marshal(policy.redactSensitiveData(input))
 	if err != nil {
 		return fmt.Errorf("%s not allowed by policy. Input unavailable due to marshalling error", enforcementPoint)
 	}
@@ -312,6 +312,24 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input i
 	}
 
 	return fmt.Errorf("%s not allowed by policy.\nInput: %s", enforcementPoint, string(inputJSON))
+}
+
+func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
+	if v, k := input["envList"]; k {
+		newEnvList := make([]string, 0)
+		cast, ok := v.([]string)
+		if ok {
+			for _, env := range cast {
+				parts := strings.Split(env, "=")
+				redacted := parts[0] + "=<<redacted>>"
+				newEnvList = append(newEnvList, redacted)
+			}
+		}
+
+		input["envList"] = newEnvList
+	}
+
+	return input
 }
 
 func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) error {
