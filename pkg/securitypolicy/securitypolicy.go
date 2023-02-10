@@ -37,6 +37,8 @@ const (
 	EnvVarRuleRegex  EnvVarRule = "re2"
 )
 
+const plan9Prefix = "plan9://"
+
 // PolicyConfig contains toml or JSON config for security policy.
 type PolicyConfig struct {
 	AllowAll                         bool                    `json:"allow_all" toml:"allow_all"`
@@ -361,7 +363,8 @@ func newOptionsFromConfig(mCfg *MountConfig) []string {
 // mount type.
 func newMountTypeFromConfig(mCfg *MountConfig) string {
 	if strings.HasPrefix(mCfg.HostPath, guestpath.SandboxMountPrefix) ||
-		strings.HasPrefix(mCfg.HostPath, guestpath.HugePagesMountPrefix) {
+		strings.HasPrefix(mCfg.HostPath, guestpath.HugePagesMountPrefix) ||
+		strings.HasPrefix(mCfg.HostPath, plan9Prefix) {
 		return "bind"
 	}
 	return "none"
