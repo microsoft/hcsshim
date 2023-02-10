@@ -307,11 +307,15 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input i
 	if err == nil {
 		errors, _ := result.Value("errors")
 		if errors != nil {
-			return fmt.Errorf("%s not allowed by policy. Errors: %v.\nInput: %s", enforcementPoint, errors, string(inputJSON))
+			if len(errors.([]interface{})) > 0 {
+				return fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s", enforcementPoint, errors, string(inputJSON))
+			} else {
+				return fmt.Errorf("%s not allowed by policy. Security policy is not valid. Please check security policy or re-generate with tooling. Input: %s", enforcementPoint, string(inputJSON))
+			}
 		}
 	}
 
-	return fmt.Errorf("%s not allowed by policy.\nInput: %s", enforcementPoint, string(inputJSON))
+	return fmt.Errorf("%s not allowed by policy. Security policy is not valid. Please check security policy or re-generate with tooling. Input: %s", enforcementPoint, string(inputJSON))
 }
 
 func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
