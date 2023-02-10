@@ -78,7 +78,7 @@ func execInHost(ctx context.Context, client shimdiag.ShimDiagService, args []str
 }
 
 // shimDiagExecOutput is a small wrapper on top of execInHost, that returns the exec output
-func shimDiagExecOutput(ctx context.Context, t *testing.T, podID string, cmd []string) (string, error) {
+func shimDiagExecOutput(ctx context.Context, t testing.TB, podID string, cmd []string) (string, error) {
 	t.Helper()
 	shimName := fmt.Sprintf("k8s.io-%s", podID)
 	shim, err := shimdiag.GetShim(shimName)
