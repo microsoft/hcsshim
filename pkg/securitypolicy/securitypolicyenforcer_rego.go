@@ -32,8 +32,6 @@ func init() {
 	defaultMarshaller = regoMarshaller
 }
 
-const plan9Prefix = "plan9://"
-
 // RegoEnforcer is a stub implementation of a security policy, which will be
 // based on [Rego] policy language. The detailed implementation will be
 // introduced in the subsequent PRs and documentation updated accordingly.
