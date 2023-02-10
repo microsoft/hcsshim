@@ -45,10 +45,10 @@ type SecurityPolicyEnforcer interface {
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) (err error)
 	EnforceOverlayUnmountPolicy(target string) (err error)
 	EnforceCreateContainerPolicy(sandboxID string, containerID string,
-		argList []string, envList []string, workingDir string, mounts []oci.Mount, privileged bool) (EnvList, bool, error)
+		argList []string, envList []string, workingDir string, mounts []oci.Mount, privileged bool, noNewPrivileges bool) (EnvList, bool, error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
-	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (EnvList, bool, error)
+	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string, noNewPrivileges bool) (EnvList, bool, error)
 	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (EnvList, bool, error)
 	EnforceShutdownContainerPolicy(containerID string) error
 	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
@@ -435,6 +435,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	workingDir string,
 	mounts []oci.Mount,
 	privileged bool,
+	noNewPrivileges bool,
 ) (allowedEnvs EnvList, stdioAccessAllowed bool, err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
@@ -475,7 +476,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, bool, error) {
+func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
@@ -863,11 +864,11 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool) (EnvList, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
@@ -945,11 +946,11 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) erro
 	return errors.New("removing an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool) (EnvList, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool) (EnvList, bool, error) {
 	return nil, false, errors.New("running commands is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string) (EnvList, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string, _ bool) (EnvList, bool, error) {
 	return nil, false, errors.New("starting additional processes in a container is denied by policy")
 }
 

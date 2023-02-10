@@ -130,7 +130,9 @@ type securityPolicyContainer struct {
 	// process.
 	Signals []syscall.Signal `json:"signals"`
 	// Whether to allow the capture of init process standard out and standard error
-	AllowStdioAccess bool
+	AllowStdioAccess bool `json:"allow_stdio_access"`
+	// Whether to deny new privileges
+	NoNewPrivileges bool `json:"no_new_privileges"`
 }
 
 type containerExecProcess struct {
@@ -199,6 +201,7 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		ExecProcesses:    execProcesses,
 		Signals:          c.Signals,
 		AllowStdioAccess: c.AllowStdioAccess,
+		NoNewPrivileges:  c.NoNewPrivileges,
 	}, nil
 }
 

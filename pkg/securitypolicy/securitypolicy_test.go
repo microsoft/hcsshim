@@ -1005,6 +1005,7 @@ func generateConstraintsContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLa
 	c.ExecProcesses = generateExecProcesses(r)
 	c.Signals = generateListOfSignals(r, 0, maxSignalNumber)
 	c.AllowStdioAccess = randBool(r)
+	c.NoNewPrivileges = randBool(r)
 
 	return &c
 }

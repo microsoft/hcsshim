@@ -96,16 +96,17 @@ type EnvRuleConfig struct {
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
-	ImageName        string              `json:"image_name" toml:"image_name"`
-	Command          []string            `json:"command" toml:"command"`
-	Auth             AuthConfig          `json:"auth" toml:"auth"`
-	EnvRules         []EnvRuleConfig     `json:"env_rules" toml:"env_rule"`
-	WorkingDir       string              `json:"working_dir" toml:"working_dir"`
-	Mounts           []MountConfig       `json:"mounts" toml:"mount"`
-	AllowElevated    bool                `json:"allow_elevated" toml:"allow_elevated"`
-	ExecProcesses    []ExecProcessConfig `json:"exec_processes" toml:"exec_process"`
-	Signals          []syscall.Signal    `json:"signals" toml:"signals"`
-	AllowStdioAccess bool                `json:"allow_stdio_access" toml:"allow_stdio_access"`
+	ImageName                string              `json:"image_name" toml:"image_name"`
+	Command                  []string            `json:"command" toml:"command"`
+	Auth                     AuthConfig          `json:"auth" toml:"auth"`
+	EnvRules                 []EnvRuleConfig     `json:"env_rules" toml:"env_rule"`
+	WorkingDir               string              `json:"working_dir" toml:"working_dir"`
+	Mounts                   []MountConfig       `json:"mounts" toml:"mount"`
+	AllowElevated            bool                `json:"allow_elevated" toml:"allow_elevated"`
+	ExecProcesses            []ExecProcessConfig `json:"exec_processes" toml:"exec_process"`
+	Signals                  []syscall.Signal    `json:"signals" toml:"signals"`
+	AllowStdioAccess         bool                `json:"allow_stdio_access" toml:"allow_stdio_access"`
+	AllowPrivilegeEscalation bool                `json:"allow_privilege_escalation" toml:"allow_privilege_escalation"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -206,7 +207,8 @@ type Container struct {
 	AllowElevated    bool                `json:"allow_elevated"`
 	ExecProcesses    []ExecProcessConfig `json:"-"`
 	Signals          []syscall.Signal    `json:"-"`
-	AllowStdioAccess bool                `json:"_"`
+	AllowStdioAccess bool                `json:"-"`
+	NoNewPrivileges  bool                `json:"-"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -248,7 +250,8 @@ func CreateContainerPolicy(
 	allowElevated bool,
 	execProcesses []ExecProcessConfig,
 	signals []syscall.Signal,
-	AllowStdioAccess bool,
+	allowStdioAccess bool,
+	noNewPrivileges bool,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
@@ -265,7 +268,8 @@ func CreateContainerPolicy(
 		AllowElevated:    allowElevated,
 		ExecProcesses:    execProcesses,
 		Signals:          signals,
-		AllowStdioAccess: AllowStdioAccess,
+		AllowStdioAccess: allowStdioAccess,
+		NoNewPrivileges:  noNewPrivileges,
 	}, nil
 }
 
