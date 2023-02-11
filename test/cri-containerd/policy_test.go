@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sync/errgroup"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
 	"github.com/Microsoft/hcsshim/internal/tools/securitypolicy/helpers"
@@ -1262,71 +1261,41 @@ func Test_ExecInUVM_WithPolicy(t *testing.T) {
 func Test_RunPodSandbox_Concurrently(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
 
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	policy := policyFromOpts(
-		t,
-		"rego",
-		securitypolicy.WithAllowUnencryptedScratch(true),
-	)
-
-	secureHardware := false
-	if *flagSevSnp {
-		secureHardware = true
-	}
-
-	runFunc := func(runPodRequest *runtime.RunPodSandboxRequest) func() error {
-		return func() error {
-			fmt.Println(runPodRequest.GetConfig().GetMetadata().GetName())
-			runpResp, err := client.RunPodSandbox(ctx, runPodRequest)
-			if err != nil {
-				return err
-			}
-			time.Sleep(time.Second)
-
-			_, err = client.StopPodSandbox(ctx, &runtime.StopPodSandboxRequest{
-				PodSandboxId: runpResp.PodSandboxId,
-			})
-			if err != nil {
-				return err
-			}
-			_, err = client.RemovePodSandbox(ctx, &runtime.RemovePodSandboxRequest{
-				PodSandboxId: runpResp.PodSandboxId,
-			})
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-	}
-
-	var runFuncs []func() error
-	for i := 0; i < 5; i++ {
-		r := &runtime.RunPodSandboxRequest{
-			Config: &runtime.PodSandboxConfig{
-				Metadata: &runtime.PodSandboxMetadata{
-					Name:      fmt.Sprintf("%s_%d", t.Name(), i),
-					Namespace: testNamespace,
+	for i := 0; i < 20; i++ {
+		t.Run(fmt.Sprintf("ParallelPodRun_%d", i+1), func(t *testing.T) {
+			t.Parallel()
+			client := newTestRuntimeClient(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			policy := policyFromOpts(
+				t,
+				"rego",
+				securitypolicy.WithAllowUnencryptedScratch(true),
+			)
+			runpRequest := &runtime.RunPodSandboxRequest{
+				Config: &runtime.PodSandboxConfig{
+					Metadata: &runtime.PodSandboxMetadata{
+						Name:      fmt.Sprintf("%s_%d", t.Name(), i),
+						Namespace: testNamespace,
+					},
+					Annotations: map[string]string{
+						annotations.NoSecurityHardware:     strconv.FormatBool(!*flagSevSnp),
+						annotations.SecurityPolicy:         policy,
+						annotations.SecurityPolicyEnforcer: "rego",
+						annotations.EncryptedScratchDisk:   strconv.FormatBool(*flagSevSnp),
+					},
 				},
-				Annotations: map[string]string{
-					annotations.NoSecurityHardware:     fmt.Sprintf("%t", !secureHardware),
-					annotations.SecurityPolicy:         policy,
-					annotations.SecurityPolicyEnforcer: "rego",
-				},
-			},
-			RuntimeHandler: lcowRuntimeHandler,
-		}
-		runFuncs = append(runFuncs, runFunc(r))
-	}
+				RuntimeHandler: lcowRuntimeHandler,
+			}
 
-	eg := errgroup.Group{}
-	for _, f := range runFuncs {
-		eg.Go(f)
-	}
-
-	err := eg.Wait()
-	if err != nil {
-		t.Fatalf("failed to run multiple pods concurrently: %s", err)
+			podID := runPodSandbox(t, client, ctx, runpRequest)
+			defer func() {
+				removePodSandbox(t, client, ctx, podID)
+			}()
+			defer func() {
+				stopPodSandbox(t, client, ctx, podID)
+			}()
+			time.Sleep(5 * time.Second)
+		})
 	}
 }
