@@ -880,7 +880,7 @@ env_matches(env) {
     input.rule in ["exec_external"]
     some process in data.policy.external_processes
     some rule in process.env_rules
-    env_ok(rule.pattern, rule.strategy, input.envList)
+    env_ok(rule.pattern, rule.strategy, env)
 }
 
 errors[envError] {
@@ -906,7 +906,7 @@ workingDirectory_matches {
 
 workingDirectory_matches {
     input.rule == "exec_external"
-    some process in data.external_processes
+    some process in data.policy.external_processes
     workingDirectory_ok(process.working_dir)
 }
 
