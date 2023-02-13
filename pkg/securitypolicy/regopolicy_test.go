@@ -3957,6 +3957,75 @@ func Test_Rego_EnvListGetsRedacted(t *testing.T) {
 	}
 }
 
+func Test_Rego_Enforce_CreateContainer_ConflictingAllowStdioAccessHasErrorMessage(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	constraints.containers[0].AllowStdioAccess = true
+
+	// create a "duplicate" as far as create container is concerned excep for
+	// a different "AllowStdioAccess" value
+	duplicate := &securityPolicyContainer{
+		Command:          constraints.containers[0].Command,
+		EnvRules:         constraints.containers[0].EnvRules,
+		WorkingDir:       constraints.containers[0].WorkingDir,
+		Mounts:           constraints.containers[0].Mounts,
+		Layers:           constraints.containers[0].Layers,
+		ExecProcesses:    generateExecProcesses(testRand),
+		Signals:          generateListOfSignals(testRand, 0, maxSignalNumber),
+		AllowElevated:    constraints.containers[0].AllowElevated,
+		AllowStdioAccess: false,
+	}
+
+	constraints.containers = append(constraints.containers, duplicate)
+
+	tc, err := setupRegoCreateContainerTest(constraints, constraints.containers[0], false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false)
+
+	// not getting an error means something is broken
+	if err == nil {
+		t.Fatalf("Unexpected success when enforcing policy")
+	}
+
+	if !strings.Contains(err.Error(), "containers only distinguishable by allow_stdio_access") {
+		t.Fatal("No error message given for conflicting allow_stdio_access on otherwise 'same' containers")
+	}
+}
+
+func Test_Rego_ExecExternalProcessPolicy_ConflictingAllowStdioAccessHasErrorMessage(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	process := generateExternalProcess(testRand)
+	process.allowStdioAccess = false
+	duplicate := process.clone()
+	duplicate.allowStdioAccess = true
+
+	constraints.externalProcesses = append(constraints.externalProcesses, process)
+	constraints.externalProcesses = append(constraints.externalProcesses, duplicate)
+	securityPolicy := constraints.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
+
+	_, _, err = policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+	if err == nil {
+		t.Fatal("Policy was unexpectedly not enforced")
+	}
+
+	if !strings.Contains(err.Error(), "external processes only distinguishable by allow_stdio_access") {
+		t.Fatal("No error message given for conflicting allow_stdio_access on otherwise 'same' external processes")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
