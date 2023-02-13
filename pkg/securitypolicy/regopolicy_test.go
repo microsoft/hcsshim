@@ -4026,6 +4026,126 @@ func Test_Rego_ExecExternalProcessPolicy_ConflictingAllowStdioAccessHasErrorMess
 	}
 }
 
+func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	container := selectContainerFromConstraints(constraints, testRand)
+	requiredRule := EnvRuleConfig{
+		Strategy: "string",
+		Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+		Required: true,
+	}
+
+	container.EnvRules = append(container.EnvRules, requiredRule)
+
+	tc, err := setupRegoCreateContainerTest(constraints, container, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	envList := make([]string, 0, len(container.EnvRules))
+	for _, env := range tc.envList {
+		if env != requiredRule.Rule {
+			envList = append(envList, env)
+		}
+	}
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false)
+
+	// not getting an error means something is broken
+	if err == nil {
+		t.Fatalf("Unexpected success when enforcing policy")
+	}
+
+	if !strings.Contains(err.Error(), "missing required environment variable") {
+		t.Fatal("No error message given for missing required environment variable")
+	}
+}
+
+func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	container := selectContainerFromConstraints(constraints, testRand)
+	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	requiredRule := EnvRuleConfig{
+		Strategy: "string",
+		Rule:     neededEnv,
+		Required: true,
+	}
+
+	container.EnvRules = append(container.EnvRules, requiredRule)
+
+	tc, err := setupRegoRunningContainerTest(constraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	running := selectContainerFromRunningContainers(tc.runningContainers, testRand)
+
+	process := selectExecProcess(running.container.ExecProcesses, testRand)
+
+	allEnvs := buildEnvironmentVariablesFromEnvRules(running.container.EnvRules, testRand)
+	envList := make([]string, 0, len(container.EnvRules))
+	for _, env := range allEnvs {
+		if env != requiredRule.Rule {
+			envList = append(envList, env)
+		}
+	}
+
+	_, _, err = tc.policy.EnforceExecInContainerPolicy(running.containerID, process.Command, envList, running.container.WorkingDir)
+
+	// not getting an error means something is broken
+	if err == nil {
+		t.Fatal("Unexpected success when enforcing policy")
+	}
+
+	if !strings.Contains(err.Error(), "missing required environment variable") {
+		fmt.Print(err.Error())
+		t.Fatal("No error message given for missing required environment variable")
+	}
+}
+
+func Test_Rego_ExecExternalProcessPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	process := generateExternalProcess(testRand)
+	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	requiredRule := EnvRuleConfig{
+		Strategy: "string",
+		Rule:     neededEnv,
+		Required: true,
+	}
+
+	process.envRules = append(process.envRules, requiredRule)
+
+	constraints.externalProcesses = append(constraints.externalProcesses, process)
+	securityPolicy := constraints.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allEnvs := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
+	envList := make([]string, 0, len(process.envRules))
+	for _, env := range allEnvs {
+		if env != requiredRule.Rule {
+			envList = append(envList, env)
+		}
+	}
+
+	_, _, err = policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+	if err == nil {
+		t.Fatal("Policy was unexpectedly not enforced")
+	}
+
+	if !strings.Contains(err.Error(), "missing required environment variable") {
+		fmt.Print(err.Error())
+		t.Fatal("No error message given for missing required environment variable")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //

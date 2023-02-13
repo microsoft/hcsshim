@@ -1093,6 +1093,16 @@ func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) 
 	// variable
 	numberOfRules := int32(len(rules))
 	numberOfMatches := randMinMax(r, 1, numberOfRules)
+
+	// Build in all required rules, this isn't a setup method of "missing item"
+	// tests
+	for _, rule := range rules {
+		if rule.Required {
+			vars = append(vars, rule.Rule)
+			numberOfMatches--
+		}
+	}
+
 	usedIndexes := map[int]struct{}{}
 	for numberOfMatches > 0 {
 		anIndex := -1
