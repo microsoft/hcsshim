@@ -318,6 +318,11 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input i
 
 func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
 	if v, k := input["envList"]; k {
+		newInput := make(inputData)
+		for k, v := range input {
+			newInput[k] = v
+		}
+
 		newEnvList := make([]string, 0)
 		cast, ok := v.([]string)
 		if ok {
@@ -328,7 +333,9 @@ func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
 			}
 		}
 
-		input["envList"] = newEnvList
+		newInput["envList"] = newEnvList
+
+		return newInput
 	}
 
 	return input
