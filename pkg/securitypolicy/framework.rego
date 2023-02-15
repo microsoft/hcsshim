@@ -1049,3 +1049,59 @@ errors[fragment_framework_svn_error] {
     semver.compare(data[input.namespace].framework_svn, svn) > 0
     fragment_framework_svn_error := concat(" ", ["fragment framework_svn is ahead of the current svn:", data[input.namespace].framework_svn, ">", svn])
 }
+
+errors["containers only distinguishable by allow_stdio_access"] {
+    input.rule == "create_container"
+
+    not container_started
+    possible_containers := [container |
+        container := data.metadata.matches[input.containerID][_]
+        privileged_ok(container.allow_elevated)
+        workingDirectory_ok(container.working_dir)
+        command_ok(container.command)
+        mountList_ok(container.mounts, container.allow_elevated)
+    ]
+
+    count(possible_containers) > 0
+
+    # check to see if the environment variables match, dropping
+    # them if allowed (and necessary)
+    env_list := valid_envs_for_all(possible_containers)
+    containers := [container |
+        container := possible_containers[_]
+        envList_ok(container.env_rules, env_list)
+    ]
+
+    count(containers) > 0
+
+    allow_stdio_access := containers[0].allow_stdio_access
+    some c in containers
+    c.allow_stdio_access != allow_stdio_access
+}
+
+errors["external processes only distinguishable by allow_stdio_access"] {
+    input.rule == "exec_external"
+
+    possible_processes := [process |
+        process := candidate_external_processes[_]
+        workingDirectory_ok(process.working_dir)
+        command_ok(process.command)
+    ]
+
+    count(possible_processes) > 0
+
+    # check to see if the environment variables match, dropping
+    # them if allowed (and necessary)
+    env_list := valid_envs_for_all(possible_processes)
+    processes := [process |
+        process := possible_processes[_]
+        envList_ok(process.env_rules, env_list)
+    ]
+
+    count(processes) > 0
+
+    allow_stdio_access := processes[0].allow_stdio_access
+    some p in processes
+    p.allow_stdio_access != allow_stdio_access
+}
+
