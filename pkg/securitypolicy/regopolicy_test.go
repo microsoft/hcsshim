@@ -887,7 +887,7 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 	}
 }
 
-func Test_Rego_Enforce_CreateContainer_Start_All_Containers(t *testing.T) {
+func Test_Rego_EnforceCreateContainer_Start_All_Containers(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		securityPolicy := p.toPolicy()
 		defaultMounts := generateMounts(testRand)
@@ -932,7 +932,7 @@ func Test_Rego_Enforce_CreateContainer_Start_All_Containers(t *testing.T) {
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
-		t.Errorf("Test_Rego_Enforce_CreateContainer_Start_All_Containers: %v", err)
+		t.Errorf("Test_Rego_EnforceCreateContainer_Start_All_Containers: %v", err)
 	}
 }
 
@@ -3957,7 +3957,7 @@ func Test_Rego_EnvListGetsRedacted(t *testing.T) {
 	}
 }
 
-func Test_Rego_Enforce_CreateContainer_ConflictingAllowStdioAccessHasErrorMessage(t *testing.T) {
+func Test_Rego_EnforceCreateContainer_ConflictingAllowStdioAccessHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	constraints.containers[0].AllowStdioAccess = true
 
