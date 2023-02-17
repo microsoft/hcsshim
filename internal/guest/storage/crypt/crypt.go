@@ -16,16 +16,16 @@ import (
 
 // Test dependencies
 var (
-	_copyEmptySparseFilesystem = copyEmptySparseFilesystem
-	_createSparseEmptyFile     = createSparseEmptyFile
-	_cryptsetupClose           = cryptsetupClose
-	_cryptsetupFormat          = cryptsetupFormat
-	_cryptsetupOpen            = cryptsetupOpen
-	_generateKeyFile           = generateKeyFile
-	_getBlockDeviceSize        = getBlockDeviceSize
-	_osMkdirTemp               = os.MkdirTemp
-	_mkfsExt4Command           = mkfsExt4Command
-	_osRemoveAll               = os.RemoveAll
+	_cryptsetupClose    = cryptsetupClose
+	_cryptsetupFormat   = cryptsetupFormat
+	_cryptsetupOpen     = cryptsetupOpen
+	_generateKeyFile    = generateKeyFile
+	_getBlockDeviceSize = getBlockDeviceSize
+	_osMkdirTemp        = os.MkdirTemp
+	_mkfsExt4Command    = mkfsExt4Command
+	_mkfsXfs            = mkfsXfs
+	_zeroDevice         = zeroDevice
+	_osRemoveAll        = os.RemoveAll
 )
 
 // cryptsetupCommand runs cryptsetup with the provided arguments
@@ -100,6 +100,17 @@ func mkfsExt4Command(args []string) error {
 	return nil
 }
 
+// invoke mkfs.xfs for the given device.
+func mkfsXfs(devicePath string) error {
+	args := []string{"-f", devicePath}
+	cmd := exec.Command("mkfs.xfs", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "failed to execute mkfs.ext4: %s", string(output))
+	}
+	return nil
+}
+
 // EncryptDevice creates a dm-crypt target for a container scratch vhd.
 //
 // In order to mount a block device as an encrypted device:
@@ -122,7 +133,7 @@ func mkfsExt4Command(args []string) error {
 //     /dev/mapper/`cryptDeviceTemplate`. This can be mounted directly, but it
 //     doesn't have any format yet.
 //
-//  4. Format the unencrypted block device as ext4:
+//  4. Format the unencrypted block device as ext4: (NOTE - no longer done - see 5)
 //
 //     A normal invocation of luksFormat wipes the target device. This takes
 //     a really long time, which isn't acceptable in our use-case. Passing the
@@ -159,8 +170,16 @@ func mkfsExt4Command(args []string) error {
 //
 //     4.4. Do a sparse copy of the filesystem into the unencrypted block device.
 //     This updates the integrity tags.
+//
+// Alternative plan using xfs.
+//
+//	 5. Format the unencrypted block device as xfs.
+//		5.1. Zero the first block. It appears that mkfs.xfs reads this before fromatting.
+//		5.2. Format the device as xfs.
+
 func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path string, err error) {
 	// Create temporary directory to store the keyfile and EXT4 image
+
 	tempDir, err := _osMkdirTemp("", "dm-crypt")
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to create temporary folder: %s", source)
@@ -202,6 +221,7 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 
 	// 4.1. Get actual size of the scratch device
 	deviceSize, err := _getBlockDeviceSize(ctx, deviceNamePath)
+
 	if err != nil {
 		return "", fmt.Errorf("error getting size of: %s: %w", deviceNamePath, err)
 	}
@@ -210,21 +230,14 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 		return "", fmt.Errorf("invalid size obtained for: %s", deviceNamePath)
 	}
 
-	// 4.2. Create sparse filesystem image
-	tempExt4File := filepath.Join(tempDir, "ext4.img")
-
-	if err = _createSparseEmptyFile(ctx, tempExt4File, deviceSize); err != nil {
-		return "", fmt.Errorf("failed to create sparse filesystem file: %w", err)
+	// 5.1. Zero the first block. It appears that mkfs.xfs reads this before formatting.
+	if err = _zeroDevice(deviceNamePath, 4096, 1); err != nil {
+		return "", fmt.Errorf("failed zero'ing start of device %s: %w", deviceNamePath, err)
 	}
 
-	// 4.3. Format it as ext4
-	if err = _mkfsExt4Command([]string{tempExt4File}); err != nil {
-		return "", fmt.Errorf("mkfs.ext4 failed to format %s: %w", tempExt4File, err)
-	}
-
-	// 4.4. Sparse copy of the filesystem into the encrypted block device
-	if err = _copyEmptySparseFilesystem(tempExt4File, deviceNamePath); err != nil {
-		return "", fmt.Errorf("failed to do sparse copy: %w", err)
+	// 5.2. Format it as xfs
+	if err = _mkfsXfs(deviceNamePath); err != nil {
+		return "", fmt.Errorf("mkfs.xfs failed to format %s: %w", deviceNamePath, err)
 	}
 
 	return deviceNamePath, nil

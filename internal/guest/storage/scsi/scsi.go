@@ -154,6 +154,8 @@ func Mount(
 		data = "noload"
 	}
 
+	var mountType = "ext4"
+
 	if encrypted {
 		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
 		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)
@@ -161,10 +163,11 @@ func Mount(
 			return fmt.Errorf("failed to mount encrypted device %s: %w", source, err)
 		}
 		source = encryptedSource
+		mountType = "xfs"
 	}
 
 	for {
-		if err := unixMount(source, target, "ext4", flags, data); err != nil {
+		if err := unixMount(source, target, mountType, flags, data); err != nil {
 			// The `source` found by controllerLunToName can take some time
 			// before its actually available under `/dev/sd*`. Retry while we
 			// wait for `source` to show up.
