@@ -19,14 +19,11 @@ func osMkdirTempTest(dir string, pattern string) (string, error) {
 }
 
 func clearCryptTestDependencies() {
-	_copyEmptySparseFilesystem = nil
-	_createSparseEmptyFile = nil
 	_cryptsetupClose = nil
 	_cryptsetupFormat = nil
 	_cryptsetupOpen = nil
 	_generateKeyFile = nil
 	_getBlockDeviceSize = nil
-	_mkfsExt4Command = nil
 	_osMkdirTemp = osMkdirTempTest
 	_osRemoveAll = nil
 }
@@ -206,9 +203,6 @@ func Test_Encrypt_Mkfs_Error(t *testing.T) {
 		// Return a non-zero size
 		return blockDeviceSize, nil
 	}
-	_createSparseEmptyFile = func(ctx context.Context, path string, size int64) error {
-		return nil
-	}
 	_mkfsXfs = func(string) error {
 		return nil
 	}
@@ -256,16 +250,7 @@ func Test_Encrypt_Success(t *testing.T) {
 		// Return a non-zero size
 		return blockDeviceSize, nil
 	}
-	_createSparseEmptyFile = func(ctx context.Context, path string, size int64) error {
-		return nil
-	}
-	_mkfsExt4Command = func(args []string) error {
-		return nil
-	}
 	_mkfsXfs = func(arg string) error {
-		return nil
-	}
-	_copyEmptySparseFilesystem = func(source string, destination string) error {
 		return nil
 	}
 

@@ -6,18 +6,18 @@ package crypt
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"os"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/pkg/errors"
 )
 
 // getBlockDeviceSize returns the size of the specified block device.
 func getBlockDeviceSize(ctx context.Context, path string) (int64, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return 0, errors.Wrap(err, "error opening: "+path)
+		return 0, fmt.Errorf("error opening %s: %w", path, err)
 	}
 
 	defer func() {
@@ -28,21 +28,18 @@ func getBlockDeviceSize(ctx context.Context, path string) (int64, error) {
 
 	pos, err := file.Seek(0, io.SeekEnd)
 	if err != nil {
-		return 0, errors.Wrap(err, "error seeking end of: "+path)
+		return 0, fmt.Errorf("error seeking end of %s: %w", path, err)
 	}
-
 	return pos, nil
 }
-
 
 // In the xfs mkfs case it appears to attempt to read the first block of the device.
 // This results in an integrity error. This function zeros out the start of the device
 // so we are sure that when it is read it has already been hashed so matches.
-
 func zeroDevice(devicePath string, blockSize int64, numberOfBlocks int64) error {
 	fout, err := os.OpenFile(devicePath, os.O_WRONLY, 0)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open device file %s", devicePath)
+		return fmt.Errorf("failed to open device file %s: %w", devicePath, err)
 	}
 	defer fout.Close()
 
@@ -54,13 +51,13 @@ func zeroDevice(devicePath string, blockSize int64, numberOfBlocks int64) error 
 	// get the size so we don't overrun the end of the device
 	foutSize, err := fout.Seek(0, io.SeekEnd)
 	if err != nil {
-		return errors.Wrapf(err, "zeroDevice: failed to seek to end, device file %s", devicePath)
+		return fmt.Errorf("zeroDevice: failed to seek to end, device file %s: %w", devicePath, err)
 	}
 
 	// move back to the front.
 	_, err = fout.Seek(0, io.SeekStart)
 	if err != nil {
-		return errors.Wrapf(err, "zeroDevice: failed to seek to start, device file %s", devicePath)
+		return fmt.Errorf("zeroDevice: failed to seek to start, device file %s: %w", devicePath, err)
 	}
 
 	var offset int64 = 0
@@ -71,13 +68,12 @@ func zeroDevice(devicePath string, blockSize int64, numberOfBlocks int64) error 
 			break
 		}
 		// Write data to destination file
-		wrttten, err := fout.Write(zeros)
+		written, err := fout.Write(zeros)
 		if err != nil {
-			return errors.Wrapf(err, "failed to write destination file %s offset %d", devicePath, offset)
+			return fmt.Errorf("failed to write destination file %s offset %d: %w", devicePath, offset, err)
 		}
-		offset += int64(wrttten)
+		offset += int64(written)
 	}
-
 	return nil
 }
 
@@ -87,12 +83,11 @@ func generateKeyFile(path string, size int64) error {
 	keyArray := make([]byte, size)
 	_, err := rand.Read(keyArray[:])
 	if err != nil {
-		return errors.Wrap(err, "failed to generate key array")
+		return fmt.Errorf("failed to generate key slice: %w", err)
 	}
 
 	if err := os.WriteFile(path, keyArray[:], 0644); err != nil {
-		return errors.Wrap(err, "failed to save key to file")
+		return fmt.Errorf("failed to save key to file: %w", err)
 	}
-
 	return nil
 }

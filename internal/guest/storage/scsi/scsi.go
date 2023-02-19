@@ -154,8 +154,7 @@ func Mount(
 		data = "noload"
 	}
 
-	var mountType = "ext4"
-
+	mountType := "ext4"
 	if encrypted {
 		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
 		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)

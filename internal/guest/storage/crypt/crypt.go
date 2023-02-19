@@ -22,7 +22,6 @@ var (
 	_generateKeyFile    = generateKeyFile
 	_getBlockDeviceSize = getBlockDeviceSize
 	_osMkdirTemp        = os.MkdirTemp
-	_mkfsExt4Command    = mkfsExt4Command
 	_mkfsXfs            = mkfsXfs
 	_zeroDevice         = zeroDevice
 	_osRemoveAll        = os.RemoveAll
@@ -90,16 +89,6 @@ func cryptsetupClose(deviceName string) error {
 	return cryptsetupCommand(closeArgs)
 }
 
-// mkfsExt4Command runs mkfs.ext4 with the provided arguments
-func mkfsExt4Command(args []string) error {
-	cmd := exec.Command("mkfs.ext4", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "failed to execute mkfs.ext4: %s", string(output))
-	}
-	return nil
-}
-
 // invoke mkfs.xfs for the given device.
 func mkfsXfs(devicePath string) error {
 	args := []string{"-f", devicePath}
@@ -133,53 +122,12 @@ func mkfsXfs(devicePath string) error {
 //     /dev/mapper/`cryptDeviceTemplate`. This can be mounted directly, but it
 //     doesn't have any format yet.
 //
-//  4. Format the unencrypted block device as ext4: (NOTE - no longer done - see 5)
-//
-//     A normal invocation of luksFormat wipes the target device. This takes
-//     a really long time, which isn't acceptable in our use-case. Passing the
-//     option --integrity-no-wipe prevents this from happening so that the
-//     command ends in an instant.
-//
-//     Because of using --integrity-no-wipe, the resulting device isn't wiped and
-//     all the integrity tags are incorrect. This means that any attempt to read
-//     from it will cause an I/O error, which programs aren't prepared to handle.
-//     For example, mkfs.ext4 tries to read blocks before writing to them, and
-//     there is no way around it. When it gets an I/O error, it just exits.
-//
-//     The solution is to create a file with the same size as the resulting
-//     device, format it as ext4, then use dd to copy the format to the device
-//     (dd won't try to read anything).
-//
-//     However, creating a file that is several GB in size isn't a good solution
-//     either because doing dd of the whole file would take as long as letting
-//     luksFormat wipe the disk.
-//
-//     The solution is to create a sparse file and format it. Then, it is
-//     possible to copy the format to the block device by doing a sparse copy
-//     (only copy the data parts of the file, not the holes). This makes
-//     formatting the device almost instantaneous.
-//
-//     4.1. Get size of scratch disk.
-//
-//     4.2. Create sparse filesystem image with the same size as the scratch
-//     device. It can be removed afterwards.
-//
-//     4.3. Format it as ext4. This way the file is only as big as the few blocks
-//     of the image that have the filesystem information, the ones modified
-//     by mkfs.ext4.
-//
-//     4.4. Do a sparse copy of the filesystem into the unencrypted block device.
-//     This updates the integrity tags.
-//
-// Alternative plan using xfs.
-//
-//	 5. Format the unencrypted block device as xfs.
-//		5.1. Zero the first block. It appears that mkfs.xfs reads this before fromatting.
-//		5.2. Format the device as xfs.
+//  4. Format the unencrypted block device as xfs.
+//  4.1. Zero the first block. It appears that mkfs.xfs reads this before formatting.
+//  4.2. Format the device as xfs.
 
 func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path string, err error) {
 	// Create temporary directory to store the keyfile and EXT4 image
-
 	tempDir, err := _osMkdirTemp("", "dm-crypt")
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to create temporary folder: %s", source)
@@ -194,7 +142,6 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 
 	// 1. Generate keyfile
 	keyFilePath := filepath.Join(tempDir, "keyfile")
-
 	if err = _generateKeyFile(keyFilePath, 1024); err != nil {
 		return "", fmt.Errorf("failed to generate keyfile %q: %w", keyFilePath, err)
 	}
@@ -219,9 +166,8 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 
 	deviceNamePath := "/dev/mapper/" + dmCryptName
 
-	// 4.1. Get actual size of the scratch device
+	// Get actual size of the scratch device
 	deviceSize, err := _getBlockDeviceSize(ctx, deviceNamePath)
-
 	if err != nil {
 		return "", fmt.Errorf("error getting size of: %s: %w", deviceNamePath, err)
 	}
@@ -230,12 +176,12 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 		return "", fmt.Errorf("invalid size obtained for: %s", deviceNamePath)
 	}
 
-	// 5.1. Zero the first block. It appears that mkfs.xfs reads this before formatting.
+	// 4.1. Zero the first block. It appears that mkfs.xfs reads this before formatting.
 	if err = _zeroDevice(deviceNamePath, 4096, 1); err != nil {
 		return "", fmt.Errorf("failed zero'ing start of device %s: %w", deviceNamePath, err)
 	}
 
-	// 5.2. Format it as xfs
+	// 4.2. Format it as xfs
 	if err = _mkfsXfs(deviceNamePath); err != nil {
 		return "", fmt.Errorf("mkfs.xfs failed to format %s: %w", deviceNamePath, err)
 	}
