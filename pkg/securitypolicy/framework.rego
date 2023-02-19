@@ -249,6 +249,9 @@ create_container := {"metadata": [updateMatches, addStarted],
     # mount list
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
+        # NB any change to these narrowing conditions should be reflected in
+        # the error handling, such that error messaging correctly reflects
+        # the narrowing process.
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
@@ -367,6 +370,9 @@ exec_in_container := {"metadata": [updateMatches],
     # narrow our matches based upon the process requested
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
+        # NB any change to these narrowing conditions should be reflected in
+        # the error handling, such that error messaging correctly reflects
+        # the narrowing process.
         workingDirectory_ok(container.working_dir)
         some process in container.exec_processes
         command_ok(process.command)
@@ -529,15 +535,17 @@ default exec_external := {"allowed": false}
 exec_external := {"allowed": true,
                   "allow_stdio_access": allow_stdio_access,
                   "env_list": env_list} {
-    print(count(candidate_external_processes))
-
     possible_processes := [process |
         process := candidate_external_processes[_]
+        # NB any change to these narrowing conditions should be reflected in
+        # the error handling, such that error messaging correctly reflects
+        # the narrowing process.
         workingDirectory_ok(process.working_dir)
         command_ok(process.command)
     ]
 
-    print(count(possible_processes))
+    count(possible_processes) > 0
+
     # check to see if the environment variables match, dropping
     # them if allowed (and necessary)
     env_list := valid_envs_for_all(possible_processes)
@@ -592,7 +600,6 @@ apply_defaults(name, raw_values, framework_svn) := values {
 apply_defaults(name, raw_values, framework_svn) := values {
     semver.compare(framework_svn, svn) < 0
     template := load_defaults(name, framework_svn)
-    print(template)
     values := [updated |
         raw := raw_values[_]
         flat := object.union(template, raw)
@@ -894,6 +901,97 @@ errors[envError] {
 
     count(bad_envs) > 0
     envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])
+}
+
+env_rule_matches(rule) {
+    some env in input.envList
+    env_ok(rule.pattern, rule.strategy, env)
+}
+
+errors["missing required environment variable"] {
+    input.rule == "create_container"
+
+    not container_started
+    possible_containers := [container |
+        container := data.metadata.matches[input.containerID][_]
+        privileged_ok(container.allow_elevated)
+        workingDirectory_ok(container.working_dir)
+        command_ok(container.command)
+        mountList_ok(container.mounts, container.allow_elevated)
+    ]
+
+    count(possible_containers) > 0
+
+    containers := [container |
+        container := possible_containers[_]
+        missing_rules := {invalid |
+            invalid := {rule |
+                rule := container.env_rules[_]
+                rule.required
+                not env_rule_matches(rule)
+            }
+            count(invalid) > 0
+        }
+        count(missing_rules) > 0
+    ]
+
+    count(containers) > 0
+}
+
+errors["missing required environment variable"] {
+    input.rule == "exec_in_container"
+
+    container_started
+    possible_containers := [container |
+        container := data.metadata.matches[input.containerID][_]
+        workingDirectory_ok(container.working_dir)
+        some process in container.exec_processes
+        command_ok(process.command)
+    ]
+
+    count(possible_containers) > 0
+
+    containers := [container |
+        container := possible_containers[_]
+        missing_rules := {invalid |
+            invalid := {rule |
+                rule := container.env_rules[_]
+                rule.required
+                not env_rule_matches(rule)
+            }
+            count(invalid) > 0
+        }
+        count(missing_rules) > 0
+    ]
+
+    count(containers) > 0
+}
+
+errors["missing required environment variable"] {
+    input.rule == "exec_external"
+
+    possible_processes := [process |
+        process := candidate_external_processes[_]
+        workingDirectory_ok(process.working_dir)
+        command_ok(process.command)
+    ]
+
+    count(possible_processes) > 0
+
+    processes := [process |
+        process := possible_processes[_]
+        missing_rules := {invalid |
+            invalid := {rule |
+                rule := process.env_rules[_]
+                rule.required
+                not env_rule_matches(rule)
+            }
+            count(invalid) > 0
+        }
+        count(missing_rules) > 0
+    ]
+
+    count(processes) > 0
 }
 
 default workingDirectory_matches := false
