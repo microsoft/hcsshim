@@ -4028,7 +4028,7 @@ func Test_Rego_ExecExternalProcessPolicy_ConflictingAllowStdioAccessHasErrorMess
 
 func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
-	container := selectContainerFromConstraints(constraints, testRand)
+	container := selectContainerFromContainerList(constraints.containers, testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
@@ -4063,7 +4063,7 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 
 func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
-	container := selectContainerFromConstraints(constraints, testRand)
+	container := selectContainerFromContainerList(constraints.containers, testRand)
 	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
