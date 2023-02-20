@@ -693,7 +693,7 @@ func Test_Rego_EnforceCommandPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, generateCommand(testRand), tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, generateCommand(testRand), tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		if err == nil {
 			return false
@@ -725,7 +725,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 		}
 
 		envList := append(tc.envList, "PREFIX_FOO=BAR")
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -750,7 +750,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 		}
 
 		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -785,7 +785,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs(t *testing.T) {
 		extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 		envList := append(tc.envList, extraEnvs...)
-		actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -816,7 +816,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs_Multiple(t *testing.T) 
 	extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 	envList := append(tc.envList, extraEnvs...)
-	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 	// getting an error means something is broken
 	if err != nil {
@@ -838,7 +838,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs_Multiple_NoMatch(t *tes
 	extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 	envList := append(tc.envList, extraEnvs...)
-	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+	actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -858,7 +858,7 @@ func Test_Rego_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 		// not getting an error means something is broken
 		if err == nil {
 			return false
@@ -880,7 +880,7 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// getting an error means something is broken
 		return err == nil
@@ -913,6 +913,8 @@ func Test_Rego_EnforceCreateContainer_Start_All_Containers(t *testing.T) {
 			}
 
 			envList := buildEnvironmentVariablesFromEnvRules(container.EnvRules, testRand)
+			user := buildIDNameFromConfig(container.User.UserIDName, testRand)
+			groups := buildGroupIDNamesFromUser(container.User, testRand)
 
 			sandboxID := testDataGenerator.uniqueSandboxID()
 			mounts := container.Mounts
@@ -922,7 +924,7 @@ func Test_Rego_EnforceCreateContainer_Start_All_Containers(t *testing.T) {
 			}
 			mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
 
-			_, _, err = policy.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false, container.NoNewPrivileges)
+			_, _, err = policy.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false, container.NoNewPrivileges, user, groups, container.User.Umask)
 
 			// getting an error means something is broken
 			if err != nil {
@@ -949,7 +951,7 @@ func Test_Rego_EnforceCreateContainer_Invalid_ContainerID(t *testing.T) {
 		}
 
 		containerID := testDataGenerator.uniqueContainerID()
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		return err != nil
@@ -968,12 +970,12 @@ func Test_Rego_EnforceCreateContainer_Same_Container_Twice(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 		if err != nil {
 			t.Error("Unable to start valid container.")
 			return false
 		}
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 		if err == nil {
 			t.Error("Able to start a container with already used id.")
 			return false
@@ -1001,7 +1003,7 @@ func Test_Rego_ExtendDefaultMounts(t *testing.T) {
 		additionalMounts := buildMountSpecFromMountArray(defaultMounts, tc.sandboxID, testRand)
 		tc.mounts = append(tc.mounts, additionalMounts.Mounts...)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		if err != nil {
 			t.Error(err)
@@ -1028,7 +1030,7 @@ func Test_Rego_MountPolicy_NoMatches(t *testing.T) {
 		additionalMounts := buildMountSpecFromMountArray(invalidMounts, tc.sandboxID, testRand)
 		tc.mounts = append(tc.mounts, additionalMounts.Mounts...)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1057,7 +1059,7 @@ func Test_Rego_MountPolicy_NotAllOptionsFromConstraints(t *testing.T) {
 		options := inputMounts[mindex].Options
 		inputMounts[mindex].Options = options[:len(options)-1]
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1083,7 +1085,7 @@ func Test_Rego_MountPolicy_BadSource(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Source = randString(testRand, maxGeneratedMountSourceLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1109,7 +1111,7 @@ func Test_Rego_MountPolicy_BadDestination(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Destination = randString(testRand, maxGeneratedMountDestinationLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1135,7 +1137,7 @@ func Test_Rego_MountPolicy_BadType(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Type = randString(testRand, 4)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1163,7 +1165,7 @@ func Test_Rego_MountPolicy_BadOption(t *testing.T) {
 		oindex := randMinMax(testRand, 0, int32(len(mountToChange.Options)-1))
 		tc.mounts[mindex].Options[oindex] = randString(testRand, maxGeneratedMountOptionLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1192,7 +1194,7 @@ func Test_Rego_MountPolicy_MountPrivilegedWhenNotAllowed(t *testing.T) {
 		oindex := randMinMax(testRand, 0, int32(len(mountToChange.Options)-1))
 		tc.mounts[mindex].Options[oindex] = randString(testRand, maxGeneratedMountOptionLength)
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1392,8 +1394,11 @@ func Test_Rego_ExecInContainerPolicy(t *testing.T) {
 		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
 		process := selectExecProcess(container.container.ExecProcesses, testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -1421,8 +1426,11 @@ func Test_Rego_ExecInContainerPolicy_No_Matches(t *testing.T) {
 
 		process := generateContainerExecProcess(testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
 		if err == nil {
 			t.Error("Test unexpectedly passed")
 			return false
@@ -1446,9 +1454,12 @@ func Test_Rego_ExecInContainerPolicy_Command_No_Match(t *testing.T) {
 
 		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
 
 		command := generateCommand(testRand)
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, command, envList, container.container.WorkingDir, randBool(testRand))
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1474,10 +1485,12 @@ func Test_Rego_ExecInContainerPolicy_Some_Env_Not_Allowed(t *testing.T) {
 
 		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
 		process := selectExecProcess(container.container.ExecProcesses, testRand)
-
 		envList := generateEnvironmentVariables(testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1505,8 +1518,11 @@ func Test_Rego_ExecInContainerPolicy_WorkingDir_No_Match(t *testing.T) {
 		process := selectExecProcess(container.container.ExecProcesses, testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
 		workingDir := generateWorkingDir(testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, workingDir, container.container.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, workingDir, container.container.NoNewPrivileges, user, groups, umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1539,7 +1555,11 @@ func Test_Rego_ExecInContainerPolicy_DropEnvs(t *testing.T) {
 		extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 		envList := append(expected, extraEnvs...)
-		actual, _, err := tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
+
+		actual, _, err := tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
 
 		if err != nil {
 			t.Errorf("expected exec in container process to be allowed. It wasn't: %v", err)
@@ -1599,15 +1619,16 @@ exec_external := {
 			return false
 		}
 
+		user := generateIDName(testRand)
 		envList := generateEnvs(envSet)
-		toKeep, _, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{}, false, true)
+		toKeep, _, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{}, false, true, user, nil, "")
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from create_container")
 			return false
 		}
 
 		envList = generateEnvs(envSet)
-		toKeep, _, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "", true)
+		toKeep, _, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "", true, user, nil, "")
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from exec_in_container")
 			return false
@@ -1651,14 +1672,15 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
-	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false, true)
+	user := generateIDName(testRand)
+	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false, true, user, nil, "")
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received map[string]interface {}" {
 		t.Errorf("incorrected error message from call to create_container: %v", err)
 	}
 
-	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "", true)
+	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "", true, user, nil, "")
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received string" {
@@ -1696,14 +1718,15 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
-	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false, true)
+	user := generateIDName(testRand)
+	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false, true, user, nil, "")
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received json.Number" {
 		t.Errorf("incorrected error message from call to create_container: %v", err)
 	}
 
-	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "", true)
+	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "", true, user, nil, "")
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received bool" {
@@ -1743,7 +1766,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 			}
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1902,6 +1925,7 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs(t *testing.T) {
 		extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 		envList := append(expected, extraEnvs...)
+
 		actual, _, err := tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
 
 		if err != nil {
@@ -2190,8 +2214,11 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Allowed(t *testing.T) {
 		}
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+		user := buildIDNameFromConfig(containerUnderTest.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(containerUnderTest.User, testRand)
+		umask := containerUnderTest.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -2241,8 +2268,11 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Not_Allowed(t *testing.T
 		}
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+		user := buildIDNameFromConfig(containerUnderTest.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(containerUnderTest.User, testRand)
+		umask := containerUnderTest.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -2292,8 +2322,11 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_Command(t *testing.T
 		}
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+		user := buildIDNameFromConfig(containerUnderTest.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(containerUnderTest.User, testRand)
+		umask := containerUnderTest.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -2344,8 +2377,11 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID(t *testi
 		}
 
 		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+		user := buildIDNameFromConfig(containerUnderTest.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(containerUnderTest.User, testRand)
+		umask := containerUnderTest.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -2390,6 +2426,9 @@ func Test_Rego_Plan9MountPolicy(t *testing.T) {
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err != nil {
@@ -2427,6 +2466,9 @@ func Test_Rego_Plan9MountPolicy_No_Matches(t *testing.T) {
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err == nil {
@@ -2476,6 +2518,9 @@ func Test_Rego_Plan9UnmountPolicy(t *testing.T) {
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err == nil {
@@ -2654,6 +2699,9 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 			copyMounts(container.mounts),
 			false,
 			container.container.NoNewPrivileges,
+			container.user,
+			container.groups,
+			container.container.User.Umask,
 		)
 
 		if err != nil {
@@ -2887,6 +2935,9 @@ func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 				copyMounts(container.mounts),
 				false,
 				container.container.NoNewPrivileges,
+				container.user,
+				container.groups,
+				container.container.User.Umask,
 			)
 
 			if err != nil {
@@ -2935,6 +2986,9 @@ func Test_Rego_LoadFragment_TwoFeeds(t *testing.T) {
 				copyMounts(container.mounts),
 				false,
 				container.container.NoNewPrivileges,
+				container.user,
+				container.groups,
+				container.container.User.Umask,
 			)
 
 			if err != nil {
@@ -2987,6 +3041,9 @@ func Test_Rego_LoadFragment_SameFeedTwice(t *testing.T) {
 				copyMounts(container.mounts),
 				false,
 				container.container.NoNewPrivileges,
+				container.user,
+				container.groups,
+				container.container.User.Umask,
 			)
 
 			if err != nil {
@@ -3083,6 +3140,7 @@ func Test_Rego_LoadFragment_ExcludedExternalProcess(t *testing.T) {
 		}
 
 		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
+
 		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
 		if err == nil {
 			t.Error("expected to be unable to execute external process from a fragment")
@@ -3274,6 +3332,9 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err != nil {
@@ -3291,6 +3352,9 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 		tc.envList,
 		tc.workingDir,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err != nil {
@@ -3334,6 +3398,9 @@ func Test_Rego_EnforeCreateContainerPolicy_StdioAccess_NotAllowed(t *testing.T) 
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err != nil {
@@ -3377,6 +3444,9 @@ func Test_Rego_Container_StdioAccess_NotDecidable(t *testing.T) {
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err == nil {
@@ -3432,6 +3502,9 @@ func Test_Rego_EnforceCreateContainerPolicy_AllowElevatedAllowsPrivilegedContain
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err != nil {
@@ -3456,6 +3529,9 @@ func Test_Rego_EnforceCreateContainerPolicy_AllowElevatedAllowsUnprivilegedConta
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err != nil {
@@ -3480,6 +3556,9 @@ func Test_Rego_EnforceCreateContainerPolicy_NoAllowElevatedDenysPrivilegedContai
 		tc.mounts,
 		true,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err == nil {
@@ -3504,6 +3583,9 @@ func Test_Rego_EnforceCreateContainerPolicy_NoAllowElevatedAllowsUnprivilegedCon
 		tc.mounts,
 		false,
 		tc.noNewPrivileges,
+		tc.user,
+		tc.groups,
+		tc.umask,
 	)
 
 	if err != nil {
@@ -3885,6 +3967,9 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 	workingDir := generateWorkingDir(testRand)
 	privileged := randBool(testRand)
 	noNewPrivileges := randBool(testRand)
+	user := generateIDName(testRand)
+	groups := []IDName{}
+	umask := generateUmask(testRand)
 
 	actualEnvs, _, err := policy.EnforceCreateContainerPolicy(
 		sandboxID,
@@ -3895,6 +3980,9 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 		[]oci.Mount{},
 		privileged,
 		noNewPrivileges,
+		user,
+		groups,
+		umask,
 	)
 
 	if err != nil {
@@ -3905,7 +3993,7 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 		t.Error("invalid envList returned from EnforceCreateContainerPolicy")
 	}
 
-	actualEnvs, _, err = policy.EnforceExecInContainerPolicy(containerID, command, expectedEnvs, workingDir, noNewPrivileges)
+	actualEnvs, _, err = policy.EnforceExecInContainerPolicy(containerID, command, expectedEnvs, workingDir, noNewPrivileges, user, groups, umask)
 
 	if err != nil {
 		t.Errorf("unexpected error when calling EnforceExecInContainerPolicy: %v", err)
@@ -3942,7 +4030,7 @@ func Test_Rego_EnvListGetsRedacted(t *testing.T) {
 	envVar := "FOO=BAR"
 	envList = append(envList, envVar)
 
-	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, "bunk", tc.mounts, false, tc.noNewPrivileges)
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, "bunk", tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -3962,7 +4050,7 @@ func Test_Rego_EnforceCreateContainer_ConflictingAllowStdioAccessHasErrorMessage
 	constraints := generateConstraints(testRand, 1)
 	constraints.containers[0].AllowStdioAccess = true
 
-	// create a "duplicate" as far as create container is concerned excep for
+	// create a "duplicate" as far as create container is concerned except for
 	// a different "AllowStdioAccess" value
 	duplicate := &securityPolicyContainer{
 		Command:          constraints.containers[0].Command,
@@ -3975,6 +4063,7 @@ func Test_Rego_EnforceCreateContainer_ConflictingAllowStdioAccessHasErrorMessage
 		AllowElevated:    constraints.containers[0].AllowElevated,
 		AllowStdioAccess: false,
 		NoNewPrivileges:  constraints.containers[0].NoNewPrivileges,
+		User:             constraints.containers[0].User,
 	}
 
 	constraints.containers = append(constraints.containers, duplicate)
@@ -3984,7 +4073,7 @@ func Test_Rego_EnforceCreateContainer_ConflictingAllowStdioAccessHasErrorMessage
 		t.Fatal(err)
 	}
 
-	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -4051,7 +4140,7 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 		}
 	}
 
-	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges)
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -4091,8 +4180,11 @@ func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testin
 			envList = append(envList, env)
 		}
 	}
+	user := buildIDNameFromConfig(running.container.User.UserIDName, testRand)
+	groups := buildGroupIDNamesFromUser(running.container.User, testRand)
+	umask := running.container.User.Umask
 
-	_, _, err = tc.policy.EnforceExecInContainerPolicy(running.containerID, process.Command, envList, running.container.WorkingDir, running.container.NoNewPrivileges)
+	_, _, err = tc.policy.EnforceExecInContainerPolicy(running.containerID, process.Command, envList, running.container.WorkingDir, running.container.NoNewPrivileges, user, groups, umask)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -4156,7 +4248,7 @@ func Test_Rego_EnforceContainerNoNewPrivilegesPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, !tc.noNewPrivileges)
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, !tc.noNewPrivileges, tc.user, tc.groups, tc.umask)
 
 		if err == nil {
 			return false
@@ -4165,7 +4257,7 @@ func Test_Rego_EnforceContainerNoNewPrivilegesPolicy_NoMatches(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid noNewPrivileges")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceContainerNoNewPrivilegesPolicy_NoMatches: %v", err)
 	}
 }
@@ -4181,8 +4273,11 @@ func Test_Rego_EnforceExecInContainerNoNewPrivilegesPolicy_NoMatches(t *testing.
 		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
 		process := selectExecProcess(container.container.ExecProcesses, testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
 
-		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, !container.container.NoNewPrivileges)
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, !container.container.NoNewPrivileges, user, groups, umask)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -4194,6 +4289,255 @@ func Test_Rego_EnforceExecInContainerNoNewPrivilegesPolicy_NoMatches(t *testing.
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceExecInContainerNoNewPrivilegesPolicy_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceContainerUserPolicy_UserName_NoMatches(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoCreateContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		user := generateIDName(testRand)
+
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask)
+
+		if err == nil {
+			return false
+		}
+
+		return strings.Contains(err.Error(), "invalid user")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceContainerUserPolicy_UserName_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceContainerUserPolicy_GroupNames_NoMatches(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoCreateContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		groups := append(tc.groups, generateIDName(testRand))
+
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask)
+
+		if err == nil {
+			return false
+		}
+
+		return strings.Contains(err.Error(), "invalid user")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceContainerUserPolicy_GroupNames_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceContainerUserPolicy_Umask_NoMatches(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoCreateContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		umask := generateUmask(testRand)
+
+		_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, umask)
+
+		if err == nil {
+			return false
+		}
+
+		return strings.Contains(err.Error(), "invalid user")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceContainerUserPolicy_Umask_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceExecInContainerUserPolicy_Username_NoMatches(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
+		process := selectExecProcess(container.container.ExecProcesses, testRand)
+		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
+
+		user := generateIDName(testRand)
+
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
+
+		// not getting an error means something is broken
+		if err == nil {
+			return false
+		}
+
+		return strings.Contains(err.Error(), "invalid user")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceExecInContainerUserPolicy_Username_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceExecInContainerUserPolicy_GroupNames_NoMatches(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
+		process := selectExecProcess(container.container.ExecProcesses, testRand)
+		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+		umask := container.container.User.Umask
+
+		groups = append(groups, generateIDName(testRand))
+
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
+
+		// not getting an error means something is broken
+		if err == nil {
+			return false
+		}
+
+		return strings.Contains(err.Error(), "invalid user")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceExecInContainerUserPolicy_GroupNames_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceExecInContainerUserPolicy_Umask_NoMatches(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
+		process := selectExecProcess(container.container.ExecProcesses, testRand)
+		envList := buildEnvironmentVariablesFromEnvRules(container.container.EnvRules, testRand)
+		user := buildIDNameFromConfig(container.container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
+
+		umask := generateUmask(testRand)
+
+		_, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask)
+
+		// not getting an error means something is broken
+		if err == nil {
+			return false
+		}
+
+		return strings.Contains(err.Error(), "invalid user")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceExecInContainerUserPolicy_Umask_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainerUserPolicy_UserIDName_Re2Match(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].User.UserIDName = IDNameConfig{
+		Strategy: IDNameStrategyRegex,
+		Rule:     "foo\\d+",
+	}
+
+	tc, err := setupSimpleRegoCreateContainerTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	user := IDName{
+		ID:   "1000",
+		Name: "foo123",
+	}
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask)
+	if err != nil {
+		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainerUserPolicy_UserIDName_AnyMatch(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].User.UserIDName = IDNameConfig{
+		Strategy: IDNameStrategyAny,
+		Rule:     "",
+	}
+
+	tc, err := setupSimpleRegoCreateContainerTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	user := generateIDName(testRand)
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask)
+	if err != nil {
+		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainerUserPolicy_GroupIDName_Re2Match(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].User.GroupIDNames = append(gc.containers[0].User.GroupIDNames, IDNameConfig{
+		Strategy: IDNameStrategyRegex,
+		Rule:     "foo\\d+",
+	})
+
+	tc, err := setupSimpleRegoCreateContainerTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	groups := append(tc.groups, IDName{ID: "1000", Name: "foo123"})
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask)
+	if err != nil {
+		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainerUserPolicy_GroupIDName_AnyMatch(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].User.GroupIDNames = append(gc.containers[0].User.GroupIDNames, IDNameConfig{
+		Strategy: IDNameStrategyAny,
+		Rule:     "",
+	})
+
+	tc, err := setupSimpleRegoCreateContainerTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	groups := append(tc.groups, generateIDName(testRand))
+
+	_, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask)
+	if err != nil {
+		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
 	}
 }
 
@@ -4390,6 +4734,9 @@ type regoContainerTestConfig struct {
 	sandboxID       string
 	mounts          []oci.Mount
 	noNewPrivileges bool
+	user            IDName
+	groups          []IDName
+	umask           string
 	policy          *regoEnforcer
 }
 
@@ -4434,6 +4781,13 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 	}
 	mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
 
+	user := IDName{}
+	if testContainer.User.UserIDName.Strategy != IDNameStrategyRegex {
+		user = buildIDNameFromConfig(testContainer.User.UserIDName, testRand)
+	}
+	groups := buildGroupIDNamesFromUser(testContainer.User, testRand)
+	umask := testContainer.User.Umask
+
 	// see NOTE_TESTCOPY
 	return &regoContainerTestConfig{
 		envList:         copyStrings(envList),
@@ -4443,6 +4797,9 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 		sandboxID:       sandboxID,
 		mounts:          copyMounts(mountSpec.Mounts),
 		noNewPrivileges: testContainer.NoNewPrivileges,
+		user:            user,
+		groups:          groups,
+		umask:           umask,
 		policy:          policy,
 	}, nil
 }
@@ -4486,6 +4843,9 @@ func runContainer(enforcer *regoEnforcer, container *securityPolicyContainer, de
 	}
 
 	envList := buildEnvironmentVariablesFromEnvRules(container.EnvRules, testRand)
+	user := buildIDNameFromConfig(container.User.UserIDName, testRand)
+	groups := buildGroupIDNamesFromUser(container.User, testRand)
+	umask := container.User.Umask
 	sandboxID := generateSandboxID(testRand)
 
 	mounts := container.Mounts
@@ -4495,7 +4855,7 @@ func runContainer(enforcer *regoEnforcer, container *securityPolicyContainer, de
 	}
 	mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
 
-	_, _, err = enforcer.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false, container.NoNewPrivileges)
+	_, _, err = enforcer.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false, container.NoNewPrivileges, user, groups, umask)
 	if err != nil {
 		return nil, err
 	}
@@ -4584,6 +4944,10 @@ func setupPlan9MountTest(gc *generatedConstraints) (tc *regoPlan9MountTestConfig
 		Type:        testMount.Type,
 	})
 
+	user := buildIDNameFromConfig(testContainer.User.UserIDName, testRand)
+	groups := buildGroupIDNamesFromUser(testContainer.User, testRand)
+	umask := testContainer.User.Umask
+
 	// see NOTE_TESTCOPY
 	return &regoPlan9MountTestConfig{
 		envList:         copyStrings(envList),
@@ -4593,6 +4957,9 @@ func setupPlan9MountTest(gc *generatedConstraints) (tc *regoPlan9MountTestConfig
 		sandboxID:       sandboxID,
 		mounts:          copyMounts(mountSpec.Mounts),
 		noNewPrivileges: testContainer.NoNewPrivileges,
+		user:            user,
+		groups:          groups,
+		umask:           umask,
 		uvmPathForShare: uvmPathForShare,
 		policy:          policy,
 	}, nil
@@ -4605,8 +4972,11 @@ type regoPlan9MountTestConfig struct {
 	containerID     string
 	sandboxID       string
 	mounts          []oci.Mount
-	noNewPrivileges bool
 	uvmPathForShare string
+	noNewPrivileges bool
+	user            IDName
+	groups          []IDName
+	umask           string
 	policy          *regoEnforcer
 }
 
@@ -4705,6 +5075,8 @@ type regoFragmentContainer struct {
 	envList   []string
 	sandboxID string
 	mounts    []oci.Mount
+	user      IDName
+	groups    []IDName
 }
 
 func setupSimpleRegoFragmentTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
@@ -4750,6 +5122,8 @@ func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, inc
 
 		envList := buildEnvironmentVariablesFromEnvRules(container.EnvRules, testRand)
 		sandboxID := testDataGenerator.uniqueSandboxID()
+		user := buildIDNameFromConfig(container.User.UserIDName, testRand)
+		groups := buildGroupIDNamesFromUser(container.User, testRand)
 
 		mounts := container.Mounts
 		mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
@@ -4758,6 +5132,8 @@ func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, inc
 			envList:   envList,
 			sandboxID: sandboxID,
 			mounts:    mountSpec.Mounts,
+			user:      user,
+			groups:    groups,
 		}
 
 		for _, include := range fragment.info.includes {
@@ -4918,6 +5294,10 @@ func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
 		envList = append(envList, envs[2]...)
 	}
 
+	user := buildIDNameFromConfig(containers[2].User.UserIDName, testRand)
+	groups := buildGroupIDNamesFromUser(containers[2].User, testRand)
+	umask := containers[2].User.Umask
+
 	sandboxID := testDataGenerator.uniqueSandboxID()
 
 	mounts := containers[2].Mounts
@@ -4936,6 +5316,9 @@ func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
 		sandboxID:       sandboxID,
 		mounts:          copyMounts(mountSpec.Mounts),
 		noNewPrivileges: containers[2].NoNewPrivileges,
+		user:            user,
+		groups:          groups,
+		umask:           umask,
 		policy:          policy,
 	}, nil
 }
@@ -5236,6 +5619,10 @@ func generateFragment(r *rand.Rand) *fragment {
 	}
 }
 
+func generateLinuxID(r *rand.Rand) uint32 {
+	return r.Uint32()
+}
+
 func addStringsToArray(values []string, valuesToAdd []string) []string {
 	toAdd := []string{}
 	for _, valueToAdd := range valuesToAdd {
@@ -5340,6 +5727,7 @@ func (c *securityPolicyContainer) toContainer() *Container {
 		Signals:          c.Signals,
 		AllowStdioAccess: c.AllowStdioAccess,
 		NoNewPrivileges:  c.NoNewPrivileges,
+		User:             c.User,
 	}
 }
 
@@ -5481,4 +5869,86 @@ func verifyAllObjectsContainKeyValue(objects []interface{}, key string, expected
 	}
 
 	return nil
+}
+
+func buildIDNameFromConfig(config IDNameConfig, r *rand.Rand) IDName {
+	switch config.Strategy {
+	case IDNameStrategyName:
+		return IDName{
+			ID:   generateIDNameID(r),
+			Name: config.Rule,
+		}
+
+	case IDNameStrategyID:
+		return IDName{
+			ID:   config.Rule,
+			Name: generateIDNameName(r),
+		}
+
+	case IDNameStrategyAny:
+		return generateIDName(r)
+
+	default:
+		panic(fmt.Sprintf("unsupported ID Name strategy: %v", config.Strategy))
+	}
+}
+
+func buildGroupIDNamesFromUser(user UserConfig, r *rand.Rand) []IDName {
+	groupIDNames := make([]IDName, 0)
+
+	// Select some number of the valid, matching rules to be groups
+	numberOfGroups := int32(len(user.GroupIDNames))
+	numberOfMatches := randMinMax(r, 1, numberOfGroups)
+	usedIndexes := map[int]struct{}{}
+	for numberOfMatches > 0 {
+		anIndex := -1
+		if (numberOfMatches * 2) > numberOfGroups {
+			// if we have a lot of matches, randomly select
+			exists := true
+
+			for exists {
+				anIndex = int(randMinMax(r, 0, numberOfGroups-1))
+				_, exists = usedIndexes[anIndex]
+			}
+		} else {
+			// we have a "smaller set of rules. we'll just iterate and select from
+			// available
+			exists := true
+
+			for exists {
+				anIndex++
+				_, exists = usedIndexes[anIndex]
+			}
+		}
+
+		if user.GroupIDNames[anIndex].Strategy == IDNameStrategyRegex {
+			// we don't match from regex groups or any groups
+			numberOfMatches--
+			continue
+		}
+
+		groupIDName := buildIDNameFromConfig(user.GroupIDNames[anIndex], r)
+		groupIDNames = append(groupIDNames, groupIDName)
+		usedIndexes[anIndex] = struct{}{}
+
+		numberOfMatches--
+	}
+
+	return groupIDNames
+}
+
+func generateIDNameName(r *rand.Rand) string {
+	return randVariableString(r, maxGeneratedNameLength)
+}
+
+func generateIDNameID(r *rand.Rand) string {
+	id := r.Uint32()
+	return strconv.FormatUint(uint64(id), 10)
+}
+
+func generateIDName(r *rand.Rand) IDName {
+	return IDName{
+		ID:   generateIDNameID(r),
+		Name: generateIDNameName(r),
+	}
 }

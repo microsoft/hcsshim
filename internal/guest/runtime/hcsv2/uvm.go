@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -43,6 +44,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
+	"github.com/opencontainers/runc/libcontainer/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -292,6 +294,66 @@ func setupSandboxHugePageMountsPath(id string) error {
 	return storage.MountRShared(mountPath)
 }
 
+func getUserNameForID(spec *specs.Spec, uid uint32) (string, error) {
+	users, err := user.ParsePasswdFileFilter(filepath.Join(spec.Root.Path, "/etc/passwd"), func(user user.User) bool {
+		return uint32(user.Uid) == uid
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(users) != 1 {
+		return "", errors.Errorf("expected exactly 1 user matched '%d'", len(users))
+	}
+	return users[0].Name, nil
+}
+
+func getGroupNameForID(spec *specs.Spec, gid uint32) (string, error) {
+	groups, err := user.ParseGroupFileFilter(filepath.Join(spec.Root.Path, "/etc/group"), func(group user.Group) bool {
+		return uint32(group.Gid) == gid
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(groups) != 1 {
+		return "", errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
+	}
+	return groups[0].Name, nil
+}
+
+func getUserInfo(spec *specs.Spec) (securitypolicy.IDName, []securitypolicy.IDName, string, error) {
+	userName, err := getUserNameForID(spec, spec.Process.User.UID)
+	if err != nil {
+		return securitypolicy.IDName{}, nil, "", err
+	}
+
+	user := securitypolicy.IDName{ID: strconv.FormatUint(uint64(spec.Process.User.UID), 10), Name: userName}
+
+	groupName, err := getGroupNameForID(spec, spec.Process.User.GID)
+	if err != nil {
+		return securitypolicy.IDName{}, nil, "", err
+	}
+	groups := []securitypolicy.IDName{{ID: strconv.FormatUint(uint64(spec.Process.User.GID), 10), Name: groupName}}
+	additionalGIDs := spec.Process.User.AdditionalGids
+	if len(additionalGIDs) > 0 {
+		for _, gid := range additionalGIDs {
+			groupName, err = getGroupNameForID(spec, gid)
+			if err != nil {
+				return securitypolicy.IDName{}, nil, "", err
+			}
+			groups = append(groups, securitypolicy.IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: groupName})
+		}
+	}
+
+	// this default value is used in the Linux kernel if no umask is specified
+	umask := "0022"
+	if spec.Process.User.Umask != nil {
+		umask = fmt.Sprintf("%04o", *spec.Process.User.Umask)
+	}
+
+	return user, groups, umask, nil
+}
+
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 	c := &Container{
@@ -384,6 +446,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
+	user, groups, umask, err := getUserInfo(settings.OCISpecification)
+	if err != nil {
+		return nil, err
+	}
+
 	envToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
 		sandboxID,
 		id,
@@ -393,6 +460,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Mounts,
 		isPrivilegedContainerCreationRequest(ctx, settings.OCISpecification),
 		settings.OCISpecification.Process.NoNewPrivileges,
+		user,
+		groups,
+		umask,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
@@ -648,6 +718,12 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	var envToKeep securitypolicy.EnvList
+
+	userName, groupNames, umask, err := getUserInfo(params.OCISpecification)
+	if err != nil {
+		return 0, err
+	}
+
 	if params.IsExternal || containerID == UVMContainerID {
 		var allowStdioAccess bool
 		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
@@ -689,7 +765,11 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 				params.OCIProcess.Args,
 				params.OCIProcess.Env,
 				params.OCIProcess.Cwd,
-				params.OCIProcess.NoNewPrivileges)
+				params.OCIProcess.NoNewPrivileges,
+				userName,
+				groupNames,
+				umask,
+			)
 			if err != nil {
 				return pid, errors.Wrapf(err, "exec in container denied due to policy")
 			}

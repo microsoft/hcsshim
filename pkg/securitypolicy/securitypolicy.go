@@ -37,6 +37,15 @@ const (
 	EnvVarRuleRegex  EnvVarRule = "re2"
 )
 
+type IDNameStrategy string
+
+const (
+	IDNameStrategyName  IDNameStrategy = "name"
+	IDNameStrategyID    IDNameStrategy = "id"
+	IDNameStrategyRegex IDNameStrategy = "re2"
+	IDNameStrategyAny   IDNameStrategy = "any"
+)
+
 const plan9Prefix = "plan9://"
 
 // PolicyConfig contains toml or JSON config for security policy.
@@ -93,6 +102,22 @@ type EnvRuleConfig struct {
 	Required bool       `json:"required" toml:"required"`
 }
 
+type IDNameConfig struct {
+	Strategy IDNameStrategy `json:"strategy" toml:"strategy"`
+	Rule     string         `json:"rule" toml:"rule"`
+}
+
+type UserConfig struct {
+	UserIDName   IDNameConfig   `json:"user_idname" toml:"user_idname"`
+	GroupIDNames []IDNameConfig `json:"group_idnames" toml:"group_idname"`
+	Umask        string         `json:"umask" toml:"umask"`
+}
+
+type IDName struct {
+	ID   string
+	Name string
+}
+
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
@@ -107,6 +132,7 @@ type ContainerConfig struct {
 	Signals                  []syscall.Signal    `json:"signals" toml:"signals"`
 	AllowStdioAccess         bool                `json:"allow_stdio_access" toml:"allow_stdio_access"`
 	AllowPrivilegeEscalation bool                `json:"allow_privilege_escalation" toml:"allow_privilege_escalation"`
+	User                     *UserConfig         `json:"user" toml:"user"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -209,6 +235,7 @@ type Container struct {
 	Signals          []syscall.Signal    `json:"-"`
 	AllowStdioAccess bool                `json:"-"`
 	NoNewPrivileges  bool                `json:"-"`
+	User             UserConfig          `json:"-"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -252,6 +279,7 @@ func CreateContainerPolicy(
 	signals []syscall.Signal,
 	allowStdioAccess bool,
 	noNewPrivileges bool,
+	user UserConfig,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
@@ -270,6 +298,7 @@ func CreateContainerPolicy(
 		Signals:          signals,
 		AllowStdioAccess: allowStdioAccess,
 		NoNewPrivileges:  noNewPrivileges,
+		User:             user,
 	}, nil
 }
 

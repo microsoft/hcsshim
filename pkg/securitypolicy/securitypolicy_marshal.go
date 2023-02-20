@@ -255,7 +255,7 @@ func writeCommand(builder *strings.Builder, command []string, indent string) {
 }
 
 func (e EnvRuleConfig) marshalRego() string {
-	return fmt.Sprintf(`{"pattern": "%s", "strategy": "%s", "required": %v}`, e.Rule, e.Strategy, e.Required)
+	return fmt.Sprintf("{\"pattern\": `%s`, \"strategy\": \"%s\", \"required\": %v}", e.Rule, e.Strategy, e.Required)
 }
 
 type envRuleArray []EnvRuleConfig
@@ -311,6 +311,30 @@ func writeSignals(builder *strings.Builder, signals []syscall.Signal, indent str
 	writeLine(builder, `%s"signals": %s,`, indent, array)
 }
 
+func (n IDNameConfig) marshalRego() string {
+	return fmt.Sprintf("{\"pattern\": `%s`, \"strategy\": \"%s\"}", n.Rule, n.Strategy)
+}
+
+type idConfigArray []IDNameConfig
+
+func (array idConfigArray) marshalRego() string {
+	values := make([]string, len(array))
+	for i, name := range array {
+		values[i] = name.marshalRego()
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(values, ","))
+}
+
+func writeUser(builder *strings.Builder, user UserConfig, indent string) {
+	groupIDNames := idConfigArray(user.GroupIDNames).marshalRego()
+	writeLine(builder, `%s"user": {`, indent)
+	writeLine(builder, `%s"user_idname": %s,`, indent+indentUsing, user.UserIDName.marshalRego())
+	writeLine(builder, `%s"group_idnames": %s,`, indent+indentUsing, groupIDNames)
+	writeLine(builder, `%s"umask": "%s"`, indent+indentUsing, user.Umask)
+	writeLine(builder, `%s},`, indent)
+}
+
 func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string) {
 	writeLine(builder, "%s{", indent)
 	writeCommand(builder, container.Command, indent+indentUsing)
@@ -319,10 +343,11 @@ func writeContainer(builder *strings.Builder, container *securityPolicyContainer
 	writeMounts(builder, container.Mounts, indent+indentUsing)
 	writeExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeSignals(builder, container.Signals, indent+indentUsing)
+	writeUser(builder, container.User, indent+indentUsing)
 	writeLine(builder, `%s"allow_elevated": %t,`, indent+indentUsing, container.AllowElevated)
 	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, container.WorkingDir)
 	writeLine(builder, `%s"allow_stdio_access": %t,`, indent+indentUsing, container.AllowStdioAccess)
-	writeLine(builder, `%s"no_new_privileges": %t`, indent+indentUsing, container.NoNewPrivileges)
+	writeLine(builder, `%s"no_new_privileges": %t,`, indent+indentUsing, container.NoNewPrivileges)
 	writeLine(builder, "%s},", indent)
 }
 

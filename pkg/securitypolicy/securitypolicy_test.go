@@ -43,6 +43,8 @@ const (
 	maxGeneratedExecProcesses                 = 4
 	maxGeneratedWorkingDirLength              = 128
 	maxSignalNumber                           = 64
+	maxGeneratedNameLength                    = 8
+	maxGeneratedGroupNames                    = 4
 	// additional consts
 	// the standard enforcer tests don't do anything with the encoded policy
 	// string. this const exists to make that explicit
@@ -1006,6 +1008,7 @@ func generateConstraintsContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLa
 	c.Signals = generateListOfSignals(r, 0, maxSignalNumber)
 	c.AllowStdioAccess = randBool(r)
 	c.NoNewPrivileges = randBool(r)
+	c.User = generateUser(r)
 
 	return &c
 }
@@ -1069,6 +1072,47 @@ func generateExecProcesses(r *rand.Rand) []containerExecProcess {
 	}
 
 	return processes
+}
+
+func generateUmask(r *rand.Rand) string {
+	// we are generating values from 000 to 777 as decimal values
+	// to ensure we cover the full range of umask values
+	// and so the resulting string will be a 4 digit octal representation
+	// even though we are using decimal values
+	return fmt.Sprintf("%04d", randMinMax(r, 0, 777))
+}
+
+func generateIDNameConfig(r *rand.Rand) IDNameConfig {
+	strategies := []IDNameStrategy{IDNameStrategyName, IDNameStrategyID}
+	strategy := strategies[randMinMax(r, 0, int32(len(strategies)-1))]
+	switch strategy {
+	case IDNameStrategyName:
+		return IDNameConfig{
+			Strategy: IDNameStrategyName,
+			Rule:     randVariableString(r, maxGeneratedNameLength),
+		}
+
+	case IDNameStrategyID:
+		return IDNameConfig{
+			Strategy: IDNameStrategyID,
+			Rule:     fmt.Sprintf("%d", r.Uint32()),
+		}
+	}
+	panic("unreachable")
+}
+
+func generateUser(r *rand.Rand) UserConfig {
+	numGroups := int(atLeastOneAtMost(r, maxGeneratedGroupNames))
+	groupIDs := make([]IDNameConfig, numGroups)
+	for i := 0; i < numGroups; i++ {
+		groupIDs[i] = generateIDNameConfig(r)
+	}
+
+	return UserConfig{
+		UserIDName:   generateIDNameConfig(r),
+		GroupIDNames: groupIDs,
+		Umask:        generateUmask(r),
+	}
 }
 
 func generateEnvironmentVariables(r *rand.Rand) []string {

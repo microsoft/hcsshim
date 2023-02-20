@@ -235,6 +235,31 @@ noNewPrivileges_ok(no_new_privileges) {
     input.noNewPrivileges == no_new_privileges
 }
 
+idName_ok(pattern, "any", value) {
+    true
+}
+
+idName_ok(pattern, "id", value) {
+    pattern == value.id
+}
+
+idName_ok(pattern, "name", value) {
+    pattern == value.name
+}
+
+idName_ok(pattern, "re2", value) {
+    regex.match(pattern, value.name)
+}
+
+user_ok(user) {
+    user.umask == input.umask
+    idName_ok(user.user_idname.pattern, user.user_idname.strategy, input.user)
+    every group in input.groups {
+        some group_idname in user.group_idnames
+        idName_ok(group_idname.pattern, group_idname.strategy, group)
+    }
+}
+
 default container_started := false
 
 container_started {
@@ -257,6 +282,7 @@ create_container := {"metadata": [updateMatches, addStarted],
         # the error handling, such that error messaging correctly reflects
         # the narrowing process.
         noNewPrivileges_ok(container.no_new_privileges)
+        user_ok(container.user)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
@@ -380,6 +406,7 @@ exec_in_container := {"metadata": [updateMatches],
         # the narrowing process.
         workingDirectory_ok(container.working_dir)
         noNewPrivileges_ok(container.no_new_privileges)
+        user_ok(container.user)
         some process in container.exec_processes
         command_ok(process.command)
     ]
@@ -921,6 +948,7 @@ errors["missing required environment variable"] {
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
         noNewPrivileges_ok(container.no_new_privileges)
+        user_ok(container.user)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
@@ -952,6 +980,7 @@ errors["missing required environment variable"] {
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
         noNewPrivileges_ok(container.no_new_privileges)
+        user_ok(container.user)
         workingDirectory_ok(container.working_dir)
         some process in container.exec_processes
         command_ok(process.command)
@@ -1163,6 +1192,7 @@ errors["containers only distinguishable by allow_stdio_access"] {
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
         noNewPrivileges_ok(container.no_new_privileges)
+        user_ok(container.user)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
@@ -1233,4 +1263,26 @@ noNewPrivileges_matches {
 errors["invalid noNewPrivileges"] {
     input.rule in ["create_container", "exec_in_container"]
     not noNewPrivileges_matches
+}
+
+default user_matches := false
+
+user_matches {
+    input.rule == "create_container"
+    some container in data.metadata.matches[input.containerID]
+    user_ok(container.user)
+}
+
+user_matches {
+    input.rule == "exec_in_container"
+    some container in data.metadata.matches[input.containerID]
+    some process in container.exec_processes
+    command_ok(process.command)
+    workingDirectory_ok(process.working_dir)
+    user_ok(process.user)
+}
+
+errors["invalid user"] {
+    input.rule in ["create_container", "exec_in_container"]
+    not user_matches
 }

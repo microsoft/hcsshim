@@ -2,6 +2,8 @@ package helpers
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -9,7 +11,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	sp "github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 // RemoteImageFromImageName parses a given imageName reference and creates a v1.Image with
@@ -63,12 +65,12 @@ func ParseEnvFromImage(img v1.Image) ([]string, error) {
 // DefaultContainerConfigs returns a hardcoded slice of container configs, which should
 // be included by default in the security policy.
 // The slice includes only a sandbox pause container.
-func DefaultContainerConfigs() []securitypolicy.ContainerConfig {
-	pause := securitypolicy.ContainerConfig{
+func DefaultContainerConfigs() []sp.ContainerConfig {
+	pause := sp.ContainerConfig{
 		ImageName: "k8s.gcr.io/pause:3.1",
 		Command:   []string{"/pause"},
 	}
-	return []securitypolicy.ContainerConfig{pause}
+	return []sp.ContainerConfig{pause}
 }
 
 // ParseWorkingDirFromImage inspects the image spec and returns working directory if
@@ -98,10 +100,63 @@ func ParseCommandFromImage(img v1.Image) ([]string, error) {
 	return cmdArgs, nil
 }
 
-// PolicyContainersFromConfigs returns a slice of securitypolicy.Container generated
-// from a slice of securitypolicy.ContainerConfig's
-func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConfig) ([]*securitypolicy.Container, error) {
-	var policyContainers []*securitypolicy.Container
+// ParseUserFromImage inspects the image and returns the user and group
+func ParseUserFromImage(img v1.Image) (sp.IDNameConfig, sp.IDNameConfig, error) {
+	imgConfig, err := img.ConfigFile()
+	var user sp.IDNameConfig
+	var group sp.IDNameConfig
+	if err != nil {
+		return user, group, err
+	}
+
+	userString := imgConfig.Config.User
+	// valid values are "user", "user:group", "uid", "uid:gid", "user:gid", "uid:group"
+	// "" is also valid, and means any user
+	// we assume that any string that is not a number is a username, and thus
+	// that any string that is a number is a uid. It is possible to have a username
+	// that is a number, but that is not supported here.
+	if userString == "" {
+		// not specified, use any
+		user.Strategy = sp.IDNameStrategyAny
+		group.Strategy = sp.IDNameStrategyAny
+	} else {
+		parts := strings.Split(userString, ":")
+		if len(parts) == 1 {
+			// only user specified, use any
+			group.Strategy = sp.IDNameStrategyAny
+			user.Rule = parts[0]
+			_, err := strconv.ParseUint(parts[0], 10, 32)
+			if err == nil {
+				user.Strategy = sp.IDNameStrategyID
+			} else {
+				user.Strategy = sp.IDNameStrategyName
+			}
+		} else if len(parts) == 2 {
+			_, err := strconv.ParseUint(parts[0], 10, 32)
+			user.Rule = parts[0]
+			if err == nil {
+				user.Strategy = sp.IDNameStrategyID
+			} else {
+				user.Strategy = sp.IDNameStrategyName
+			}
+
+			_, err = strconv.ParseUint(parts[1], 10, 32)
+			group.Rule = parts[1]
+			if err == nil {
+				group.Strategy = sp.IDNameStrategyID
+			} else {
+				group.Strategy = sp.IDNameStrategyName
+			}
+		}
+	}
+
+	return user, group, nil
+}
+
+// PolicyContainersFromConfigs returns a slice of sp.Container generated
+// from a slice of sp.ContainerConfig's
+func PolicyContainersFromConfigs(containerConfigs []sp.ContainerConfig) ([]*sp.Container, error) {
+	var policyContainers []*sp.Container
 	for _, containerConfig := range containerConfigs {
 		var imageOptions []remote.Option
 
@@ -140,13 +195,13 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 
 		// we want all environment variables which we've extracted from the
 		// image to be required
-		envRules := securitypolicy.NewEnvVarRules(envVars, true)
+		envRules := sp.NewEnvVarRules(envVars, true)
 
 		// cri adds TERM=xterm for all workload containers. we add to all containers
 		// to prevent any possible error
-		envRules = append(envRules, securitypolicy.EnvRuleConfig{
+		envRules = append(envRules, sp.EnvRuleConfig{
 			Rule:     "TERM=xterm",
-			Strategy: securitypolicy.EnvVarRuleString,
+			Strategy: sp.EnvVarRuleString,
 			Required: false,
 		})
 
@@ -161,7 +216,12 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			workingDir = containerConfig.WorkingDir
 		}
 
-		container, err := securitypolicy.CreateContainerPolicy(
+		user, group, err := ParseUserFromImage(img)
+		if err != nil {
+			return nil, err
+		}
+
+		container, err := sp.CreateContainerPolicy(
 			commandArgs,
 			layerHashes,
 			envRules,
@@ -172,6 +232,7 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			containerConfig.Signals,
 			containerConfig.AllowStdioAccess,
 			!containerConfig.AllowPrivilegeEscalation,
+			setDefaultUser(containerConfig.User, user, group),
 		)
 		if err != nil {
 			return nil, err
@@ -180,4 +241,17 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 	}
 
 	return policyContainers, nil
+}
+
+func setDefaultUser(config *sp.UserConfig, user, group sp.IDNameConfig) sp.UserConfig {
+	if config != nil {
+		return *config
+	}
+
+	// 0022 is the default umask for containers in docker
+	return sp.UserConfig{
+		UserIDName:   user,
+		GroupIDNames: []sp.IDNameConfig{group},
+		Umask:        "0022",
+	}
 }

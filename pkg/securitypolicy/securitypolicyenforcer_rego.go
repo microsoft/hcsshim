@@ -398,6 +398,21 @@ func getEnvsToKeep(envList []string, results rpi.RegoQueryResult) ([]string, err
 	return keepSet.toArray(), nil
 }
 
+func (idName IDName) toInput() interface{} {
+	return map[string]interface{}{
+		"id":   idName.ID,
+		"name": idName.Name,
+	}
+}
+
+func groupsToInputs(groups []IDName) []interface{} {
+	inputs := []interface{}{}
+	for _, group := range groups {
+		inputs = append(inputs, group.toInput())
+	}
+	return inputs
+}
+
 func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	sandboxID string,
 	containerID string,
@@ -407,6 +422,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	mounts []oci.Mount,
 	privileged bool,
 	noNewPrivileges bool,
+	user IDName,
+	groups []IDName,
+	umask string,
 ) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
 		"containerID":     containerID,
@@ -418,6 +436,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"mounts":          appendMountData([]interface{}{}, mounts),
 		"privileged":      privileged,
 		"noNewPrivileges": noNewPrivileges,
+		"user":            user.toInput(),
+		"groups":          groupsToInputs(groups),
+		"umask":           umask,
 	}
 
 	results, err := policy.enforce("create_container", input)
@@ -475,13 +496,25 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
 }
 
-func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string, noNewPrivileges bool) (toKeep EnvList, stdioAccessAllowed bool, err error) {
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	noNewPrivileges bool,
+	user IDName,
+	groups []IDName,
+	umask string,
+) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
 		"containerID":     containerID,
 		"argList":         argList,
 		"envList":         envList,
 		"workingDir":      workingDir,
 		"noNewPrivileges": noNewPrivileges,
+		"user":            user.toInput(),
+		"groups":          groupsToInputs(groups),
+		"umask":           umask,
 	}
 
 	results, err := policy.enforce("exec_in_container", input)
