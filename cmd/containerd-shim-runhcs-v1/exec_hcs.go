@@ -8,6 +8,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/signals"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -285,7 +286,32 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		}
 		var delivered bool
 		if supported && options != nil {
-			delivered, err = he.p.Process.Signal(ctx, options)
+			if he.isWCOW {
+				// Servercore images block on signaling and wait until the target process
+				// is terminated to return to the caller. This causes issues when graceful
+				// termination of containers is requested (Bug36689012).
+				// To fix this, we deliver the signal to the target process in a separate background
+				// thread so that the caller can wait for the desired timeout before sending
+				// a SIGKILL to the process.
+				// TODO: We can get rid of these changes once the fix to support graceful termination is
+				// made in windows.
+				go func() {
+					signalDelivered, deliveryErr := he.p.Process.Signal(ctx, options)
+
+					if deliveryErr != nil {
+						if !hcs.IsAlreadyStopped(deliveryErr) {
+							// Process is not already stopped and there was a signal delivery error to this process
+							log.G(ctx).WithField("err", deliveryErr).Errorf("Error in delivering signal %d, to pid: %d", signal, he.pid)
+						}
+					}
+					if !signalDelivered {
+						log.G(ctx).Errorf("Error: NotFound; exec: '%s' in task: '%s' not found", he.id, he.tid)
+					}
+				}()
+				delivered, err = true, nil
+			} else {
+				delivered, err = he.p.Process.Signal(ctx, options)
+			}
 		} else {
 			// legacy path before signals support OR if WCOW with signals
 			// support needs to issue a terminate.
@@ -356,7 +382,7 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 // To transition for a created state the following must be done:
 //
 // 1. Issue `he.processDoneCancel` to unblock the goroutine
-// `he.waitForContainerExit()``.
+// `he.waitForContainerExit()“.
 //
 // 2. Set `he.state`, `he.exitStatus` and `he.exitedAt` to the exited values.
 //
