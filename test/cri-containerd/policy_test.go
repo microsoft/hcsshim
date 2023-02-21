@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,56 +24,55 @@ var validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
 
 type configSideEffect func(*runtime.CreateContainerRequest) error
 
-func securityPolicyFromContainers(
-	policyType string,
-	unencryptedScratch bool,
-	containers []securitypolicy.ContainerConfig,
-	allowEnvironmentVariableDropping bool,
-) (string, error) {
-	pc, err := helpers.PolicyContainersFromConfigs(containers)
-	if err != nil {
-		return "", err
-	}
-	policyString, err := securitypolicy.MarshalPolicy(policyType, false, pc,
-		[]securitypolicy.ExternalProcessConfig{
-			{
-				Command:          []string{"ls", "-l", "/dev/mapper"},
-				WorkingDir:       "/",
-				AllowStdioAccess: true,
-			},
-			{
-				Command:          []string{"bash"},
-				WorkingDir:       "/",
-				AllowStdioAccess: true,
-			},
-		},
-		[]securitypolicy.FragmentConfig{},
-		true,
-		true,
-		true,
-		allowEnvironmentVariableDropping,
-		unencryptedScratch,
-	)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString([]byte(policyString)), nil
+var defaultExternalProcesses = []securitypolicy.ExternalProcessConfig{
+	{
+		Command:          []string{"ls", "-l", "/dev/mapper"},
+		WorkingDir:       "/",
+		AllowStdioAccess: true,
+	},
+	{
+		Command:          []string{"bash"},
+		WorkingDir:       "/",
+		AllowStdioAccess: true,
+	},
 }
 
-func sandboxSecurityPolicy(t *testing.T, policyType string, unencryptedOk bool, dropEnvOk bool) string {
+func policyFromOpts(t *testing.T, policyType string, opts ...securitypolicy.PolicyConfigOpt) string {
 	t.Helper()
-	defaultContainers := helpers.DefaultContainerConfigs()
-	policyString, err := securityPolicyFromContainers(policyType, unencryptedOk, defaultContainers, dropEnvOk)
-	if err != nil {
-		t.Fatalf("failed to create security policy string: %s", err)
+	defaultOpts := []securitypolicy.PolicyConfigOpt{
+		securitypolicy.WithContainers(helpers.DefaultContainerConfigs()),
 	}
-	return policyString
+
+	defaultOpts = append(defaultOpts, opts...)
+	config, err := securitypolicy.NewPolicyConfig(defaultOpts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pc, err := helpers.PolicyContainersFromConfigs(config.Containers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyString, err := securitypolicy.MarshalPolicy(
+		policyType,
+		false,
+		pc,
+		config.ExternalProcesses,
+		config.Fragments,
+		config.AllowPropertiesAccess,
+		config.AllowDumpStacks,
+		config.AllowRuntimeLogging,
+		config.AllowEnvironmentVariableDropping,
+		config.AllowUnencryptedScratch,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString([]byte(policyString))
 }
 
 func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
 	t.Helper()
-	defaultContainers := helpers.DefaultContainerConfigs()
-
 	alpineContainer := securitypolicy.ContainerConfig{
 		ImageName: imageLcowAlpine,
 		Command:   validPolicyAlpineCommand,
@@ -84,12 +84,18 @@ func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVaria
 		}
 	}
 
-	containers := append(defaultContainers, alpineContainer)
-	policyString, err := securityPolicyFromContainers(policyType, true, containers, allowEnvironmentVariableDropping)
-	if err != nil {
-		t.Fatalf("failed to create security policy string: %s", err)
-	}
-	return policyString
+	containers := append(helpers.DefaultContainerConfigs(), alpineContainer)
+	return policyFromOpts(
+		t,
+		policyType,
+		securitypolicy.WithContainers(containers),
+		securitypolicy.WithExternalProcesses(defaultExternalProcesses),
+		securitypolicy.WithAllowUnencryptedScratch(true),
+		securitypolicy.WithAllowEnvVarDropping(allowEnvironmentVariableDropping),
+		securitypolicy.WithAllowRuntimeLogging(true),
+		securitypolicy.WithAllowPropertiesAccess(true),
+		securitypolicy.WithAllowDumpStacks(true),
+	)
 }
 
 func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandboxRequest {
@@ -99,7 +105,7 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(
 			map[string]string{
-				annotations.NoSecurityHardware:  "true",
+				annotations.NoSecurityHardware:  strconv.FormatBool(!*flagSevSnp),
 				annotations.SecurityPolicy:      policy,
 				annotations.VPMemNoMultiMapping: "true",
 			},
@@ -137,7 +143,12 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, true, true)
+			sandboxPolicy := policyFromOpts(
+				t,
+				pc.input,
+				securitypolicy.WithAllowUnencryptedScratch(true),
+				securitypolicy.WithAllowEnvVarDropping(true),
+			)
 			sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -801,7 +812,12 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 						annotations.UVMSecurityPolicyEnv: "true",
 						annotations.HostAMDCertificate:   certValue,
 					}
+				} else {
+					containerRequest.Config.Annotations = map[string]string{
+						annotations.UVMSecurityPolicyEnv: "false",
+					}
 				}
+
 				// setup logfile to capture stdout
 				logPath := filepath.Join(t.TempDir(), "log.txt")
 				containerRequest.Config.LogPath = logPath
@@ -967,7 +983,13 @@ func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("AllowUnencrypted_%t_EncryptionEnabled_%t", tc.allowUnencrypted, tc.encryptAnnotation), func(t *testing.T) {
-			policy := sandboxSecurityPolicy(t, "rego", tc.allowUnencrypted, true)
+			policy := policyFromOpts(
+				t,
+				"rego",
+				securitypolicy.WithExternalProcesses(defaultExternalProcesses),
+				securitypolicy.WithAllowUnencryptedScratch(tc.allowUnencrypted),
+				securitypolicy.WithAllowEnvVarDropping(true),
+			)
 			sandboxRequest := sandboxRequestWithPolicy(t, policy)
 			// sandboxRequestWithPolicy sets security policy annotation, so we
 			// won't get a nil point deref here.
@@ -997,8 +1019,15 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	policy := sandboxSecurityPolicy(t, "rego", false, true)
+	policy := policyFromOpts(
+		t,
+		"rego",
+		securitypolicy.WithExternalProcesses(defaultExternalProcesses),
+		securitypolicy.WithAllowUnencryptedScratch(false),
+		securitypolicy.WithAllowEnvVarDropping(true),
+	)
 	sandboxRequest := sandboxRequestWithPolicy(t, policy)
+	sandboxRequest.Config.Annotations[annotations.EncryptedScratchDisk] = "false"
 
 	// we didn't pass encrypt scratch annotation and policy should reject pod creation
 	response, err := client.RunPodSandbox(ctx, sandboxRequest)
@@ -1083,6 +1112,85 @@ func Test_RunContainer_WithPolicy_And_Binary_Logger_Without_Stdio(t *testing.T) 
 			}
 			if tc.expectedOutput != string(content) {
 				t.Fatalf("expected output %q, got %q", tc.expectedOutput, string(content))
+			}
+		})
+	}
+}
+
+func Test_ExecInContainer_WithPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, tc := range []struct {
+		execProcessConfig  securitypolicy.ExecProcessConfig
+		execProcessRequest []string
+		shouldFail         bool
+	}{
+		{
+			execProcessConfig: securitypolicy.ExecProcessConfig{
+				Command: []string{"ls"},
+			},
+			execProcessRequest: []string{"ls"},
+			shouldFail:         false,
+		},
+		{
+			execProcessConfig: securitypolicy.ExecProcessConfig{
+				Command: []string{"ls"},
+			},
+			execProcessRequest: []string{"ls", "-l"},
+			shouldFail:         true,
+		},
+	} {
+		t.Run(fmt.Sprintf("ExecInContainer_ShouldFail_%t", tc.shouldFail), func(t *testing.T) {
+			cmd := []string{"ash", "-c", "while true; do sleep 1; done"}
+			policy := alpineSecurityPolicy(
+				t,
+				"rego",
+				true,
+				securitypolicy.WithExecProcesses([]securitypolicy.ExecProcessConfig{tc.execProcessConfig}),
+				securitypolicy.WithCommand(cmd),
+			)
+			sandboxRequest := sandboxRequestWithPolicy(t, policy)
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			conReq := getCreateContainerRequest(
+				podID,
+				fmt.Sprintf("alpine-exec-not-allowed-%t", tc.shouldFail),
+				imageLcowAlpine,
+				cmd,
+				sandboxRequest.Config,
+			)
+
+			containerID := createContainer(t, client, ctx, conReq)
+			defer removeContainer(t, client, ctx, containerID)
+
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
+
+			execReq := &runtime.ExecSyncRequest{
+				ContainerId: containerID,
+				Cmd:         tc.execProcessRequest,
+				Timeout:     20,
+			}
+			_, err := client.ExecSync(ctx, execReq)
+			if err == nil {
+				if tc.shouldFail {
+					t.Fatal("exec should've been denied by policy")
+				}
+			} else {
+				if !tc.shouldFail {
+					t.Fatalf("unexpected exec failure: %s", err)
+				}
+				if !strings.Contains(err.Error(), "invalid command") {
+					t.Fatalf("expected 'invalid command' error, got '%s' instead", err)
+				}
 			}
 		})
 	}

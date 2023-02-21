@@ -54,6 +54,16 @@ type PolicyConfig struct {
 	AllowUnencryptedScratch bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
 }
 
+func NewPolicyConfig(opts ...PolicyConfigOpt) (*PolicyConfig, error) {
+	p := &PolicyConfig{}
+	for _, o := range opts {
+		if err := o(p); err != nil {
+			return nil, err
+		}
+	}
+	return p, nil
+}
+
 // ExternalProcessConfig contains toml or JSON config for running external processes in the UVM.
 type ExternalProcessConfig struct {
 	Command          []string `json:"command" toml:"command"`
