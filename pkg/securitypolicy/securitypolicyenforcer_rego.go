@@ -406,16 +406,18 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	workingDir string,
 	mounts []oci.Mount,
 	privileged bool,
+	noNewPrivileges bool,
 ) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
-		"containerID":  containerID,
-		"argList":      argList,
-		"envList":      envList,
-		"workingDir":   workingDir,
-		"sandboxDir":   spec.SandboxMountsDir(sandboxID),
-		"hugePagesDir": spec.HugePagesMountsDir(sandboxID),
-		"mounts":       appendMountData([]interface{}{}, mounts),
-		"privileged":   privileged,
+		"containerID":     containerID,
+		"argList":         argList,
+		"envList":         envList,
+		"workingDir":      workingDir,
+		"sandboxDir":      spec.SandboxMountsDir(sandboxID),
+		"hugePagesDir":    spec.HugePagesMountsDir(sandboxID),
+		"mounts":          appendMountData([]interface{}{}, mounts),
+		"privileged":      privileged,
+		"noNewPrivileges": noNewPrivileges,
 	}
 
 	results, err := policy.enforce("create_container", input)
@@ -473,12 +475,13 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
 }
 
-func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (toKeep EnvList, stdioAccessAllowed bool, err error) {
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string, noNewPrivileges bool) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
-		"containerID": containerID,
-		"argList":     argList,
-		"envList":     envList,
-		"workingDir":  workingDir,
+		"containerID":     containerID,
+		"argList":         argList,
+		"envList":         envList,
+		"workingDir":      workingDir,
+		"noNewPrivileges": noNewPrivileges,
 	}
 
 	results, err := policy.enforce("exec_in_container", input)

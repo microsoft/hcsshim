@@ -231,6 +231,10 @@ privileged_ok(elevation_allowed) {
     input.privileged == elevation_allowed
 }
 
+noNewPrivileges_ok(no_new_privileges) {
+    input.noNewPrivileges == no_new_privileges
+}
+
 default container_started := false
 
 container_started {
@@ -252,6 +256,7 @@ create_container := {"metadata": [updateMatches, addStarted],
         # NB any change to these narrowing conditions should be reflected in
         # the error handling, such that error messaging correctly reflects
         # the narrowing process.
+        noNewPrivileges_ok(container.no_new_privileges)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
@@ -374,6 +379,7 @@ exec_in_container := {"metadata": [updateMatches],
         # the error handling, such that error messaging correctly reflects
         # the narrowing process.
         workingDirectory_ok(container.working_dir)
+        noNewPrivileges_ok(container.no_new_privileges)
         some process in container.exec_processes
         command_ok(process.command)
     ]
@@ -914,6 +920,7 @@ errors["missing required environment variable"] {
     not container_started
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
+        noNewPrivileges_ok(container.no_new_privileges)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
@@ -944,6 +951,7 @@ errors["missing required environment variable"] {
     container_started
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
+        noNewPrivileges_ok(container.no_new_privileges)
         workingDirectory_ok(container.working_dir)
         some process in container.exec_processes
         command_ok(process.command)
@@ -1154,6 +1162,7 @@ errors["containers only distinguishable by allow_stdio_access"] {
     not container_started
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
+        noNewPrivileges_ok(container.no_new_privileges)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
@@ -1203,3 +1212,25 @@ errors["external processes only distinguishable by allow_stdio_access"] {
     p.allow_stdio_access != allow_stdio_access
 }
 
+
+default noNewPrivileges_matches := false
+
+noNewPrivileges_matches {
+    input.rule == "create_container"
+    some container in data.metadata.matches[input.containerID]
+    noNewPrivileges_ok(container.no_new_privileges)
+}
+
+noNewPrivileges_matches {
+    input.rule == "exec_in_container"
+    some container in data.metadata.matches[input.containerID]
+    some process in container.exec_processes
+    command_ok(process.command)
+    workingDirectory_ok(process.working_dir)
+    noNewPrivileges_ok(process.no_new_privileges)
+}
+
+errors["invalid noNewPrivileges"] {
+    input.rule in ["create_container", "exec_in_container"]
+    not noNewPrivileges_matches
+}

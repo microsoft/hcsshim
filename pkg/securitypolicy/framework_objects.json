@@ -79,6 +79,10 @@
         "allow_stdio_access": {
             "introduced_version": "0.1.0",
             "default_value": false
+        },
+        "no_new_privileges": {
+            "introduced_version": "0.2.0",
+            "default_value": true
         }
     },
     "external_process": {

@@ -171,6 +171,7 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			containerConfig.ExecProcesses,
 			containerConfig.Signals,
 			containerConfig.AllowStdioAccess,
+			!containerConfig.AllowPrivilegeEscalation,
 		)
 		if err != nil {
 			return nil, err
