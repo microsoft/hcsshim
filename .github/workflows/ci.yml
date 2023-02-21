@@ -286,8 +286,8 @@ jobs:
               # remove any left-over state
               choco uninstall -y --no-progress --force mingw
 
-              Write-Output 'Sleeping for 2 seconds'
-              Sleep -Seconds 2
+              Write-Output 'Sleeping for 60 seconds'
+              Sleep -Seconds 60
             }
 
             choco install -y --no-progress --stop-on-first-failure --force mingw --allow-downgrade --version 10.2.0
