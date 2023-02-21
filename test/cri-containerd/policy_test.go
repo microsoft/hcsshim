@@ -1001,10 +1001,7 @@ func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
 			defer stopPodSandbox(t, client, ctx, podID)
 
 			if tc.encryptAnnotation {
-				output, err := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
-				if err != nil {
-					t.Fatal(err)
-				}
+				output := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
 				if !strings.Contains(output, "dm-crypt-scsi-contr") {
 					t.Log(output)
 					t.Fatal("expected to find dm-crypt target")
@@ -1232,7 +1229,7 @@ func Test_ExecInUVM_WithPolicy(t *testing.T) {
 			shouldFail:       true,
 		},
 	} {
-		t.Run(fmt.Sprintf("ExecInUVM_ShouldFail_%t", tc.shouldFail), func(t *testing.T) {
+		t.Run(fmt.Sprintf("ShouldFail_%t", tc.shouldFail), func(t *testing.T) {
 			policy := policyFromOpts(t, "rego",
 				securitypolicy.WithExternalProcesses([]securitypolicy.ExternalProcessConfig{tc.execInUVMConfig}),
 				securitypolicy.WithAllowRuntimeLogging(true),
@@ -1243,7 +1240,7 @@ func Test_ExecInUVM_WithPolicy(t *testing.T) {
 			defer removePodSandbox(t, client, ctx, podID)
 			defer stopPodSandbox(t, client, ctx, podID)
 
-			_, err := shimDiagExecOutput(ctx, t, podID, tc.execInUVMRequest)
+			_, err := shimDiagExecOutputWithErr(ctx, t, podID, tc.execInUVMRequest)
 			if err != nil {
 				if !tc.shouldFail {
 					t.Fatalf("external process exec should succeed, got error instead: %s", err)
