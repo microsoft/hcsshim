@@ -65,9 +65,14 @@ const (
 	opaqueWhiteout = ".wh..wh..opq"
 )
 
-// ConvertTarToExt4 writes a compact ext4 file system image that contains the files in the
-// input tar stream.
 func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
+	_, err := ConvertTarToExt4WithResult(r, w, options...)
+	return err
+}
+
+// ConvertTarToExt4WithResult writes a compact ext4 file system image that contains the files in the
+// input tar stream and returns the number of bytes written on success.
+func ConvertTarToExt4WithResult(r io.Reader, w io.ReadWriteSeeker, options ...Option) (uint64, error) {
 	var p params
 	for _, opt := range options {
 		opt(&p)
@@ -81,11 +86,11 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 			break
 		}
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		if err = fs.MakeParents(hdr.Name); err != nil {
-			return errors.Wrapf(err, "failed to ensure parent directories for %s", hdr.Name)
+			return 0, errors.Wrapf(err, "failed to ensure parent directories for %s", hdr.Name)
 		}
 
 		if p.convertWhiteout {
@@ -95,12 +100,12 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 					// Update the directory with the appropriate xattr.
 					f, err := fs.Stat(dir)
 					if err != nil {
-						return errors.Wrapf(err, "failed to stat parent directory of whiteout %s", hdr.Name)
+						return 0, errors.Wrapf(err, "failed to stat parent directory of whiteout %s", hdr.Name)
 					}
 					f.Xattrs["trusted.overlay.opaque"] = []byte("y")
 					err = fs.Create(dir, f)
 					if err != nil {
-						return errors.Wrapf(err, "failed to create opaque dir %s", hdr.Name)
+						return 0, errors.Wrapf(err, "failed to create opaque dir %s", hdr.Name)
 					}
 				} else {
 					// Create an overlay-style whiteout.
@@ -111,7 +116,7 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 					}
 					err = fs.Create(path.Join(dir, name[len(whiteoutPrefix):]), f)
 					if err != nil {
-						return errors.Wrapf(err, "failed to create whiteout file for %s", hdr.Name)
+						return 0, errors.Wrapf(err, "failed to create whiteout file for %s", hdr.Name)
 					}
 				}
 
@@ -122,7 +127,7 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 		if hdr.Typeflag == tar.TypeLink {
 			err = fs.Link(hdr.Linkname, hdr.Name)
 			if err != nil {
-				return err
+				return 0, err
 			}
 		} else {
 			f := &compactext4.File{
@@ -165,15 +170,20 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 			f.Mode |= typ
 			err = fs.Create(hdr.Name, f)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			_, err = io.Copy(fs, t)
 			if err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
-	return fs.Close()
+
+	if err := fs.Close(); err != nil {
+		return 0, err
+	}
+
+	return uint64(fs.Position()), nil
 }
 
 // Convert wraps ConvertTarToExt4 and conditionally computes (and appends) the file image's cryptographic

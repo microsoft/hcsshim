@@ -23,7 +23,7 @@ type Writer struct {
 	inodes               []*inode
 	curName              string
 	curInode             *inode
-	pos                  int64
+	pos                  int64 // in bytes
 	dataWritten, dataMax int64
 	err                  error
 	initialized          bool
@@ -96,7 +96,7 @@ const (
 	inodeFirst        = 11
 	inodeLostAndFound = inodeFirst
 
-	BlockSize               = 4096
+	BlockSize               = 4096 // physical block size
 	blocksPerGroup          = BlockSize * 8
 	inodeSize               = 256
 	maxInodesPerGroup       = BlockSize * 8 // Limited by the inode bitmap
@@ -724,6 +724,10 @@ func (w *Writer) Write(b []byte) (int, error) {
 	n, err := w.write(b)
 	w.dataWritten += int64(n)
 	return n, err
+}
+
+func (w *Writer) Position() int64 {
+	return w.pos
 }
 
 func (w *Writer) startInode(name string, inode *inode, size int64) {
