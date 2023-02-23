@@ -43,7 +43,7 @@ func zeroFirstBlock(path string, blockSize int) error {
 
 	zeros := bytes.Repeat([]byte{0}, blockSize)
 	if _, err := fout.Write(zeros); err != nil {
-		return fmt.Errorf("failed writing zero bytes: %w", err)
+		return fmt.Errorf("failed to zero-out bytes: %w", err)
 	}
 	return nil
 }
