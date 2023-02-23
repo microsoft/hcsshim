@@ -4,6 +4,7 @@
 package crypt
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -33,46 +34,16 @@ func getBlockDeviceSize(ctx context.Context, path string) (int64, error) {
 	return pos, nil
 }
 
-// In the xfs mkfs case it appears to attempt to read the first block of the device.
-// This results in an integrity error. This function zeros out the start of the device
-// so we are sure that when it is read it has already been hashed so matches.
-func zeroDevice(devicePath string, blockSize int64, numberOfBlocks int64) error {
-	fout, err := os.OpenFile(devicePath, os.O_WRONLY, 0)
+func zeroFirstBlock(path string, blockSize int) error {
+	fout, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
-		return fmt.Errorf("failed to open device file %s: %w", devicePath, err)
+		return fmt.Errorf("failed to open file for zero'ing: %w", err)
 	}
 	defer fout.Close()
 
-	zeros := make([]byte, blockSize)
-	for i := range zeros {
-		zeros[i] = 0
-	}
-
-	// get the size so we don't overrun the end of the device
-	foutSize, err := fout.Seek(0, io.SeekEnd)
-	if err != nil {
-		return fmt.Errorf("zeroDevice: failed to seek to end, device file %s: %w", devicePath, err)
-	}
-
-	// move back to the front.
-	_, err = fout.Seek(0, io.SeekStart)
-	if err != nil {
-		return fmt.Errorf("zeroDevice: failed to seek to start, device file %s: %w", devicePath, err)
-	}
-
-	var offset int64 = 0
-	var which int64
-	for which = 0; which < numberOfBlocks; which++ {
-		// Exit when the end of the file is reached
-		if offset >= foutSize {
-			break
-		}
-		// Write data to destination file
-		written, err := fout.Write(zeros)
-		if err != nil {
-			return fmt.Errorf("failed to write destination file %s offset %d: %w", devicePath, offset, err)
-		}
-		offset += int64(written)
+	zeros := bytes.Repeat([]byte{0}, blockSize)
+	if _, err := fout.Write(zeros); err != nil {
+		return fmt.Errorf("failed writing zero bytes: %w", err)
 	}
 	return nil
 }

@@ -26,6 +26,7 @@ func clearCryptTestDependencies() {
 	_getBlockDeviceSize = nil
 	_osMkdirTemp = osMkdirTempTest
 	_osRemoveAll = nil
+	_zeroFirstBlock = nil
 }
 
 func Test_Encrypt_Generate_Key_Error(t *testing.T) {
@@ -203,10 +204,7 @@ func Test_Encrypt_Mkfs_Error(t *testing.T) {
 		// Return a non-zero size
 		return blockDeviceSize, nil
 	}
-	_mkfsXfs = func(string) error {
-		return nil
-	}
-	_zeroDevice = func(string, int64, int64) error {
+	_zeroFirstBlock = func(_ string, _ int) error {
 		return nil
 	}
 
@@ -221,8 +219,7 @@ func Test_Encrypt_Mkfs_Error(t *testing.T) {
 		return expectedErr
 	}
 
-	_, err := EncryptDevice(context.Background(), source, "dm-crypt-name")
-	if errors.Unwrap(err) != expectedErr {
+	if _, err := EncryptDevice(context.Background(), source, "dm-crypt-name"); errors.Unwrap(err) != expectedErr {
 		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
 	}
 }
@@ -249,6 +246,9 @@ func Test_Encrypt_Success(t *testing.T) {
 	_getBlockDeviceSize = func(ctx context.Context, path string) (int64, error) {
 		// Return a non-zero size
 		return blockDeviceSize, nil
+	}
+	_zeroFirstBlock = func(_ string, _ int) error {
+		return nil
 	}
 	_mkfsXfs = func(arg string) error {
 		return nil
