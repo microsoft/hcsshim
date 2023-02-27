@@ -5,6 +5,7 @@ on:
 
 env:
   GO_VERSION: "1.18.x"
+  GOTESTSUM_VERSION: "latest"
 
 jobs:
   lint:
@@ -163,14 +164,21 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+
       - name: Test standard security policy
-        run: go test -timeout=30m -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
+        run: gotestsum --format standard-verbose --debug -- -timeout=30m -mod=mod -gcflags=all=-d=checkptr ./pkg/securitypolicy
 
       - name: Test rego security policy
-        run: go test --tags=rego -timeout=30m -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
+        run: gotestsum --format standard-verbose --debug -- -tags=rego -timeout=30m -mod=mod -gcflags=all=-d=checkptr ./pkg/securitypolicy
 
       - name: Test rego policy interpreter
-        run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal/regopolicyinterpreter
+        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter
+
+      - name: Build gcs Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./gcs
+        working-directory: test
 
   test-windows:
     needs: [lint, protos, verify-vendor, go-gen]
@@ -184,22 +192,34 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - run: go test -gcflags=all=-d=checkptr -v ./... -tags admin
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal -tags admin
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./containerd-shim-runhcs-v1/ -tags functional
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./cri-containerd/ -tags functional
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./functional/ -tags functional
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./runhcs/ -tags functional
-        working-directory: test
-      - run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
-        working-directory: test
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
 
+      # run tests
+      - name: Test repo
+        run: gotestsum --format standard-verbose --debug -- -gcflags=all=-d=checkptr -tags admin ./...
+      - name: Test schema version
+        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr -tags admin ./internal
+        working-directory: test
       - name: Test rego policy interpreter
-        run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal/regopolicyinterpreter
+        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter
+
+      # build testing binaries
+      - name: Build containerd-shim-runhcs-v1 Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./containerd-shim-runhcs-v1
+        working-directory: test
+      - name: Build cri-containerd Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./cri-containerd
+        working-directory: test
+      - name: Build functional Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./functional
+        working-directory: test
+      - name: Build runhcs Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./runhcs
+        working-directory: test
+      - name: Build logging-driver Binary
+        run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
+        working-directory: test
 
       - uses: actions/upload-artifact@v3
         if: ${{ github.event_name == 'pull_request' }}
