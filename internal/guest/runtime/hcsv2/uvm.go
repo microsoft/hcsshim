@@ -294,54 +294,36 @@ func setupSandboxHugePageMountsPath(id string) error {
 	return storage.MountRShared(mountPath)
 }
 
-func getUserNameForID(spec *specs.Spec, uid uint32) (string, error) {
-	users, err := user.ParsePasswdFileFilter(filepath.Join(spec.Root.Path, "/etc/passwd"), func(user user.User) bool {
+func getUserInfo(spec *specs.Spec) (securitypolicy.IDName, []securitypolicy.IDName, string, error) {
+	uid := spec.Process.User.UID
+	userInfo, err := getUser(spec, func(user user.User) bool {
 		return uint32(user.Uid) == uid
 	})
+
 	if err != nil {
-		return "", err
+		return securitypolicy.IDName{}, nil, "", err
 	}
 
-	if len(users) != 1 {
-		return "", errors.Errorf("expected exactly 1 user matched '%d'", len(users))
-	}
-	return users[0].Name, nil
-}
+	userIDName := securitypolicy.IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: userInfo.Name}
 
-func getGroupNameForID(spec *specs.Spec, gid uint32) (string, error) {
-	groups, err := user.ParseGroupFileFilter(filepath.Join(spec.Root.Path, "/etc/group"), func(group user.Group) bool {
+	gid := spec.Process.User.GID
+	groupInfo, err := getGroup(spec, func(group user.Group) bool {
 		return uint32(group.Gid) == gid
 	})
 	if err != nil {
-		return "", err
-	}
-	if len(groups) != 1 {
-		return "", errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
-	}
-	return groups[0].Name, nil
-}
-
-func getUserInfo(spec *specs.Spec) (securitypolicy.IDName, []securitypolicy.IDName, string, error) {
-	userName, err := getUserNameForID(spec, spec.Process.User.UID)
-	if err != nil {
 		return securitypolicy.IDName{}, nil, "", err
 	}
-
-	user := securitypolicy.IDName{ID: strconv.FormatUint(uint64(spec.Process.User.UID), 10), Name: userName}
-
-	groupName, err := getGroupNameForID(spec, spec.Process.User.GID)
-	if err != nil {
-		return securitypolicy.IDName{}, nil, "", err
-	}
-	groups := []securitypolicy.IDName{{ID: strconv.FormatUint(uint64(spec.Process.User.GID), 10), Name: groupName}}
+	groupIDNames := []securitypolicy.IDName{{ID: strconv.FormatUint(uint64(spec.Process.User.GID), 10), Name: groupInfo.Name}}
 	additionalGIDs := spec.Process.User.AdditionalGids
 	if len(additionalGIDs) > 0 {
 		for _, gid := range additionalGIDs {
-			groupName, err = getGroupNameForID(spec, gid)
+			groupInfo, err := getGroup(spec, func(group user.Group) bool {
+				return uint32(group.Gid) == gid
+			})
 			if err != nil {
 				return securitypolicy.IDName{}, nil, "", err
 			}
-			groups = append(groups, securitypolicy.IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: groupName})
+			groupIDNames = append(groupIDNames, securitypolicy.IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: groupInfo.Name})
 		}
 	}
 
@@ -351,7 +333,7 @@ func getUserInfo(spec *specs.Spec) (securitypolicy.IDName, []securitypolicy.IDNa
 		umask = fmt.Sprintf("%04o", *spec.Process.User.Umask)
 	}
 
-	return user, groups, umask, nil
+	return userIDName, groupIDNames, umask, nil
 }
 
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
