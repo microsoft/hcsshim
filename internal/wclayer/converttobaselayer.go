@@ -45,18 +45,12 @@ func ensureHive(path string, root *os.File) (err error) {
 
 	defer func() {
 		closeErr := winapi.ORCloseHive(key)
-		if closeErr != nil {
+		if closeErr != nil && err == nil {
 			err = fmt.Errorf("closing hive key: %w", closeErr)
 		}
 	}()
 
-	var hivePath *uint16
-	hivePath, err = syscall.UTF16PtrFromString(fullPath)
-	if err != nil {
-		return fmt.Errorf("getting path: %w", err)
-	}
-
-	err = winapi.ORSaveHive(key, hivePath, version.MajorVersion, version.MinorVersion)
+	err = winapi.ORSaveHive(key, fullPath, version.MajorVersion, version.MinorVersion)
 	if err != nil {
 		return fmt.Errorf("saving hive: %w", err)
 	}

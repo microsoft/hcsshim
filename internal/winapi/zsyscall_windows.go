@@ -397,7 +397,16 @@ func ORCreateHive(key *syscall.Handle) (regerrno error) {
 	return
 }
 
-func ORSaveHive(key syscall.Handle, file *uint16, OsMajorVersion uint32, OsMinorVersion uint32) (regerrno error) {
+func ORSaveHive(key syscall.Handle, file string, OsMajorVersion uint32, OsMinorVersion uint32) (regerrno error) {
+	var _p0 *uint16
+	_p0, regerrno = syscall.UTF16PtrFromString(file)
+	if regerrno != nil {
+		return
+	}
+	return _ORSaveHive(key, _p0, OsMajorVersion, OsMinorVersion)
+}
+
+func _ORSaveHive(key syscall.Handle, file *uint16, OsMajorVersion uint32, OsMinorVersion uint32) (regerrno error) {
 	r0, _, _ := syscall.Syscall6(procORSaveHive.Addr(), 4, uintptr(key), uintptr(unsafe.Pointer(file)), uintptr(OsMajorVersion), uintptr(OsMinorVersion), 0, 0)
 	if r0 != 0 {
 		regerrno = syscall.Errno(r0)
