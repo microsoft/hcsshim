@@ -207,8 +207,12 @@ func (r *baseLayerReader) Read(b []byte) (int, error) {
 
 func (r *baseLayerReader) Close() (err error) {
 	defer r.s.End()
-	defer func() { oc.SetSpanStatus(r.s, err) }()
+	defer func() {
+		oc.SetSpanStatus(r.s, err)
+		close(r.proceed)
+	}()
 	r.proceed <- false
+	// The r.result channel will be closed once walk() returns
 	<-r.result
 	r.reset()
 	return nil
