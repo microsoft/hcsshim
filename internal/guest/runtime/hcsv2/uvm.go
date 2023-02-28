@@ -656,6 +656,10 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	var envToKeep securitypolicy.EnvList
+	user, groups, umask, err := securitypolicy.GetUserInfo(params.OCISpecification)
+	if err != nil {
+		return 0, err
+	}
 
 	if params.IsExternal || containerID == UVMContainerID {
 		var allowStdioAccess bool
@@ -691,10 +695,6 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			pid, err = c.Start(ctx, conSettings)
 		} else {
 			var allowStdioAccess bool
-			user, groups, umask, err := securitypolicy.GetUserInfo(params.OCISpecification)
-			if err != nil {
-				return pid, err
-			}
 			// Windows uses a different field for command, there's no enforcement
 			// around this yet for Windows so this is Linux specific at the moment.
 			envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(
