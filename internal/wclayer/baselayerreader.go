@@ -197,10 +197,7 @@ func (r *baseLayerReader) LinkInfo() (uint32, *winio.FileIDInfo, error) {
 
 func (r *baseLayerReader) Read(b []byte) (int, error) {
 	if r.backupReader == nil {
-		if r.currentFile == nil {
-			return 0, io.EOF
-		}
-		return r.currentFile.Read(b)
+		return 0, io.EOF
 	}
 	return r.backupReader.Read(b)
 }
