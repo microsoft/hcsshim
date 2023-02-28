@@ -6,12 +6,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/opencontainers/runc/libcontainer/user"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
 
@@ -434,4 +437,69 @@ func newMountConstraints(mountConfigs []MountConfig) Mounts {
 	return Mounts{
 		Elements: mounts,
 	}
+}
+
+func getUser(spec *specs.Spec, filter func(user.User) bool) (user.User, error) {
+	users, err := user.ParsePasswdFileFilter(filepath.Join(spec.Root.Path, "/etc/passwd"), filter)
+	if err != nil {
+		return user.User{}, err
+	}
+	if len(users) != 1 {
+		return user.User{}, errors.Errorf("expected exactly 1 user matched '%d'", len(users))
+	}
+	return users[0], nil
+}
+
+func getGroup(spec *specs.Spec, filter func(user.Group) bool) (user.Group, error) {
+	groups, err := user.ParseGroupFileFilter(filepath.Join(spec.Root.Path, "/etc/group"), filter)
+	if err != nil {
+		return user.Group{}, err
+	}
+	if len(groups) != 1 {
+		return user.Group{}, errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
+	}
+	return groups[0], nil
+}
+
+// GetUserInfo returns the user and group information for the container.
+func GetUserInfo(spec *specs.Spec) (IDName, []IDName, string, error) {
+	uid := spec.Process.User.UID
+	userInfo, err := getUser(spec, func(user user.User) bool {
+		return uint32(user.Uid) == uid
+	})
+
+	if err != nil {
+		return IDName{}, nil, "", err
+	}
+
+	userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: userInfo.Name}
+
+	gid := spec.Process.User.GID
+	groupInfo, err := getGroup(spec, func(group user.Group) bool {
+		return uint32(group.Gid) == gid
+	})
+	if err != nil {
+		return IDName{}, nil, "", err
+	}
+	groupIDNames := []IDName{{ID: strconv.FormatUint(uint64(spec.Process.User.GID), 10), Name: groupInfo.Name}}
+	additionalGIDs := spec.Process.User.AdditionalGids
+	if len(additionalGIDs) > 0 {
+		for _, gid := range additionalGIDs {
+			groupInfo, err := getGroup(spec, func(group user.Group) bool {
+				return uint32(group.Gid) == gid
+			})
+			if err != nil {
+				return IDName{}, nil, "", err
+			}
+			groupIDNames = append(groupIDNames, IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: groupInfo.Name})
+		}
+	}
+
+	// this default value is used in the Linux kernel if no umask is specified
+	umask := "0022"
+	if spec.Process.User.Umask != nil {
+		umask = fmt.Sprintf("%04o", *spec.Process.User.Umask)
+	}
+
+	return userIDName, groupIDNames, umask, nil
 }

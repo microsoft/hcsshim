@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -44,7 +43,6 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
-	"github.com/opencontainers/runc/libcontainer/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -294,48 +292,6 @@ func setupSandboxHugePageMountsPath(id string) error {
 	return storage.MountRShared(mountPath)
 }
 
-func getUserInfo(spec *specs.Spec) (securitypolicy.IDName, []securitypolicy.IDName, string, error) {
-	uid := spec.Process.User.UID
-	userInfo, err := getUser(spec, func(user user.User) bool {
-		return uint32(user.Uid) == uid
-	})
-
-	if err != nil {
-		return securitypolicy.IDName{}, nil, "", err
-	}
-
-	userIDName := securitypolicy.IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: userInfo.Name}
-
-	gid := spec.Process.User.GID
-	groupInfo, err := getGroup(spec, func(group user.Group) bool {
-		return uint32(group.Gid) == gid
-	})
-	if err != nil {
-		return securitypolicy.IDName{}, nil, "", err
-	}
-	groupIDNames := []securitypolicy.IDName{{ID: strconv.FormatUint(uint64(spec.Process.User.GID), 10), Name: groupInfo.Name}}
-	additionalGIDs := spec.Process.User.AdditionalGids
-	if len(additionalGIDs) > 0 {
-		for _, gid := range additionalGIDs {
-			groupInfo, err := getGroup(spec, func(group user.Group) bool {
-				return uint32(group.Gid) == gid
-			})
-			if err != nil {
-				return securitypolicy.IDName{}, nil, "", err
-			}
-			groupIDNames = append(groupIDNames, securitypolicy.IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: groupInfo.Name})
-		}
-	}
-
-	// this default value is used in the Linux kernel if no umask is specified
-	umask := "0022"
-	if spec.Process.User.Umask != nil {
-		umask = fmt.Sprintf("%04o", *spec.Process.User.Umask)
-	}
-
-	return userIDName, groupIDNames, umask, nil
-}
-
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 	c := &Container{
@@ -428,7 +384,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
-	user, groups, umask, err := getUserInfo(settings.OCISpecification)
+	user, groups, umask, err := securitypolicy.GetUserInfo(settings.OCISpecification)
 	if err != nil {
 		return nil, err
 	}
@@ -701,11 +657,6 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var c *Container
 	var envToKeep securitypolicy.EnvList
 
-	userName, groupNames, umask, err := getUserInfo(params.OCISpecification)
-	if err != nil {
-		return 0, err
-	}
-
 	if params.IsExternal || containerID == UVMContainerID {
 		var allowStdioAccess bool
 		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
@@ -740,6 +691,10 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			pid, err = c.Start(ctx, conSettings)
 		} else {
 			var allowStdioAccess bool
+			user, groups, umask, err := securitypolicy.GetUserInfo(params.OCISpecification)
+			if err != nil {
+				return pid, err
+			}
 			// Windows uses a different field for command, there's no enforcement
 			// around this yet for Windows so this is Linux specific at the moment.
 			envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(
@@ -748,8 +703,8 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 				params.OCIProcess.Env,
 				params.OCIProcess.Cwd,
 				params.OCIProcess.NoNewPrivileges,
-				userName,
-				groupNames,
+				user,
+				groups,
 				umask,
 			)
 			if err != nil {
