@@ -31,6 +31,7 @@ func main() {
 		createCommand,
 		exportCommand,
 		importCommand,
+		makeBaseLayerCommand,
 		mountCommand,
 		removeCommand,
 		unmountCommand,
