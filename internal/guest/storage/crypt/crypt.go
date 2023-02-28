@@ -16,15 +16,14 @@ import (
 
 // Test dependencies
 var (
-	_cryptsetupClose    = cryptsetupClose
-	_cryptsetupFormat   = cryptsetupFormat
-	_cryptsetupOpen     = cryptsetupOpen
-	_generateKeyFile    = generateKeyFile
-	_getBlockDeviceSize = getBlockDeviceSize
-	_osMkdirTemp        = os.MkdirTemp
-	_mkfsXfs            = mkfsXfs
-	_zeroDevice         = zeroDevice
-	_osRemoveAll        = os.RemoveAll
+	_cryptsetupClose  = cryptsetupClose
+	_cryptsetupFormat = cryptsetupFormat
+	_cryptsetupOpen   = cryptsetupOpen
+	_generateKeyFile  = generateKeyFile
+	_osMkdirTemp      = os.MkdirTemp
+	_mkfsXfs          = mkfsXfs
+	_osRemoveAll      = os.RemoveAll
+	_zeroFirstBlock   = zeroFirstBlock
 )
 
 // cryptsetupCommand runs cryptsetup with the provided arguments
@@ -165,20 +164,12 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 	}()
 
 	deviceNamePath := "/dev/mapper/" + dmCryptName
-
-	// Get actual size of the scratch device
-	deviceSize, err := _getBlockDeviceSize(ctx, deviceNamePath)
-	if err != nil {
-		return "", fmt.Errorf("error getting size of: %s: %w", deviceNamePath, err)
-	}
-
-	if deviceSize == 0 {
-		return "", fmt.Errorf("invalid size obtained for: %s", deviceNamePath)
-	}
-
-	// 4.1. Zero the first block. It appears that mkfs.xfs reads this before formatting.
-	if err = _zeroDevice(deviceNamePath, 4096, 1); err != nil {
-		return "", fmt.Errorf("failed zero'ing start of device %s: %w", deviceNamePath, err)
+	// 4.1. Zero the first block.
+	// In the xfs mkfs case it appears to attempt to read the first block of the device.
+	// This results in an integrity error. This function zeros out the start of the device,
+	// so we are sure that when it is read it has already been hashed so matches.
+	if err := _zeroFirstBlock(deviceNamePath, 4096); err != nil {
+		return "", fmt.Errorf("failed to zero first block: %w", err)
 	}
 
 	// 4.2. Format it as xfs

@@ -5,10 +5,8 @@ package crypt
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/pkg/errors"
 )
 
@@ -23,9 +21,9 @@ func clearCryptTestDependencies() {
 	_cryptsetupFormat = nil
 	_cryptsetupOpen = nil
 	_generateKeyFile = nil
-	_getBlockDeviceSize = nil
 	_osMkdirTemp = osMkdirTempTest
 	_osRemoveAll = nil
+	_zeroFirstBlock = nil
 }
 
 func Test_Encrypt_Generate_Key_Error(t *testing.T) {
@@ -127,63 +125,11 @@ func Test_Encrypt_Cryptsetup_Open_Error(t *testing.T) {
 	}
 }
 
-func Test_Encrypt_Get_Device_Size_Error(t *testing.T) {
-	clearCryptTestDependencies()
-
-	// Test what happens when cryptsetup fails to get the size of the
-	// unencrypted block device.
-
-	_generateKeyFile = func(path string, size int64) error {
-		return nil
-	}
-	_osRemoveAll = func(path string) error {
-		return nil
-	}
-	_cryptsetupFormat = func(source string, keyFilePath string) error {
-		return nil
-	}
-	_cryptsetupOpen = func(source string, deviceName string, keyFilePath string) error {
-		return nil
-	}
-	_cryptsetupClose = func(deviceName string) error {
-		return nil
-	}
-
-	source := "/dev/sda"
-	dmCryptName := "dm-crypt-target"
-	deviceNamePath := "/dev/mapper/" + dmCryptName
-
-	expectedErr := errors.New("expected error message")
-	_getBlockDeviceSize = func(ctx context.Context, path string) (int64, error) {
-		return 0, expectedErr
-	}
-
-	_, err := EncryptDevice(context.Background(), source, dmCryptName)
-	if errors.Unwrap(err) != expectedErr {
-		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
-	}
-
-	// Check that it fails when the size of the block device is zero
-
-	expectedErr = fmt.Errorf("invalid size obtained for: %s", deviceNamePath)
-	_getBlockDeviceSize = func(ctx context.Context, path string) (int64, error) {
-		return 0, nil
-	}
-
-	_, err = EncryptDevice(context.Background(), source, dmCryptName)
-	if err.Error() != expectedErr.Error() {
-		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
-	}
-}
-
 func Test_Encrypt_Mkfs_Error(t *testing.T) {
 	clearCryptTestDependencies()
 
 	// Test what happens when mkfs fails to format the unencrypted device.
 	// Verify that the arguments passed to it are the right ones.
-
-	blockDeviceSize := int64(memory.GiB)
-
 	_generateKeyFile = func(path string, size int64) error {
 		return nil
 	}
@@ -199,14 +145,7 @@ func Test_Encrypt_Mkfs_Error(t *testing.T) {
 	_cryptsetupClose = func(deviceName string) error {
 		return nil
 	}
-	_getBlockDeviceSize = func(ctx context.Context, path string) (int64, error) {
-		// Return a non-zero size
-		return blockDeviceSize, nil
-	}
-	_mkfsXfs = func(string) error {
-		return nil
-	}
-	_zeroDevice = func(string, int64, int64) error {
+	_zeroFirstBlock = func(_ string, _ int) error {
 		return nil
 	}
 
@@ -221,8 +160,7 @@ func Test_Encrypt_Mkfs_Error(t *testing.T) {
 		return expectedErr
 	}
 
-	_, err := EncryptDevice(context.Background(), source, "dm-crypt-name")
-	if errors.Unwrap(err) != expectedErr {
+	if _, err := EncryptDevice(context.Background(), source, "dm-crypt-name"); errors.Unwrap(err) != expectedErr {
 		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
 	}
 }
@@ -231,9 +169,6 @@ func Test_Encrypt_Success(t *testing.T) {
 	clearCryptTestDependencies()
 
 	// Test what happens when everything goes right.
-
-	blockDeviceSize := int64(memory.GiB)
-
 	_generateKeyFile = func(path string, size int64) error {
 		return nil
 	}
@@ -246,9 +181,8 @@ func Test_Encrypt_Success(t *testing.T) {
 	_cryptsetupOpen = func(source string, deviceName string, keyFilePath string) error {
 		return nil
 	}
-	_getBlockDeviceSize = func(ctx context.Context, path string) (int64, error) {
-		// Return a non-zero size
-		return blockDeviceSize, nil
+	_zeroFirstBlock = func(_ string, _ int) error {
+		return nil
 	}
 	_mkfsXfs = func(arg string) error {
 		return nil
