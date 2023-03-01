@@ -384,7 +384,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
-	user, groups, umask, err := securitypolicy.GetUserInfo(settings.OCISpecification)
+	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(settings.OCISpecification)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +656,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	var envToKeep securitypolicy.EnvList
-	user, groups, umask, err := securitypolicy.GetUserInfo(params.OCISpecification)
+	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(params.OCISpecification)
 	if err != nil {
 		return 0, err
 	}

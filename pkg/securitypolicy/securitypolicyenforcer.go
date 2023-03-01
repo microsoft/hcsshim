@@ -78,6 +78,7 @@ type SecurityPolicyEnforcer interface {
 	LoadFragment(issuer string, feed string, code string) error
 	EnforceScratchMountPolicy(scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(scratchPath string) (err error)
+	GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error)
 }
 
 type stringSet map[string]struct{}
@@ -573,6 +574,11 @@ func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error 
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer.
+func (StandardSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	return IDName{}, nil, "", nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -945,6 +951,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error 
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	return IDName{}, nil, "", nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string //nolint:unused
 }
@@ -1025,4 +1035,8 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) 
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
 	return errors.New("unmounting scratch is denied by the policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	return IDName{}, nil, "", nil
 }
