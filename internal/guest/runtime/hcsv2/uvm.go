@@ -360,6 +360,16 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			if err := setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification); err != nil {
 				return nil, err
 			}
+
+			// Add SEV device when security policy is not empty, except when privileged annotation is
+			// set to "true", in which case all UVMs devices are added.
+			if len(h.securityPolicyEnforcer.EncodedSecurityPolicy()) > 0 && !oci.ParseAnnotationsBool(ctx,
+				settings.OCISpecification.Annotations, annotations.LCOWPrivileged, false) {
+				if err := addDevSev(ctx, settings.OCISpecification); err != nil {
+					log.G(ctx).WithError(err).Debug("failed to add SEV device")
+				}
+			}
+
 			defer func() {
 				if err != nil {
 					_ = os.RemoveAll(settings.OCIBundlePath)
