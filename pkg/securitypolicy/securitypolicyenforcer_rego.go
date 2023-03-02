@@ -712,6 +712,10 @@ func (policy *regoEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, strin
 	passwdPath := filepath.Join(spec.Root.Path, "/etc/passwd")
 	groupPath := filepath.Join(spec.Root.Path, "/etc/group")
 
+	if spec.Process == nil {
+		return IDName{}, nil, "", errors.New("spec.Process is nil")
+	}
+
 	uid := spec.Process.User.UID
 	userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
 	if _, err := os.Stat(passwdPath); err == nil {
