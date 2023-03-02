@@ -88,14 +88,14 @@
             "introduced_version": "0.2.1",
             "default_value": {
                 "umask": "0022",
-                "user": {
-                    "strategy": "any",
-                    "pattern": ""
+                "user_idname": {
+                    "pattern": "",
+                    "strategy": "any"
                 },
-                "groups": [
+                "group_idnames": [
                     {
-                        "strategy": "any",
-                        "pattern": ""
+                        "pattern": "",
+                        "strategy": "any"
                     }
                 ]
             }

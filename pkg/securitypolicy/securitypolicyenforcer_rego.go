@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -684,8 +685,8 @@ func (policy *regoEnforcer) EnforceScratchUnmountPolicy(scratchPath string) erro
 	return nil
 }
 
-func getUser(spec *specs.Spec, filter func(user.User) bool) (user.User, error) {
-	users, err := user.ParsePasswdFileFilter(filepath.Join(spec.Root.Path, "/etc/passwd"), filter)
+func getUser(spec *specs.Spec, passwdPath string, filter func(user.User) bool) (user.User, error) {
+	users, err := user.ParsePasswdFileFilter(passwdPath, filter)
 	if err != nil {
 		return user.User{}, err
 	}
@@ -695,8 +696,8 @@ func getUser(spec *specs.Spec, filter func(user.User) bool) (user.User, error) {
 	return users[0], nil
 }
 
-func getGroup(spec *specs.Spec, filter func(user.Group) bool) (user.Group, error) {
-	groups, err := user.ParseGroupFileFilter(filepath.Join(spec.Root.Path, "/etc/group"), filter)
+func getGroup(spec *specs.Spec, groupPath string, filter func(user.Group) bool) (user.Group, error) {
+	groups, err := user.ParseGroupFileFilter(groupPath, filter)
 	if err != nil {
 		return user.Group{}, err
 	}
@@ -708,35 +709,55 @@ func getGroup(spec *specs.Spec, filter func(user.Group) bool) (user.Group, error
 
 // GetUserInfo returns the user and group information for the container.
 func (policy *regoEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	passwdPath := filepath.Join(spec.Root.Path, "/etc/passwd")
+	groupPath := filepath.Join(spec.Root.Path, "/etc/group")
+
 	uid := spec.Process.User.UID
-	userInfo, err := getUser(spec, func(user user.User) bool {
-		return uint32(user.Uid) == uid
-	})
+	userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
+	if _, err := os.Stat(passwdPath); err == nil {
+		userInfo, err := getUser(spec, passwdPath, func(user user.User) bool {
+			return uint32(user.Uid) == uid
+		})
 
-	if err != nil {
-		return IDName{}, nil, "", err
+		if err != nil {
+			return userIDName, nil, "", err
+		}
+
+		userIDName.Name = userInfo.Name
 	}
-
-	userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: userInfo.Name}
 
 	gid := spec.Process.User.GID
-	groupInfo, err := getGroup(spec, func(group user.Group) bool {
-		return uint32(group.Gid) == gid
-	})
-	if err != nil {
-		return IDName{}, nil, "", err
+	groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
+
+	checkGroup := true
+	if _, err := os.Stat(groupPath); err == nil {
+		groupInfo, err := getGroup(spec, groupPath, func(group user.Group) bool {
+			return uint32(group.Gid) == gid
+		})
+
+		if err != nil {
+			return userIDName, nil, "", err
+		}
+		groupIDName.Name = groupInfo.Name
+	} else {
+		checkGroup = false
 	}
-	groupIDNames := []IDName{{ID: strconv.FormatUint(uint64(spec.Process.User.GID), 10), Name: groupInfo.Name}}
+
+	groupIDNames := []IDName{groupIDName}
 	additionalGIDs := spec.Process.User.AdditionalGids
 	if len(additionalGIDs) > 0 {
 		for _, gid := range additionalGIDs {
-			groupInfo, err := getGroup(spec, func(group user.Group) bool {
-				return uint32(group.Gid) == gid
-			})
-			if err != nil {
-				return IDName{}, nil, "", err
+			groupIDName = IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
+			if checkGroup {
+				groupInfo, err := getGroup(spec, groupPath, func(group user.Group) bool {
+					return uint32(group.Gid) == gid
+				})
+				if err != nil {
+					return userIDName, nil, "", err
+				}
+				groupIDName.Name = groupInfo.Name
 			}
-			groupIDNames = append(groupIDNames, IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: groupInfo.Name})
+			groupIDNames = append(groupIDNames, groupIDName)
 		}
 	}
 
