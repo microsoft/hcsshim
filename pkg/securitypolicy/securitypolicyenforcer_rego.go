@@ -112,6 +112,10 @@ func createRegoEnforcer(base64EncodedPolicy string,
 	securityPolicy := new(SecurityPolicy)
 	err = json.Unmarshal(rawPolicy, securityPolicy)
 	if err == nil {
+		if securityPolicy.AllowAll {
+			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
+		}
+
 		containers := make([]*Container, securityPolicy.Containers.Length)
 
 		for i := 0; i < securityPolicy.Containers.Length; i++ {
@@ -120,11 +124,14 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			if !ok {
 				return nil, fmt.Errorf("container constraint with index %q not found", index)
 			}
+			cConf.AllowStdioAccess = true
+			cConf.NoNewPrivileges = true
+			cConf.User = UserConfig{
+				UserIDName:   IDNameConfig{Strategy: IDNameStrategyAny},
+				GroupIDNames: []IDNameConfig{{Strategy: IDNameStrategyAny}},
+				Umask:        "0022",
+			}
 			containers[i] = &cConf
-		}
-
-		if securityPolicy.AllowAll {
-			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
 		code, err = marshalRego(
