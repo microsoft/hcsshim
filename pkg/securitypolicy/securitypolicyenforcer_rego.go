@@ -714,7 +714,6 @@ func getGroup(spec *specs.Spec, groupPath string, filter func(user.Group) bool) 
 	return groups[0], nil
 }
 
-// GetUserInfo returns the user and group information for the container.
 func (policy *regoEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
 	passwdPath := filepath.Join(spec.Root.Path, "/etc/passwd")
 	groupPath := filepath.Join(spec.Root.Path, "/etc/group")
