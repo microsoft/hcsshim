@@ -442,7 +442,7 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 		trace.StringAttribute("endpointName", req.Name),
 		trace.StringAttribute("namespaceID", req.NamespaceID))
 
-	if req.Name == "" || req.NamespaceID == "" {
+	if req.Name == "" || (!req.AttachToHost && req.NamespaceID == "") {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
@@ -464,6 +464,11 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.Name)
 		}
 		if req.AttachToHost {
+			if req.NamespaceID != "" {
+				log.G(ctx).WithField("namespaceID", req.NamespaceID).
+					Warning("Specified namespace ID will be ignored when attaching to default host namespace")
+			}
+
 			nsID, err := getHostDefaultNamespace()
 			if err != nil {
 				return nil, err

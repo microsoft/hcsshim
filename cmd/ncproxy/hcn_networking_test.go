@@ -946,6 +946,9 @@ func TestAddEndpoint_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache, networkingStore)
 
 	// create test network namespace
+	// we need to create a (host) namespace other than the HostDefault to differentiate between
+	// the nominal AddEndpoint functionality, and when specifying attach to host
+	// the DefaultHost namespace is retrieved below.
 	namespace := hcn.NewNamespace(hcn.NamespaceTypeHost)
 	namespace, err = namespace.Create()
 	if err != nil {
@@ -1016,9 +1019,12 @@ func TestAddEndpoint_NoError(t *testing.T) {
 			}()
 
 			req := &ncproxygrpc.AddEndpointRequest{
-				Name:         endpointName,
-				NamespaceID:  namespace.Id, // will be ignored if AttachToHost is true
-				AttachToHost: test.attachToHost,
+				Name: endpointName,
+			}
+			if test.attachToHost {
+				req.AttachToHost = true
+			} else {
+				req.NamespaceID = namespace.Id
 			}
 
 			_, err = gService.AddEndpoint(ctx, req)
