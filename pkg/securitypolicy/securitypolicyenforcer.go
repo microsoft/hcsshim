@@ -44,11 +44,29 @@ type SecurityPolicyEnforcer interface {
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) (err error)
 	EnforceOverlayUnmountPolicy(target string) (err error)
-	EnforceCreateContainerPolicy(sandboxID string, containerID string,
-		argList []string, envList []string, workingDir string, mounts []oci.Mount, privileged bool, noNewPrivileges bool) (EnvList, bool, error)
+	EnforceCreateContainerPolicy(
+		sandboxID string,
+		containerID string,
+		argList []string,
+		envList []string,
+		workingDir string,
+		mounts []oci.Mount,
+		privileged bool,
+		noNewPrivileges bool,
+		user IDName,
+		groups []IDName,
+		umask string) (EnvList, bool, error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
-	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string, noNewPrivileges bool) (EnvList, bool, error)
+	EnforceExecInContainerPolicy(
+		containerID string,
+		argList []string,
+		envList []string,
+		workingDir string,
+		noNewPrivileges bool,
+		user IDName,
+		groups []IDName,
+		umask string) (EnvList, bool, error)
 	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (EnvList, bool, error)
 	EnforceShutdownContainerPolicy(containerID string) error
 	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
@@ -60,6 +78,7 @@ type SecurityPolicyEnforcer interface {
 	LoadFragment(issuer string, feed string, code string) error
 	EnforceScratchMountPolicy(scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(scratchPath string) (err error)
+	GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error)
 }
 
 type stringSet map[string]struct{}
@@ -436,6 +455,9 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	mounts []oci.Mount,
 	privileged bool,
 	noNewPrivileges bool,
+	user IDName,
+	groups []IDName,
+	umask string,
 ) (allowedEnvs EnvList, stdioAccessAllowed bool, err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
@@ -476,7 +498,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool) (EnvList, bool, error) {
+func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
@@ -550,6 +572,11 @@ func (StandardSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) er
 // points are simply allowed.
 func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
 	return nil
+}
+
+// Stub. We are deprecating the standard enforcer.
+func (StandardSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	return IDName{}, nil, "", nil
 }
 
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
@@ -864,11 +891,11 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool) (EnvList, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool) (EnvList, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
@@ -924,6 +951,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error 
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	return IDName{}, nil, "", nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string //nolint:unused
 }
@@ -946,11 +977,11 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) erro
 	return errors.New("removing an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool) (EnvList, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
 	return nil, false, errors.New("running commands is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string, _ bool) (EnvList, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
 	return nil, false, errors.New("starting additional processes in a container is denied by policy")
 }
 
@@ -1004,4 +1035,8 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) 
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
 	return errors.New("unmounting scratch is denied by the policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	return IDName{}, nil, "", nil
 }

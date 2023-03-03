@@ -83,6 +83,22 @@
         "no_new_privileges": {
             "introduced_version": "0.2.0",
             "default_value": true
+        },
+        "user": {
+            "introduced_version": "0.2.1",
+            "default_value": {
+                "umask": "0022",
+                "user_idname": {
+                    "pattern": "",
+                    "strategy": "any"
+                },
+                "group_idnames": [
+                    {
+                        "pattern": "",
+                        "strategy": "any"
+                    }
+                ]
+            }
         }
     },
     "external_process": {

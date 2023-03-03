@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -15,6 +17,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
+	"github.com/opencontainers/runc/libcontainer/user"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -108,6 +112,10 @@ func createRegoEnforcer(base64EncodedPolicy string,
 	securityPolicy := new(SecurityPolicy)
 	err = json.Unmarshal(rawPolicy, securityPolicy)
 	if err == nil {
+		if securityPolicy.AllowAll {
+			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
+		}
+
 		containers := make([]*Container, securityPolicy.Containers.Length)
 
 		for i := 0; i < securityPolicy.Containers.Length; i++ {
@@ -116,11 +124,14 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			if !ok {
 				return nil, fmt.Errorf("container constraint with index %q not found", index)
 			}
+			cConf.AllowStdioAccess = true
+			cConf.NoNewPrivileges = true
+			cConf.User = UserConfig{
+				UserIDName:   IDNameConfig{Strategy: IDNameStrategyAny},
+				GroupIDNames: []IDNameConfig{{Strategy: IDNameStrategyAny}},
+				Umask:        "0022",
+			}
 			containers[i] = &cConf
-		}
-
-		if securityPolicy.AllowAll {
-			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
 		code, err = marshalRego(
@@ -398,6 +409,21 @@ func getEnvsToKeep(envList []string, results rpi.RegoQueryResult) ([]string, err
 	return keepSet.toArray(), nil
 }
 
+func (idName IDName) toInput() interface{} {
+	return map[string]interface{}{
+		"id":   idName.ID,
+		"name": idName.Name,
+	}
+}
+
+func groupsToInputs(groups []IDName) []interface{} {
+	inputs := []interface{}{}
+	for _, group := range groups {
+		inputs = append(inputs, group.toInput())
+	}
+	return inputs
+}
+
 func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	sandboxID string,
 	containerID string,
@@ -407,6 +433,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	mounts []oci.Mount,
 	privileged bool,
 	noNewPrivileges bool,
+	user IDName,
+	groups []IDName,
+	umask string,
 ) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
 		"containerID":     containerID,
@@ -418,6 +447,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"mounts":          appendMountData([]interface{}{}, mounts),
 		"privileged":      privileged,
 		"noNewPrivileges": noNewPrivileges,
+		"user":            user.toInput(),
+		"groups":          groupsToInputs(groups),
+		"umask":           umask,
 	}
 
 	results, err := policy.enforce("create_container", input)
@@ -475,13 +507,25 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
 }
 
-func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string, noNewPrivileges bool) (toKeep EnvList, stdioAccessAllowed bool, err error) {
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	noNewPrivileges bool,
+	user IDName,
+	groups []IDName,
+	umask string,
+) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := inputData{
 		"containerID":     containerID,
 		"argList":         argList,
 		"envList":         envList,
 		"workingDir":      workingDir,
 		"noNewPrivileges": noNewPrivileges,
+		"user":            user.toInput(),
+		"groups":          groupsToInputs(groups),
+		"umask":           umask,
 	}
 
 	results, err := policy.enforce("exec_in_container", input)
@@ -646,4 +690,92 @@ func (policy *regoEnforcer) EnforceScratchUnmountPolicy(scratchPath string) erro
 		return err
 	}
 	return nil
+}
+
+func getUser(spec *specs.Spec, passwdPath string, filter func(user.User) bool) (user.User, error) {
+	users, err := user.ParsePasswdFileFilter(passwdPath, filter)
+	if err != nil {
+		return user.User{}, err
+	}
+	if len(users) != 1 {
+		return user.User{}, errors.Errorf("expected exactly 1 user matched '%d'", len(users))
+	}
+	return users[0], nil
+}
+
+func getGroup(spec *specs.Spec, groupPath string, filter func(user.Group) bool) (user.Group, error) {
+	groups, err := user.ParseGroupFileFilter(groupPath, filter)
+	if err != nil {
+		return user.Group{}, err
+	}
+	if len(groups) != 1 {
+		return user.Group{}, errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
+	}
+	return groups[0], nil
+}
+
+func (policy *regoEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+	passwdPath := filepath.Join(spec.Root.Path, "/etc/passwd")
+	groupPath := filepath.Join(spec.Root.Path, "/etc/group")
+
+	if spec.Process == nil {
+		return IDName{}, nil, "", errors.New("spec.Process is nil")
+	}
+
+	uid := spec.Process.User.UID
+	userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
+	if _, err := os.Stat(passwdPath); err == nil {
+		userInfo, err := getUser(spec, passwdPath, func(user user.User) bool {
+			return uint32(user.Uid) == uid
+		})
+
+		if err != nil {
+			return userIDName, nil, "", err
+		}
+
+		userIDName.Name = userInfo.Name
+	}
+
+	gid := spec.Process.User.GID
+	groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
+
+	checkGroup := true
+	if _, err := os.Stat(groupPath); err == nil {
+		groupInfo, err := getGroup(spec, groupPath, func(group user.Group) bool {
+			return uint32(group.Gid) == gid
+		})
+
+		if err != nil {
+			return userIDName, nil, "", err
+		}
+		groupIDName.Name = groupInfo.Name
+	} else {
+		checkGroup = false
+	}
+
+	groupIDNames := []IDName{groupIDName}
+	additionalGIDs := spec.Process.User.AdditionalGids
+	if len(additionalGIDs) > 0 {
+		for _, gid := range additionalGIDs {
+			groupIDName = IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
+			if checkGroup {
+				groupInfo, err := getGroup(spec, groupPath, func(group user.Group) bool {
+					return uint32(group.Gid) == gid
+				})
+				if err != nil {
+					return userIDName, nil, "", err
+				}
+				groupIDName.Name = groupInfo.Name
+			}
+			groupIDNames = append(groupIDNames, groupIDName)
+		}
+	}
+
+	// this default value is used in the Linux kernel if no umask is specified
+	umask := "0022"
+	if spec.Process.User.Umask != nil {
+		umask = fmt.Sprintf("%04o", *spec.Process.User.Umask)
+	}
+
+	return userIDName, groupIDNames, umask, nil
 }

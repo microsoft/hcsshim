@@ -384,6 +384,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
+	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(settings.OCISpecification)
+	if err != nil {
+		return nil, err
+	}
+
 	envToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
 		sandboxID,
 		id,
@@ -393,6 +398,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Mounts,
 		isPrivilegedContainerCreationRequest(ctx, settings.OCISpecification),
 		settings.OCISpecification.Process.NoNewPrivileges,
+		user,
+		groups,
+		umask,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
@@ -648,6 +656,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	var envToKeep securitypolicy.EnvList
+
 	if params.IsExternal || containerID == UVMContainerID {
 		var allowStdioAccess bool
 		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
@@ -681,15 +690,29 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			// there's no policy enforcement to do for starting
 			pid, err = c.Start(ctx, conSettings)
 		} else {
-			var allowStdioAccess bool
 			// Windows uses a different field for command, there's no enforcement
 			// around this yet for Windows so this is Linux specific at the moment.
+
+			var user securitypolicy.IDName
+			var groups []securitypolicy.IDName
+			var umask string
+			var allowStdioAccess bool
+
+			user, groups, umask, err = h.securityPolicyEnforcer.GetUserInfo(params.OCISpecification)
+			if err != nil {
+				return 0, err
+			}
+
 			envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(
 				containerID,
 				params.OCIProcess.Args,
 				params.OCIProcess.Env,
 				params.OCIProcess.Cwd,
-				params.OCIProcess.NoNewPrivileges)
+				params.OCIProcess.NoNewPrivileges,
+				user,
+				groups,
+				umask,
+			)
 			if err != nil {
 				return pid, errors.Wrapf(err, "exec in container denied due to policy")
 			}

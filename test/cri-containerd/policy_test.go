@@ -105,9 +105,10 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(
 			map[string]string{
-				annotations.NoSecurityHardware:  strconv.FormatBool(!*flagSevSnp),
-				annotations.SecurityPolicy:      policy,
-				annotations.VPMemNoMultiMapping: "true",
+				annotations.NoSecurityHardware:   strconv.FormatBool(!*flagSevSnp),
+				annotations.SecurityPolicy:       policy,
+				annotations.VPMemNoMultiMapping:  "true",
+				annotations.EncryptedScratchDisk: strconv.FormatBool(*flagSevSnp),
 			},
 		),
 	)

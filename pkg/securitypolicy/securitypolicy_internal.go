@@ -133,6 +133,8 @@ type securityPolicyContainer struct {
 	AllowStdioAccess bool `json:"allow_stdio_access"`
 	// Whether to deny new privileges
 	NoNewPrivileges bool `json:"no_new_privileges"`
+	// The user that the container will run as
+	User UserConfig `json:"user"`
 }
 
 type containerExecProcess struct {
@@ -202,6 +204,7 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		Signals:          c.Signals,
 		AllowStdioAccess: c.AllowStdioAccess,
 		NoNewPrivileges:  c.NoNewPrivileges,
+		User:             c.User,
 	}, nil
 }
 
