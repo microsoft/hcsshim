@@ -142,6 +142,12 @@ func NewLayerWriter(ctx context.Context, path string, parentLayerPaths []string)
 		if err != nil {
 			return nil, err
 		}
+
+		// ensure the required files are present in the base layer
+		_, err = ensureBaseLayer(f)
+		if err != nil {
+			return nil, err
+		}
 		return &baseLayerWriter{
 			ctx:  ctx,
 			s:    span,
