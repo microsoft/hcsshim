@@ -358,6 +358,7 @@ var xxx_messageInfo_CreateNetworkRequest proto.InternalMessageInfo
 
 type Network struct {
 	// Types that are valid to be assigned to Settings:
+	//
 	//	*Network_HcnNetwork
 	//	*Network_NcproxyNetwork
 	Settings             isNetwork_Settings `protobuf_oneof:"settings"`
@@ -729,6 +730,7 @@ var xxx_messageInfo_CreateEndpointRequest proto.InternalMessageInfo
 
 type EndpointSettings struct {
 	// Types that are valid to be assigned to Settings:
+	//
 	//	*EndpointSettings_HcnEndpoint
 	//	*EndpointSettings_NcproxyEndpoint
 	Settings             isEndpointSettings_Settings `protobuf_oneof:"settings"`
@@ -950,6 +952,7 @@ type NCProxyEndpointSettings struct {
 	NetworkName           string `protobuf:"bytes,5,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
 	DefaultGateway        string `protobuf:"bytes,6,opt,name=default_gateway,json=defaultGateway,proto3" json:"default_gateway,omitempty"`
 	// Types that are valid to be assigned to DeviceDetails:
+	//
 	//	*NCProxyEndpointSettings_PciDeviceDetails
 	DeviceDetails           isNCProxyEndpointSettings_DeviceDetails `protobuf_oneof:"device_details"`
 	Ipv6Address             string                                  `protobuf:"bytes,8,opt,name=ipv6address,proto3" json:"ipv6address,omitempty"`
