@@ -160,8 +160,7 @@ var checkCmd = cli.Command{
 		},
 		cli.StringFlag{
 			Name:  "chain",
-			Usage: "key or cert file to use (pem) (default: chain.pem)",
-			Value: "chain.pem",
+			Usage: "key or cert file to use (pem) (optional)",
 		},
 		cli.StringFlag{
 			Name:  "did",
@@ -341,14 +340,22 @@ var chainCmd = cli.Command{
 			Usage: "input COSE Sign1 file",
 			Value: "input.cose",
 		},
+		cli.StringFlag{
+			Name:  "out",
+			Usage: "output chain PEM text file",
+		},
 	},
 	Action: func(ctx *cli.Context) error {
 		pems, err := cosesign1.ParsePemChain(ctx.String("in"))
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stdout, "%s\n", strings.Join(pems, "\n"))
-		return nil
+		if len(ctx.String("out")) > 0 {
+			return cosesign1.WriteString(ctx.String("out"), strings.Join(pems, "\n"))
+		} else {
+			fmt.Fprintf(os.Stdout, "%s\n", strings.Join(pems, "\n"))
+			return nil
+		}
 	},
 }
 
