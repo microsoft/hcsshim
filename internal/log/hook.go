@@ -23,35 +23,34 @@ type Hook struct {
 	// EncodeAsJSON formats structs, maps, arrays, slices, and [bytes.Buffer] as JSON.
 	// Variables of [bytes.Buffer] will be converted to []byte.
 	//
-	// Default is true.
+	// Default is false.
 	EncodeAsJSON bool
 
 	// FormatTime specifies the format for [time.Time] variables.
-	// An empty string disabled formatting.
+	// An empty string disables formatting.
+	// When disabled, the fall back will the JSON encoding, if enabled.
 	//
 	// Default is [github.com/containerd/containerd/log.RFC3339NanoFixed].
 	TimeFormat string
 
 	// Duration format converts a [time.Duration] fields to an appropriate encoding.
+	// nil disables formatting.
+	// When disabled, the fall back will the JSON encoding, if enabled.
 	//
-	// Default is [DurationFormatSeconds].
+	// Default is [DurationFormatString], which appends a duration unit after the value.
 	DurationFormat DurationFormat
 
 	// AddSpanContext adds [logfields.TraceID] and [logfields.SpanID] fields to
 	// the entry from the span context stored in [logrus.Entry.Context], if it exists.
 	AddSpanContext bool
-
-	// Whether to encode errors or keep them as is.
-	EncodeError bool
 }
 
 var _ logrus.Hook = &Hook{}
 
 func NewHook() *Hook {
 	return &Hook{
-		EncodeAsJSON:   true,
 		TimeFormat:     log.RFC3339NanoFixed,
-		DurationFormat: DurationFormatSeconds,
+		DurationFormat: DurationFormatString,
 		AddSpanContext: true,
 	}
 }
@@ -72,30 +71,36 @@ func (h *Hook) Fire(e *logrus.Entry) (err error) {
 // the settings in [Hook].
 // If [Hook.TimeFormat] is non-empty, it will be passed to [time.Time.Format] for
 // fields of type [time.Time].
-// If [Hook.EncodeAsJSON] is true, then fields that are numeric, boolean, strings, or
-// errors will be encoded via a [json.NewEncoder] in encode().
 //
-// If [Hook.TimeFormat] is empty and [Hook.EncodeAsJSON] is false, then this is a no-op.
+// If [Hook.EncodeAsJSON] is true, then fields that are not numeric, boolean, strings, or
+// errors will be encoded via a [json.Marshal] (with HTML escaping disabled).
+// Chanel- and function-typed fields, as well as unsafe pointers are left alone and not encoded.
+//
+// If [Hook.TimeFormat] and [Hook.DurationFormat] are empty and [Hook.EncodeAsJSON] is false,
+// then this is a no-op.
 func (h *Hook) encode(e *logrus.Entry) {
 	d := e.Data
 
 	formatTime := h.TimeFormat != ""
-	if !(h.EncodeAsJSON || formatTime) {
+	formatDuration := h.DurationFormat != nil
+	if !(h.EncodeAsJSON || formatTime || formatDuration) {
 		return
 	}
 
-	// todo: replace these with constraints.Integer, constraints.Float, etc in go1.18
 	for k, v := range d {
-		if !h.EncodeError {
-			if _, ok := v.(error); k == logrus.ErrorKey || ok {
-				continue
-			}
-		}
+		// encode types with dedicated formatting options first
 
-		if t, ok := v.(time.Time); formatTime && ok {
-			d[k] = t.Format(h.TimeFormat)
+		if vv, ok := v.(time.Time); formatTime && ok {
+			d[k] = vv.Format(h.TimeFormat)
 			continue
 		}
+
+		if vv, ok := v.(time.Duration); formatDuration && ok {
+			d[k] = h.DurationFormat(vv)
+			continue
+		}
+
+		// general case JSON encoding
 
 		if !h.EncodeAsJSON {
 			continue
@@ -103,18 +108,11 @@ func (h *Hook) encode(e *logrus.Entry) {
 
 		switch vv := v.(type) {
 		// built in types
+		// "json" marshals errors as "{}", so leave alone here
 		case bool, string, error, uintptr,
 			int8, int16, int32, int64, int,
 			uint8, uint32, uint64, uint,
 			float32, float64:
-			continue
-
-		case time.Duration:
-			if h.DurationFormat != nil {
-				if i := h.DurationFormat(vv); i != nil {
-					d[k] = i
-				}
-			}
 			continue
 
 		// Rather than setting d[k] = vv.String(), JSON encode []byte value, since it
@@ -130,7 +128,7 @@ func (h *Hook) encode(e *logrus.Entry) {
 			v = vv.Bytes()
 		}
 
-		// dereference any pointers
+		// dereference pointer or interface variables
 		rv := reflect.Indirect(reflect.ValueOf(v))
 		// check if `v` is a null pointer
 		if !rv.IsValid() {
@@ -141,6 +139,10 @@ func (h *Hook) encode(e *logrus.Entry) {
 		switch rv.Kind() {
 		case reflect.Map, reflect.Struct, reflect.Array, reflect.Slice:
 		default:
+			// Bool, [U]?Int*, Float*, Complex*, Uintptr, String: encoded as normal
+			// Chan, Func: not supported by json
+			// Interface, Pointer: dereferenced above
+			// UnsafePointer: not supported by json, not safe to de-reference; leave alone
 			continue
 		}
 
@@ -150,16 +152,16 @@ func (h *Hook) encode(e *logrus.Entry) {
 			// hooks (ie, exporting to ETW) from firing. So add encoding errors to
 			// the entry data to be written out, but keep on processing.
 			d[k+"-"+logrus.ErrorKey] = err.Error()
+			// keep the original `v` as the value,
+			continue
 		}
-
-		// if  `err != nil`, then `b == nil` and this will be the empty string
 		d[k] = string(b)
 	}
 }
 
 func (h *Hook) addSpanContext(e *logrus.Entry) {
 	ctx := e.Context
-	if ctx == nil {
+	if !h.AddSpanContext || ctx == nil {
 		return
 	}
 	span := trace.FromContext(ctx)

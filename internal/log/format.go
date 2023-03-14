@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/log"
-	"github.com/sirupsen/logrus"
 )
 
 const TimeFormat = log.RFC3339NanoFixed
@@ -83,17 +82,4 @@ func encodeBuffer(buf *bytes.Buffer, v interface{}) ([]byte, error) {
 
 	// encoder.Encode appends a newline to the end
 	return bytes.TrimSpace(buf.Bytes()), nil
-}
-
-// GetCallerName checks if the entry appears caller caller information and returns the function name.
-//
-// This is intended to be used with "github.com/Microsoft/go-winio/pkg/etwlogrus".WithGetName.
-func GetCallerName(e *logrus.Entry) string {
-	if e.Caller == nil {
-		return ""
-	}
-	if e.Caller.Func != nil {
-		return e.Caller.Func.Name()
-	}
-	return e.Caller.Function
 }

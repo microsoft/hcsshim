@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// todo: break import cycle with "internal/hcs" and errors errors defined there
+// todo: break import cycle with "internal/hcs/errors.go" and reference errors defined there
 // todo: add errors defined in "internal/guest/gcserror" (Hresult does not implement error)
 
 func toStatusCode(err error) codes.Code {
@@ -23,7 +23,7 @@ func toStatusCode(err error) codes.Code {
 	}
 
 	switch {
-	// case IsAny(err):
+	// case isAny(err):
 	// 	return codes.Cancelled
 	case isAny(err, os.ErrInvalid):
 		return codes.InvalidArgument
@@ -35,23 +35,23 @@ func toStatusCode(err error) codes.Code {
 		return codes.AlreadyExists
 	case isAny(err, os.ErrPermission):
 		return codes.PermissionDenied
-	// case IsAny(err):
+	// case isAny(err):
 	// 	return codes.ResourceExhausted
 	case isAny(err, os.ErrClosed, net.ErrClosed, io.ErrClosedPipe, io.ErrShortBuffer):
 		return codes.FailedPrecondition
-	// case IsAny(err):
+	// case isAny(err):
 	// 	return codes.Aborted
-	// case IsAny(err):
+	// case isAny(err):
 	// 	return codes.OutOfRange
-	// case IsAny(err):
+	// case isAny(err):
 	// 	return codes.Unimplemented
 	case isAny(err, io.ErrNoProgress):
 		return codes.Internal
-	// case IsAny(err):
+	// case isAny(err):
 	// 	return codes.Unavailable
 	case isAny(err, io.ErrShortWrite, io.ErrUnexpectedEOF):
 		return codes.DataLoss
-	// case IsAny(err):
+	// case isAny(err):
 	// 	return codes.Unauthenticated
 	default:
 		return codes.Unknown
