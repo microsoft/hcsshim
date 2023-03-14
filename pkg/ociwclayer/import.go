@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -43,6 +44,20 @@ func ImportLayerFromTar(ctx context.Context, r io.Reader, path string, parentLay
 	if err != nil {
 		return 0, err
 	}
+
+	// It seems that in certain situations, like having the containerd root and state on a file system hosted on a
+	// mounted VHDX, we need SeSecurityPrivilege when opening a file with winio.ACCESS_SYSTEM_SECURITY. This happens
+	// in the base layer writer in hcsshim when adding a new file.
+	if err := winio.EnableProcessPrivileges([]string{winio.SeSecurityPrivilege}); err != nil {
+		return 0, fmt.Errorf("failed to enable SeSecurityPrivilege: %w", err)
+	}
+	defer func() {
+		privErr := winio.DisableProcessPrivileges([]string{winio.SeSecurityPrivilege})
+		if err == nil && privErr != nil {
+			err = privErr
+		}
+	}()
+
 	w, err := wclayer.NewLayerWriter(ctx, path, parentLayerPaths)
 	if err != nil {
 		return 0, err
