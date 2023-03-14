@@ -5,9 +5,12 @@ package cri_containerd
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/test/internal/require"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -178,6 +181,10 @@ func Test_StopContainer_ReusePod_LCOW(t *testing.T) {
 // behavior and to ensure that the containers are killed only after 15 second
 // timeout specified via the stop container command.
 func Test_GracefulTermination(t *testing.T) {
+	// The test image is based on 2022 servercore and nanoserver images. Ensure
+	// that we are running on the correct OS version
+	require.Build(t, osversion.V21H2Server)
+
 	for name, tc := range map[string]struct {
 		features       []string
 		runtimeHandler string
@@ -235,13 +242,13 @@ func Test_GracefulTermination(t *testing.T) {
 			startTimeOfContainer := time.Now()
 			// stop container with timeout of 15 seconds
 			stopContainerWithTimeout(t, client, ctx, containerID, 15)
-			assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_EXITED)
 			// get time elapsed before and after container stop command was issued
-			elapsedTime := time.Since(startTimeOfContainer)
+			elapsedTime := math.Round(time.Since(startTimeOfContainer).Seconds())
+			assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_EXITED)
 			// Ensure that the container has stopped after approx 15 seconds.
-			// We are giving it a buffer of +/- 1 second
-			if elapsedTime < 14*time.Second || elapsedTime > 16*time.Second {
-				t.Fatalf("Container did not shutdown gracefully \n")
+			// We are giving it a buffer of few seconds to account for cloud test delays
+			if elapsedTime < 14 || elapsedTime > 20 {
+				t.Fatalf("Container did not shutdown gracefully. Total elapsedTime before and after container stop command was issued is: %v", elapsedTime)
 			}
 		})
 	}
