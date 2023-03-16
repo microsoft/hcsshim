@@ -4336,14 +4336,74 @@ func Test_Rego_CreateContainer_User_Default(t *testing.T) {
 	}
 }
 
-func Test_Rego_CreateContainer_Capabilities_Default(t *testing.T) {
+func Test_Rego_CreateContainer_Capabilities_Default_Unprivileged(t *testing.T) {
 	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 	tc, err := setupFrameworkSVNSimpleTest(gc, "0.1.0", frameworkSVN)
 	if err != nil {
 		t.Fatalf("error setting up test: %v", err)
 	}
 
-	input := map[string]interface{}{}
+	input := map[string]interface{}{
+		"privileged": false,
+	}
+	result, err := tc.policy.rego.RawQuery("data.framework.candidate_containers", input)
+
+	if err != nil {
+		t.Fatalf("unable to query containers: %v", err)
+	}
+
+	containers, ok := result[0].Expressions[0].Value.([]interface{})
+	if !ok {
+		t.Fatal("unable to extract containers from result")
+	}
+
+	if len(containers) != len(gc.containers) {
+		t.Error("incorrect number of candidate containers.")
+	}
+
+	for _, container := range containers {
+		object := container.(map[string]interface{})
+		capabilities, ok := object["capabilities"].(map[string]interface{})
+		if !ok {
+			t.Error("unable to extract capabilities from container")
+			continue
+		}
+
+		defaultCapabilities := DefaultUnprivilegedCapabilities()
+		sort.Strings(defaultCapabilities)
+
+		for _, capSet := range []string{"bounding", "effective", "permitted"} {
+			caps := capabilities[capSet].([]interface{})
+			if len(caps) != len(defaultCapabilities) {
+				t.Errorf("incorrect number of capabilities in %s set", capSet)
+			} else {
+				for i, cap := range caps {
+					if defaultCapabilities[i] != cap.(string) {
+						t.Errorf("unexpected capability %s in %s set", cap, capSet)
+					}
+				}
+			}
+		}
+
+		for _, capSet := range []string{"ambient", "inheritable"} {
+			caps := capabilities[capSet].([]interface{})
+			if len(caps) != 0 {
+				t.Errorf("unexpected %s capabilities", capSet)
+			}
+		}
+	}
+}
+
+func Test_Rego_CreateContainer_Capabilities_Default_Privileged(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+	tc, err := setupFrameworkSVNSimpleTest(gc, "0.1.0", frameworkSVN)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	input := map[string]interface{}{
+		"privileged": true,
+	}
 	result, err := tc.policy.rego.RawQuery("data.framework.candidate_containers", input)
 
 	if err != nil {

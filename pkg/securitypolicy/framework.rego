@@ -1611,6 +1611,7 @@ check_capabilities(raw_container, framework_svn) := capabilities {
 check_capabilities(raw_container, framework_svn) := capabilities {
     semver.compare(framework_svn, "0.2.2") < 0
     raw_container.allow_elevated
+    input.privileged
     caps := {cap | cap := data.defaultPrivilegedCapabilities[_]}
     capabilities := {
         "bounding": caps,
