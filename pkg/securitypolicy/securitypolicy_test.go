@@ -1017,8 +1017,8 @@ func generateConstraintsContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLa
 	return &c
 }
 
-func generateInternalCapabilities(r *rand.Rand) capabilitiesInternal {
-	return capabilitiesInternal{
+func generateInternalCapabilities(r *rand.Rand) *capabilitiesInternal {
+	return &capabilitiesInternal{
 		Bounding:    generateCapabilitiesSet(r, 0),
 		Effective:   generateCapabilitiesSet(r, 0),
 		Inheritable: generateCapabilitiesSet(r, 0),

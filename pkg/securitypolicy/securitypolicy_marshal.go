@@ -283,14 +283,16 @@ func writeLayers(builder *strings.Builder, layers []string, indent string) {
 	writeLine(builder, `%s"layers": %s,`, indent, (stringArray(layers)).marshalRego())
 }
 
-func writeCapabilities(builder *strings.Builder, capabilities capabilitiesInternal, indent string) {
-	writeLine(builder, `%s"capabilities": {`, indent)
-	writeLine(builder, `%s"bounding": %s,`, indent+indentUsing, (stringArray(capabilities.Bounding)).marshalRego())
-	writeLine(builder, `%s"effective": %s,`, indent+indentUsing, (stringArray(capabilities.Effective)).marshalRego())
-	writeLine(builder, `%s"inheritable": %s,`, indent+indentUsing, (stringArray(capabilities.Inheritable)).marshalRego())
-	writeLine(builder, `%s"permitted": %s,`, indent+indentUsing, (stringArray(capabilities.Permitted)).marshalRego())
-	writeLine(builder, `%s"ambient": %s,`, indent+indentUsing, (stringArray(capabilities.Ambient)).marshalRego())
-	writeLine(builder, `%s}`, indent)
+func writeCapabilities(builder *strings.Builder, capabilities *capabilitiesInternal, indent string) {
+	if capabilities != nil {
+		writeLine(builder, `%s"capabilities": {`, indent)
+		writeLine(builder, `%s"bounding": %s,`, indent+indentUsing, (stringArray(capabilities.Bounding)).marshalRego())
+		writeLine(builder, `%s"effective": %s,`, indent+indentUsing, (stringArray(capabilities.Effective)).marshalRego())
+		writeLine(builder, `%s"inheritable": %s,`, indent+indentUsing, (stringArray(capabilities.Inheritable)).marshalRego())
+		writeLine(builder, `%s"permitted": %s,`, indent+indentUsing, (stringArray(capabilities.Permitted)).marshalRego())
+		writeLine(builder, `%s"ambient": %s,`, indent+indentUsing, (stringArray(capabilities.Ambient)).marshalRego())
+		writeLine(builder, `%s}`, indent)
+	}
 }
 
 func (m mountInternal) marshalRego() string {

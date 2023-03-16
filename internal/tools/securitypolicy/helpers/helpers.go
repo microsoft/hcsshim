@@ -233,7 +233,7 @@ func PolicyContainersFromConfigs(containerConfigs []sp.ContainerConfig) ([]*sp.C
 			containerConfig.AllowStdioAccess,
 			!containerConfig.AllowPrivilegeEscalation,
 			setDefaultUser(containerConfig.User, user, group),
-			setDefaultCapabilities(containerConfig.Capabilities, containerConfig.AllowElevated),
+			setDefaultCapabilities(containerConfig.Capabilities),
 		)
 		if err != nil {
 			return nil, err
@@ -257,49 +257,26 @@ func setDefaultUser(config *sp.UserConfig, user, group sp.IDNameConfig) sp.UserC
 	}
 }
 
-// Defaults come from containerd and https://github.com/containerd/containerd/blob/main/oci/spec.go#L136
-// allowElevated at this time indicates (not directly) that the container
-// is privileged and should get all capabilities
-func setDefaultCapabilities(config sp.CapabilitiesConfig, allowElevated bool) sp.CapabilitiesConfig {
-	// From the toml marshaller, if there was no entry then it will be `nil`.
-	// We should provide defaults if it was missing
-	if config.Bounding == nil {
-		if allowElevated {
-			config.Bounding = sp.DefaultPrivilegedCapabilities()
-		} else {
-			config.Bounding = sp.DefaultUnprivilegedCapabilities()
+func setDefaultCapabilities(config *sp.CapabilitiesConfig) *sp.CapabilitiesConfig {
+	if config != nil {
+		// For any that is missing, we put an empty set to give the user the
+		// quickest path when they get a runtime error to figuring out the issue.
+		// Our only other reasonable option would be to bail here with an error
+		// message.
+		if config.Bounding == nil {
+			config.Bounding = make([]string, 0)
 		}
-	}
-
-	if config.Effective == nil {
-		if allowElevated {
-			config.Effective = sp.DefaultPrivilegedCapabilities()
-		} else {
-			config.Effective = sp.DefaultUnprivilegedCapabilities()
+		if config.Effective == nil {
+			config.Effective = make([]string, 0)
 		}
-	}
-
-	if config.Inheritable == nil {
-		if allowElevated {
-			config.Inheritable = sp.DefaultPrivilegedCapabilities()
-		} else {
-			config.Inheritable = sp.EmptyCapabiltiesSet()
+		if config.Inheritable == nil {
+			config.Inheritable = make([]string, 0)
 		}
-	}
-
-	if config.Permitted == nil {
-		if allowElevated {
-			config.Permitted = sp.DefaultPrivilegedCapabilities()
-		} else {
-			config.Permitted = sp.DefaultUnprivilegedCapabilities()
+		if config.Permitted == nil {
+			config.Permitted = make([]string, 0)
 		}
-	}
-
-	if config.Ambient == nil {
-		if allowElevated {
-			config.Ambient = sp.DefaultPrivilegedCapabilities()
-		} else {
-			config.Ambient = sp.EmptyCapabiltiesSet()
+		if config.Ambient == nil {
+			config.Ambient = make([]string, 0)
 		}
 	}
 

@@ -130,7 +130,7 @@ type ContainerConfig struct {
 	AllowStdioAccess         bool                `json:"allow_stdio_access" toml:"allow_stdio_access"`
 	AllowPrivilegeEscalation bool                `json:"allow_privilege_escalation" toml:"allow_privilege_escalation"`
 	User                     *UserConfig         `json:"user" toml:"user"`
-	Capabilities             CapabilitiesConfig  `json:"capabilities" toml:"capabilities"`
+	Capabilities             *CapabilitiesConfig `json:"capabilities" toml:"capabilities"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -244,7 +244,7 @@ type Container struct {
 	AllowStdioAccess bool                `json:"-"`
 	NoNewPrivileges  bool                `json:"-"`
 	User             UserConfig          `json:"-"`
-	Capabilities     CapabilitiesConfig  `json:"-"`
+	Capabilities     *CapabilitiesConfig `json:"-"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -289,7 +289,7 @@ func CreateContainerPolicy(
 	allowStdioAccess bool,
 	noNewPrivileges bool,
 	user UserConfig,
-	capabilities CapabilitiesConfig,
+	capabilities *CapabilitiesConfig,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err

@@ -139,7 +139,7 @@ type securityPolicyContainer struct {
 	// The user that the container will run as
 	User UserConfig `json:"user"`
 	// Capability sets for the container
-	Capabilities capabilitiesInternal `json:"capabilities"`
+	Capabilities *capabilitiesInternal `json:"capabilities"`
 }
 
 type containerExecProcess struct {
@@ -205,6 +205,12 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		execProcesses[i] = containerExecProcess(ep)
 	}
 
+	var capabilities *capabilitiesInternal
+	if c.Capabilities != nil {
+		c := c.Capabilities.toInternal()
+		capabilities = &c
+	}
+
 	return &securityPolicyContainer{
 		Command:  command,
 		EnvRules: envRules,
@@ -219,7 +225,7 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		AllowStdioAccess: c.AllowStdioAccess,
 		NoNewPrivileges:  c.NoNewPrivileges,
 		User:             c.User,
-		Capabilities:     c.Capabilities.toInternal(),
+		Capabilities:     capabilities,
 	}, nil
 }
 

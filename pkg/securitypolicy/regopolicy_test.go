@@ -1204,7 +1204,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_UndecidableHasErrorMessage(t 
 		Ambient:     testCaps,
 	}
 
-	firstContainerCapabilities := capabilitiesInternal{
+	firstContainerCapabilities := &capabilitiesInternal{
 		Bounding:    firstCaps,
 		Effective:   firstCaps,
 		Inheritable: firstCaps,
@@ -1212,7 +1212,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_UndecidableHasErrorMessage(t 
 		Ambient:     firstCaps,
 	}
 
-	secondContainerCapabilities := capabilitiesInternal{
+	secondContainerCapabilities := &capabilitiesInternal{
 		Bounding:    secondCaps,
 		Effective:   secondCaps,
 		Inheritable: secondCaps,
@@ -6347,6 +6347,14 @@ func (c *securityPolicyContainer) toContainer() *Container {
 		execProcesses[i] = ExecProcessConfig(ep)
 	}
 
+	capabilities := CapabilitiesConfig{
+		Bounding:    c.Capabilities.Bounding,
+		Effective:   c.Capabilities.Effective,
+		Inheritable: c.Capabilities.Inheritable,
+		Permitted:   c.Capabilities.Permitted,
+		Ambient:     c.Capabilities.Ambient,
+	}
+
 	return &Container{
 		Command:          CommandArgs(stringArrayToStringMap(c.Command)),
 		EnvRules:         envRuleArrayToEnvRules(c.EnvRules),
@@ -6359,7 +6367,7 @@ func (c *securityPolicyContainer) toContainer() *Container {
 		AllowStdioAccess: c.AllowStdioAccess,
 		NoNewPrivileges:  c.NoNewPrivileges,
 		User:             c.User,
-		Capabilities:     CapabilitiesConfig(c.Capabilities),
+		Capabilities:     &capabilities,
 	}
 }
 

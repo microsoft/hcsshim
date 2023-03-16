@@ -130,23 +130,6 @@ func createRegoEnforcer(base64EncodedPolicy string,
 				GroupIDNames: []IDNameConfig{{Strategy: IDNameStrategyAny}},
 				Umask:        "0022",
 			}
-			if cConf.AllowElevated {
-				cConf.Capabilities = CapabilitiesConfig{
-					Bounding:    DefaultPrivilegedCapabilities(),
-					Effective:   DefaultPrivilegedCapabilities(),
-					Inheritable: DefaultPrivilegedCapabilities(),
-					Permitted:   DefaultPrivilegedCapabilities(),
-					Ambient:     DefaultPrivilegedCapabilities(),
-				}
-			} else {
-				cConf.Capabilities = CapabilitiesConfig{
-					Bounding:    DefaultUnprivilegedCapabilities(),
-					Effective:   DefaultUnprivilegedCapabilities(),
-					Inheritable: EmptyCapabiltiesSet(),
-					Permitted:   DefaultUnprivilegedCapabilities(),
-					Ambient:     EmptyCapabiltiesSet(),
-				}
-			}
 			containers[i] = &cConf
 		}
 
