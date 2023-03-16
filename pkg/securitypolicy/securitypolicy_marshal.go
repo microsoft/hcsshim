@@ -291,7 +291,9 @@ func writeCapabilities(builder *strings.Builder, capabilities *capabilitiesInter
 		writeLine(builder, `%s"inheritable": %s,`, indent+indentUsing, (stringArray(capabilities.Inheritable)).marshalRego())
 		writeLine(builder, `%s"permitted": %s,`, indent+indentUsing, (stringArray(capabilities.Permitted)).marshalRego())
 		writeLine(builder, `%s"ambient": %s,`, indent+indentUsing, (stringArray(capabilities.Ambient)).marshalRego())
-		writeLine(builder, `%s}`, indent)
+		writeLine(builder, `%s},`, indent)
+	} else {
+		writeLine(builder, `%s"capabilities": null,`, indent)
 	}
 }
 

@@ -308,7 +308,8 @@ filter_capsList_for_single_container(allowed_caps) := caps {
 largest_caps_sets_for_all(containers) := largest_caps_sets {
     filtered := [caps |
         container := containers[_]
-        caps := filter_capsList_for_single_container(container.capabilities)
+        capabilities := get_capabilities(container)
+        caps := filter_capsList_for_single_container(capabilities)
     ]
 
     # we want to select the most specific matches, which in this
@@ -387,6 +388,53 @@ caps_ok(allowed_caps, requested_caps) {
     capsList_ok(allowed_caps.ambient, requested_caps.ambient)
 }
 
+get_capabilities(container) := capabilities {
+    container.capabilities != null
+    capabilities := container.capabilities
+}
+
+default_privileged_capabilities := capabilities {
+    caps := {cap | cap := data.defaultPrivilegedCapabilities[_]}
+    capabilities := {
+        "bounding": caps,
+        "effective": caps,
+        "inheritable": caps,
+        "permitted": caps,
+        "ambient": set(),
+    }
+}
+
+get_capabilities(container) := capabilities {
+    container.capabilities == null
+    container.allow_elevated
+    input.privileged
+    capabilities := default_privileged_capabilities
+}
+
+default_unprivileged_capabilities := capabilities {
+    caps := {cap | cap := data.defaultUnprivilegedCapabilities[_]}
+    capabilities := {
+        "bounding": caps,
+        "effective": caps,
+        "inheritable": set(),
+        "permitted": caps,
+        "ambient": set(),
+    }
+}
+
+get_capabilities(container) := capabilities {
+    container.capabilities == null
+    container.allow_elevated
+    not input.privileged
+    capabilities := default_unprivileged_capabilities
+}
+
+get_capabilities(container) := capabilities {
+    container.capabilities == null
+    not container.allow_elevated
+    capabilities := default_unprivileged_capabilities
+}
+
 default create_container := {"allowed": false}
 
 create_container := {"metadata": [updateMatches, addStarted],
@@ -428,7 +476,7 @@ create_container := {"metadata": [updateMatches, addStarted],
     caps_list := valid_caps_for_all(possible_after_env_containers)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(container.capabilities, caps_list)
+        caps_ok(get_capabilities(container), caps_list)
     ]
 
     count(possible_after_caps_containers) > 0
@@ -564,7 +612,7 @@ exec_in_container := {"metadata": [updateMatches],
     caps_list := valid_caps_for_all(possible_after_env_containers)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(container.capabilities, caps_list)
+        caps_ok(get_capabilities(container), caps_list)
     ]
 
     count(possible_after_caps_containers) > 0
@@ -1342,7 +1390,7 @@ errors["containers only distinguishable by allow_stdio_access"] {
     caps_list := valid_caps_for_all(possible_after_env_containers)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(container.capabilities, caps_list)
+        caps_ok(get_capabilities(container), caps_list)
     ]
 
     count(possible_after_caps_containers) > 0
@@ -1458,7 +1506,7 @@ errors["capabilities don't match"] {
     caps_list := valid_caps_for_all(possible_after_env_containers)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(container.capabilities, caps_list)
+        caps_ok(get_capabilities(container), caps_list)
     ]
 
     count(possible_after_caps_containers) == 0
@@ -1495,7 +1543,7 @@ errors["capabilities don't match"] {
     caps_list := valid_caps_for_all(possible_after_env_containers)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(container.capabilities, caps_list)
+        caps_ok(get_capabilities(container), caps_list)
     ]
 
     count(possible_after_caps_containers) == 0
@@ -1612,27 +1660,20 @@ check_capabilities(raw_container, framework_svn) := capabilities {
     semver.compare(framework_svn, "0.2.2") < 0
     raw_container.allow_elevated
     input.privileged
-    caps := {cap | cap := data.defaultPrivilegedCapabilities[_]}
-    capabilities := {
-        "bounding": caps,
-        "effective": caps,
-        "inheritable": caps,
-        "permitted": caps,
-        "ambient": caps,
-    }
+    capabilities := default_privileged_capabilities
+}
+
+check_capabilities(raw_container, framework_svn) := capabilities {
+    semver.compare(framework_svn, "0.2.2") < 0
+    raw_container.allow_elevated
+    not input.privileged
+    capabilities := default_unprivileged_capabilities
 }
 
 check_capabilities(raw_container, framework_svn) := capabilities {
     semver.compare(framework_svn, "0.2.2") < 0
     not raw_container.allow_elevated
-    caps := {cap | cap := data.defaultUnprivilegedCapabilities[_]}
-    capabilities := {
-        "bounding": caps,
-        "effective": caps,
-        "inheritable": set(),
-        "permitted": caps,
-        "ambient": set(),
-    }
+    capabilities := default_unprivileged_capabilities
 }
 
 check_external_process(raw_process, framework_svn) := process {

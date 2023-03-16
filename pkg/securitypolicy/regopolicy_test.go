@@ -1280,6 +1280,81 @@ func Test_Rego_EnforceCreateContainer_CapabilitiesIsNil(t *testing.T) {
 	}
 }
 
+func Test_Rego_EnforceCreateContainer_Capabilities_Null_Elevated(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	constraints.containers[0].AllowElevated = true
+	constraints.containers[0].Capabilities = nil
+	tc, err := setupSimpleRegoCreateContainerTest(constraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	capabilitiesInt := capabilitiesInternal{
+		Bounding:    DefaultUnprivilegedCapabilities(),
+		Effective:   DefaultUnprivilegedCapabilities(),
+		Inheritable: []string{},
+		Permitted:   DefaultUnprivilegedCapabilities(),
+		Ambient:     []string{},
+	}
+	capabilities := capabilitiesInt.toExternal()
+
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities)
+
+	if err != nil {
+		t.Fatal("Unexpected failure with null capabilities and elevated: %w", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainer_Capabilities_Null(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	constraints.containers[0].AllowElevated = false
+	constraints.containers[0].Capabilities = nil
+	tc, err := setupSimpleRegoCreateContainerTest(constraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	capabilitiesInt := capabilitiesInternal{
+		Bounding:    DefaultUnprivilegedCapabilities(),
+		Effective:   DefaultUnprivilegedCapabilities(),
+		Inheritable: []string{},
+		Permitted:   DefaultUnprivilegedCapabilities(),
+		Ambient:     []string{},
+	}
+	capabilities := capabilitiesInt.toExternal()
+
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities)
+
+	if err != nil {
+		t.Fatal("Unexpected failure with null capabilities: %w", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainer_Capabilities_Null_Elevated_Privileged(t *testing.T) {
+	constraints := generateConstraints(testRand, 1)
+	constraints.containers[0].AllowElevated = true
+	constraints.containers[0].Capabilities = nil
+	tc, err := setupSimpleRegoCreateContainerTest(constraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	capabilitiesInt := capabilitiesInternal{
+		Bounding:    DefaultPrivilegedCapabilities(),
+		Effective:   DefaultPrivilegedCapabilities(),
+		Inheritable: DefaultPrivilegedCapabilities(),
+		Permitted:   DefaultPrivilegedCapabilities(),
+		Ambient:     []string{},
+	}
+	capabilities := capabilitiesInt.toExternal()
+
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, true, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities)
+
+	if err != nil {
+		t.Fatal("Unexpected failure with null capabilities when elevated and privileged: %w", err)
+	}
+}
+
 func Test_Rego_EnforceCreateContainer_CapabilitiesAreEmpty(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	constraints.containers[0].Capabilities.Bounding = make([]string, 0)
@@ -4450,7 +4525,7 @@ func Test_Rego_CreateContainer_Capabilities_Default_Privileged(t *testing.T) {
 
 		for _, capSet := range []string{"ambient", "inheritable"} {
 			caps := capabilities[capSet].([]interface{})
-			if allowElevated {
+			if allowElevated && capSet == "inheritable" {
 				if len(caps) != len(defaultCapabilities) {
 					t.Errorf("incorrect number of capabilities in %s set", capSet)
 				} else {
@@ -5449,7 +5524,13 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 	groups := buildGroupIDNamesFromUser(testContainer.User, testRand)
 	umask := testContainer.User.Umask
 
-	capabilities := copyLinuxCapabilities(testContainer.Capabilities.toExternal())
+	var capabilities *oci.LinuxCapabilities
+	if testContainer.Capabilities != nil {
+		capsExternal := copyLinuxCapabilities(testContainer.Capabilities.toExternal())
+		capabilities = &capsExternal
+	} else {
+		capabilities = nil
+	}
 
 	// see NOTE_TESTCOPY
 	return &regoContainerTestConfig{
@@ -5463,7 +5544,7 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 		user:            user,
 		groups:          groups,
 		umask:           umask,
-		capabilities:    &capabilities,
+		capabilities:    capabilities,
 		policy:          policy,
 	}, nil
 }
