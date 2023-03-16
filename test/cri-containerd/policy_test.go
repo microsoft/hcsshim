@@ -64,6 +64,7 @@ func policyFromOpts(t *testing.T, policyType string, opts ...securitypolicy.Poli
 		config.AllowRuntimeLogging,
 		config.AllowEnvironmentVariableDropping,
 		config.AllowUnencryptedScratch,
+		config.AllowCapabilityDropping,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -71,11 +72,12 @@ func policyFromOpts(t *testing.T, policyType string, opts ...securitypolicy.Poli
 	return base64.StdEncoding.EncodeToString([]byte(policyString))
 }
 
-func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
+func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool, allowCapabilityDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
 	t.Helper()
 	alpineContainer := securitypolicy.ContainerConfig{
-		ImageName: imageLcowAlpine,
-		Command:   validPolicyAlpineCommand,
+		ImageName:                imageLcowAlpine,
+		Command:                  validPolicyAlpineCommand,
+		AllowPrivilegeEscalation: true,
 	}
 
 	for _, o := range opts {
@@ -92,6 +94,7 @@ func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVaria
 		securitypolicy.WithExternalProcesses(defaultExternalProcesses),
 		securitypolicy.WithAllowUnencryptedScratch(true),
 		securitypolicy.WithAllowEnvVarDropping(allowEnvironmentVariableDropping),
+		securitypolicy.WithAllowCapabilityDropping(allowCapabilityDropping),
 		securitypolicy.WithAllowRuntimeLogging(true),
 		securitypolicy.WithAllowPropertiesAccess(true),
 		securitypolicy.WithAllowDumpStacks(true),
@@ -150,6 +153,7 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 				pc.input,
 				securitypolicy.WithAllowUnencryptedScratch(true),
 				securitypolicy.WithAllowEnvVarDropping(true),
+				securitypolicy.WithAllowCapabilityDropping(true),
 			)
 			sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
@@ -171,7 +175,7 @@ func Test_RunSimpleAlpineContainer_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, pc.input, false)
+			alpinePolicy := alpineSecurityPolicy(t, pc.input, false, false)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -243,7 +247,7 @@ func Test_RunContainer_WithPolicy_And_ValidConfigs(t *testing.T) {
 	} {
 		for _, pc := range policyTestMatrix {
 			t.Run(testConfig.name+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-				alpinePolicy := alpineSecurityPolicy(t, pc.input, false, testConfig.opts...)
+				alpinePolicy := alpineSecurityPolicy(t, pc.input, false, false, testConfig.opts...)
 				sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 				sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -316,7 +320,7 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, "json", false)
+			alpinePolicy := alpineSecurityPolicy(t, "json", false, false)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
@@ -445,7 +449,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 	} {
 		for _, pc := range policyTestMatrix {
 			t.Run(testConfig.name+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-				alpinePolicy := alpineSecurityPolicy(t, pc.input, false, testConfig.opts...)
+				alpinePolicy := alpineSecurityPolicy(t, pc.input, false, false, testConfig.opts...)
 				sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 				sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -596,7 +600,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, "json", false, testConfig.opts...)
+			alpinePolicy := alpineSecurityPolicy(t, "json", false, false, testConfig.opts...)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
@@ -642,7 +646,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_Set(t *testing.T) 
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, pc.input, false, securitypolicy.WithAllowElevated(true))
+			alpinePolicy := alpineSecurityPolicy(t, pc.input, false, false, securitypolicy.WithAllowElevated(true))
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 				SecurityContext: &runtime.LinuxSandboxSecurityContext{
@@ -684,7 +688,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alpinePolicy := alpineSecurityPolicy(t, "json", false)
+	alpinePolicy := alpineSecurityPolicy(t, "json", false, false)
 	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
@@ -785,11 +789,11 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 		},
 		{
 			name:   "StandardPolicy",
-			policy: alpineSecurityPolicy(t, "json", false, opts...),
+			policy: alpineSecurityPolicy(t, "json", false, false, opts...),
 		},
 		{
 			name:   "RegoPolicy",
-			policy: alpineSecurityPolicy(t, "rego", false, opts...),
+			policy: alpineSecurityPolicy(t, "rego", false, false, opts...),
 		},
 	} {
 		for _, setPolicyEnv := range []bool{true, false} {
@@ -880,12 +884,12 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Dropping(t *testing.T) {
 	}{
 		{
 			name:    "Dropped",
-			policy:  alpineSecurityPolicy(t, "rego", true, securitypolicy.WithCommand(alpineCmd)),
+			policy:  alpineSecurityPolicy(t, "rego", true, false, securitypolicy.WithCommand(alpineCmd)),
 			allowed: true,
 		},
 		{
 			name:    "NotDropped",
-			policy:  alpineSecurityPolicy(t, "rego", false, securitypolicy.WithCommand(alpineCmd)),
+			policy:  alpineSecurityPolicy(t, "rego", false, false, securitypolicy.WithCommand(alpineCmd)),
 			allowed: false,
 		},
 	} {
@@ -991,6 +995,7 @@ func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
 				securitypolicy.WithExternalProcesses(defaultExternalProcesses),
 				securitypolicy.WithAllowUnencryptedScratch(tc.allowUnencrypted),
 				securitypolicy.WithAllowEnvVarDropping(true),
+				securitypolicy.WithAllowCapabilityDropping(true),
 			)
 			sandboxRequest := sandboxRequestWithPolicy(t, policy)
 			// sandboxRequestWithPolicy sets security policy annotation, so we
@@ -1027,6 +1032,7 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 		securitypolicy.WithExternalProcesses(defaultExternalProcesses),
 		securitypolicy.WithAllowUnencryptedScratch(false),
 		securitypolicy.WithAllowEnvVarDropping(true),
+		securitypolicy.WithAllowCapabilityDropping(true),
 	)
 	sandboxRequest := sandboxRequestWithPolicy(t, policy)
 	sandboxRequest.Config.Annotations[annotations.EncryptedScratchDisk] = "false"
@@ -1082,6 +1088,7 @@ func Test_RunContainer_WithPolicy_And_Binary_Logger_Without_Stdio(t *testing.T) 
 				t,
 				"rego",
 				true,
+				false,
 				securitypolicy.WithAllowStdioAccess(tc.stdioAllowed),
 				securitypolicy.WithCommand(cmd),
 			)
@@ -1121,6 +1128,7 @@ func Test_RunContainer_WithPolicy_And_Binary_Logger_Without_Stdio(t *testing.T) 
 
 func Test_ExecInContainer_WithPolicy(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1152,6 +1160,7 @@ func Test_ExecInContainer_WithPolicy(t *testing.T) {
 				t,
 				"rego",
 				true,
+				false,
 				securitypolicy.WithExecProcesses([]securitypolicy.ExecProcessConfig{tc.execProcessConfig}),
 				securitypolicy.WithCommand(cmd),
 			)

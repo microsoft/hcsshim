@@ -55,7 +55,9 @@ type SecurityPolicyEnforcer interface {
 		noNewPrivileges bool,
 		user IDName,
 		groups []IDName,
-		umask string) (EnvList, bool, error)
+		umask string,
+		capabilities *oci.LinuxCapabilities,
+	) (EnvList, *oci.LinuxCapabilities, bool, error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
 	EnforceExecInContainerPolicy(
@@ -66,7 +68,9 @@ type SecurityPolicyEnforcer interface {
 		noNewPrivileges bool,
 		user IDName,
 		groups []IDName,
-		umask string) (EnvList, bool, error)
+		umask string,
+		capabilities *oci.LinuxCapabilities,
+	) (EnvList, *oci.LinuxCapabilities, bool, error)
 	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (EnvList, bool, error)
 	EnforceShutdownContainerPolicy(containerID string) error
 	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
@@ -78,7 +82,7 @@ type SecurityPolicyEnforcer interface {
 	LoadFragment(issuer string, feed string, code string) error
 	EnforceScratchMountPolicy(scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(scratchPath string) (err error)
-	GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error)
+	GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error)
 }
 
 type stringSet map[string]struct{}
@@ -458,48 +462,52 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	user IDName,
 	groups []IDName,
 	umask string,
-) (allowedEnvs EnvList, stdioAccessAllowed bool, err error) {
+	caps *oci.LinuxCapabilities,
+) (allowedEnvs EnvList,
+	allowedCapabilities *oci.LinuxCapabilities,
+	stdioAccessAllowed bool,
+	err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
 	if len(pe.Containers) < 1 {
-		return nil, true, errors.New("policy doesn't allow mounting containers")
+		return nil, nil, true, errors.New("policy doesn't allow mounting containers")
 	}
 
 	if _, e := pe.startedContainers[containerID]; e {
-		return nil, true, errors.New("container has already been started")
+		return nil, nil, true, errors.New("container has already been started")
 	}
 
 	if err = pe.enforceCommandPolicy(containerID, argList); err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 
 	if err = pe.enforceEnvironmentVariablePolicy(containerID, envList); err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 
 	if err = pe.enforceWorkingDirPolicy(containerID, workingDir); err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 
 	if err = pe.enforcePrivilegedPolicy(containerID, privileged); err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 
 	if err = pe.enforceMountPolicy(sandboxID, containerID, mounts); err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 
 	// record that we've allowed this container to start
 	pe.startedContainers[containerID] = struct{}{}
 
-	return envList, true, nil
+	return envList, caps, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
-	return envList, true, nil
+func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return envList, caps, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
@@ -575,7 +583,7 @@ func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error 
 }
 
 // Stub. We are deprecating the standard enforcer.
-func (StandardSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+func (StandardSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
 
@@ -891,12 +899,12 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
-	return envList, true, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return envList, caps, true, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
-	return envList, true, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return envList, caps, true, nil
 }
 
 func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, bool, error) {
@@ -951,7 +959,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
 
@@ -977,12 +985,12 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) erro
 	return errors.New("removing an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
-	return nil, false, errors.New("running commands is denied by policy")
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, _ *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return nil, nil, false, errors.New("running commands is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string, _ bool, _ IDName, _ []IDName, _ string) (EnvList, bool, error) {
-	return nil, false, errors.New("starting additional processes in a container is denied by policy")
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string, _ bool, _ IDName, _ []IDName, _ string, _ *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return nil, nil, false, errors.New("starting additional processes in a container is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) (EnvList, bool, error) {
@@ -1037,6 +1045,6 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) erro
 	return errors.New("unmounting scratch is denied by the policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Spec) (IDName, []IDName, string, error) {
+func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }

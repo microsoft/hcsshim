@@ -45,6 +45,8 @@ const (
 	maxSignalNumber                           = 64
 	maxGeneratedNameLength                    = 8
 	maxGeneratedGroupNames                    = 4
+	maxGeneratedCapabilities                  = 12
+	maxGeneratedCapabilitesLength             = 24
 	// additional consts
 	// the standard enforcer tests don't do anything with the encoded policy
 	// string. this const exists to make that explicit
@@ -990,6 +992,7 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 		allowUnencryptedScratch:          randBool(r),
 		namespace:                        generateFragmentNamespace(testRand),
 		svn:                              generateSVN(testRand),
+		allowCapabilityDropping:          false,
 	}
 }
 
@@ -1009,8 +1012,34 @@ func generateConstraintsContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLa
 	c.AllowStdioAccess = randBool(r)
 	c.NoNewPrivileges = randBool(r)
 	c.User = generateUser(r)
+	c.Capabilities = generateInternalCapabilities(r)
 
 	return &c
+}
+
+func generateInternalCapabilities(r *rand.Rand) capabilitiesInternal {
+	return capabilitiesInternal{
+		Bounding:    generateCapabilitiesSet(r, 0),
+		Effective:   generateCapabilitiesSet(r, 0),
+		Inheritable: generateCapabilitiesSet(r, 0),
+		Permitted:   generateCapabilitiesSet(r, 0),
+		Ambient:     generateCapabilitiesSet(r, 0),
+	}
+}
+
+func generateCapabilitiesSet(r *rand.Rand, minSize int32) []string {
+	capabilities := make([]string, 0)
+
+	numArgs := atLeastNAtMostM(r, minSize, maxGeneratedCapabilities)
+	for i := 0; i < int(numArgs); i++ {
+		capabilities = append(capabilities, generateCapability(r))
+	}
+
+	return capabilities
+}
+
+func generateCapability(r *rand.Rand) string {
+	return randVariableString(r, maxGeneratedCapabilitesLength)
 }
 
 func generateContainerInitProcess(r *rand.Rand) containerInitProcess {
@@ -1462,6 +1491,7 @@ type generatedConstraints struct {
 	allowUnencryptedScratch          bool
 	namespace                        string
 	svn                              string
+	allowCapabilityDropping          bool
 }
 
 type containerInitProcess struct {

@@ -384,12 +384,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
-	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(settings.OCISpecification)
+	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(id, settings.OCISpecification.Process)
 	if err != nil {
 		return nil, err
 	}
 
-	envToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+	envToKeep, capsToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
 		sandboxID,
 		id,
 		settings.OCISpecification.Process.Args,
@@ -401,6 +401,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		user,
 		groups,
 		umask,
+		settings.OCISpecification.Process.Capabilities,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
@@ -414,6 +415,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 
 	if envToKeep != nil {
 		settings.OCISpecification.Process.Env = []string(envToKeep)
+	}
+
+	if capsToKeep != nil {
+		settings.OCISpecification.Process.Capabilities = capsToKeep
 	}
 
 	// Export security policy and signed UVM reference info as one of the
@@ -655,9 +660,9 @@ func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, p
 func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
 	var pid int
 	var c *Container
-	var envToKeep securitypolicy.EnvList
 
 	if params.IsExternal || containerID == UVMContainerID {
+		var envToKeep securitypolicy.EnvList
 		var allowStdioAccess bool
 		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
 			params.CommandArgs,
@@ -693,17 +698,19 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			// Windows uses a different field for command, there's no enforcement
 			// around this yet for Windows so this is Linux specific at the moment.
 
+			var envToKeep securitypolicy.EnvList
+			var capsToKeep *specs.LinuxCapabilities
 			var user securitypolicy.IDName
 			var groups []securitypolicy.IDName
 			var umask string
 			var allowStdioAccess bool
 
-			user, groups, umask, err = h.securityPolicyEnforcer.GetUserInfo(params.OCISpecification)
+			user, groups, umask, err = h.securityPolicyEnforcer.GetUserInfo(containerID, params.OCIProcess)
 			if err != nil {
 				return 0, err
 			}
 
-			envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(
+			envToKeep, capsToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(
 				containerID,
 				params.OCIProcess.Args,
 				params.OCIProcess.Env,
@@ -712,6 +719,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 				user,
 				groups,
 				umask,
+				params.OCIProcess.Capabilities,
 			)
 			if err != nil {
 				return pid, errors.Wrapf(err, "exec in container denied due to policy")
@@ -725,6 +733,10 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 
 			if envToKeep != nil {
 				params.OCIProcess.Env = envToKeep
+			}
+
+			if capsToKeep != nil {
+				params.OCIProcess.Capabilities = capsToKeep
 			}
 
 			pid, err = c.ExecProcess(ctx, params.OCIProcess, conSettings)

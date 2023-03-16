@@ -83,6 +83,13 @@ func WithAllowEnvVarDropping(allow bool) PolicyConfigOpt {
 	}
 }
 
+func WithAllowCapabilityDropping(allow bool) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.AllowCapabilityDropping = allow
+		return nil
+	}
+}
+
 func WithAllowRuntimeLogging(allow bool) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.AllowRuntimeLogging = allow

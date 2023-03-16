@@ -233,6 +233,7 @@ func PolicyContainersFromConfigs(containerConfigs []sp.ContainerConfig) ([]*sp.C
 			containerConfig.AllowStdioAccess,
 			!containerConfig.AllowPrivilegeEscalation,
 			setDefaultUser(containerConfig.User, user, group),
+			setDefaultCapabilities(containerConfig.Capabilities, containerConfig.AllowElevated),
 		)
 		if err != nil {
 			return nil, err
@@ -254,4 +255,53 @@ func setDefaultUser(config *sp.UserConfig, user, group sp.IDNameConfig) sp.UserC
 		GroupIDNames: []sp.IDNameConfig{group},
 		Umask:        "0022",
 	}
+}
+
+// Defaults come from containerd and https://github.com/containerd/containerd/blob/main/oci/spec.go#L136
+// allowElevated at this time indicates (not directly) that the container
+// is privileged and should get all capabilities
+func setDefaultCapabilities(config sp.CapabilitiesConfig, allowElevated bool) sp.CapabilitiesConfig {
+	// From the toml marshaller, if there was no entry then it will be `nil`.
+	// We should provide defaults if it was missing
+	if config.Bounding == nil {
+		if allowElevated {
+			config.Bounding = sp.DefaultPrivilegedCapabilities()
+		} else {
+			config.Bounding = sp.DefaultUnprivilegedCapabilities()
+		}
+	}
+
+	if config.Effective == nil {
+		if allowElevated {
+			config.Effective = sp.DefaultPrivilegedCapabilities()
+		} else {
+			config.Effective = sp.DefaultUnprivilegedCapabilities()
+		}
+	}
+
+	if config.Inheritable == nil {
+		if allowElevated {
+			config.Inheritable = sp.DefaultPrivilegedCapabilities()
+		} else {
+			config.Inheritable = sp.EmptyCapabiltiesSet()
+		}
+	}
+
+	if config.Permitted == nil {
+		if allowElevated {
+			config.Permitted = sp.DefaultPrivilegedCapabilities()
+		} else {
+			config.Permitted = sp.DefaultUnprivilegedCapabilities()
+		}
+	}
+
+	if config.Ambient == nil {
+		if allowElevated {
+			config.Ambient = sp.DefaultPrivilegedCapabilities()
+		} else {
+			config.Ambient = sp.EmptyCapabiltiesSet()
+		}
+	}
+
+	return config
 }

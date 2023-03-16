@@ -79,17 +79,13 @@ func createInterpreter() *rpi.RegoPolicyInterpreter {
 			log.Fatalf("error loading initial data state: %v", err)
 		}
 	} else {
-		objectDefaults := make(map[string]interface{})
-		err = json.Unmarshal([]byte(securitypolicy.FrameworkObjects), &objectDefaults)
-		if err != nil {
-			log.Fatalf("unable to unmarshal framework object defaults: %v", err)
-		}
 		data = map[string]interface{}{
-			"objectDefaults":   objectDefaults,
-			"defaultMounts":    []interface{}{},
-			"privilegedMounts": []interface{}{},
-			"sandboxPrefix":    guestpath.SandboxMountPrefix,
-			"hugePagesPrefix":  guestpath.HugePagesMountPrefix,
+			"defaultMounts":                   []interface{}{},
+			"privilegedMounts":                []interface{}{},
+			"sandboxPrefix":                   guestpath.SandboxMountPrefix,
+			"hugePagesPrefix":                 guestpath.HugePagesMountPrefix,
+			"defaultPrivilegedCapabilities":   securitypolicy.DefaultPrivilegedCapabilities(),
+			"defaultUnprivilegedCapabilities": securitypolicy.DefaultUnprivilegedCapabilities(),
 		}
 	}
 

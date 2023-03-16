@@ -16,6 +16,7 @@ type securityPolicyInternal struct {
 	AllowRuntimeLogging              bool
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
+	AllowCapabilityDropping          bool
 }
 
 type securityPolicyFragment struct {
@@ -68,6 +69,7 @@ func newSecurityPolicyInternal(
 	allowRuntimeLogging bool,
 	allowDropEnvironmentVariables bool,
 	allowUnencryptedScratch bool,
+	allowDropCapabilities bool,
 ) (*securityPolicyInternal, error) {
 	containersInternal, err := containersToInternal(containers)
 	if err != nil {
@@ -83,6 +85,7 @@ func newSecurityPolicyInternal(
 		AllowRuntimeLogging:              allowRuntimeLogging,
 		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
+		AllowCapabilityDropping:          allowDropCapabilities,
 	}, nil
 }
 
@@ -135,6 +138,8 @@ type securityPolicyContainer struct {
 	NoNewPrivileges bool `json:"no_new_privileges"`
 	// The user that the container will run as
 	User UserConfig `json:"user"`
+	// Capability sets for the container
+	Capabilities capabilitiesInternal `json:"capabilities"`
 }
 
 type containerExecProcess struct {
@@ -156,6 +161,15 @@ type mountInternal struct {
 	Destination string   `json:"destination"`
 	Type        string   `json:"type"`
 	Options     []string `json:"options"`
+}
+
+// Internal version of Capabilities
+type capabilitiesInternal struct {
+	Bounding    []string
+	Effective   []string
+	Inheritable []string
+	Permitted   []string
+	Ambient     []string
 }
 
 type fragment struct {
@@ -205,6 +219,7 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		AllowStdioAccess: c.AllowStdioAccess,
 		NoNewPrivileges:  c.NoNewPrivileges,
 		User:             c.User,
+		Capabilities:     c.Capabilities.toInternal(),
 	}, nil
 }
 
@@ -278,6 +293,10 @@ func (f FragmentConfig) toInternal() fragment {
 		minimumSVN: f.MinimumSVN,
 		includes:   f.Includes,
 	}
+}
+
+func (c CapabilitiesConfig) toInternal() capabilitiesInternal {
+	return capabilitiesInternal(c)
 }
 
 func stringMapToStringArray(m map[string]string) ([]string, error) {
