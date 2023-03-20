@@ -67,6 +67,7 @@ func main() {
 				config.AllowRuntimeLogging,
 				config.AllowEnvironmentVariableDropping,
 				config.AllowUnencryptedScratch,
+				config.AllowCapabilityDropping,
 			)
 		}
 		if err != nil {

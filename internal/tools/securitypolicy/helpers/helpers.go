@@ -233,6 +233,7 @@ func PolicyContainersFromConfigs(containerConfigs []sp.ContainerConfig) ([]*sp.C
 			containerConfig.AllowStdioAccess,
 			!containerConfig.AllowPrivilegeEscalation,
 			setDefaultUser(containerConfig.User, user, group),
+			setDefaultCapabilities(containerConfig.Capabilities),
 		)
 		if err != nil {
 			return nil, err
@@ -254,4 +255,30 @@ func setDefaultUser(config *sp.UserConfig, user, group sp.IDNameConfig) sp.UserC
 		GroupIDNames: []sp.IDNameConfig{group},
 		Umask:        "0022",
 	}
+}
+
+func setDefaultCapabilities(config *sp.CapabilitiesConfig) *sp.CapabilitiesConfig {
+	if config != nil {
+		// For any that is missing, we put an empty set to give the user the
+		// quickest path when they get a runtime error to figuring out the issue.
+		// Our only other reasonable option would be to bail here with an error
+		// message.
+		if config.Bounding == nil {
+			config.Bounding = make([]string, 0)
+		}
+		if config.Effective == nil {
+			config.Effective = make([]string, 0)
+		}
+		if config.Inheritable == nil {
+			config.Inheritable = make([]string, 0)
+		}
+		if config.Permitted == nil {
+			config.Permitted = make([]string, 0)
+		}
+		if config.Ambient == nil {
+			config.Ambient = make([]string, 0)
+		}
+	}
+
+	return config
 }
