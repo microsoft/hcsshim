@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
@@ -1253,6 +1254,48 @@ func Test_ExecInUVM_WithPolicy(t *testing.T) {
 					t.Fatal("external process exec should have failed")
 				}
 			}
+		})
+	}
+}
+
+func Test_RunPodSandbox_Concurrently(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+
+	for i := 0; i < 20; i++ {
+		t.Run(fmt.Sprintf("ParallelPodRun_%d", i+1), func(t *testing.T) {
+			t.Parallel()
+			client := newTestRuntimeClient(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			policy := policyFromOpts(
+				t,
+				"rego",
+				securitypolicy.WithAllowUnencryptedScratch(true),
+			)
+			runpRequest := &runtime.RunPodSandboxRequest{
+				Config: &runtime.PodSandboxConfig{
+					Metadata: &runtime.PodSandboxMetadata{
+						Name:      fmt.Sprintf("%s_%d", t.Name(), i),
+						Namespace: testNamespace,
+					},
+					Annotations: map[string]string{
+						annotations.NoSecurityHardware:     strconv.FormatBool(!*flagSevSnp),
+						annotations.SecurityPolicy:         policy,
+						annotations.SecurityPolicyEnforcer: "rego",
+						annotations.EncryptedScratchDisk:   strconv.FormatBool(*flagSevSnp),
+					},
+				},
+				RuntimeHandler: lcowRuntimeHandler,
+			}
+
+			podID := runPodSandbox(t, client, ctx, runpRequest)
+			defer func() {
+				removePodSandbox(t, client, ctx, podID)
+			}()
+			defer func() {
+				stopPodSandbox(t, client, ctx, podID)
+			}()
+			time.Sleep(5 * time.Second)
 		})
 	}
 }
