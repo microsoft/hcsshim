@@ -18,9 +18,9 @@ import (
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/osversion"
 	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
-	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
-	"github.com/Microsoft/hcsshim/test/internal/require"
+	"github.com/Microsoft/hcsshim/test/pkg/images"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 	runc "github.com/containerd/go-runc"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/pkg/errors"
@@ -200,7 +200,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 
 	// Get the LayerFolders
 	imageName := getWindowsImageNameByVersion(t, version)
-	img := layers.LazyImageLayers{Image: imageName, Platform: constants.PlatformWindows}
+	img := layers.LazyImageLayers{Image: imageName, Platform: images.PlatformWindows}
 	defer func() {
 		if err := img.Close(ctx); err != nil {
 			t.Errorf("could not close image %s: %v", imageName, err)

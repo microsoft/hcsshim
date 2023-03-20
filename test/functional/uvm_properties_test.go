@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/internal/require"
-	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
+	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {

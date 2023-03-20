@@ -7,7 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 
-	_ "github.com/Microsoft/hcsshim/test/internal/manifest" // manifest test binary automatically
+	_ "github.com/Microsoft/hcsshim/test/pkg/manifest" // manifest test binary automatically
 )
 
 func Build(tb testing.TB, b uint16) {

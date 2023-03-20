@@ -23,8 +23,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 
-	testflag "github.com/Microsoft/hcsshim/test/internal/flag"
-	"github.com/Microsoft/hcsshim/test/internal/require"
+	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
 
 const (

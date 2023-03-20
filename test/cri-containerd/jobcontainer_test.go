@@ -18,10 +18,10 @@ import (
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
 	"github.com/Microsoft/hcsshim/hcn"
-	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/test/internal/require"
+	"github.com/Microsoft/hcsshim/test/pkg/definitions/winapi"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
 
 func getJobContainerPodRequestWCOW(t *testing.T) *runtime.RunPodSandboxRequest {

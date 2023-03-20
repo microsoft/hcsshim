@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/cpugroup"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/test/pkg/definitions/cpugroup"
+	"github.com/Microsoft/hcsshim/test/pkg/definitions/processorinfo"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
