@@ -1013,8 +1013,18 @@ func generateConstraintsContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLa
 	c.NoNewPrivileges = randBool(r)
 	c.User = generateUser(r)
 	c.Capabilities = generateInternalCapabilities(r)
+	c.SeccompProfileSHA256 = generateSeccomp(r)
 
 	return &c
+}
+
+func generateSeccomp(r *rand.Rand) string {
+	if randBool(r) {
+		// 50% chance of no seccomp profile
+		return ""
+	}
+
+	return generateRootHash(r)
 }
 
 func generateInternalCapabilities(r *rand.Rand) *capabilitiesInternal {

@@ -232,7 +232,12 @@ privileged_ok(elevation_allowed) {
 }
 
 noNewPrivileges_ok(no_new_privileges) {
-    input.noNewPrivileges == no_new_privileges
+    no_new_privileges
+    input.noNewPrivileges
+}
+
+noNewPrivileges_ok(no_new_privileges) {
+    no_new_privileges == false
 }
 
 idName_ok(pattern, "any", value) {
@@ -258,6 +263,10 @@ user_ok(user) {
         some group_idname in user.group_idnames
         idName_ok(group_idname.pattern, group_idname.strategy, group)
     }
+}
+
+seccomp_ok(seccomp_profile_sha256) {
+    input.seccompProfileSHA256 == seccomp_profile_sha256
 }
 
 default container_started := false
@@ -457,6 +466,7 @@ create_container := {"metadata": [updateMatches, addStarted],
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
         mountList_ok(container.mounts, container.allow_elevated)
+        seccomp_ok(container.seccomp_profile_sha256)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -1371,6 +1381,7 @@ errors["containers only distinguishable by allow_stdio_access"] {
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
         mountList_ok(container.mounts, container.allow_elevated)
+        seccomp_ok(container.seccomp_profile_sha256)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -1487,6 +1498,7 @@ errors["capabilities don't match"] {
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
         mountList_ok(container.mounts, container.allow_elevated)
+        seccomp_ok(container.seccomp_profile_sha256)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -1588,6 +1600,44 @@ errors["containers only distinguishable by capabilties"] {
     not all_caps_sets_are_equal(largest)
 }
 
+default seccomp_matches := false
+
+seccomp_matches {
+    input.rule == "create_container"
+    some container in data.metadata.matches[input.containerID]
+    seccomp_ok(container.seccomp_profile_sha256)
+}
+
+errors["invalid seccomp"] {
+    input.rule == "create_container"
+    not seccomp_matches
+}
+
+default matches := null
+
+matches := containers {
+    input.rule == "create_container"
+    containers := data.metadata.matches[input.containerID]
+}
+
+matches := processes {
+    input.rule == "exec_in_container"
+    processes := [process |
+        container := data.metadata.matches[input.containerID][_]
+        process := container.exec_processes[_]
+    ]
+}
+
+matches := processes {
+    input.rule == "exec_external"
+    processes := candidate_external_processes
+}
+
+matches := fragments {
+    input.rule == "load_fragment"
+    fragments := candidate_fragments
+}
+
 
 ################################################################################
 # Logic for providing backwards compatibility for framework data objects
@@ -1616,6 +1666,7 @@ check_container(raw_container, framework_svn) := container {
         "no_new_privileges": check_no_new_privileges(raw_container, framework_svn),
         "user": check_user(raw_container, framework_svn),
         "capabilities": check_capabilities(raw_container, framework_svn),
+        "seccomp_profile_sha256": check_seccomp_profile_sha256(raw_container, framework_svn),
     }
 }
 
@@ -1626,7 +1677,7 @@ check_no_new_privileges(raw_container, framework_svn) := no_new_privileges {
 
 check_no_new_privileges(raw_container, framework_svn) := no_new_privileges {
     semver.compare(framework_svn, "0.2.0") < 0
-    no_new_privileges := true
+    no_new_privileges := false
 }
 
 check_user(raw_container, framework_svn) := user {
@@ -1658,22 +1709,21 @@ check_capabilities(raw_container, framework_svn) := capabilities {
 
 check_capabilities(raw_container, framework_svn) := capabilities {
     semver.compare(framework_svn, "0.2.2") < 0
-    raw_container.allow_elevated
-    input.privileged
-    capabilities := default_privileged_capabilities
+    # we cannot determine a reasonable default at the time this is called,
+    # which is either during `mount_overlay` or `load_fragment`, and so
+    # we set it to `null`, which indicates that the capabilities should
+    # be determined dynamically when needed.
+    capabilities := null
 }
 
-check_capabilities(raw_container, framework_svn) := capabilities {
-    semver.compare(framework_svn, "0.2.2") < 0
-    raw_container.allow_elevated
-    not input.privileged
-    capabilities := default_unprivileged_capabilities
+check_seccomp_profile_sha256(raw_container, framework_svn) := seccomp_profile_sha256 {
+    semver.compare(framework_svn, "0.2.3") >= 0
+    seccomp_profile_sha256 := raw_container.seccomp_profile_sha256
 }
 
-check_capabilities(raw_container, framework_svn) := capabilities {
-    semver.compare(framework_svn, "0.2.2") < 0
-    not raw_container.allow_elevated
-    capabilities := default_unprivileged_capabilities
+check_seccomp_profile_sha256(raw_container, framework_svn) := seccomp_profile_sha256 {
+    semver.compare(framework_svn, "0.2.3") < 0
+    seccomp_profile_sha256 := ""
 }
 
 check_external_process(raw_process, framework_svn) := process {

@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
 
@@ -115,6 +116,20 @@ type IDName struct {
 	Name string
 }
 
+func MeasureSeccompProfile(seccomp *specs.LinuxSeccomp) (string, error) {
+	if seccomp == nil {
+		return "", nil
+	}
+
+	buf, err := json.Marshal(seccomp)
+	if err != nil {
+		return "", err
+	}
+
+	profileSHA256 := sha256.Sum256(buf)
+	return fmt.Sprintf("%x", profileSHA256), nil
+}
+
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
@@ -131,6 +146,7 @@ type ContainerConfig struct {
 	AllowPrivilegeEscalation bool                `json:"allow_privilege_escalation" toml:"allow_privilege_escalation"`
 	User                     *UserConfig         `json:"user" toml:"user"`
 	Capabilities             *CapabilitiesConfig `json:"capabilities" toml:"capabilities"`
+	SeccompProfilePath       string              `json:"seccomp_profile_path" toml:"seccomp_profile_path"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -233,18 +249,19 @@ type Containers struct {
 }
 
 type Container struct {
-	Command          CommandArgs         `json:"command"`
-	EnvRules         EnvRules            `json:"env_rules"`
-	Layers           Layers              `json:"layers"`
-	WorkingDir       string              `json:"working_dir"`
-	Mounts           Mounts              `json:"mounts"`
-	AllowElevated    bool                `json:"allow_elevated"`
-	ExecProcesses    []ExecProcessConfig `json:"-"`
-	Signals          []syscall.Signal    `json:"-"`
-	AllowStdioAccess bool                `json:"-"`
-	NoNewPrivileges  bool                `json:"-"`
-	User             UserConfig          `json:"-"`
-	Capabilities     *CapabilitiesConfig `json:"-"`
+	Command              CommandArgs         `json:"command"`
+	EnvRules             EnvRules            `json:"env_rules"`
+	Layers               Layers              `json:"layers"`
+	WorkingDir           string              `json:"working_dir"`
+	Mounts               Mounts              `json:"mounts"`
+	AllowElevated        bool                `json:"allow_elevated"`
+	ExecProcesses        []ExecProcessConfig `json:"-"`
+	Signals              []syscall.Signal    `json:"-"`
+	AllowStdioAccess     bool                `json:"-"`
+	NoNewPrivileges      bool                `json:"-"`
+	User                 UserConfig          `json:"-"`
+	Capabilities         *CapabilitiesConfig `json:"-"`
+	SeccompProfileSHA256 string              `json:"-"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -290,6 +307,7 @@ func CreateContainerPolicy(
 	noNewPrivileges bool,
 	user UserConfig,
 	capabilities *CapabilitiesConfig,
+	seccompProfileSHA256 string,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
@@ -298,18 +316,19 @@ func CreateContainerPolicy(
 		return nil, err
 	}
 	return &Container{
-		Command:          newCommandArgs(command),
-		Layers:           newLayers(layers),
-		EnvRules:         newEnvRules(envRules),
-		WorkingDir:       workingDir,
-		Mounts:           newMountConstraints(mounts),
-		AllowElevated:    allowElevated,
-		ExecProcesses:    execProcesses,
-		Signals:          signals,
-		AllowStdioAccess: allowStdioAccess,
-		NoNewPrivileges:  noNewPrivileges,
-		User:             user,
-		Capabilities:     capabilities,
+		Command:              newCommandArgs(command),
+		Layers:               newLayers(layers),
+		EnvRules:             newEnvRules(envRules),
+		WorkingDir:           workingDir,
+		Mounts:               newMountConstraints(mounts),
+		AllowElevated:        allowElevated,
+		ExecProcesses:        execProcesses,
+		Signals:              signals,
+		AllowStdioAccess:     allowStdioAccess,
+		NoNewPrivileges:      noNewPrivileges,
+		User:                 user,
+		Capabilities:         capabilities,
+		SeccompProfileSHA256: seccompProfileSHA256,
 	}, nil
 }
 

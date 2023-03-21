@@ -124,12 +124,13 @@ func createRegoEnforcer(base64EncodedPolicy string,
 				return nil, fmt.Errorf("container constraint with index %q not found", index)
 			}
 			cConf.AllowStdioAccess = true
-			cConf.NoNewPrivileges = true
+			cConf.NoNewPrivileges = false
 			cConf.User = UserConfig{
 				UserIDName:   IDNameConfig{Strategy: IDNameStrategyAny},
 				GroupIDNames: []IDNameConfig{{Strategy: IDNameStrategyAny}},
 				Umask:        "0022",
 			}
+			cConf.SeccompProfileSHA256 = ""
 			containers[i] = &cConf
 		}
 
@@ -306,20 +307,32 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input i
 		return fmt.Errorf("%s not allowed by policy. Input unavailable due to marshalling error", enforcementPoint)
 	}
 
+	defaultMessage := fmt.Errorf("%s not allowed by policy. Security policy is not valid. Please check security policy or re-generate with tooling. Input: %s", enforcementPoint, string(inputJSON))
+
 	input["rule"] = enforcementPoint
 	result, err := policy.rego.Query("data.policy.reason", input)
-	if err == nil {
-		errors, _ := result.Value("errors")
-		if errors != nil {
-			if len(errors.([]interface{})) > 0 {
-				return fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s", enforcementPoint, errors, string(inputJSON))
-			} else {
-				return fmt.Errorf("%s not allowed by policy. Security policy is not valid. Please check security policy or re-generate with tooling. Input: %s", enforcementPoint, string(inputJSON))
-			}
-		}
+	if err != nil {
+		return defaultMessage
 	}
 
-	return fmt.Errorf("%s not allowed by policy. Security policy is not valid. Please check security policy or re-generate with tooling. Input: %s", enforcementPoint, string(inputJSON))
+	errors, err := result.Value("errors")
+	if err != nil || len(errors.([]interface{})) == 0 {
+		return defaultMessage
+	}
+
+	errorMessage := fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s.", enforcementPoint, errors, string(inputJSON))
+
+	matches, err := result.Value("matches")
+	if err != nil {
+		return errorMessage
+	}
+
+	matchesJSON, err := json.Marshal(matches)
+	if err != nil {
+		return errorMessage
+	}
+
+	return fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s. Matches: %s", enforcementPoint, errors, string(inputJSON), string(matchesJSON))
 }
 
 func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
@@ -515,6 +528,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	groups []IDName,
 	umask string,
 	capabilities *oci.LinuxCapabilities,
+	seccompProfileSHA256 string,
 ) (envToKeep EnvList,
 	capsToKeep *oci.LinuxCapabilities,
 	stdioAccessAllowed bool,
@@ -524,19 +538,20 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	}
 
 	input := inputData{
-		"containerID":     containerID,
-		"argList":         argList,
-		"envList":         envList,
-		"workingDir":      workingDir,
-		"sandboxDir":      spec.SandboxMountsDir(sandboxID),
-		"hugePagesDir":    spec.HugePagesMountsDir(sandboxID),
-		"mounts":          appendMountData([]interface{}{}, mounts),
-		"privileged":      privileged,
-		"noNewPrivileges": noNewPrivileges,
-		"user":            user.toInput(),
-		"groups":          groupsToInputs(groups),
-		"umask":           umask,
-		"capabilities":    mapifyCapabilities(capabilities),
+		"containerID":          containerID,
+		"argList":              argList,
+		"envList":              envList,
+		"workingDir":           workingDir,
+		"sandboxDir":           spec.SandboxMountsDir(sandboxID),
+		"hugePagesDir":         spec.HugePagesMountsDir(sandboxID),
+		"mounts":               appendMountData([]interface{}{}, mounts),
+		"privileged":           privileged,
+		"noNewPrivileges":      noNewPrivileges,
+		"user":                 user.toInput(),
+		"groups":               groupsToInputs(groups),
+		"umask":                umask,
+		"capabilities":         mapifyCapabilities(capabilities),
+		"seccompProfileSHA256": seccompProfileSHA256,
 	}
 
 	results, err := policy.enforce("create_container", input)

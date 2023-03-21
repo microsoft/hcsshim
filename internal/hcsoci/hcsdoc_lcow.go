@@ -9,11 +9,13 @@ import (
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
+func createLCOWSpec(ctx context.Context, coi *createOptionsInternal) (*specs.Spec, error) {
 	// Remarshal the spec to perform a deep copy.
 	j, err := json.Marshal(coi.Spec)
 	if err != nil {
@@ -45,7 +47,10 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 		spec.Linux.Resources.HugepageLimits = nil
 		spec.Linux.Resources.Network = nil
 	}
-	spec.Linux.Seccomp = nil
+
+	if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false) {
+		spec.Linux.Seccomp = nil
+	}
 
 	return spec, nil
 }
@@ -84,7 +89,7 @@ type linuxHostedSystem struct {
 }
 
 func createLinuxContainerDocument(ctx context.Context, coi *createOptionsInternal, guestRoot, scratchPath string) (*linuxHostedSystem, error) {
-	spec, err := createLCOWSpec(coi)
+	spec, err := createLCOWSpec(ctx, coi)
 	if err != nil {
 		return nil, err
 	}

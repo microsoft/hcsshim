@@ -389,6 +389,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, err
 	}
 
+	seccomp, err := securitypolicy.MeasureSeccompProfile(settings.OCISpecification.Linux.Seccomp)
+	if err != nil {
+		return nil, err
+	}
+
 	envToKeep, capsToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
 		sandboxID,
 		id,
@@ -402,6 +407,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		groups,
 		umask,
 		settings.OCISpecification.Process.Capabilities,
+		seccomp,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")

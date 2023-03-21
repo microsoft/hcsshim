@@ -61,6 +61,38 @@ func WithExecProcesses(execs []ExecProcessConfig) ContainerConfigOpt {
 	}
 }
 
+// WithAllowPrivilegeEscalation allows escalating of privileges by clearing the NoNewPrivileges flag
+func WithAllowPrivilegeEscalation(allow bool) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.AllowPrivilegeEscalation = allow
+		return nil
+	}
+}
+
+// WithUser sets user in container policy config.
+func WithUser(user UserConfig) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.User = &user
+		return nil
+	}
+}
+
+// WithCapabilities sets capabilities in container policy config.
+func WithCapabilities(capabilities *CapabilitiesConfig) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.Capabilities = capabilities
+		return nil
+	}
+}
+
+// WithSeccompProfilePath sets seccomp profile path in container policy config.
+func WithSeccompProfilePath(path string) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.SeccompProfilePath = path
+		return nil
+	}
+}
+
 // WithContainers adds containers to security policy.
 func WithContainers(containers []ContainerConfig) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
