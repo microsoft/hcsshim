@@ -442,7 +442,7 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 		trace.StringAttribute("endpointName", req.Name),
 		trace.StringAttribute("namespaceID", req.NamespaceID))
 
-	if req.Name == "" || req.NamespaceID == "" {
+	if req.Name == "" || (!req.AttachToHost && req.NamespaceID == "") {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
@@ -462,6 +462,22 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 			}
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.Name)
+		}
+		if req.AttachToHost {
+			if req.NamespaceID != "" {
+				log.G(ctx).WithField("namespaceID", req.NamespaceID).
+					Warning("Specified namespace ID will be ignored when attaching to default host namespace")
+			}
+
+			nsID, err := getHostDefaultNamespace()
+			if err != nil {
+				return nil, err
+			}
+
+			req.NamespaceID = nsID
+			log.G(ctx).WithField("namespaceID", req.NamespaceID).Debug("Attaching endpoint to default host namespace")
+			// replace current span namespaceID attribute
+			span.AddAttributes(trace.StringAttribute("namespaceID", req.NamespaceID))
 		}
 		if err := hcn.AddNamespaceEndpoint(req.NamespaceID, ep.Id); err != nil {
 			return nil, errors.Wrapf(err, "failed to add endpoint with name %q to namespace", req.Name)
@@ -681,7 +697,7 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 		return nil, errors.Wrapf(err, "failed to get network with name %q", req.Name)
 	}
 
-	return hcnNetworkToNetworkResponse(network)
+	return hcnNetworkToNetworkResponse(ctx, network)
 }
 
 func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetworksRequest) (_ *ncproxygrpc.GetNetworksResponse, err error) {
@@ -702,7 +718,7 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 	}
 
 	for _, network := range rawHCNNetworks {
-		n, err := hcnNetworkToNetworkResponse(&network)
+		n, err := hcnNetworkToNetworkResponse(ctx, &network)
 		if err != nil {
 			return nil, err
 		}

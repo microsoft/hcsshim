@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/pkg/errors"
 )
@@ -243,7 +244,7 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 	return network, nil
 }
 
-func hcnNetworkToNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.GetNetworkResponse, error) {
+func hcnNetworkToNetworkResponse(ctx context.Context, network *hcn.HostComputeNetwork) (*ncproxygrpc.GetNetworkResponse, error) {
 	var (
 		ipamType                  int32
 		defaultGateway            string
@@ -300,12 +301,28 @@ func hcnNetworkToNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.
 		DefaultGatewayIpv6:        defaultGatewayIPv6,
 	}
 
+	var startMac, endMac string
+	switch n := len(network.MacPool.Ranges); {
+	case n < 1:
+		return nil, fmt.Errorf("network %s(%s) MAC pool is empty", network.Name, network.Id)
+	case n > 1:
+		log.G(ctx).WithField("networkName", network.Name).Warn("network has multiple MAC pools, only returning the first")
+		fallthrough
+	default:
+		startMac = network.MacPool.Ranges[0].StartMacAddress
+		endMac = network.MacPool.Ranges[0].EndMacAddress
+	}
+
 	return &ncproxygrpc.GetNetworkResponse{
 		ID: network.Id,
 		Network: &ncproxygrpc.Network{
 			Settings: &ncproxygrpc.Network_HcnNetwork{
 				HcnNetwork: settings,
 			},
+		},
+		MacRange: &ncproxygrpc.MacRange{
+			StartMacAddress: startMac,
+			EndMacAddress:   endMac,
 		},
 	}, nil
 }
@@ -367,4 +384,20 @@ func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req
 	}
 
 	return endpoint, nil
+}
+
+// getHostDefaultNamespace returns the first namespace found that has type [hcn.NamespaceTypeHostDefault],
+// or an error if none is found.
+func getHostDefaultNamespace() (string, error) {
+	namespaces, err := hcn.ListNamespaces()
+	if err != nil {
+		return "", errors.Wrapf(err, "failed list namespaces")
+	}
+
+	for _, ns := range namespaces {
+		if ns.Type == hcn.NamespaceTypeHostDefault {
+			return ns.Id, nil
+		}
+	}
+	return "", errors.New("unable to find default host namespace to attach to")
 }

@@ -57,14 +57,14 @@ message Network {
 }
 
 message NCProxyNetworkSettings {
-    string name = 1; 
+    string name = 1;
 }
 
 message HostComputeNetworkSettings {
     enum NetworkMode
     {
         Transparent = 0;
-        NAT = 1; 
+        NAT = 1;
     }
     enum IpamType
     {
@@ -78,7 +78,7 @@ message HostComputeNetworkSettings {
     IpamType ipam_type = 4;
     repeated string subnet_ipaddress_prefix = 5;
     string default_gateway = 6;
-    repeated string subnet_ipaddress_prefix_ipv6 = 7; 
+    repeated string subnet_ipaddress_prefix_ipv6 = 7;
     string default_gateway_ipv6 = 8;
 }
 
@@ -114,9 +114,9 @@ message EndpointSettings {
 }
 
 message HcnEndpointResponse {
-    string namespace = 1; 
-    string id = 2; 
-    HcnEndpointSettings settings = 3; 
+    string namespace = 1;
+    string id = 2;
+    HcnEndpointSettings settings = 3;
 }
 
 message HcnEndpointSettings {
@@ -124,15 +124,15 @@ message HcnEndpointSettings {
     string macaddress = 2;
     string ipaddress = 3;
     uint32 ipaddress_prefixlength = 4;
-    string network_name = 5; 
-    HcnEndpointPolicies policies = 6; 
+    string network_name = 5;
+    HcnEndpointPolicies policies = 6;
     DnsSetting dns_setting = 7;
-    string ipv6address = 8; 
-    uint32 ipv6address_prefixlength = 9; 
+    string ipv6address = 8;
+    uint32 ipv6address_prefixlength = 9;
 }
 
 message HcnEndpointPolicies {
-    reserved 3 to 7; 
+    reserved 3 to 7;
     PortNameEndpointPolicySetting portname_policy_setting = 1;
     IovEndpointPolicySetting iov_policy_settings = 2;
 }
@@ -147,8 +147,8 @@ message NCProxyEndpointSettings {
     oneof device_details {
         PCIDeviceDetails pci_device_details = 7;
     }
-    string ipv6address = 8; 
-    string ipv6address_prefixlength = 9; 
+    string ipv6address = 8;
+    string ipv6address_prefixlength = 9;
 }
 
 message PCIDeviceDetails {
@@ -163,6 +163,7 @@ message CreateEndpointResponse{
 message AddEndpointRequest {
     string name = 1;
     string namespace_id = 2;
+    bool attach_to_host = 3;
 }
 
 message AddEndpointResponse{}
@@ -184,8 +185,8 @@ message GetEndpointRequest{
 }
 
 message GetEndpointResponse{
-    string namespace = 1; 
-    string id = 2; 
+    string namespace = 1;
+    string id = 2;
     EndpointSettings endpoint = 3;
 }
 
@@ -196,6 +197,12 @@ message GetNetworkRequest{
 message GetNetworkResponse{
     string id = 1;
     Network network = 2;
+    MacRange macRange = 3;
+}
+
+message MacRange {
+    string startMacAddress = 1;
+    string endMacAddress = 2;
 }
 
 message GetEndpointsRequest{}

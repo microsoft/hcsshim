@@ -16,6 +16,11 @@ import (
 	"github.com/golang/mock/gomock"
 )
 
+const (
+	startMACAddress = "00-15-5D-52-C0-00"
+	endMACAddress   = "00-15-5D-52-CF-FF"
+)
+
 func getTestIPv4Subnets() []hcn.Subnet {
 	testSubnet := hcn.Subnet{
 		IpAddressPrefix: "192.168.100.0/24",
@@ -63,8 +68,8 @@ func createTestIPv4NATNetwork(name string) (*hcn.HostComputeNetwork, error) {
 		MacPool: hcn.MacPool{
 			Ranges: []hcn.MacRange{
 				{
-					StartMacAddress: "00-15-5D-52-C0-00",
-					EndMacAddress:   "00-15-5D-52-CF-FF",
+					StartMacAddress: startMACAddress,
+					EndMacAddress:   endMACAddress,
 				},
 			},
 		},
@@ -86,8 +91,8 @@ func createTestDualStackNATNetwork(name string) (*hcn.HostComputeNetwork, error)
 		MacPool: hcn.MacPool{
 			Ranges: []hcn.MacRange{
 				{
-					StartMacAddress: "00-15-5D-52-C0-00",
-					EndMacAddress:   "00-15-5D-52-CF-FF",
+					StartMacAddress: startMACAddress,
+					EndMacAddress:   endMACAddress,
 				},
 			},
 		},
@@ -941,7 +946,10 @@ func TestAddEndpoint_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache, networkingStore)
 
 	// create test network namespace
-	namespace := hcn.NewNamespace(hcn.NamespaceTypeHostDefault)
+	// we need to create a (host) namespace other than the HostDefault to differentiate between
+	// the nominal AddEndpoint functionality, and when specifying attach to host
+	// the DefaultHost namespace is retrieved below.
+	namespace := hcn.NewNamespace(hcn.NamespaceTypeHost)
 	namespace, err = namespace.Create()
 	if err != nil {
 		t.Fatalf("failed to create test namespace with %v", err)
@@ -950,9 +958,23 @@ func TestAddEndpoint_NoError(t *testing.T) {
 		_ = namespace.Delete()
 	}()
 
+	hostDefaultNSID, err := getHostDefaultNamespace()
+	if err != nil {
+		ns := hcn.NewNamespace(hcn.NamespaceTypeHostDefault)
+		ns, err = ns.Create()
+		if err != nil {
+			t.Fatalf("failed to create host-default test namespace: %v", err)
+		}
+		defer func() {
+			_ = ns.Delete()
+		}()
+		hostDefaultNSID = ns.Id
+	}
+
 	type config struct {
 		name              string
 		networkCreateFunc func(string) (*hcn.HostComputeNetwork, error)
+		attachToHost      bool
 	}
 	tests := []config{
 		{
@@ -963,13 +985,23 @@ func TestAddEndpoint_NoError(t *testing.T) {
 			name:              "AddEndpoint dual stack returns no error",
 			networkCreateFunc: createTestDualStackNATNetwork,
 		},
+		{
+			name:              "AddEndpoint with host attach returns no error",
+			networkCreateFunc: createTestIPv4NATNetwork,
+			attachToHost:      true,
+		},
+		{
+			name:              "AddEndpoint dual stack with host attach returns no error",
+			networkCreateFunc: createTestDualStackNATNetwork,
+			attachToHost:      true,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(subtest *testing.T) {
 			// test network
 			networkName := subtest.Name() + "-network"
-			network, err := createTestIPv4NATNetwork(networkName)
+			network, err := test.networkCreateFunc(networkName)
 			if err != nil {
 				subtest.Fatalf("failed to create test network with %v", err)
 			}
@@ -987,8 +1019,12 @@ func TestAddEndpoint_NoError(t *testing.T) {
 			}()
 
 			req := &ncproxygrpc.AddEndpointRequest{
-				Name:        endpointName,
-				NamespaceID: namespace.Id,
+				Name: endpointName,
+			}
+			if test.attachToHost {
+				req.AttachToHost = true
+			} else {
+				req.NamespaceID = namespace.Id
 			}
 
 			_, err = gService.AddEndpoint(ctx, req)
@@ -996,7 +1032,11 @@ func TestAddEndpoint_NoError(t *testing.T) {
 				subtest.Fatalf("expected AddEndpoint to return no error, instead got %v", err)
 			}
 			// validate endpoint was added to namespace
-			endpoints, err := hcn.GetNamespaceEndpointIds(namespace.Id)
+			nsID := namespace.Id
+			if test.attachToHost {
+				nsID = hostDefaultNSID
+			}
+			endpoints, err := hcn.GetNamespaceEndpointIds(nsID)
 			if err != nil {
 				subtest.Fatalf("failed to get the namespace's endpoints with %v", err)
 			}
@@ -1558,9 +1598,19 @@ func TestGetNetwork_NoError(t *testing.T) {
 			req := &ncproxygrpc.GetNetworkRequest{
 				Name: networkName,
 			}
-			_, err = gService.GetNetwork(ctx, req)
+			resp, err := gService.GetNetwork(ctx, req)
 			if err != nil {
 				subtest.Fatalf("expected no error, instead got %v", err)
+			}
+			mac := resp.MacRange
+			if mac == nil {
+				subtest.Fatal("received nil MAC Range")
+			}
+			if mac.StartMacAddress != startMACAddress {
+				subtest.Errorf("got start MAC address %q, wanted %q", mac.StartMacAddress, startMACAddress)
+			}
+			if mac.EndMacAddress != endMACAddress {
+				subtest.Errorf("got end MAC address %q, wanted %q", mac.EndMacAddress, endMACAddress)
 			}
 		})
 	}
