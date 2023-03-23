@@ -80,7 +80,7 @@ const (
 
 // Image definitions
 //
-//nolint:deadcode,unused,varcheck // may be used in future tests
+//nolint:unused // may be used in future tests
 var (
 	imageWindowsNanoserver      = getWindowsNanoserverImage(osversion.Build())
 	imageWindowsServercore      = getWindowsServerCoreImage(osversion.Build())
@@ -172,6 +172,7 @@ func getWindowsNanoserverImage(build uint16) string {
 	return constants.NanoserverImage(tag)
 }
 
+//nolint:unused // may be used in future tests
 func getWindowsServerCoreImage(build uint16) string {
 	tag, err := constants.ImageFromBuild(build)
 	if err != nil {

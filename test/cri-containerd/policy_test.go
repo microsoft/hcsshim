@@ -1271,6 +1271,7 @@ func Test_RunPodSandbox_Concurrently(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
 
 	for i := 0; i < 20; i++ {
+		i := i // define a local copy of loop variable that will be captured by `t.Run` closure
 		t.Run(fmt.Sprintf("ParallelPodRun_%d", i+1), func(t *testing.T) {
 			t.Parallel()
 			client := newTestRuntimeClient(t)

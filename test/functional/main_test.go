@@ -191,7 +191,7 @@ func defaultLCOWOptions(tb testing.TB) *uvm.OptionsLCOW {
 	return opts
 }
 
-//nolint:deadcode,unused // will be used when WCOW tests are updated
+//nolint:unused // will be used when WCOW tests are updated
 func defaultWCOWOptions(tb testing.TB) *uvm.OptionsWCOW {
 	tb.Helper()
 	return uvm.NewDefaultOptionsWCOW(util.CleanName(tb.Name()), hcsOwner)
@@ -212,7 +212,7 @@ func linuxImageLayers(ctx context.Context, tb testing.TB) []string {
 // If layer paths were provided on the command line, they are returned.
 // Otherwise, it pulls an appropriate image.
 //
-//nolint:deadcode,unused // will be used when WCOW tests are updated
+//nolint:unused // will be used when WCOW tests are updated
 func windowsImageLayers(ctx context.Context, tb testing.TB) []string {
 	tb.Helper()
 	if ss := flagWCOWLayerPaths.Strings(); len(ss) > 0 {
@@ -224,8 +224,6 @@ func windowsImageLayers(ctx context.Context, tb testing.TB) []string {
 // windowsServercoreImageLayers returns image layer paths for Windows servercore.
 //
 // See [windowsImageLayers] for more.
-//
-//nolint:unused // will be used when WCOW tests are updated
 func windowsServercoreImageLayers(ctx context.Context, tb testing.TB) []string {
 	tb.Helper()
 	return servercoreImagePaths.Layers(ctx, tb)

@@ -257,7 +257,6 @@ func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 		}
 	}()
 
-	//nolint:unused // false positive about config being unused
 	type config struct {
 		name             string
 		requiredFeatures []string
