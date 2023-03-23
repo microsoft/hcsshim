@@ -30,9 +30,13 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Clean mod cache
+        shell: Powershell
+        run: |
+          go clean -modcache
       - uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.49
+          version: v1.52
           args: >-
             --verbose
             --max-issues-per-linter=0
