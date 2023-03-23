@@ -54,7 +54,6 @@ func TestSCSIAddRemoveWCOW(t *testing.T) {
 	testSCSIAddRemoveSingle(t, u, `c:\`, "windows", layers)
 }
 
-//nolint:unused // unused since tests are skipped
 func testAddSCSI(u *uvm.UtilityVM, disks []string, pathPrefix string, usePath bool, reAdd bool) error {
 	for i := range disks {
 		uvmPath := ""
@@ -73,7 +72,6 @@ func testAddSCSI(u *uvm.UtilityVM, disks []string, pathPrefix string, usePath bo
 	return nil
 }
 
-//nolint:unused // unused since tests are skipped
 func testRemoveAllSCSI(u *uvm.UtilityVM, disks []string) error {
 	for i := range disks {
 		if err := u.RemoveSCSI(context.Background(), disks[i]); err != nil {
@@ -85,8 +83,6 @@ func testRemoveAllSCSI(u *uvm.UtilityVM, disks []string) error {
 
 // TODO this test is only needed until WCOW supports adding the same scsi device to
 // multiple containers
-//
-//nolint:unused // unused since tests are skipped
 func testSCSIAddRemoveSingle(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
 	t.Helper()
 	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0
@@ -138,7 +134,6 @@ func testSCSIAddRemoveSingle(t *testing.T, u *uvm.UtilityVM, pathPrefix string, 
 	// TODO: Could extend to validate can't add a 64th disk (windows). 65th (linux).
 }
 
-//nolint:unused // unused since tests are skipped
 func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
 	t.Helper()
 	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0

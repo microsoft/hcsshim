@@ -252,8 +252,6 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 
 // Helper to run the init process in an LCOW container; verify it exits with exit
 // code 0; verify stderr is empty; check output is as expected.
-//
-//nolint:unused // unused since tests are skipped
 func runInitProcess(t *testing.T, s cow.Container, expected string) {
 	t.Helper()
 	var errB bytes.Buffer

@@ -24,7 +24,7 @@ func calculateJobCPUWeight(processorWeight uint32) uint32 {
 	return 1 + uint32((8*processorWeight)/processorWeightMax)
 }
 
-//nolint:deadcode,unused // may be used in future tests
+//nolint:unused // may be used in future tests
 func calculateJobCPURate(hostProcs uint32, processorCount uint32) uint32 {
 	rate := (processorCount * 10000) / hostProcs
 	if rate == 0 {

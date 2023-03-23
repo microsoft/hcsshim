@@ -16,7 +16,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/linux"
 )
 
-//nolint:deadcode,varcheck // enumerate all options
 const (
 	msgTypeInvalid = iota
 	msgCPUIDRequest

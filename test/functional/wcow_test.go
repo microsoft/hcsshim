@@ -181,8 +181,6 @@ import (
 // Helper to stop a container.
 // Ones created through hcsoci methods will be of type cow.Container.
 // Ones created through hcsshim methods will be of type hcsshim.Container
-//
-//nolint:unused // unused since tests are skipped
 func stopContainer(t *testing.T, c interface{}) {
 	t.Helper()
 	switch c := c.(type) {
@@ -214,8 +212,6 @@ func stopContainer(t *testing.T, c interface{}) {
 
 // Helper to launch a process in a container created through the hcsshim methods.
 // At the point of calling, the container must have been successfully created.
-//
-//nolint:unused // unused since tests are skipped
 func runShimCommand(t *testing.T,
 	c hcsshim.Container,
 	command string,
@@ -262,7 +258,6 @@ func runShimCommand(t *testing.T,
 	}
 }
 
-//nolint:unused // unused since tests are skipped
 func runShimCommands(t *testing.T, c hcsshim.Container) {
 	t.Helper()
 	runShimCommand(t, c, `echo Hello`, `c:\`, 0, "Hello")
@@ -281,7 +276,6 @@ func runShimCommands(t *testing.T, c hcsshim.Container) {
 	runShimCommand(t, c, `ls`, `c:\mappedrw`, 0, `readwrite`)
 }
 
-//nolint:unused // unused since tests are skipped
 func runHcsCommands(t *testing.T, c cow.Container) {
 	t.Helper()
 	runHcsCommand(t, c, `echo Hello`, `c:\`, 0, "Hello")
@@ -302,8 +296,6 @@ func runHcsCommands(t *testing.T, c cow.Container) {
 
 // Helper to launch a process in a container created through the hcsshim methods.
 // At the point of calling, the container must have been successfully created.
-//
-//nolint:unused // unused since tests are skipped
 func runHcsCommand(t *testing.T,
 	c cow.Container,
 	command string,
@@ -349,8 +341,6 @@ func runHcsCommand(t *testing.T,
 }
 
 // Creates two temp folders used for the mounts/mapped directories
-//
-//nolint:unused // unused since tests are skipped
 func createTestMounts(t *testing.T) (string, string) {
 	t.Helper()
 	// Create two temp folders for mapped directories.
@@ -364,8 +354,6 @@ func createTestMounts(t *testing.T) (string, string) {
 }
 
 // For calling hcsshim interface, need hcsshim.Layer built from an images layer folders
-//
-//nolint:unused // unused since tests are skipped
 func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Layer {
 	t.Helper()
 	var layers []hcsshim.Layer
@@ -504,7 +492,6 @@ func TestWCOWXenonShim(t *testing.T) {
 	stopContainer(t, xenonShim)
 }
 
-//nolint:unused // unused since tests are skipped
 func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, hostRWSharedDirectory, hostROSharedDirectory string) *specs.Spec {
 	t.Helper()
 	return &specs.Spec{
