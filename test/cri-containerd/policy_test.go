@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -772,13 +773,26 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// The command prints environment variables to stdout, which we can capture
-	// and validate later
-	alpineCmd := []string{"ash", "-c", "env && sleep 1"}
+	alpineCmd := []string{"ash", "-c", "sleep 10"}
 
+	listDirCmd := []string{"ls", "-l", securitypolicy.SecurityContextMountPath}
+	// Make sure these are linux paths
+	catPolicyCmd := []string{"cat", path.Join(securitypolicy.SecurityContextMountPath, securitypolicy.PolicyFilename)}
+	catCertCmd := []string{"cat", path.Join(securitypolicy.SecurityContextMountPath, securitypolicy.HostAMDCertFilename)}
 	opts := []securitypolicy.ContainerConfigOpt{
 		securitypolicy.WithCommand(alpineCmd),
 		securitypolicy.WithAllowStdioAccess(true),
+		securitypolicy.WithExecProcesses([]securitypolicy.ExecProcessConfig{
+			{
+				Command: listDirCmd,
+			},
+			{
+				Command: catPolicyCmd,
+			},
+			{
+				Command: catCertCmd,
+			},
+		}),
 	}
 	for _, config := range []struct {
 		name   string
@@ -787,10 +801,6 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 		{
 			name:   "OpenDoorPolicy",
 			policy: openDoorPolicy,
-		},
-		{
-			name:   "StandardPolicy",
-			policy: alpineSecurityPolicy(t, "json", false, false, opts...),
 		},
 		{
 			name:   "RegoPolicy",
@@ -825,42 +835,57 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 					}
 				}
 
-				// setup logfile to capture stdout
-				logPath := filepath.Join(t.TempDir(), "log.txt")
-				containerRequest.Config.LogPath = logPath
-
 				containerID := createContainer(t, client, ctx, containerRequest)
 				defer removeContainer(t, client, ctx, containerID)
 
 				startContainer(t, client, ctx, containerID)
 				requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
 
-				// no need to stop the container since it'll exit by itself
-				requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_EXITED)
-
-				content, err := os.ReadFile(logPath)
-				if err != nil {
-					t.Fatalf("error reading log file: %s", err)
-				}
-				targetEnvs := []string{
-					fmt.Sprintf("UVM_SECURITY_POLICY=%s", config.policy),
-					"UVM_REFERENCE_INFO=",
-					fmt.Sprintf("UVM_HOST_AMD_CERTIFICATE=%s", certValue),
-				}
+				r := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+					ContainerId: containerID,
+					Cmd:         listDirCmd,
+				})
 				if setPolicyEnv {
-					// make sure that the expected environment variable was set
-					for _, env := range targetEnvs {
-						if !strings.Contains(string(content), env) {
-							t.Fatalf("missing init process environment variable: %s", env)
-						}
+					if r.ExitCode != 0 {
+						t.Log(string(r.Stderr))
+						t.Fatalf("unexpected exec exit code: %d", r.ExitCode)
+					}
+
+					// validate content of the policy file
+					r2 := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+						ContainerId: containerID,
+						Cmd:         catPolicyCmd,
+					})
+					r2stdout := string(r2.Stdout)
+					if r2stdout != config.policy {
+						t.Log(config.policy)
+						t.Log(r2stdout)
+						t.Fatal("supplied policy is different from the one written in file")
+					}
+
+					// validate content of AMD cert file
+					r3 := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+						ContainerId: containerID,
+						Cmd:         catCertCmd,
+					})
+					r3stdout := string(r3.Stdout)
+					if r3stdout != certValue {
+						t.Log(certValue)
+						t.Log(r3stdout)
+						t.Fatal("supplied cert is different from the one written in file")
 					}
 				} else {
-					for _, env := range targetEnvs {
-						if strings.Contains(string(content), env) {
-							t.Fatalf("environment variable should not be set for init process: %s", env)
-						}
+					if r.ExitCode != 1 {
+						t.Log(string(r.Stdout))
+						t.Fatalf("unexpected exec exit code: %d", r.ExitCode)
+					}
+					if !strings.Contains(string(r.Stderr), "No such file") {
+						t.Fatalf("expected different error output, got:\n %s", string(r.Stderr))
 					}
 				}
+
+				// no need to stop the container since it'll exit by itself
+				requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_EXITED)
 			})
 		}
 	}

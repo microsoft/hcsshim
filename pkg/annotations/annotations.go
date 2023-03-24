@@ -271,8 +271,10 @@ const (
 	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
 	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
 
-	// UVMSecurityPolicyEnv specifies if UVM_SECURITY_POLICY, UVM_REFERENCE_INFO
-	// and UVM_HOST_AMD_CERTIFICATE variables should be injected for a container.
+	// UVMSecurityPolicyEnv specifies if confidential containers' related information
+	// should be written to containers' rootfs. The filenames and location are defined
+	// by securitypolicy.PolicyFilename, securitypolicy.HostAMDCertFilename and
+	// securitypolicy.ReferenceInfoFilename.
 	UVMSecurityPolicyEnv = "io.microsoft.virtualmachine.lcow.securitypolicy.env"
 
 	// UVMReferenceInfoFile specifies the filename of a signed UVM reference file to be passed to UVM.
