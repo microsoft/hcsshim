@@ -1213,6 +1213,98 @@ func Test_ExecInContainer_WithPolicy(t *testing.T) {
 	}
 }
 
+func Test_ExecInContainer_WithPolicy_Privileged(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, tc := range []struct {
+		execProcessConfig  securitypolicy.ExecProcessConfig
+		execProcessRequest []string
+		shouldFail         bool
+	}{
+		{
+			execProcessConfig: securitypolicy.ExecProcessConfig{
+				Command: []string{"ls"},
+			},
+			execProcessRequest: []string{"ls"},
+			shouldFail:         false,
+		},
+		{
+			execProcessConfig: securitypolicy.ExecProcessConfig{
+				Command: []string{"ls"},
+			},
+			execProcessRequest: []string{"ls", "-l"},
+			shouldFail:         true,
+		},
+	} {
+		t.Run(fmt.Sprintf("ExecInContainer_ShouldFail_%t", tc.shouldFail), func(t *testing.T) {
+			cmd := []string{"ash", "-c", "while true; do sleep 1; done"}
+			policy := alpineSecurityPolicy(
+				t,
+				"rego",
+				true,
+				false,
+				securitypolicy.WithExecProcesses([]securitypolicy.ExecProcessConfig{tc.execProcessConfig}),
+				securitypolicy.WithCommand(cmd),
+				securitypolicy.WithAllowElevated(true),
+			)
+			sandboxRequest := sandboxRequestWithPolicy(t, policy)
+			sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+				SecurityContext: &runtime.LinuxSandboxSecurityContext{
+					Privileged: true,
+				},
+			}
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			conReq := getCreateContainerRequest(
+				podID,
+				fmt.Sprintf("alpine-exec-not-allowed-%t", tc.shouldFail),
+				imageLcowAlpine,
+				cmd,
+				sandboxRequest.Config,
+			)
+			conReq.Config.Linux = &runtime.LinuxContainerConfig{
+				SecurityContext: &runtime.LinuxContainerSecurityContext{
+					Privileged: true,
+				},
+			}
+
+			containerID := createContainer(t, client, ctx, conReq)
+			defer removeContainer(t, client, ctx, containerID)
+
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
+
+			execReq := &runtime.ExecSyncRequest{
+				ContainerId: containerID,
+				Cmd:         tc.execProcessRequest,
+				Timeout:     20,
+			}
+			_, err := client.ExecSync(ctx, execReq)
+			if err == nil {
+				if tc.shouldFail {
+					t.Fatal("exec should've been denied by policy")
+				}
+			} else {
+				if !tc.shouldFail {
+					t.Fatalf("unexpected exec failure: %s", err)
+				}
+				if !strings.Contains(err.Error(), "invalid command") {
+					t.Fatalf("expected 'invalid command' error, got '%s' instead", err)
+				}
+			}
+		})
+	}
+}
+
 func Test_ExecInUVM_WithPolicy(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
 
