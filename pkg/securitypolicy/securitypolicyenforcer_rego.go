@@ -322,7 +322,7 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input i
 
 	errorMessage := fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s.", enforcementPoint, errors, string(inputJSON))
 
-	matches, err := result.Value("matches")
+	matches, err := result.Value("error_objects")
 	if err != nil {
 		return errorMessage
 	}
@@ -332,7 +332,7 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input i
 		return errorMessage
 	}
 
-	return fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s. Matches: %s", enforcementPoint, errors, string(inputJSON), string(matchesJSON))
+	return fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s. Error Objects: %s", enforcementPoint, errors, string(inputJSON), string(matchesJSON))
 }
 
 func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {

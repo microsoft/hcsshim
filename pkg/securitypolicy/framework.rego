@@ -275,6 +275,12 @@ container_started {
     data.metadata.started[input.containerID]
 }
 
+default container_privileged := false
+
+container_privileged {
+    data.metadata.started[input.containerID].privileged
+}
+
 capsList_ok(allowed_caps_list, requested_caps_list) {
     count(allowed_caps_list) == count(requested_caps_list)
 
@@ -314,10 +320,10 @@ filter_capsList_for_single_container(allowed_caps) := caps {
     }
 }
 
-largest_caps_sets_for_all(containers) := largest_caps_sets {
+largest_caps_sets_for_all(containers, privileged) := largest_caps_sets {
     filtered := [caps |
         container := containers[_]
-        capabilities := get_capabilities(container)
+        capabilities := get_capabilities(container, privileged)
         caps := filter_capsList_for_single_container(capabilities)
     ]
 
@@ -371,18 +377,18 @@ all_caps_sets_are_equal(sets) := caps {
     }
 }
 
-valid_caps_for_all(containers) := caps {
+valid_caps_for_all(containers, privileged) := caps {
     allow_capability_dropping
 
     # find largest matching capabilities sets aka "the most specific"
-    largest_caps_sets := largest_caps_sets_for_all(containers)
+    largest_caps_sets := largest_caps_sets_for_all(containers, privileged)
 
     # if there is more than one set with the same size, we
     # can only proceed if they are all the same
     caps := all_caps_sets_are_equal(largest_caps_sets)
 }
 
-valid_caps_for_all(containers) := caps {
+valid_caps_for_all(containers, privileged) := caps {
     not allow_capability_dropping
 
     # no dropping allowed, so we just return the input
@@ -397,7 +403,7 @@ caps_ok(allowed_caps, requested_caps) {
     capsList_ok(allowed_caps.ambient, requested_caps.ambient)
 }
 
-get_capabilities(container) := capabilities {
+get_capabilities(container, privileged) := capabilities {
     container.capabilities != null
     capabilities := container.capabilities
 }
@@ -413,10 +419,9 @@ default_privileged_capabilities := capabilities {
     }
 }
 
-get_capabilities(container) := capabilities {
+get_capabilities(container, true) := capabilities {
     container.capabilities == null
     container.allow_elevated
-    input.privileged
     capabilities := default_privileged_capabilities
 }
 
@@ -431,14 +436,13 @@ default_unprivileged_capabilities := capabilities {
     }
 }
 
-get_capabilities(container) := capabilities {
+get_capabilities(container, false) := capabilities {
     container.capabilities == null
     container.allow_elevated
-    not input.privileged
     capabilities := default_unprivileged_capabilities
 }
 
-get_capabilities(container) := capabilities {
+get_capabilities(container, privileged) := capabilities {
     container.capabilities == null
     not container.allow_elevated
     capabilities := default_unprivileged_capabilities
@@ -483,10 +487,10 @@ create_container := {"metadata": [updateMatches, addStarted],
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers)
+    caps_list := valid_caps_for_all(possible_after_env_containers, input.privileged)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container), caps_list)
+        caps_ok(get_capabilities(container, input.privileged), caps_list)
     ]
 
     count(possible_after_caps_containers) > 0
@@ -514,7 +518,9 @@ create_container := {"metadata": [updateMatches, addStarted],
         "name": "started",
         "action": "add",
         "key": input.containerID,
-        "value": true,
+        "value": {
+            "privileged": input.privileged,
+        },
     }
 }
 
@@ -619,10 +625,10 @@ exec_in_container := {"metadata": [updateMatches],
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers)
+    caps_list := valid_caps_for_all(possible_after_env_containers, container_privileged)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container), caps_list)
+        caps_ok(get_capabilities(container, container_privileged), caps_list)
     ]
 
     count(possible_after_caps_containers) > 0
@@ -1398,10 +1404,10 @@ errors["containers only distinguishable by allow_stdio_access"] {
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers)
+    caps_list := valid_caps_for_all(possible_after_env_containers, input.privileged)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container), caps_list)
+        caps_ok(get_capabilities(container, input.privileged), caps_list)
     ]
 
     count(possible_after_caps_containers) > 0
@@ -1515,10 +1521,10 @@ errors["capabilities don't match"] {
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers)
+    caps_list := valid_caps_for_all(possible_after_env_containers, input.privileged)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container), caps_list)
+        caps_ok(get_capabilities(container, input.privileged), caps_list)
     ]
 
     count(possible_after_caps_containers) == 0
@@ -1552,10 +1558,10 @@ errors["capabilities don't match"] {
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers)
+    caps_list := valid_caps_for_all(possible_after_env_containers, container_privileged)
     possible_after_caps_containers := [container |
         container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container), caps_list)
+        caps_ok(get_capabilities(container, container_privileged), caps_list)
     ]
 
     count(possible_after_caps_containers) == 0
@@ -1596,7 +1602,7 @@ errors["containers only distinguishable by capabilties"] {
 
     count(possible_after_env_containers) > 0
 
-    largest := largest_caps_sets_for_all(possible_after_env_containers)
+    largest := largest_caps_sets_for_all(possible_after_env_containers, input.privileged)
     not all_caps_sets_are_equal(largest)
 }
 
@@ -1613,14 +1619,14 @@ errors["invalid seccomp"] {
     not seccomp_matches
 }
 
-default matches := null
+default error_objects := null
 
-matches := containers {
+error_objects := containers {
     input.rule == "create_container"
     containers := data.metadata.matches[input.containerID]
 }
 
-matches := processes {
+error_objects := processes {
     input.rule == "exec_in_container"
     processes := [process |
         container := data.metadata.matches[input.containerID][_]
@@ -1628,12 +1634,12 @@ matches := processes {
     ]
 }
 
-matches := processes {
+error_objects := processes {
     input.rule == "exec_external"
     processes := candidate_external_processes
 }
 
-matches := fragments {
+error_objects := fragments {
     input.rule == "load_fragment"
     fragments := candidate_fragments
 }
