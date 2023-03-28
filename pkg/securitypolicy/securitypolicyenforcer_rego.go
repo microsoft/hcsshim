@@ -311,11 +311,13 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input i
 
 	input["rule"] = enforcementPoint
 	result, err := policy.rego.Query("data.policy.reason", input)
+	// TODO: log error via logrus once the enforcer interface is updated to accept context as parameter.
 	if err != nil {
 		return defaultMessage
 	}
 
 	errors, err := result.Value("errors")
+	// TODO: log error via logrus once the enforcer interface is updated to accept context as parameter.
 	if err != nil || len(errors.([]interface{})) == 0 {
 		return defaultMessage
 	}
