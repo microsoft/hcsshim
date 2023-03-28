@@ -140,6 +140,8 @@ type securityPolicyContainer struct {
 	User UserConfig `json:"user"`
 	// Capability sets for the container
 	Capabilities *capabilitiesInternal `json:"capabilities"`
+	// Seccomp configuration for the container
+	SeccompProfileSHA256 string `json:"seccomp_profile_sha256"`
 }
 
 type containerExecProcess struct {
@@ -217,15 +219,16 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		Layers:   layers,
 		// No need to have toInternal(), because WorkingDir is a string both
 		// internally and in the policy.
-		WorkingDir:       c.WorkingDir,
-		Mounts:           mounts,
-		AllowElevated:    c.AllowElevated,
-		ExecProcesses:    execProcesses,
-		Signals:          c.Signals,
-		AllowStdioAccess: c.AllowStdioAccess,
-		NoNewPrivileges:  c.NoNewPrivileges,
-		User:             c.User,
-		Capabilities:     capabilities,
+		WorkingDir:           c.WorkingDir,
+		Mounts:               mounts,
+		AllowElevated:        c.AllowElevated,
+		ExecProcesses:        execProcesses,
+		Signals:              c.Signals,
+		AllowStdioAccess:     c.AllowStdioAccess,
+		NoNewPrivileges:      c.NoNewPrivileges,
+		User:                 c.User,
+		Capabilities:         capabilities,
+		SeccompProfileSHA256: c.SeccompProfileSHA256,
 	}, nil
 }
 

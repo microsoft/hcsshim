@@ -364,11 +364,12 @@ func writeContainer(builder *strings.Builder, container *securityPolicyContainer
 	writeExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeSignals(builder, container.Signals, indent+indentUsing)
 	writeUser(builder, container.User, indent+indentUsing)
+	writeCapabilities(builder, container.Capabilities, indent+indentUsing)
+	writeLine(builder, `%s"seccomp_profile_sha256": "%s",`, indent+indentUsing, container.SeccompProfileSHA256)
 	writeLine(builder, `%s"allow_elevated": %t,`, indent+indentUsing, container.AllowElevated)
 	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, container.WorkingDir)
 	writeLine(builder, `%s"allow_stdio_access": %t,`, indent+indentUsing, container.AllowStdioAccess)
 	writeLine(builder, `%s"no_new_privileges": %t,`, indent+indentUsing, container.NoNewPrivileges)
-	writeCapabilities(builder, container.Capabilities, indent+indentUsing)
 	writeLine(builder, "%s},", indent)
 }
 

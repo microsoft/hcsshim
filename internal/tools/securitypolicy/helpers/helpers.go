@@ -1,7 +1,10 @@
 package helpers
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -9,6 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	sp "github.com/Microsoft/hcsshim/pkg/securitypolicy"
@@ -234,6 +238,7 @@ func PolicyContainersFromConfigs(containerConfigs []sp.ContainerConfig) ([]*sp.C
 			!containerConfig.AllowPrivilegeEscalation,
 			setDefaultUser(containerConfig.User, user, group),
 			setDefaultCapabilities(containerConfig.Capabilities),
+			setDefaultSeccomp(containerConfig.SeccompProfilePath),
 		)
 		if err != nil {
 			return nil, err
@@ -281,4 +286,29 @@ func setDefaultCapabilities(config *sp.CapabilitiesConfig) *sp.CapabilitiesConfi
 	}
 
 	return config
+}
+
+func setDefaultSeccomp(seccompProfilePath string) string {
+	if len(seccompProfilePath) == 0 {
+		return ""
+	}
+
+	var seccomp specs.LinuxSeccomp
+
+	buff, err := os.ReadFile(seccompProfilePath)
+	if err != nil {
+		log.Fatalf("unable to read seccomp profile: %v", err)
+	}
+
+	err = json.Unmarshal(buff, &seccomp)
+	if err != nil {
+		log.Fatalf("unable to parse seccomp profile: %v", err)
+	}
+
+	profileSHA256, err := sp.MeasureSeccompProfile(&seccomp)
+	if err != nil {
+		log.Fatalf("unable to measure seccomp profile: %v", err)
+	}
+
+	return profileSHA256
 }

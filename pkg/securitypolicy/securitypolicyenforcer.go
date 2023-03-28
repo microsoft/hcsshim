@@ -57,6 +57,7 @@ type SecurityPolicyEnforcer interface {
 		groups []IDName,
 		umask string,
 		capabilities *oci.LinuxCapabilities,
+		seccompProfileSHA256 string,
 	) (EnvList, *oci.LinuxCapabilities, bool, error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
@@ -463,6 +464,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	groups []IDName,
 	umask string,
 	caps *oci.LinuxCapabilities,
+	seccomp string,
 ) (allowedEnvs EnvList,
 	allowedCapabilities *oci.LinuxCapabilities,
 	stdioAccessAllowed bool,
@@ -899,7 +901,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities, _ string) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, caps, true, nil
 }
 
@@ -985,7 +987,7 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) erro
 	return errors.New("removing an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, _ *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, _ *oci.LinuxCapabilities, _ string) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return nil, nil, false, errors.New("running commands is denied by policy")
 }
 
