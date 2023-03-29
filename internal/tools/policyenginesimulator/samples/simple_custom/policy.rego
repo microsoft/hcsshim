@@ -1,6 +1,6 @@
 package policy
 
-api_svn := "0.7.0"
+api_version := "0.7.0"
 
 overlays := {
     "pause": {

@@ -1,6 +1,7 @@
 package infra
 
-svn := "1.0.0"
+svn := "1"
+framework_version := "0.1.0"
 
 containers := [
     {

@@ -1,6 +1,6 @@
 package api
 
-svn := "@@API_SVN@@"
+version := "@@API_VERSION@@"
 
 enforcement_points := {
     "mount_device": {"introducedVersion": "0.1.0", "default_results": {"allowed": false}},
