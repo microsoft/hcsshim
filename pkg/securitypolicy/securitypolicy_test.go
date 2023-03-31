@@ -1234,10 +1234,7 @@ func generateFragmentNamespace(r *rand.Rand) string {
 }
 
 func generateSVN(r *rand.Rand) string {
-	major := randMinMax(r, 0, maxGeneratedVersion)
-	minor := randMinMax(r, 0, maxGeneratedVersion)
-	patch := randMinMax(r, 0, maxGeneratedVersion)
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
+	return strconv.FormatInt(int64(randMinMax(r, 0, maxGeneratedVersion)), 10)
 }
 
 func selectRootHashFromConstraints(constraints *generatedConstraints, r *rand.Rand) string {

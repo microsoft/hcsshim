@@ -22,8 +22,8 @@ var frameworkCodeTemplate string
 //go:embed api.rego
 var apiCodeTemplate string
 
-var APICode = strings.Replace(apiCodeTemplate, "@@API_SVN@@", apiSVN, 1)
-var FrameworkCode = strings.Replace(frameworkCodeTemplate, "@@FRAMEWORK_SVN@@", frameworkSVN, 1)
+var APICode = strings.Replace(apiCodeTemplate, "@@API_VERSION@@", apiVersion, 1)
+var FrameworkCode = strings.Replace(frameworkCodeTemplate, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)
 
 var ErrInvalidOpenDoorPolicy = errors.New("allow_all cannot be set to 'true' when Containers are non-empty")
 
@@ -174,11 +174,11 @@ type CapabilitiesConfig struct {
 	Ambient     []string `json:"ambient" toml:"ambient"`
 }
 
-//go:embed svn_api
-var apiSVN string
+//go:embed version_api
+var apiVersion string
 
-//go:embed svn_framework
-var frameworkSVN string
+//go:embed version_framework
+var frameworkVersion string
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
 // strings slice.

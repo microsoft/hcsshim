@@ -1,7 +1,7 @@
 package policy
 
-api_svn := "@@API_SVN@@"
-framework_svn := "@@FRAMEWORK_SVN@@"
+api_version := "@@API_VERSION@@"
+framework_version := "@@FRAMEWORK_VERSION@@"
 
 @@OBJECTS@@
 

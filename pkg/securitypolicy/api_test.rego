@@ -1,6 +1,6 @@
 package api
 
-svn := "0.0.2"
+version := "0.0.2"
 
 enforcement_points := {
     "__fixture_for_future_test__": {"introducedVersion": "100.0.0", "default_results": {"allowed": true}},

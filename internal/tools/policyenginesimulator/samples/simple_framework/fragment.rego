@@ -1,43 +1,26 @@
 package fragment
 
-svn := "1.0.0"
-framework_svn := "0.1.0"
+svn := "1"
+framework_version := "0.3.0"
 
 containers := [
     {
-        "command": ["python3","WebAttestationReport.py"],
-        "env_rules": [
-            {
-                "pattern": "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "strategy": "string",
-                "required": false
-            },
-            {
-                "pattern": "PYTHONUNBUFFERED=1",
-                "strategy": "string",
-                "required": false
-            },
-            {
-                "pattern": "TERM=xterm",
-                "strategy": "string",
-                "required": false
-            }
-        ],
-        "layers": [
-            "37e9dcf799048b7d35ce53584e0984198e1bc3366c3bb5582fd97553d31beb4e",
-            "97112ba1d4a2c86c1c15a3e13f606e8fcc0fb1b49154743cadd1f065c42fee5a",
-            "1e66649e162d99c4d675d8d8c3af90ece3799b33d24671bc83fe9ea5143daf2f",
-            "3413e98a178646d4703ea70b9bff2d4410e606a22062046992cda8c8aedaa387",
-            "b99a9ced77c45fc4dc96bac8ea1e4d9bc1d2a66696cc057d3f3cca79dc999702",
-            "e7fbe653352d546497c534c629269c4c04f1997f6892bd66c273f0c9753a4de3",
-            "04c110e9406d2b57079f1eac4c9c5247747caa3bcaab6d83651de6e7da97cb40",
-            "f65ec804a63b85f507ac11d187434ea135a18cdc16202551d8dff292f942fdf0",
-            "998fe7a12356e0de0f2ffb4134615b42c9510e281c0ecfc7628c121442544309"],
+        "command": ["rustc","--version"],
+        "env_rules": [{"pattern": `PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, "strategy": "string", "required": true},{"pattern": `RUSTUP_HOME=/usr/local/rustup`, "strategy": "string", "required": true},{"pattern": `CARGO_HOME=/usr/local/cargo`, "strategy": "string", "required": true},{"pattern": `RUST_VERSION=1.52.1`, "strategy": "string", "required": true},{"pattern": `TERM=xterm`, "strategy": "string", "required": false}],
+        "layers": ["fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a","4dedae42847c704da891a28c25d32201a1ae440bce2aecccfa8e6f03b97a6a6c","41d64cdeb347bf236b4c13b7403b633ff11f1cf94dbc7cf881a44d6da88c5156","eb36921e1f82af46dfe248ef8f1b3afb6a5230a64181d960d10237a08cd73c79","e769d7487cc314d3ee748a4440805317c19262c7acd2fdbdb0d47d2e4613a15c","1b80f120dbd88e4355d6241b519c3e25290215c469516b49dece9cf07175a766"],
         "mounts": [],
-        "exec_processes": [],
+        "exec_processes": [{"command": ["bash"], "signals": []}],
         "signals": [],
-        "allow_elevated": true,
-        "working_dir": "/demo-attestion",
-        "allow_stdio_access": true,
-    }
+        "user": {
+            "user_idname": {"pattern": ``, "strategy": "any"},
+            "group_idnames": [{"pattern": ``, "strategy": "any"}],
+            "umask": "0022"
+        },
+        "capabilities": null,
+        "seccomp_profile_sha256": "",
+        "allow_elevated": false,
+        "working_dir": "/home/fragment",
+        "allow_stdio_access": false,
+        "no_new_privileges": true,
+    },
 ]

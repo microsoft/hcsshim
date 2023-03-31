@@ -138,7 +138,7 @@ for more detail.
 ``` rego
 package policy
 
-api_svn := "0.7.0"
+api_version := "0.7.0"
 
 import future.keywords.every
 import future.keywords.in
@@ -187,7 +187,7 @@ reason := {"errors": data.framework.errors}
 ``` rego
 package policy
 
-api_svn := "0.7.0"
+api_version := "0.7.0"
 
 overlays := {
     "pause": {

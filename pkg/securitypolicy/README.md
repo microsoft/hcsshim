@@ -30,8 +30,7 @@ Here is a helpful checklist:
 4.  Add the enforcement point to [`api.rego`](./api.rego) and bump one minor
     version.
 5.  Add the enforcement point rule to [`policy.rego`](./policy.rego) and
-    [`open_door.rego`](./open_door.rego). Update their `api_svn` values to
-    the latest API version.
+    [`open_door.rego`](./open_door.rego).
 6.  Add the enforcement point rule logic to [`framework.rego`](./framework.rego)
 7.  Add useful error messages to [`framework.rego`](./framework.rego). Be sure
     to gate them with the rule name.

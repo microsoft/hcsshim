@@ -1,96 +1,66 @@
 package policy
 
-api_svn := "0.7.0"
-framework_svn := "0.1.0"
-
-import future.keywords.every
-import future.keywords.in
+api_version := "0.10.0"
+framework_version := "0.3.0"
 
 fragments := [
-    {"issuer": "did:web:contoso.github.io", "feed": "contoso.azurecr.io/fragment", "minimum_svn": "1.0.0", "includes": ["containers"]},
+    {"issuer": "did:web:contoso.com", "feed": "contoso.azurecr.io/infra", "minimum_svn": "1", "includes": ["containers"]},
 ]
 containers := [
     {
+        "command": ["rustc","--help"],
+        "env_rules": [{"pattern": `PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, "strategy": "string", "required": true},{"pattern": `RUSTUP_HOME=/usr/local/rustup`, "strategy": "string", "required": true},{"pattern": `CARGO_HOME=/usr/local/cargo`, "strategy": "string", "required": true},{"pattern": `RUST_VERSION=1.52.1`, "strategy": "string", "required": true},{"pattern": `TERM=xterm`, "strategy": "string", "required": false},{"pattern": `PREFIX_.+=.+`, "strategy": "re2", "required": false}],
+        "layers": ["fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a","4dedae42847c704da891a28c25d32201a1ae440bce2aecccfa8e6f03b97a6a6c","41d64cdeb347bf236b4c13b7403b633ff11f1cf94dbc7cf881a44d6da88c5156","eb36921e1f82af46dfe248ef8f1b3afb6a5230a64181d960d10237a08cd73c79","e769d7487cc314d3ee748a4440805317c19262c7acd2fdbdb0d47d2e4613a15c","1b80f120dbd88e4355d6241b519c3e25290215c469516b49dece9cf07175a766"],
+        "mounts": [{"destination": "/container/path/one", "options": ["rbind","rshared","rw"], "source": "sandbox:///host/path/one", "type": "bind"},{"destination": "/container/path/two", "options": ["rbind","rshared","ro"], "source": "sandbox:///host/path/two", "type": "bind"}],
+        "exec_processes": [{"command": ["top"], "signals": []}],
+        "signals": [],
+        "user": {
+            "user_idname": {"pattern": ``, "strategy": "any"},
+            "group_idnames": [{"pattern": ``, "strategy": "any"}],
+            "umask": "0022"
+        },
+        "capabilities": {
+            "bounding": ["CAP_SYS_ADMIN"],
+            "effective": ["CAP_SYS_ADMIN"],
+            "inheritable": ["CAP_SYS_ADMIN"],
+            "permitted": ["CAP_SYS_ADMIN"],
+            "ambient": ["CAP_SYS_ADMIN"],
+        },
+        "seccomp_profile_sha256": "",
+        "allow_elevated": true,
+        "working_dir": "/home/user",
+        "allow_stdio_access": false,
+        "no_new_privileges": true,
+    },
+    {
         "command": ["/pause"],
-        "env_rules": [
-            {
-                "pattern": "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "strategy": "string",
-                "required": false
-            },
-            {
-                "pattern": "TERM=xterm",
-                "strategy": "string",
-                "required": false
-            }
-        ],
+        "env_rules": [{"pattern": `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, "strategy": "string", "required": true},{"pattern": `TERM=xterm`, "strategy": "string", "required": false}],
         "layers": ["16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"],
         "mounts": [],
         "exec_processes": [],
         "signals": [],
+        "user": {
+            "user_idname": {"pattern": ``, "strategy": "any"},
+            "group_idnames": [{"pattern": ``, "strategy": "any"}],
+            "umask": "0022"
+        },
+        "capabilities": null,
+        "seccomp_profile_sha256": "",
         "allow_elevated": false,
         "working_dir": "/",
-        "allow_stdio_access": true,
-    },
-    {
-        "id": "user_0",
-        "command": ["bash", "/copy_resolv_conf.sh"],
-        "env_rules": [
-            {
-              "pattern": "IDENTITY_API_VERSION=.+",
-              "strategy": "re2"
-            },
-            {
-              "pattern": "IDENTITY_HEADER=.+",
-              "strategy": "re2"
-            },
-            {
-              "pattern": "SOURCE_RESOLV_CONF_LOCATION=/etc/resolv.conf",
-              "strategy": "string"
-            },
-            {
-              "pattern": "DESTINATION_RESOLV_CONF_LOCATION=/mount/resolvconf/resolv.conf",
-              "strategy": "string"
-            },
-            {
-              "pattern": "IDENTITY_SERVER_THUMBPRINT=.+",
-              "strategy": "re2"
-            },
-            {
-              "pattern": "HOSTNAME=.+",
-              "strategy": "re2"
-            },
-            {
-              "pattern": "TERM=xterm",
-              "strategy": "string"
-            },
-            {
-              "pattern": "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-              "strategy": "string"
-            }
-       ],
-        "layers": [
-            "285cb680a55d09f548d4baa804a663764788619824565685b32b8097cbed3d26",
-            "a6a6918c07c85e29e48d4a87c1194781251d5185f682c26f20d6ee4e955a239f",
-            "296e5baa5b9ded863ca0170e05cd9ecf4136f86c830a9da906184ab147415c7b",
-            "97adfda6943f3af972b9bf4fa684f533f10c023d913d195048fef03f9c3c60fd",
-            "606fd6baf5eb1a71fd286aea29672a06bfe55f0007ded92ee73142a37590ed19"
-        ],
-
-        "mounts": [
-            {
-              "destination": "/mount/resolvconf",
-              "options": ["rbind", "rshared", "rw"],
-              "source": "sandbox:///tmp/atlas/resolvconf/.+",
-              "type": "bind"
-            }
-        ],
-
-        "allow_elevated": true,
-        "working_dir": "/",
-        "allow_stdio_access": true,
+        "allow_stdio_access": false,
+        "no_new_privileges": true,
     },
 ]
+external_processes := [
+    {"command": ["bash"], "env_rules": [{"pattern": `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, "strategy": "string", "required": true}], "working_dir": "/", "allow_stdio_access": false},
+]
+allow_properties_access := false
+allow_dump_stacks := false
+allow_runtime_logging := false
+allow_environment_variable_dropping := false
+allow_unencrypted_scratch := false
+allow_capability_dropping := true
 
 
 mount_device := data.framework.mount_device
@@ -104,5 +74,13 @@ shutdown_container := data.framework.shutdown_container
 signal_container_process := data.framework.signal_container_process
 plan9_mount := data.framework.plan9_mount
 plan9_unmount := data.framework.plan9_unmount
+get_properties := data.framework.get_properties
+dump_stacks := data.framework.dump_stacks
+runtime_logging := data.framework.runtime_logging
 load_fragment := data.framework.load_fragment
-reason := {"errors": data.framework.errors}
+scratch_mount := data.framework.scratch_mount
+scratch_unmount := data.framework.scratch_unmount
+reason := {
+    "errors": data.framework.errors,
+    "error_objects": data.framework.error_objects,
+}

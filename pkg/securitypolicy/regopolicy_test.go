@@ -51,19 +51,18 @@ func Test_RegoTemplates(t *testing.T) {
 	}
 
 	apiRules := resultSet[0].Expressions[0].Value.(map[string]interface{})
-	apiSVN := apiRules["svn"].(string)
 	enforcementPoints := apiRules["enforcement_points"].(map[string]interface{})
 
 	policyCode := strings.Replace(policyRegoTemplate, "@@OBJECTS@@", "", 1)
-	policyCode = strings.Replace(policyCode, "@@API_SVN@@", apiSVN, 1)
-	policyCode = strings.Replace(policyCode, "@@FRAMEWORK_SVN@@", frameworkSVN, 1)
+	policyCode = strings.Replace(policyCode, "@@API_VERSION@@", apiVersion, 1)
+	policyCode = strings.Replace(policyCode, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)
 
-	err = verifyPolicyRules(apiSVN, enforcementPoints, policyCode)
+	err = verifyPolicyRules(apiVersion, enforcementPoints, policyCode)
 	if err != nil {
 		t.Errorf("Policy Rego Template is invalid: %s", err)
 	}
 
-	err = verifyPolicyRules(apiSVN, enforcementPoints, openDoorRego)
+	err = verifyPolicyRules(apiVersion, enforcementPoints, openDoorRego)
 	if err != nil {
 		t.Errorf("Open Door Rego Template is invalid: %s", err)
 	}
@@ -1829,7 +1828,7 @@ func Test_Rego_Version_Future_Enforcement_Point(t *testing.T) {
 // framework that was released after the policy was authored as indicated
 // by their respective version information.
 func Test_Rego_Version_Unavailable_Enforcement_Point(t *testing.T) {
-	code := "package policy\n\napi_svn := \"0.0.1\""
+	code := "package policy\n\napi_version := \"0.0.1\""
 	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
 		t.Fatalf("unable to create a new Rego policy: %v", err)
@@ -1862,7 +1861,7 @@ func Test_Rego_Version_Unavailable_Enforcement_Point(t *testing.T) {
 }
 
 func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
-	code := "package policy\n\napi_svn := \"0.0.1\""
+	code := "package policy\n\napi_version := \"0.0.1\""
 	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
 		t.Fatalf("unable to create a new Rego policy: %v", err)
@@ -1909,7 +1908,7 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 func Test_Rego_Enforcement_Point_Extra(t *testing.T) {
 	code := `package policy
 
-api_svn := "0.0.1"
+api_version := "0.0.1"
 
 __fixture_for_allowed_extra__ := {"allowed": true}
 `
@@ -2451,8 +2450,8 @@ exec_external := {
 
 func Test_Rego_InvalidEnvList(t *testing.T) {
 	rego := fmt.Sprintf(`package policy
-	api_svn := "%s"
-	framework_svn := "%s"
+	api_version := "%s"
+	framework_version := "%s"
 
 	create_container := {
 		"allowed": true,
@@ -2465,7 +2464,7 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 	exec_external := {
 		"allowed": true,
 		"env_list": true
-	}`, apiSVN, frameworkSVN)
+	}`, apiVersion, frameworkVersion)
 
 	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
@@ -2499,8 +2498,8 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 
 func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 	rego := fmt.Sprintf(`package policy
-	api_svn := "%s"
-	framework_svn := "%s"
+	api_version := "%s"
+	framework_version := "%s"
 
 	create_container := {
 		"allowed": true,
@@ -2513,7 +2512,7 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 	exec_external := {
 		"allowed": true,
 		"env_list": ["one", ["two"], "three"]
-	}`, apiSVN, frameworkSVN)
+	}`, apiVersion, frameworkVersion)
 
 	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
@@ -3687,9 +3686,9 @@ func Test_Rego_LoadFragment_BadFeed(t *testing.T) {
 	}
 }
 
-func Test_Rego_LoadFragment_InvalidVersion(t *testing.T) {
+func Test_Rego_LoadFragment_InvalidSVN(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
-		tc, err := setupRegoFragmentVersionErrorTestConfig(p)
+		tc, err := setupRegoFragmentSVNErrorTestConfig(p)
 		if err != nil {
 			t.Error(err)
 			return false
@@ -3698,12 +3697,12 @@ func Test_Rego_LoadFragment_InvalidVersion(t *testing.T) {
 		fragment := tc.fragments[0]
 		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err == nil {
-			t.Error("expected to be unable to load fragment due to invalid version")
+			t.Error("expected to be unable to load fragment due to invalid svn")
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "fragment version is below the specified minimum") {
-			t.Error("expected error string to contain 'fragment version is below the specified minimum'")
+		if !strings.Contains(err.Error(), "fragment svn is below the specified minimum") {
+			t.Error("expected error string to contain 'fragment svn is below the specified minimum'")
 			return false
 		}
 
@@ -3716,7 +3715,120 @@ func Test_Rego_LoadFragment_InvalidVersion(t *testing.T) {
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
-		t.Errorf("Test_Rego_LoadFragment_InvalidVersion: %v", err)
+		t.Errorf("Test_Rego_LoadFragment_InvalidSVN: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_Fragment_InvalidSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoSubfragmentSVNErrorTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		subFragment := tc.subFragments[0]
+		err = tc.policy.LoadFragment(subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		if err == nil {
+			t.Error("expected to be unable to load subfragment due to invalid svn")
+			return false
+		}
+
+		if !strings.Contains(err.Error(), "fragment svn is below the specified minimum") {
+			t.Error("expected error string to contain 'fragment svn is below the specified minimum'")
+			return false
+		}
+
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(subFragment.info.issuer, fragment.info.feed)) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_Fragment_InvalidSVN: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_SemverVersion(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		p.fragments = generateFragments(testRand, 1)
+		p.fragments[0].minimumSVN = generateSemver(testRand)
+		securityPolicy := p.toPolicy()
+
+		defaultMounts := toOCIMounts(generateMounts(testRand))
+		privilegedMounts := toOCIMounts(generateMounts(testRand))
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts)
+
+		if err != nil {
+			t.Fatalf("error compiling policy: %v", err)
+		}
+
+		issuer := p.fragments[0].issuer
+		feed := p.fragments[0].feed
+
+		fragmentConstraints := generateConstraints(testRand, 1)
+		fragmentConstraints.svn = mustIncrementSVN(p.fragments[0].minimumSVN)
+		code := fragmentConstraints.toFragment().marshalRego()
+
+		err = policy.LoadFragment(issuer, feed, code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		if policy.rego.IsModuleActive(rpi.ModuleID(issuer, feed)) {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_SemverVersion: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_SVNMismatch(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentSVNMismatchTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to invalid version")
+			return false
+		}
+
+		if !strings.Contains(err.Error(), "fragment svn and the specified minimum are different types") {
+			t.Error("expected error string to contain 'fragment svn and the specified minimum are different types'")
+			return false
+		}
+
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_SVNMismatch: %v", err)
 	}
 }
 
@@ -3984,8 +4096,8 @@ func Test_Rego_LoadFragment_FragmentNamespace(t *testing.T) {
 	value := randVariableString(testRand, 32)
 	fragmentCode := fmt.Sprintf(`package fragment
 
-svn := "1.0.0"
-framework_svn := "%s"
+svn := 1
+framework_version := "%s"
 
 layer := "%s"
 
@@ -3997,25 +4109,25 @@ mount_device := {"allowed": allowed, "metadata": [addCustom]} {
         "key": "%s",
         "value": "%s"
 	}
-}`, frameworkSVN, deviceHash, key, value)
+}`, frameworkVersion, deviceHash, key, value)
 
 	issuer := testDataGenerator.uniqueFragmentIssuer()
 	feed := testDataGenerator.uniqueFragmentFeed()
 	policyCode := fmt.Sprintf(`package policy
 
-api_svn := "%s"
-framework_svn := "%s"
+api_version := "%s"
+framework_version := "%s"
 
 default load_fragment := {"allowed": false}
 
 load_fragment := {"allowed": true, "add_module": true} {
 	input.issuer == "%s"
 	input.feed == "%s"
-	semver.compare(data[input.namespace].svn, "1.0.0") >= 0
+	data[input.namespace].svn >= 1
 }
 
 mount_device := data.fragment.mount_device
-	`, apiSVN, frameworkSVN, issuer, feed)
+	`, apiVersion, frameworkVersion, issuer, feed)
 
 	policy, err := newRegoPolicy(policyCode, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
@@ -4433,7 +4545,7 @@ func Test_Rego_EnforceCreateContainerPolicy_NoAllowElevatedAllowsUnprivilegedCon
 
 func Test_Rego_CreateContainer_NoNewPrivileges_Default(t *testing.T) {
 	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
-	tc, err := setupFrameworkSVNSimpleTest(gc, "0.1.0", frameworkSVN)
+	tc, err := setupFrameworkVersionSimpleTest(gc, "0.1.0", frameworkVersion)
 	if err != nil {
 		t.Fatalf("error setting up test: %v", err)
 	}
@@ -4465,7 +4577,7 @@ func Test_Rego_CreateContainer_NoNewPrivileges_Default(t *testing.T) {
 
 func Test_Rego_CreateContainer_User_Default(t *testing.T) {
 	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
-	tc, err := setupFrameworkSVNSimpleTest(gc, "0.1.0", frameworkSVN)
+	tc, err := setupFrameworkVersionSimpleTest(gc, "0.1.0", frameworkVersion)
 	if err != nil {
 		t.Fatalf("error setting up test: %v", err)
 	}
@@ -4524,7 +4636,7 @@ func Test_Rego_CreateContainer_User_Default(t *testing.T) {
 
 func Test_Rego_CreateContainer_Capabilities_Default(t *testing.T) {
 	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
-	tc, err := setupFrameworkSVNSimpleTest(gc, "0.1.0", frameworkSVN)
+	tc, err := setupFrameworkVersionSimpleTest(gc, "0.1.0", frameworkVersion)
 	if err != nil {
 		t.Fatalf("error setting up test: %v", err)
 	}
@@ -4563,7 +4675,7 @@ func Test_Rego_CreateContainer_Capabilities_Default(t *testing.T) {
 
 func Test_Rego_CreateContainer_AllowCapabilityDropping_Default(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
-	tc, err := setupFrameworkSVNSimpleTest(gc, "0.1.0", frameworkSVN)
+	tc, err := setupFrameworkVersionSimpleTest(gc, "0.1.0", frameworkVersion)
 	if err != nil {
 		t.Fatalf("error setting up test: %v", err)
 	}
@@ -4587,7 +4699,7 @@ func Test_Rego_CreateContainer_AllowCapabilityDropping_Default(t *testing.T) {
 
 func Test_Rego_CreateContainer_Seccomp_Default(t *testing.T) {
 	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
-	tc, err := setupFrameworkSVNSimpleTest(gc, "0.1.0", frameworkSVN)
+	tc, err := setupFrameworkVersionSimpleTest(gc, "0.1.0", frameworkVersion)
 	if err != nil {
 		t.Fatalf("error setting up test: %v", err)
 	}
@@ -4617,9 +4729,9 @@ func Test_Rego_CreateContainer_Seccomp_Default(t *testing.T) {
 	}
 }
 
-func Test_FrameworkSVN_Missing(t *testing.T) {
+func Test_FrameworkVersion_Missing(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
-	tc, err := setupFrameworkSVNSimpleTest(gc, "", frameworkSVN)
+	tc, err := setupFrameworkVersionSimpleTest(gc, "", frameworkVersion)
 	if err != nil {
 		t.Fatalf("unable to setup test: %v", err)
 	}
@@ -4631,19 +4743,19 @@ func Test_FrameworkSVN_Missing(t *testing.T) {
 
 	err = tc.policy.EnforceOverlayMountPolicy(containerID, layerPaths, testDataGenerator.uniqueMountTarget())
 	if err == nil {
-		t.Error("unexpected success. Missing framework_svn should trigger an error.")
+		t.Error("unexpected success. Missing framework_version should trigger an error.")
 	}
 
 	actual := err.Error()
-	expected := fmt.Sprintf("framework_svn is missing. Current svn: %s", frameworkSVN)
+	expected := fmt.Sprintf("framework_version is missing. Current version: %s", frameworkVersion)
 	if !strings.Contains(actual, expected) {
 		t.Errorf("missing expected error message: %s", expected)
 	}
 }
 
-func Test_Fragment_FrameworkSVN_Missing(t *testing.T) {
+func Test_Fragment_FrameworkVersion_Missing(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
-	tc, err := setupFrameworkSVNTest(gc, frameworkSVN, frameworkSVN, 1, "", []string{})
+	tc, err := setupFrameworkVersionTest(gc, frameworkVersion, frameworkVersion, 1, "", []string{})
 	if err != nil {
 		t.Fatalf("unable to setup test: %v", err)
 	}
@@ -4651,19 +4763,19 @@ func Test_Fragment_FrameworkSVN_Missing(t *testing.T) {
 	fragment := tc.fragments[0]
 	err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
 	if err == nil {
-		t.Error("unexpected success. Missing framework_svn should trigger an error.")
+		t.Error("unexpected success. Missing framework_version should trigger an error.")
 	}
 
 	actual := err.Error()
-	expected := fmt.Sprintf("fragment framework_svn is missing. Current svn: %s", frameworkSVN)
+	expected := fmt.Sprintf("fragment framework_version is missing. Current version: %s", frameworkVersion)
 	if !strings.Contains(actual, expected) {
 		t.Errorf("missing expected error message: %s", expected)
 	}
 }
 
-func Test_FrameworkSVN_In_Future(t *testing.T) {
+func Test_FrameworkVersion_In_Future(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
-	tc, err := setupFrameworkSVNSimpleTest(gc, "100.0.0", frameworkSVN)
+	tc, err := setupFrameworkVersionSimpleTest(gc, "100.0.0", frameworkVersion)
 	if err != nil {
 		t.Fatalf("unable to setup test: %v", err)
 	}
@@ -4675,19 +4787,19 @@ func Test_FrameworkSVN_In_Future(t *testing.T) {
 
 	err = tc.policy.EnforceOverlayMountPolicy(containerID, layerPaths, testDataGenerator.uniqueMountTarget())
 	if err == nil {
-		t.Error("unexpected success. Future framework_svn should trigger an error.")
+		t.Error("unexpected success. Future framework_version should trigger an error.")
 	}
 
 	actual := err.Error()
-	expected := fmt.Sprintf("framework_svn is ahead of the current svn: 100.0.0 > %s", frameworkSVN)
+	expected := fmt.Sprintf("framework_version is ahead of the current version: 100.0.0 > %s", frameworkVersion)
 	if !strings.Contains(actual, expected) {
 		t.Errorf("missing expected error message: %s", expected)
 	}
 }
 
-func Test_Fragment_FrameworkSVN_In_Future(t *testing.T) {
+func Test_Fragment_FrameworkVersion_In_Future(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
-	tc, err := setupFrameworkSVNTest(gc, frameworkSVN, frameworkSVN, 1, "100.0.0", []string{})
+	tc, err := setupFrameworkVersionTest(gc, frameworkVersion, frameworkVersion, 1, "100.0.0", []string{})
 	if err != nil {
 		t.Fatalf("unable to setup test: %v", err)
 	}
@@ -4695,11 +4807,11 @@ func Test_Fragment_FrameworkSVN_In_Future(t *testing.T) {
 	fragment := tc.fragments[0]
 	err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
 	if err == nil {
-		t.Error("unexpected success. Future framework_svn should trigger an error.")
+		t.Error("unexpected success. Future framework_version should trigger an error.")
 	}
 
 	actual := err.Error()
-	expected := fmt.Sprintf("fragment framework_svn is ahead of the current svn: 100.0.0 > %s", frameworkSVN)
+	expected := fmt.Sprintf("fragment framework_version is ahead of the current version: 100.0.0 > %s", frameworkVersion)
 	if !strings.Contains(actual, expected) {
 		t.Errorf("missing expected error message: %s", expected)
 	}
@@ -4708,12 +4820,12 @@ func Test_Fragment_FrameworkSVN_In_Future(t *testing.T) {
 func Test_Rego_MissingEnvList(t *testing.T) {
 	code := fmt.Sprintf(`package policy
 
-	api_svn := "%s"
+	api_version := "%s"
 
 	create_container := {"allowed": true}
 	exec_in_container := {"allowed": true}
 	exec_external := {"allowed": true}
-	`, apiSVN)
+	`, apiVersion)
 
 	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
@@ -5448,6 +5560,115 @@ func Test_Rego_EnforceCreateContainerSeccompPolicy_NoMatch(t *testing.T) {
 	}
 }
 
+func Test_Rego_FrameworkSVN(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	securityPolicy := gc.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	code := securityPolicy.marshalRego()
+	code = strings.Replace(code, "framework_version", "framework_svn", 1)
+
+	policy, err := newRegoPolicy(code,
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts))
+	if err != nil {
+		t.Fatalf("unable to create policy: %v", err)
+	}
+
+	value, err := policy.rego.RawQuery("data.framework.policy_framework_version", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("unable to query policy: %v", err)
+	}
+
+	policyFrameworkVersion, ok := value[0].Expressions[0].Value.(string)
+	if ok {
+		if policyFrameworkVersion != frameworkVersion {
+			t.Error("policy_framework_version is not set correctly from framework_svn")
+		}
+	} else {
+		t.Error("no result set from querying data.framework.policy_framework_version")
+	}
+}
+
+func Test_Rego_Fragment_FrameworkSVN(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.fragments = generateFragments(testRand, 1)
+
+	gc.fragments = generateFragments(testRand, 1)
+	gc.fragments[0].minimumSVN = generateSemver(testRand)
+	securityPolicy := gc.toPolicy()
+
+	defaultMounts := toOCIMounts(generateMounts(testRand))
+	privilegedMounts := toOCIMounts(generateMounts(testRand))
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts)
+
+	if err != nil {
+		t.Fatalf("error compiling policy: %v", err)
+	}
+
+	fragmentConstraints := generateConstraints(testRand, 1)
+	fragmentConstraints.svn = mustIncrementSVN(gc.fragments[0].minimumSVN)
+	code := fragmentConstraints.toFragment().marshalRego()
+
+	policy.rego.AddModule(fragmentConstraints.namespace, &rpi.RegoModule{
+		Namespace: fragmentConstraints.namespace,
+		Feed:      gc.fragments[0].feed,
+		Issuer:    gc.fragments[0].issuer,
+		Code:      code,
+	})
+
+	input := map[string]interface{}{
+		"namespace": fragmentConstraints.namespace,
+	}
+	result, err := policy.rego.RawQuery("data.framework.fragment_framework_version", input)
+
+	if err != nil {
+		t.Fatalf("error querying policy: %v", err)
+	}
+
+	fragmentFrameworkVersion, ok := result[0].Expressions[0].Value.(string)
+
+	if ok {
+		if fragmentFrameworkVersion != frameworkVersion {
+			t.Error("fragment_framework_version is not set correctly from framework_svn")
+		}
+	} else {
+		t.Error("no result set from querying data.framework.fragment_framework_version")
+	}
+}
+
+func Test_Rego_APISVN(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	securityPolicy := gc.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	code := securityPolicy.marshalRego()
+	code = strings.Replace(code, "api_version", "api_svn", 1)
+
+	policy, err := newRegoPolicy(code,
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts))
+	if err != nil {
+		t.Fatalf("unable to create policy: %v", err)
+	}
+
+	value, err := policy.rego.RawQuery("data.framework.policy_api_version", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("unable to query policy: %v", err)
+	}
+
+	policyAPIVersion, ok := value[0].Expressions[0].Value.(string)
+	if ok {
+		if policyAPIVersion != apiVersion {
+			t.Error("policy_api_version is not set correctly from api_svn")
+		}
+	} else {
+		t.Error("no result set from querying data.framework.policy_api_version")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -6063,26 +6284,46 @@ type regoFragmentContainer struct {
 }
 
 func setupSimpleRegoFragmentTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
-	return setupRegoFragmentTestConfig(gc, 1, []string{"containers"}, []string{}, false, false, false)
+	return setupRegoFragmentTestConfig(gc, 1, []string{"containers"}, []string{}, false, false, false, false)
 }
 
 func setupRegoFragmentTestConfigWithIncludes(gc *generatedConstraints, includes []string) (*regoFragmentTestConfig, error) {
-	return setupRegoFragmentTestConfig(gc, 1, includes, []string{}, false, false, false)
+	return setupRegoFragmentTestConfig(gc, 1, includes, []string{}, false, false, false, false)
 }
 
 func setupRegoFragmentTestConfigWithExcludes(gc *generatedConstraints, excludes []string) (*regoFragmentTestConfig, error) {
-	return setupRegoFragmentTestConfig(gc, 1, []string{}, excludes, false, false, false)
+	return setupRegoFragmentTestConfig(gc, 1, []string{}, excludes, false, false, false, false)
 }
 
-func setupRegoFragmentVersionErrorTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
-	return setupRegoFragmentTestConfig(gc, 1, []string{"containers"}, []string{}, true, false, false)
+func setupRegoFragmentSVNErrorTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 1, []string{"containers"}, []string{}, true, false, false, false)
+}
+
+func setupRegoSubfragmentSVNErrorTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 1, []string{"fragments"}, []string{}, true, false, false, false)
 }
 
 func setupRegoFragmentTwoFeedTestConfig(gc *generatedConstraints, sameIssuer bool, sameFeed bool) (*regoFragmentTestConfig, error) {
-	return setupRegoFragmentTestConfig(gc, 2, []string{"containers"}, []string{}, false, sameIssuer, sameFeed)
+	return setupRegoFragmentTestConfig(gc, 2, []string{"containers"}, []string{}, false, sameIssuer, sameFeed, false)
 }
 
-func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, includes []string, excludes []string, versionError bool, sameIssuer bool, sameFeed bool) (tc *regoFragmentTestConfig, err error) {
+func setupRegoFragmentSVNMismatchTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 2, []string{"containers"}, []string{}, false, false, false, true)
+}
+
+func compareSVNs(lhs string, rhs string) int {
+	lhs_int, err := strconv.Atoi(lhs)
+	if err == nil {
+		rhs_int, err := strconv.Atoi(rhs)
+		if err == nil {
+			return lhs_int - rhs_int
+		}
+	}
+
+	panic("unable to compare SVNs")
+}
+
+func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, includes []string, excludes []string, svnError bool, sameIssuer bool, sameFeed bool, svnMismatch bool) (tc *regoFragmentTestConfig, err error) {
 	gc.fragments = generateFragments(testRand, int32(numFragments))
 
 	if sameIssuer {
@@ -6094,7 +6335,11 @@ func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, inc
 		}
 	}
 
-	fragments := selectFragmentsFromConstraints(gc, numFragments, includes, excludes, versionError, frameworkSVN)
+	subSVNError := svnError
+	if len(includes) > 0 && includes[0] == "fragments" {
+		svnError = false
+	}
+	fragments := selectFragmentsFromConstraints(gc, numFragments, includes, excludes, svnError, frameworkVersion, svnMismatch)
 
 	containers := make([]*regoFragmentContainer, numFragments)
 	subFragments := make([]*regoFragment, numFragments)
@@ -6126,7 +6371,7 @@ func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, inc
 		for _, include := range fragment.info.includes {
 			switch include {
 			case "fragments":
-				subFragments[i] = selectFragmentsFromConstraints(fragment.constraints, 1, []string{"containers"}, []string{}, false, frameworkSVN)[0]
+				subFragments[i] = selectFragmentsFromConstraints(fragment.constraints, 1, []string{"containers"}, []string{}, subSVNError, frameworkVersion, false)[0]
 				break
 
 			case "external_processes":
@@ -6139,14 +6384,17 @@ func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, inc
 		// we remove the include string so that the generated policy
 		// does not include them.
 		fragment.info.includes = removeStringsFromArray(fragment.info.includes, excludes)
+
+		code := fragment.constraints.toFragment().marshalRego()
+		fragment.code = setFrameworkVersion(code, frameworkVersion)
 	}
 
 	if sameFeed {
 		includeSet := make(map[string]bool)
-		minSVN := semver.MustParse("9.9.9")
+		minSVN := strconv.Itoa(maxGeneratedVersion)
 		for _, fragment := range gc.fragments {
-			svn := semver.MustParse(fragment.minimumSVN)
-			if svn.LT(minSVN) {
+			svn := fragment.minimumSVN
+			if compareSVNs(svn, minSVN) < 0 {
 				minSVN = svn
 			}
 			for _, include := range fragment.includes {
@@ -6154,7 +6402,7 @@ func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, inc
 			}
 		}
 		frag := gc.fragments[0]
-		frag.minimumSVN = minSVN.String()
+		frag.minimumSVN = minSVN
 		frag.includes = make([]string, 0, len(includeSet))
 		for include := range includeSet {
 			frag.includes = append(frag.includes, include)
@@ -6316,40 +6564,40 @@ func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
 	}, nil
 }
 
-type regoFrameworkSVNTestConfig struct {
+type regoFrameworkVersionTestConfig struct {
 	policy    *regoEnforcer
 	fragments []*regoFragment
 }
 
-func setFrameworkSVN(code string, svn string) string {
-	template := `framework_svn := "%s"`
-	old := fmt.Sprintf(template, frameworkSVN)
-	if svn == "" {
+func setFrameworkVersion(code string, version string) string {
+	template := `framework_version := "%s"`
+	old := fmt.Sprintf(template, frameworkVersion)
+	if version == "" {
 		return strings.Replace(code, old, "", 1)
 	}
 
-	new := fmt.Sprintf(template, svn)
+	new := fmt.Sprintf(template, version)
 	return strings.Replace(code, old, new, 1)
 }
 
-func setupFrameworkSVNSimpleTest(gc *generatedConstraints, policy_svn string, svn string) (*regoFrameworkSVNTestConfig, error) {
-	return setupFrameworkSVNTest(gc, policy_svn, svn, 0, "", []string{})
+func setupFrameworkVersionSimpleTest(gc *generatedConstraints, policyVersion string, version string) (*regoFrameworkVersionTestConfig, error) {
+	return setupFrameworkVersionTest(gc, policyVersion, version, 0, "", []string{})
 }
 
-func setupFrameworkSVNTest(gc *generatedConstraints, policy_svn string, svn string, numFragments int, fragment_svn string, includes []string) (*regoFrameworkSVNTestConfig, error) {
+func setupFrameworkVersionTest(gc *generatedConstraints, policyVersion string, version string, numFragments int, fragmentVersion string, includes []string) (*regoFrameworkVersionTestConfig, error) {
 	fragments := make([]*regoFragment, 0, numFragments)
 	if numFragments > 0 {
 		gc.fragments = generateFragments(testRand, int32(numFragments))
-		fragments = selectFragmentsFromConstraints(gc, numFragments, includes, []string{}, false, fragment_svn)
+		fragments = selectFragmentsFromConstraints(gc, numFragments, includes, []string{}, false, fragmentVersion, false)
 	}
 
 	securityPolicy := gc.toPolicy()
-	policy, err := newRegoPolicy(setFrameworkSVN(securityPolicy.marshalRego(), policy_svn), []oci.Mount{}, []oci.Mount{})
+	policy, err := newRegoPolicy(setFrameworkVersion(securityPolicy.marshalRego(), policyVersion), []oci.Mount{}, []oci.Mount{})
 	if err != nil {
 		return nil, err
 	}
 
-	code := strings.Replace(frameworkCodeTemplate, "@@FRAMEWORK_SVN@@", svn, 1)
+	code := strings.Replace(frameworkCodeTemplate, "@@FRAMEWORK_VERSION@@", version, 1)
 	policy.rego.RemoveModule("framework.rego")
 	policy.rego.AddModule("framework.rego", &rpi.RegoModule{Namespace: "framework", Code: code})
 	err = policy.rego.Compile()
@@ -6357,7 +6605,7 @@ func setupFrameworkSVNTest(gc *generatedConstraints, policy_svn string, svn stri
 		return nil, err
 	}
 
-	return &regoFrameworkSVNTestConfig{policy: policy, fragments: fragments}, nil
+	return &regoFrameworkVersionTestConfig{policy: policy, fragments: fragments}, nil
 }
 
 type regoFragment struct {
@@ -6370,7 +6618,24 @@ func (f *regoFragment) selectContainer() *securityPolicyContainer {
 	return selectContainerFromContainerList(f.constraints.containers, testRand)
 }
 
-func selectFragmentsFromConstraints(gc *generatedConstraints, numFragments int, includes []string, excludes []string, versionError bool, fragmentFrameworkSVN string) []*regoFragment {
+func mustIncrementSVN(svn string) string {
+	svn_semver, err := semver.Parse(svn)
+
+	if err == nil {
+		svn_semver.IncrementMajor()
+		return svn_semver.String()
+	}
+
+	svn_int, err := strconv.Atoi(svn)
+
+	if err == nil {
+		return strconv.Itoa(svn_int + 1)
+	}
+
+	panic("Could not increment SVN")
+}
+
+func selectFragmentsFromConstraints(gc *generatedConstraints, numFragments int, includes []string, excludes []string, svnError bool, frameworkVersion string, svnMismatch bool) []*regoFragment {
 	choices := randChoices(testRand, numFragments, len(gc.fragments))
 	fragments := make([]*regoFragment, numFragments)
 	for i, choice := range choices {
@@ -6395,19 +6660,23 @@ func selectFragmentsFromConstraints(gc *generatedConstraints, numFragments int, 
 				break
 			}
 		}
-		code := constraints.toPolicy().marshalRego()
 
-		version := config.minimumSVN
-		if versionError {
-			sv := semver.MustParse(version)
-			sv.IncrementMajor()
-			config.minimumSVN = sv.String()
+		svn := config.minimumSVN
+		if svnMismatch {
+			if randBool(testRand) {
+				svn = generateSemver(testRand)
+			} else {
+				config.minimumSVN = generateSemver(testRand)
+			}
 		}
 
-		namespace := testDataGenerator.uniqueFragmentNamespace()
-		fragmentHeader := fmt.Sprintf("package %s\n\nsvn := \"%s\"\n", namespace, version)
-		code = strings.Replace(code, "package policy", fragmentHeader, 1)
-		code = setFrameworkSVN(code, fragmentFrameworkSVN)
+		constraints.svn = svn
+		if svnError {
+			config.minimumSVN = mustIncrementSVN(config.minimumSVN)
+		}
+
+		code := constraints.toFragment().marshalRego()
+		code = setFrameworkVersion(code, frameworkVersion)
 
 		fragments[i] = &regoFragment{
 			info:        config,
@@ -6776,7 +7045,7 @@ func setupRegoScratchMountTest(
 	}, nil
 }
 
-func verifyPolicyRules(apiSVN string, enforcementPoints map[string]interface{}, policyCode string) error {
+func verifyPolicyRules(apiVersion string, enforcementPoints map[string]interface{}, policyCode string) error {
 	query := rego.New(
 		rego.Query("data.policy"),
 		rego.Module("policy.rego", policyCode),
@@ -6790,10 +7059,10 @@ func verifyPolicyRules(apiSVN string, enforcementPoints map[string]interface{}, 
 	}
 
 	policyTemplateRules := resultSet[0].Expressions[0].Value.(map[string]interface{})
-	policyTemplateAPISVN := policyTemplateRules["api_svn"].(string)
+	policyTemplateAPIVersion := policyTemplateRules["api_version"].(string)
 
-	if policyTemplateAPISVN != apiSVN {
-		return fmt.Errorf("Policy template SVN != api SVN: %s != %s", apiSVN, policyTemplateAPISVN)
+	if policyTemplateAPIVersion != apiVersion {
+		return fmt.Errorf("Policy template version != api version: %s != %s", apiVersion, policyTemplateAPIVersion)
 	}
 
 	for rule := range enforcementPoints {
@@ -6803,7 +7072,7 @@ func verifyPolicyRules(apiSVN string, enforcementPoints map[string]interface{}, 
 	}
 
 	for rule := range policyTemplateRules {
-		if rule == "api_svn" || rule == "framework_svn" || rule == "reason" {
+		if rule == "api_version" || rule == "framework_version" || rule == "reason" {
 			continue
 		}
 
@@ -6905,6 +7174,13 @@ func generateCapabilities(r *rand.Rand) *oci.LinuxCapabilities {
 		Permitted:   generateCapabilitiesSet(r, 0),
 		Ambient:     generateCapabilitiesSet(r, 0),
 	}
+}
+
+func generateSemver(r *rand.Rand) string {
+	major := randMinMax(r, 0, maxGeneratedVersion)
+	minor := randMinMax(r, 0, maxGeneratedVersion)
+	patch := randMinMax(r, 0, maxGeneratedVersion)
+	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
 }
 
 func alterCapabilitySet(r *rand.Rand, set []string) []string {
