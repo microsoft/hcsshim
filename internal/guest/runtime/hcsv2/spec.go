@@ -249,7 +249,7 @@ func addDevSev(ctx context.Context, spec *oci.Spec) error {
 		sevErr := fmt.Errorf("failed to add SEV device to spec: %w", err)
 		var errSevGuest error
 		devSev, errSevGuest = devices.DeviceFromPath("/dev/sev-guest", "rwm")
-		if err != nil {
+		if errSevGuest != nil {
 			return fmt.Errorf("%s: %w", sevErr, errSevGuest)
 		}
 	}
