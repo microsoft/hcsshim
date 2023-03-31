@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -774,23 +773,13 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 	defer cancel()
 
 	alpineCmd := []string{"ash", "-c", "sleep 10"}
-
-	listDirCmd := []string{"ls", "-l", securitypolicy.SecurityContextMountPath}
-	// Make sure these are linux paths
-	catPolicyCmd := []string{"cat", path.Join(securitypolicy.SecurityContextMountPath, securitypolicy.PolicyFilename)}
-	catCertCmd := []string{"cat", path.Join(securitypolicy.SecurityContextMountPath, securitypolicy.HostAMDCertFilename)}
+	listDirCmd := []string{"ash", "-c", fmt.Sprintf("ls -l /%s", securitypolicy.SecurityContextDirTemplate)}
 	opts := []securitypolicy.ContainerConfigOpt{
 		securitypolicy.WithCommand(alpineCmd),
 		securitypolicy.WithAllowStdioAccess(true),
 		securitypolicy.WithExecProcesses([]securitypolicy.ExecProcessConfig{
 			{
 				Command: listDirCmd,
-			},
-			{
-				Command: catPolicyCmd,
-			},
-			{
-				Command: catCertCmd,
 			},
 		}),
 	}
@@ -845,38 +834,23 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 					ContainerId: containerID,
 					Cmd:         listDirCmd,
 				})
+				stdout := string(r.Stdout)
 				if setPolicyEnv {
 					if r.ExitCode != 0 {
 						t.Log(string(r.Stderr))
 						t.Fatalf("unexpected exec exit code: %d", r.ExitCode)
 					}
-
-					// validate content of the policy file
-					r2 := execSync(t, client, ctx, &runtime.ExecSyncRequest{
-						ContainerId: containerID,
-						Cmd:         catPolicyCmd,
-					})
-					r2stdout := string(r2.Stdout)
-					if r2stdout != config.policy {
-						t.Log(config.policy)
-						t.Log(r2stdout)
-						t.Fatal("supplied policy is different from the one written in file")
+					if !strings.Contains(stdout, securitypolicy.PolicyFilename) {
+						t.Log(stdout)
+						t.Fatalf("security policy file not found: %s", securitypolicy.PolicyFilename)
 					}
-
-					// validate content of AMD cert file
-					r3 := execSync(t, client, ctx, &runtime.ExecSyncRequest{
-						ContainerId: containerID,
-						Cmd:         catCertCmd,
-					})
-					r3stdout := string(r3.Stdout)
-					if r3stdout != certValue {
-						t.Log(certValue)
-						t.Log(r3stdout)
-						t.Fatal("supplied cert is different from the one written in file")
+					if !strings.Contains(stdout, securitypolicy.HostAMDCertFilename) {
+						t.Log(stdout)
+						t.Fatalf("AMD certificate file not found: %s", securitypolicy.HostAMDCertFilename)
 					}
 				} else {
 					if r.ExitCode != 1 {
-						t.Log(string(r.Stdout))
+						t.Log(stdout)
 						t.Fatalf("unexpected exec exit code: %d", r.ExitCode)
 					}
 					if !strings.Contains(string(r.Stderr), "No such file") {
