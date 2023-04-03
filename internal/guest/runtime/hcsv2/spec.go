@@ -239,6 +239,24 @@ func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 	return nil
 }
 
+// addDevSev adds SEV device to container spec. On 5.x kernel the device is /dev/sev,
+// however this changed in 6.x where the device is /dev/sev-guest.
+func addDevSev(ctx context.Context, spec *oci.Spec) error {
+	// try adding /dev/sev, which should be present for 5.x kernel
+	devSev, err := devices.DeviceFromPath("/dev/sev", "rwm")
+	if err != nil {
+		// try adding /dev/guest-sev, which should be present for 6.x kernel
+		sevErr := fmt.Errorf("failed to add SEV device to spec: %w", err)
+		var errSevGuest error
+		devSev, errSevGuest = devices.DeviceFromPath("/dev/sev-guest", "rwm")
+		if errSevGuest != nil {
+			return fmt.Errorf("%s: %w", sevErr, errSevGuest)
+		}
+	}
+	addLinuxDeviceToSpec(ctx, devSev, spec, true)
+	return nil
+}
+
 // devShmMountWithSize returns a /dev/shm device mount with size set to
 // `sizeString` if it represents a valid size in KB, returns error otherwise.
 func devShmMountWithSize(sizeString string) (*oci.Mount, error) {
