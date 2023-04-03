@@ -1865,3 +1865,73 @@ func Test_RunContainer_WithPolicy_BackwardsCompatible(t *testing.T) {
 	startContainer(t, client, ctx, containerID)
 	defer stopContainer(t, client, ctx, containerID)
 }
+
+func Test_Plan9Mount_WithPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p9MountConfigs := []securitypolicy.MountConfig{
+		{
+			HostPath:      "plan9://",
+			ContainerPath: "/mounts/p9",
+			Readonly:      false,
+		},
+	}
+
+	for _, allowed := range []bool{true, false} {
+		t.Run(fmt.Sprintf("Plan9Mount_Allowed_%t", allowed), func(t *testing.T) {
+			var opts []securitypolicy.ContainerConfigOpt
+			if allowed {
+				opts = append(opts, securitypolicy.WithMountConstraints(p9MountConfigs))
+			}
+			alpinePolicy := alpineSecurityPolicy(
+				t,
+				"rego",
+				false,
+				false,
+				opts...,
+			)
+			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "rego"
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			containerRequest := getCreateContainerRequest(
+				podID,
+				"alpine-plan9",
+				imageLcowAlpine,
+				validPolicyAlpineCommand,
+				sandboxRequest.Config,
+			)
+			containerRequest.Config.Mounts = append(containerRequest.Config.Mounts, &runtime.Mount{
+				HostPath:      t.TempDir(),
+				ContainerPath: "/mounts/p9",
+				Readonly:      false,
+			})
+
+			containerID := createContainer(t, client, ctx, containerRequest)
+			defer removeContainer(t, client, ctx, containerID)
+
+			_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
+				ContainerId: containerID,
+			})
+			if err == nil {
+				defer stopContainer(t, client, ctx, containerID)
+				if !allowed {
+					t.Fatal("container start should have failed")
+				}
+			} else {
+				if allowed {
+					t.Fatalf("container creation should have succeeded: %s", err)
+				}
+				expectedErrStr := "invalid mount list: /mounts/p9"
+				if !strings.Contains(err.Error(), expectedErrStr) {
+					t.Fatalf("expected '%s' policy error, got: %s", expectedErrStr, err)
+				}
+			}
+		})
+	}
+}
