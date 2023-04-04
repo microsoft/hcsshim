@@ -5,7 +5,6 @@ package hcsv2
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -430,37 +429,36 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// It may be an error to have a security policy but not expose it to the
 	// container as in that case it can never be checked as correct by a verifier.
 	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.UVMSecurityPolicyEnv, true) {
-		securityContextDir, err := os.MkdirTemp(settings.OCISpecification.Root.Path, securitypolicy.SecurityContextDirTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create security context directory: %w", err)
-		}
-		// Make sure it's readable
-		if err := os.Chmod(securityContextDir, 0744); err != nil {
-			return nil, fmt.Errorf("failed to chmod security context directory: %w", err)
-		}
-
 		encodedPolicy := h.securityPolicyEnforcer.EncodedSecurityPolicy()
-		if len(encodedPolicy) > 0 {
-			if _, err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename,
-				bytes.NewReader([]byte(encodedPolicy))); err != nil {
-				return nil, fmt.Errorf("failed to write security policy: %w", err)
-			}
-		}
-		if len(h.uvmReferenceInfo) > 0 {
-			if _, err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename,
-				bytes.NewReader([]byte(h.uvmReferenceInfo))); err != nil {
-				return nil, fmt.Errorf("failed to write UVM reference info: %w", err)
-			}
-		}
 		hostAMDCert := settings.OCISpecification.Annotations[annotations.HostAMDCertificate]
-		if len(hostAMDCert) > 0 {
-			if _, err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename,
-				bytes.NewReader([]byte(hostAMDCert))); err != nil {
-				return nil, fmt.Errorf("failed to write host AMD certificate: %w", err)
+		if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(h.uvmReferenceInfo) > 0 {
+			// Use os.MkdirTemp to make sure that the directory is unique.
+			securityContextDir, err := os.MkdirTemp(settings.OCISpecification.Root.Path, securitypolicy.SecurityContextDirTemplate)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create security context directory: %w", err)
 			}
-		}
+			// Make sure it's readable
+			if err := os.Chmod(securityContextDir, 0744); err != nil {
+				return nil, fmt.Errorf("failed to chmod security context directory: %w", err)
+			}
 
-		if len(encodedPolicy) > 0 || len(h.uvmReferenceInfo) > 0 || len(hostAMDCert) > 0 {
+			if len(encodedPolicy) > 0 {
+				if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0744); err != nil {
+					return nil, fmt.Errorf("failed to write security policy: %w", err)
+				}
+			}
+			if len(h.uvmReferenceInfo) > 0 {
+				if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(h.uvmReferenceInfo), 0744); err != nil {
+					return nil, fmt.Errorf("failed to write UVM reference info: %w", err)
+				}
+			}
+
+			if len(hostAMDCert) > 0 {
+				if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0744); err != nil {
+					return nil, fmt.Errorf("failed to write host AMD certificate: %w", err)
+				}
+			}
+
 			containerCtxDir := fmt.Sprintf("/%s", filepath.Base(securityContextDir))
 			secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
 			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secCtxEnv)
@@ -1133,22 +1131,16 @@ func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec)
 	return oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false)
 }
 
-func writeFileInDir(dir string, filename string, content io.Reader) (int64, error) {
+func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) error {
 	st, err := os.Stat(dir)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	if !st.IsDir() {
-		return 0, fmt.Errorf("not a directory %q", dir)
+		return fmt.Errorf("not a directory %q", dir)
 	}
 
 	targetFilename := filepath.Join(dir, filename)
-	f, err := os.Create(targetFilename)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-
-	return io.Copy(f, content)
+	return os.WriteFile(targetFilename, data, perm)
 }
