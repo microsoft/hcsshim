@@ -437,32 +437,47 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Process.Capabilities = capsToKeep
 	}
 
-	// Export security policy and signed UVM reference info as one of the
-	// process's environment variables so that application and sidecar
-	// containers can have access to it. The security policy is required
-	// by containers which need to extract init-time claims found in the
-	// security policy.
-	//
-	// We append the variable after the security policy enforcing logic
-	// completes to bypass it; the security policy variable cannot be included
-	// in the security policy as its value is not available security policy
-	// construction time.
-
-	// It may be an error to have a security policy but not expose it to the container as
-	// in that case it can never be checked as correct by a verifier.
+	// Write security policy, signed UVM reference and host AMD certificate to
+	// container's rootfs, so that application and sidecar containers can have
+	// access to it. The security policy is required by containers which need to
+	// extract init-time claims found in the security policy. The directory path
+	// containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
+	// It may be an error to have a security policy but not expose it to the
+	// container as in that case it can never be checked as correct by a verifier.
 	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.UVMSecurityPolicyEnv, true) {
 		encodedPolicy := h.securityPolicyEnforcer.EncodedSecurityPolicy()
-		if len(encodedPolicy) > 0 {
-			secPolicyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", encodedPolicy)
-			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
-		}
-		if len(h.uvmReferenceInfo) > 0 {
-			uvmReferenceInfo := fmt.Sprintf("UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
-			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, uvmReferenceInfo)
-		}
-		if len(settings.OCISpecification.Annotations[annotations.HostAMDCertificate]) > 0 {
-			amdCertEnv := fmt.Sprintf("UVM_HOST_AMD_CERTIFICATE=%s", settings.OCISpecification.Annotations[annotations.HostAMDCertificate])
-			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, amdCertEnv)
+		hostAMDCert := settings.OCISpecification.Annotations[annotations.HostAMDCertificate]
+		if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(h.uvmReferenceInfo) > 0 {
+			// Use os.MkdirTemp to make sure that the directory is unique.
+			securityContextDir, err := os.MkdirTemp(settings.OCISpecification.Root.Path, securitypolicy.SecurityContextDirTemplate)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create security context directory: %w", err)
+			}
+			// Make sure it's readable
+			if err := os.Chmod(securityContextDir, 0744); err != nil {
+				return nil, fmt.Errorf("failed to chmod security context directory: %w", err)
+			}
+
+			if len(encodedPolicy) > 0 {
+				if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0744); err != nil {
+					return nil, fmt.Errorf("failed to write security policy: %w", err)
+				}
+			}
+			if len(h.uvmReferenceInfo) > 0 {
+				if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(h.uvmReferenceInfo), 0744); err != nil {
+					return nil, fmt.Errorf("failed to write UVM reference info: %w", err)
+				}
+			}
+
+			if len(hostAMDCert) > 0 {
+				if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0744); err != nil {
+					return nil, fmt.Errorf("failed to write host AMD certificate: %w", err)
+				}
+			}
+
+			containerCtxDir := fmt.Sprintf("/%s", filepath.Base(securityContextDir))
+			secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
+			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secCtxEnv)
 		}
 	}
 
@@ -1130,4 +1145,18 @@ func processOCIEnvToParam(envs []string) map[string]string {
 // creation request would create a privileged container
 func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec) bool {
 	return oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false)
+}
+
+func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) error {
+	st, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+
+	if !st.IsDir() {
+		return fmt.Errorf("not a directory %q", dir)
+	}
+
+	targetFilename := filepath.Join(dir, filename)
+	return os.WriteFile(targetFilename, data, perm)
 }
