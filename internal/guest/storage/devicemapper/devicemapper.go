@@ -4,6 +4,8 @@
 package devicemapper
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -11,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/guest/linux"
@@ -214,6 +217,43 @@ func makeTableIoctl(name string, targets []Target) *dmIoctl {
 		off += sn
 	}
 	return d
+}
+
+// CreateDeviceWithRetryErrors keeps retrying to create device mapper target
+func CreateDeviceWithRetryErrors(
+	ctx context.Context,
+	name string,
+	flags CreateFlags,
+	targets []Target,
+	errs ...error,
+) (string, error) {
+retry:
+	for {
+		dmPath, err := CreateDevice(name, flags, targets)
+		if err == nil {
+			return dmPath, nil
+		}
+		log.G(ctx).WithError(err).Warning("CreateDevice error")
+		// In some cases
+		dmErr, ok := err.(*dmError)
+		if !ok {
+			return "", err
+		}
+		// check retry-able errors
+		for _, e := range errs {
+			if errors.Is(dmErr.Err, e) {
+				select {
+				case <-ctx.Done():
+					log.G(ctx).WithError(err).Warning("CreateDeviceWithRetryErrors failed, context timeout")
+					return "", err
+				default:
+					time.Sleep(100 * time.Millisecond)
+					continue retry
+				}
+			}
+		}
+		return "", fmt.Errorf("CreateDeviceWithRetryErrors failed: %w", err)
+	}
 }
 
 // CreateDevice creates a device-mapper device with the given target spec. It returns

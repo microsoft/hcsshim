@@ -6,10 +6,9 @@ package devicemapper
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
+	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -33,14 +32,18 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 		trace.Int64Attribute("sectorSize", size),
 		trace.StringAttribute("linearTable", fmt.Sprintf("%s: '%d %d %s'", devName, linearTarget.SectorStart, linearTarget.LengthInBlocks, linearTarget.Params)))
 
-	devMapperPath, err := CreateDevice(devName, CreateReadOnly, []Target{linearTarget})
+	devMapperPath, err := CreateDeviceWithRetryErrors(
+		ctx,
+		devName,
+		CreateReadOnly,
+		[]Target{linearTarget},
+		unix.ENOENT,
+		unix.ENXIO,
+		unix.ENODEV,
+	)
 	if err != nil {
-		// todo (maksiman): add better retry logic, similar to how SCSI device mounts are
-		// retried on unix.ENOENT and unix.ENXIO.
-		time.Sleep(500 * time.Millisecond)
-		if devMapperPath, err = CreateDevice(devName, CreateReadOnly, []Target{linearTarget}); err != nil {
-			return "", errors.Wrapf(err, "failed to create dm-linear target, device=%s, offset=%d", devPath, mappingInfo.DeviceOffsetInBytes)
-		}
+		return "", fmt.Errorf("failed to create dm-linear target, device=%s, offset=%d: %w", devPath,
+			mappingInfo.DeviceOffsetInBytes, err)
 	}
 
 	return devMapperPath, nil
@@ -86,15 +89,18 @@ func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo
 		trace.Int64Attribute("sectorSize", dmBlocks),
 		trace.StringAttribute("verityTable", verityTarget.Params))
 
-	mapperPath, err := CreateDevice(devName, CreateReadOnly, []Target{verityTarget})
+	devMapperPath, err := CreateDeviceWithRetryErrors(
+		ctx,
+		devName,
+		CreateReadOnly,
+		[]Target{verityTarget},
+		unix.ENOENT,
+		unix.ENXIO,
+		unix.ENODEV,
+	)
 	if err != nil {
-		// todo (maksiman): add better retry logic, similar to how SCSI device mounts are
-		// retried on unix.ENOENT and unix.ENXIO
-		time.Sleep(500 * time.Millisecond)
-		if mapperPath, err = CreateDevice(devName, CreateReadOnly, []Target{verityTarget}); err != nil {
-			return "", errors.Wrapf(err, "failed to create dm-verity target. device=%s", devPath)
-		}
+		return "", fmt.Errorf("frailed to create dm-verity target for device=%s: %w", devPath, err)
 	}
 
-	return mapperPath, nil
+	return devMapperPath, nil
 }
