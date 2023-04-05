@@ -4,6 +4,7 @@
 package securitypolicy
 
 import (
+	"context"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/log"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -34,6 +36,11 @@ func init() {
 	defaultEnforcer = regoEnforcerName
 	defaultMarshaller = regoMarshaller
 }
+
+const capabilitiesNilError = "capabilities object provided by the UVM to the policy engine is nil"
+const invalidError = "Security policy is not valid. Please check security policy or re-generate with tooling."
+const noReasonError = "Security policy is either not valid or did not provide a reason for denial. Please check security policy or re-generate with tooling."
+const noAPIVersionError = "policy does not define api_version"
 
 // RegoEnforcer is a stub implementation of a security policy, which will be
 // based on [Rego] policy language. The detailed implementation will be
@@ -251,6 +258,15 @@ func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (*enf
 		return nil, fmt.Errorf("enforcement point rule %s is invalid", enforcementPoint)
 	}
 
+	versionMissing, err := result.Bool("version_missing")
+	if err != nil {
+		return nil, err
+	}
+
+	if versionMissing {
+		return nil, errors.New(noAPIVersionError)
+	}
+
 	defaultResults, err := result.Object("default_results")
 	if err != nil {
 		return nil, errors.New("enforcement point result missing defaults")
@@ -267,26 +283,25 @@ func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (*enf
 	}, nil
 }
 
-func (policy *regoEnforcer) enforce(enforcementPoint string, input inputData) (rpi.RegoQueryResult, error) {
+func (policy *regoEnforcer) enforce(ctx context.Context, enforcementPoint string, input inputData) (rpi.RegoQueryResult, error) {
 	rule := "data.policy." + enforcementPoint
 	result, err := policy.rego.Query(rule, input)
 	if err != nil {
-		return nil, err
+		return nil, policy.denyWithError(ctx, err, input)
 	}
 
 	result, err = policy.applyDefaults(enforcementPoint, result)
 	if err != nil {
-		return result, err
+		return result, policy.denyWithError(ctx, err, input)
 	}
 
 	allowed, err := result.Bool("allowed")
 	if err != nil {
-		return nil, err
+		return nil, policy.denyWithError(ctx, err, input)
 	}
 
 	if !allowed {
-		err = policy.getReasonNotAllowed(enforcementPoint, input)
-		return nil, err
+		return nil, policy.denyWithReason(ctx, enforcementPoint, input)
 	}
 
 	return result, nil
@@ -301,40 +316,53 @@ func errorString(errors interface{}) string {
 	return strings.Join(output, ",")
 }
 
-func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input inputData) error {
-	inputJSON, err := json.Marshal(policy.redactSensitiveData(input))
-	if err != nil {
-		return fmt.Errorf("%s not allowed by policy. Input unavailable due to marshalling error", enforcementPoint)
+func (policy *regoEnforcer) denyWithError(ctx context.Context, policyError error, input inputData) error {
+	policyDecision := map[string]interface{}{
+		"input":       policy.redactSensitiveData(input),
+		"decision":    "deny",
+		"reason":      invalidError,
+		"policyError": policyError.Error(),
 	}
 
-	defaultMessage := fmt.Errorf("%s not allowed by policy. Security policy is not valid. Please check security policy or re-generate with tooling. Input: %s", enforcementPoint, string(inputJSON))
+	decisionJSON, err := json.Marshal(policyDecision)
+	if err != nil {
+		log.G(ctx).Errorf("Unable to marshal error object: %v", err)
+		decisionJSON = []byte(`"Unable to marshal error object"`)
+	}
 
+	log.G(ctx).WithField("error", string(decisionJSON)).Debug("Policy decision")
+
+	base64EncodedDecisionJSON := base64.RawURLEncoding.EncodeToString(decisionJSON)
+
+	return fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
+}
+
+func (policy *regoEnforcer) denyWithReason(ctx context.Context, enforcementPoint string, input inputData) error {
 	input["rule"] = enforcementPoint
+	policyDecision := map[string]interface{}{
+		"input":    policy.redactSensitiveData(input),
+		"decision": "deny",
+	}
+
 	result, err := policy.rego.Query("data.policy.reason", input)
-	// TODO: log error via logrus once the enforcer interface is updated to accept context as parameter.
+	if err == nil {
+		policyDecision["reason"] = result
+	} else {
+		log.G(ctx).Warnf("Unable to obtain reason for policy decision: %v", err)
+		policyDecision["reason"] = noReasonError
+	}
+
+	decisionJSON, err := json.Marshal(policyDecision)
 	if err != nil {
-		return defaultMessage
+		log.G(ctx).Errorf("Unable to marshal error object: %v", err)
+		decisionJSON = []byte(`"Unable to marshal error object"`)
 	}
 
-	errors, err := result.Value("errors")
-	// TODO: log error via logrus once the enforcer interface is updated to accept context as parameter.
-	if err != nil || len(errors.([]interface{})) == 0 {
-		return defaultMessage
-	}
+	log.G(ctx).WithField("policyDecision", string(decisionJSON)).Debug("Policy decision")
 
-	errorMessage := fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s.", enforcementPoint, errors, string(inputJSON))
+	base64EncodedDecisionJSON := base64.RawURLEncoding.EncodeToString(decisionJSON)
 
-	matches, err := result.Value("error_objects")
-	if err != nil {
-		return errorMessage
-	}
-
-	matchesJSON, err := json.Marshal(matches)
-	if err != nil {
-		return errorMessage
-	}
-
-	return fmt.Errorf("%s not allowed by policy. Errors: %v. Input: %s. Error Objects: %s", enforcementPoint, errors, string(inputJSON), string(matchesJSON))
+	return fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
 }
 
 func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
@@ -362,33 +390,33 @@ func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
 	return input
 }
 
-func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) error {
+func (policy *regoEnforcer) EnforceDeviceMountPolicy(ctx context.Context, target string, deviceHash string) error {
 	input := inputData{
 		"target":     target,
 		"deviceHash": deviceHash,
 	}
 
-	_, err := policy.enforce("mount_device", input)
+	_, err := policy.enforce(ctx, "mount_device", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) error {
+func (policy *regoEnforcer) EnforceOverlayMountPolicy(ctx context.Context, containerID string, layerPaths []string, target string) error {
 	input := inputData{
 		"containerID": containerID,
 		"layerPaths":  layerPaths,
 		"target":      target,
 	}
 
-	_, err := policy.enforce("mount_overlay", input)
+	_, err := policy.enforce(ctx, "mount_overlay", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforceOverlayUnmountPolicy(target string) error {
+func (policy *regoEnforcer) EnforceOverlayUnmountPolicy(ctx context.Context, target string) error {
 	input := inputData{
 		"unmountTarget": target,
 	}
 
-	_, err := policy.enforce("unmount_overlay", input)
+	_, err := policy.enforce(ctx, "unmount_overlay", input)
 	return err
 }
 
@@ -518,6 +546,7 @@ func mapifyCapabilities(caps *oci.LinuxCapabilities) map[string][]string {
 }
 
 func (policy *regoEnforcer) EnforceCreateContainerPolicy(
+	ctx context.Context,
 	sandboxID string,
 	containerID string,
 	argList []string,
@@ -536,7 +565,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	stdioAccessAllowed bool,
 	err error) {
 	if capabilities == nil {
-		return nil, nil, false, errors.New("capabilities is nil")
+		return nil, nil, false, errors.New(capabilitiesNilError)
 	}
 
 	input := inputData{
@@ -556,7 +585,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"seccompProfileSHA256": seccompProfileSHA256,
 	}
 
-	results, err := policy.enforce("create_container", input)
+	results, err := policy.enforce(ctx, "create_container", input)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -584,12 +613,12 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	return envToKeep, capsToKeep, stdioAccessAllowed, nil
 }
 
-func (policy *regoEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) error {
+func (policy *regoEnforcer) EnforceDeviceUnmountPolicy(ctx context.Context, unmountTarget string) error {
 	input := inputData{
 		"unmountTarget": unmountTarget,
 	}
 
-	_, err := policy.enforce("unmount_device", input)
+	_, err := policy.enforce(ctx, "unmount_device", input)
 	return err
 }
 
@@ -617,6 +646,7 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 }
 
 func (policy *regoEnforcer) EnforceExecInContainerPolicy(
+	ctx context.Context,
 	containerID string,
 	argList []string,
 	envList []string,
@@ -631,7 +661,7 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(
 	stdioAccessAllowed bool,
 	err error) {
 	if capabilities == nil {
-		return nil, nil, false, errors.New("capabilities is nil")
+		return nil, nil, false, errors.New(capabilitiesNilError)
 	}
 
 	input := inputData{
@@ -646,7 +676,7 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(
 		"capabilities":    mapifyCapabilities(capabilities),
 	}
 
-	results, err := policy.enforce("exec_in_container", input)
+	results, err := policy.enforce(ctx, "exec_in_container", input)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -664,14 +694,14 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(
 	return envToKeep, capsToKeep, policy.stdio[containerID], nil
 }
 
-func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (toKeep EnvList, stdioAccessAllowed bool, err error) {
+func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(ctx context.Context, argList []string, envList []string, workingDir string) (toKeep EnvList, stdioAccessAllowed bool, err error) {
 	input := map[string]interface{}{
 		"argList":    argList,
 		"envList":    envList,
 		"workingDir": workingDir,
 	}
 
-	results, err := policy.enforce("exec_external", input)
+	results, err := policy.enforce(ctx, "exec_external", input)
 	if err != nil {
 		return nil, false, err
 	}
@@ -689,16 +719,16 @@ func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, e
 	return toKeep, stdioAccessAllowed, nil
 }
 
-func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) error {
+func (policy *regoEnforcer) EnforceShutdownContainerPolicy(ctx context.Context, containerID string) error {
 	input := inputData{
 		"containerID": containerID,
 	}
 
-	_, err := policy.enforce("shutdown_container", input)
+	_, err := policy.enforce(ctx, "shutdown_container", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error {
+func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(ctx context.Context, containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error {
 	input := inputData{
 		"containerID":   containerID,
 		"signal":        signal,
@@ -706,11 +736,11 @@ func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(containerID stri
 		"argList":       startupArgList,
 	}
 
-	_, err := policy.enforce("signal_container_process", input)
+	_, err := policy.enforce(ctx, "signal_container_process", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforcePlan9MountPolicy(target string) error {
+func (policy *regoEnforcer) EnforcePlan9MountPolicy(ctx context.Context, target string) error {
 	mountPathPrefix := strings.Replace(guestpath.LCOWMountPathPrefixFmt, "%d", "[0-9]+", 1)
 	input := inputData{
 		"rootPrefix":      guestpath.LCOWRootPrefixInUVM,
@@ -718,36 +748,36 @@ func (policy *regoEnforcer) EnforcePlan9MountPolicy(target string) error {
 		"target":          target,
 	}
 
-	_, err := policy.enforce("plan9_mount", input)
+	_, err := policy.enforce(ctx, "plan9_mount", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(target string) error {
+func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(ctx context.Context, target string) error {
 	input := map[string]interface{}{
 		"unmountTarget": target,
 	}
 
-	_, err := policy.enforce("plan9_unmount", input)
+	_, err := policy.enforce(ctx, "plan9_unmount", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforceGetPropertiesPolicy() error {
+func (policy *regoEnforcer) EnforceGetPropertiesPolicy(ctx context.Context) error {
 	input := make(inputData)
 
-	_, err := policy.enforce("get_properties", input)
+	_, err := policy.enforce(ctx, "get_properties", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforceDumpStacksPolicy() error {
+func (policy *regoEnforcer) EnforceDumpStacksPolicy(ctx context.Context) error {
 	input := make(inputData)
 
-	_, err := policy.enforce("dump_stacks", input)
+	_, err := policy.enforce(ctx, "dump_stacks", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforceRuntimeLoggingPolicy() error {
+func (policy *regoEnforcer) EnforceRuntimeLoggingPolicy(ctx context.Context) error {
 	input := make(inputData)
-	_, err := policy.enforce("runtime_logging", input)
+	_, err := policy.enforce(ctx, "runtime_logging", input)
 	return err
 }
 
@@ -761,7 +791,7 @@ func parseNamespace(rego string) (string, error) {
 	return strings.TrimSpace(parts[1]), nil
 }
 
-func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string) error {
+func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, feed string, rego string) error {
 	namespace, err := parseNamespace(rego)
 	if err != nil {
 		return fmt.Errorf("unable to load fragment: %w", err)
@@ -782,7 +812,7 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 		"namespace": namespace,
 	}
 
-	results, err := policy.enforce("load_fragment", input)
+	results, err := policy.enforce(ctx, "load_fragment", input)
 
 	addModule, _ := results.Bool("add_module")
 	if !addModule {
@@ -792,23 +822,23 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 	return err
 }
 
-func (policy *regoEnforcer) EnforceScratchMountPolicy(scratchPath string, encrypted bool) error {
+func (policy *regoEnforcer) EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) error {
 	input := map[string]interface{}{
 		"target":    scratchPath,
 		"encrypted": encrypted,
 	}
-	_, err := policy.enforce("scratch_mount", input)
+	_, err := policy.enforce(ctx, "scratch_mount", input)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (policy *regoEnforcer) EnforceScratchUnmountPolicy(scratchPath string) error {
+func (policy *regoEnforcer) EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) error {
 	input := map[string]interface{}{
 		"unmountTarget": scratchPath,
 	}
-	_, err := policy.enforce("scratch_unmount", input)
+	_, err := policy.enforce(ctx, "scratch_unmount", input)
 	if err != nil {
 		return err
 	}

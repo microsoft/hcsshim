@@ -4,6 +4,7 @@
 package securitypolicy
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -40,11 +41,12 @@ func init() {
 }
 
 type SecurityPolicyEnforcer interface {
-	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
-	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
-	EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) (err error)
-	EnforceOverlayUnmountPolicy(target string) (err error)
+	EnforceDeviceMountPolicy(ctx context.Context, target string, deviceHash string) (err error)
+	EnforceDeviceUnmountPolicy(ctx context.Context, unmountTarget string) (err error)
+	EnforceOverlayMountPolicy(ctx context.Context, containerID string, layerPaths []string, target string) (err error)
+	EnforceOverlayUnmountPolicy(ctx context.Context, target string) (err error)
 	EnforceCreateContainerPolicy(
+		ctx context.Context,
 		sandboxID string,
 		containerID string,
 		argList []string,
@@ -62,6 +64,7 @@ type SecurityPolicyEnforcer interface {
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
 	EnforceExecInContainerPolicy(
+		ctx context.Context,
 		containerID string,
 		argList []string,
 		envList []string,
@@ -72,17 +75,17 @@ type SecurityPolicyEnforcer interface {
 		umask string,
 		capabilities *oci.LinuxCapabilities,
 	) (EnvList, *oci.LinuxCapabilities, bool, error)
-	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (EnvList, bool, error)
-	EnforceShutdownContainerPolicy(containerID string) error
-	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
-	EnforcePlan9MountPolicy(target string) (err error)
-	EnforcePlan9UnmountPolicy(target string) (err error)
-	EnforceGetPropertiesPolicy() error
-	EnforceDumpStacksPolicy() error
-	EnforceRuntimeLoggingPolicy() (err error)
-	LoadFragment(issuer string, feed string, code string) error
-	EnforceScratchMountPolicy(scratchPath string, encrypted bool) (err error)
-	EnforceScratchUnmountPolicy(scratchPath string) (err error)
+	EnforceExecExternalProcessPolicy(ctx context.Context, argList []string, envList []string, workingDir string) (EnvList, bool, error)
+	EnforceShutdownContainerPolicy(ctx context.Context, containerID string) error
+	EnforceSignalContainerProcessPolicy(ctx context.Context, containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
+	EnforcePlan9MountPolicy(ctx context.Context, target string) (err error)
+	EnforcePlan9UnmountPolicy(ctx context.Context, target string) (err error)
+	EnforceGetPropertiesPolicy(ctx context.Context) error
+	EnforceDumpStacksPolicy(ctx context.Context) error
+	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
+	LoadFragment(ctx context.Context, issuer string, feed string, code string) error
+	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
+	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error)
 }
 
@@ -333,7 +336,7 @@ func NewStandardSecurityPolicyEnforcer(
 // devices is a root hash that exists for 1 or more layers in any container
 // in the supplied SecurityPolicy. Each "seen" layer is recorded in devices
 // as it is mounted.
-func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
+func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(ctx context.Context, target string, deviceHash string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -371,7 +374,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string
 //
 // When proper protocol enforcement is in place, this will also make sure that
 // the device isn't currently used by any running container in an overlay.
-func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) (err error) {
+func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(ctx context.Context, unmountTarget string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -396,7 +399,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarg
 // "run command" which come with a container ID, we can find the corresponding
 // container index and use that to look up the command in the appropriate
 // security policy container instance.
-func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) (err error) {
+func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(ctx context.Context, containerID string, layerPaths []string, target string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -452,6 +455,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 // understanding of the containers running with a UVM as they come up and map
 // them back to a container definition from the user supplied SecurityPolicy.
 func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
+	ctx context.Context,
 	sandboxID string,
 	containerID string,
 	argList []string,
@@ -508,79 +512,79 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ context.Context, _ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, caps, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, bool, error) {
+func (*StandardSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ context.Context, _ []string, envList []string, _ string) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+func (*StandardSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(context.Context, string) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
+func (*StandardSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(context.Context, string, syscall.Signal, bool, []string) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforcePlan9MountPolicy(_ string) error {
+func (*StandardSecurityPolicyEnforcer) EnforcePlan9MountPolicy(context.Context, string) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) error {
+func (*StandardSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(context.Context, string) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error {
+func (*StandardSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(context.Context, string) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceGetPropertiesPolicy() error {
+func (*StandardSecurityPolicyEnforcer) EnforceGetPropertiesPolicy(context.Context) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
+func (*StandardSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy() error {
+func (*StandardSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy(context.Context) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) LoadFragment(_ string, _ string, _ string) error {
+func (*StandardSecurityPolicyEnforcer) LoadFragment(context.Context, string, string, string) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (StandardSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) error {
+func (StandardSecurityPolicyEnforcer) EnforceScratchMountPolicy(context.Context, string, bool) error {
 	return nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
+func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Context, string) error {
 	return nil
 }
 
@@ -885,67 +889,67 @@ type OpenDoorSecurityPolicyEnforcer struct {
 
 var _ SecurityPolicyEnforcer = (*OpenDoorSecurityPolicyEnforcer)(nil)
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(context.Context, string, string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(context.Context, string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string, _ string) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(context.Context, string, []string, string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(context.Context, string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities, _ string) (EnvList, *oci.LinuxCapabilities, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ context.Context, _, _ string, _ []string, envList []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities, _ string) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, caps, true, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ context.Context, _ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, caps, true, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, bool, error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ context.Context, _ []string, envList []string, _ string) (EnvList, bool, error) {
 	return envList, true, nil
 }
 
-func (*OpenDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+func (*OpenDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(context.Context, string) error {
 	return nil
 }
 
-func (*OpenDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
+func (*OpenDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(context.Context, string, syscall.Signal, bool, []string) error {
 	return nil
 }
 
-func (*OpenDoorSecurityPolicyEnforcer) EnforcePlan9MountPolicy(_ string) error {
+func (*OpenDoorSecurityPolicyEnforcer) EnforcePlan9MountPolicy(context.Context, string) error {
 	return nil
 }
 
-func (*OpenDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) error {
+func (*OpenDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(context.Context, string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceGetPropertiesPolicy() error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceGetPropertiesPolicy(context.Context) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) LoadFragment(_ string, _ string, _ string) error {
+func (OpenDoorSecurityPolicyEnforcer) LoadFragment(context.Context, string, string, string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
+func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts([]oci.Mount) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy() error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy(context.Context) error {
 	return nil
 }
 
@@ -953,11 +957,11 @@ func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return oe.encodedSecurityPolicy
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(context.Context, string, bool) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Context, string) error {
 	return nil
 }
 
@@ -971,59 +975,59 @@ type ClosedDoorSecurityPolicyEnforcer struct {
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(context.Context, string, string) error {
 	return errors.New("mounting is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(context.Context, string) error {
 	return errors.New("unmounting is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string, _ string) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(context.Context, string, []string, string) error {
 	return errors.New("creating an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(context.Context, string) error {
 	return errors.New("removing an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount, _ bool, _ bool, _ IDName, _ []IDName, _ string, _ *oci.LinuxCapabilities, _ string) (EnvList, *oci.LinuxCapabilities, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(context.Context, string, string, []string, []string, string, []oci.Mount, bool, bool, IDName, []IDName, string, *oci.LinuxCapabilities, string) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return nil, nil, false, errors.New("running commands is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string, _ bool, _ IDName, _ []IDName, _ string, _ *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(context.Context, string, []string, []string, string, bool, IDName, []IDName, string, *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return nil, nil, false, errors.New("starting additional processes in a container is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) (EnvList, bool, error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(context.Context, []string, []string, string) (EnvList, bool, error) {
 	return nil, false, errors.New("starting additional processes in uvm is denied by policy")
 }
 
-func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(context.Context, string) error {
 	return errors.New("shutting down containers is denied by policy")
 }
 
-func (*ClosedDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
+func (*ClosedDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(context.Context, string, syscall.Signal, bool, []string) error {
 	return errors.New("signalling container processes is denied by policy")
 }
 
-func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9MountPolicy(_ string) error {
+func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9MountPolicy(context.Context, string) error {
 	return errors.New("mounting is denied by policy")
 }
 
-func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) error {
+func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(context.Context, string) error {
 	return errors.New("unmounting is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceGetPropertiesPolicy() error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceGetPropertiesPolicy(context.Context) error {
 	return errors.New("getting container properties is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context) error {
 	return errors.New("getting stack dumps is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(_ string, _ string, _ string) error {
+func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(context.Context, string, string, string) error {
 	return errors.New("loading fragments is denied by policy")
 }
 
@@ -1031,7 +1035,7 @@ func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error
 	return nil
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy() error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy(context.Context) error {
 	return errors.New("runtime logging is denied by policy")
 }
 
@@ -1039,11 +1043,11 @@ func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return ""
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(context.Context, string, bool) error {
 	return errors.New("mounting scratch is denied by the policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Context, string) error {
 	return errors.New("unmounting scratch is denied by the policy")
 }
 
