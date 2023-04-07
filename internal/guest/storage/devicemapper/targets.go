@@ -6,6 +6,7 @@ package devicemapper
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
@@ -34,7 +35,12 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 
 	devMapperPath, err := CreateDevice(devName, CreateReadOnly, []Target{linearTarget})
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to create dm-linear target, device=%s, offset=%d", devPath, mappingInfo.DeviceOffsetInBytes)
+		// todo (maksiman): add better retry logic, similar to how SCSI device mounts are
+		// retried on unix.ENOENT and unix.ENXIO.
+		time.Sleep(500 * time.Millisecond)
+		if devMapperPath, err = CreateDevice(devName, CreateReadOnly, []Target{linearTarget}); err != nil {
+			return "", errors.Wrapf(err, "failed to create dm-linear target, device=%s, offset=%d", devPath, mappingInfo.DeviceOffsetInBytes)
+		}
 	}
 
 	return devMapperPath, nil
@@ -82,7 +88,12 @@ func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo
 
 	mapperPath, err := CreateDevice(devName, CreateReadOnly, []Target{verityTarget})
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to create dm-verity target. device=%s", devPath)
+		// todo (maksiman): add better retry logic, similar to how SCSI device mounts are
+		// retried on unix.ENOENT and unix.ENXIO
+		time.Sleep(500 * time.Millisecond)
+		if mapperPath, err = CreateDevice(devName, CreateReadOnly, []Target{verityTarget}); err != nil {
+			return "", errors.Wrapf(err, "failed to create dm-verity target. device=%s", devPath)
+		}
 	}
 
 	return mapperPath, nil

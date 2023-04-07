@@ -159,7 +159,13 @@ func Mount(
 		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
 		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)
 		if err != nil {
-			return fmt.Errorf("failed to mount encrypted device %s: %w", source, err)
+			// todo (maksiman): add better retry logic, similar to how SCSI device mounts are
+			// retried on unix.ENOENT and unix.ENXIO. The retry should probably be on an
+			// error message rather than actual error, because we shell-out to cryptsetup.
+			time.Sleep(500 * time.Millisecond)
+			if encryptedSource, err = encryptDevice(spnCtx, source, cryptDeviceName); err != nil {
+				return fmt.Errorf("failed to mount encrypted device %s: %w", source, err)
+			}
 		}
 		source = encryptedSource
 		mountType = "xfs"
