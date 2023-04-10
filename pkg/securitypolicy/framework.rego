@@ -729,16 +729,20 @@ plan9_unmount := {"metadata": [removePlan9Target], "allowed": true} {
 }
 
 
-default enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": true, "invalid": false}
+default enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": true, "invalid": false, "version_missing": false}
 
-enforcement_point_info := {"available": available, "default_results": default_results, "unknown": false, "invalid": false} {
+enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": false, "version_missing": true} {
+    policy_api_version == null
+}
+
+enforcement_point_info := {"available": available, "default_results": default_results, "unknown": false, "invalid": false, "version_missing": false} {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.version, enforcement_point.introducedVersion) >= 0
     available := semver.compare(policy_api_version, enforcement_point.introducedVersion) >= 0
     default_results := enforcement_point.default_results
 }
 
-enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": true} {
+enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": true, "version_missing": false} {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.version, enforcement_point.introducedVersion) < 0
 }
@@ -1385,17 +1389,19 @@ errors[framework_version_error] {
 
 errors[framework_version_error] {
     semver.compare(policy_framework_version, version) > 0
-    framework_version_error := concat(" ", ["framework_version is ahead of the current version:", policy_framework_version, ">", version])
+    framework_version_error := concat(" ", ["framework_version is ahead of the current version:", policy_framework_version, "is greater than", version])
 }
 
 errors[fragment_framework_version_error] {
+    input.namespace
     fragment_framework_version == null
     fragment_framework_version_error := concat(" ", ["fragment framework_version is missing. Current version:", version])
 }
 
 errors[fragment_framework_version_error] {
+    input.namespace
     semver.compare(fragment_framework_version, version) > 0
-    fragment_framework_version_error := concat(" ", ["fragment framework_version is ahead of the current version:", fragment_framework_version, ">", version])
+    fragment_framework_version_error := concat(" ", ["fragment framework_version is ahead of the current version:", fragment_framework_version, "is greater than", version])
 }
 
 errors["containers only distinguishable by allow_stdio_access"] {

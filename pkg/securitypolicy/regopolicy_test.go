@@ -241,10 +241,10 @@ func Test_Rego_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 		target := testDataGenerator.uniqueMountTarget()
 		rootHash := generateInvalidRootHash(testRand)
 
-		err = policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
 
 		// we expect an error, not getting one means something is broken
-		return err != nil && strings.Contains(err.Error(), rootHash) && strings.Contains(err.Error(), "deviceHash not found")
+		return assertDecisionJSONContains(t, err, rootHash, "deviceHash not found")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -266,7 +266,7 @@ func Test_Rego_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 		target := testDataGenerator.uniqueMountTarget()
 		rootHash := selectRootHashFromConstraints(p, testRand)
 
-		err = policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
 
 		// getting an error means something is broken
 		return err == nil
@@ -289,19 +289,19 @@ func Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 		target := testDataGenerator.uniqueMountTarget()
 		rootHash := selectRootHashFromConstraints(p, testRand)
 
-		err = policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
 		if err != nil {
 			t.Errorf("unable to mount device: %v", err)
 			return false
 		}
 
-		err = policy.EnforceDeviceUnmountPolicy(target)
+		err = policy.EnforceDeviceUnmountPolicy(p.ctx, target)
 		if err != nil {
 			t.Errorf("unable to unmount device: %v", err)
 			return false
 		}
 
-		err = policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
 		if err != nil {
 			t.Errorf("unable to remount device: %v", err)
 			return false
@@ -326,20 +326,20 @@ func Test_Rego_EnforceDeviceMountPolicy_Duplicate_Device_Target(t *testing.T) {
 
 		target := testDataGenerator.uniqueMountTarget()
 		rootHash := selectRootHashFromConstraints(p, testRand)
-		err = policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
 		if err != nil {
 			t.Error("Valid device mount failed. It shouldn't have.")
 			return false
 		}
 
 		rootHash = selectRootHashFromConstraints(p, testRand)
-		err = policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
 		if err == nil {
 			t.Error("Duplicate device mount target was allowed. It shouldn't have been.")
 			return false
 		}
 
-		return strings.Contains(err.Error(), "device already mounted at path")
+		return assertDecisionJSONContains(t, err, "device already mounted at path")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -357,17 +357,18 @@ func Test_Rego_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
+		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
 
 		if err == nil {
 			return false
 		}
 
-		if len(tc.layers) > 0 && !strings.Contains(err.Error(), tc.layers[0]) {
-			return false
+		toFind := []string{"no matching containers for overlay"}
+		if len(tc.layers) > 0 {
+			toFind = append(toFind, tc.layers[0])
 		}
 
-		return strings.Contains(err.Error(), "no matching containers for overlay")
+		return assertDecisionJSONContains(t, err, toFind...)
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -385,7 +386,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
+		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
 
 		// getting an error means something is broken
 		return err == nil
@@ -408,6 +409,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_With_Same_Root_Hash(t *testing.T
 	container.Layers[numLayers-2] = container.Layers[numLayers-1]
 
 	constraints := new(generatedConstraints)
+	constraints.ctx = context.Background()
 	constraints.containers = []*securityPolicyContainer{container}
 	constraints.externalProcesses = generateExternalProcesses(testRand)
 	securityPolicy := constraints.toPolicy()
@@ -423,7 +425,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_With_Same_Root_Hash(t *testing.T
 		t.Fatalf("error creating valid overlay: %v", err)
 	}
 
-	err = policy.EnforceOverlayMountPolicy(containerID, layers, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, layers, testDataGenerator.uniqueMountTarget())
 	if err != nil {
 		t.Fatalf("Unable to create an overlay where root hashes are the same")
 	}
@@ -442,6 +444,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 	// Make the two containers have the same base layer
 	containerTwo.Layers[sharedLayerIndex] = containerOne.Layers[sharedLayerIndex]
 	constraints := new(generatedConstraints)
+	constraints.ctx = context.Background()
 	constraints.containers = []*securityPolicyContainer{containerOne, containerTwo}
 	constraints.externalProcesses = generateExternalProcesses(testRand)
 
@@ -462,7 +465,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 	sharedMount := ""
 	for i := 0; i < len(containerOne.Layers); i++ {
 		mount := testDataGenerator.uniqueMountTarget()
-		err := policy.EnforceDeviceMountPolicy(mount, containerOne.Layers[i])
+		err := policy.EnforceDeviceMountPolicy(constraints.ctx, mount, containerOne.Layers[i])
 		if err != nil {
 			t.Fatalf("Unexpected error mounting overlay device: %v", err)
 		}
@@ -473,7 +476,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 		containerOneOverlay[len(containerOneOverlay)-i-1] = mount
 	}
 
-	err = policy.EnforceOverlayMountPolicy(containerID, containerOneOverlay, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, containerOneOverlay, testDataGenerator.uniqueMountTarget())
 	if err != nil {
 		t.Fatalf("Unexpected error mounting overlay: %v", err)
 	}
@@ -491,7 +494,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 		if i != sharedLayerIndex {
 			mount = testDataGenerator.uniqueMountTarget()
 
-			err := policy.EnforceDeviceMountPolicy(mount, containerTwo.Layers[i])
+			err := policy.EnforceDeviceMountPolicy(constraints.ctx, mount, containerTwo.Layers[i])
 			if err != nil {
 				t.Fatalf("Unexpected error mounting overlay device: %v", err)
 			}
@@ -502,7 +505,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 		containerTwoOverlay[len(containerTwoOverlay)-i-1] = mount
 	}
 
-	err = policy.EnforceOverlayMountPolicy(containerID, containerTwoOverlay, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, containerTwoOverlay, testDataGenerator.uniqueMountTarget())
 	if err != nil {
 		t.Fatalf("Unexpected error mounting overlay: %v", err)
 	}
@@ -523,16 +526,16 @@ func Test_Rego_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testi
 			return false
 		}
 
-		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget()); err != nil {
+		if err := tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget()); err != nil {
 			t.Errorf("expected nil error got: %v", err)
 			return false
 		}
 
-		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget()); err == nil {
+		if err := tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget()); err == nil {
 			t.Errorf("able to create overlay for the same container twice")
 			return false
 		} else {
-			return strings.Contains(err.Error(), "overlay has already been mounted")
+			return assertDecisionJSONContains(t, err, "overlay has already been mounted")
 		}
 	}
 
@@ -543,6 +546,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testi
 
 func Test_Rego_EnforceOverlayMountPolicy_Reusing_ID_Across_Overlays(t *testing.T) {
 	constraints := new(generatedConstraints)
+	constraints.ctx = context.Background()
 	for i := 0; i < 2; i++ {
 		constraints.containers = append(constraints.containers, generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer))
 	}
@@ -568,7 +572,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Reusing_ID_Across_Overlays(t *testing.T
 		t.Fatalf("Unexpected error creating valid overlay: %v", err)
 	}
 
-	err = policy.EnforceOverlayMountPolicy(containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
 	if err != nil {
 		t.Fatalf("Unexpected error mounting overlay filesystem: %v", err)
 	}
@@ -579,7 +583,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Reusing_ID_Across_Overlays(t *testing.T
 		t.Fatalf("Unexpected error creating valid overlay: %v", err)
 	}
 
-	err = policy.EnforceOverlayMountPolicy(containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
 	if err == nil {
 		t.Fatalf("Unexpected success mounting overlay filesystem")
 	}
@@ -593,6 +597,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Reusing_ID_Across_Overlays(t *testing.T
 func Test_Rego_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing.T) {
 	for containersToCreate := 13; containersToCreate <= maxContainersInGeneratedConstraints; containersToCreate++ {
 		constraints := new(generatedConstraints)
+		constraints.ctx = context.Background()
 		constraints.externalProcesses = generateExternalProcesses(testRand)
 
 		for i := 1; i <= containersToCreate; i++ {
@@ -618,7 +623,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *te
 			}
 
 			id := testDataGenerator.uniqueContainerID()
-			err = policy.EnforceOverlayMountPolicy(id, layerPaths, testDataGenerator.uniqueMountTarget())
+			err = policy.EnforceOverlayMountPolicy(constraints.ctx, id, layerPaths, testDataGenerator.uniqueMountTarget())
 			if err != nil {
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}
@@ -635,13 +640,13 @@ func Test_Rego_EnforceOverlayUnmountPolicy(t *testing.T) {
 		}
 
 		target := testDataGenerator.uniqueMountTarget()
-		err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, target)
+		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, target)
 		if err != nil {
 			t.Errorf("Failure setting up overlay for testing: %v", err)
 			return false
 		}
 
-		err = tc.policy.EnforceOverlayUnmountPolicy(target)
+		err = tc.policy.EnforceOverlayUnmountPolicy(p.ctx, target)
 		if err != nil {
 			t.Errorf("Unexpected policy enforcement failure: %v", err)
 			return false
@@ -664,14 +669,14 @@ func Test_Rego_EnforceOverlayUnmountPolicy_No_Matches(t *testing.T) {
 		}
 
 		target := testDataGenerator.uniqueMountTarget()
-		err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers, target)
+		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, target)
 		if err != nil {
 			t.Errorf("Failure setting up overlay for testing: %v", err)
 			return false
 		}
 
 		badTarget := testDataGenerator.uniqueMountTarget()
-		err = tc.policy.EnforceOverlayUnmountPolicy(badTarget)
+		err = tc.policy.EnforceOverlayUnmountPolicy(p.ctx, badTarget)
 		if err == nil {
 			t.Errorf("Unexpected policy enforcement success: %v", err)
 			return false
@@ -693,13 +698,13 @@ func Test_Rego_EnforceCommandPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, generateCommand(testRand), tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, generateCommand(testRand), tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid command")
+		return assertDecisionJSONContains(t, err, "invalid command")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -725,7 +730,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 		}
 
 		envList := append(tc.envList, "PREFIX_FOO=BAR")
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -750,19 +755,14 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 		}
 
 		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "invalid env list") {
-			t.Error("missing reason")
-			return false
-		}
-
-		return strings.Contains(err.Error(), envList[0])
+		return assertDecisionJSONContains(t, err, "invalid env list", envList[0])
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -785,7 +785,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs(t *testing.T) {
 		extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 		envList := append(tc.envList, extraEnvs...)
-		actual, _, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		actual, _, _, err := tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -816,7 +816,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs_Multiple(t *testing.T) 
 	extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 	envList := append(tc.envList, extraEnvs...)
-	actual, _, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	actual, _, _, err := tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	// getting an error means something is broken
 	if err != nil {
@@ -838,7 +838,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_DropEnvs_Multiple_NoMatch(t *tes
 	extraEnvs := buildEnvironmentVariablesFromEnvRules(extraRules, testRand)
 
 	envList := append(tc.envList, extraEnvs...)
-	actual, _, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	actual, _, _, err := tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -858,13 +858,13 @@ func Test_Rego_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid working directory")
+		return assertDecisionJSONContains(t, err, "invalid working directory")
 	}
 
 	if err := quick.Check(testFunc, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -880,7 +880,7 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 			return false
 		}
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
 		return err == nil
@@ -926,7 +926,7 @@ func Test_Rego_EnforceCreateContainer_Start_All_Containers(t *testing.T) {
 			capabilities := container.Capabilities.toExternal()
 			seccomp := container.SeccompProfileSHA256
 
-			_, _, _, err = policy.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false, container.NoNewPrivileges, user, groups, container.User.Umask, &capabilities, seccomp)
+			_, _, _, err = policy.EnforceCreateContainerPolicy(p.ctx, sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, false, container.NoNewPrivileges, user, groups, container.User.Umask, &capabilities, seccomp)
 
 			// getting an error means something is broken
 			if err != nil {
@@ -953,7 +953,7 @@ func Test_Rego_EnforceCreateContainer_Invalid_ContainerID(t *testing.T) {
 		}
 
 		containerID := testDataGenerator.uniqueContainerID()
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		return err != nil
@@ -972,12 +972,12 @@ func Test_Rego_EnforceCreateContainer_Same_Container_Twice(t *testing.T) {
 			return false
 		}
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 		if err != nil {
 			t.Error("Unable to start valid container.")
 			return false
 		}
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 		if err == nil {
 			t.Error("Able to start a container with already used id.")
 			return false
@@ -1006,7 +1006,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_NoMatches(t *testing.T) {
 		capabilities.Permitted = alterCapabilitySet(testRand, capabilities.Permitted)
 		capabilities.Ambient = alterCapabilitySet(testRand, capabilities.Ambient)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, capabilities, tc.seccomp)
 
 		if err == nil {
 			t.Error("Unexpected success with incorrect capabilities")
@@ -1033,7 +1033,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SubsetDoesntMatch(t *testing.
 			capabilities := copyLinuxCapabilities(*tc.capabilities)
 			capabilities.Bounding = subsetCapabilitySet(testRand, copyStrings(capabilities.Bounding))
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 			if err == nil {
 				t.Error("Unexpected success with bounding as a subset of allowed capabilities")
@@ -1045,7 +1045,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SubsetDoesntMatch(t *testing.
 			capabilities := copyLinuxCapabilities(*tc.capabilities)
 			capabilities.Effective = subsetCapabilitySet(testRand, copyStrings(capabilities.Effective))
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 			if err == nil {
 				t.Error("Unexpected success with effective as a subset of allowed capabilities")
@@ -1057,7 +1057,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SubsetDoesntMatch(t *testing.
 			capabilities := copyLinuxCapabilities(*tc.capabilities)
 			capabilities.Inheritable = subsetCapabilitySet(testRand, copyStrings(capabilities.Inheritable))
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 			if err == nil {
 				t.Error("Unexpected success with inheritable as a subset of allowed capabilities")
@@ -1069,7 +1069,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SubsetDoesntMatch(t *testing.
 			capabilities := copyLinuxCapabilities(*tc.capabilities)
 			capabilities.Permitted = subsetCapabilitySet(testRand, copyStrings(capabilities.Permitted))
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 			if err == nil {
 				t.Error("Unexpected success with permitted as a subset of allowed capabilities")
@@ -1081,7 +1081,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SubsetDoesntMatch(t *testing.
 			capabilities := copyLinuxCapabilities(*tc.capabilities)
 			capabilities.Ambient = subsetCapabilitySet(testRand, copyStrings(capabilities.Ambient))
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 			if err == nil {
 				t.Error("Unexpected success with ambient as a subset of allowed capabilities")
@@ -1108,7 +1108,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SupersetDoesntMatch(t *testin
 		capabilities := copyLinuxCapabilities(*tc.capabilities)
 		capabilities.Bounding = superCapabilitySet(testRand, copyStrings(capabilities.Bounding))
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 		if err == nil {
 			t.Error("Unexpected success with bounding as a superset of allowed capabilities")
@@ -1118,7 +1118,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SupersetDoesntMatch(t *testin
 		capabilities = copyLinuxCapabilities(*tc.capabilities)
 		capabilities.Effective = superCapabilitySet(testRand, copyStrings(capabilities.Effective))
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 		if err == nil {
 			t.Error("Unexpected success with effective as a superset of allowed capabilities")
@@ -1128,7 +1128,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SupersetDoesntMatch(t *testin
 		capabilities = copyLinuxCapabilities(*tc.capabilities)
 		capabilities.Inheritable = superCapabilitySet(testRand, copyStrings(capabilities.Inheritable))
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 		if err == nil {
 			t.Error("Unexpected success with inheritable as a superset of allowed capabilities")
@@ -1138,7 +1138,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SupersetDoesntMatch(t *testin
 		capabilities = copyLinuxCapabilities(*tc.capabilities)
 		capabilities.Permitted = superCapabilitySet(testRand, copyStrings(capabilities.Permitted))
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 		if err == nil {
 			t.Error("Unexpected success with permitted as a superset of allowed capabilities")
@@ -1148,7 +1148,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_SupersetDoesntMatch(t *testin
 		capabilities = copyLinuxCapabilities(*tc.capabilities)
 		capabilities.Ambient = superCapabilitySet(testRand, copyStrings(capabilities.Ambient))
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 		if err == nil {
 			t.Error("Unexpected success with ambient as a superset of allowed capabilities")
@@ -1177,13 +1177,13 @@ func Test_Rego_EnforceCreateContainer_Capabilities_DenialHasErrorMessage(t *test
 	capabilities.Permitted = alterCapabilitySet(testRand, capabilities.Permitted)
 	capabilities.Ambient = alterCapabilitySet(testRand, capabilities.Ambient)
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, capabilities, tc.seccomp)
 
 	if err == nil {
-		t.Fatal("Unexpected success with incorrect capabilities")
+		t.Error("Unexpected success with incorrect capabilities")
 	}
 
-	if !strings.Contains(err.Error(), "capabilities don't match") {
+	if !assertDecisionJSONContains(t, err, "capabilities don't match") {
 		t.Fatal("No error message given for denial by capability mismatch")
 	}
 }
@@ -1252,13 +1252,13 @@ func Test_Rego_EnforceCreateContainer_Capabilities_UndecidableHasErrorMessage(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, incomingCapabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, incomingCapabilities, tc.seccomp)
 
 	if err == nil {
 		t.Fatal("Unexpected success with undecidable capabilities")
 	}
 
-	if !strings.Contains(err.Error(), "containers only distinguishable by capabilties") {
+	if !assertDecisionJSONContains(t, err, "containers only distinguishable by capabilties") {
 		t.Fatal("No error message given for undecidable based on capabilities mismatch")
 	}
 }
@@ -1270,13 +1270,13 @@ func Test_Rego_EnforceCreateContainer_CapabilitiesIsNil(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, nil, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, nil, tc.seccomp)
 
 	if err == nil {
 		t.Fatal("Unexpected success with nil capabilities")
 	}
 
-	if !strings.Contains(err.Error(), "capabilities is nil") {
+	if err.Error() != capabilitiesNilError {
 		t.Fatal("No error message given for denial by capability being nil")
 	}
 }
@@ -1298,7 +1298,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Null_Elevated(t *testing.T) {
 		Ambient:     []string{},
 	}.toExternal()
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with null capabilities and elevated: %w", err)
@@ -1322,7 +1322,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Null(t *testing.T) {
 		Ambient:     []string{},
 	}.toExternal()
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with null capabilities: %w", err)
@@ -1346,7 +1346,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Null_Elevated_Privileged(t *t
 		Ambient:     []string{},
 	}.toExternal()
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, true, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, true, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with null capabilities when elevated and privileged: %w", err)
@@ -1378,7 +1378,7 @@ func Test_Rego_EnforceExecInContainer_Capabilities_Null_Elevated(t *testing.T) {
 	groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 	umask := container.container.User.Umask
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(constraints.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with null capabilities and elevated: %w", err)
@@ -1409,7 +1409,7 @@ func Test_Rego_EnforceExecInContainer_Capabilities_Null(t *testing.T) {
 	groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 	umask := container.container.User.Umask
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(constraints.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with null capabilities: %w", err)
@@ -1441,7 +1441,7 @@ func Test_Rego_EnforceExecInContainer_Capabilities_Null_Elevated_Privileged(t *t
 	groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 	umask := container.container.User.Umask
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(constraints.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with null capabilities when elevated and privileged: %w", err)
@@ -1463,7 +1463,7 @@ func Test_Rego_EnforceCreateContainer_CapabilitiesAreEmpty(t *testing.T) {
 
 	capabilities := oci.LinuxCapabilities{}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 	if err != nil {
 		t.Fatal("Unexpected failure")
@@ -1487,7 +1487,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Drop(t *testing.T) {
 		capabilities.Permitted = append(capabilities.Permitted, extraCapabilities.Permitted...)
 		capabilities.Ambient = append(capabilities.Ambient, extraCapabilities.Ambient...)
 
-		_, actual, _, err := tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
+		_, actual, _, err := tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, &capabilities, tc.seccomp)
 
 		if err != nil {
 			t.Errorf("Expected container creation to be allowed. It wasn't for extra capabilities: %v", err)
@@ -1538,7 +1538,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Drop_NoMatches(t *testing.T) 
 
 		capabilities := generateCapabilities(testRand)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, capabilities, tc.seccomp)
 
 		if err == nil {
 			t.Errorf("Unexpected success with non matching capabilities set and dropping")
@@ -1567,7 +1567,7 @@ func Test_Rego_ExtendDefaultMounts(t *testing.T) {
 		additionalMounts := buildMountSpecFromMountArray(defaultMounts, tc.sandboxID, testRand)
 		tc.mounts = append(tc.mounts, additionalMounts.Mounts...)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		if err != nil {
 			t.Error(err)
@@ -1594,7 +1594,7 @@ func Test_Rego_MountPolicy_NoMatches(t *testing.T) {
 		additionalMounts := buildMountSpecFromMountArray(invalidMounts, tc.sandboxID, testRand)
 		tc.mounts = append(tc.mounts, additionalMounts.Mounts...)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1602,7 +1602,7 @@ func Test_Rego_MountPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid mount list")
+		return assertDecisionJSONContains(t, err, "invalid mount list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1623,14 +1623,14 @@ func Test_Rego_MountPolicy_NotAllOptionsFromConstraints(t *testing.T) {
 		options := inputMounts[mindex].Options
 		inputMounts[mindex].Options = options[:len(options)-1]
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid mount list")
+		return assertDecisionJSONContains(t, err, "invalid mount list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1649,14 +1649,14 @@ func Test_Rego_MountPolicy_BadSource(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Source = randString(testRand, maxGeneratedMountSourceLength)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid mount list")
+		return assertDecisionJSONContains(t, err, "invalid mount list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1675,14 +1675,14 @@ func Test_Rego_MountPolicy_BadDestination(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Destination = randString(testRand, maxGeneratedMountDestinationLength)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid mount list")
+		return assertDecisionJSONContains(t, err, "invalid mount list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1701,14 +1701,14 @@ func Test_Rego_MountPolicy_BadType(t *testing.T) {
 		index := randMinMax(testRand, 0, int32(len(tc.mounts)-1))
 		tc.mounts[index].Type = randString(testRand, 4)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid mount list")
+		return assertDecisionJSONContains(t, err, "invalid mount list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1729,7 +1729,7 @@ func Test_Rego_MountPolicy_BadOption(t *testing.T) {
 		oindex := randMinMax(testRand, 0, int32(len(mountToChange.Options)-1))
 		tc.mounts[mindex].Options[oindex] = randString(testRand, maxGeneratedMountOptionLength)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1737,7 +1737,7 @@ func Test_Rego_MountPolicy_BadOption(t *testing.T) {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid mount list")
+		return assertDecisionJSONContains(t, err, "invalid mount list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1758,7 +1758,7 @@ func Test_Rego_MountPolicy_MountPrivilegedWhenNotAllowed(t *testing.T) {
 		oindex := randMinMax(testRand, 0, int32(len(mountToChange.Options)-1))
 		tc.mounts[mindex].Options[oindex] = randString(testRand, maxGeneratedMountOptionLength)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -1766,7 +1766,7 @@ func Test_Rego_MountPolicy_MountPrivilegedWhenNotAllowed(t *testing.T) {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid mount list")
+		return assertDecisionJSONContains(t, err, "invalid mount list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1906,6 +1906,7 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 }
 
 func Test_Rego_Enforcement_Point_Extra(t *testing.T) {
+	ctx := context.Background()
 	code := `package policy
 
 api_version := "0.0.1"
@@ -1923,7 +1924,7 @@ __fixture_for_allowed_extra__ := {"allowed": true}
 	}
 
 	input := make(map[string]interface{})
-	results, err := policy.enforce("__fixture_for_allowed_extra__", input)
+	results, err := policy.enforce(ctx, "__fixture_for_allowed_extra__", input)
 	if err != nil {
 		t.Fatalf("enforcement produced an error: %v", err)
 	}
@@ -1947,6 +1948,29 @@ __fixture_for_allowed_extra__ := {"allowed": true}
 	}
 }
 
+func Test_Rego_No_API_Version(t *testing.T) {
+	code := "package policy"
+	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("unable to create a new Rego policy: %v", err)
+	}
+
+	err = policy.injectTestAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = policy.queryEnforcementPoint("__fixture_for_allowed_test_true__")
+
+	if err == nil {
+		t.Error("querying an enforcement point without an api_version did not produce an error")
+	}
+
+	if err.Error() != noAPIVersionError {
+		t.Errorf("querying an enforcement point without an api_version produced an incorrect error: %s", err)
+	}
+}
+
 func Test_Rego_ExecInContainerPolicy(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupRegoRunningContainerTest(p, false)
@@ -1964,7 +1988,7 @@ func Test_Rego_ExecInContainerPolicy(t *testing.T) {
 		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 		umask := container.container.User.Umask
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// getting an error means something is broken
 		if err != nil {
@@ -1997,7 +2021,7 @@ func Test_Rego_ExecInContainerPolicy_No_Matches(t *testing.T) {
 		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 		umask := container.container.User.Umask
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 		if err == nil {
 			t.Error("Test unexpectedly passed")
 			return false
@@ -2028,7 +2052,7 @@ func Test_Rego_ExecInContainerPolicy_Command_No_Match(t *testing.T) {
 		capabilities := container.container.Capabilities.toExternal()
 
 		command := generateCommand(testRand)
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2036,7 +2060,7 @@ func Test_Rego_ExecInContainerPolicy_Command_No_Match(t *testing.T) {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid command")
+		return assertDecisionJSONContains(t, err, "invalid command")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
@@ -2060,7 +2084,7 @@ func Test_Rego_ExecInContainerPolicy_Some_Env_Not_Allowed(t *testing.T) {
 		umask := container.container.User.Umask
 		capabilities := container.container.Capabilities.toExternal()
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2068,7 +2092,7 @@ func Test_Rego_ExecInContainerPolicy_Some_Env_Not_Allowed(t *testing.T) {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid env list")
+		return assertDecisionJSONContains(t, err, "invalid env list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
@@ -2093,7 +2117,7 @@ func Test_Rego_ExecInContainerPolicy_WorkingDir_No_Match(t *testing.T) {
 		umask := container.container.User.Umask
 		capabilities := container.container.Capabilities.toExternal()
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, workingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, workingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2101,7 +2125,7 @@ func Test_Rego_ExecInContainerPolicy_WorkingDir_No_Match(t *testing.T) {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid working directory")
+		return assertDecisionJSONContains(t, err, "invalid working directory")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
@@ -2127,7 +2151,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 		capabilities := copyLinuxCapabilities(container.container.Capabilities.toExternal())
 		capabilities.Bounding = superCapabilitySet(testRand, capabilities.Bounding)
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2135,7 +2159,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "capabilities don't match") {
+		if !assertDecisionJSONContains(t, err, "capabilities don't match") {
 			t.Errorf("Didn't find expected error message\n%v\n", err)
 			return false
 		}
@@ -2143,7 +2167,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 		capabilities = copyLinuxCapabilities(container.container.Capabilities.toExternal())
 		capabilities.Effective = superCapabilitySet(testRand, capabilities.Effective)
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2151,7 +2175,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "capabilities don't match") {
+		if !assertDecisionJSONContains(t, err, "capabilities don't match") {
 			t.Errorf("Didn't find expected error message\n%v\n", err)
 			return false
 		}
@@ -2159,7 +2183,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 		capabilities = copyLinuxCapabilities(container.container.Capabilities.toExternal())
 		capabilities.Inheritable = superCapabilitySet(testRand, capabilities.Inheritable)
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2167,7 +2191,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "capabilities don't match") {
+		if !assertDecisionJSONContains(t, err, "capabilities don't match") {
 			t.Errorf("Didn't find expected error message\n%v\n", err)
 			return false
 		}
@@ -2175,7 +2199,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 		capabilities = copyLinuxCapabilities(container.container.Capabilities.toExternal())
 		capabilities.Permitted = superCapabilitySet(testRand, capabilities.Permitted)
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2183,7 +2207,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "capabilities don't match") {
+		if !assertDecisionJSONContains(t, err, "capabilities don't match") {
 			t.Errorf("Didn't find expected error message\n%v\n", err)
 			return false
 		}
@@ -2191,7 +2215,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 		capabilities = copyLinuxCapabilities(container.container.Capabilities.toExternal())
 		capabilities.Ambient = superCapabilitySet(testRand, capabilities.Ambient)
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2199,7 +2223,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_No_Match(t *testing.T) {
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "capabilities don't match") {
+		if !assertDecisionJSONContains(t, err, "capabilities don't match") {
 			t.Errorf("Didn't find expected error message\n%v\n", err)
 			return false
 		}
@@ -2226,13 +2250,13 @@ func Test_Rego_ExecInContainerPolicy_CapabilitiesIsNil(t *testing.T) {
 	groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 	umask := container.container.User.Umask
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, nil)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(constraints.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, nil)
 
 	if err == nil {
 		t.Fatal("Unexpected success with nil capabilities")
 	}
 
-	if !strings.Contains(err.Error(), "capabilities is nil") {
+	if err.Error() != capabilitiesNilError {
 		t.Fatal("No error message given for denial by capability being nil")
 	}
 }
@@ -2259,7 +2283,7 @@ func Test_Rego_ExecInContainerPolicy_CapabilitiesAreEmpty(t *testing.T) {
 	groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 	umask := container.container.User.Umask
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(constraints.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 	if err != nil {
 		t.Fatal("Unexpected failure")
@@ -2292,7 +2316,7 @@ func Test_Rego_ExecInContainerPolicy_Capabilities_Drop(t *testing.T) {
 		capabilities.Permitted = append(capabilities.Permitted, extraCapabilities.Permitted...)
 		capabilities.Ambient = append(capabilities.Ambient, extraCapabilities.Ambient...)
 
-		_, actual, _, err := tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, actual, _, err := tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		if err != nil {
 			t.Errorf("Expected exec in container to be allowed. It wasn't for extra capabilities: %v", err)
@@ -2355,7 +2379,7 @@ func Test_Rego_ExecInContainerPolicy_DropEnvs(t *testing.T) {
 		groups := buildGroupIDNamesFromUser(container.container.User, testRand)
 		umask := container.container.User.Umask
 
-		actual, _, _, err := tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		actual, _, _, err := tc.policy.EnforceExecInContainerPolicy(gc.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		if err != nil {
 			t.Errorf("expected exec in container process to be allowed. It wasn't: %v", err)
@@ -2420,21 +2444,21 @@ exec_external := {
 		seccomp := ""
 
 		envList := generateEnvs(envSet)
-		toKeep, _, _, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{}, false, true, user, nil, "", capabilities, seccomp)
+		toKeep, _, _, err := policy.EnforceCreateContainerPolicy(gc.ctx, "", "", []string{}, envList, "", []oci.Mount{}, false, true, user, nil, "", capabilities, seccomp)
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from create_container")
 			return false
 		}
 
 		envList = generateEnvs(envSet)
-		toKeep, _, _, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "", true, user, nil, "", capabilities)
+		toKeep, _, _, err = policy.EnforceExecInContainerPolicy(gc.ctx, "", []string{}, envList, "", true, user, nil, "", capabilities)
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from exec_in_container")
 			return false
 		}
 
 		envList = generateEnvs(envSet)
-		toKeep, _, err = policy.EnforceExecExternalProcessPolicy([]string{}, envList, "")
+		toKeep, _, err = policy.EnforceExecExternalProcessPolicy(gc.ctx, []string{}, envList, "")
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from exec_external")
 			return false
@@ -2471,24 +2495,25 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
+	ctx := context.Background()
 	user := generateIDName(testRand)
 	capabilities := &oci.LinuxCapabilities{}
 	seccomp := ""
-	_, _, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false, true, user, nil, "", capabilities, seccomp)
+	_, _, _, err = policy.EnforceCreateContainerPolicy(ctx, "", "", []string{}, []string{}, "", []oci.Mount{}, false, true, user, nil, "", capabilities, seccomp)
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received map[string]interface {}" {
 		t.Errorf("incorrected error message from call to create_container: %v", err)
 	}
 
-	_, _, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "", true, user, nil, "", capabilities)
+	_, _, _, err = policy.EnforceExecInContainerPolicy(ctx, "", []string{}, []string{}, "", true, user, nil, "", capabilities)
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received string" {
 		t.Errorf("incorrected error message from call to exec_in_container: %v", err)
 	}
 
-	_, _, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
+	_, _, err = policy.EnforceExecExternalProcessPolicy(ctx, []string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_external to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received bool" {
@@ -2519,25 +2544,26 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
+	ctx := context.Background()
 	user := generateIDName(testRand)
 	capabilities := &oci.LinuxCapabilities{}
 	seccomp := ""
 
-	_, _, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{}, false, true, user, nil, "", capabilities, seccomp)
+	_, _, _, err = policy.EnforceCreateContainerPolicy(ctx, "", "", []string{}, []string{}, "", []oci.Mount{}, false, true, user, nil, "", capabilities, seccomp)
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received json.Number" {
 		t.Errorf("incorrected error message from call to create_container: %v", err)
 	}
 
-	_, _, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "", true, user, nil, "", capabilities)
+	_, _, _, err = policy.EnforceExecInContainerPolicy(ctx, "", []string{}, []string{}, "", true, user, nil, "", capabilities)
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received bool" {
 		t.Errorf("incorrected error message from call to exec_in_container: %v", err)
 	}
 
-	_, _, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
+	_, _, err = policy.EnforceExecExternalProcessPolicy(ctx, []string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_external to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received []interface {}" {
@@ -2570,7 +2596,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 			}
 		}
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
 		if err == nil {
@@ -2597,7 +2623,7 @@ func Test_Rego_ExecExternalProcessPolicy(t *testing.T) {
 		process := selectExternalProcessFromConstraints(p, testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(p.ctx, process.command, envList, process.workingDir)
 		if err != nil {
 			t.Error("Policy enforcement unexpectedly was denied")
 			return false
@@ -2622,7 +2648,7 @@ func Test_Rego_ExecExternalProcessPolicy_No_Matches(t *testing.T) {
 		process := generateExternalProcess(testRand)
 		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(p.ctx, process.command, envList, process.workingDir)
 		if err == nil {
 			t.Error("Policy was unexpectedly not enforced")
 			return false
@@ -2648,13 +2674,13 @@ func Test_Rego_ExecExternalProcessPolicy_Command_No_Match(t *testing.T) {
 		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
 		command := generateCommand(testRand)
 
-		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(command, envList, process.workingDir)
+		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(p.ctx, command, envList, process.workingDir)
 		if err == nil {
 			t.Error("Policy was unexpectedly not enforced")
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid command")
+		return assertDecisionJSONContains(t, err, "invalid command")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -2673,13 +2699,13 @@ func Test_Rego_ExecExternalProcessPolicy_Some_Env_Not_Allowed(t *testing.T) {
 		process := selectExternalProcessFromConstraints(p, testRand)
 		envList := generateEnvironmentVariables(testRand)
 
-		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(p.ctx, process.command, envList, process.workingDir)
 		if err == nil {
 			t.Error("Policy was unexpectedly not enforced")
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid env list")
+		return assertDecisionJSONContains(t, err, "invalid env list")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -2699,13 +2725,13 @@ func Test_Rego_ExecExternalProcessPolicy_WorkingDir_No_Match(t *testing.T) {
 		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
 		workingDir := generateWorkingDir(testRand)
 
-		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, workingDir)
+		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(p.ctx, process.command, envList, workingDir)
 		if err == nil {
 			t.Error("Policy was unexpectedly not enforced")
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid working directory")
+		return assertDecisionJSONContains(t, err, "invalid working directory")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -2730,7 +2756,7 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs(t *testing.T) {
 
 		envList := append(expected, extraEnvs...)
 
-		actual, _, err := tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		actual, _, err := tc.policy.EnforceExecExternalProcessPolicy(gc.ctx, process.command, envList, process.workingDir)
 
 		if err != nil {
 			t.Errorf("expected exec in container process to be allowed. It wasn't: %v", err)
@@ -2781,7 +2807,7 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs_Multiple(t *testing.T) {
 	envList := append(envs0, envs1...)
 	envList = append(envList, envs2...)
 
-	actual, _, err := policy.EnforceExecExternalProcessPolicy(process2.command, envList, process2.workingDir)
+	actual, _, err := policy.EnforceExecExternalProcessPolicy(gc.ctx, process2.command, envList, process2.workingDir)
 
 	// getting an error means something is broken
 	if err != nil {
@@ -2831,7 +2857,7 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs_Multiple_NoMatch(t *testing.T)
 	envList := append(envs0, envs1[:extraLen]...)
 	envList = append(envList, envs2[:extraLen]...)
 
-	actual, _, err := policy.EnforceExecExternalProcessPolicy(process2.command, envList, process2.workingDir)
+	actual, _, err := policy.EnforceExecExternalProcessPolicy(gc.ctx, process2.command, envList, process2.workingDir)
 
 	// not getting an error means something is broken
 	if err == nil {
@@ -2853,7 +2879,7 @@ func Test_Rego_ShutdownContainerPolicy_Running_Container(t *testing.T) {
 
 	container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
 
-	err = tc.policy.EnforceShutdownContainerPolicy(container.containerID)
+	err = tc.policy.EnforceShutdownContainerPolicy(p.ctx, container.containerID)
 	if err != nil {
 		t.Fatal("Expected shutdown of running container to be allowed, it wasn't")
 	}
@@ -2869,7 +2895,7 @@ func Test_Rego_ShutdownContainerPolicy_Not_Running_Container(t *testing.T) {
 
 	notRunningContainerID := testDataGenerator.uniqueContainerID()
 
-	err = tc.policy.EnforceShutdownContainerPolicy(notRunningContainerID)
+	err = tc.policy.EnforceShutdownContainerPolicy(p.ctx, notRunningContainerID)
 	if err == nil {
 		t.Fatal("Expected shutdown of not running container to be denied, it wasn't")
 	}
@@ -2898,7 +2924,7 @@ func Test_Rego_SignalContainerProcessPolicy_InitProcess_Allowed(t *testing.T) {
 		}
 
 		signal := selectSignalFromSignals(testRand, hasAllowedSignals.Signals)
-		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, true, hasAllowedSignals.Command)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(p.ctx, containerID, signal, true, hasAllowedSignals.Command)
 
 		if err != nil {
 			t.Errorf("Signal init process unexpectedly failed: %v", err)
@@ -2937,7 +2963,7 @@ func Test_Rego_SignalContainerProcessPolicy_InitProcess_Not_Allowed(t *testing.T
 		}
 
 		signal := generateSignal(testRand)
-		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, true, hasNoAllowedSignals.Command)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(p.ctx, containerID, signal, true, hasNoAllowedSignals.Command)
 
 		if err == nil {
 			t.Errorf("Signal init process unexpectedly passed: %v", err)
@@ -2975,7 +3001,7 @@ func Test_Rego_SignalContainerProcessPolicy_InitProcess_Bad_ContainerID(t *testi
 
 		signal := selectSignalFromSignals(testRand, hasAllowedSignals.Signals)
 		badContainerID := generateContainerID(testRand)
-		err = tc.policy.EnforceSignalContainerProcessPolicy(badContainerID, signal, true, hasAllowedSignals.Command)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(p.ctx, badContainerID, signal, true, hasAllowedSignals.Command)
 
 		if err == nil {
 			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
@@ -3023,7 +3049,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Allowed(t *testing.T) {
 		umask := containerUnderTest.User.Umask
 		capabilities := containerUnderTest.Capabilities.toExternal()
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -3031,7 +3057,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Allowed(t *testing.T) {
 
 		signal := selectSignalFromSignals(testRand, processUnderTest.Signals)
 
-		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, false, processUnderTest.Command)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(p.ctx, containerID, signal, false, processUnderTest.Command)
 		if err != nil {
 			t.Errorf("Signal init process unexpectedly failed: %v", err)
 			return false
@@ -3078,7 +3104,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Not_Allowed(t *testing.T
 		umask := containerUnderTest.User.Umask
 		capabilities := containerUnderTest.Capabilities.toExternal()
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -3086,7 +3112,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Not_Allowed(t *testing.T
 
 		signal := generateSignal(testRand)
 
-		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, false, processUnderTest.Command)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(p.ctx, containerID, signal, false, processUnderTest.Command)
 		if err == nil {
 			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
 			return false
@@ -3133,7 +3159,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_Command(t *testing.T
 		umask := containerUnderTest.User.Umask
 		capabilities := containerUnderTest.Capabilities.toExternal()
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -3142,7 +3168,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_Command(t *testing.T
 		signal := selectSignalFromSignals(testRand, processUnderTest.Signals)
 		badCommand := generateCommand(testRand)
 
-		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, false, badCommand)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(p.ctx, containerID, signal, false, badCommand)
 		if err == nil {
 			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
 			return false
@@ -3189,7 +3215,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID(t *testi
 		umask := containerUnderTest.User.Umask
 		capabilities := containerUnderTest.Capabilities.toExternal()
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir, containerUnderTest.NoNewPrivileges, user, groups, umask, &capabilities)
 		if err != nil {
 			t.Errorf("Unable to exec process for test: %v", err)
 			return false
@@ -3198,7 +3224,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID(t *testi
 		signal := selectSignalFromSignals(testRand, processUnderTest.Signals)
 		badContainerID := generateContainerID(testRand)
 
-		err = tc.policy.EnforceSignalContainerProcessPolicy(badContainerID, signal, false, processUnderTest.Command)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(p.ctx, badContainerID, signal, false, processUnderTest.Command)
 		if err == nil {
 			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
 			return false
@@ -3220,12 +3246,13 @@ func Test_Rego_Plan9MountPolicy(t *testing.T) {
 		t.Fatalf("unable to setup test: %v", err)
 	}
 
-	err = tc.policy.EnforcePlan9MountPolicy(tc.uvmPathForShare)
+	err = tc.policy.EnforcePlan9MountPolicy(gc.ctx, tc.uvmPathForShare)
 	if err != nil {
 		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
 	}
 
 	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		gc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -3262,12 +3289,13 @@ func Test_Rego_Plan9MountPolicy_No_Matches(t *testing.T) {
 		mount = generateUVMPathForShare(testRand, tc.containerID)
 	}
 
-	err = tc.policy.EnforcePlan9MountPolicy(mount)
+	err = tc.policy.EnforcePlan9MountPolicy(gc.ctx, mount)
 	if err != nil {
 		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
 	}
 
 	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		gc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -3297,7 +3325,7 @@ func Test_Rego_Plan9MountPolicy_Invalid(t *testing.T) {
 	}
 
 	mount := randString(testRand, maxGeneratedMountSourceLength)
-	err = tc.policy.EnforcePlan9MountPolicy(mount)
+	err = tc.policy.EnforcePlan9MountPolicy(gc.ctx, mount)
 	if err == nil {
 		t.Fatal("Policy enforcement unexpectedly was allowed", err)
 	}
@@ -3311,17 +3339,18 @@ func Test_Rego_Plan9UnmountPolicy(t *testing.T) {
 		t.Fatalf("unable to setup test: %v", err)
 	}
 
-	err = tc.policy.EnforcePlan9MountPolicy(tc.uvmPathForShare)
+	err = tc.policy.EnforcePlan9MountPolicy(gc.ctx, tc.uvmPathForShare)
 	if err != nil {
 		t.Fatalf("Couldn't mount as part of setup: %v", err)
 	}
 
-	err = tc.policy.EnforcePlan9UnmountPolicy(tc.uvmPathForShare)
+	err = tc.policy.EnforcePlan9UnmountPolicy(gc.ctx, tc.uvmPathForShare)
 	if err != nil {
 		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
 	}
 
 	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		gc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -3351,13 +3380,13 @@ func Test_Rego_Plan9UnmountPolicy_No_Matches(t *testing.T) {
 	}
 
 	mount := generateUVMPathForShare(testRand, tc.containerID)
-	err = tc.policy.EnforcePlan9MountPolicy(mount)
+	err = tc.policy.EnforcePlan9MountPolicy(gc.ctx, mount)
 	if err != nil {
 		t.Fatalf("Couldn't mount as part of setup: %v", err)
 	}
 
 	badMount := randString(testRand, maxPlan9MountTargetLength)
-	err = tc.policy.EnforcePlan9UnmountPolicy(badMount)
+	err = tc.policy.EnforcePlan9UnmountPolicy(gc.ctx, badMount)
 	if err == nil {
 		t.Fatalf("Policy enforcement unexpectedly was allowed")
 	}
@@ -3371,7 +3400,7 @@ func Test_Rego_GetPropertiesPolicy_On(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceGetPropertiesPolicy()
+		err = tc.policy.EnforceGetPropertiesPolicy(constraints.ctx)
 		if err != nil {
 			t.Error("Policy enforcement unexpectedly was denied")
 			return false
@@ -3393,7 +3422,7 @@ func Test_Rego_GetPropertiesPolicy_Off(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceGetPropertiesPolicy()
+		err = tc.policy.EnforceGetPropertiesPolicy(constraints.ctx)
 		if err == nil {
 			t.Error("Policy enforcement unexpectedly was allowed")
 			return false
@@ -3415,7 +3444,7 @@ func Test_Rego_DumpStacksPolicy_On(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceDumpStacksPolicy()
+		err = tc.policy.EnforceDumpStacksPolicy(constraints.ctx)
 		if err != nil {
 			t.Errorf("Policy enforcement unexpectedly was denied: %v", err)
 			return false
@@ -3437,7 +3466,7 @@ func Test_Rego_DumpStacksPolicy_Off(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceDumpStacksPolicy()
+		err = tc.policy.EnforceDumpStacksPolicy(constraints.ctx)
 		if err == nil {
 			t.Error("Policy enforcement unexpectedly was allowed")
 			return false
@@ -3460,7 +3489,7 @@ func Test_EnforceRuntimeLogging_Allowed(t *testing.T) {
 		t.Fatalf("unable to setup test: %v", err)
 	}
 
-	err = tc.policy.EnforceRuntimeLoggingPolicy()
+	err = tc.policy.EnforceRuntimeLoggingPolicy(gc.ctx)
 	if err != nil {
 		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
 	}
@@ -3475,7 +3504,7 @@ func Test_EnforceRuntimeLogging_Not_Allowed(t *testing.T) {
 		t.Fatalf("unable to setup test: %v", err)
 	}
 
-	err = tc.policy.EnforceRuntimeLoggingPolicy()
+	err = tc.policy.EnforceRuntimeLoggingPolicy(gc.ctx)
 	if err == nil {
 		t.Fatalf("Policy enforcement unexpectedly was allowed")
 	}
@@ -3492,7 +3521,7 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
 
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -3504,7 +3533,7 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 			return false
 		}
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
 			container.sandboxID,
 			containerID,
 			copyStrings(container.container.Command),
@@ -3549,13 +3578,13 @@ func Test_Rego_LoadFragment_Fragment(t *testing.T) {
 		fragment := tc.fragments[0]
 		subFragment := tc.subFragments[0]
 
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
 		if err != nil {
 			t.Error("unable to load sub-fragment from fragment: %w", err)
 			return false
@@ -3592,14 +3621,14 @@ func Test_Rego_LoadFragment_ExternalProcess(t *testing.T) {
 		fragment := tc.fragments[0]
 		process := tc.externalProcesses[0]
 
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
 		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
-		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(p.ctx, process.command, envList, process.workingDir)
 		if err != nil {
 			t.Error("unable to execute external process from fragment: %w", err)
 			return false
@@ -3628,13 +3657,13 @@ func Test_Rego_LoadFragment_BadIssuer(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		issuer := testDataGenerator.uniqueFragmentIssuer()
-		err = tc.policy.LoadFragment(issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, issuer, fragment.info.feed, fragment.code)
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad issuer")
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "invalid fragment issuer") {
+		if !assertDecisionJSONContains(t, err, "invalid fragment issuer") {
 			t.Error("expected error string to contain 'invalid fragment issuer'")
 			return false
 		}
@@ -3662,13 +3691,13 @@ func Test_Rego_LoadFragment_BadFeed(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		feed := testDataGenerator.uniqueFragmentFeed()
-		err = tc.policy.LoadFragment(fragment.info.issuer, feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, feed, fragment.code)
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad feed")
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "invalid fragment feed") {
+		if !assertDecisionJSONContains(t, err, "invalid fragment feed") {
 			t.Error("expected error string to contain 'invalid fragment feed'")
 			return false
 		}
@@ -3695,13 +3724,13 @@ func Test_Rego_LoadFragment_InvalidSVN(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid svn")
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "fragment svn is below the specified minimum") {
+		if !assertDecisionJSONContains(t, err, "fragment svn is below the specified minimum") {
 			t.Error("expected error string to contain 'fragment svn is below the specified minimum'")
 			return false
 		}
@@ -3728,20 +3757,20 @@ func Test_Rego_LoadFragment_Fragment_InvalidSVN(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
 		subFragment := tc.subFragments[0]
-		err = tc.policy.LoadFragment(subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
 		if err == nil {
 			t.Error("expected to be unable to load subfragment due to invalid svn")
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "fragment svn is below the specified minimum") {
+		if !assertDecisionJSONContains(t, err, "fragment svn is below the specified minimum") {
 			t.Error("expected error string to contain 'fragment svn is below the specified minimum'")
 			return false
 		}
@@ -3780,7 +3809,7 @@ func Test_Rego_LoadFragment_SemverVersion(t *testing.T) {
 		fragmentConstraints.svn = mustIncrementSVN(p.fragments[0].minimumSVN)
 		code := fragmentConstraints.toFragment().marshalRego()
 
-		err = policy.LoadFragment(issuer, feed, code)
+		err = policy.LoadFragment(p.ctx, issuer, feed, code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -3808,13 +3837,13 @@ func Test_Rego_LoadFragment_SVNMismatch(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid version")
 			return false
 		}
 
-		if !strings.Contains(err.Error(), "fragment svn and the specified minimum are different types") {
+		if !assertDecisionJSONContains(t, err, "fragment svn and the specified minimum are different types") {
 			t.Error("expected error string to contain 'fragment svn and the specified minimum are different types'")
 			return false
 		}
@@ -3841,7 +3870,7 @@ func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 		}
 
 		for _, fragment := range tc.fragments {
-			err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+			err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 			if err != nil {
 				t.Error("unable to load fragment: %w", err)
 				return false
@@ -3855,7 +3884,7 @@ func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 				return false
 			}
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
 				container.sandboxID,
 				containerID,
 				copyStrings(container.container.Command),
@@ -3894,7 +3923,7 @@ func Test_Rego_LoadFragment_TwoFeeds(t *testing.T) {
 		}
 
 		for _, fragment := range tc.fragments {
-			err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+			err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 			if err != nil {
 				t.Error("unable to load fragment: %w", err)
 				return false
@@ -3908,7 +3937,7 @@ func Test_Rego_LoadFragment_TwoFeeds(t *testing.T) {
 				return false
 			}
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
 				container.sandboxID,
 				containerID,
 				copyStrings(container.container.Command),
@@ -3946,13 +3975,13 @@ func Test_Rego_LoadFragment_SameFeedTwice(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.LoadFragment(tc.fragments[0].info.issuer, tc.fragments[0].info.feed, tc.fragments[0].code)
+		err = tc.policy.LoadFragment(p.ctx, tc.fragments[0].info.issuer, tc.fragments[0].info.feed, tc.fragments[0].code)
 		if err != nil {
 			t.Error("unable to load fragment the first time: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(tc.fragments[1].info.issuer, tc.fragments[1].info.feed, tc.fragments[1].code)
+		err = tc.policy.LoadFragment(p.ctx, tc.fragments[1].info.issuer, tc.fragments[1].info.feed, tc.fragments[1].code)
 		if err != nil {
 			t.Error("expected to be able to load the same issuer/feed twice: %w", err)
 			return false
@@ -3965,7 +3994,7 @@ func Test_Rego_LoadFragment_SameFeedTwice(t *testing.T) {
 				return false
 			}
 
-			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+			_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
 				container.sandboxID,
 				containerID,
 				copyStrings(container.container.Command),
@@ -4006,7 +4035,7 @@ func Test_Rego_LoadFragment_ExcludedContainer(t *testing.T) {
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
 
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4037,13 +4066,13 @@ func Test_Rego_LoadFragment_ExcludedFragment(t *testing.T) {
 		fragment := tc.fragments[0]
 		subFragment := tc.subFragments[0]
 
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
 		if err == nil {
 			t.Error("expected to be unable to load a sub-fragment from a fragment")
 			return false
@@ -4068,7 +4097,7 @@ func Test_Rego_LoadFragment_ExcludedExternalProcess(t *testing.T) {
 		fragment := tc.fragments[0]
 		process := tc.externalProcesses[0]
 
-		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4076,7 +4105,7 @@ func Test_Rego_LoadFragment_ExcludedExternalProcess(t *testing.T) {
 
 		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
 
-		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		_, _, err = tc.policy.EnforceExecExternalProcessPolicy(p.ctx, process.command, envList, process.workingDir)
 		if err == nil {
 			t.Error("expected to be unable to execute external process from a fragment")
 			return false
@@ -4091,6 +4120,7 @@ func Test_Rego_LoadFragment_ExcludedExternalProcess(t *testing.T) {
 }
 
 func Test_Rego_LoadFragment_FragmentNamespace(t *testing.T) {
+	ctx := context.Background()
 	deviceHash := generateRootHash(testRand)
 	key := randVariableString(testRand, 32)
 	value := randVariableString(testRand, 32)
@@ -4134,12 +4164,12 @@ mount_device := data.fragment.mount_device
 		t.Fatalf("unable to create Rego policy: %v", err)
 	}
 
-	err = policy.LoadFragment(issuer, feed, fragmentCode)
+	err = policy.LoadFragment(ctx, issuer, feed, fragmentCode)
 	if err != nil {
 		t.Fatalf("unable to load fragment: %v", err)
 	}
 
-	err = policy.EnforceDeviceMountPolicy("/mnt/foo", deviceHash)
+	err = policy.EnforceDeviceMountPolicy(ctx, "/mnt/foo", deviceHash)
 	if err != nil {
 		t.Fatalf("unable to mount device: %v", err)
 	}
@@ -4188,7 +4218,7 @@ func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
 			}
 
 			scratchPath := generateMountTarget(testRand)
-			err = smConfig.policy.EnforceScratchMountPolicy(scratchPath, tc.encrypted)
+			err = smConfig.policy.EnforceScratchMountPolicy(gc.ctx, scratchPath, tc.encrypted)
 			if tc.failureExpected {
 				if err == nil {
 					t.Fatal("policy enforcement should've been denied")
@@ -4235,12 +4265,12 @@ func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
 			}
 
 			scratchPath := generateMountTarget(testRand)
-			err = smConfig.policy.EnforceScratchMountPolicy(scratchPath, tc.encrypted)
+			err = smConfig.policy.EnforceScratchMountPolicy(gc.ctx, scratchPath, tc.encrypted)
 			if err != nil {
 				t.Fatalf("scratch_mount policy enforcement unexpectedly was denied: %s", err)
 			}
 
-			err = smConfig.policy.EnforceScratchUnmountPolicy(scratchPath)
+			err = smConfig.policy.EnforceScratchUnmountPolicy(gc.ctx, scratchPath)
 			if err != nil {
 				t.Fatalf("scratch_unmount policy enforcement unexpectedly was denied: %s", err)
 			}
@@ -4259,6 +4289,7 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 	}
 
 	_, _, allow_stdio_access, err := tc.policy.EnforceCreateContainerPolicy(
+		gc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -4284,6 +4315,7 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 
 	// stdio access is inherited from the container and should be the same
 	_, _, allow_stdio_access, err = tc.policy.EnforceExecInContainerPolicy(
+		gc.ctx,
 		tc.containerID,
 		gc.containers[0].ExecProcesses[0].Command,
 		tc.envList,
@@ -4305,6 +4337,7 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 
 	envList := buildEnvironmentVariablesFromEnvRules(gc.externalProcesses[0].envRules, testRand)
 	_, allow_stdio_access, err = tc.policy.EnforceExecExternalProcessPolicy(
+		gc.ctx,
 		gc.externalProcesses[0].command,
 		envList,
 		gc.externalProcesses[0].workingDir,
@@ -4328,6 +4361,7 @@ func Test_Rego_EnforeCreateContainerPolicy_StdioAccess_NotAllowed(t *testing.T) 
 	}
 
 	_, _, allow_stdio_access, err := tc.policy.EnforceCreateContainerPolicy(
+		tc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -4376,6 +4410,7 @@ func Test_Rego_Container_StdioAccess_NotDecidable(t *testing.T) {
 	}
 
 	_, _, allow_stdio_access, err := tc.policy.EnforceCreateContainerPolicy(
+		tc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -4413,6 +4448,7 @@ func Test_Rego_ExecExternal_StdioAccess_NotAllowed(t *testing.T) {
 
 	envList := buildEnvironmentVariablesFromEnvRules(gc.externalProcesses[0].envRules, testRand)
 	_, allow_stdio_access, err := policy.EnforceExecExternalProcessPolicy(
+		gc.ctx,
 		gc.externalProcesses[0].command,
 		envList,
 		gc.externalProcesses[0].workingDir,
@@ -4436,6 +4472,7 @@ func Test_Rego_EnforceCreateContainerPolicy_AllowElevatedAllowsPrivilegedContain
 	}
 
 	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -4465,6 +4502,7 @@ func Test_Rego_EnforceCreateContainerPolicy_AllowElevatedAllowsUnprivilegedConta
 	}
 
 	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -4494,6 +4532,7 @@ func Test_Rego_EnforceCreateContainerPolicy_NoAllowElevatedDenysPrivilegedContai
 	}
 
 	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -4523,6 +4562,7 @@ func Test_Rego_EnforceCreateContainerPolicy_NoAllowElevatedAllowsUnprivilegedCon
 	}
 
 	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(
+		tc.ctx,
 		tc.sandboxID,
 		tc.containerID,
 		tc.argList,
@@ -4741,16 +4781,12 @@ func Test_FrameworkVersion_Missing(t *testing.T) {
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(tc.policy, c)
 
-	err = tc.policy.EnforceOverlayMountPolicy(containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = tc.policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
 	if err == nil {
 		t.Error("unexpected success. Missing framework_version should trigger an error.")
 	}
 
-	actual := err.Error()
-	expected := fmt.Sprintf("framework_version is missing. Current version: %s", frameworkVersion)
-	if !strings.Contains(actual, expected) {
-		t.Errorf("missing expected error message: %s", expected)
-	}
+	assertDecisionJSONContains(t, err, fmt.Sprintf("framework_version is missing. Current version: %s", frameworkVersion))
 }
 
 func Test_Fragment_FrameworkVersion_Missing(t *testing.T) {
@@ -4761,16 +4797,12 @@ func Test_Fragment_FrameworkVersion_Missing(t *testing.T) {
 	}
 
 	fragment := tc.fragments[0]
-	err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+	err = tc.policy.LoadFragment(gc.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 	if err == nil {
 		t.Error("unexpected success. Missing framework_version should trigger an error.")
 	}
 
-	actual := err.Error()
-	expected := fmt.Sprintf("fragment framework_version is missing. Current version: %s", frameworkVersion)
-	if !strings.Contains(actual, expected) {
-		t.Errorf("missing expected error message: %s", expected)
-	}
+	assertDecisionJSONContains(t, err, fmt.Sprintf("fragment framework_version is missing. Current version: %s", frameworkVersion))
 }
 
 func Test_FrameworkVersion_In_Future(t *testing.T) {
@@ -4785,16 +4817,12 @@ func Test_FrameworkVersion_In_Future(t *testing.T) {
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(tc.policy, c)
 
-	err = tc.policy.EnforceOverlayMountPolicy(containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = tc.policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
 	if err == nil {
 		t.Error("unexpected success. Future framework_version should trigger an error.")
 	}
 
-	actual := err.Error()
-	expected := fmt.Sprintf("framework_version is ahead of the current version: 100.0.0 > %s", frameworkVersion)
-	if !strings.Contains(actual, expected) {
-		t.Errorf("missing expected error message: %s", expected)
-	}
+	assertDecisionJSONContains(t, err, fmt.Sprintf("framework_version is ahead of the current version: 100.0.0 is greater than %s", frameworkVersion))
 }
 
 func Test_Fragment_FrameworkVersion_In_Future(t *testing.T) {
@@ -4805,16 +4833,12 @@ func Test_Fragment_FrameworkVersion_In_Future(t *testing.T) {
 	}
 
 	fragment := tc.fragments[0]
-	err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+	err = tc.policy.LoadFragment(gc.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
 	if err == nil {
 		t.Error("unexpected success. Future framework_version should trigger an error.")
 	}
 
-	actual := err.Error()
-	expected := fmt.Sprintf("fragment framework_version is ahead of the current version: 100.0.0 > %s", frameworkVersion)
-	if !strings.Contains(actual, expected) {
-		t.Errorf("missing expected error message: %s", expected)
-	}
+	assertDecisionJSONContains(t, err, fmt.Sprintf("fragment framework_version is ahead of the current version: 100.0.0 is greater than %s", frameworkVersion))
 }
 
 func Test_Rego_MissingEnvList(t *testing.T) {
@@ -4832,6 +4856,7 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 		t.Fatalf("error compiling the rego policy: %v", err)
 	}
 
+	ctx := context.Background()
 	sandboxID := generateSandboxID(testRand)
 	containerID := generateContainerID(testRand)
 	command := generateCommand(testRand)
@@ -4846,6 +4871,7 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 	seccomp := ""
 
 	actualEnvs, _, _, err := policy.EnforceCreateContainerPolicy(
+		ctx,
 		sandboxID,
 		containerID,
 		command,
@@ -4869,7 +4895,7 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 		t.Error("invalid envList returned from EnforceCreateContainerPolicy")
 	}
 
-	actualEnvs, _, _, err = policy.EnforceExecInContainerPolicy(containerID, command, expectedEnvs, workingDir, noNewPrivileges, user, groups, umask, capabilities)
+	actualEnvs, _, _, err = policy.EnforceExecInContainerPolicy(ctx, containerID, command, expectedEnvs, workingDir, noNewPrivileges, user, groups, umask, capabilities)
 
 	if err != nil {
 		t.Errorf("unexpected error when calling EnforceExecInContainerPolicy: %v", err)
@@ -4879,7 +4905,7 @@ func Test_Rego_MissingEnvList(t *testing.T) {
 		t.Error("invalid envList returned from EnforceExecInContainerPolicy")
 	}
 
-	actualEnvs, _, err = policy.EnforceExecExternalProcessPolicy(command, expectedEnvs, workingDir)
+	actualEnvs, _, err = policy.EnforceExecExternalProcessPolicy(ctx, command, expectedEnvs, workingDir)
 
 	if err != nil {
 		t.Errorf("unexpected error when calling EnfForceExecExternalProcessPolicy: %v", err)
@@ -4906,18 +4932,18 @@ func Test_Rego_EnvListGetsRedacted(t *testing.T) {
 	envVar := "FOO=BAR"
 	envList = append(envList, envVar)
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, "bunk", tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, "bunk", tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	// not getting an error means something is broken
 	if err == nil {
 		t.Fatal("Unexpected success when enforcing policy")
 	}
 
-	if strings.Contains(err.Error(), envVar) {
+	if !assertDecisionJSONDoesNotContain(t, err, envVar) {
 		t.Fatal("EnvList wasn't redacted in error message")
 	}
 
-	if !strings.Contains(err.Error(), `FOO=\u003c\u003credacted\u003e\u003e`) {
+	if !assertDecisionJSONContains(t, err, `FOO=\u003c\u003credacted\u003e\u003e`) {
 		t.Fatal("EnvList redaction format wasn't as expected")
 	}
 }
@@ -4951,14 +4977,14 @@ func Test_Rego_EnforceCreateContainer_ConflictingAllowStdioAccessHasErrorMessage
 		t.Fatal(err)
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	// not getting an error means something is broken
 	if err == nil {
 		t.Fatalf("Unexpected success when enforcing policy")
 	}
 
-	if !strings.Contains(err.Error(), "containers only distinguishable by allow_stdio_access") {
+	if !assertDecisionJSONContains(t, err, "containers only distinguishable by allow_stdio_access") {
 		t.Fatal("No error message given for conflicting allow_stdio_access on otherwise 'same' containers")
 	}
 }
@@ -4985,12 +5011,12 @@ func Test_Rego_ExecExternalProcessPolicy_ConflictingAllowStdioAccessHasErrorMess
 
 	envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
 
-	_, _, err = policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+	_, _, err = policy.EnforceExecExternalProcessPolicy(constraints.ctx, process.command, envList, process.workingDir)
 	if err == nil {
 		t.Fatal("Policy was unexpectedly not enforced")
 	}
 
-	if !strings.Contains(err.Error(), "external processes only distinguishable by allow_stdio_access") {
+	if !assertDecisionJSONContains(t, err, "external processes only distinguishable by allow_stdio_access") {
 		t.Fatal("No error message given for conflicting allow_stdio_access on otherwise 'same' external processes")
 	}
 }
@@ -5018,14 +5044,14 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 		}
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	// not getting an error means something is broken
 	if err == nil {
 		t.Fatalf("Unexpected success when enforcing policy")
 	}
 
-	if !strings.Contains(err.Error(), "missing required environment variable") {
+	if !assertDecisionJSONContains(t, err, "missing required environment variable") {
 		t.Fatal("No error message given for missing required environment variable")
 	}
 }
@@ -5063,14 +5089,14 @@ func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testin
 	umask := running.container.User.Umask
 	capabilities := running.container.Capabilities.toExternal()
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(running.containerID, process.Command, envList, running.container.WorkingDir, running.container.NoNewPrivileges, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(constraints.ctx, running.containerID, process.Command, envList, running.container.WorkingDir, running.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 	// not getting an error means something is broken
 	if err == nil {
 		t.Fatal("Unexpected success when enforcing policy")
 	}
 
-	if !strings.Contains(err.Error(), "missing required environment variable") {
+	if !assertDecisionJSONContains(t, err, "missing required environment variable") {
 		fmt.Print(err.Error())
 		t.Fatal("No error message given for missing required environment variable")
 	}
@@ -5108,12 +5134,12 @@ func Test_Rego_ExecExternalProcessPolicy_RequiredEnvMissingHasErrorMessage(t *te
 		}
 	}
 
-	_, _, err = policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+	_, _, err = policy.EnforceExecExternalProcessPolicy(constraints.ctx, process.command, envList, process.workingDir)
 	if err == nil {
 		t.Fatal("Policy was unexpectedly not enforced")
 	}
 
-	if !strings.Contains(err.Error(), "missing required environment variable") {
+	if !assertDecisionJSONContains(t, err, "missing required environment variable") {
 		fmt.Print(err.Error())
 		t.Fatal("No error message given for missing required environment variable")
 	}
@@ -5128,7 +5154,7 @@ func Test_Rego_EnforceContainerNoNewPrivilegesPolicy_FalseAllowsFalse(t *testing
 		t.Fatal(err)
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, false, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, false, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with false")
@@ -5144,7 +5170,7 @@ func Test_Rego_EnforceContainerNoNewPrivilegesPolicy_FalseAllowsTrue(t *testing.
 		t.Fatal(err)
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, true, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, true, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with true")
@@ -5160,13 +5186,13 @@ func Test_Rego_EnforceContainerNoNewPrivilegesPolicy_TrueDisallowsFalse(t *testi
 		t.Fatal(err)
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, false, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, false, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	if err == nil {
 		t.Fatal("Unexpected success with false")
 	}
 
-	if !strings.Contains(err.Error(), "invalid noNewPrivileges") {
+	if !assertDecisionJSONContains(t, err, "invalid noNewPrivileges") {
 		t.Fatal("Expected error message is missing")
 	}
 }
@@ -5180,7 +5206,7 @@ func Test_Rego_EnforceContainerNoNewPrivilegesPolicy_TrueAllowsTrue(t *testing.T
 		t.Fatal(err)
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, true, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, true, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with true")
@@ -5204,7 +5230,7 @@ func Test_Rego_EnforceExecInContainerNoNewPrivilegesPolicy_FalseAllowsFalse(t *t
 	umask := container.container.User.Umask
 	capabilities := container.container.Capabilities.toExternal()
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, false, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, false, user, groups, umask, &capabilities)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with false")
@@ -5228,7 +5254,7 @@ func Test_Rego_EnforceExecInContainerNoNewPrivilegesPolicy_FalseAllowsTrue(t *te
 	umask := container.container.User.Umask
 	capabilities := container.container.Capabilities.toExternal()
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, true, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, true, user, groups, umask, &capabilities)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with true")
@@ -5252,13 +5278,13 @@ func Test_Rego_EnforceExecInContainerNoNewPrivilegesPolicy_TrueDisallowsFalse(t 
 	umask := container.container.User.Umask
 	capabilities := container.container.Capabilities.toExternal()
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, false, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, false, user, groups, umask, &capabilities)
 
 	if err == nil {
 		t.Fatal("Unexpected success with false")
 	}
 
-	if !strings.Contains(err.Error(), "invalid noNewPrivileges") {
+	if !assertDecisionJSONContains(t, err, "invalid noNewPrivileges") {
 		t.Fatal("Expected error message is missing")
 	}
 }
@@ -5280,7 +5306,7 @@ func Test_Rego_EnforceExecInContainerNoNewPrivilegesPolicy_TrueAllowsTrue(t *tes
 	umask := container.container.User.Umask
 	capabilities := container.container.Capabilities.toExternal()
 
-	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, true, user, groups, umask, &capabilities)
+	_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, true, user, groups, umask, &capabilities)
 
 	if err != nil {
 		t.Fatal("Unexpected failure with true")
@@ -5297,13 +5323,13 @@ func Test_Rego_EnforceContainerUserPolicy_UserName_NoMatches(t *testing.T) {
 
 		user := generateIDName(testRand)
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid user")
+		return assertDecisionJSONContains(t, err, "invalid user")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
@@ -5321,13 +5347,13 @@ func Test_Rego_EnforceContainerUserPolicy_GroupNames_NoMatches(t *testing.T) {
 
 		groups := append(tc.groups, generateIDName(testRand))
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid user")
+		return assertDecisionJSONContains(t, err, "invalid user")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
@@ -5345,13 +5371,13 @@ func Test_Rego_EnforceContainerUserPolicy_Umask_NoMatches(t *testing.T) {
 
 		umask := "0888"
 
-		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, umask, tc.capabilities, tc.seccomp)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, umask, tc.capabilities, tc.seccomp)
 
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid user")
+		return assertDecisionJSONContains(t, err, "invalid user")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
@@ -5376,14 +5402,14 @@ func Test_Rego_EnforceExecInContainerUserPolicy_Username_NoMatches(t *testing.T)
 
 		user := generateIDName(testRand)
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid user")
+		return assertDecisionJSONContains(t, err, "invalid user")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
@@ -5409,14 +5435,14 @@ func Test_Rego_EnforceExecInContainerUserPolicy_GroupNames_NoMatches(t *testing.
 
 		groups = append(groups, generateIDName(testRand))
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid user")
+		return assertDecisionJSONContains(t, err, "invalid user")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
@@ -5444,14 +5470,14 @@ func Test_Rego_EnforceExecInContainerUserPolicy_Umask_NoMatches(t *testing.T) {
 		// generated value.
 		umask := "8888"
 
-		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
+		_, _, _, err = tc.policy.EnforceExecInContainerPolicy(p.ctx, container.containerID, process.Command, envList, container.container.WorkingDir, container.container.NoNewPrivileges, user, groups, umask, &capabilities)
 
 		// not getting an error means something is broken
 		if err == nil {
 			return false
 		}
 
-		return strings.Contains(err.Error(), "invalid user")
+		return assertDecisionJSONContains(t, err, "invalid user")
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
@@ -5476,7 +5502,7 @@ func Test_Rego_EnforceCreateContainerUserPolicy_UserIDName_Re2Match(t *testing.T
 		Name: "foo123",
 	}
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 	if err != nil {
 		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
 	}
@@ -5496,7 +5522,7 @@ func Test_Rego_EnforceCreateContainerUserPolicy_UserIDName_AnyMatch(t *testing.T
 
 	user := generateIDName(testRand)
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 	if err != nil {
 		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
 	}
@@ -5516,7 +5542,7 @@ func Test_Rego_EnforceCreateContainerUserPolicy_GroupIDName_Re2Match(t *testing.
 
 	groups := append(tc.groups, IDName{ID: "1000", Name: "foo123"})
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask, tc.capabilities, tc.seccomp)
 	if err != nil {
 		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
 	}
@@ -5536,7 +5562,7 @@ func Test_Rego_EnforceCreateContainerUserPolicy_GroupIDName_AnyMatch(t *testing.
 
 	groups := append(tc.groups, generateIDName(testRand))
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask, tc.capabilities, tc.seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, groups, tc.umask, tc.capabilities, tc.seccomp)
 	if err != nil {
 		t.Errorf("Expected container setup to be allowed. It wasn't: %v", err)
 	}
@@ -5552,10 +5578,10 @@ func Test_Rego_EnforceCreateContainerSeccompPolicy_NoMatch(t *testing.T) {
 
 	seccomp := generateRootHash(testRand)
 
-	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, seccomp)
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, seccomp)
 	if err == nil {
 		t.Error("Expected container setup to not be allowed.")
-	} else if !strings.Contains(err.Error(), "invalid seccomp") {
+	} else if !assertDecisionJSONContains(t, err, "invalid seccomp") {
 		t.Error("`invalid seccomp` missing from error message")
 	}
 }
@@ -5667,6 +5693,27 @@ func Test_Rego_APISVN(t *testing.T) {
 	} else {
 		t.Error("no result set from querying data.framework.policy_api_version")
 	}
+}
+
+func Test_Rego_NoReason(t *testing.T) {
+	code := `package policy
+
+	api_version := "0.0.1"
+
+	mount_device := {"allowed": false}
+`
+	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("unable to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+	err = policy.EnforceDeviceMountPolicy(ctx, generateMountTarget(testRand), generateRootHash(testRand))
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+
+	assertDecisionJSONContains(t, err, noReasonError)
 }
 
 //
@@ -5899,6 +5946,7 @@ type regoContainerTestConfig struct {
 	capabilities    *oci.LinuxCapabilities
 	seccomp         string
 	policy          *regoEnforcer
+	ctx             context.Context
 }
 
 func setupSimpleRegoCreateContainerTest(gc *generatedConstraints) (tc *regoContainerTestConfig, err error) {
@@ -5973,6 +6021,7 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 		capabilities:    capabilities,
 		seccomp:         seccomp,
 		policy:          policy,
+		ctx:             gc.ctx,
 	}, nil
 }
 
@@ -6009,6 +6058,7 @@ func setupRegoRunningContainerTest(gc *generatedConstraints, privileged bool) (t
 }
 
 func runContainer(enforcer *regoEnforcer, container *securityPolicyContainer, defaultMounts []mountInternal, privilegedMounts []mountInternal, privileged bool) (*regoRunningContainer, error) {
+	ctx := context.Background()
 	containerID, err := mountImageForContainer(enforcer, container)
 	if err != nil {
 		return nil, err
@@ -6050,7 +6100,7 @@ func runContainer(enforcer *regoEnforcer, container *securityPolicyContainer, de
 	}
 	seccomp := container.SeccompProfileSHA256
 
-	_, _, _, err = enforcer.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, privileged, container.NoNewPrivileges, user, groups, umask, &capabilities, seccomp)
+	_, _, _, err = enforcer.EnforceCreateContainerPolicy(ctx, sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts, privileged, container.NoNewPrivileges, user, groups, umask, &capabilities, seccomp)
 	if err != nil {
 		return nil, err
 	}
@@ -6229,6 +6279,7 @@ type regoDumpStacksTestConfig struct {
 }
 
 func mountImageForContainer(policy *regoEnforcer, container *securityPolicyContainer) (string, error) {
+	ctx := context.Background()
 	containerID := testDataGenerator.uniqueContainerID()
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(policy, container)
@@ -6237,7 +6288,7 @@ func mountImageForContainer(policy *regoEnforcer, container *securityPolicyConta
 	}
 
 	// see NOTE_TESTCOPY
-	err = policy.EnforceOverlayMountPolicy(containerID, copyStrings(layerPaths), testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(ctx, containerID, copyStrings(layerPaths), testDataGenerator.uniqueMountTarget())
 	if err != nil {
 		return "", fmt.Errorf("error mounting filesystem: %w", err)
 	}
@@ -6561,6 +6612,7 @@ func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
 		policy:          policy,
 		capabilities:    &capabilities,
 		seccomp:         seccomp,
+		ctx:             gc.ctx,
 	}, nil
 }
 
@@ -7285,4 +7337,48 @@ func assertKeyValue(object map[string]interface{}, key string, expectedValue int
 	}
 
 	return nil
+}
+
+func assertDecisionJSONContains(t *testing.T, err error, expectedValues ...string) bool {
+	if err == nil {
+		t.Errorf("expected error to contain %v but got nil", expectedValues)
+		return false
+	}
+
+	policyDecision, err := ExtractPolicyDecision(err.Error())
+	if err != nil {
+		t.Errorf("unable to extract policy decision from error: %v", err)
+		return false
+	}
+
+	for _, expected := range expectedValues {
+		if !strings.Contains(policyDecision, expected) {
+			t.Errorf("expected error to contain %q", expected)
+			return false
+		}
+	}
+
+	return true
+}
+
+func assertDecisionJSONDoesNotContain(t *testing.T, err error, expectedValues ...string) bool {
+	if err == nil {
+		t.Errorf("expected error to contain %v but got nil", expectedValues)
+		return false
+	}
+
+	policyDecision, err := ExtractPolicyDecision(err.Error())
+	if err != nil {
+		t.Errorf("unable to extract policy decision from error: %v", err)
+		return false
+	}
+
+	for _, expected := range expectedValues {
+		if strings.Contains(policyDecision, expected) {
+			t.Errorf("expected error to not contain %q", expected)
+			return false
+		}
+	}
+
+	return true
 }

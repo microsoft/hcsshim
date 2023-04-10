@@ -442,11 +442,11 @@ func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
-	_, span := oc.StartSpan(r.Context, "opengcs::bridge::dumpStacksV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::dumpStacksV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	stacks, err := b.hostState.GetStacks()
+	stacks, err := b.hostState.GetStacks(ctx)
 	if err != nil {
 		return nil, err
 	}

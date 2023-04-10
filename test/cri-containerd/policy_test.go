@@ -124,6 +124,31 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 	)
 }
 
+func assertErrorContains(t *testing.T, err error, expected string) bool {
+	t.Helper()
+	if err == nil {
+		t.Error("expected error but got nil")
+		return false
+	}
+
+	if strings.Contains(err.Error(), expected) {
+		return true
+	}
+
+	policyDecisionJSON, err := securitypolicy.ExtractPolicyDecision(err.Error())
+	if err != nil {
+		t.Error(err)
+		return false
+	}
+
+	if !strings.Contains(policyDecisionJSON, expected) {
+		t.Errorf("expected policy decision JSON to contain %q", expected)
+		return false
+	}
+
+	return true
+}
+
 type policyConfig struct {
 	enforcer string
 	input    string
@@ -355,7 +380,7 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected container start failure")
 			}
-			if !strings.Contains(err.Error(), testConfig.expectedError) {
+			if !assertErrorContains(t, err, testConfig.expectedError) {
 				t.Fatalf("expected %q in error message, got: %q", testConfig.expectedError, err)
 			}
 		})
@@ -635,7 +660,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			if err == nil {
 				t.Fatal("expected container start failure")
 			}
-			if !strings.Contains(err.Error(), testConfig.expectedError) {
+			if !assertErrorContains(t, err, testConfig.expectedError) {
 				t.Fatalf("expected %q in error message, got: %q", testConfig.expectedError, err)
 			}
 		})
@@ -728,7 +753,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 		t.Fatalf("expected to fail")
 	} else {
 		expectedErrStr := "privileged escalation unmatched by policy rule"
-		if !strings.Contains(err.Error(), expectedErrStr) {
+		if !assertErrorContains(t, err, expectedErrStr) {
 			t.Fatalf("expected different error: %s", err)
 		}
 	}
@@ -759,7 +784,7 @@ func Test_RunContainer_WithPolicy_CannotSet_AllowAll_And_Containers(t *testing.T
 	if err == nil {
 		t.Fatal("expected to fail")
 	}
-	if !strings.Contains(err.Error(), securitypolicy.ErrInvalidOpenDoorPolicy.Error()) {
+	if !assertErrorContains(t, err, securitypolicy.ErrInvalidOpenDoorPolicy.Error()) {
 		t.Fatalf("expected error %s, got %s", securitypolicy.ErrInvalidOpenDoorPolicy, err)
 	}
 }
@@ -1056,7 +1081,7 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 		t.Fatalf("expected to fail")
 	}
 	expectedError := "unencrypted scratch not allowed"
-	if !strings.Contains(err.Error(), expectedError) {
+	if !assertErrorContains(t, err, expectedError) {
 		t.Fatalf("expected '%s' error, got '%s'", expectedError, err)
 	}
 }
@@ -1204,7 +1229,7 @@ func Test_ExecInContainer_WithPolicy(t *testing.T) {
 				if !tc.shouldFail {
 					t.Fatalf("unexpected exec failure: %s", err)
 				}
-				if !strings.Contains(err.Error(), "invalid command") {
+				if !assertErrorContains(t, err, "invalid command") {
 					t.Fatalf("expected 'invalid command' error, got '%s' instead", err)
 				}
 			}
@@ -1296,7 +1321,7 @@ func Test_ExecInContainer_WithPolicy_Privileged(t *testing.T) {
 				if !tc.shouldFail {
 					t.Fatalf("unexpected exec failure: %s", err)
 				}
-				if !strings.Contains(err.Error(), "invalid command") {
+				if !assertErrorContains(t, err, "invalid command") {
 					t.Fatalf("expected 'invalid command' error, got '%s' instead", err)
 				}
 			}
@@ -1351,7 +1376,7 @@ func Test_ExecInUVM_WithPolicy(t *testing.T) {
 				if !tc.shouldFail {
 					t.Fatalf("external process exec should succeed, got error instead: %s", err)
 				}
-				if !strings.Contains(err.Error(), "invalid command") {
+				if !assertErrorContains(t, err, "invalid command") {
 					t.Fatalf("expected invalid command error, got %s", err)
 				}
 			} else {

@@ -137,6 +137,23 @@ func MeasureSeccompProfile(seccomp *specs.LinuxSeccomp) (string, error) {
 	return fmt.Sprintf("%x", profileSHA256), nil
 }
 
+const policyDecisionPattern = `policyDecision< %s >policyDecision`
+
+func ExtractPolicyDecision(errorMessage string) (string, error) {
+	re := regexp.MustCompile(fmt.Sprintf(policyDecisionPattern, `(.*)`))
+	matches := re.FindStringSubmatch(errorMessage)
+	if len(matches) != 2 {
+		return "", errors.Errorf("unable to extract policy decision from error message: %s", errorMessage)
+	}
+
+	errorBytes, err := base64.RawURLEncoding.DecodeString(matches[1])
+	if err != nil {
+		return "", err
+	}
+
+	return string(errorBytes), nil
+}
+
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {

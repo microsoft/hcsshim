@@ -125,7 +125,7 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	// The other point is on startup where we take a flag to set the default
 	// policy enforcer to use before a policy arrives. After that flag is set,
 	// we use the enforcer in question to set up logging as well.
-	if err = p.EnforceRuntimeLoggingPolicy(); err == nil {
+	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
 		logrus.SetOutput(h.logWriter)
 	} else {
 		logrus.SetOutput(io.Discard)
@@ -208,7 +208,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 	}
 
 	// now offer the payload fragment to the policy
-	err = h.securityPolicyEnforcer.LoadFragment(issuer, feed, payloadString)
+	err = h.securityPolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
 	if err != nil {
 		return fmt.Errorf("InjectFragment failed policy load: %w", err)
 	}
@@ -405,6 +405,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	}
 
 	envToKeep, capsToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+		ctx,
 		sandboxID,
 		id,
 		settings.OCISpecification.Process.Args,
@@ -643,7 +644,7 @@ func (h *Host) ShutdownContainer(ctx context.Context, containerID string, gracef
 		return err
 	}
 
-	err = h.securityPolicyEnforcer.EnforceShutdownContainerPolicy(containerID)
+	err = h.securityPolicyEnforcer.EnforceShutdownContainerPolicy(ctx, containerID)
 	if err != nil {
 		return err
 	}
@@ -680,7 +681,7 @@ func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, p
 	}
 
 	startupArgList := p.(*containerProcess).spec.Args
-	err = h.securityPolicyEnforcer.EnforceSignalContainerProcessPolicy(containerID, signal, signalingInitProcess, startupArgList)
+	err = h.securityPolicyEnforcer.EnforceSignalContainerProcessPolicy(ctx, containerID, signal, signalingInitProcess, startupArgList)
 	if err != nil {
 		return err
 	}
@@ -696,6 +697,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 		var envToKeep securitypolicy.EnvList
 		var allowStdioAccess bool
 		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
+			ctx,
 			params.CommandArgs,
 			processParamEnvToOCIEnv(params.Environment),
 			params.WorkingDirectory,
@@ -742,6 +744,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			}
 
 			envToKeep, capsToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(
+				ctx,
 				containerID,
 				params.OCIProcess.Args,
 				params.OCIProcess.Env,
@@ -789,7 +792,7 @@ func (h *Host) GetExternalProcess(pid int) (Process, error) {
 }
 
 func (h *Host) GetProperties(ctx context.Context, containerID string, query prot.PropertyQuery) (*prot.PropertiesV2, error) {
-	err := h.securityPolicyEnforcer.EnforceGetPropertiesPolicy()
+	err := h.securityPolicyEnforcer.EnforceGetPropertiesPolicy(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get properties denied due to policy")
 	}
@@ -822,8 +825,8 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 	return properties, nil
 }
 
-func (h *Host) GetStacks() (string, error) {
-	err := h.securityPolicyEnforcer.EnforceDumpStacksPolicy()
+func (h *Host) GetStacks(ctx context.Context) (string, error) {
+	err := h.securityPolicyEnforcer.EnforceDumpStacksPolicy(ctx)
 	if err != nil {
 		return "", errors.Wrapf(err, "dump stacks denied due to policy")
 	}
@@ -947,7 +950,7 @@ func modifyMappedVirtualDisk(
 					deviceHash = mvd.VerityInfo.RootDigest
 				}
 
-				err = securityPolicy.EnforceDeviceMountPolicy(mvd.MountPath, deviceHash)
+				err = securityPolicy.EnforceDeviceMountPolicy(ctx, mvd.MountPath, deviceHash)
 				if err != nil {
 					return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
 				}
@@ -960,7 +963,7 @@ func modifyMappedVirtualDisk(
 	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
 			if mvd.ReadOnly {
-				if err := securityPolicy.EnforceDeviceUnmountPolicy(mvd.MountPath); err != nil {
+				if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
 					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
 				}
 			}
@@ -984,14 +987,14 @@ func modifyMappedDirectory(
 ) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
-		err = securityPolicy.EnforcePlan9MountPolicy(md.MountPath)
+		err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
 		if err != nil {
 			return errors.Wrapf(err, "mounting plan9 device at %s denied by policy", md.MountPath)
 		}
 
 		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
 	case guestrequest.RequestTypeRemove:
-		err = securityPolicy.EnforcePlan9UnmountPolicy(md.MountPath)
+		err = securityPolicy.EnforcePlan9UnmountPolicy(ctx, md.MountPath)
 		if err != nil {
 			return errors.Wrapf(err, "unmounting plan9 device at %s denied by policy", md.MountPath)
 		}
@@ -1013,14 +1016,14 @@ func modifyMappedVPMemDevice(ctx context.Context,
 		if vpd.VerityInfo != nil {
 			deviceHash = vpd.VerityInfo.RootDigest
 		}
-		err = securityPolicy.EnforceDeviceMountPolicy(vpd.MountPath, deviceHash)
+		err = securityPolicy.EnforceDeviceMountPolicy(ctx, vpd.MountPath, deviceHash)
 		if err != nil {
 			return errors.Wrapf(err, "mounting pmem device %d onto %s denied by policy", vpd.DeviceNumber, vpd.MountPath)
 		}
 
 		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo)
 	case guestrequest.RequestTypeRemove:
-		if err := securityPolicy.EnforceDeviceUnmountPolicy(vpd.MountPath); err != nil {
+		if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, vpd.MountPath); err != nil {
 			return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", vpd.MountPath)
 		}
 
@@ -1063,18 +1066,18 @@ func modifyCombinedLayers(
 			upperdirPath = filepath.Join(cl.ScratchPath, "upper")
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
 
-			if err := securityPolicy.EnforceScratchMountPolicy(cl.ScratchPath, scratchEncrypted); err != nil {
+			if err := securityPolicy.EnforceScratchMountPolicy(ctx, cl.ScratchPath, scratchEncrypted); err != nil {
 				return fmt.Errorf("scratch mounting denied by policy: %w", err)
 			}
 		}
 
-		if err := securityPolicy.EnforceOverlayMountPolicy(cl.ContainerID, layerPaths, cl.ContainerRootPath); err != nil {
+		if err := securityPolicy.EnforceOverlayMountPolicy(ctx, cl.ContainerID, layerPaths, cl.ContainerRootPath); err != nil {
 			return fmt.Errorf("overlay creation denied by policy: %w", err)
 		}
 
 		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
 	case guestrequest.RequestTypeRemove:
-		if err := securityPolicy.EnforceOverlayUnmountPolicy(cl.ContainerRootPath); err != nil {
+		if err := securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath); err != nil {
 			return errors.Wrap(err, "overlay removal denied by policy")
 		}
 
