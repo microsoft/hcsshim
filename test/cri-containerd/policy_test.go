@@ -304,7 +304,6 @@ func Test_RunContainer_WithPolicy_And_ValidConfigs(t *testing.T) {
 	}
 }
 
-// todo (maksiman): add coverage for rego enforcer
 func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 	type config struct {
 		name          string
@@ -326,7 +325,7 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 				req.Config.WorkingDir = "/non/existent"
 				return nil
 			},
-			expectedError: "working_dir \"/non/existent\" unmatched by policy rule",
+			expectedError: "invalid working directory",
 		},
 		{
 			name: "InvalidCommand",
@@ -334,7 +333,7 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 				req.Config.Command = []string{"ash", "-c", "echo 'invalid command'"}
 				return nil
 			},
-			expectedError: "command [ash -c echo 'invalid command'] doesn't match policy",
+			expectedError: "invalid command",
 		},
 		{
 			name: "InvalidEnvironmentVariable",
@@ -347,13 +346,12 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 				)
 				return nil
 			},
-			expectedError: "env variable KEY=VALUE unmatched by policy rule",
+			expectedError: "invalid env list",
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, "json", false, false)
+			alpinePolicy := alpineSecurityPolicy(t, "rego", false, false)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
-			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
 			podID := runPodSandbox(t, client, ctx, sandboxRequest)
 			defer removePodSandbox(t, client, ctx, podID)
@@ -509,7 +507,6 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 	}
 }
 
-// todo (maksiman): add coverage for rego enforcer
 func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -549,7 +546,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 				return nil
 			},
 			opts:          testSandboxMountOpts,
-			expectedError: "is not allowed by mount constraints",
+			expectedError: "invalid mount list",
 		},
 		{
 			name: "InvalidSandboxMountDestination",
@@ -564,7 +561,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 				return nil
 			},
 			opts:          testSandboxMountOpts,
-			expectedError: "is not allowed by mount constraints",
+			expectedError: "invalid mount list",
 		},
 		{
 			name: "InvalidSandboxMountFlagRO",
@@ -580,7 +577,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 				return nil
 			},
 			opts:          testSandboxMountOpts,
-			expectedError: "is not allowed by mount constraints",
+			expectedError: "invalid mount list",
 		},
 		{
 			name: "InvalidSandboxMountFlagRW",
@@ -604,7 +601,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 						},
 					},
 				)},
-			expectedError: "is not allowed by mount constraints",
+			expectedError: "invalid mount list",
 		},
 		{
 			name: "InvalidHostPathForRegex",
@@ -627,13 +624,17 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 						},
 					},
 				)},
-			expectedError: "is not allowed by mount constraints",
+			expectedError: "invalid mount list",
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, "json", false, false, testConfig.opts...)
+			alpinePolicy := alpineSecurityPolicy(
+				t,
+				"rego",
+				false,
+				false,
+				testConfig.opts...)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
-			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
 			podID := runPodSandbox(t, client, ctx, sandboxRequest)
 			defer removePodSandbox(t, client, ctx, podID)
@@ -710,7 +711,6 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_Set(t *testing.T) 
 	}
 }
 
-// todo (maksiman): add coverage for rego enforcer
 func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -719,14 +719,13 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alpinePolicy := alpineSecurityPolicy(t, "json", false, false)
+	alpinePolicy := alpineSecurityPolicy(t, "rego", false, false)
 	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
 			Privileged: true,
 		},
 	}
-	sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -759,7 +758,6 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 	}
 }
 
-// todo (maksiman): add coverage for rego enforcer
 func Test_RunContainer_WithPolicy_CannotSet_AllowAll_And_Containers(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -780,6 +778,10 @@ func Test_RunContainer_WithPolicy_CannotSet_AllowAll_And_Containers(t *testing.T
 	}
 
 	sandboxRequest := sandboxRequestWithPolicy(t, stringPolicy)
+	if sandboxRequest.Config.Annotations == nil {
+		sandboxRequest.Config.Annotations = make(map[string]string)
+	}
+	sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "rego"
 	_, err = client.RunPodSandbox(ctx, sandboxRequest)
 	if err == nil {
 		t.Fatal("expected to fail")
