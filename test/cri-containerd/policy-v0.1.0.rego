@@ -18,7 +18,7 @@ containers := [
     {
         "command": ["ash","-c","echo 'Hello'"],
         "env_rules": [{"pattern": `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, "strategy": "string", "required": true},{"pattern": `TERM=xterm`, "strategy": "string", "required": false}],
-        "layers": ["0196c8ecca6c885a250b186ed8449cf42d737b8551b8d0839381461d95461802"],
+        "layers": ["ebac866d4031abdde44160431606f4b4d75db0b0c675e9e4f46244dd5f3e81e2"],
         "mounts": [],
         "exec_processes": [],
         "signals": [],

@@ -751,7 +751,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 	); err == nil {
 		t.Fatalf("expected to fail")
 	} else {
-		expectedErrStr := "privileged escalation unmatched by policy rule"
+		expectedErrStr := "privileged escalation not allowed"
 		if !assertErrorContains(t, err, expectedErrStr) {
 			t.Fatalf("expected different error: %s", err)
 		}
@@ -1021,6 +1021,9 @@ func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("AllowUnencrypted_%t_EncryptionEnabled_%t", tc.allowUnencrypted, tc.encryptAnnotation), func(t *testing.T) {
+			if tc.encryptAnnotation && !*flagSevSnp {
+				t.Skip("not running on SNP hardware, dm-crypt not supported")
+			}
 			policy := policyFromOpts(
 				t,
 				"rego",
@@ -1954,7 +1957,7 @@ func Test_Plan9Mount_WithPolicy(t *testing.T) {
 					t.Fatalf("container creation should have succeeded: %s", err)
 				}
 				expectedErrStr := "invalid mount list: /mounts/p9"
-				if !strings.Contains(err.Error(), expectedErrStr) {
+				if !assertErrorContains(t, err, expectedErrStr) {
 					t.Fatalf("expected '%s' policy error, got: %s", expectedErrStr, err)
 				}
 			}
