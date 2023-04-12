@@ -370,7 +370,7 @@ func createDidDocument(did string, chain []*x509.Certificate) (string, error) {
 		"id": "%[1]s#key-1",
 		"type": "JsonWebKey2020",
 		"controller": "%[1]s",
-		"publicKeyJwk": %s,
+		"publicKeyJwk": %s
 	}]
 	%s
 	%s
