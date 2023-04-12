@@ -193,7 +193,8 @@ func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *s
 	}
 
 	args := []string{"create", "-b", bundlePath, "--no-pivot"}
-	p, err := c.startProcess(tempProcessDir, spec.Process.Terminal, stdioSet, args...)
+
+	p, err := c.startProcess(tempProcessDir, spec.Process.Terminal, stdioSet, spec.Annotations, args...)
 	if err != nil {
 		return nil, err
 	}
