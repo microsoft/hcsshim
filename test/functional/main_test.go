@@ -29,12 +29,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 
-	"github.com/Microsoft/hcsshim/test/internal/constants"
-	testflag "github.com/Microsoft/hcsshim/test/internal/flag"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
-	"github.com/Microsoft/hcsshim/test/internal/require"
 	"github.com/Microsoft/hcsshim/test/internal/util"
-	testuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
+	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"
+	"github.com/Microsoft/hcsshim/test/pkg/images"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 // owner field for uVMs.
@@ -42,18 +42,18 @@ const hcsOwner = "hcsshim-functional-tests"
 
 var (
 	alpineImagePaths = &layers.LazyImageLayers{
-		Image:    constants.ImageLinuxAlpineLatest,
-		Platform: constants.PlatformLinux,
+		Image:    images.ImageLinuxAlpineLatest,
+		Platform: images.PlatformLinux,
 	}
 	//TODO: pick appropriate image based on OS build
 	nanoserverImagePaths = &layers.LazyImageLayers{
-		Image:    constants.ImageWindowsNanoserverLTSC2022,
-		Platform: constants.PlatformWindows,
+		Image:    images.ImageWindowsNanoserverLTSC2022,
+		Platform: images.PlatformWindows,
 	}
 	// wcow tests originally used busyboxw; cannot find image on docker or mcr
 	servercoreImagePaths = &layers.LazyImageLayers{
-		Image:    constants.ImageWindowsServercoreLTSC2022,
-		Platform: constants.PlatformWindows,
+		Image:    images.ImageWindowsServercoreLTSC2022,
+		Platform: images.PlatformWindows,
 	}
 )
 

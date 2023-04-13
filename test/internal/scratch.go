@@ -12,7 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 
-	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
+	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 const lcowGlobalSVMID = "test.lcowglobalsvm"

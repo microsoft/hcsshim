@@ -8,8 +8,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 
-	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
+	"github.com/Microsoft/hcsshim/test/pkg/images"
 )
 
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the
@@ -55,7 +55,7 @@ func CreateWCOWUVMFromOptsWithImage(
 		tb.Fatal("opts must be set")
 	}
 
-	img := layers.LazyImageLayers{Image: image, Platform: constants.PlatformWindows}
+	img := layers.LazyImageLayers{Image: image, Platform: images.PlatformWindows}
 	tb.Cleanup(func() {
 		if err := img.Close(ctx); err != nil {
 			tb.Errorf("could not close image %s: %v", image, err)

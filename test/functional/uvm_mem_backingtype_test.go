@@ -11,10 +11,10 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/internal/require"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 	"github.com/sirupsen/logrus"
 
-	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
+	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {

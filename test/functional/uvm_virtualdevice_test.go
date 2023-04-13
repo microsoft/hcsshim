@@ -12,8 +12,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/internal/require"
-	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
+	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 const lcowGPUBootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"

@@ -13,8 +13,8 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 
-	"github.com/Microsoft/hcsshim/test/internal/require"
-	"github.com/Microsoft/hcsshim/test/internal/uvm"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
+	"github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func Test_LCOW_Update_Resources(t *testing.T) {

@@ -23,8 +23,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/pkg/ociwclayer"
 
-	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/util"
+	"github.com/Microsoft/hcsshim/test/pkg/images"
 )
 
 // helper utilities for dealing with images
@@ -95,9 +95,9 @@ func (x *LazyImageLayers) extractLayers(ctx context.Context) (err error) {
 
 	var extract func(context.Context, io.ReadCloser, string, []string) error
 	switch x.Platform {
-	case constants.PlatformLinux:
+	case images.PlatformLinux:
 		extract = linuxImage
-	case constants.PlatformWindows:
+	case images.PlatformWindows:
 		if err = winio.EnableProcessPrivileges([]string{winio.SeBackupPrivilege, winio.SeRestorePrivilege}); err != nil {
 			return err
 		}

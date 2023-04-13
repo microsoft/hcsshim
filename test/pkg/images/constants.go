@@ -1,4 +1,4 @@
-package constants
+package images
 
 import (
 	"fmt"

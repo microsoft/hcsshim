@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/test/internal/constants"
+	"github.com/Microsoft/hcsshim/test/pkg/images"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/namespaces"
 	ctrdoci "github.com/containerd/containerd/oci"
@@ -55,7 +55,7 @@ func DefaultLinuxSpec(ctx context.Context, tb testing.TB, nns string) *specs.Spe
 // See [CreateSpecWithPlatform] for more details.
 func CreateLinuxSpec(ctx context.Context, tb testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
 	tb.Helper()
-	return CreateSpecWithPlatform(ctx, tb, constants.PlatformLinux, id, opts...)
+	return CreateSpecWithPlatform(ctx, tb, images.PlatformLinux, id, opts...)
 }
 
 // CreateWindowsSpec returns the OCI spec for a Windows container.
@@ -63,7 +63,7 @@ func CreateLinuxSpec(ctx context.Context, tb testing.TB, id string, opts ...ctrd
 // See [CreateSpecWithPlatform] for more details.
 func CreateWindowsSpec(ctx context.Context, tb testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
 	tb.Helper()
-	return CreateSpecWithPlatform(ctx, tb, constants.PlatformWindows, id, opts...)
+	return CreateSpecWithPlatform(ctx, tb, images.PlatformWindows, id, opts...)
 }
 
 // CreateSpecWithPlatform returns the OCI spec for the specified platform.

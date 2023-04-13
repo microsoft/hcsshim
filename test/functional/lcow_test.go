@@ -24,8 +24,8 @@ import (
 
 	testutilities "github.com/Microsoft/hcsshim/test/internal"
 	testcmd "github.com/Microsoft/hcsshim/test/internal/cmd"
-	"github.com/Microsoft/hcsshim/test/internal/require"
-	testuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 // test if waiting after creating (but not starting) an LCOW uVM returns

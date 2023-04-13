@@ -11,7 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 
-	_ "github.com/Microsoft/hcsshim/test/internal/manifest"
+	_ "github.com/Microsoft/hcsshim/test/pkg/manifest"
 )
 
 func init() {

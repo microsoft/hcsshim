@@ -9,8 +9,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 
-	"github.com/Microsoft/hcsshim/test/internal/require"
-	"github.com/Microsoft/hcsshim/test/internal/uvm"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
+	"github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func BenchmarkLCOW_UVM_Create(b *testing.B) {

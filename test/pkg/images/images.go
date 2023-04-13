@@ -1,4 +1,4 @@
-package constants
+package images
 
 // not technically constants, but close enough ...
 

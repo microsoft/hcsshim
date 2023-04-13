@@ -9,7 +9,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 
-	"github.com/Microsoft/hcsshim/test/internal/timeout"
+	"github.com/Microsoft/hcsshim/test/pkg/timeout"
 )
 
 func Start(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) func() {

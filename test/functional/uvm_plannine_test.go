@@ -16,8 +16,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 
-	"github.com/Microsoft/hcsshim/test/internal/require"
-	testuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 // TestPlan9 tests adding/removing Plan9 shares to/from a v2 Linux utility VM

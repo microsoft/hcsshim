@@ -20,8 +20,8 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 	"google.golang.org/grpc"
 
-	"github.com/Microsoft/hcsshim/test/internal/constants"
-	"github.com/Microsoft/hcsshim/test/internal/timeout"
+	imagesutil "github.com/Microsoft/hcsshim/test/pkg/images"
+	"github.com/Microsoft/hcsshim/test/pkg/timeout"
 )
 
 // images maps image refs -> chain ID
@@ -169,7 +169,7 @@ func PullImage(ctx context.Context, tb testing.TB, client *containerd.Client, re
 		containerd.WithPullUnpack,
 	}
 
-	if s, err := constants.SnapshotterFromPlatform(plat); err == nil {
+	if s, err := imagesutil.SnapshotterFromPlatform(plat); err == nil {
 		opts = append(opts, containerd.WithPullSnapshotter(s))
 	}
 

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/cmd"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/test/pkg/definitions/cmd"
+	"github.com/Microsoft/hcsshim/test/pkg/definitions/shimdiag"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 

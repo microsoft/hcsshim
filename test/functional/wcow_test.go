@@ -27,7 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
 
-	"github.com/Microsoft/hcsshim/test/internal/require"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
 
 // Has testing for Windows containers using both the older hcsshim methods,

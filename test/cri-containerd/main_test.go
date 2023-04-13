@@ -24,11 +24,11 @@ import (
 	"google.golang.org/grpc"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
-	"github.com/Microsoft/hcsshim/test/internal/constants"
-	testflag "github.com/Microsoft/hcsshim/test/internal/flag"
-	"github.com/Microsoft/hcsshim/test/internal/require"
+	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"
+	"github.com/Microsoft/hcsshim/test/pkg/images"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 
-	_ "github.com/Microsoft/hcsshim/test/internal/manifest"
+	_ "github.com/Microsoft/hcsshim/test/pkg/manifest"
 )
 
 const (
@@ -84,12 +84,12 @@ const (
 var (
 	imageWindowsNanoserver      = getWindowsNanoserverImage(osversion.Build())
 	imageWindowsServercore      = getWindowsServerCoreImage(osversion.Build())
-	imageWindowsNanoserver17763 = constants.ImageWindowsNanoserver1809
-	imageWindowsNanoserver18362 = constants.ImageWindowsNanoserver1903
-	imageWindowsNanoserver19041 = constants.ImageWindowsNanoserver2004
-	imageWindowsServercore17763 = constants.ImageWindowsServercore1809
-	imageWindowsServercore18362 = constants.ImageWindowsServercore1903
-	imageWindowsServercore19041 = constants.ImageWindowsServercore2004
+	imageWindowsNanoserver17763 = images.ImageWindowsNanoserver1809
+	imageWindowsNanoserver18362 = images.ImageWindowsNanoserver1903
+	imageWindowsNanoserver19041 = images.ImageWindowsNanoserver2004
+	imageWindowsServercore17763 = images.ImageWindowsServercore1809
+	imageWindowsServercore18362 = images.ImageWindowsServercore1903
+	imageWindowsServercore19041 = images.ImageWindowsServercore2004
 )
 
 // Flags
@@ -165,20 +165,20 @@ func requireBinary(tb testing.TB, binary string) string {
 }
 
 func getWindowsNanoserverImage(build uint16) string {
-	tag, err := constants.ImageFromBuild(build)
+	tag, err := images.ImageFromBuild(build)
 	if err != nil {
 		panic(err)
 	}
-	return constants.NanoserverImage(tag)
+	return images.NanoserverImage(tag)
 }
 
 //nolint:unused // may be used in future tests
 func getWindowsServerCoreImage(build uint16) string {
-	tag, err := constants.ImageFromBuild(build)
+	tag, err := images.ImageFromBuild(build)
 	if err != nil {
 		panic(err)
 	}
-	return constants.ServercoreImage(tag)
+	return images.ServercoreImage(tag)
 }
 
 func createGRPCConn(ctx context.Context) (*grpc.ClientConn, error) {

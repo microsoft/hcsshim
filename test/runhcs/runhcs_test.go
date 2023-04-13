@@ -4,5 +4,5 @@
 package runhcs
 
 import (
-	_ "github.com/Microsoft/hcsshim/test/internal/manifest"
+	_ "github.com/Microsoft/hcsshim/test/pkg/manifest"
 )

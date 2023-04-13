@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/test/internal/flag"
+	"github.com/Microsoft/hcsshim/test/pkg/flag"
 )
 
 // Features checks the wanted features are present in given,
