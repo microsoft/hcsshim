@@ -1,6 +1,7 @@
 package regopolicyinterpreter
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -151,7 +152,7 @@ func Test_Float(t *testing.T) {
 	f := func(ip intPair) bool {
 		p := ip.toFloat()
 		input := map[string]interface{}{"a": p.a, "b": p.b}
-		result, err := rego.Query("data.test.add", input)
+		result, err := rego.Query(context.Background(), "data.test.add", input)
 		if err != nil {
 			t.Errorf("received error when trying to query rego: %v", err)
 			return false
@@ -191,7 +192,7 @@ func Test_String(t *testing.T) {
 	f := func(ip intPair) bool {
 		p := ip.toString()
 		input := map[string]interface{}{"a": p.a, "b": p.b}
-		result, err := rego.Query("data.test.add", input)
+		result, err := rego.Query(context.Background(), "data.test.add", input)
 		if err != nil {
 			t.Errorf("received error when trying to query rego: %v", err)
 			return false
@@ -582,7 +583,7 @@ func (testObject) Generate(r *rand.Rand, _ int) reflect.Value {
 
 func getResult(r *RegoPolicyInterpreter, p intPair, rule string) (RegoQueryResult, error) {
 	input := map[string]interface{}{"a": p.a, "b": p.b}
-	result, err := r.Query("data.test."+rule, input)
+	result, err := r.Query(context.Background(), "data.test."+rule, input)
 	if err != nil {
 		return nil, fmt.Errorf("received error when trying to query rego: %w", err)
 	}
@@ -596,7 +597,7 @@ func getResult(r *RegoPolicyInterpreter, p intPair, rule string) (RegoQueryResul
 
 func createLists(r *RegoPolicyInterpreter, p intPair, name metadataName) error {
 	input := map[string]interface{}{"a": p.a, "b": p.b, "name": string(name)}
-	result, err := r.Query("data.test.create", input)
+	result, err := r.Query(context.Background(), "data.test.create", input)
 	if err != nil {
 		return fmt.Errorf("received error when trying to query rego: %w", err)
 	}
@@ -619,7 +620,7 @@ func createLists(r *RegoPolicyInterpreter, p intPair, name metadataName) error {
 
 func appendLists(r *RegoPolicyInterpreter, p intPair, name metadataName) error {
 	input := map[string]interface{}{"a": p.a, "b": p.b, "name": string(name)}
-	result, err := r.Query("data.test.append", input)
+	result, err := r.Query(context.Background(), "data.test.append", input)
 	if err != nil {
 		return fmt.Errorf("received error when trying to query rego: %w", err)
 	}
@@ -642,7 +643,7 @@ func appendLists(r *RegoPolicyInterpreter, p intPair, name metadataName) error {
 
 func computeGap(r *RegoPolicyInterpreter, name metadataName, expected int) error {
 	input := map[string]interface{}{"name": string(name)}
-	result, err := r.Query("data.test.compute_gap", input)
+	result, err := r.Query(context.Background(), "data.test.compute_gap", input)
 	if err != nil {
 		return fmt.Errorf("received error when trying to query rego: %w", err)
 	}
