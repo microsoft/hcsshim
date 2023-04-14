@@ -38,8 +38,8 @@ func init() {
 }
 
 const capabilitiesNilError = "capabilities object provided by the UVM to the policy engine is nil"
-const invalidError = "Security policy is not valid. Please check security policy or re-generate with tooling."
-const noReasonError = "Security policy is either not valid or did not provide a reason for denial. Please check security policy or re-generate with tooling."
+const invalidPolicyMessage = "Security policy is not valid. Please check security policy or re-generate with tooling."
+const noReasonMessage = "Security policy is either not valid or did not provide a reason for denial. Please check security policy or re-generate with tooling."
 const noAPIVersionError = "policy does not define api_version"
 
 // RegoEnforcer is a stub implementation of a security policy, which will be
@@ -56,6 +56,8 @@ type regoEnforcer struct {
 	defaultMounts []oci.Mount
 	// Stdio allowed state on a per container id basis
 	stdio map[string]bool
+	// Maximum error message length
+	maxErrorMessageLength int
 }
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
@@ -105,6 +107,7 @@ type inputData map[string]interface{}
 func createRegoEnforcer(base64EncodedPolicy string,
 	defaultMounts []oci.Mount,
 	privilegedMounts []oci.Mount,
+	maxErrorMessageLength int,
 ) (SecurityPolicyEnforcer, error) {
 	// base64 decode the incoming policy string
 	// It will either be (legacy) JSON or Rego.
@@ -119,7 +122,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 	err = json.Unmarshal(rawPolicy, securityPolicy)
 	if err == nil {
 		if securityPolicy.AllowAll {
-			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
+			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts, maxErrorMessageLength)
 		}
 
 		containers := make([]*Container, securityPolicy.Containers.Length)
@@ -166,6 +169,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 		return nil, fmt.Errorf("error creating Rego policy: %w", err)
 	}
 	regoPolicy.base64policy = base64EncodedPolicy
+	regoPolicy.maxErrorMessageLength = maxErrorMessageLength
 	return regoPolicy, nil
 }
 
@@ -205,6 +209,9 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	if err != nil {
 		return nil, fmt.Errorf("rego compilation failed: %w", err)
 	}
+
+	// by default we do not perform message truncation
+	policy.maxErrorMessageLength = 0
 
 	return policy, nil
 }
@@ -307,62 +314,192 @@ func (policy *regoEnforcer) enforce(ctx context.Context, enforcementPoint string
 	return result, nil
 }
 
-func errorString(errors interface{}) string {
-	errorArray := errors.([]interface{})
-	output := make([]string, len(errorArray))
-	for i, err := range errorArray {
-		output[i] = fmt.Sprintf("%v", err)
+type decisionTruncator func(map[string]interface{})
+
+func truncateErrorObjects(decision map[string]interface{}) {
+	if rawReason, ok := decision["reason"]; ok {
+		// check if it is a framework reason object
+		if reason, ok := rawReason.(rpi.RegoQueryResult); ok {
+			// check if we can remove error_objects
+			if _, ok := reason["error_objects"]; ok {
+				decision["truncated"] = append(decision["truncated"].([]string), "reason.error_objects")
+				delete(reason, "error_objects")
+				decision["reason"] = reason
+			}
+		}
 	}
-	return strings.Join(output, ",")
 }
 
-func (policy *regoEnforcer) denyWithError(ctx context.Context, policyError error, input inputData) error {
-	policyDecision := map[string]interface{}{
-		"input":       policy.redactSensitiveData(input),
-		"decision":    "deny",
-		"reason":      invalidError,
-		"policyError": policyError.Error(),
+func truncateInput(decision map[string]interface{}) {
+	if _, ok := decision["input"]; ok {
+		// remove the input
+		decision["truncated"] = append(decision["truncated"].([]string), "input")
+		delete(decision, "input")
 	}
+}
 
-	decisionJSON, err := json.Marshal(policyDecision)
+func truncateReason(decision map[string]interface{}) {
+	decision["truncated"] = append(decision["truncated"].([]string), "reason")
+	delete(decision, "reason")
+}
+
+func (policy *regoEnforcer) policyDecisionToError(ctx context.Context, decision map[string]interface{}) error {
+	decisionJSON, err := json.Marshal(decision)
 	if err != nil {
-		log.G(ctx).Errorf("Unable to marshal error object: %v", err)
+		log.G(ctx).WithError(err).Error("unable to marshal error object")
 		decisionJSON = []byte(`"Unable to marshal error object"`)
 	}
 
-	log.G(ctx).WithField("error", string(decisionJSON)).Debug("Policy decision")
+	log.G(ctx).WithField("policyDecision", string(decisionJSON))
 
 	base64EncodedDecisionJSON := base64.RawURLEncoding.EncodeToString(decisionJSON)
+	errorMessage := fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
+	if policy.maxErrorMessageLength == 0 {
+		// indicates no message truncation
+		return fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
+	}
 
-	return fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
+	if len(errorMessage.Error()) <= policy.maxErrorMessageLength {
+		return errorMessage
+	}
+
+	decision["truncated"] = []string{}
+	truncators := []decisionTruncator{truncateErrorObjects, truncateInput, truncateReason}
+	for _, truncate := range truncators {
+		truncate(decision)
+
+		decisionJSON, err := json.Marshal(decision)
+		if err != nil {
+			log.G(ctx).WithError(err).Error("unable to marshal error object")
+			decisionJSON = []byte(`"Unable to marshal error object"`)
+		}
+		base64EncodedDecisionJSON = base64.RawURLEncoding.EncodeToString(decisionJSON)
+		errorMessage = fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
+
+		if len(errorMessage.Error()) <= policy.maxErrorMessageLength {
+			break
+		}
+	}
+
+	return errorMessage
+}
+
+func (policy *regoEnforcer) denyWithError(ctx context.Context, policyError error, input inputData) error {
+	input = policy.redactSensitiveData(input)
+	input = replaceCapabilitiesWithPlaceholders(input)
+	policyDecision := map[string]interface{}{
+		"input":       input,
+		"decision":    "deny",
+		"reason":      invalidPolicyMessage,
+		"policyError": policyError.Error(),
+	}
+
+	return policy.policyDecisionToError(ctx, policyDecision)
 }
 
 func (policy *regoEnforcer) denyWithReason(ctx context.Context, enforcementPoint string, input inputData) error {
+	cleaned_input := policy.redactSensitiveData(input)
+	cleaned_input = replaceCapabilitiesWithPlaceholders(cleaned_input)
 	input["rule"] = enforcementPoint
 	policyDecision := map[string]interface{}{
-		"input":    policy.redactSensitiveData(input),
+		"input":    cleaned_input,
 		"decision": "deny",
 	}
 
 	result, err := policy.rego.Query("data.policy.reason", input)
 	if err == nil {
-		policyDecision["reason"] = result
+		policyDecision["reason"] = replaceCapabilitiesWithPlaceholdersInReason(result)
 	} else {
-		log.G(ctx).Warnf("Unable to obtain reason for policy decision: %v", err)
-		policyDecision["reason"] = noReasonError
+		log.G(ctx).WithError(err).Warn("unable to obtain reason for policy decision")
+		policyDecision["reason"] = noReasonMessage
 	}
 
-	decisionJSON, err := json.Marshal(policyDecision)
+	return policy.policyDecisionToError(ctx, policyDecision)
+}
+
+func areCapsEqual(actual map[string]interface{}, expected map[string][]string) bool {
+	for key, caps := range expected {
+		values, ok := actual[key].([]interface{})
+		if !ok {
+			return false
+		}
+
+		if len(values) != len(caps) {
+			return false
+		}
+
+		for i, value := range values {
+			cap, ok := value.(string)
+			if !ok {
+				return false
+			}
+
+			if cap != caps[i] {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+var privilegedCapabilities = map[string][]string{
+	"bounding":    DefaultPrivilegedCapabilities(),
+	"effective":   DefaultPrivilegedCapabilities(),
+	"inheritable": DefaultPrivilegedCapabilities(),
+	"permitted":   DefaultPrivilegedCapabilities(),
+	"ambient":     EmptyCapabiltiesSet(),
+}
+
+var unprivilegedCapabilities = map[string][]string{
+	"bounding":    DefaultUnprivilegedCapabilities(),
+	"effective":   DefaultUnprivilegedCapabilities(),
+	"inheritable": EmptyCapabiltiesSet(),
+	"permitted":   DefaultUnprivilegedCapabilities(),
+	"ambient":     EmptyCapabiltiesSet(),
+}
+
+// as capability lists are repetitive and take up a lot of room in the error
+// message, we can replace the defaults with placeholders to save space
+func replaceCapabilitiesWithPlaceholders(object map[string]interface{}) map[string]interface{} {
+	capabilities, ok := object["capabilities"].(map[string]interface{})
+	if !ok {
+		return object
+	}
+
+	if areCapsEqual(capabilities, privilegedCapabilities) {
+		object["capabilities"] = "[privileged]"
+	} else if areCapsEqual(capabilities, unprivilegedCapabilities) {
+		object["capabilities"] = "[unprivileged]"
+	}
+
+	return object
+}
+
+func replaceCapabilitiesWithPlaceholdersInReason(reason rpi.RegoQueryResult) rpi.RegoQueryResult {
+	errorObjectsRaw, err := reason.Value("error_objects")
 	if err != nil {
-		log.G(ctx).Errorf("Unable to marshal error object: %v", err)
-		decisionJSON = []byte(`"Unable to marshal error object"`)
+		return reason
 	}
 
-	log.G(ctx).WithField("policyDecision", string(decisionJSON)).Debug("Policy decision")
+	errorObjects, ok := errorObjectsRaw.([]interface{})
+	if !ok {
+		return reason
+	}
 
-	base64EncodedDecisionJSON := base64.RawURLEncoding.EncodeToString(decisionJSON)
+	objects := make([]interface{}, len(errorObjects))
+	for i, objectRaw := range errorObjects {
+		object, ok := objectRaw.(map[string]interface{})
+		if !ok {
+			objects[i] = objectRaw
+			continue
+		}
 
-	return fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
+		objects[i] = replaceCapabilitiesWithPlaceholders(object)
+	}
+
+	reason["error_objects"] = objects
+	return reason
 }
 
 func (policy *regoEnforcer) redactSensitiveData(input inputData) inputData {
@@ -524,18 +661,23 @@ func groupsToInputs(groups []IDName) []interface{} {
 	return inputs
 }
 
-func handleNilOrEmptyCaps(caps []string) []string {
+func handleNilOrEmptyCaps(caps []string) interface{} {
 	if len(caps) > 0 {
-		return caps
+		result := make([]interface{}, len(caps))
+		for i, cap := range caps {
+			result[i] = cap
+		}
+
+		return result
 	}
 
 	// caps is either nil or empty.
 	// In either case, we want to return an empty array.
-	return make([]string, 0)
+	return make([]interface{}, 0)
 }
 
-func mapifyCapabilities(caps *oci.LinuxCapabilities) map[string][]string {
-	out := make(map[string][]string)
+func mapifyCapabilities(caps *oci.LinuxCapabilities) map[string]interface{} {
+	out := make(map[string]interface{})
 
 	out["bounding"] = handleNilOrEmptyCaps(caps.Bounding)
 	out["effective"] = handleNilOrEmptyCaps(caps.Effective)

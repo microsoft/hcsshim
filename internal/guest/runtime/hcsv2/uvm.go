@@ -107,6 +107,10 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 		return errors.New("security policy has already been set")
 	}
 
+	// this limit ensures messages are below the character truncation limit that
+	// can be imposed by an orchestrator
+	maxErrorMessageLength := 3 * 1024
+
 	// Initialize security policy enforcer for a given enforcer type and
 	// encoded security policy.
 	p, err := securitypolicy.CreateSecurityPolicyEnforcer(
@@ -114,6 +118,7 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 		r.EncodedSecurityPolicy,
 		policy.DefaultCRIMounts(),
 		policy.DefaultCRIPrivilegedMounts(),
+		maxErrorMessageLength,
 	)
 	if err != nil {
 		return err

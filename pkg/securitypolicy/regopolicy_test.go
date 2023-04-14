@@ -5713,7 +5713,149 @@ func Test_Rego_NoReason(t *testing.T) {
 		t.Error("expected error, got nil")
 	}
 
-	assertDecisionJSONContains(t, err, noReasonError)
+	assertDecisionJSONContains(t, err, noReasonMessage)
+}
+
+func Test_Rego_ErrorTruncation(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoCreateContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		maxErrorMessageLength := int(randMinMax(testRand, 128, 4*1024))
+		tc.policy.maxErrorMessageLength = maxErrorMessageLength
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		// not getting an error means something is broken
+		if err == nil {
+			return false
+		}
+
+		if len(err.Error()) > maxErrorMessageLength {
+			return assertDecisionJSONContains(t, err, `"reason.error_objects","input","reason"`)
+		}
+
+		policyDecisionJSON, err := ExtractPolicyDecision(err.Error())
+		if err != nil {
+			t.Errorf("unable to extract policy decision JSON: %v", err)
+			return false
+		}
+
+		var policyDecision map[string]interface{}
+		err = json.Unmarshal([]byte(policyDecisionJSON), &policyDecision)
+		if err != nil {
+			t.Errorf("unable to unmarshal policy decision: %v", err)
+		}
+
+		if truncated, ok := policyDecision["truncated"].([]interface{}); ok {
+			if truncated[0].(string) != "reason.error_objects" {
+				t.Error("first item to be truncated should be reason.error_objects")
+				return false
+			} else if len(truncated) > 1 && truncated[1].(string) != "input" {
+				t.Error("second item to be truncated should be input")
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceOverlayMountPolicy_No_Matches failed: %v", err)
+	}
+}
+
+func Test_Rego_ErrorTruncation_Unable(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+	tc, err := setupRegoOverlayTest(gc, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	maxErrorMessageLength := 32
+	tc.policy.maxErrorMessageLength = maxErrorMessageLength
+	err = tc.policy.EnforceOverlayMountPolicy(gc.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
+
+	if err == nil {
+		t.Fatal("Policy did not throw the expected error")
+	}
+
+	assertDecisionJSONContains(t, err, `"reason.error_objects","input","reason"`)
+}
+
+func Test_Rego_ErrorTruncation_CustomPolicy(t *testing.T) {
+	code := fmt.Sprintf(`package policy
+
+	api_version := "0.1.0"
+
+	mount_device := {"allowed": false}
+
+	reason := {"custom_error": "%s"}
+`, randString(testRand, 2048))
+
+	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("unable to create policy: %v", err)
+	}
+
+	policy.maxErrorMessageLength = 512
+	ctx := context.Background()
+	err = policy.EnforceDeviceMountPolicy(ctx, generateMountTarget(testRand), generateRootHash(testRand))
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+
+	assertDecisionJSONContains(t, err, `"input","reason"`)
+}
+
+func Test_Rego_Capabiltiies_Placeholder_Object_Privileged(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].Capabilities = &capabilitiesInternal{
+		Bounding:    DefaultPrivilegedCapabilities(),
+		Effective:   DefaultPrivilegedCapabilities(),
+		Inheritable: DefaultPrivilegedCapabilities(),
+		Permitted:   DefaultPrivilegedCapabilities(),
+		Ambient:     EmptyCapabiltiesSet(),
+	}
+	tc, err := setupSimpleRegoCreateContainerTest(gc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+	if err == nil {
+		t.Fatal("Policy did not throw the expected error")
+	}
+
+	assertDecisionJSONContains(t, err, "[privileged]")
+	assertDecisionJSONDoesNotContain(t, err, DefaultPrivilegedCapabilities()...)
+}
+
+func Test_Rego_Capabiltiies_Placeholder_Object_Unprivileged(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].Capabilities = &capabilitiesInternal{
+		Bounding:    DefaultUnprivilegedCapabilities(),
+		Effective:   DefaultUnprivilegedCapabilities(),
+		Inheritable: EmptyCapabiltiesSet(),
+		Permitted:   DefaultUnprivilegedCapabilities(),
+		Ambient:     EmptyCapabiltiesSet(),
+	}
+	tc, err := setupSimpleRegoCreateContainerTest(gc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, err = tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, randString(testRand, 20), tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+	if err == nil {
+		t.Fatal("Policy did not throw the expected error")
+	}
+
+	assertDecisionJSONContains(t, err, "[unprivileged]")
+	assertDecisionJSONDoesNotContain(t, err, DefaultUnprivilegedCapabilities()...)
 }
 
 //
