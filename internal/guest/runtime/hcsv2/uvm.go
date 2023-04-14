@@ -454,8 +454,8 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			if err != nil {
 				return nil, fmt.Errorf("failed to create security context directory: %w", err)
 			}
-			// Make sure it's readable
-			if err := os.Chmod(securityContextDir, 0744); err != nil {
+			// Make sure that files inside directory are readable
+			if err := os.Chmod(securityContextDir, 0745); err != nil {
 				return nil, fmt.Errorf("failed to chmod security context directory: %w", err)
 			}
 
