@@ -237,7 +237,7 @@ func newRegoMetadataOperation(operation interface{}) (*regoMetadataOperation, er
 	}
 	metadataOp.Name, ok = data["name"].(string)
 	if !ok {
-		return nil, errors.New("uanble to load metadata name")
+		return nil, errors.New("unable to load metadata name")
 	}
 	action, ok := data["action"].(string)
 	if !ok {
@@ -591,7 +591,7 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 	}
 
 	if len(rawResult) == 0 {
-		return nil, errors.New("emtpy result from Rego query")
+		return nil, errors.New("empty result from Rego query")
 	}
 
 	result := make(RegoQueryResult)

@@ -1020,6 +1020,11 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
     }
 }
 
+reason := {
+    "errors": errors,
+    "error_objects": error_objects
+}
+
 ################################################################
 # Error messages
 ################################################################
