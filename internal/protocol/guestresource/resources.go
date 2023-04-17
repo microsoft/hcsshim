@@ -18,6 +18,11 @@ const (
 	// ResourceTypeMappedDirectory is the modify resource type for mapped
 	// directories
 	ResourceTypeMappedDirectory guestrequest.ResourceType = "MappedDirectory"
+	// ResourceTypeSCSIDevice is the modify resources type for SCSI devices.
+	// Note this type is not related to mounting a device in the guest, only
+	// for operations on the SCSI device itself.
+	// Currently it only supports Remove, to cleanly remove a SCSI device.
+	ResourceTypeSCSIDevice guestrequest.ResourceType = "SCSIDevice"
 	// ResourceTypeMappedVirtualDisk is the modify resource type for mapped
 	// virtual disks
 	ResourceTypeMappedVirtualDisk guestrequest.ResourceType = "MappedVirtualDisk"
@@ -63,6 +68,12 @@ type WCOWCombinedLayers struct {
 }
 
 // Defines the schema for hosted settings passed to GCS and/or OpenGCS
+
+// SCSIDevice represents a SCSI device that is attached to the system.
+type SCSIDevice struct {
+	Controller uint8 `json:"Controller,omitempty"`
+	Lun        uint8 `json:"Lun,omitempty"`
+}
 
 // LCOWMappedVirtualDisk represents a disk on the host which is mapped into a
 // directory in the guest in the V2 schema.
