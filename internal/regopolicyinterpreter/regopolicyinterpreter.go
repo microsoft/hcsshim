@@ -590,11 +590,11 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 		return nil, err
 	}
 
+	result := make(RegoQueryResult)
 	if len(rawResult) == 0 {
-		return nil, errors.New("empty result from Rego query")
+		return result, nil
 	}
 
-	result := make(RegoQueryResult)
 	resultSet, ok := rawResult[0].Expressions[0].Value.(map[string]interface{})
 	if !ok {
 		return nil, errors.New("unable to load results object from Rego query")

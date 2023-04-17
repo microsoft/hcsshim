@@ -408,7 +408,11 @@ func (policy *regoEnforcer) denyWithReason(ctx context.Context, enforcementPoint
 
 	result, err := policy.rego.Query("data.policy.reason", input)
 	if err == nil {
-		policyDecision["reason"] = replaceCapabilitiesWithPlaceholdersInReason(result)
+		if result.IsEmpty() {
+			policyDecision["reason"] = noReasonMessage
+		} else {
+			policyDecision["reason"] = replaceCapabilitiesWithPlaceholdersInReason(result)
+		}
 	} else {
 		log.G(ctx).WithError(err).Warn("unable to obtain reason for policy decision")
 		policyDecision["reason"] = noReasonMessage

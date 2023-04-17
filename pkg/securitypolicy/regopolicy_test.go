@@ -5810,6 +5810,62 @@ func Test_Rego_ErrorTruncation_CustomPolicy(t *testing.T) {
 	assertDecisionJSONContains(t, err, `"input","reason"`)
 }
 
+func Test_Rego_Missing_Enforcement_Point(t *testing.T) {
+	code := `package policy
+
+	api_svn := "0.10.0"
+
+	mount_device := {"allowed": true}
+	unmount_device := {"allowed": true}
+	mount_overlay := {"allowed": true}
+	unmount_overlay := {"allowed": true}
+
+	reason := {"errors": data.framework.errors}
+`
+
+	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("unable to create policy: %v", err)
+	}
+
+	sandboxID := generateSandboxID(testRand)
+	containerID := generateContainerID(testRand)
+	argList := generateCommand(testRand)
+	envList := generateEnvironmentVariables(testRand)
+	workingDir := generateWorkingDir(testRand)
+	mounts := []oci.Mount{}
+	user := generateIDName(testRand)
+	groups := []IDName{}
+	umask := generateUmask(testRand)
+	capabilities := &oci.LinuxCapabilities{
+		Bounding:    DefaultUnprivilegedCapabilities(),
+		Effective:   DefaultUnprivilegedCapabilities(),
+		Inheritable: EmptyCapabiltiesSet(),
+		Permitted:   DefaultUnprivilegedCapabilities(),
+		Ambient:     EmptyCapabiltiesSet(),
+	}
+
+	ctx := context.Background()
+	_, _, _, err = policy.EnforceCreateContainerPolicy(
+		ctx,
+		sandboxID,
+		containerID,
+		argList,
+		envList,
+		workingDir,
+		mounts,
+		false,
+		false,
+		user,
+		groups,
+		umask,
+		capabilities,
+		"",
+	)
+
+	assertDecisionJSONContains(t, err, "rule for create_container is missing from policy")
+}
+
 func Test_Rego_Capabiltiies_Placeholder_Object_Privileged(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
 	gc.containers[0].Capabilities = &capabilitiesInternal{
