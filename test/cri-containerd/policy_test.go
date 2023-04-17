@@ -1731,6 +1731,12 @@ var validSeccomp []byte
 var invalidSeccomp []byte
 
 func Test_RunContainer_WithPolicy_And_Seccomp(t *testing.T) {
+	seccompProfilePath := filepath.Join(t.TempDir(), "seccomp_valid.json")
+	if err := os.WriteFile(seccompProfilePath, validSeccomp, 0755); err != nil {
+		t.Fatalf("failed to write seccomp profile to temp file: %s", err)
+	}
+	defer os.Remove(seccompProfilePath)
+
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -1738,7 +1744,7 @@ func Test_RunContainer_WithPolicy_And_Seccomp(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seccompPolicy := alpineSecurityPolicy(t, "rego", false, false, securitypolicy.WithSeccompProfilePath("seccomp_valid.json"))
+	seccompPolicy := alpineSecurityPolicy(t, "rego", false, false, securitypolicy.WithSeccompProfilePath(seccompProfilePath))
 	noSeccompPolicy := alpineSecurityPolicy(t, "rego", false, false)
 
 	validSeccompBase64 := base64.StdEncoding.EncodeToString(validSeccomp)
