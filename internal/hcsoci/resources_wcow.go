@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/credentials"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/resources"
@@ -151,35 +152,52 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				}
 			}
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
-			if mount.Type == "physical-disk" {
-				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
-				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly, mount.Options)
-				if err != nil {
-					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
-				}
-				r.Add(scsiMount)
-			} else if mount.Type == "virtual-disk" {
-				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-				scsiMount, err := coi.HostingSystem.AddSCSI(
-					ctx,
-					mount.Source,
-					uvmPath,
-					readOnly,
-					false,
-					mount.Options,
-					uvm.VMAccessTypeIndividual,
+			if mount.Type == "physical-disk" || mount.Type == "virtual-disk" || mount.Type == "extensible-virtual-disk" {
+				var (
+					scsiMount *uvm.SCSIMount
+					err       error
 				)
+				switch mount.Type {
+				case "physical-disk":
+					l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
+					scsiMount, err = coi.HostingSystem.AddSCSIPhysicalDisk(
+						ctx,
+						mount.Source,
+						uvmPath,
+						readOnly,
+						mount.Options,
+					)
+				case "virtual-disk":
+					l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
+					scsiMount, err = coi.HostingSystem.AddSCSI(
+						ctx,
+						mount.Source,
+						uvmPath,
+						readOnly,
+						false,
+						mount.Options,
+						uvm.VMAccessTypeIndividual,
+					)
+				case "extensible-virtual-disk":
+					l.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
+					scsiMount, err = coi.HostingSystem.AddSCSIExtensibleVirtualDisk(
+						ctx,
+						mount.Source,
+						uvmPath,
+						readOnly,
+					)
+				}
 				if err != nil {
-					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
+					return fmt.Errorf("adding SCSI mount %+v: %w", mount, err)
 				}
 				r.Add(scsiMount)
-			} else if mount.Type == "extensible-virtual-disk" {
-				l.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
-				scsiMount, err := coi.HostingSystem.AddSCSIExtensibleVirtualDisk(ctx, mount.Source, uvmPath, readOnly)
-				if err != nil {
-					return errors.Wrapf(err, "adding SCSI EVD mount failed %+v", mount)
-				}
-				r.Add(scsiMount)
+				// Compute guest mounts now, and store them, so they can be added to the container doc later.
+				// We do this now because we have access to the guest path through the returned mount object.
+				coi.windowsAdditionalMounts = append(coi.windowsAdditionalMounts, hcsschema.MappedDirectory{
+					HostPath:      scsiMount.UVMPath,
+					ContainerPath: mount.Destination,
+					ReadOnly:      readOnly,
+				})
 			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 				// Mounts that map to a path in the UVM are specified with a 'sandbox://' prefix.
 				//

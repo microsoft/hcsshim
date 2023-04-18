@@ -69,19 +69,9 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 				}
 				mdv2.HostPath = src
 			} else if mount.Type == "virtual-disk" || mount.Type == "physical-disk" || mount.Type == "extensible-virtual-disk" {
-				mountPath := mount.Source
-				var err error
-				if mount.Type == "extensible-virtual-disk" {
-					_, mountPath, err = uvm.ParseExtensibleVirtualDiskPath(mount.Source)
-					if err != nil {
-						return nil, err
-					}
-				}
-				uvmPath, err := coi.HostingSystem.GetScsiUvmPath(ctx, mountPath)
-				if err != nil {
-					return nil, err
-				}
-				mdv2.HostPath = uvmPath
+				// For v2 schema containers, any disk mounts will be part of coi.additionalMounts.
+				// For v1 schema containers, we don't even get here, since there is no HostingSystem.
+				continue
 			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 				// Convert to the path in the guest that was asked for.
 				mdv2.HostPath = convertToWCOWSandboxMountPath(mount.Source)
@@ -97,6 +87,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 			config.mdsv2 = append(config.mdsv2, mdv2)
 		}
 	}
+	config.mdsv2 = append(config.mdsv2, coi.windowsAdditionalMounts...)
 	return &config, nil
 }
 
