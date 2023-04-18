@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +27,14 @@ func install(ctx context.Context) error {
 	}
 	targetOverlayPath := args[0]
 	driver := args[1]
+
+	if _, err := os.Lstat(targetOverlayPath); err == nil {
+		// We assume the overlay path to be unique per set of drivers. Thus, if the path
+		// exists already, we have already installed these drivers, and can quit early.
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("failed to stat overlay dir: %s: %w", targetOverlayPath, err)
+	}
 
 	// create an overlay mount from the driver's UVM path so we can write to the
 	// mount path in the UVM despite having mounted in the driver originally as

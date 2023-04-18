@@ -53,14 +53,9 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string, gpuDri
 		return closer, execPnPInstallDriver(ctx, vm, uvmPath)
 	}
 
-	// no need to reinstall if the driver has already been added in LCOW, return early
-	if _, err := vm.GetScsiUvmPath(ctx, share); err != uvm.ErrNotAttached {
-		return nil, err
-	}
-
 	// first mount driver as scsi in standard mount location
 	uvmPathForShare := fmt.Sprintf(guestpath.LCOWGlobalMountPrefixFmt, vm.UVMMountCounter())
-	closer, err = vm.AddSCSI(ctx,
+	mount, err := vm.AddSCSI(ctx,
 		share,
 		uvmPathForShare,
 		true,
@@ -70,9 +65,14 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string, gpuDri
 	if err != nil {
 		return closer, fmt.Errorf("failed to add SCSI disk to utility VM for path %+v: %s", share, err)
 	}
+	closer = mount
+	uvmPathForShare = mount.UVMPath
 
 	// construct path that the drivers will be remounted as read/write in the UVM
-	driverGUID, err := guid.NewV4()
+
+	// 914aadc8-f700-4365-8016-ddad0a9d406d. Random GUID chosen for namespace.
+	ns := guid.GUID{Data1: 0x914aadc8, Data2: 0xf700, Data3: 0x4365, Data4: [8]byte{0x80, 0x16, 0xdd, 0xad, 0x0a, 0x9d, 0x40, 0x6d}}
+	driverGUID, err := guid.NewV5(ns, []byte(share))
 	if err != nil {
 		return closer, fmt.Errorf("failed to create a guid path for driver %+v: %s", share, err)
 	}
