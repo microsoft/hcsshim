@@ -66,6 +66,7 @@ func NewManager(
 // MountConfig specifies the options to apply for mounting a SCSI device in
 // the guest OS.
 type MountConfig struct {
+	Partition uint64
 	Encrypted bool
 	Options   []string
 }
@@ -136,6 +137,7 @@ func (m *Manager) AddVirtualDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
+			partition: mc.Partition,
 			readOnly:  readOnly,
 			encrypted: mc.Encrypted,
 			options:   mc.Options,
@@ -179,6 +181,7 @@ func (m *Manager) AddPhysicalDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
+			partition: mc.Partition,
 			readOnly:  readOnly,
 			encrypted: mc.Encrypted,
 			options:   mc.Options,
@@ -221,6 +224,7 @@ func (m *Manager) AddExtensibleVirtualDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
+			partition: mc.Partition,
 			readOnly:  readOnly,
 			encrypted: mc.Encrypted,
 			options:   mc.Options,

@@ -27,7 +27,8 @@ import (
 )
 
 type LCOWLayer struct {
-	VHDPath string
+	VHDPath   string
+	Partition uint64
 }
 
 // Defines a set of LCOW layers.
@@ -108,7 +109,7 @@ func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers
 
 	for _, layer := range layers.Layers {
 		log.G(ctx).WithField("layerPath", layer.VHDPath).Debug("mounting layer")
-		uvmPath, closer, err := addLCOWLayer(ctx, vm, layer.VHDPath)
+		uvmPath, closer, err := addLCOWLayer(ctx, vm, layer)
 		if err != nil {
 			return "", "", nil, fmt.Errorf("failed to add LCOW layer: %s", err)
 		}
@@ -389,15 +390,17 @@ func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolde
 	return containerScratchPathInUVM, closer, nil
 }
 
-func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layerPath string) (uvmPath string, _ resources.ResourceCloser, err error) {
-	// don't try to add as vpmem when we want additional devices on the uvm to be fully physically backed
-	if !vm.DevicesPhysicallyBacked() {
+func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvmPath string, _ resources.ResourceCloser, err error) {
+	// Don't add as VPMEM when we want additional devices on the UVM to be fully physically backed.
+	// Also don't use VPMEM when we need to mount a specific partition of the disk, as this is only
+	// supported for SCSI.
+	if !vm.DevicesPhysicallyBacked() && layer.Partition == 0 {
 		// We first try vPMEM and if it is full or the file is too large we
 		// fall back to SCSI.
-		mount, err := vm.AddVPMem(ctx, layerPath)
+		mount, err := vm.AddVPMem(ctx, layer.VHDPath)
 		if err == nil {
 			log.G(ctx).WithFields(logrus.Fields{
-				"layerPath": layerPath,
+				"layerPath": layer.VHDPath,
 				"layerType": "vpmem",
 			}).Debug("Added LCOW layer")
 			return mount.GuestPath, mount, nil
@@ -406,13 +409,14 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layerPath string) (uvm
 		}
 	}
 
-	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layerPath, true, "", &scsi.MountConfig{Options: []string{"ro"}})
+	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layer.VHDPath, true, "", &scsi.MountConfig{Partition: layer.Partition, Options: []string{"ro"}})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to add SCSI layer: %s", err)
 	}
 	log.G(ctx).WithFields(logrus.Fields{
-		"layerPath": layerPath,
-		"layerType": "scsi",
+		"layerPath":      layer.VHDPath,
+		"layerPartition": layer.Partition,
+		"layerType":      "scsi",
 	}).Debug("Added LCOW layer")
 	return sm.GuestPath(), sm, nil
 }

@@ -100,6 +100,31 @@ func getLCOWLayers(rootfs []*types.Mount, layerFolders []string) (*layers.LCOWLa
 			return nil, err
 		}
 		return legacyLayer(scratchLayer, parentLayers), nil
+	case "lcow-partitioned-layer":
+		var (
+			scratchPath string
+			layerData   []struct {
+				Path      string
+				Partition uint64
+			}
+		)
+		for _, opt := range m.Options {
+			if optPrefix := "scratch="; strings.HasPrefix(opt, optPrefix) {
+				scratchPath = strings.TrimPrefix(opt, optPrefix)
+			} else if optPrefix := "parent-partitioned-layers="; strings.HasPrefix(opt, optPrefix) {
+				layerJSON := strings.TrimPrefix(opt, optPrefix)
+				if err := json.Unmarshal([]byte(layerJSON), &layerData); err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, fmt.Errorf("unrecognized %s mount option: %s", m.Type, opt)
+			}
+		}
+		roLayers := make([]*layers.LCOWLayer, 0, len(layerData))
+		for _, layer := range layerData {
+			roLayers = append(roLayers, &layers.LCOWLayer{VHDPath: layer.Path, Partition: layer.Partition})
+		}
+		return &layers.LCOWLayers{Layers: roLayers, ScratchVHDPath: scratchPath}, nil
 	default:
 		return nil, fmt.Errorf("unrecognized rootfs mount type: %s", m.Type)
 	}
