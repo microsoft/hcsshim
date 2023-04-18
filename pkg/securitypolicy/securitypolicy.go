@@ -146,7 +146,7 @@ func ExtractPolicyDecision(errorMessage string) (string, error) {
 		return "", errors.Errorf("unable to extract policy decision from error message: %s", errorMessage)
 	}
 
-	errorBytes, err := base64.RawURLEncoding.DecodeString(matches[1])
+	errorBytes, err := base64.URLEncoding.DecodeString(matches[1])
 	if err != nil {
 		return "", err
 	}
