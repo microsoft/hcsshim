@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"github.com/Microsoft/hcsshim/internal/credentials"
-	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
@@ -51,7 +50,7 @@ func (r *Resources) LcowScratchPath() string {
 }
 
 // SetLayers updates the container resource's image layers
-func (r *Resources) SetLayers(l *layers.ImageLayers) {
+func (r *Resources) SetLayers(l ResourceCloser) {
 	r.layers = l
 }
 
@@ -86,7 +85,7 @@ type Resources struct {
 	// addedNetNSToVM indicates if the network namespace has been added to the containers utility VM
 	addedNetNSToVM bool
 	// layers is a pointer to a struct of the layers paths of a container
-	layers *layers.ImageLayers
+	layers ResourceCloser
 	// resources is a slice of the resources associated with a container
 	resources []ResourceCloser
 }
@@ -157,9 +156,7 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 	}
 
 	if r.layers != nil {
-		// TODO dcantah: Either make it so layers doesn't rely on the all bool for cleanup logic
-		// or find a way to factor out the all bool in favor of something else.
-		if err := r.layers.Release(ctx, all); err != nil {
+		if err := r.layers.Release(ctx); err != nil {
 			return err
 		}
 	}

@@ -60,13 +60,16 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
 		containerRootInUVM := r.ContainerRootInUVM()
-		containerRootPath, err := layers.MountWCOWLayers(ctx, coi.actualID, coi.Spec.Windows.LayerFolders, containerRootInUVM, "", coi.HostingSystem)
+		containerRootPath, closer, err := layers.MountWCOWLayers(ctx, coi.actualID, coi.Spec.Windows.LayerFolders, containerRootInUVM, "", coi.HostingSystem)
 		if err != nil {
 			return errors.Wrap(err, "failed to mount container storage")
 		}
 		coi.Spec.Root.Path = containerRootPath
-		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, coi.Spec.Windows.LayerFolders, "", isSandbox)
-		r.SetLayers(layers)
+		// If this is the pause container in a hypervisor-isolated pod, we can skip cleanup of
+		// layers, as that happens automatically when the UVM is terminated.
+		if !isSandbox || coi.HostingSystem == nil {
+			r.SetLayers(closer)
+		}
 	}
 
 	if err := setupMounts(ctx, coi, r); err != nil {

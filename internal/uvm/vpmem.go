@@ -29,6 +29,18 @@ var (
 	ErrMaxVPMemLayerSize = errors.New("layer size is to large for VPMEM max size")
 )
 
+// var _ resources.ResourceCloser = &VPMEMMount{} -- Causes an import cycle.
+
+type VPMEMMount struct {
+	GuestPath string
+	uvm       *UtilityVM
+	hostPath  string
+}
+
+func (vc *VPMEMMount) Release(ctx context.Context) error {
+	return vc.uvm.RemoveVPMem(ctx, vc.hostPath)
+}
+
 type vPMemInfoDefault struct {
 	hostPath string
 	uvmPath  string
@@ -235,18 +247,27 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 	return nil
 }
 
-func (uvm *UtilityVM) AddVPMem(ctx context.Context, hostPath string) (string, error) {
+func (uvm *UtilityVM) AddVPMem(ctx context.Context, hostPath string) (*VPMEMMount, error) {
 	if uvm.operatingSystem != "linux" {
-		return "", errNotSupported
+		return nil, errNotSupported
 	}
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
+	var (
+		guestPath string
+		err       error
+	)
 	if uvm.vpmemMultiMapping {
-		return uvm.addVPMemMappedDevice(ctx, hostPath)
+		guestPath, err = uvm.addVPMemMappedDevice(ctx, hostPath)
+	} else {
+		guestPath, err = uvm.addVPMemDefault(ctx, hostPath)
 	}
-	return uvm.addVPMemDefault(ctx, hostPath)
+	if err != nil {
+		return nil, err
+	}
+	return &VPMEMMount{GuestPath: guestPath, uvm: uvm, hostPath: hostPath}, nil
 }
 
 func (uvm *UtilityVM) RemoveVPMem(ctx context.Context, hostPath string) error {

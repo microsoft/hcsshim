@@ -37,11 +37,11 @@ func TestVPMEM(t *testing.T) {
 	}
 
 	for i := 0; i < int(iterations); i++ {
-		uvmPath, err := u.AddVPMem(ctx, filepath.Join(tempDir, "layer.vhd"))
+		mount, err := u.AddVPMem(ctx, filepath.Join(tempDir, "layer.vhd"))
 		if err != nil {
 			t.Fatalf("AddVPMEM failed: %s", err)
 		}
-		t.Logf("exposed as %s", uvmPath)
+		t.Logf("exposed as %s", mount.GuestPath)
 	}
 
 	// Remove them all
