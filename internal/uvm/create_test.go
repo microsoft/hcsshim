@@ -28,12 +28,3 @@ func TestCreateWCOWBadLayerFolders(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestCreateClone(t *testing.T) {
-	opts := NewDefaultOptionsWCOW(t.Name(), "")
-	opts.IsClone = true
-	_, err := CreateWCOW(context.Background(), opts)
-	if err == nil {
-		t.Fatalf("CreateWCOW should fail when IsClone is true and TemplateConfig is not provided")
-	}
-}

@@ -104,34 +104,6 @@ type Options struct {
 	DumpDirectoryPath string
 }
 
-// compares the create opts used during template creation with the create opts
-// provided for clone creation. If they don't match (except for a few fields)
-// then clone creation is failed.
-func verifyCloneUvmCreateOpts(templateOpts, cloneOpts *OptionsWCOW) bool {
-	// Following fields can be different in the template and clone configurations.
-	// 1. the scratch layer path. i.e the last element of the LayerFolders path.
-	// 2. IsTemplate, IsClone and TemplateConfig variables.
-	// 3. ID
-	// 4. AdditionalHCSDocumentJSON
-
-	// Save the original values of the fields that we want to ignore and replace them with
-	// the same values as that of the other object. So that we can simply use `==` operator.
-	templateIDBackup := templateOpts.ID
-	templateOpts.ID = cloneOpts.ID
-
-	// We can't use `==` operator on structs which include slices in them. So compare the
-	// Layerfolders separately and then directly compare the Options struct.
-	result := (len(templateOpts.LayerFolders) == len(cloneOpts.LayerFolders))
-	for i := 0; result && i < len(templateOpts.LayerFolders)-1; i++ {
-		result = result && (templateOpts.LayerFolders[i] == cloneOpts.LayerFolders[i])
-	}
-	result = result && (*templateOpts.Options == *cloneOpts.Options)
-
-	// set original values
-	templateOpts.ID = templateIDBackup
-	return result
-}
-
 // Verifies that the final UVM options are correct and supported.
 func verifyOptions(ctx context.Context, options interface{}) error {
 	switch opts := options.(type) {
@@ -166,15 +138,6 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		}
 		if opts.SCSIControllerCount != 1 {
 			return errors.New("exactly 1 SCSI controller is required for WCOW")
-		}
-		if opts.IsClone && !verifyCloneUvmCreateOpts(&opts.TemplateConfig.CreateOpts, opts) {
-			return errors.New("clone configuration doesn't match with template configuration")
-		}
-		if opts.IsClone && opts.TemplateConfig == nil {
-			return errors.New("template config can not be nil when creating clone")
-		}
-		if opts.IsTemplate && opts.FullyPhysicallyBacked {
-			return errors.New("template can not be created from a full physically backed UVM")
 		}
 	}
 	return nil

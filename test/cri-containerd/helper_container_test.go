@@ -127,3 +127,13 @@ func requireContainerState(
 		)
 	}())
 }
+
+func cleanupContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID *string) {
+	t.Helper()
+	if *containerID == "" {
+		// Do nothing for empty containerID
+		return
+	}
+	stopContainer(t, client, ctx, *containerID)
+	removeContainer(t, client, ctx, *containerID)
+}

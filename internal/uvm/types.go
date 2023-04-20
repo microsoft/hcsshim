@@ -118,16 +118,6 @@ type UtilityVM struct {
 	// Access to this variable should be done atomically.
 	mountCounter uint64
 
-	// specifies if this UVM is created to be saved as a template
-	IsTemplate bool
-
-	// specifies if this UVM is a cloned from a template
-	IsClone bool
-
-	// ID of the template from which this clone was created. Only applies when IsClone
-	// is true
-	TemplateID string
-
 	// Location that container process dumps will get written too.
 	processDumpLocation string
 
