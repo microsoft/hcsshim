@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	testutilities "github.com/Microsoft/hcsshim/test/internal"
@@ -169,7 +170,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	cacheDir := t.TempDir()
 	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
 
-	// This is what gets mounted into /tmp/scratch
+	// This is what gets mounted for UVM scratch
 	uvmScratchDir := t.TempDir()
 	uvmScratchFile := filepath.Join(uvmScratchDir, "uvmscratch.vhdx")
 
@@ -184,13 +185,13 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	lcowUVM := testuvm.CreateAndStartLCOW(context.Background(), t, "uvm")
 	defer lcowUVM.Close()
 
-	// Populate the cache and generate the scratch file for /tmp/scratch
+	// Populate the cache and generate the scratch file
 	if err := lcow.CreateScratch(context.Background(), lcowUVM, uvmScratchFile, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 
-	var options []string
-	if _, err := lcowUVM.AddSCSI(context.Background(), uvmScratchFile, `/tmp/scratch`, false, false, options, uvm.VMAccessTypeIndividual); err != nil {
+	_, err := lcowUVM.SCSIManager.AddVirtualDisk(context.Background(), uvmScratchFile, false, lcowUVM.ID(), &scsi.MountConfig{})
+	if err != nil {
 		t.Fatal(err)
 	}
 

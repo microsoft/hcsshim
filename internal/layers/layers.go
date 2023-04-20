@@ -22,6 +22,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
@@ -104,22 +105,18 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
 	}
 
-	containerScratchPathInUVM := ospath.Join(vm.OS(), guestRoot)
 	hostPath, err := getScratchVHDPath(layerFolders)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to eval symlinks on scratch path: %w", err)
 	}
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
-	var options []string
-	scsiMount, err := vm.AddSCSI(
+	scsiMount, err := vm.SCSIManager.AddVirtualDisk(
 		ctx,
 		hostPath,
-		containerScratchPathInUVM,
 		false,
-		vm.ScratchEncryptionEnabled(),
-		options,
-		uvm.VMAccessTypeIndividual,
+		vm.ID(),
+		&scsi.MountConfig{Encrypted: vm.ScratchEncryptionEnabled()},
 	)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
@@ -128,7 +125,7 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 	// handles the case where we want to share a scratch disk for multiple containers instead
 	// of mounting a new one. Pass a unique value for `ScratchPath` to avoid container upper and
 	// work directories colliding in the UVM.
-	containerScratchPathInUVM = ospath.Join("linux", scsiMount.UVMPath, "scratch", containerID)
+	containerScratchPathInUVM := ospath.Join("linux", scsiMount.GuestPath(), "scratch", containerID)
 
 	defer func() {
 		if err != nil {
@@ -164,7 +161,7 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 //
 //	Job container: Returns the mount path on the host as a volume guid, with the volume mounted on
 //	the host at `volumeMountPath`.
-func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
+func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
 	if vm == nil {
 		return mountWCOWHostLayers(ctx, layerFolders, volumeMountPath)
 	}
@@ -173,7 +170,7 @@ func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		return "", nil, errors.New("MountWCOWLayers should only be called for WCOW")
 	}
 
-	return mountWCOWIsolatedLayers(ctx, containerID, layerFolders, guestRoot, volumeMountPath, vm)
+	return mountWCOWIsolatedLayers(ctx, containerID, layerFolders, volumeMountPath, vm)
 }
 
 type wcowHostLayersCloser struct {
@@ -310,7 +307,7 @@ func (lc *wcowIsolatedLayersCloser) Release(ctx context.Context) (retErr error) 
 	return
 }
 
-func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
+func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolders []string, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
 	log.G(ctx).WithField("os", vm.OS()).Debug("hcsshim::MountWCOWLayers V2 UVM")
 
 	var (
@@ -339,27 +336,17 @@ func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolde
 		layerClosers = append(layerClosers, mount)
 	}
 
-	containerScratchPathInUVM := ospath.Join(vm.OS(), guestRoot)
 	hostPath, err := getScratchVHDPath(layerFolders)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
 	}
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
-	var options []string
-	scsiMount, err := vm.AddSCSI(
-		ctx,
-		hostPath,
-		containerScratchPathInUVM,
-		false,
-		vm.ScratchEncryptionEnabled(),
-		options,
-		uvm.VMAccessTypeIndividual,
-	)
+	scsiMount, err := vm.SCSIManager.AddVirtualDisk(ctx, hostPath, false, vm.ID(), &scsi.MountConfig{})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
 	}
-	containerScratchPathInUVM = scsiMount.UVMPath
+	containerScratchPathInUVM := scsiMount.GuestPath()
 
 	defer func() {
 		if err != nil {
@@ -407,9 +394,7 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layerPath string) (uvm
 		}
 	}
 
-	options := []string{"ro"}
-	uvmPath = fmt.Sprintf(guestpath.LCOWGlobalMountPrefixFmt, vm.UVMMountCounter())
-	sm, err := vm.AddSCSI(ctx, layerPath, uvmPath, true, false, options, uvm.VMAccessTypeNoop)
+	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layerPath, true, "", &scsi.MountConfig{Options: []string{"ro"}})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to add SCSI layer: %s", err)
 	}
@@ -417,7 +402,7 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layerPath string) (uvm
 		"layerPath": layerPath,
 		"layerType": "scsi",
 	}).Debug("Added LCOW layer")
-	return sm.UVMPath, sm, nil
+	return sm.GuestPath(), sm, nil
 }
 
 // GetHCSLayers converts host paths corresponding to container layers into HCS schema V2 layers
