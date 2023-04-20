@@ -352,7 +352,7 @@ func (policy *regoEnforcer) policyDecisionToError(ctx context.Context, decision 
 
 	log.G(ctx).WithField("policyDecision", string(decisionJSON))
 
-	base64EncodedDecisionJSON := base64.RawURLEncoding.EncodeToString(decisionJSON)
+	base64EncodedDecisionJSON := base64.StdEncoding.EncodeToString(decisionJSON)
 	errorMessage := fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
 	if policy.maxErrorMessageLength == 0 {
 		// indicates no message truncation
@@ -373,7 +373,7 @@ func (policy *regoEnforcer) policyDecisionToError(ctx context.Context, decision 
 			log.G(ctx).WithError(err).Error("unable to marshal error object")
 			decisionJSON = []byte(`"Unable to marshal error object"`)
 		}
-		base64EncodedDecisionJSON = base64.RawURLEncoding.EncodeToString(decisionJSON)
+		base64EncodedDecisionJSON = base64.StdEncoding.EncodeToString(decisionJSON)
 		errorMessage = fmt.Errorf(policyDecisionPattern, base64EncodedDecisionJSON)
 
 		if len(errorMessage.Error()) <= policy.maxErrorMessageLength {
