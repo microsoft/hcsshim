@@ -108,6 +108,10 @@ message Options {
 
 	// scrub_logs enables removing environment variables and other potentially sensitive information from logs
 	bool scrub_logs = 20;
+
+	// direct_sandbox_image is an optional path to a sandbox image vhd to use. 
+	// This is currently only supported for LCOW. 
+	string direct_sandbox_image = 21; 
 }
 
 // ProcessDetails contains additional information about a process. This is the additional
