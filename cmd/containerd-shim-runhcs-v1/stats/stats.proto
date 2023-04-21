@@ -4,7 +4,7 @@ package containerd.runhcs.stats.v1;
 
 import weak "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
-import "github.com/containerd/cgroups/stats/v1/metrics.proto";
+import "github.com/containerd/cgroups/v3/cgroup1/stats/metrics.proto";
 
 option go_package = "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats;stats";
 

@@ -6,7 +6,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/containerd/cgroups v1.1.0
+	github.com/containerd/cgroups/v3 v3.0.1
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.6.6
 	github.com/containerd/go-runc v1.0.0

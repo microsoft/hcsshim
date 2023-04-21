@@ -5,16 +5,17 @@ package stats
 
 import (
 	fmt "fmt"
-	v1 "github.com/containerd/cgroups/stats/v1"
-	proto "github.com/gogo/protobuf/proto"
-	_ "github.com/gogo/protobuf/types"
-	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 	time "time"
+
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
+	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/gogo/protobuf/types"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

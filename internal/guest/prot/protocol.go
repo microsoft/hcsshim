@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"strconv"
 
-	v1 "github.com/containerd/cgroups/stats/v1"
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
@@ -17,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-//////////// Code for the Message Header ////////////
+// ////////// Code for the Message Header ////////////
 // Message Identifiers as present in the message header are subdivided into
 // various pieces of information.
 //
@@ -217,7 +217,7 @@ type MessageHeader struct {
 // MessageHeaderSize is the size in bytes of the MessageHeader struct.
 const MessageHeaderSize = 16
 
-/////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////
 
 // ProtocolVersion is a type for the selected HCS<->GCS protocol version of
 // messages
