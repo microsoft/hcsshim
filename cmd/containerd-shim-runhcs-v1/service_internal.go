@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
@@ -16,7 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
 	google_protobuf1 "github.com/gogo/protobuf/types"
@@ -115,46 +113,41 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		}
 	}
 
-	if len(req.Rootfs) == 0 {
-		// If no mounts are passed via the snapshotter its the callers full
-		// responsibility to manage the storage. Just move on without affecting
-		// the config.json at all.
-		if spec.Windows == nil || len(spec.Windows.LayerFolders) < 2 {
-			return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "no Windows.LayerFolders found in oci spec")
-		}
-	} else if len(req.Rootfs) != 1 {
-		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "Rootfs does not contain exactly 1 mount for the root file system")
-	} else {
+	var layerFolders []string
+	if spec.Windows != nil {
+		layerFolders = spec.Windows.LayerFolders
+	}
+	if err := validateRootfsAndLayers(req.Rootfs, layerFolders); err != nil {
+		return nil, err
+	}
+
+	// Only work with Windows here.
+	// Parsing of the rootfs mount for Linux containers occurs later.
+	if spec.Linux == nil && len(req.Rootfs) > 0 {
+		// For Windows containers, we work with LayerFolders throughout
+		// much of the creation logic in the shim. If we were given a
+		// rootfs mount, convert it to LayerFolders here.
 		m := req.Rootfs[0]
-		if m.Type != "windows-layer" && m.Type != "lcow-layer" {
-			return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "unsupported mount type '%s'", m.Type)
+		if m.Type != "windows-layer" {
+			return nil, fmt.Errorf("unsupported Windows mount type: %s", m.Type)
 		}
 
-		// parentLayerPaths are passed in layerN, layerN-1, ..., layer 0
-		//
-		// The OCI spec expects:
-		//   layerN, layerN-1, ..., layer0, scratch
-		var parentLayerPaths []string
-		for _, option := range m.Options {
-			if strings.HasPrefix(option, mount.ParentLayerPathsFlag) {
-				err := json.Unmarshal([]byte(option[len(mount.ParentLayerPathsFlag):]), &parentLayerPaths)
-				if err != nil {
-					return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "failed to unmarshal parent layer paths from mount: %v", err)
-				}
-			}
-		}
-
-		// This is a Windows Argon make sure that we have a Root filled in.
-		if spec.Windows.HyperV == nil {
-			if spec.Root == nil {
-				spec.Root = &specs.Root{}
-			}
+		source, parentLayerPaths, err := parseLegacyRootfsMount(m)
+		if err != nil {
+			return nil, err
 		}
 
 		// Append the parents
 		spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, parentLayerPaths...)
 		// Append the scratch
-		spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, m.Source)
+		spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, source)
+	}
+
+	// This is a Windows Argon make sure that we have a Root filled in.
+	if spec.Windows.HyperV == nil {
+		if spec.Root == nil {
+			spec.Root = &specs.Root{}
+		}
 	}
 
 	if req.Terminal && req.Stderr != "" {

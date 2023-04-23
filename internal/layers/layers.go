@@ -26,6 +26,21 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
+type LCOWLayer struct {
+	VHDPath string
+}
+
+// Defines a set of LCOW layers.
+// For future extensibility, the LCOWLayer type could be swapped for an interface,
+// and we could either call some method on the interface to "apply" it directly to the UVM,
+// or type cast it to the various types that we support, and use the one it matches.
+// This would allow us to support different "types" of mounts, such as raw VHD, VHD+partition, etc.
+type LCOWLayers struct {
+	// Should be in order from top-most layer to bottom-most layer.
+	Layers         []*LCOWLayer
+	ScratchVHDPath string
+}
+
 type lcowLayersCloser struct {
 	uvm                     *uvm.UtilityVM
 	guestCombinedLayersPath string
@@ -65,7 +80,7 @@ func (lc *lcowLayersCloser) Release(ctx context.Context) (retErr error) {
 // Returns the path at which the `rootfs` of the container can be accessed. Also, returns the path inside the
 // UVM at which container scratch directory is located. Usually, this path is the path at which the container
 // scratch VHD is mounted. However, in case of scratch sharing this is a directory under the UVM scratch.
-func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot string, vm *uvm.UtilityVM) (_, _ string, _ resources.ResourceCloser, err error) {
+func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers, guestRoot string, vm *uvm.UtilityVM) (_, _ string, _ resources.ResourceCloser, err error) {
 	if vm == nil {
 		return "", "", nil, errors.New("MountLCOWLayers cannot be called for process-isolated containers")
 	}
@@ -91,13 +106,9 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		}
 	}()
 
-	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
-		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
-		var (
-			layerPath = filepath.Join(layerPath, "layer.vhd")
-			uvmPath   string
-		)
-		uvmPath, closer, err := addLCOWLayer(ctx, vm, layerPath)
+	for _, layer := range layers.Layers {
+		log.G(ctx).WithField("layerPath", layer.VHDPath).Debug("mounting layer")
+		uvmPath, closer, err := addLCOWLayer(ctx, vm, layer.VHDPath)
 		if err != nil {
 			return "", "", nil, fmt.Errorf("failed to add LCOW layer: %s", err)
 		}
@@ -105,7 +116,8 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
 	}
 
-	hostPath, err := getScratchVHDPath(layerFolders)
+	hostPath := layers.ScratchVHDPath
+	hostPath, err = filepath.EvalSymlinks(hostPath)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to eval symlinks on scratch path: %w", err)
 	}

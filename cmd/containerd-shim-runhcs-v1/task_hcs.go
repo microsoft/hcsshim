@@ -11,6 +11,7 @@ import (
 	"time"
 
 	eventstypes "github.com/containerd/containerd/api/events"
+	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
@@ -118,7 +119,16 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 
 // createContainer is a generic call to return either a process/hypervisor isolated container, or a job container
 // based on what is set in the OCI spec.
-func createContainer(ctx context.Context, id, owner, netNS string, s *specs.Spec, parent *uvm.UtilityVM, shimOpts *runhcsopts.Options) (cow.Container, *resources.Resources, error) {
+func createContainer(
+	ctx context.Context,
+	id,
+	owner,
+	netNS string,
+	s *specs.Spec,
+	parent *uvm.UtilityVM,
+	shimOpts *runhcsopts.Options,
+	rootfs []*types.Mount,
+) (cow.Container, *resources.Resources, error) {
 	var (
 		err       error
 		container cow.Container
@@ -137,6 +147,17 @@ func createContainer(ctx context.Context, id, owner, netNS string, s *specs.Spec
 			Spec:             s,
 			HostingSystem:    parent,
 			NetworkNamespace: netNS,
+		}
+		if s.Linux != nil {
+			var layerFolders []string
+			if s.Windows != nil {
+				layerFolders = s.Windows.LayerFolders
+			}
+			lcowLayers, err := getLCOWLayers(rootfs, layerFolders)
+			if err != nil {
+				return nil, nil, err
+			}
+			opts.LCOWLayers = lcowLayers
 		}
 		if shimOpts != nil {
 			opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
@@ -192,7 +213,7 @@ func newHcsTask(
 		return nil, err
 	}
 
-	container, resources, err := createContainer(ctx, req.ID, owner, netNS, s, parent, shimOpts)
+	container, resources, err := createContainer(ctx, req.ID, owner, netNS, s, parent, shimOpts, req.Rootfs)
 	if err != nil {
 		return nil, err
 	}

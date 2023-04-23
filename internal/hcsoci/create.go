@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/resources"
@@ -43,6 +44,7 @@ type CreateOptions struct {
 	SchemaVersion    *hcsschema.Version // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
 	HostingSystem    *uvm.UtilityVM     // Utility or service VM in which the container is to be created.
 	NetworkNamespace string             // Host network namespace to use (overrides anything in the spec)
+	LCOWLayers       *layers.LCOWLayers
 
 	// This is an advanced debugging parameter. It allows for diagnosability by leaving a containers
 	// resources allocated in case of a failure. Thus you would be able to use tools such as hcsdiag
