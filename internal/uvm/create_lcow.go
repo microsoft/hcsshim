@@ -610,14 +610,14 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				pmem := newPackedVPMemDevice()
 				pmem.maxMappedDeviceCount = 1
 
-				st, err := os.Stat(rootfsFullPath)
-				if err != nil {
-					return nil, errors.Wrapf(err, "failed to stat rootfs: %q", rootfsFullPath)
+				st, stErr := os.Stat(rootfsFullPath)
+				if stErr != nil {
+					return nil, errors.Wrapf(stErr, "failed to stat rootfs: %q", rootfsFullPath)
 				}
 				devSize := pageAlign(uint64(st.Size()))
-				memReg, err := pmem.Allocate(devSize)
-				if err != nil {
-					return nil, errors.Wrap(err, "failed to allocate memory for rootfs")
+				memReg, pErr := pmem.Allocate(devSize)
+				if pErr != nil {
+					return nil, errors.Wrap(pErr, "failed to allocate memory for rootfs")
 				}
 				defer func() {
 					if err != nil {

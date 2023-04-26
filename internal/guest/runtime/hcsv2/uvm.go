@@ -543,7 +543,8 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeMappedVirtualDisk:
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
 		// find the actual controller number on the bus and update the incoming request.
-		cNum, err := scsi.ActualControllerNumber(ctx, mvd.Controller)
+		var cNum uint8
+		cNum, err = scsi.ActualControllerNumber(ctx, mvd.Controller)
 		if err != nil {
 			return err
 		}
@@ -552,7 +553,8 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		if !mvd.ReadOnly {
 			localCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 			defer cancel()
-			source, err := scsi.ControllerLunToName(localCtx, mvd.Controller, mvd.Lun)
+			var source string
+			source, err = scsi.ControllerLunToName(localCtx, mvd.Controller, mvd.Lun)
 			if err != nil {
 				return err
 			}
