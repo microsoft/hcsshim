@@ -555,8 +555,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		if !mvd.ReadOnly {
 			localCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 			defer cancel()
-			var source string
-			source, err = scsi.ControllerLunToName(localCtx, mvd.Controller, mvd.Lun)
+			source, err := scsi.GetDevicePath(localCtx, mvd.Controller, mvd.Lun, mvd.Partition)
 			if err != nil {
 				return err
 			}
@@ -982,7 +981,7 @@ func modifyMappedVirtualDisk(
 				}
 			}
 
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath,
+			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
 				mvd.ReadOnly, mvd.Encrypted, mvd.Options, mvd.VerityInfo)
 		}
 		return nil
@@ -994,7 +993,8 @@ func modifyMappedVirtualDisk(
 				}
 			}
 
-			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.Encrypted, mvd.VerityInfo); err != nil {
+			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition,
+				mvd.MountPath, mvd.Encrypted, mvd.VerityInfo); err != nil {
 				return err
 			}
 		}
