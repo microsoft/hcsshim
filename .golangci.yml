@@ -146,3 +146,8 @@ issues:
       linters:
         - staticcheck
       text: "^SA1019: .*nodenetsvc[/]?v0"
+
+    - path: internal\\vhdx\\info
+      linters:
+        - stylecheck
+      Text: "ST1003:"
