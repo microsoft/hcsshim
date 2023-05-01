@@ -13,5 +13,5 @@ func IsCimFsSupported() bool {
 	if err != nil {
 		logrus.WithError(err).Warn("get build revision")
 	}
-	return osversion.Get().Version == 20348 && rv >= 1700
+	return osversion.Build() == 20348 && rv >= 1700
 }
