@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"golang.org/x/sys/windows"
 )
 
@@ -102,7 +104,12 @@ func TestCimReadWrite(t *testing.T) {
 	}
 
 	// mount and read the contents of the cim
-	mountvol, err := Mount(cimPath)
+	volumeGUID, err := guid.NewV4()
+	if err != nil {
+		t.Fatalf("generate cim mount GUID: %s", err)
+	}
+
+	mountvol, err := Mount(cimPath, volumeGUID, hcsschema.CimMountFlagCacheFiles)
 	if err != nil {
 		t.Fatalf("mount cim : %s", err)
 	}
