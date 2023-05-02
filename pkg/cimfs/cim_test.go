@@ -64,7 +64,7 @@ func createCimFileUtil(c *CimFsWriter, fileTuple tuple) error {
 // |- foo
 // |--- bar.txt
 func TestCimReadWrite(t *testing.T) {
-	if !IsCimFsSupported() {
+	if !IsCimFSSupported() {
 		t.Skipf("CimFs not supported")
 	}
 
