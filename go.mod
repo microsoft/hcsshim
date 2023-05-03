@@ -8,9 +8,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/containerd/cgroups v1.1.0
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.6
+	github.com/containerd/containerd v1.6.21
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/ttrpc v1.1.0
+	github.com/containerd/ttrpc v1.1.1
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
@@ -81,7 +81,7 @@ require (
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/tools v0.8.0 // indirect
-	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
+	google.golang.org/genproto v0.0.0-20220502173005-c8bf987b8c21 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
