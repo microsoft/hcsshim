@@ -540,6 +540,8 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 
 func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) (err error) {
 	switch req.ResourceType {
+	case guestresource.ResourceTypeSCSIDevice:
+		return modifySCSIDevice(ctx, req.RequestType, req.Settings.(*guestresource.SCSIDevice))
 	case guestresource.ResourceTypeMappedVirtualDisk:
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
 		// find the actual controller number on the bus and update the incoming request.
@@ -939,6 +941,23 @@ func newInvalidRequestTypeError(rt guestrequest.RequestType) error {
 	return errors.Errorf("the RequestType %q is not supported", rt)
 }
 
+func modifySCSIDevice(
+	ctx context.Context,
+	rt guestrequest.RequestType,
+	msd *guestresource.SCSIDevice,
+) error {
+	switch rt {
+	case guestrequest.RequestTypeRemove:
+		cNum, err := scsi.ActualControllerNumber(ctx, msd.Controller)
+		if err != nil {
+			return err
+		}
+		return scsi.UnplugDevice(ctx, cNum, msd.Lun)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
+}
+
 func modifyMappedVirtualDisk(
 	ctx context.Context,
 	rt guestrequest.RequestType,
@@ -979,7 +998,7 @@ func modifyMappedVirtualDisk(
 				return err
 			}
 		}
-		return scsi.UnplugDevice(ctx, mvd.Controller, mvd.Lun)
+		return nil
 	default:
 		return newInvalidRequestTypeError(rt)
 	}

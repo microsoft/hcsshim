@@ -534,6 +534,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 
 	// Fill in the ResourceType-specific fields.
 	switch msr.ResourceType {
+	case guestresource.ResourceTypeSCSIDevice:
+		msd := &guestresource.SCSIDevice{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, msd); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as SCSIDevice")
+		}
+		msr.Settings = msd
 	case guestresource.ResourceTypeMappedVirtualDisk:
 		mvd := &guestresource.LCOWMappedVirtualDisk{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, mvd); err != nil {
