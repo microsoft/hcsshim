@@ -204,21 +204,6 @@ const (
 	// CPUGroupID specifies the cpugroup ID that a UVM should be assigned to if any
 	CPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
 
-	// SaveAsTemplate annotation must be used with a pod & container creation request.
-	// If this annotation is present in the request then it will save the UVM (pod)
-	// and the container(s) inside it as a template. However, this also means that this
-	// pod and the containers inside this pod will permananetly stay in the
-	// paused/templated state and can not be resumed again.
-	SaveAsTemplate = "io.microsoft.virtualmachine.saveastemplate"
-
-	// TemplateID should be used when creating a pod or a container from a template.
-	// When creating a pod from a template use the ID of the templated pod as the
-	// TemplateID and when creating a container use the ID of the templated container as
-	// the TemplateID. It is the client's responsibility to make sure that the sandbox
-	// within which a cloned container needs to be created must also be created from the
-	// same template.
-	TemplateID = "io.microsoft.virtualmachine.templateid"
-
 	// NetworkConfigProxy holds the address of the network config proxy service.
 	// If set, network setup will be attempted via ncproxy.
 	NetworkConfigProxy = "io.microsoft.network.ncproxy"

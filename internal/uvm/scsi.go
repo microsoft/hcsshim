@@ -3,18 +3,13 @@
 package uvm
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -40,8 +35,6 @@ const (
 	// the running VM only
 	VMAccessTypeIndividual
 )
-
-const scsiCurrentSerialVersionID = 2
 
 var (
 	ErrNoAvailableLocation      = fmt.Errorf("no available location")
@@ -88,10 +81,6 @@ type SCSIMount struct {
 	// specify the type of it (for e.g "space" for storage spaces). Otherwise this should be
 	// empty.
 	extensibleVirtualDiskType string
-	// serialization ID
-	serialVersionID uint32
-	// Make sure that serialVersionID is always the last field and its value is
-	// incremented every time this structure is updated
 
 	// A channel to wait on while mount of this SCSI disk is in progress.
 	waitCh chan struct{}
@@ -140,7 +129,6 @@ func (sm *SCSIMount) logFormat() logrus.Fields {
 		"Controller":                sm.Controller,
 		"LUN":                       sm.LUN,
 		"ExtensibleVirtualDiskType": sm.extensibleVirtualDiskType,
-		"SerialVersionID":           sm.serialVersionID,
 	}
 }
 
@@ -167,7 +155,6 @@ func newSCSIMount(
 		readOnly:                  readOnly,
 		attachmentType:            attachmentType,
 		extensibleVirtualDiskType: evdType,
-		serialVersionID:           scsiCurrentSerialVersionID,
 		waitCh:                    make(chan struct{}),
 	}
 }
@@ -562,174 +549,6 @@ func grantAccess(ctx context.Context, uvmID string, hostPath string, vmAccess VM
 		return wclayer.GrantVmAccess(ctx, uvmID, hostPath)
 	}
 	return nil
-}
-
-var _ = (Cloneable)(&SCSIMount{})
-
-// GobEncode serializes the SCSIMount struct
-func (sm *SCSIMount) GobEncode() ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := gob.NewEncoder(&buf)
-	errMsgFmt := "failed to encode SCSIMount: %s"
-	// encode only the fields that can be safely deserialized.
-	if err := encoder.Encode(sm.serialVersionID); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	if err := encoder.Encode(sm.HostPath); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	if err := encoder.Encode(sm.UVMPath); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	if err := encoder.Encode(sm.Controller); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	if err := encoder.Encode(sm.LUN); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	if err := encoder.Encode(sm.readOnly); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	if err := encoder.Encode(sm.attachmentType); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	if err := encoder.Encode(sm.extensibleVirtualDiskType); err != nil {
-		return nil, fmt.Errorf(errMsgFmt, err)
-	}
-	return buf.Bytes(), nil
-}
-
-// GobDecode deserializes the SCSIMount struct into the struct on which this is called
-// (i.e the sm pointer)
-func (sm *SCSIMount) GobDecode(data []byte) error {
-	buf := bytes.NewBuffer(data)
-	decoder := gob.NewDecoder(buf)
-	errMsgFmt := "failed to decode SCSIMount: %s"
-	// fields should be decoded in the same order in which they were encoded.
-	if err := decoder.Decode(&sm.serialVersionID); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	if sm.serialVersionID != scsiCurrentSerialVersionID {
-		return fmt.Errorf("serialized version of SCSIMount: %d doesn't match with the current version: %d", sm.serialVersionID, scsiCurrentSerialVersionID)
-	}
-	if err := decoder.Decode(&sm.HostPath); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	if err := decoder.Decode(&sm.UVMPath); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	if err := decoder.Decode(&sm.Controller); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	if err := decoder.Decode(&sm.LUN); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	if err := decoder.Decode(&sm.readOnly); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	if err := decoder.Decode(&sm.attachmentType); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	if err := decoder.Decode(&sm.extensibleVirtualDiskType); err != nil {
-		return fmt.Errorf(errMsgFmt, err)
-	}
-	return nil
-}
-
-// Clone function creates a clone of the SCSIMount `sm` and adds the cloned SCSIMount to
-// the uvm `vm`. If `sm` is read only then it is simply added to the `vm`. But if it is a
-// writable mount(e.g a scratch layer) then a copy of it is made and that copy is added
-// to the `vm`.
-func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) error {
-	var (
-		dstVhdPath string = sm.HostPath
-		err        error
-		dir        string
-		conStr     string = guestrequest.ScsiControllerGuids[sm.Controller]
-		lunStr     string = fmt.Sprintf("%d", sm.LUN)
-	)
-
-	if !sm.readOnly {
-		// This is a writable SCSI mount. It must be either the
-		// 1. scratch VHD of the UVM or
-		// 2. scratch VHD of the container.
-		// A user provided writable SCSI mount is not allowed on the template UVM
-		// or container and so this SCSI mount has to be the scratch VHD of the
-		// UVM or container.  The container inside this UVM will automatically be
-		// cloned here when we are cloning the uvm itself. We will receive a
-		// request for creation of this container later and that request will
-		// specify the storage path for this container.  However, that storage
-		// location is not available now so we just use the storage path of the
-		// uvm instead.
-		// TODO(ambarve): Find a better way for handling this. Problem with this
-		// approach is that the scratch VHD of the container will not be
-		// automatically cleaned after container exits. It will stay there as long
-		// as the UVM keeps running.
-
-		// For the scratch VHD of the VM (always attached at Controller:0, LUN:0)
-		// clone it in the scratch folder
-		dir = cd.scratchFolder
-		if sm.Controller != 0 || sm.LUN != 0 {
-			dir, err = os.MkdirTemp(cd.scratchFolder, fmt.Sprintf("clone-mount-%d-%d", sm.Controller, sm.LUN))
-			if err != nil {
-				return fmt.Errorf("error while creating directory for scsi mounts of clone vm: %s", err)
-			}
-		}
-
-		// copy the VHDX
-		dstVhdPath = filepath.Join(dir, filepath.Base(sm.HostPath))
-		log.G(ctx).WithFields(logrus.Fields{
-			"source hostPath":      sm.HostPath,
-			"controller":           sm.Controller,
-			"LUN":                  sm.LUN,
-			"destination hostPath": dstVhdPath,
-		}).Debug("Creating a clone of SCSI mount")
-
-		if err = copyfile.CopyFile(ctx, sm.HostPath, dstVhdPath, true); err != nil {
-			return err
-		}
-
-		if err = grantAccess(ctx, cd.uvmID, dstVhdPath, VMAccessTypeIndividual); err != nil {
-			os.Remove(dstVhdPath)
-			return err
-		}
-	}
-
-	if cd.doc.VirtualMachine.Devices.Scsi == nil {
-		cd.doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
-	}
-
-	if _, ok := cd.doc.VirtualMachine.Devices.Scsi[conStr]; !ok {
-		cd.doc.VirtualMachine.Devices.Scsi[conStr] = hcsschema.Scsi{
-			Attachments: map[string]hcsschema.Attachment{},
-		}
-	}
-
-	cd.doc.VirtualMachine.Devices.Scsi[conStr].Attachments[lunStr] = hcsschema.Attachment{
-		Path:  dstVhdPath,
-		Type_: sm.attachmentType,
-	}
-
-	clonedScsiMount := newSCSIMount(
-		vm,
-		dstVhdPath,
-		sm.UVMPath,
-		sm.attachmentType,
-		sm.extensibleVirtualDiskType,
-		1,
-		sm.Controller,
-		sm.LUN,
-		sm.readOnly,
-		sm.encrypted,
-	)
-
-	vm.scsiLocations[sm.Controller][sm.LUN] = clonedScsiMount
-
-	return nil
-}
-
-func (sm *SCSIMount) GetSerialVersionID() uint32 {
-	return scsiCurrentSerialVersionID
 }
 
 // ParseExtensibleVirtualDiskPath parses the evd path provided in the config.

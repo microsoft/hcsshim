@@ -269,9 +269,6 @@ func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
 		options := vm.DefaultVSMBOptions(true)
 		options.TakeBackupPrivilege = true
-		if vm.IsTemplate {
-			vm.SetSaveableVSMBOptions(options, options.ReadOnly)
-		}
 		if _, err := vm.AddVSMB(ctx, layerPath, options); err != nil {
 			return "", fmt.Errorf("failed to add VSMB layer: %s", err)
 		}

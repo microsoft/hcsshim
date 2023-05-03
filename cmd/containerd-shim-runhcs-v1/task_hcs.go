@@ -166,7 +166,6 @@ func newHcsTask(
 	}).Debug("newHcsTask")
 
 	owner := filepath.Base(os.Args[0])
-	isTemplate := oci.ParseAnnotationsSaveAsTemplate(ctx, s)
 
 	var netNS string
 	if s.Windows != nil &&
@@ -208,7 +207,6 @@ func newHcsTask(
 		host:           parent,
 		closed:         make(chan struct{}),
 		taskSpec:       s,
-		isTemplate:     isTemplate,
 		ioRetryTimeout: ioRetryTimeout,
 	}
 	ht.init = newHcsExec(
@@ -231,136 +229,7 @@ func newHcsTask(
 		go ht.waitForHostExit()
 	}
 
-	// In the normal case the `Signal` call from the caller killed this task's
-	// init process. Or the init process ran to completion - this will mostly
-	// happen when we are creating a template and want to wait for init process
-	// to finish before we save the template. In such cases do not tear down the
-	// container after init exits - because we need the container in the template
-	go ht.waitInitExit(!isTemplate)
-
-	// Publish the created event
-	if err := ht.events.publishEvent(
-		ctx,
-		runtime.TaskCreateEventTopic,
-		&eventstypes.TaskCreate{
-			ContainerID: req.ID,
-			Bundle:      req.Bundle,
-			Rootfs:      req.Rootfs,
-			IO: &eventstypes.TaskIO{
-				Stdin:    req.Stdin,
-				Stdout:   req.Stdout,
-				Stderr:   req.Stderr,
-				Terminal: req.Terminal,
-			},
-			Checkpoint: "",
-			Pid:        uint32(ht.init.Pid()),
-		}); err != nil {
-		return nil, err
-	}
-	return ht, nil
-}
-
-// newClonedTask creates a container within `parent`. The parent must be already cloned
-// from a template and hence this container must already be present inside that parent.
-// This function simply creates the go wrapper around the container that is already
-// running inside the cloned parent.
-// This task MAY own the UVM that it is running in but as of now the cloning feature is
-// only used for WCOW hyper-V isolated containers and for WCOW, the wcowPodSandboxTask
-// owns that UVM.
-func newClonedHcsTask(
-	ctx context.Context,
-	events publisher,
-	parent *uvm.UtilityVM,
-	ownsParent bool,
-	req *task.CreateTaskRequest,
-	s *specs.Spec,
-	templateID string) (_ shimTask, err error) {
-	log.G(ctx).WithFields(logrus.Fields{
-		"tid":        req.ID,
-		"ownsParent": ownsParent,
-		"templateid": templateID,
-	}).Debug("newClonedHcsTask")
-
-	owner := filepath.Base(os.Args[0])
-
-	if parent.OS() != "windows" {
-		return nil, fmt.Errorf("cloned task can only be created inside a windows host")
-	}
-
-	var shimOpts *runhcsopts.Options
-	if req.Options != nil {
-		v, err := typeurl.UnmarshalAny(req.Options)
-		if err != nil {
-			return nil, err
-		}
-		shimOpts = v.(*runhcsopts.Options)
-	}
-
-	// Default to an infinite timeout (zero value)
-	var ioRetryTimeout time.Duration
-	if shimOpts != nil {
-		ioRetryTimeout = time.Duration(shimOpts.IoRetryTimeoutInSec) * time.Second
-	}
-	io, err := cmd.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal, ioRetryTimeout)
-	if err != nil {
-		return nil, err
-	}
-
-	var netNS string
-	if s.Windows != nil &&
-		s.Windows.Network != nil {
-		netNS = s.Windows.Network.NetworkNamespace
-	}
-
-	// This is a cloned task. Use the templateid as the ID of the container here
-	// because that's the ID of this container inside the UVM.
-	opts := hcsoci.CreateOptions{
-		ID:               templateID,
-		Owner:            owner,
-		Spec:             s,
-		HostingSystem:    parent,
-		NetworkNamespace: netNS,
-	}
-	system, resources, err := hcsoci.CloneContainer(ctx, &opts)
-	if err != nil {
-		return nil, err
-	}
-
-	ht := &hcsTask{
-		events:     events,
-		id:         req.ID,
-		isWCOW:     oci.IsWCOW(s),
-		c:          system,
-		cr:         resources,
-		ownsHost:   ownsParent,
-		host:       parent,
-		closed:     make(chan struct{}),
-		templateID: templateID,
-		taskSpec:   s,
-		isTemplate: false,
-	}
-	ht.init = newClonedExec(
-		ctx,
-		events,
-		req.ID,
-		parent,
-		system,
-		req.ID,
-		req.Bundle,
-		ht.isWCOW,
-		s.Process,
-		io)
-
-	if parent != nil {
-		// We have a parent UVM. Listen for its exit and forcibly close this
-		// task. This is not expected but in the event of a UVM crash we need to
-		// handle this case.
-		go ht.waitForHostExit()
-	}
-
-	// In the normal case the `Signal` call from the caller killed this task's
-	// init process.
-	go ht.waitInitExit(true)
+	go ht.waitInitExit()
 
 	// Publish the created event
 	if err := ht.events.publishEvent(
@@ -439,19 +308,6 @@ type hcsTask struct {
 	// closeHostOnce is used to close `host`. This will only be used if
 	// `ownsHost==true` and `host != nil`.
 	closeHostOnce sync.Once
-
-	// templateID represents the id of the template container from which this container
-	// is cloned. The parent UVM (inside which this container is running) identifies this
-	// container with it's original id (i.e the id that was assigned to this container
-	// at the time of template creation i.e the templateID). Hence, every request that
-	// is sent to the GCS must actually use templateID to reference this container.
-	// A non-empty templateID specifies that this task was cloned.
-	templateID string
-
-	// if isTemplate is true then this container will be saved as a template as soon
-	// as its init process exits. Note: templateID and isTemplate are mutually exclusive.
-	// i.e isTemplate can not be true when templateID is not empty.
-	isTemplate bool
 
 	// taskSpec represents the spec/configuration for this task.
 	taskSpec *specs.Spec
@@ -716,7 +572,7 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 	return ht.init.Wait()
 }
 
-func (ht *hcsTask) waitInitExit(destroyContainer bool) {
+func (ht *hcsTask) waitInitExit() {
 	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitInitExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
@@ -724,20 +580,8 @@ func (ht *hcsTask) waitInitExit(destroyContainer bool) {
 	// Wait for it to exit on its own
 	ht.init.Wait()
 
-	if destroyContainer {
-		// Close the host and event the exit
-		ht.close(ctx)
-	} else {
-		// Close the container's host, but do not close or terminate the container itself
-		ht.closeHost(ctx)
-	}
-
-	if ht.isTemplate {
-		// Save the host as a template
-		if err := saveAsTemplate(ctx, ht); err != nil {
-			log.G(ctx).WithError(err).Error("failed to save as template")
-		}
-	}
+	// Close the host and event the exit
+	ht.close(ctx)
 }
 
 // waitForHostExit waits for the host virtual machine to exit. Once exited

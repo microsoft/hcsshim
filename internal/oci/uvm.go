@@ -5,11 +5,9 @@ package oci
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
-	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -142,19 +140,6 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 	return def
 }
 
-func ParseCloneAnnotations(ctx context.Context, s *specs.Spec) (isTemplate bool, templateID string, err error) {
-	templateID = ParseAnnotationsTemplateID(ctx, s)
-	isTemplate = ParseAnnotationsSaveAsTemplate(ctx, s)
-	if templateID != "" && isTemplate {
-		return false, "", fmt.Errorf("templateID and save as template flags can not be passed in the same request")
-	}
-
-	if (isTemplate || templateID != "") && !IsWCOW(s) {
-		return false, "", fmt.Errorf("save as template and creating clones is only available for WCOW")
-	}
-	return
-}
-
 // handleAnnotationKernelDirectBoot handles parsing annotationKernelDirectBoot and setting
 // implied annotations from the result.
 func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
@@ -194,26 +179,6 @@ func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]str
 			options.AllowOvercommit = false
 		}
 	}
-}
-
-// handleCloneAnnotations handles parsing annotations related to template creation and cloning
-// Since late cloning is only supported for WCOW this function only deals with WCOW options.
-func handleCloneAnnotations(ctx context.Context, a map[string]string, wopts *uvm.OptionsWCOW) (err error) {
-	wopts.IsTemplate = ParseAnnotationsBool(ctx, a, annotations.SaveAsTemplate, false)
-	templateID := parseAnnotationsString(a, annotations.TemplateID, "")
-	if templateID != "" {
-		tc, err := clone.FetchTemplateConfig(ctx, templateID)
-		if err != nil {
-			return err
-		}
-		wopts.TemplateConfig = &uvm.UVMTemplateConfig{
-			UVMID:      tc.TemplateUVMID,
-			CreateOpts: tc.TemplateUVMCreateOpts,
-			Resources:  tc.TemplateUVMResources,
-		}
-		wopts.IsClone = true
-	}
-	return nil
 }
 
 // handleSecurityPolicy handles parsing SecurityPolicy and NoSecurityHardware and setting
@@ -318,9 +283,6 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.NoDirectMap = ParseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)
 		wopts.NoInheritHostTimezone = ParseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
-		if err := handleCloneAnnotations(ctx, s.Annotations, wopts); err != nil {
-			return nil, err
-		}
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")

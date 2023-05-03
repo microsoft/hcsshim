@@ -301,16 +301,6 @@ func (p *pod) ID() string {
 	return p.id
 }
 
-func (p *pod) GetCloneAnnotations(ctx context.Context, s *specs.Spec) (bool, string, error) {
-	isTemplate, templateID, err := oci.ParseCloneAnnotations(ctx, s)
-	if err != nil {
-		return false, "", err
-	} else if (isTemplate || templateID != "") && p.host == nil {
-		return false, "", fmt.Errorf("save as template and creating clones is only supported for hyper-v isolated containers")
-	}
-	return isTemplate, templateID, nil
-}
-
 func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
 	if req.ID == p.id {
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists", req.ID)
@@ -366,17 +356,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 			sid)
 	}
 
-	_, templateID, err := p.GetCloneAnnotations(ctx, s)
-	if err != nil {
-		return nil, err
-	}
-
-	var st shimTask
-	if templateID != "" {
-		st, err = newClonedHcsTask(ctx, p.events, p.host, false, req, s, templateID)
-	} else {
-		st, err = newHcsTask(ctx, p.events, p.host, false, req, s)
-	}
+	st, err := newHcsTask(ctx, p.events, p.host, false, req, s)
 	if err != nil {
 		return nil, err
 	}

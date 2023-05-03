@@ -121,3 +121,13 @@ func getRunPodSandboxRequest(tb testing.TB, runtimeHandler string, sandboxOpts .
 		RuntimeHandler: runtimeHandler,
 	}
 }
+
+func cleanupPod(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID *string) {
+	t.Helper()
+	if *podID == "" {
+		// Do nothing for empty podID
+		return
+	}
+	stopPodSandbox(t, client, ctx, *podID)
+	removePodSandbox(t, client, ctx, *podID)
+}

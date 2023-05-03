@@ -9,11 +9,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -23,7 +21,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -69,110 +66,9 @@ type createOptionsInternal struct {
 	actualOwner            string             // Owner for the container
 	actualNetworkNamespace string
 	ccgState               *hcsschema.ContainerCredentialGuardState // Container Credential Guard information to be attached to HCS container document
-	isTemplate             bool                                     // Are we going to save this container as a template
-	templateID             string                                   // Template ID of the template from which this container is being cloned
-}
-
-// compares two slices of strings and returns true if they are same, returns false otherwise.
-// The elements in the slices don't have to be in the same order for them to be equal.
-func cmpSlices(s1, s2 []string) bool {
-	equal := (len(s1) == len(s2))
-	for i := 0; equal && i < len(s1); i++ {
-		found := false
-		for j := 0; !found && j < len(s2); j++ {
-			found = (s1[i] == s2[j])
-		}
-		equal = equal && found
-	}
-	return equal
-}
-
-// verifyCloneContainerSpecs compares the container creation spec provided during the template container
-// creation and the spec provided during cloned container creation and checks that all the fields match
-// (except for the certain fields that are allowed to be different).
-func verifyCloneContainerSpecs(templateSpec, cloneSpec *specs.Spec) error {
-	// Following fields can be different in the template and clone specs.
-	// 1. Process
-	// 2. Annotations - Only the template/cloning related annotations can be different.
-	// 3. Windows.LayerFolders - Only the last i.e scratch layer can be different.
-
-	if templateSpec.Version != cloneSpec.Version {
-		return fmt.Errorf("OCI Runtime Spec version of template (%s) doesn't match with the Spec version of clone (%s)", templateSpec.Version, cloneSpec.Version)
-	}
-
-	// for annotations check that the values of memory & cpu annotations are same
-	if templateSpec.Annotations[annotations.ContainerMemorySizeInMB] != cloneSpec.Annotations[annotations.ContainerMemorySizeInMB] {
-		return errors.New("memory size limit for template and clone containers can not be different")
-	}
-	if templateSpec.Annotations[annotations.ContainerProcessorCount] != cloneSpec.Annotations[annotations.ContainerProcessorCount] {
-		return errors.New("processor count for template and clone containers can not be different")
-	}
-	if templateSpec.Annotations[annotations.ContainerProcessorLimit] != cloneSpec.Annotations[annotations.ContainerProcessorLimit] {
-		return errors.New("processor limit for template and clone containers can not be different")
-	}
-
-	// LayerFolders should be identical except for the last element.
-	if !cmpSlices(templateSpec.Windows.LayerFolders[:len(templateSpec.Windows.LayerFolders)-1], cloneSpec.Windows.LayerFolders[:len(cloneSpec.Windows.LayerFolders)-1]) {
-		return errors.New("layers provided for template container and clone container don't match. Check the image specified in container config")
-	}
-
-	if !reflect.DeepEqual(templateSpec.Windows.HyperV, cloneSpec.Windows.HyperV) {
-		return errors.New("HyperV spec for template and clone containers can not be different")
-	}
-
-	if templateSpec.Windows.Network.AllowUnqualifiedDNSQuery != cloneSpec.Windows.Network.AllowUnqualifiedDNSQuery {
-		return errors.New("different values for allow unqualified DNS query can not be provided for template and clones")
-	}
-	if templateSpec.Windows.Network.NetworkSharedContainerName != cloneSpec.Windows.Network.NetworkSharedContainerName {
-		return errors.New("different network shared name can not be provided for template and clones")
-	}
-	if !cmpSlices(templateSpec.Windows.Network.DNSSearchList, cloneSpec.Windows.Network.DNSSearchList) {
-		return errors.New("different DNS search list can not be provided for template and clones")
-	}
-
-	return nil
 }
 
 func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) error {
-	if coi.HostingSystem != nil && coi.HostingSystem.IsTemplate && !coi.isTemplate {
-		return fmt.Errorf("only a template container can be created inside a template pod. Any other combination is not valid")
-	}
-
-	if coi.HostingSystem != nil && coi.templateID != "" && !coi.HostingSystem.IsClone {
-		return fmt.Errorf("a container can not be cloned inside a non cloned POD")
-	}
-
-	if coi.templateID != "" {
-		// verify that the configurations provided for the template for
-		// this clone are same.
-		tc, err := clone.FetchTemplateConfig(ctx, coi.HostingSystem.TemplateID)
-		if err != nil {
-			return fmt.Errorf("config validation failed : %s", err)
-		}
-		if err := verifyCloneContainerSpecs(&tc.TemplateContainerSpec, coi.Spec); err != nil {
-			return err
-		}
-	}
-
-	if coi.HostingSystem != nil && coi.HostingSystem.IsTemplate {
-		if len(coi.Spec.Windows.Devices) != 0 {
-			return fmt.Errorf("mapped Devices are not supported for template containers")
-		}
-
-		if _, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
-			return fmt.Errorf("gmsa specifications are not supported for template containers")
-		}
-
-		if coi.Spec.Windows.Servicing {
-			return fmt.Errorf("template containers can't be started in servicing mode")
-		}
-
-		// check that no mounts are specified.
-		if len(coi.Spec.Mounts) > 0 {
-			return fmt.Errorf("user specified mounts are not permitted for template containers")
-		}
-	}
-
 	// check if gMSA is disabled
 	if coi.Spec.Windows != nil {
 		disableGMSA := oci.ParseAnnotationsDisableGMSA(ctx, coi.Spec)
@@ -213,9 +109,6 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 	} else {
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
 	}
-
-	coi.isTemplate = oci.ParseAnnotationsSaveAsTemplate(ctx, createOptions.Spec)
-	coi.templateID = oci.ParseAnnotationsTemplateID(ctx, createOptions.Spec)
 
 	log.G(ctx).WithFields(logrus.Fields{
 		"options": fmt.Sprintf("%+v", createOptions),
@@ -386,64 +279,6 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		return nil, r, err
 	}
 	return system, r, nil
-}
-
-// CloneContainer is similar to CreateContainer but it does not add layers or namespace like
-// CreateContainer does. Also, instead of sending create container request it sends a modify
-// request to an existing container. CloneContainer only works for WCOW.
-func CloneContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *resources.Resources, err error) {
-	coi, err := initializeCreateOptions(ctx, createOptions)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if err := validateContainerConfig(ctx, coi); err != nil {
-		return nil, nil, err
-	}
-
-	if coi.Spec.Windows == nil || coi.HostingSystem == nil {
-		return nil, nil, fmt.Errorf("CloneContainer is only supported for Hyper-v isolated WCOW ")
-	}
-
-	r := resources.NewContainerResources(createOptions.ID)
-	defer func() {
-		if err != nil {
-			if !coi.DoNotReleaseResourcesOnFailure {
-				_ = resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
-			}
-		}
-	}()
-
-	if coi.HostingSystem != nil {
-		n := coi.HostingSystem.ContainerCounter()
-		if coi.Spec.Linux != nil {
-			r.SetContainerRootInUVM(fmt.Sprintf(lcowRootInUVM, createOptions.ID))
-		} else {
-			r.SetContainerRootInUVM(fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16)))
-		}
-	}
-
-	if err = setupMounts(ctx, coi, r); err != nil {
-		return nil, r, err
-	}
-
-	mounts, err := createMountsConfig(ctx, coi)
-	if err != nil {
-		return nil, r, err
-	}
-
-	c, err := coi.HostingSystem.CloneContainer(ctx, coi.actualID)
-	if err != nil {
-		return nil, r, err
-	}
-
-	// Everything that is usually added to the container during the createContainer
-	// request (via the gcsDocument) must be hot added here.
-	if err := addMountsToClone(ctx, c, mounts); err != nil {
-		return nil, r, err
-	}
-
-	return c, r, nil
 }
 
 // isV2Xenon returns true if the create options are for a HCS schema V2 xenon container

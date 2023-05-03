@@ -60,19 +60,6 @@ func ParseAnnotationsDisableGMSA(ctx context.Context, s *specs.Spec) bool {
 	return ParseAnnotationsBool(ctx, s.Annotations, annotations.WCOWDisableGMSA, false)
 }
 
-// ParseAnnotationsSaveAsTemplate searches for the boolean value which specifies
-// if this create request should be considered as a template creation request. If value
-// is found the returns the actual value, returns false otherwise.
-func ParseAnnotationsSaveAsTemplate(ctx context.Context, s *specs.Spec) bool {
-	return ParseAnnotationsBool(ctx, s.Annotations, annotations.SaveAsTemplate, false)
-}
-
-// ParseAnnotationsTemplateID searches for the templateID in the create request. If the
-// value is found then returns the value otherwise returns the empty string.
-func ParseAnnotationsTemplateID(ctx context.Context, s *specs.Spec) string {
-	return parseAnnotationsString(s.Annotations, annotations.TemplateID, "")
-}
-
 // general annotation parsing
 
 // ParseAnnotationsBool searches `a` for `key` and if found verifies that the

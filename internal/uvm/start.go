@@ -260,7 +260,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			IoListen:       gcs.HvsockIoListen(uvm.runtimeID),
 			InitGuestState: initGuestState,
 		}
-		uvm.gc, err = gcc.Connect(ctx, !uvm.IsClone)
+		uvm.gc, err = gcc.Connect(ctx, true)
 		if err != nil {
 			return err
 		}

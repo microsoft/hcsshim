@@ -36,19 +36,11 @@ var (
 	ErrNICNotFound = errors.New("NIC not found in network namespace")
 )
 
-// Network namespace setup is a bit different for templates and clones.
-// For templates and clones we use a special network namespace ID.
-// Details about this can be found in the Networking section of the late-clone wiki page.
-//
 // In this function we take the namespace ID of the namespace that was created for this
-// UVM. We hot add the namespace (with the default ID if this is a template). We get the
-// endpoints associated with this namespace and then hot add those endpoints (by changing
-// their namespace IDs by the default IDs if it is a template).
+// UVM. We hot add the namespace. We get the endpoints associated with this namespace
+// and then hot add those endpoints.
 func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) error {
 	nsidInsideUVM := nsid
-	if uvm.IsTemplate || uvm.IsClone {
-		nsidInsideUVM = DefaultCloneNetworkNamespaceID
-	}
 
 	// Query endpoints with actual nsid
 	endpoints, err := GetNamespaceEndpoints(ctx, nsid)
@@ -56,35 +48,15 @@ func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) er
 		return err
 	}
 
-	// Add the network namespace inside the UVM if it is not a clone. (Clones will
-	// inherit the namespace from template)
-	if !uvm.IsClone {
-		// Get the namespace struct from the actual nsid.
-		hcnNamespace, err := hcn.GetNamespaceByID(nsid)
-		if err != nil {
-			return err
-		}
-
-		// All templates should have a special NSID so that it
-		// will be easier to debug. Override it here.
-		if uvm.IsTemplate {
-			hcnNamespace.Id = nsidInsideUVM
-		}
-
-		if err = uvm.AddNetNS(ctx, hcnNamespace); err != nil {
-			return err
-		}
+	// Add the network namespace inside the UVM.
+	// Get the namespace struct from the actual nsid.
+	hcnNamespace, err := hcn.GetNamespaceByID(nsid)
+	if err != nil {
+		return err
 	}
 
-	// If adding a network endpoint to clones or a template override nsid associated
-	// with it.
-	if uvm.IsClone || uvm.IsTemplate {
-		// replace nsid for each endpoint
-		for _, ep := range endpoints {
-			ep.Namespace = &hns.Namespace{
-				ID: nsidInsideUVM,
-			}
-		}
+	if err = uvm.AddNetNS(ctx, hcnNamespace); err != nil {
+		return err
 	}
 
 	if err = uvm.AddEndpointsToNS(ctx, nsidInsideUVM, endpoints); err != nil {

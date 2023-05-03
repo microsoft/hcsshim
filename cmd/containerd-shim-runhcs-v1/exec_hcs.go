@@ -445,8 +445,6 @@ func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 //
 // 6. Close `he.exited` channel to unblock any waiters who might have called
 // `Create`/`Wait`/`Start` which is a valid pattern.
-//
-// 7. Finally, save the UVM and this container as a template if specified.
 func (he *hcsExec) waitForExit() {
 	var err error // this will only save the last error, since we dont return early on error
 	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForExit")
