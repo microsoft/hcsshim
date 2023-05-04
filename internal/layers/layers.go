@@ -161,13 +161,14 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 //	Job container: Returns the mount path on the host as a volume guid, with the volume mounted on
 //	the host at `volumeMountPath`.
 func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
+	if vm == nil {
+		return mountWCOWHostLayers(ctx, layerFolders, volumeMountPath)
+	}
+
 	if vm.OS() != "windows" {
 		return "", nil, errors.New("MountWCOWLayers should only be called for WCOW")
 	}
 
-	if vm == nil {
-		return mountWCOWHostLayers(ctx, layerFolders, volumeMountPath)
-	}
 	return mountWCOWIsolatedLayers(ctx, containerID, layerFolders, guestRoot, volumeMountPath, vm)
 }
 
