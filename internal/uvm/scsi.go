@@ -519,19 +519,6 @@ func (uvm *UtilityVM) allocateSCSIMount(
 	return uvm.scsiLocations[controller][lun], false, nil
 }
 
-// GetScsiUvmPath returns the guest mounted path of a SCSI drive.
-//
-// If `hostPath` is not mounted returns `ErrNotAttached`.
-func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (string, error) {
-	uvm.m.Lock()
-	defer uvm.m.Unlock()
-	sm, err := uvm.findSCSIAttachment(ctx, hostPath)
-	if err != nil {
-		return "", err
-	}
-	return sm.UVMPath, err
-}
-
 // ScratchEncryptionEnabled is a getter for `uvm.encryptScratch`.
 //
 // Returns true if the scratch disks should be encrypted, false otherwise.
