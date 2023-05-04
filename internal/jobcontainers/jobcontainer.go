@@ -21,7 +21,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
-	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/resources"
@@ -189,25 +188,16 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 		}
 	})
 
+	var closer resources.ResourceCloser
 	if fileBindingSupport {
-		if err := container.bindSetup(ctx, s); err != nil {
-			return nil, nil, err
-		}
+		closer, err = container.bindSetup(ctx, s)
 	} else {
-		if err := container.fallbackSetup(ctx, s); err != nil {
-			return nil, nil, err
-		}
+		closer, err = container.fallbackSetup(ctx, s)
 	}
-
-	// We actually don't need to pass in anything for volumeMountPath below if we have file binding support,
-	// the filter allows us to pass in a raw volume path and it can use that to bind a volume to a friendly path
-	// instead so we can skip calling SetVolumeMountPoint.
-	var rootfsMountPoint string
-	if !fileBindingSupport {
-		rootfsMountPoint = container.rootfsLocation
+	if err != nil {
+		return nil, nil, err
 	}
-	layers := layers.NewImageLayers(nil, "", s.Windows.LayerFolders, rootfsMountPoint, false)
-	r.SetLayers(layers)
+	r.SetLayers(closer)
 
 	volumeGUIDRegex := `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
 	if matched, err := regexp.MatchString(volumeGUIDRegex, s.Root.Path); !matched || err != nil {
@@ -775,37 +765,56 @@ func (c *JobContainer) replaceWithMountPoint(str string) (string, bool) {
 	return newStr, str != newStr
 }
 
-func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error) {
+func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (_ resources.ResourceCloser, err error) {
 	// Must be upgraded to a silo so we can get per silo bindings for the container.
 	if err := c.job.PromoteToSilo(); err != nil {
-		return err
+		return nil, err
 	}
 	// Union the container layers.
-	if err := c.mountLayers(ctx, c.id, s, ""); err != nil {
-		return fmt.Errorf("failed to mount container layers: %w", err)
+	closer, err := c.mountLayers(ctx, c.id, s, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to mount container layers: %w", err)
 	}
+	defer func() {
+		if err != nil {
+			_ = closer.Release(ctx)
+		}
+	}()
+
 	rootfsLocation := defaultSiloRootfsLocation
 	if loc := customRootfsLocation(s.Annotations); loc != "" {
 		rootfsLocation = loc
 	}
 
 	if err := c.setupRootfsBinding(rootfsLocation, s.Root.Path); err != nil {
-		return err
+		return nil, err
 	}
 	c.rootfsLocation = rootfsLocation
-	return c.setupMounts(ctx, s)
+	if err := c.setupMounts(ctx, s); err != nil {
+		return nil, err
+	}
+	return closer, nil
 }
 
 // This handles the fallback case where bind mounting isn't available on the machine. This mounts the
 // container layers on the host and sets up any mounts present in the OCI runtime spec.
-func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec) (err error) {
+func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec) (_ resources.ResourceCloser, err error) {
 	rootfsLocation := fmt.Sprintf(fallbackRootfsFormat, c.id)
 	if loc := customRootfsLocation(s.Annotations); loc != "" {
 		rootfsLocation = filepath.Join(loc, c.id)
 	}
-	if err := c.mountLayers(ctx, c.id, s, rootfsLocation); err != nil {
-		return fmt.Errorf("failed to mount container layers: %w", err)
+	closer, err := c.mountLayers(ctx, c.id, s, rootfsLocation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to mount container layers: %w", err)
 	}
+	defer func() {
+		if err != nil {
+			_ = closer.Release(ctx)
+		}
+	}()
 	c.rootfsLocation = rootfsLocation
-	return fallbackMountSetup(s, c.rootfsLocation)
+	if err := fallbackMountSetup(s, c.rootfsLocation); err != nil {
+		return nil, err
+	}
+	return closer, nil
 }

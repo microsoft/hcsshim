@@ -30,13 +30,16 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 	containerRootInUVM := r.ContainerRootInUVM()
 	if coi.Spec.Windows != nil && len(coi.Spec.Windows.LayerFolders) > 0 {
 		log.G(ctx).Debug("hcsshim::allocateLinuxResources mounting storage")
-		rootPath, scratchPath, err := layers.MountLCOWLayers(ctx, coi.actualID, coi.Spec.Windows.LayerFolders, containerRootInUVM, "", coi.HostingSystem)
+		rootPath, scratchPath, closer, err := layers.MountLCOWLayers(ctx, coi.actualID, coi.Spec.Windows.LayerFolders, containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return errors.Wrap(err, "failed to mount container storage")
 		}
 		coi.Spec.Root.Path = rootPath
-		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, coi.Spec.Windows.LayerFolders, "", isSandbox)
-		r.SetLayers(layers)
+		// If this is the pause container in a hypervisor-isolated pod, we can skip cleanup of
+		// layers, as that happens automatically when the UVM is terminated.
+		if !isSandbox || coi.HostingSystem == nil {
+			r.SetLayers(closer)
+		}
 		r.SetLcowScratchPath(scratchPath)
 	} else if coi.Spec.Root.Path != "" {
 		// This is the "Plan 9" root filesystem.
