@@ -3,7 +3,7 @@
 package main
 
 import (
-	gcontext "context"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,16 +50,16 @@ This command allows containerd to delete any container resources created, mounte
 The delete command will be executed in the container's bundle as its cwd.
 `,
 	SkipArgReorder: true,
-	Action: func(context *cli.Context) (err error) {
+	Action: func(cCtx *cli.Context) (err error) {
 		// We cant write anything to stdout for this cmd other than the
 		// task.DeleteResponse by protocol. We can write to stderr which will be
 		// logged as a warning in containerd.
 
-		ctx, span := oc.StartSpan(gcontext.Background(), "delete")
+		ctx, span := oc.StartSpan(context.Background(), "delete")
 		defer span.End()
 		defer func() { oc.SetSpanStatus(span, err) }()
 
-		bundleFlag := context.GlobalString("bundle")
+		bundleFlag := cCtx.GlobalString("bundle")
 		if bundleFlag == "" {
 			return errors.New("bundle is required")
 		}
@@ -107,7 +107,10 @@ The delete command will be executed in the container's bundle as its cwd.
 		// be deleted, but if the shim crashed unexpectedly (panic, terminated etc.) then the account may still be around.
 		// The username will be the container ID so try and delete it here. The username character limit is 20, so we need to
 		// slice down the container ID a bit.
-		username := idFlag[:winapi.UserNameCharLimit]
+		username := idFlag
+		if len(username) > winapi.UserNameCharLimit {
+			username = username[:winapi.UserNameCharLimit]
+		}
 
 		// Always try and delete the user, if it doesn't exist we'll get a specific error code that we can use to
 		// not log any warnings.
