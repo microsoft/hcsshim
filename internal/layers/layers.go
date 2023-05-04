@@ -65,6 +65,10 @@ func (lc *lcowLayersCloser) Release(ctx context.Context) (retErr error) {
 // UVM at which container scratch directory is located. Usually, this path is the path at which the container
 // scratch VHD is mounted. However, in case of scratch sharing this is a directory under the UVM scratch.
 func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot string, vm *uvm.UtilityVM) (_, _ string, _ resources.ResourceCloser, err error) {
+	if vm == nil {
+		return "", "", nil, errors.New("MountLCOWLayers cannot be called for process-isolated containers")
+	}
+
 	if vm.OS() != "linux" {
 		return "", "", nil, errors.New("MountLCOWLayers should only be called for LCOW")
 	}
@@ -161,13 +165,14 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 //	Job container: Returns the mount path on the host as a volume guid, with the volume mounted on
 //	the host at `volumeMountPath`.
 func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
+	if vm == nil {
+		return mountWCOWHostLayers(ctx, layerFolders, volumeMountPath)
+	}
+
 	if vm.OS() != "windows" {
 		return "", nil, errors.New("MountWCOWLayers should only be called for WCOW")
 	}
 
-	if vm == nil {
-		return mountWCOWHostLayers(ctx, layerFolders, volumeMountPath)
-	}
 	return mountWCOWIsolatedLayers(ctx, containerID, layerFolders, guestRoot, volumeMountPath, vm)
 }
 
