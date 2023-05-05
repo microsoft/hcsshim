@@ -125,46 +125,6 @@ func Test_Encrypt_Cryptsetup_Open_Error(t *testing.T) {
 	}
 }
 
-func Test_Encrypt_Mkfs_Error(t *testing.T) {
-	clearCryptTestDependencies()
-
-	// Test what happens when mkfs fails to format the unencrypted device.
-	// Verify that the arguments passed to it are the right ones.
-	_generateKeyFile = func(path string, size int64) error {
-		return nil
-	}
-	_osRemoveAll = func(path string) error {
-		return nil
-	}
-	_cryptsetupFormat = func(source string, keyFilePath string) error {
-		return nil
-	}
-	_cryptsetupOpen = func(source string, deviceName string, keyFilePath string) error {
-		return nil
-	}
-	_cryptsetupClose = func(deviceName string) error {
-		return nil
-	}
-	_zeroFirstBlock = func(_ string, _ int) error {
-		return nil
-	}
-
-	source := "/dev/sda"
-	formatTarget := "/dev/mapper/dm-crypt-name"
-
-	expectedErr := errors.New("expected error message")
-	_mkfsXfs = func(arg string) error {
-		if arg != formatTarget {
-			t.Fatalf("expected args: '%v' got: '%v'", formatTarget, arg)
-		}
-		return expectedErr
-	}
-
-	if _, err := EncryptDevice(context.Background(), source, "dm-crypt-name"); errors.Unwrap(err) != expectedErr {
-		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
-	}
-}
-
 func Test_Encrypt_Success(t *testing.T) {
 	clearCryptTestDependencies()
 
@@ -182,9 +142,6 @@ func Test_Encrypt_Success(t *testing.T) {
 		return nil
 	}
 	_zeroFirstBlock = func(_ string, _ int) error {
-		return nil
-	}
-	_mkfsXfs = func(arg string) error {
 		return nil
 	}
 

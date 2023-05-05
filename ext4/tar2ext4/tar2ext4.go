@@ -215,19 +215,19 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 // More details can be found here https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout
 //
 // Our goal is to skip the Group 0 padding, read and return the ext4 SuperBlock
-func ReadExt4SuperBlock(vhdPath string) (*format.SuperBlock, error) {
-	vhd, err := os.OpenFile(vhdPath, os.O_RDONLY, 0)
+func ReadExt4SuperBlock(devicePath string) (*format.SuperBlock, error) {
+	dev, err := os.OpenFile(devicePath, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
 	}
-	defer vhd.Close()
+	defer dev.Close()
 
 	// Skip padding at the start
-	if _, err := vhd.Seek(1024, io.SeekStart); err != nil {
+	if _, err := dev.Seek(1024, io.SeekStart); err != nil {
 		return nil, err
 	}
 	var sb format.SuperBlock
-	if err := binary.Read(vhd, binary.LittleEndian, &sb); err != nil {
+	if err := binary.Read(dev, binary.LittleEndian, &sb); err != nil {
 		return nil, err
 	}
 	// Make sure the magic bytes are correct.
@@ -235,6 +235,15 @@ func ReadExt4SuperBlock(vhdPath string) (*format.SuperBlock, error) {
 		return nil, errors.New("not an ext4 file system")
 	}
 	return &sb, nil
+}
+
+// IsDeviceExt4 is will read the device's superblock and determine if it is
+// and ext4 superblock.
+func IsDeviceExt4(devicePath string) bool {
+	// ReadExt4SuperBlock will check the superblock magic number for us,
+	// so we know if no error is returned, this is an ext4 device.
+	_, err := ReadExt4SuperBlock(devicePath)
+	return err == nil
 }
 
 // ConvertAndComputeRootDigest writes a compact ext4 file system image that contains the files in the

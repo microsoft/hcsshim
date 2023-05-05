@@ -18,7 +18,7 @@ func mkfsExt4Command(args []string) error {
 	}
 	return nil
 }
-func FormatExt4(ctx context.Context, source string) error {
+func Format(ctx context.Context, source string) error {
 	// Format source as ext4
 	if err := mkfsExt4Command([]string{source}); err != nil {
 		return fmt.Errorf("mkfs.ext4 failed to format %s: %w", source, err)
