@@ -22,6 +22,7 @@ import (
 	"github.com/containerd/typeurl"
 	"github.com/gogo/protobuf/types"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
 	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"
@@ -186,8 +187,7 @@ func createGRPCConn(ctx context.Context) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	//nolint:staticcheck //TODO: SA1019: grpc.WithInsecure is deprecated: use WithTransportCredentials and insecure.NewCredentials()
-	return grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithContextDialer(dialer))
+	return grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(dialer))
 }
 
 func newTestRuntimeClient(tb testing.TB) runtime.RuntimeServiceClient {

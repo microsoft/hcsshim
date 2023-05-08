@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/opencontainers/image-spec/identity"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	imagesutil "github.com/Microsoft/hcsshim/test/pkg/images"
 	"github.com/Microsoft/hcsshim/test/pkg/timeout"
@@ -33,8 +34,7 @@ func createGRPCConn(ctx context.Context, address string) (*grpc.ClientConn, erro
 	if err != nil {
 		return nil, err
 	}
-	//nolint:staticcheck //TODO: SA1019: grpc.WithInsecure is deprecated: use WithTransportCredentials and insecure.NewCredentials()
-	return grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithContextDialer(dialer))
+	return grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(dialer))
 }
 
 type ContainerdClientOptions struct {
