@@ -7,17 +7,13 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
-    # ignore patch version increment updates (will not affect security updates)
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
 
   - package-ecosystem: "gomod"
     directory: "/test"
     schedule:
       interval: "weekly"
       day: "sunday"
-    # ignore patch version increment updates (will not affect security updates)
+    # ignore patch version increment updates in test, since shouldn't be critical
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-patch"]
