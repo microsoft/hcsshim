@@ -28,7 +28,7 @@ require (
 	github.com/urfave/cli v1.22.4
 	github.com/veraison/go-cose v1.0.0-rc.1
 	github.com/vishvananda/netlink v1.2.1-beta.2
-	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
+	github.com/vishvananda/netns v0.0.4
 	go.etcd.io/bbolt v1.3.6
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.1.0
