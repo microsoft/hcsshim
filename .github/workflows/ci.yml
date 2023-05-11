@@ -200,6 +200,9 @@ jobs:
       - name: Test rego policy interpreter
         run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter
 
+      - name: Run guest code unit tests
+        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/guest/...
+      
       - name: Build gcs Testing Binary
         run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./gcs
         working-directory: test
