@@ -389,8 +389,8 @@ github.com/xeipuuv/gojsonreference
 # github.com/yashtewari/glob-intersection v0.1.0
 ## explicit; go 1.17
 github.com/yashtewari/glob-intersection
-# go.etcd.io/bbolt v1.3.6
-## explicit; go 1.12
+# go.etcd.io/bbolt v1.3.7
+## explicit; go 1.17
 go.etcd.io/bbolt
 # go.opencensus.io v0.24.0
 ## explicit; go 1.13
