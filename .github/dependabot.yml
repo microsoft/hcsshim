@@ -1,3 +1,7 @@
+# there may be other dependencies manually ignored.
+# search `"@dependabot ignore" in:comments` in the repo to see them.
+#
+# reference:
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
@@ -13,8 +17,16 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
-    # ignore patch version increment updates in test, since shouldn't be critical
+    labels:
+      - dependencies
+      - go
+      - tests
     ignore:
+      # updating CRI would break tests
+      - dependency-name: "k8s.io/cri-api"
+      # keep containerd and related dependencies in sync with the shim/the root repo
+      - dependency-name: "github.com/containerd/*"
+      # ignore patch version increment updates in test, since shouldn't be critical
       - dependency-name: "*"
         update-types: ["version-update:semver-patch"]
 
