@@ -8,18 +8,18 @@ require (
 	github.com/containerd/cgroups v1.1.0
 	github.com/containerd/containerd v1.6.21
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/ttrpc v1.2.1
+	github.com/containerd/ttrpc v1.1.1
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/go-containerregistry v0.15.1
 	github.com/kevpar/cri v1.11.1-0.20220302210600-4c5c347230b2
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0-rc3
-	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
+	github.com/opencontainers/runtime-spec v1.1.0-rc.2
 	github.com/opencontainers/runtime-tools v0.9.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.2.0
 	golang.org/x/sys v0.8.0
