@@ -124,12 +124,23 @@ func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers
 	}
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
+	mConfig := &scsi.MountConfig{
+		Encrypted: vm.ScratchEncryptionEnabled(),
+		// For scratch disks, we support formatting the disk if it is not already
+		// formatted.
+		EnsureFileystem: true,
+		Filesystem:      "ext4",
+	}
+	if vm.ScratchEncryptionEnabled() {
+		// Encrypted scratch devices are formatted with xfs
+		mConfig.Filesystem = "xfs"
+	}
 	scsiMount, err := vm.SCSIManager.AddVirtualDisk(
 		ctx,
 		hostPath,
 		false,
 		vm.ID(),
-		&scsi.MountConfig{Encrypted: vm.ScratchEncryptionEnabled()},
+		mConfig,
 	)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %s", err)

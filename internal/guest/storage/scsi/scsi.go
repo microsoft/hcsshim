@@ -18,9 +18,12 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
+	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/crypt"
 	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
+	"github.com/Microsoft/hcsshim/internal/guest/storage/ext4"
+	"github.com/Microsoft/hcsshim/internal/guest/storage/xfs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
@@ -47,8 +50,18 @@ var (
 	encryptDevice = crypt.EncryptDevice
 	// cleanupCryptDevice is stubbed for unit testing `mount`
 	cleanupCryptDevice = crypt.CleanupCryptDevice
+	// getDeviceFsType is stubbed for unit testing `mount`
+	_getDeviceFsType = getDeviceFsType
 	// storageUnmountPath is stubbed for unit testing `unmount`
 	storageUnmountPath = storage.UnmountPath
+	// tar2ext4.IsDeviceExt4 is stubbed for unit testing `getDeviceFsType`
+	_tar2ext4IsDeviceExt4 = tar2ext4.IsDeviceExt4
+	// ext4Format is stubbed for unit testing the `EnsureFilesystem` flow
+	// in `mount`
+	ext4Format = ext4.Format
+	// ext4Format is stubbed for unit testing the `EnsureFilesystem` and
+	// `Encrypt` flow in `mount`
+	xfsFormat = xfs.Format
 )
 
 const (
@@ -91,14 +104,24 @@ func ActualControllerNumber(_ context.Context, passedController uint8) (uint8, e
 	return 0, fmt.Errorf("host<N> directory not found inside %s", controllerDirPath)
 }
 
+// Config represents options that are used as part of setup/cleanup before
+// mounting or after unmounting a device. This does not include options
+// that are sent to the mount or unmount calls.
+type Config struct {
+	Encrypted        bool
+	VerityInfo       *guestresource.DeviceVerityInfo
+	EnsureFilesystem bool
+	Filesystem       string
+}
+
 // Mount creates a mount from the SCSI device on `controller` index `lun` to
 // `target`
 //
 // `target` will be created. On mount failure the created `target` will be
 // automatically cleaned up.
 //
-// If `encrypted` is set to true, the SCSI device will be encrypted using
-// dm-crypt.
+// If the config has `encrypted` is set to true, the SCSI device will be
+// encrypted using dm-crypt.
 func Mount(
 	ctx context.Context,
 	controller,
@@ -106,9 +129,8 @@ func Mount(
 	partition uint64,
 	target string,
 	readonly bool,
-	encrypted bool,
 	options []string,
-	verityInfo *guestresource.DeviceVerityInfo) (err error) {
+	config *Config) (err error) {
 	spnCtx, span := oc.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -124,15 +146,35 @@ func Mount(
 		return err
 	}
 
+	// The `source` found by GetDevicePath can take some time
+	// before its actually available under `/dev/sd*`. Retry while we
+	// wait for `source` to show up.
+	for {
+		if _, err := osStat(source); err != nil {
+			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ENXIO) {
+				select {
+				case <-ctx.Done():
+					log.G(ctx).Warnf("context timed out while retrying to find device %s: %v", source, err)
+					return err
+				default:
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
+			}
+			return err
+		}
+		break
+	}
+
 	if readonly {
 		var deviceHash string
-		if verityInfo != nil {
-			deviceHash = verityInfo.RootDigest
+		if config.VerityInfo != nil {
+			deviceHash = config.VerityInfo.RootDigest
 		}
 
-		if verityInfo != nil {
+		if config.VerityInfo != nil {
 			dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, partition, deviceHash)
-			if source, err = createVerityTarget(spnCtx, source, dmVerityName, verityInfo); err != nil {
+			if source, err = createVerityTarget(spnCtx, source, dmVerityName, config.VerityInfo); err != nil {
 				return err
 			}
 			defer func() {
@@ -162,8 +204,8 @@ func Mount(
 		data = "noload"
 	}
 
-	mountType := "ext4"
-	if encrypted {
+	var deviceFS string
+	if config.Encrypted {
 		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun, partition)
 		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)
 		if err != nil {
@@ -176,27 +218,50 @@ func Mount(
 			}
 		}
 		source = encryptedSource
-		mountType = "xfs"
+	} else {
+		// Get the filesystem that is already on the device (if any) and use that
+		// as the mountType unless `Filesystem` was given.
+		deviceFS, err = _getDeviceFsType(source)
+		if err != nil {
+			if config.Filesystem == "" || !errors.Is(err, ErrUnknownFilesystem) {
+				return fmt.Errorf("getting device's filesystem: %w", err)
+			}
+		}
+		log.G(ctx).WithField("filesystem", deviceFS).Debug("filesystem found on device")
 	}
 
-	for {
-		if err := unixMount(source, target, mountType, flags, data); err != nil {
-			// The `source` found by GetDevicePath can take some time
-			// before its actually available under `/dev/sd*`. Retry while we
-			// wait for `source` to show up.
-			if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ENXIO) {
-				select {
-				case <-ctx.Done():
-					log.G(ctx).Warnf("mount system call failed with %s, context timed out while retrying", err)
-					return err
-				default:
-					time.Sleep(10 * time.Millisecond)
-					continue
+	mountType := deviceFS
+	if config.Filesystem != "" {
+		mountType = config.Filesystem
+	}
+
+	// if EnsureFilesystem is set, then we need to check if the device has the
+	// correct filesystem configured on it. If it does not, format the device
+	// with the corect filesystem. Right now, we only support formatting ext4
+	// and xfs.
+	if config.EnsureFilesystem {
+		// compare the actual fs found on the device to the filesystem requested
+		if deviceFS != config.Filesystem {
+			// re-format device to the correct fs
+			switch config.Filesystem {
+			case "ext4":
+				if err := ext4Format(ctx, source); err != nil {
+					return fmt.Errorf("ext4 format: %w", err)
 				}
+			case "xfs":
+				if err = xfsFormat(source); err != nil {
+					return fmt.Errorf("xfs format: %w", err)
+				}
+			default:
+				return fmt.Errorf("unsupported filesystem %s requested for device", config.Filesystem)
 			}
-			return err
 		}
-		break
+	}
+
+	// device should already be present under /dev, so we should not get an error
+	// unless the command has actually errored out
+	if err := unixMount(source, target, mountType, flags, data); err != nil {
+		return fmt.Errorf("mounting: %w", err)
 	}
 
 	// remount the target to account for propagation flags
@@ -220,8 +285,7 @@ func Unmount(
 	lun uint8,
 	partition uint64,
 	target string,
-	encrypted bool,
-	verityInfo *guestresource.DeviceVerityInfo,
+	config *Config,
 ) (err error) {
 	ctx, span := oc.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
@@ -238,15 +302,15 @@ func Unmount(
 		return errors.Wrapf(err, "unmount failed: %s", target)
 	}
 
-	if verityInfo != nil {
-		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, partition, verityInfo.RootDigest)
+	if config.VerityInfo != nil {
+		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, partition, config.VerityInfo.RootDigest)
 		if err := removeDevice(dmVerityName); err != nil {
 			// Ignore failures, since the path has been unmounted at this point.
 			log.G(ctx).WithError(err).Debugf("failed to remove dm verity target: %s", dmVerityName)
 		}
 	}
 
-	if encrypted {
+	if config.Encrypted {
 		dmCryptName := fmt.Sprintf(cryptDeviceFmt, controller, lun, partition)
 		if err := cleanupCryptDevice(dmCryptName); err != nil {
 			return fmt.Errorf("failed to cleanup dm-crypt target %s: %w", dmCryptName, err)
@@ -357,4 +421,17 @@ func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 		return err
 	}
 	return nil
+}
+
+var ErrUnknownFilesystem = errors.New("could not get device filesystem type")
+
+// getDeviceFsType finds a device's filesystem.
+// Right now we only support checking for ext4. In the future, this may
+// be expanded to support xfs or other fs types.
+func getDeviceFsType(devicePath string) (string, error) {
+	if _tar2ext4IsDeviceExt4(devicePath) {
+		return "ext4", nil
+	}
+
+	return "", ErrUnknownFilesystem
 }

@@ -78,14 +78,16 @@ type SCSIDevice struct {
 // LCOWMappedVirtualDisk represents a disk on the host which is mapped into a
 // directory in the guest in the V2 schema.
 type LCOWMappedVirtualDisk struct {
-	MountPath  string            `json:"MountPath,omitempty"`
-	Lun        uint8             `json:"Lun,omitempty"`
-	Controller uint8             `json:"Controller,omitempty"`
-	Partition  uint64            `json:"Partition,omitempty"`
-	ReadOnly   bool              `json:"ReadOnly,omitempty"`
-	Encrypted  bool              `json:"Encrypted,omitempty"`
-	Options    []string          `json:"Options,omitempty"`
-	VerityInfo *DeviceVerityInfo `json:"VerityInfo,omitempty"`
+	MountPath        string            `json:"MountPath,omitempty"`
+	Lun              uint8             `json:"Lun,omitempty"`
+	Controller       uint8             `json:"Controller,omitempty"`
+	Partition        uint64            `json:"Partition,omitempty"`
+	ReadOnly         bool              `json:"ReadOnly,omitempty"`
+	Encrypted        bool              `json:"Encrypted,omitempty"`
+	Options          []string          `json:"Options,omitempty"`
+	VerityInfo       *DeviceVerityInfo `json:"VerityInfo,omitempty"`
+	EnsureFilesystem bool              `json:"EnsureFilesystem,omitempty"`
+	Filesystem       string            `json:"Filesystem,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {

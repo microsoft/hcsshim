@@ -66,9 +66,25 @@ func NewManager(
 // MountConfig specifies the options to apply for mounting a SCSI device in
 // the guest OS.
 type MountConfig struct {
+	// Partition is the target partition index on a partitioned device to
+	// mount. Partitions are 1-based indexed.
+	// This is only supported for LCOW.
 	Partition uint64
+	// Encrypted indicates if we should encrypt the device with dm-crypt.
+	// This is only supported for LCOW.
 	Encrypted bool
-	Options   []string
+	// Options are options such as propagation options, flags, or data to
+	// pass to the mount call.
+	// This is only supported for LCOW.
+	Options []string
+	// EnsureFilesystem indicates to format the mount as `Filesystem`
+	// if it is not already formatted with that fs type.
+	// This is only supported for LCOW.
+	EnsureFileystem bool
+	// Filesystem is the target filesystem that a device will be
+	// mounted as.
+	// This is only supported for LCOW.
+	Filesystem string
 }
 
 // Mount represents a SCSI device that has been attached to a VM, and potentially
@@ -137,11 +153,13 @@ func (m *Manager) AddVirtualDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
-			partition: mc.Partition,
-			readOnly:  readOnly,
-			encrypted: mc.Encrypted,
-			options:   mc.Options,
-			verity:    readVerityInfo(ctx, hostPath),
+			partition:       mc.Partition,
+			readOnly:        readOnly,
+			encrypted:       mc.Encrypted,
+			options:         mc.Options,
+			verity:          readVerityInfo(ctx, hostPath),
+			ensureFileystem: mc.EnsureFileystem,
+			filesystem:      mc.Filesystem,
 		}
 	}
 	return m.add(ctx,
@@ -181,11 +199,13 @@ func (m *Manager) AddPhysicalDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
-			partition: mc.Partition,
-			readOnly:  readOnly,
-			encrypted: mc.Encrypted,
-			options:   mc.Options,
-			verity:    readVerityInfo(ctx, hostPath),
+			partition:       mc.Partition,
+			readOnly:        readOnly,
+			encrypted:       mc.Encrypted,
+			options:         mc.Options,
+			verity:          readVerityInfo(ctx, hostPath),
+			ensureFileystem: mc.EnsureFileystem,
+			filesystem:      mc.Filesystem,
 		}
 	}
 	return m.add(ctx,
@@ -224,10 +244,12 @@ func (m *Manager) AddExtensibleVirtualDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
-			partition: mc.Partition,
-			readOnly:  readOnly,
-			encrypted: mc.Encrypted,
-			options:   mc.Options,
+			partition:       mc.Partition,
+			readOnly:        readOnly,
+			encrypted:       mc.Encrypted,
+			options:         mc.Options,
+			ensureFileystem: mc.EnsureFileystem,
+			filesystem:      mc.Filesystem,
 		}
 	}
 	return m.add(ctx,

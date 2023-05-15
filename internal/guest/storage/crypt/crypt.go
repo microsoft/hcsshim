@@ -21,7 +21,6 @@ var (
 	_cryptsetupOpen   = cryptsetupOpen
 	_generateKeyFile  = generateKeyFile
 	_osMkdirTemp      = os.MkdirTemp
-	_mkfsXfs          = mkfsXfs
 	_osRemoveAll      = os.RemoveAll
 	_zeroFirstBlock   = zeroFirstBlock
 )
@@ -88,17 +87,6 @@ func cryptsetupClose(deviceName string) error {
 	return cryptsetupCommand(closeArgs)
 }
 
-// invoke mkfs.xfs for the given device.
-func mkfsXfs(devicePath string) error {
-	args := []string{"-f", devicePath}
-	cmd := exec.Command("mkfs.xfs", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "failed to execute mkfs.ext4: %s", string(output))
-	}
-	return nil
-}
-
 // EncryptDevice creates a dm-crypt target for a container scratch vhd.
 //
 // In order to mount a block device as an encrypted device:
@@ -121,12 +109,11 @@ func mkfsXfs(devicePath string) error {
 //     /dev/mapper/`cryptDeviceTemplate`. This can be mounted directly, but it
 //     doesn't have any format yet.
 //
-//  4. Format the unencrypted block device as xfs.
+//  4. Prepare the unecrypted block device to be later formatted as xfs
 //  4.1. Zero the first block. It appears that mkfs.xfs reads this before formatting.
-//  4.2. Format the device as xfs.
 
 func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path string, err error) {
-	// Create temporary directory to store the keyfile and EXT4 image
+	// Create temporary directory to store the keyfile and xfs image
 	tempDir, err := _osMkdirTemp("", "dm-crypt")
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to create temporary folder: %s", source)
@@ -170,11 +157,6 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 	// so we are sure that when it is read it has already been hashed so matches.
 	if err := _zeroFirstBlock(deviceNamePath, 4096); err != nil {
 		return "", fmt.Errorf("failed to zero first block: %w", err)
-	}
-
-	// 4.2. Format it as xfs
-	if err = _mkfsXfs(deviceNamePath); err != nil {
-		return "", fmt.Errorf("mkfs.xfs failed to format %s: %w", deviceNamePath, err)
 	}
 
 	return deviceNamePath, nil
