@@ -8,17 +8,21 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"golang.org/x/sys/unix"
 )
 
 func clearTestDependencies() {
+	osReadDir = nil
+	osStat = nil
 	osMkdirAll = nil
 	osRemoveAll = nil
 	unixMount = nil
-	controllerLunToName = nil
+	getDevicePath = nil
 	createVerityTarget = nil
 	encryptDevice = nil
 	cleanupCryptDevice = nil
@@ -33,12 +37,13 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		return expectedErr
 	}
 
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"",
@@ -65,7 +70,7 @@ func Test_Mount_Mkdir_ExpectedPath(t *testing.T) {
 		}
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -75,6 +80,7 @@ func Test_Mount_Mkdir_ExpectedPath(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		target,
@@ -101,7 +107,7 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 		}
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -111,6 +117,7 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		target,
@@ -123,7 +130,7 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 	}
 }
 
-func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
+func Test_Mount_GetDevicePath_Valid_Controller(t *testing.T) {
 	clearTestDependencies()
 
 	// NOTE: Do NOT set osRemoveAll because the mount succeeds. Expect it not to
@@ -133,7 +140,7 @@ func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
 		return nil
 	}
 	expectedController := uint8(2)
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		if expectedController != controller {
 			t.Errorf("expected controller: %v, got: %v", expectedController, controller)
 			return "", errors.New("unexpected controller")
@@ -149,6 +156,7 @@ func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
 		context.Background(),
 		expectedController,
 		0,
+		0,
 		"/fake/path",
 		false,
 		false,
@@ -159,7 +167,7 @@ func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
 	}
 }
 
-func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
+func Test_Mount_GetDevicePath_Valid_Lun(t *testing.T) {
 	clearTestDependencies()
 
 	// NOTE: Do NOT set osRemoveAll because the mount succeeds. Expect it not to
@@ -169,7 +177,7 @@ func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
 		return nil
 	}
 	expectedLun := uint8(2)
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		if expectedLun != lun {
 			t.Errorf("expected lun: %v, got: %v", expectedLun, lun)
 			return "", errors.New("unexpected lun")
@@ -185,6 +193,44 @@ func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
 		context.Background(),
 		0,
 		expectedLun,
+		0,
+		"/fake/path",
+		false,
+		false,
+		nil,
+		nil,
+	); err != nil {
+		t.Fatalf("expected nil error got: %v", err)
+	}
+}
+
+func Test_Mount_GetDevicePath_Valid_Partition(t *testing.T) {
+	clearTestDependencies()
+
+	// NOTE: Do NOT set osRemoveAll because the mount succeeds. Expect it not to
+	// be called.
+
+	osMkdirAll = func(path string, perm os.FileMode) error {
+		return nil
+	}
+	expectedPartition := uint64(3)
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
+		if expectedPartition != partition {
+			t.Errorf("expected partition: %v, got: %v", expectedPartition, partition)
+			return "", errors.New("unexpected lun")
+		}
+		return "", nil
+	}
+	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
+		// Fake the mount success
+		return nil
+	}
+
+	if err := Mount(
+		context.Background(),
+		0,
+		0,
+		expectedPartition,
 		"/fake/path",
 		false,
 		false,
@@ -201,7 +247,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	target := "/fake/path"
@@ -222,6 +268,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		target,
@@ -247,7 +294,7 @@ func Test_Mount_Valid_Source(t *testing.T) {
 		return nil
 	}
 	expectedSource := "/dev/sdz"
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return expectedSource, nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -257,7 +304,7 @@ func Test_Mount_Valid_Source(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil)
+	err := Mount(context.Background(), 0, 0, 0, "/fake/path", false, false, nil, nil)
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -272,7 +319,7 @@ func Test_Mount_Valid_Target(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	expectedTarget := "/fake/path"
@@ -286,6 +333,7 @@ func Test_Mount_Valid_Target(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		expectedTarget,
@@ -307,7 +355,7 @@ func Test_Mount_Valid_FSType(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -321,6 +369,7 @@ func Test_Mount_Valid_FSType(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"/fake/path",
@@ -342,7 +391,7 @@ func Test_Mount_Valid_Flags(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -356,6 +405,7 @@ func Test_Mount_Valid_Flags(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"/fake/path",
@@ -377,7 +427,7 @@ func Test_Mount_Readonly_Valid_Flags(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -391,6 +441,7 @@ func Test_Mount_Readonly_Valid_Flags(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"/fake/path",
@@ -412,7 +463,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -425,6 +476,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"/fake/path",
@@ -446,7 +498,7 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+	getDevicePath = func(ctx context.Context, controller, lun uint8, partition uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
@@ -460,6 +512,7 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"/fake/path",
@@ -477,13 +530,13 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
 	clearTestDependencies()
 
-	expectedVerityName := fmt.Sprintf(verityDeviceFmt, 0, 0, "hash")
+	expectedVerityName := fmt.Sprintf(verityDeviceFmt, 0, 0, 0, "hash")
 	expectedSource := "/dev/sdb"
 	expectedMapperPath := fmt.Sprintf("/dev/mapper/%s", expectedVerityName)
 	expectedTarget := "/foo"
 	createVerityTargetCalled := false
 
-	controllerLunToName = func(_ context.Context, _, _ uint8) (string, error) {
+	getDevicePath = func(_ context.Context, _, _ uint8, _ uint64) (string, error) {
 		return expectedSource, nil
 	}
 
@@ -519,6 +572,7 @@ func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 		context.Background(),
 		0,
 		0,
+		0,
 		expectedTarget,
 		true,
 		false,
@@ -536,10 +590,10 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 	clearTestDependencies()
 
 	expectedError := errors.New("osMkdirAll error")
-	expectedVerityName := fmt.Sprintf(verityDeviceFmt, 0, 0, "hash")
+	expectedVerityName := fmt.Sprintf(verityDeviceFmt, 0, 0, 0, "hash")
 	removeDeviceCalled := false
 
-	controllerLunToName = func(_ context.Context, _, _ uint8) (string, error) {
+	getDevicePath = func(_ context.Context, _, _ uint8, _ uint64) (string, error) {
 		return "/dev/sdb", nil
 	}
 
@@ -567,6 +621,7 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 		context.Background(),
 		0,
 		0,
+		0,
 		"/foo",
 		true,
 		false,
@@ -586,7 +641,7 @@ func Test_Mount_EncryptDevice_Called(t *testing.T) {
 	osMkdirAll = func(string, os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(context.Context, uint8, uint8) (string, error) {
+	getDevicePath = func(context.Context, uint8, uint8, uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(string, string, string, uintptr, string) error {
@@ -594,7 +649,7 @@ func Test_Mount_EncryptDevice_Called(t *testing.T) {
 	}
 	encryptDeviceCalled := false
 	encryptDevice = func(_ context.Context, source string, devName string) (string, error) {
-		expectedCryptTarget := fmt.Sprintf(cryptDeviceFmt, 0, 0)
+		expectedCryptTarget := fmt.Sprintf(cryptDeviceFmt, 0, 0, 0)
 		if devName != expectedCryptTarget {
 			t.Fatalf("expected crypt device %q got %q", expectedCryptTarget, devName)
 		}
@@ -603,6 +658,7 @@ func Test_Mount_EncryptDevice_Called(t *testing.T) {
 	}
 	if err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"/fake/path",
@@ -624,7 +680,7 @@ func Test_Mount_RemoveAllCalled_When_EncryptDevice_Fails(t *testing.T) {
 	osMkdirAll = func(string, os.FileMode) error {
 		return nil
 	}
-	controllerLunToName = func(context.Context, uint8, uint8) (string, error) {
+	getDevicePath = func(context.Context, uint8, uint8, uint64) (string, error) {
 		return "", nil
 	}
 	unixMount = func(string, string, string, uintptr, string) error {
@@ -642,6 +698,7 @@ func Test_Mount_RemoveAllCalled_When_EncryptDevice_Fails(t *testing.T) {
 
 	err := Mount(
 		context.Background(),
+		0,
 		0,
 		0,
 		"/fake/path",
@@ -669,7 +726,7 @@ func Test_Unmount_CleanupCryptDevice_Called(t *testing.T) {
 	}
 	cleanupCryptDeviceCalled := false
 	cleanupCryptDevice = func(devName string) error {
-		expectedDevName := fmt.Sprintf(cryptDeviceFmt, 0, 0)
+		expectedDevName := fmt.Sprintf(cryptDeviceFmt, 0, 0, 0)
 		if devName != expectedDevName {
 			t.Fatalf("expected crypt target %q, got %q", expectedDevName, devName)
 		}
@@ -677,10 +734,168 @@ func Test_Unmount_CleanupCryptDevice_Called(t *testing.T) {
 		return nil
 	}
 
-	if err := Unmount(context.Background(), 0, 0, "/fake/path", true, nil); err != nil {
+	if err := Unmount(context.Background(), 0, 0, 0, "/fake/path", true, nil); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	if !cleanupCryptDeviceCalled {
 		t.Fatal("cleanupCryptDevice not called")
+	}
+}
+
+// fakeFileInfo is a mock os.FileInfo that can be used to return
+// in mock os calls
+type fakeFileInfo struct {
+	name string
+}
+
+func (f *fakeFileInfo) Name() string {
+	return f.name
+}
+
+func (f *fakeFileInfo) Size() int64 {
+	// fake size
+	return 100
+}
+
+func (f *fakeFileInfo) Mode() os.FileMode {
+	// fake mode
+	return os.ModeDir
+}
+
+func (f *fakeFileInfo) ModTime() time.Time {
+	// fake time
+	return time.Now()
+}
+
+func (f *fakeFileInfo) IsDir() bool {
+	// fake isDir
+	return false
+}
+
+func (f *fakeFileInfo) Sys() interface{} {
+	return nil
+}
+
+// fakeDirEntry is a mock os.DirEntry that can be used to return in
+// the response from the mocked os.ReadDir call.
+type fakeDirEntry struct {
+	name string
+}
+
+func (d *fakeDirEntry) Name() string {
+	return d.name
+}
+
+func (d *fakeDirEntry) IsDir() bool {
+	return true
+}
+
+func (d *fakeDirEntry) Type() os.FileMode {
+	return os.ModeDir
+}
+
+func (d *fakeDirEntry) Info() (os.FileInfo, error) {
+	return &fakeFileInfo{name: d.name}, nil
+}
+
+func Test_GetDevicePath_Device_With_Partition(t *testing.T) {
+	clearTestDependencies()
+
+	deviceName := "sdd"
+	partition := uint64(1)
+	deviceWithPartitionName := deviceName + fmt.Sprintf("%d", partition)
+	expectedDevicePath := filepath.Join("/dev", deviceWithPartitionName)
+
+	osReadDir = func(_ string) ([]os.DirEntry, error) {
+		entry := &fakeDirEntry{name: deviceName}
+		return []os.DirEntry{entry}, nil
+	}
+
+	osStat = func(_ string) (os.FileInfo, error) {
+		return &fakeFileInfo{
+			name: deviceWithPartitionName,
+		}, nil
+	}
+
+	getDevicePath = GetDevicePath
+
+	actualPath, err := getDevicePath(context.Background(), 0, 0, partition)
+	if err != nil {
+		t.Fatalf("expected to get no error, instead got %v", err)
+	}
+	if actualPath != expectedDevicePath {
+		t.Fatalf("expected to get %v, instead got %v", expectedDevicePath, actualPath)
+	}
+}
+
+func Test_GetDevicePath_Device_With_Partition_Error(t *testing.T) {
+	clearTestDependencies()
+
+	deviceName := "sdd"
+	partition := uint64(1)
+
+	osReadDir = func(_ string) ([]os.DirEntry, error) {
+		entry := &fakeDirEntry{name: deviceName}
+		return []os.DirEntry{entry}, nil
+	}
+
+	osStat = func(_ string) (os.FileInfo, error) {
+		return nil, nil
+	}
+
+	getDevicePath = GetDevicePath
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	actualPath, err := getDevicePath(ctx, 0, 0, partition)
+	if err == nil {
+		t.Fatalf("expected to get an error, instead got %v", actualPath)
+	}
+}
+
+func Test_GetDevicePath_Device_No_Partition(t *testing.T) {
+	clearTestDependencies()
+
+	deviceName := "sdd"
+	expectedDevicePath := filepath.Join("/dev", deviceName)
+
+	osReadDir = func(_ string) ([]os.DirEntry, error) {
+		entry := &fakeDirEntry{name: deviceName}
+		return []os.DirEntry{entry}, nil
+	}
+
+	osStat = func(name string) (os.FileInfo, error) {
+		return nil, fmt.Errorf("should not make this call: %v", name)
+	}
+
+	getDevicePath = GetDevicePath
+
+	actualPath, err := getDevicePath(context.Background(), 0, 0, 0)
+	if err != nil {
+		t.Fatalf("expected to get no error, instead got %v", err)
+	}
+	if actualPath != expectedDevicePath {
+		t.Fatalf("expected to get %v, instead got %v", expectedDevicePath, actualPath)
+	}
+}
+
+func Test_GetDevicePath_Device_No_Partition_Error(t *testing.T) {
+	clearTestDependencies()
+
+	osReadDir = func(_ string) ([]os.DirEntry, error) {
+		return nil, nil
+	}
+
+	osStat = func(name string) (os.FileInfo, error) {
+		return nil, fmt.Errorf("should not make this call: %v", name)
+	}
+
+	getDevicePath = GetDevicePath
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	actualPath, err := getDevicePath(ctx, 0, 0, 0)
+	if err == nil {
+		t.Fatalf("expected to get an error, instead got %v", actualPath)
 	}
 }

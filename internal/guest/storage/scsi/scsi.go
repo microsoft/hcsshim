@@ -6,6 +6,7 @@ package scsi
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -32,8 +33,12 @@ var (
 	osRemoveAll = os.RemoveAll
 	unixMount   = unix.Mount
 
-	// controllerLunToName is stubbed to make testing `Mount` easier.
-	controllerLunToName = ControllerLunToName
+	// mock functions for testing getDevicePath
+	osReadDir = os.ReadDir
+	osStat    = os.Stat
+
+	// getDevicePath is stubbed to make testing `Mount` easier.
+	getDevicePath = GetDevicePath
 	// createVerityTarget is stubbed for unit testing `Mount`.
 	createVerityTarget = dm.CreateVerityTarget
 	// removeDevice is stubbed for unit testing `Mount`.
@@ -49,8 +54,8 @@ var (
 const (
 	scsiDevicesPath  = "/sys/bus/scsi/devices"
 	vmbusDevicesPath = "/sys/bus/vmbus/devices"
-	verityDeviceFmt  = "dm-verity-scsi-contr%d-lun%d-%s"
-	cryptDeviceFmt   = "dm-crypt-scsi-contr%d-lun%d"
+	verityDeviceFmt  = "dm-verity-scsi-contr%d-lun%d-p%d-%s"
+	cryptDeviceFmt   = "dm-crypt-scsi-contr%d-lun%d-p%d"
 )
 
 // ActualControllerNumber retrieves the actual controller number assigned to a SCSI controller
@@ -98,6 +103,7 @@ func Mount(
 	ctx context.Context,
 	controller,
 	lun uint8,
+	partition uint64,
 	target string,
 	readonly bool,
 	encrypted bool,
@@ -109,9 +115,11 @@ func Mount(
 
 	span.AddAttributes(
 		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)))
+		trace.Int64Attribute("lun", int64(lun)),
+		trace.Int64Attribute("partition", int64(partition)),
+	)
 
-	source, err := controllerLunToName(spnCtx, controller, lun)
+	source, err := getDevicePath(spnCtx, controller, lun, partition)
 	if err != nil {
 		return err
 	}
@@ -123,7 +131,7 @@ func Mount(
 		}
 
 		if verityInfo != nil {
-			dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, deviceHash)
+			dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, partition, deviceHash)
 			if source, err = createVerityTarget(spnCtx, source, dmVerityName, verityInfo); err != nil {
 				return err
 			}
@@ -156,7 +164,7 @@ func Mount(
 
 	mountType := "ext4"
 	if encrypted {
-		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
+		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun, partition)
 		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)
 		if err != nil {
 			// todo (maksiman): add better retry logic, similar to how SCSI device mounts are
@@ -173,7 +181,7 @@ func Mount(
 
 	for {
 		if err := unixMount(source, target, mountType, flags, data); err != nil {
-			// The `source` found by controllerLunToName can take some time
+			// The `source` found by GetDevicePath can take some time
 			// before its actually available under `/dev/sd*`. Retry while we
 			// wait for `source` to show up.
 			if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ENXIO) {
@@ -210,6 +218,7 @@ func Unmount(
 	ctx context.Context,
 	controller,
 	lun uint8,
+	partition uint64,
 	target string,
 	encrypted bool,
 	verityInfo *guestresource.DeviceVerityInfo,
@@ -221,6 +230,7 @@ func Unmount(
 	span.AddAttributes(
 		trace.Int64Attribute("controller", int64(controller)),
 		trace.Int64Attribute("lun", int64(lun)),
+		trace.Int64Attribute("partition", int64(partition)),
 		trace.StringAttribute("target", target))
 
 	// unmount target
@@ -229,7 +239,7 @@ func Unmount(
 	}
 
 	if verityInfo != nil {
-		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, verityInfo.RootDigest)
+		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, partition, verityInfo.RootDigest)
 		if err := removeDevice(dmVerityName); err != nil {
 			// Ignore failures, since the path has been unmounted at this point.
 			log.G(ctx).WithError(err).Debugf("failed to remove dm verity target: %s", dmVerityName)
@@ -237,7 +247,7 @@ func Unmount(
 	}
 
 	if encrypted {
-		dmCryptName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
+		dmCryptName := fmt.Sprintf(cryptDeviceFmt, controller, lun, partition)
 		if err := cleanupCryptDevice(dmCryptName); err != nil {
 			return fmt.Errorf("failed to cleanup dm-crypt target %s: %w", dmCryptName, err)
 		}
@@ -246,16 +256,18 @@ func Unmount(
 	return nil
 }
 
-// ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
-// `controller` index `lun`.
-func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, err error) {
-	ctx, span := oc.StartSpan(ctx, "scsi::ControllerLunToName")
+// GetDevicePath finds the `/dev/sd*` path to the SCSI device on `controller`
+// index `lun` with partition index `partition`.
+func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64) (_ string, err error) {
+	ctx, span := oc.StartSpan(ctx, "scsi::GetDevicePath")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(
 		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)))
+		trace.Int64Attribute("lun", int64(lun)),
+		trace.Int64Attribute("partition", int64(partition)),
+	)
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 	// Devices matching the given SCSI code should each have a subdirectory
@@ -263,8 +275,8 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 	blockPath := filepath.Join(scsiDevicesPath, scsiID, "block")
 	var deviceNames []os.DirEntry
 	for {
-		deviceNames, err = os.ReadDir(blockPath)
-		if err != nil && !os.IsNotExist(err) {
+		deviceNames, err = osReadDir(blockPath)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return "", err
 		}
 		if len(deviceNames) == 0 {
@@ -282,8 +294,38 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 	if len(deviceNames) > 1 {
 		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
 	}
+	deviceName := deviceNames[0].Name()
 
-	devicePath := filepath.Join("/dev", deviceNames[0].Name())
+	// devices that have partitions have a subdirectory under
+	// /sys/bus/scsi/devices/<scsiID>/block/<deviceName> for each partition.
+	// Partitions use 1-based indexing, so if `partition` is 0, then we should
+	// return the device name without a partition index.
+	if partition != 0 {
+		partitionName := fmt.Sprintf("%s%d", deviceName, partition)
+		partitionPath := filepath.Join(blockPath, deviceName, partitionName)
+
+		// Wait for the device partition to show up
+		for {
+			fi, err := osStat(partitionPath)
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return "", err
+			} else if fi == nil {
+				// if the fileinfo is nil that means we didn't find the device, keep
+				// trying until the context is done or the device path shows up
+				select {
+				case <-ctx.Done():
+					return "", ctx.Err()
+				default:
+					time.Sleep(time.Millisecond * 10)
+					continue
+				}
+			}
+			break
+		}
+		deviceName = partitionName
+	}
+
+	devicePath := filepath.Join("/dev", deviceName)
 	log.G(ctx).WithField("devicePath", devicePath).Debug("found device path")
 	return devicePath, nil
 }
