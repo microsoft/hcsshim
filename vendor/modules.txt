@@ -367,7 +367,7 @@ github.com/vektah/gqlparser/v2/lexer
 github.com/vektah/gqlparser/v2/parser
 github.com/vektah/gqlparser/v2/validator
 github.com/vektah/gqlparser/v2/validator/rules
-# github.com/veraison/go-cose v1.0.0-rc.1
+# github.com/veraison/go-cose v1.0.0
 ## explicit; go 1.18
 github.com/veraison/go-cose
 # github.com/vishvananda/netlink v1.2.1-beta.2

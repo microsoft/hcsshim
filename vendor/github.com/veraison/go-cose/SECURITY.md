@@ -8,7 +8,7 @@ This document provides the details on the veraison/go-cose security policy and d
 
 | Version | Supported          |
 | ------- | ------------------ |
-| [v1.0.0-alpha1][v1.0.0-alpha1-release]  | :green_check_mark: |
+| [v1.0.0-rc1][v1.0.0-rc1-release]  | Yes |
 
 ## Report A Vulnerability
 
@@ -23,7 +23,7 @@ To make a report please email the private security list at <a href="mailto:go-co
 [TO:]:     go-cose-security@googlegroups.com
 [SUBJECT]: go-cose Security Notification
 [BODY]:
-Release: v1.0.0-alpha.1
+Release: v1.0.0-rc.1
 
 Summary:
 A quick summary of the issue
@@ -85,6 +85,6 @@ Disclosures will be published on the same day as a release fixing the vulnerabil
 
 [go-cose]:                https://github.com/veraison/go-cose
 [security-advisories]:    https://github.com/veraison/go-cose/security/advisories
-[v1.0.0-alpha1-release]:  https://github.com/veraison/go-cose/releases/tag/v1.0.0-alpha.1
+[v1.0.0-rc1-release]:  https://github.com/veraison/go-cose/releases/tag/v1.0.0-rc.1
 [v1.0.0-milestone]:       https://github.com/veraison/go-cose/milestone/2
 [go-cose-maintainers]:    https://github.com/veraison/community/blob/main/OWNERS
