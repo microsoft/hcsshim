@@ -21,15 +21,15 @@ require (
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/open-policy-agent/opa v0.42.2
 	github.com/opencontainers/runc v1.1.5
-	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
+	github.com/opencontainers/runtime-spec v1.1.0-rc.2
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
-	github.com/urfave/cli v1.22.12
+	github.com/urfave/cli v1.22.13
 	github.com/veraison/go-cose v1.0.0-rc.1
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	github.com/vishvananda/netns v0.0.4
-	go.etcd.io/bbolt v1.3.6
+	go.etcd.io/bbolt v1.3.7
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.2.0
 	golang.org/x/sys v0.8.0

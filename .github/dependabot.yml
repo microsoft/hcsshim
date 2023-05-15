@@ -11,6 +11,10 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
+    ignore:
+      # only do patch updates for containerd and co: don't bump anything else
+      - dependency-name: "github.com/containerd/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: "gomod"
     directory: "/test"
