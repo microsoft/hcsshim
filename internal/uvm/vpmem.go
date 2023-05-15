@@ -10,13 +10,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Microsoft/hcsshim/ext4/dmverity"
-	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/verity"
 )
 
 const (
@@ -26,7 +25,9 @@ const (
 var (
 	// ErrMaxVPMemLayerSize is the error returned when the size of `hostPath` is
 	// greater than the max vPMem layer size set at create time.
-	ErrMaxVPMemLayerSize = errors.New("layer size is to large for VPMEM max size")
+	ErrMaxVPMemLayerSize   = errors.New("layer size is to large for VPMEM max size")
+	ErrNoAvailableLocation = fmt.Errorf("no available location")
+	ErrNotAttached         = fmt.Errorf("not attached")
 )
 
 // var _ resources.ResourceCloser = &VPMEMMount{} -- Causes an import cycle.
@@ -53,51 +54,6 @@ func newDefaultVPMemInfo(hostPath, uvmPath string) *vPMemInfoDefault {
 		uvmPath:  uvmPath,
 		refCount: 1,
 	}
-}
-
-// fileSystemSize retrieves ext4 fs SuperBlock and returns the file system size and block size
-func fileSystemSize(vhdPath string) (int64, int, error) {
-	sb, err := tar2ext4.ReadExt4SuperBlock(vhdPath)
-	if err != nil {
-		return 0, 0, errors.Wrap(err, "failed to read ext4 super block")
-	}
-	blockSize := 1024 * (1 << sb.LogBlockSize)
-	fsSize := int64(blockSize) * int64(sb.BlocksCountLow)
-	return fsSize, blockSize, nil
-}
-
-// readVeritySuperBlock reads ext4 super block for a given VHD to then further read the dm-verity super block
-// and root hash
-func readVeritySuperBlock(ctx context.Context, layerPath string) (*guestresource.DeviceVerityInfo, error) {
-	// dm-verity information is expected to be appended, the size of ext4 data will be the offset
-	// of the dm-verity super block, followed by merkle hash tree
-	ext4SizeInBytes, ext4BlockSize, err := fileSystemSize(layerPath)
-	if err != nil {
-		return nil, err
-	}
-
-	dmvsb, err := dmverity.ReadDMVerityInfo(layerPath, ext4SizeInBytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read dm-verity super block")
-	}
-	log.G(ctx).WithFields(logrus.Fields{
-		"layerPath":     layerPath,
-		"rootHash":      dmvsb.RootDigest,
-		"algorithm":     dmvsb.Algorithm,
-		"salt":          dmvsb.Salt,
-		"dataBlocks":    dmvsb.DataBlocks,
-		"dataBlockSize": dmvsb.DataBlockSize,
-	}).Debug("dm-verity information")
-
-	return &guestresource.DeviceVerityInfo{
-		Ext4SizeInBytes: ext4SizeInBytes,
-		BlockSize:       ext4BlockSize,
-		RootDigest:      dmvsb.RootDigest,
-		Algorithm:       dmvsb.Algorithm,
-		Salt:            dmvsb.Salt,
-		Version:         int(dmvsb.Version),
-		SuperBlock:      true,
-	}, nil
 }
 
 // findNextVPMemSlot finds next available VPMem slot.
@@ -171,7 +127,7 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 		DeviceNumber: deviceNumber,
 		MountPath:    uvmPath,
 	}
-	if v, iErr := readVeritySuperBlock(ctx, hostPath); iErr != nil {
+	if v, iErr := verity.ReadVeritySuperBlock(ctx, hostPath); iErr != nil {
 		log.G(ctx).WithError(iErr).WithField("hostPath", hostPath).Debug("unable to read dm-verity information from VHD")
 	} else {
 		if v != nil {
@@ -211,13 +167,12 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 		return nil
 	}
 
-	var verity *guestresource.DeviceVerityInfo
-	if v, _ := readVeritySuperBlock(ctx, hostPath); v != nil {
+	v, _ := verity.ReadVeritySuperBlock(ctx, hostPath)
+	if v != nil {
 		log.G(ctx).WithFields(logrus.Fields{
 			"hostPath":   hostPath,
 			"rootDigest": v.RootDigest,
 		}).Debug("removing VPMem with dm-verity")
-		verity = v
 	}
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeRemove,
@@ -228,7 +183,7 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 			Settings: guestresource.LCOWMappedVPMemDevice{
 				DeviceNumber: deviceNumber,
 				MountPath:    device.uvmPath,
-				VerityInfo:   verity,
+				VerityInfo:   v,
 			},
 		},
 	}

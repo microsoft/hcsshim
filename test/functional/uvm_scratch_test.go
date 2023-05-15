@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
@@ -50,12 +49,11 @@ func TestScratchCreateLCOW(t *testing.T) {
 	}
 
 	// Make sure it can be added (verifies it has access correctly)
-	var options []string
-	scsiMount, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false, false, options, uvm.VMAccessTypeIndividual)
+	scsiMount, err := targetUVM.SCSIManager.AddVirtualDisk(context.Background(), destTwo, false, targetUVM.ID(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scsiMount.Controller != 0 && scsiMount.LUN != 0 {
+	if scsiMount.Controller() != 0 && scsiMount.LUN() != 0 {
 		t.Fatal(err)
 	}
 	// TODO Could consider giving it a host path and verifying it's contents somehow
