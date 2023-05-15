@@ -26,6 +26,22 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
+type LCOWLayer struct {
+	VHDPath   string
+	Partition uint64
+}
+
+// Defines a set of LCOW layers.
+// For future extensibility, the LCOWLayer type could be swapped for an interface,
+// and we could either call some method on the interface to "apply" it directly to the UVM,
+// or type cast it to the various types that we support, and use the one it matches.
+// This would allow us to support different "types" of mounts, such as raw VHD, VHD+partition, etc.
+type LCOWLayers struct {
+	// Should be in order from top-most layer to bottom-most layer.
+	Layers         []*LCOWLayer
+	ScratchVHDPath string
+}
+
 type lcowLayersCloser struct {
 	uvm                     *uvm.UtilityVM
 	guestCombinedLayersPath string
@@ -65,7 +81,7 @@ func (lc *lcowLayersCloser) Release(ctx context.Context) (retErr error) {
 // Returns the path at which the `rootfs` of the container can be accessed. Also, returns the path inside the
 // UVM at which container scratch directory is located. Usually, this path is the path at which the container
 // scratch VHD is mounted. However, in case of scratch sharing this is a directory under the UVM scratch.
-func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot string, vm *uvm.UtilityVM) (_, _ string, _ resources.ResourceCloser, err error) {
+func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers, guestRoot string, vm *uvm.UtilityVM) (_, _ string, _ resources.ResourceCloser, err error) {
 	if vm == nil {
 		return "", "", nil, errors.New("MountLCOWLayers cannot be called for process-isolated containers")
 	}
@@ -91,13 +107,9 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		}
 	}()
 
-	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
-		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
-		var (
-			layerPath = filepath.Join(layerPath, "layer.vhd")
-			uvmPath   string
-		)
-		uvmPath, closer, err := addLCOWLayer(ctx, vm, layerPath)
+	for _, layer := range layers.Layers {
+		log.G(ctx).WithField("layerPath", layer.VHDPath).Debug("mounting layer")
+		uvmPath, closer, err := addLCOWLayer(ctx, vm, layer)
 		if err != nil {
 			return "", "", nil, fmt.Errorf("failed to add LCOW layer: %s", err)
 		}
@@ -105,7 +117,8 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
 	}
 
-	hostPath, err := getScratchVHDPath(layerFolders)
+	hostPath := layers.ScratchVHDPath
+	hostPath, err = filepath.EvalSymlinks(hostPath)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to eval symlinks on scratch path: %w", err)
 	}
@@ -377,15 +390,17 @@ func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolde
 	return containerScratchPathInUVM, closer, nil
 }
 
-func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layerPath string) (uvmPath string, _ resources.ResourceCloser, err error) {
-	// don't try to add as vpmem when we want additional devices on the uvm to be fully physically backed
-	if !vm.DevicesPhysicallyBacked() {
+func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvmPath string, _ resources.ResourceCloser, err error) {
+	// Don't add as VPMEM when we want additional devices on the UVM to be fully physically backed.
+	// Also don't use VPMEM when we need to mount a specific partition of the disk, as this is only
+	// supported for SCSI.
+	if !vm.DevicesPhysicallyBacked() && layer.Partition == 0 {
 		// We first try vPMEM and if it is full or the file is too large we
 		// fall back to SCSI.
-		mount, err := vm.AddVPMem(ctx, layerPath)
+		mount, err := vm.AddVPMem(ctx, layer.VHDPath)
 		if err == nil {
 			log.G(ctx).WithFields(logrus.Fields{
-				"layerPath": layerPath,
+				"layerPath": layer.VHDPath,
 				"layerType": "vpmem",
 			}).Debug("Added LCOW layer")
 			return mount.GuestPath, mount, nil
@@ -394,13 +409,14 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layerPath string) (uvm
 		}
 	}
 
-	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layerPath, true, "", &scsi.MountConfig{Options: []string{"ro"}})
+	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layer.VHDPath, true, "", &scsi.MountConfig{Partition: layer.Partition, Options: []string{"ro"}})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to add SCSI layer: %s", err)
 	}
 	log.G(ctx).WithFields(logrus.Fields{
-		"layerPath": layerPath,
-		"layerType": "scsi",
+		"layerPath":      layer.VHDPath,
+		"layerPartition": layer.Partition,
+		"layerType":      "scsi",
 	}).Debug("Added LCOW layer")
 	return sm.GuestPath(), sm, nil
 }
