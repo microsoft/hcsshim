@@ -221,6 +221,8 @@ github.com/klauspost/compress/internal/cpuinfo
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
+# github.com/kr/pretty v0.3.0
+## explicit; go 1.12
 # github.com/lestrrat-go/backoff/v2 v2.0.8
 ## explicit; go 1.16
 github.com/lestrrat-go/backoff/v2
@@ -330,8 +332,8 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/opencontainers/runc v1.1.5
-## explicit; go 1.16
+# github.com/opencontainers/runc v1.1.7
+## explicit; go 1.17
 github.com/opencontainers/runc/libcontainer/devices
 github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.1.0-rc.2

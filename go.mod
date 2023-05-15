@@ -20,7 +20,7 @@ require (
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/open-policy-agent/opa v0.42.2
-	github.com/opencontainers/runc v1.1.5
+	github.com/opencontainers/runc v1.1.7
 	github.com/opencontainers/runtime-spec v1.1.0-rc.2
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
@@ -59,6 +59,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/klauspost/compress v1.16.5 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.0 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
