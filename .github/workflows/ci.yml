@@ -202,7 +202,7 @@ jobs:
 
       - name: Run guest code unit tests
         run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/guest/...
-      
+
       - name: Build gcs Testing Binary
         run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./gcs
         working-directory: test
@@ -231,10 +231,17 @@ jobs:
       - name: Test rego policy interpreter
         run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter
 
+      - name: Run containerd-shim-runhcs-v1 tests
+        shell: powershell
+        run: |
+          powershell {
+            cd '../..'
+            go build -trimpath -o './test/containerd-shim-runhcs-v1' ./cmd/containerd-shim-runhcs-v1
+          }
+          gotestsum --format standard-verbose --debug -- -mod=mod -tags functional -gcflags=all=-d=checkptr ./...
+        working-directory: test/containerd-shim-runhcs-v1
+
       # build testing binaries
-      - name: Build containerd-shim-runhcs-v1 Testing Binary
-        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./containerd-shim-runhcs-v1
-        working-directory: test
       - name: Build cri-containerd Testing Binary
         run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./cri-containerd
         working-directory: test

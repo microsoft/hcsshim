@@ -4,7 +4,6 @@
 package main
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -12,14 +11,15 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-func verifyDeleteCommandSuccess(t *testing.T, stdout, stderr string, runerr error, begin, end time.Time) {
+func verifyDeleteCommandSuccess(t *testing.T, stdout, stderr string, runErr error, begin, end time.Time) {
 	t.Helper()
-	if runerr != nil {
-		t.Fatalf("expected `delete` command success got err: %v", runerr)
+	if runErr != nil {
+		t.Fatalf("expected `delete` command success got err: %v", runErr)
 	}
 	if stdout == "" {
-		t.Fatalf("expected `delete` command stdout to be non-empty, stderr: %v", stderr)
+		t.Fatalf("expected `delete` command stdout to be non-empty, stdout: %v", stdout)
 	}
+	// don't check stderr, since logs will be printed to it
 	var resp task.DeleteResponse
 	if err := proto.Unmarshal([]byte(stdout), &resp); err != nil {
 		t.Fatalf("failed to unmarshal stdout to DeleteResponse with err: '%v", err)
@@ -29,9 +29,6 @@ func verifyDeleteCommandSuccess(t *testing.T, stdout, stderr string, runerr erro
 	}
 	if begin.After(resp.ExitedAt) || end.Before(resp.ExitedAt) {
 		t.Fatalf("DeleteResponse.ExitedAt should be between, %v and %v, got: %v", begin, end, resp.ExitedAt)
-	}
-	if stderr != "" {
-		t.Fatalf("expected `delete` command stderr to be empty got: %s", stderr)
 	}
 }
 
@@ -72,6 +69,9 @@ func Test_Delete_No_Bundle_Path(t *testing.T) {
 }
 
 func Test_Delete_HcsSystem_NotFound(t *testing.T) {
+	// `delete` no longer removes bundle, but still create a directory regardless
+	//
+	// https://github.com/microsoft/hcsshim/commit/450cdb150a74aa594d7fe63bb0b3a2a37f5dd782
 	dir := t.TempDir()
 
 	before := time.Now()
@@ -90,7 +90,4 @@ func Test_Delete_HcsSystem_NotFound(t *testing.T) {
 		t,
 		stdout, stderr, err,
 		before, after)
-	if _, err := os.Stat(dir); err == nil || !os.IsNotExist(err) {
-		t.Fatalf("expected the bundle dir to be cleaned up. Got err: %v", err)
-	}
 }
