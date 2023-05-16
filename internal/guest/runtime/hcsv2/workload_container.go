@@ -17,6 +17,8 @@ import (
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hooks"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/guest/network"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
@@ -94,7 +96,48 @@ func specHasGPUDevice(spec *oci.Spec) bool {
 	return false
 }
 
+func setupNetworking(ctx context.Context, hostname, id string, spec *oci.Spec) (err error) {
+	// Write the hosts
+	sandboxHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
+	sandboxHostsPath := getSandboxHostsPath(id)
+	log.G(ctx).WithField("sandboxHostsPath", sandboxHostsPath).Debug("Printing sandboxHosts Path")
+	log.G(ctx).Debug("SandboxHostsContent ", sandboxHostsContent)
+	if err := os.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
+	 	return errors.Wrapf(err, "failed to write sandbox hosts to %q", sandboxHostsPath)
+	}
+
+	// Write resolv.conf
+	ns, err := getNetworkNamespace(getNetworkNamespaceID(spec))
+	log.G(ctx).Debug("Network namespace", ns)
+	if err != nil {
+		log.G(ctx).Debug("Error getting network namespace")
+		return err
+	}
+	var searches, servers []string
+	for _, n := range ns.Adapters() {
+		if len(n.DNSSuffix) > 0 {
+			searches = network.MergeValues(searches, strings.Split(n.DNSSuffix, ","))
+		}
+		if len(n.DNSServerList) > 0 {
+			servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
+		}
+	}
+	resolvContent, err := network.GenerateResolvConfContent(ctx, searches, servers, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate sandbox resolv.conf content")
+	}
+	sandboxResolvPath := getSandboxResolvPath(id)
+	log.G(ctx).Debug("sandboxResolvPath", sandboxResolvPath)
+	log.G(ctx).Debug("sandboxResolvContent", resolvContent)
+	if err := os.WriteFile(sandboxResolvPath, []byte(resolvContent), 0644); err != nil {
+		return errors.Wrap(err, "failed to write sandbox resolv.conf")
+	}
+
+	return nil
+}
+
 func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec) (err error) {
+	log.G(ctx).Debug("Inside setupWorkloadContainerSpec")
 	ctx, span := oc.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -107,6 +150,18 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		return errors.Errorf("workload container must not change hostname: %s", spec.Hostname)
 	}
 
+	hostname, err := os.Hostname()
+	if hostname == "" {
+		return errors.Wrap(err, "failed to get hostname")
+	}
+	log.G(ctx).WithField("hostname", hostname).Debug("Printing hostname");
+
+	// Set up networking
+	log.G(ctx).Debug("Inside setupWorkloadContainerSpec -> Setting up networking");
+	err = setupNetworking(ctx, hostname, sbid, spec);
+	log.G(ctx).Debug("Inside setupWorkloadContainerSpec -> Completed setting up networking");
+
+	log.G(ctx).Debug("Inside setupWorkloadContainerSpec -> UpdateSandboxMounts")
 	// update any sandbox mounts with the sandboxMounts directory path and create files
 	if err = updateSandboxMounts(sbid, spec); err != nil {
 		return errors.Wrapf(err, "failed to update sandbox mounts for container %v in sandbox %v", id, sbid)
@@ -116,6 +171,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		return errors.Wrapf(err, "failed to update hugepages mounts for container %v in sandbox %v", id, sbid)
 	}
 
+	log.G(ctx).Debug("Inside setupWorkloadContainerSpec -> GenerateWorkloadContainerNetworkMounts")
 	// Add default mounts for container networking (e.g. /etc/hostname, /etc/hosts),
 	// if spec didn't override them explicitly.
 	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMounts(sbid, spec)
@@ -171,5 +227,6 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil
 
+	log.G(ctx).Debug("Inside setupWorkloadContainerSpec -> Completed")
 	return nil
 }
