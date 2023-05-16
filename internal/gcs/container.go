@@ -37,6 +37,7 @@ var _ cow.Container = &Container{}
 // CreateContainer creates a container using ID `cid` and `cfg`. The request
 // will likely not be cancellable even if `ctx` becomes done.
 func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, config interface{}) (_ *Container, err error) {
+	log.G(ctx).Debug("Inside GuestConnection CreateContainer")
 	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::CreateContainer", oc.WithClientSpanKind)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

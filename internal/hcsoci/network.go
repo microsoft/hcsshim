@@ -14,6 +14,7 @@ import (
 )
 
 func createNetworkNamespace(ctx context.Context, coi *createOptionsInternal, r *resources.Resources) error {
+	log.G(ctx).Debug("Inside createNetworkNamespace")
 	op := "hcsoci::createNetworkNamespace"
 	l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
 	l.Debug(op + " - Begin")

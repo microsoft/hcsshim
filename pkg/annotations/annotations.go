@@ -289,6 +289,9 @@ const (
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
 	// case the UVM crashes.
 	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
+
+	// Preprovisioned UVMs are UVMs that are created and started before a container is created.
+	PreprovisionedUvm = "io.microsoft.virtualmachine.preprovisioned"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of
