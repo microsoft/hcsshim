@@ -420,7 +420,7 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvm
 		}
 	}
 
-	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layer.VHDPath, true, "", &scsi.MountConfig{Partition: layer.Partition, Options: []string{"ro"}})
+	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layer.VHDPath, true, vm.ID(), &scsi.MountConfig{Partition: layer.Partition, Options: []string{"ro"}})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to add SCSI layer: %s", err)
 	}
