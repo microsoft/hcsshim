@@ -2,6 +2,8 @@ package verity
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
@@ -13,13 +15,13 @@ import (
 
 // fileSystemSize retrieves ext4 fs SuperBlock and returns the file system size and block size
 func fileSystemSize(vhdPath string) (int64, int, error) {
-	sb, err := tar2ext4.ReadExt4SuperBlock(vhdPath)
+	vhd, err := os.Open(vhdPath)
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "failed to read ext4 super block")
+		return 0, 0, fmt.Errorf("failed to open VHD file: %w", err)
 	}
-	blockSize := 1024 * (1 << sb.LogBlockSize)
-	fsSize := int64(blockSize) * int64(sb.BlocksCountLow)
-	return fsSize, blockSize, nil
+	defer vhd.Close()
+
+	return tar2ext4.Ext4FileSystemSize(vhd)
 }
 
 // ReadVeritySuperBlock reads ext4 super block for a given VHD to then further read the dm-verity super block
