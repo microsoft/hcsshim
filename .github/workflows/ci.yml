@@ -9,7 +9,7 @@ env:
 
 jobs:
   lint:
-    runs-on: "windows-2019"
+    runs-on: "windows-2022"
     strategy:
       fail-fast: false
       matrix:
@@ -48,7 +48,12 @@ jobs:
           GOOS: ${{ matrix.goos }}
 
   protos:
-    runs-on: "windows-2019"
+    runs-on: "windows-2022"
+
+    env:
+      # translating from github.com/Microsoft/hcsshim/<path> (via `go list`) to <path> is easier if hcsshim is in GOPATH/src
+      GOPATH: '${{ github.workspace }}\go'
+
     steps:
       - uses: actions/setup-go@v4
         with:
@@ -72,7 +77,6 @@ jobs:
           "containerd_ref=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         working-directory: go/src/github.com/Microsoft/hcsshim
 
-      # Install protoc-gen-gogoctrd in D:\bin
       - uses: actions/checkout@v3
         with:
           repository: containerd/containerd
@@ -80,47 +84,71 @@ jobs:
           ref: "${{ env.containerd_ref }}"
         name: Checkout containerd
 
-      - name: Install protoc-gen-gogoctrd
+      - name: Install protobuild and protoc-gen-gogoctrd
         shell: powershell
         run: |
-          cd containerd
-          go build ./cmd/protoc-gen-gogoctrd
-          mkdir D:\bin
-          mv protoc-gen-gogoctrd.exe D:\bin
+          # not actually GOBIN
+          $goBin = Join-Path (go env GOPATH) 'bin'
+          mkdir -f $goBin
+          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      # Install protoc in D:\bin
+          go install github.com/containerd/protobuild@v0.2.0
+
+          cd containerd
+          go build -o $goBin ./cmd/protoc-gen-gogoctrd
+
       - name: Install protoc
         shell: powershell
         run: |
-          Invoke-WebRequest -OutFile protoc.zip -Uri https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/protoc-3.19.4-win32.zip
-          Expand-Archive -Path protoc.zip -DestinationPath .
-          mv include go/src/github.com/Microsoft/hcsshim/protobuf
-          mv bin\protoc.exe D:\bin
+          gh release download -R protocolbuffers/protobuf -p 'protoc-*-win32.zip' -O protoc.zip 'v23.2'
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not download protoc.'
+            exit $LASTEXITCODE
+          }
+
+          tar.exe xf protoc.zip
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not install protoc.'
+            exit $LASTEXITCODE
+          }
+
+          mkdir -f ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
+          mv include/* ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
+
+          # put protoc in GOPATH to make things easier
+          mv bin\protoc.exe (Join-Path (go env GOPATH) 'bin')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Protobuild
         shell: powershell
         run: |
-          go install github.com/containerd/protobuild@v0.2.0
-          cd go\src\github.com\Microsoft\hcsshim
-
-          $Env:Path += ";D:\bin;" + $Env:GOPATH + "\bin"
+          Write-Output "::group::protobuild"
           protobuild $(go list ./... | grep -v /vendor/)
+          Write-Output "::endgroup::"
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Failed to run protobuild.'
+            exit $LASTEXITCODE
+          }
 
+          Write-Output "::group::git diff"
+          # look for any new files not previously tracked
+          git add --all --intent-to-add .
           git diff --exit-code
-        env:
-          GOPATH: '${{ github.workspace }}\go'
-          GOFLAGS: ""
-          GOPROXY: ""
+          Write-Output "::endgroup::"
+        working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
 
   verify-vendor:
-    runs-on: "windows-2019"
+    runs-on: "windows-2022"
     env:
       GOPROXY: "https://proxy.golang.org,direct"
     steps:
       - uses: actions/checkout@v3
+
       - uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+
       - name: Validate go.mod and vendoring
         shell: powershell
         run: |
@@ -130,6 +158,7 @@ jobs:
             Write-Error "Main modules are not up to date. Please validate your go version >= this job's and run `go mod vendor` followed by `go mod tidy` in the repo root path."
           }
           exit $process.ExitCode
+
       - name: Validate test/go.mod
         shell: powershell
         working-directory: test
@@ -150,7 +179,7 @@ jobs:
 
   go-gen:
     name: Go Generate
-    runs-on: "windows-2019"
+    runs-on: "windows-2022"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
@@ -316,18 +345,15 @@ jobs:
       - name: Install crictl
         shell: powershell
         run: |
-          $VerbosePreference = 'Continue'
-          $ErrorActionPreference = 'Stop'
-
-          $crictlVersion = 'v1.24.2'
-          $url = "https://github.com/kubernetes-sigs/cri-tools/releases/download/${crictlVersion}/crictl-${crictlVersion}-windows-amd64.tar.gz"
-          curl.exe -L --no-progress-meter -o c:\crictl.tar.gz $url
-          tar.exe xf c:\crictl.tar.gz -C "${{ github.workspace }}/bin"
+          gh release download -R kubernetes-sigs/cri-tools -p 'crictl-*-windows-amd64.tar.gz' -O c:\crictl.tar.gz 'v1.24.2'
+          tar.exe xf c:\crictl.tar.gz -C '${{ github.workspace }}/bin'
 
           if ( $LASTEXITCODE ) {
             Write-Output '::error::Could not install crictl.'
             exit $LASTEXITCODE
           }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install mingw
         shell: powershell
@@ -472,7 +498,7 @@ jobs:
 
   build:
     needs: [test-windows, test-linux]
-    runs-on: "windows-2019"
+    runs-on: "windows-2022"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
