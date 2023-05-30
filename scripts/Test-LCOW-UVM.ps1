@@ -51,8 +51,10 @@ param (
 
     # gcs test/container options
 
+    # we can no longer specify the guest/destination path for SCSI mounts, so hope the rootfs is the first
+    # path to be SCSI-mounted
     [string]
-    $ContainerRootFSMount = '/run/rootfs',
+    $ContainerRootFSMount = '/run/mounts/scsi/m0',
 
     [string]
     $ContainerRootFSPath = (Join-Path $BootFilesPath 'rootfs.vhd'),
@@ -79,10 +81,10 @@ $UVMBootPath = Resolve-Path $UVMBootPath
 
 $shell = ( $Action -eq 'Shell' )
 
+$date = Get-Date
 if ( $shell ) {
     $cmd = 'ash'
 } else {
-    $date = Get-Date
     $waitfiles = "$ContainerRootFSMount"
     $gcspath = 'gcs.test'
     if ( -not $SkipGCSTestMount ) {
@@ -124,7 +126,7 @@ $boot = "$UVMBootPath -gcs lcow " + `
     "-boot-files-path $BootFilesPath " + `
     "-root-fs-type $BootFSType " + `
     '-kernel-file vmlinux ' + `
-    "-mount-scsi `"$ContainerRootFSPath,$ContainerRootFSMount`" "
+    "-mount-scsi `"$ContainerRootFSPath`" "
 
 if ( -not $SkipGCSTestMount ) {
     $boot += "-share `"$GCSTestPath,$GCSTestMount`" "
