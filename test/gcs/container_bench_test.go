@@ -45,9 +45,7 @@ func BenchmarkContainerCreate(b *testing.B) {
 		// create launches background go-routines
 		// so kill container to end those and avoid future perf hits
 		killContainer(ctx, b, c)
-		deleteContainer(ctx, b, c)
-		removeContainer(ctx, b, host, id)
-		unmountRootfs(ctx, b, scratch)
+		cleanupContainer(ctx, b, host, c)
 	}
 }
 
