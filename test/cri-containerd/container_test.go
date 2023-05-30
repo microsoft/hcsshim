@@ -874,3 +874,74 @@ func Test_RunContainer_ExecUser_Root_LCOW(t *testing.T) {
 		t.Fatalf("expected user for exec to be 'root', got %q", string(r.Stdout))
 	}
 }
+
+// creates a linux container and attempts to mount a (non-existent) nfs share. Tests if the kernel has the
+// required modules for supporting NFS mount.
+func Test_Container_NFSMount_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowUbuntu})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// start a privileged pod & container. container must be privileged in order to be able to mount a NFS
+	// share.
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+		SecurityContext: &runtime.LinuxSandboxSecurityContext{
+			Privileged: true,
+		},
+	}
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	requestTemplate := getCreateContainerRequest(
+		podID,
+		t.Name()+"-container",
+		imageLcowUbuntu,
+		[]string{"bash", "-c", "while true; do echo 'hello'; sleep 1; done"},
+		sandboxRequest.Config,
+	)
+	requestTemplate.Config.Linux = &runtime.LinuxContainerConfig{
+		SecurityContext: &runtime.LinuxContainerSecurityContext{
+			Privileged: true,
+		},
+	}
+	containerID := createContainer(t, client, ctx, requestTemplate)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	execHelper := func(ctrID string, cmd []string) {
+		stdout, stderr, errcode := execContainer(t, client, ctx, ctrID, cmd)
+		if errcode != 0 {
+			t.Helper()
+			t.Logf("stdout: %s \n\n stderr: %s\n\n", stdout, stderr)
+			t.Fatalf("failed to run '%v'\n: errcode: %d", cmd, errcode)
+		}
+	}
+
+	// setup nfs client
+	nfsdir := "/mnt/nfstest"
+	execHelper(containerID, []string{"apt", "update"})
+	execHelper(containerID, []string{"apt", "install", "-y", "nfs-common"})
+	execHelper(containerID, []string{"mkdir", "-p", nfsdir})
+
+	// There is no NFS daemon running in the container, so it is expected that the mount call fails with
+	// the connection refused error. However getting upto the connection refused error verifies that the
+	// container has all the required NFS client modules to successfully mount a NFS. (This also means
+	// that the kernel was correctly built with the NFS client options). `retry=0` ensures it fails
+	// immediately instead of retrying. If the kernel isn't correctly configured the call would fail with
+	// "No Device" error.
+	stdout, stderr, errcode := execContainer(t, client, ctx, containerID, []string{"mount", "-v", "-t", "nfs", "localhost:/fake/nfs/mount", nfsdir, "-o", "vers=4,minorversion=1,sec=sys,retry=0"})
+	if errcode != 32 { // 32 is mount failure
+		t.Logf("stdout: %s \n\n stderr: %s\n", stdout, stderr)
+		t.Fatalf("mount call is expected to fail with mount failure error code: 32, errcode was %d instead", errcode)
+	} else if !strings.Contains(stderr, "Connection refused") {
+		t.Logf("stdout: %s \n\n stderr: %s\n", stdout, stderr)
+		t.Fatalf("mount call is expected to fail with Connection refused error")
+	}
+}
