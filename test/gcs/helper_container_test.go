@@ -4,7 +4,6 @@ package gcs
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -34,7 +33,8 @@ const tailNull = "tail -f /dev/null"
 
 // Creates an overlay mount, and then a container using that mount that runs until stopped.
 // The container is created on its own, and not associated with a sandbox pod, and is therefore not CRI compliant.
-// [unmountRootfs] is added to the test cleanup.
+//
+// [unmountRootfs] must be called on the scratch directory before deleting the container.
 func createStandaloneContainer(ctx context.Context, tb testing.TB, host *hcsv2.Host, id string, extra ...ctrdoci.SpecOpts) *hcsv2.Container {
 	tb.Helper()
 	ctx = namespaces.WithNamespace(ctx, testoci.DefaultNamespace)
@@ -51,6 +51,8 @@ func createStandaloneContainer(ctx context.Context, tb testing.TB, host *hcsv2.H
 		OCISpecification: s,
 	}
 
+	// should be called before the container is deleted, but call it again incase the test errors before
+	// the container is created/cleanup is scheduled
 	tb.Cleanup(func() {
 		unmountRootfs(ctx, tb, scratch)
 	})
@@ -171,6 +173,9 @@ func deleteContainer(ctx context.Context, tb testing.TB, c *hcsv2.Container) {
 
 func cleanupContainer(ctx context.Context, tb testing.TB, host *hcsv2.Host, c *hcsv2.Container) {
 	tb.Helper()
+	// assume scratch space was created by [mountRootfs]
+	scratch := filepath.Join(guestpath.LCOWRootPrefixInUVM, c.ID())
+	unmountRootfs(ctx, tb, scratch)
 	deleteContainer(ctx, tb, c)
 	removeContainer(ctx, tb, host, c.ID())
 }
@@ -256,9 +261,6 @@ func unmountRootfs(ctx context.Context, tb testing.TB, path string) {
 	tb.Helper()
 	if err := storage.UnmountAllInPath(ctx, path, true); err != nil {
 		tb.Fatalf("could not unmount container rootfs: %v", err)
-	}
-	if err := os.RemoveAll(path); err != nil {
-		tb.Fatalf("could not remove container directory: %v", err)
 	}
 }
 
