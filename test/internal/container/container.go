@@ -4,6 +4,7 @@ package container
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -11,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 
@@ -37,6 +39,28 @@ func Create(
 		Spec:          spec,
 		// dont create a network namespace on the host side
 		NetworkNamespace: "", //spec.Windows.Network.NetworkNamespace,
+	}
+
+	if co.Spec.Linux != nil {
+		var layerFolders []string
+		if co.Spec.Windows != nil {
+			layerFolders = co.Spec.Windows.LayerFolders
+		}
+		if len(layerFolders) <= 1 {
+			tb.Fatalf("LCOW requires at least 2 layers (including scratch): %v", layerFolders)
+		}
+		scratch := layerFolders[len(layerFolders)-1]
+		parents := layerFolders[:len(layerFolders)-1]
+
+		// todo: support partitioned layers
+		co.LCOWLayers = &layers.LCOWLayers{
+			Layers:         make([]*layers.LCOWLayer, 0, len(parents)),
+			ScratchVHDPath: filepath.Join(scratch, "sandbox.vhdx"),
+		}
+
+		for _, p := range parents {
+			co.LCOWLayers.Layers = append(co.LCOWLayers.Layers, &layers.LCOWLayer{VHDPath: filepath.Join(p, "layer.vhd")})
+		}
 	}
 
 	c, r, err := hcsoci.CreateContainer(ctx, co)
