@@ -58,20 +58,22 @@ var (
 )
 
 const (
-	featureLCOW        = "LCOW"
-	featureWCOW        = "WCOW"
-	featureContainer   = "container"
-	featureHostProcess = "HostProcess"
-	featureUVMMem      = "UVMMem"
-	featurePlan9       = "Plan9"
-	featureSCSI        = "SCSI"
-	featureScratch     = "Scratch"
-	featureVSMB        = "vSMB"
-	featureVPMEM       = "vPMEM"
+	featureLCOW          = "LCOW"
+	featureLCOWIntegrity = "LCOWIntegrity"
+	featureWCOW          = "WCOW"
+	featureContainer     = "container"
+	featureHostProcess   = "HostProcess"
+	featureUVMMem        = "UVMMem"
+	featurePlan9         = "Plan9"
+	featureSCSI          = "SCSI"
+	featureScratch       = "Scratch"
+	featureVSMB          = "vSMB"
+	featureVPMEM         = "vPMEM"
 )
 
 var allFeatures = []string{
 	featureLCOW,
+	featureLCOWIntegrity,
 	featureWCOW,
 	featureHostProcess,
 	featureContainer,
@@ -204,6 +206,14 @@ func linuxImageLayers(ctx context.Context, tb testing.TB) []string {
 	tb.Helper()
 	if ss := flagLCOWLayerPaths.Strings(); len(ss) > 0 {
 		return ss
+	}
+	if flagFeatures.IsSet(featureLCOWIntegrity) {
+		alpineWithVerity := &layers.LazyImageLayers{
+			Image:        images.ImageLinuxAlpineLatest,
+			Platform:     images.PlatformLinux,
+			AppendVerity: true,
+		}
+		return alpineWithVerity.Layers(ctx, tb)
 	}
 	return alpineImagePaths.Layers(ctx, tb)
 }

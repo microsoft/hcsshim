@@ -4,6 +4,7 @@ package layers
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -21,6 +22,9 @@ func CacheFile(_ context.Context, tb testing.TB, dir string) string {
 	tb.Helper()
 	if dir == "" {
 		dir = tb.TempDir()
+		tb.Cleanup(func() {
+			os.RemoveAll(dir)
+		})
 	}
 	cache := filepath.Join(dir, CacheFileName)
 	return cache
@@ -33,6 +37,9 @@ func ScratchSpace(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM, name, d
 	tb.Helper()
 	if dir == "" {
 		dir = tb.TempDir()
+		tb.Cleanup(func() {
+			os.RemoveAll(dir)
+		})
 	}
 	if cache == "" {
 		cache = CacheFile(ctx, tb, dir)
