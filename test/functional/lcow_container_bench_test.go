@@ -4,18 +4,20 @@
 package functional
 
 import (
+	"path/filepath"
 	"testing"
 
 	ctrdoci "github.com/containerd/containerd/oci"
 	cri_util "github.com/containerd/containerd/pkg/cri/util"
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/hcsshim/test/internal/cmd"
 	"github.com/Microsoft/hcsshim/test/internal/container"
-	"github.com/Microsoft/hcsshim/test/internal/layers"
+	testlayers "github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/oci"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	"github.com/Microsoft/hcsshim/test/pkg/uvm"
@@ -32,13 +34,13 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("Create", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		cache := layers.CacheFile(ctx, b, "")
+		cache := testlayers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			id := cri_util.GenerateID()
-			scratch, _ := layers.ScratchSpace(ctx, b, vm, "", "", cache)
+			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := oci.CreateLinuxSpec(ctx, b, id,
 				oci.DefaultLinuxSpecOpts(id,
 					ctrdoci.WithProcessArgs("/bin/sh", "-c", "true"),
@@ -51,6 +53,15 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				Spec:          spec,
 				// dont create a network namespace on the host side
 				NetworkNamespace: "",
+			}
+
+			co.LCOWLayers = &layers.LCOWLayers{
+				Layers:         make([]*layers.LCOWLayer, 0, len(ls)),
+				ScratchVHDPath: filepath.Join(scratch, "sandbox.vhdx"),
+			}
+
+			for _, p := range ls {
+				co.LCOWLayers.Layers = append(co.LCOWLayers.Layers, &layers.LCOWLayer{VHDPath: filepath.Join(p, "layer.vhd")})
 			}
 
 			b.StartTimer()
@@ -79,13 +90,13 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("Start", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		cache := layers.CacheFile(ctx, b, "")
+		cache := testlayers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			id := cri_util.GenerateID()
-			scratch, _ := layers.ScratchSpace(ctx, b, vm, "", "", cache)
+			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := oci.CreateLinuxSpec(ctx, b, id,
 				oci.DefaultLinuxSpecOpts(id,
 					ctrdoci.WithProcessArgs("/bin/sh", "-c", "true"),
@@ -111,13 +122,13 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("InitExec", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		cache := layers.CacheFile(ctx, b, "")
+		cache := testlayers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			id := cri_util.GenerateID()
-			scratch, _ := layers.ScratchSpace(ctx, b, vm, "", "", cache)
+			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := oci.CreateLinuxSpec(ctx, b, id,
 				oci.DefaultLinuxSpecOpts(id,
 					ctrdoci.WithProcessArgs("/bin/sh", "-c", oci.TailNullArgs),
@@ -144,13 +155,13 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("InitExecKill", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		cache := layers.CacheFile(ctx, b, "")
+		cache := testlayers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			id := cri_util.GenerateID()
-			scratch, _ := layers.ScratchSpace(ctx, b, vm, "", "", cache)
+			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := oci.CreateLinuxSpec(ctx, b, id,
 				oci.DefaultLinuxSpecOpts(id,
 					ctrdoci.WithProcessArgs("/bin/sh", "-c", oci.TailNullArgs),
@@ -172,13 +183,13 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("ContainerKill", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		cache := layers.CacheFile(ctx, b, "")
+		cache := testlayers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			id := cri_util.GenerateID()
-			scratch, _ := layers.ScratchSpace(ctx, b, vm, "", "", cache)
+			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := oci.CreateLinuxSpec(ctx, b, id,
 				oci.DefaultLinuxSpecOpts(id,
 					ctrdoci.WithProcessArgs("/bin/sh", "-c", "true"),
