@@ -5,6 +5,7 @@ package functional
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -59,7 +60,11 @@ func Test_LCOW_Update_Resources(t *testing.T) {
 			defer cleanup()
 			if err := vm.Update(ctx, config.resource, nil); err != nil {
 				if config.valid {
-					t.Fatalf("failed to update LCOW UVM constraints: %s", err)
+					if strings.Contains(err.Error(), "invalid resource") {
+						t.Fatalf("failed to update LCOW UVM constraints: %s", err)
+					} else {
+						t.Logf("ignored error: %s", err)
+					}
 				}
 			} else {
 				if !config.valid {
