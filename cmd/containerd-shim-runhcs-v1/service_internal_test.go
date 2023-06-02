@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
-	v1 "github.com/containerd/cgroups/stats/v1"
-	"github.com/containerd/containerd/runtime/v2/task"
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/pkg/errors"
 )
 
@@ -103,7 +103,7 @@ func verifyExpectedCgroupMetrics(t *testing.T, v *v1.Metrics) {
 		t.Fatal("expected non-nil Metrics.CPU")
 	}
 	if v.CPU.Usage.Total != 100 {
-		t.Fatalf("Expected Metrics.CPU.Usage == 100, got: %d", v.CPU.Usage)
+		t.Fatalf("Expected Metrics.CPU.Usage.Total == 100, got: %d", v.CPU.Usage.Total)
 	}
 	if v.Memory == nil {
 		t.Fatal("expected non-nil Metrics.Memory")

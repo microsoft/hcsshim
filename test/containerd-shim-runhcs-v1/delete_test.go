@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/runtime/v2/task"
-	"github.com/gogo/protobuf/proto"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
+	"google.golang.org/protobuf/proto"
 )
 
 func verifyDeleteCommandSuccess(t *testing.T, stdout, stderr string, runErr error, begin, end time.Time) {
@@ -27,7 +27,7 @@ func verifyDeleteCommandSuccess(t *testing.T, stdout, stderr string, runErr erro
 	if resp.ExitStatus != 255 {
 		t.Fatalf("DeleteResponse exit status is 255 by convention, got: %v", resp.ExitStatus)
 	}
-	if begin.After(resp.ExitedAt) || end.Before(resp.ExitedAt) {
+	if begin.After(resp.ExitedAt.AsTime()) || end.Before(resp.ExitedAt.AsTime()) {
 		t.Fatalf("DeleteResponse.ExitedAt should be between, %v and %v, got: %v", begin, end, resp.ExitedAt)
 	}
 }

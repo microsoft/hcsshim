@@ -8,6 +8,14 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/containerd/containerd/protobuf"
+	"github.com/containerd/ttrpc"
+	typeurl "github.com/containerd/typeurl/v2"
+	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -19,13 +27,6 @@ import (
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
-	"github.com/containerd/ttrpc"
-	"github.com/containerd/typeurl"
-	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func init() {
@@ -43,6 +44,8 @@ var (
 
 // GRPC service exposed for use by a Node Network Service.
 type grpcService struct {
+	ncproxygrpc.UnimplementedNetworkConfigProxyServer
+
 	// containerIDToComputeAgent is a cache that stores the mappings from
 	// container ID to compute agent address is memory. This is repopulated
 	// on reconnect and referenced during client calls.
@@ -81,7 +84,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 		return nil, status.Errorf(codes.FailedPrecondition, "No shim registered for namespace `%s`", req.ContainerID)
 	}
 
-	var anyEndpoint *types.Any
+	var anyEndpoint typeurl.Any
 	if ep, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.EndpointName); err == nil {
 		if ep.Settings == nil || ep.Settings.DeviceDetails == nil || ep.Settings.DeviceDetails.PCIDeviceDetails == nil {
 			return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -149,7 +152,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 	caReq := &computeagent.AddNICInternalRequest{
 		ContainerID: req.ContainerID,
 		NicID:       req.NicID,
-		Endpoint:    anyEndpoint,
+		Endpoint:    protobuf.FromAny(anyEndpoint),
 	}
 	if _, err := agent.AddNIC(ctx, caReq); err != nil {
 		return nil, err
@@ -201,7 +204,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 	iovReqSettings := settings.Policies.IovPolicySettings
 	caReq := &computeagent.ModifyNICInternalRequest{
 		NicID:    req.NicID,
-		Endpoint: anyEndpoint,
+		Endpoint: protobuf.FromAny(anyEndpoint),
 		IovPolicySettings: &computeagent.IovSettings{
 			IovOffloadWeight:    iovReqSettings.IovOffloadWeight,
 			QueuePairsRequested: iovReqSettings.QueuePairsRequested,
@@ -265,7 +268,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
-	var anyEndpoint *types.Any
+	var anyEndpoint typeurl.Any
 	if endpt, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.EndpointName); err == nil {
 		anyEndpoint, err = typeurl.MarshalAny(endpt)
 		if err != nil {
@@ -293,7 +296,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 		caReq := &computeagent.DeleteNICInternalRequest{
 			ContainerID: req.ContainerID,
 			NicID:       req.NicID,
-			Endpoint:    anyEndpoint,
+			Endpoint:    protobuf.FromAny(anyEndpoint),
 		}
 		if _, err := agent.DeleteNIC(ctx, caReq); err != nil {
 			if err == uvm.ErrNICNotFound || err == uvm.ErrNetNSNotFound {

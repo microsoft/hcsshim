@@ -34,7 +34,9 @@ func createGRPCConn(ctx context.Context, address string) (*grpc.ClientConn, erro
 	if err != nil {
 		return nil, err
 	}
-	return grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(dialer))
+	return grpc.DialContext(ctx, addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(dialer))
 }
 
 type ContainerdClientOptions struct {
@@ -164,7 +166,6 @@ func PullImage(ctx context.Context, tb testing.TB, client *containerd.Client, re
 	}
 
 	opts := []containerd.RemoteOpt{
-		containerd.WithSchema1Conversion,
 		containerd.WithPlatform(plat),
 		containerd.WithPullUnpack,
 	}

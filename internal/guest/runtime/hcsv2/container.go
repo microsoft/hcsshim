@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/containerd/cgroups"
-	v1 "github.com/containerd/cgroups/stats/v1"
+	cgroups "github.com/containerd/cgroups/v3/cgroup1"
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -260,7 +260,7 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	cgroupPath := c.spec.Linux.CgroupsPath
-	cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(cgroupPath))
+	cg, err := cgroups.Load(cgroups.StaticPath(cgroupPath))
 	if err != nil {
 		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
 	}

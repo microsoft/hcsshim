@@ -15,12 +15,14 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
-	"github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 )
 
 // This is a barebones example of an implementation of the network
@@ -468,7 +470,7 @@ func main() {
 
 	grpcClient, err := grpc.Dial(
 		conf.GRPCAddr,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		log.G(ctx).WithError(err).Fatalf("failed to connect to ncproxy at %s", conf.GRPCAddr)

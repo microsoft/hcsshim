@@ -60,49 +60,18 @@ jobs:
       GOPATH: '${{ github.workspace }}\go'
 
     steps:
+      # protobuild requires the code to be in $GOPATH to translate from github.com/Microsoft/hcsshim
+      # to the correct path on disk
       - name: Checkout hcsshim
         uses: actions/checkout@v3
         with:
-          path: go/src/github.com/Microsoft/hcsshim
+          path: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go/src/github.com/Microsoft/hcsshim/go.sum
-
-      - name: Get containerd ref
-        shell: powershell
-        run: |
-          $v = go list -m -f '{{ .Version }}' 'github.com/containerd/containerd' 2>&1
-          if ( $LASTEXITCODE ) {
-            Write-Output '::error::Could not retrieve containerd version.'
-            exit $LASTEXITCODE
-          }
-
-          Write-Output "containerd ref is: $v"
-          "containerd_ref=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        working-directory: go/src/github.com/Microsoft/hcsshim
-
-      - name: Checkout containerd
-        uses: actions/checkout@v3
-        with:
-          repository: containerd/containerd
-          path: "containerd"
-          ref: "${{ env.containerd_ref }}"
-
-      - name: Install protobuild and protoc-gen-gogoctrd
-        shell: powershell
-        run: |
-          # not actually GOBIN
-          $goBin = Join-Path (go env GOPATH) 'bin'
-          mkdir -f $goBin
-          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-          go install github.com/containerd/protobuild@v0.2.0
-
-          cd containerd
-          go build -o $goBin ./cmd/protoc-gen-gogoctrd
 
       - name: Install protoc
         shell: powershell
@@ -122,25 +91,25 @@ jobs:
           mkdir -f ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
           mv include/* ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
 
-          # put protoc in GOPATH to make things easier
-          mv bin\protoc.exe (Join-Path (go env GOPATH) 'bin')
+          # put protoc in GOBIN to make things easier
+          $bin = Join-Path (go env GOPATH) 'bin'
+          mkdir -f $bin
+          mv bin\protoc.exe $bin
+
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Protobuild
+      - name: Run protobuild
         shell: powershell
         run: |
           Write-Output "::group::protobuild"
-          protobuild $(go list ./... | grep -v /vendor/)
+          .\scripts\Update-Proto.ps1
           Write-Output "::endgroup::"
-          if ( $LASTEXITCODE ) {
-            Write-Output '::error::Failed to run protobuild.'
-            exit $LASTEXITCODE
-          }
 
-          Write-Output "::group::git diff"
           # look for any new files not previously tracked
           git add --all --intent-to-add .
+          Write-Output "::group::git diff"
           git diff --exit-code
           Write-Output "::endgroup::"
         working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"

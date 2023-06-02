@@ -17,11 +17,13 @@ var (
 )
 
 type v0ServiceWrapper struct {
+	ncproxygrpcv0.UnimplementedNetworkConfigProxyServer
+
 	s *grpcService
 }
 
 func newV0ServiceWrapper(s *grpcService) *v0ServiceWrapper {
-	return &v0ServiceWrapper{s}
+	return &v0ServiceWrapper{s: s}
 }
 
 var _ ncproxygrpcv0.NetworkConfigProxyServer = &v0ServiceWrapper{}

@@ -6,7 +6,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/containerd/containerd/runtime/v2/task"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // newTestShimExec creates a test exec. If you are intending to make an init
@@ -47,7 +48,7 @@ func (tse *testShimExec) Status() *task.StateResponse {
 		ExecID:     tse.id,
 		Pid:        uint32(tse.pid),
 		ExitStatus: tse.status,
-		ExitedAt:   tse.at,
+		ExitedAt:   timestamppb.New(tse.at),
 	}
 }
 func (tse *testShimExec) Start(ctx context.Context) error {

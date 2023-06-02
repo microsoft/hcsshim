@@ -11,13 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	task "github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/errdefs"
+	"go.opencensus.io/trace"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/runtime/v2/task"
-	google_protobuf1 "github.com/gogo/protobuf/types"
-	"go.opencensus.io/trace"
 )
 
 type ServiceOptions struct {
@@ -80,7 +81,7 @@ type service struct {
 	gracefulShutdown bool
 }
 
-var _ = (task.TaskService)(&service{})
+var _ task.TaskService = &service{}
 
 func NewService(o ...ServiceOption) (svc *service, err error) {
 	var opts ServiceOptions
@@ -214,7 +215,7 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "Pause")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -229,7 +230,7 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "Resume")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -244,7 +245,7 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "Checkpoint")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -261,7 +262,7 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "Kill")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -280,7 +281,7 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "Exec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -356,7 +357,7 @@ func (s *service) DiagTasks(ctx context.Context, req *shimdiag.TasksRequest) (_ 
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "ResizePty")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -375,7 +376,7 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "CloseIO")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -393,7 +394,7 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "Update")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -470,7 +471,7 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *google_protobuf1.Empty, err error) {
+func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *emptypb.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "Shutdown")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

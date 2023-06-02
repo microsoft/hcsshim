@@ -9,15 +9,17 @@ import (
 	"path/filepath"
 	"time"
 
+	task "github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/containerd/containerd/runtime/v2/task"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
 )
 
 // LimitedRead reads at max `readLimitBytes` bytes from the file at path `filePath`. If the file has
@@ -122,7 +124,7 @@ The delete command will be executed in the container's bundle as its cwd.
 		}
 
 		if data, err := proto.Marshal(&task.DeleteResponse{
-			ExitedAt:   time.Now(),
+			ExitedAt:   timestamppb.New(time.Now()),
 			ExitStatus: 255,
 		}); err != nil {
 			return err

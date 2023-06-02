@@ -8,14 +8,15 @@ import (
 	"time"
 
 	eventstypes "github.com/containerd/containerd/api/events"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
-	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
@@ -151,11 +152,11 @@ func (he *hcsExec) Status() *task.StateResponse {
 	var s containerd_v1_types.Status
 	switch he.state {
 	case shimExecStateCreated:
-		s = containerd_v1_types.StatusCreated
+		s = containerd_v1_types.Status_CREATED
 	case shimExecStateRunning:
-		s = containerd_v1_types.StatusRunning
+		s = containerd_v1_types.Status_RUNNING
 	case shimExecStateExited:
-		s = containerd_v1_types.StatusStopped
+		s = containerd_v1_types.Status_STOPPED
 	}
 
 	return &task.StateResponse{
@@ -169,7 +170,7 @@ func (he *hcsExec) Status() *task.StateResponse {
 		Stderr:     he.io.StderrPath(),
 		Terminal:   he.io.Terminal(),
 		ExitStatus: he.exitStatus,
-		ExitedAt:   he.exitedAt,
+		ExitedAt:   timestamppb.New(he.exitedAt),
 	}
 }
 
@@ -492,7 +493,7 @@ func (he *hcsExec) waitForExit() {
 				ID:          he.id,
 				Pid:         uint32(he.pid),
 				ExitStatus:  he.exitStatus,
-				ExitedAt:    he.exitedAt,
+				ExitedAt:    timestamppb.New(he.exitedAt),
 			}); err != nil {
 			log.G(ctx).WithError(err).Error("failed to publish TaskExitEvent")
 		}
