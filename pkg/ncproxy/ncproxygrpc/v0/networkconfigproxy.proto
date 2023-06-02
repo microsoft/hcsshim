@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package ncproxygrpc;
+option go_package = "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v0";
+
+service NetworkConfigProxy {
+    rpc AddNIC(AddNICRequest) returns (AddNICResponse) {}
+    rpc ModifyNIC(ModifyNICRequest) returns (ModifyNICResponse) {}
+    rpc DeleteNIC(DeleteNICRequest) returns (DeleteNICResponse) {}
+
+    rpc CreateNetwork(CreateNetworkRequest) returns (CreateNetworkResponse) {}
+    rpc CreateEndpoint(CreateEndpointRequest) returns (CreateEndpointResponse) {}
+    rpc AddEndpoint(AddEndpointRequest) returns (AddEndpointResponse) {}
+    rpc DeleteEndpoint(DeleteEndpointRequest) returns (DeleteEndpointResponse) {}
+    rpc DeleteNetwork(DeleteNetworkRequest) returns (DeleteNetworkResponse) {}
+    rpc GetEndpoint(GetEndpointRequest) returns (GetEndpointResponse) {}
+    rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse) {}
+    rpc GetEndpoints(GetEndpointsRequest) returns (GetEndpointsResponse) {}
+    rpc GetNetworks(GetNetworksRequest) returns (GetNetworksResponse) {}
+}
+
+message AddNICRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    string endpoint_name = 3;
+}
+
+message AddNICResponse {}
+
+message ModifyNICRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    string endpoint_name = 3;
+    IovEndpointPolicySetting iov_policy_settings = 4;
+}
+
+message ModifyNICResponse {}
+
+message DeleteNICRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    string endpoint_name = 3;
+}
+
+message DeleteNICResponse {}
+
+message CreateNetworkRequest {
+    enum NetworkMode
+    {
+        Transparent = 0;
+        NAT = 1;
+    }
+
+    enum IpamType
+    {
+        Static = 0;
+        DHCP = 1;
+    }
+
+    string name = 1;
+    NetworkMode mode = 2;
+    string switch_name = 3;
+    IpamType ipam_type = 4;
+    repeated string subnet_ipaddress_prefix = 5;
+    string default_gateway = 6;
+}
+
+message CreateNetworkResponse{
+    string id = 1;
+}
+
+message PortNameEndpointPolicySetting {
+    string port_name = 1;
+}
+
+message IovEndpointPolicySetting {
+    uint32 iov_offload_weight = 1;
+    uint32 queue_pairs_requested = 2;
+    uint32 interrupt_moderation = 3;
+}
+
+message DnsSetting {
+    repeated string server_ip_addrs = 1;
+    string domain = 2;
+    repeated string search = 3;
+}
+
+message CreateEndpointRequest {
+    reserved 8 to 15;
+    string name = 1;
+    string macaddress = 2;
+    string ipaddress = 3;
+    string ipaddress_prefixlength = 4;
+    string network_name = 5;
+    PortNameEndpointPolicySetting portname_policy_setting = 6;
+    IovEndpointPolicySetting iov_policy_settings = 7;
+    DnsSetting dns_setting = 16;
+}
+
+message CreateEndpointResponse{
+    string id = 1;
+}
+
+message AddEndpointRequest {
+    string name = 1;
+    string namespace_id = 2;
+}
+
+message AddEndpointResponse{}
+
+message DeleteEndpointRequest {
+    string name = 1;
+}
+
+message DeleteEndpointResponse{}
+
+message DeleteNetworkRequest{
+    string name = 1;
+}
+
+message DeleteNetworkResponse{}
+
+message GetEndpointRequest{
+    string name = 1;
+}
+
+message GetEndpointResponse{
+    string id = 1;
+    string name = 2;
+    string network = 3; // GUID
+    string namespace = 4; // GUID
+    DnsSetting dns_setting = 5;
+}
+
+message GetNetworkRequest{
+    string name = 1;
+}
+
+message GetNetworkResponse{
+    string id = 1;
+    string name = 2;
+}
+
+message GetEndpointsRequest{}
+
+message GetEndpointsResponse{
+    repeated GetEndpointResponse endpoints = 1;
+}
+
+message GetNetworksRequest{}
+
+message GetNetworksResponse{
+    repeated GetNetworkResponse networks = 1;
+}

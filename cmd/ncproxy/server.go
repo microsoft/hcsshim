@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxystore "github.com/Microsoft/hcsshim/internal/ncproxy/store"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
+	ncproxygrpcv0 "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v0"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
@@ -65,6 +66,11 @@ func newServer(ctx context.Context, conf *config, dbPath string) (*server, error
 func (s *server) setup(ctx context.Context) (net.Listener, net.Listener, error) {
 	gService := newGRPCService(s.cache, s.ncproxyNetworking)
 	ncproxygrpc.RegisterNetworkConfigProxyServer(s.grpc, gService)
+
+	// support the v0 ncproxy api
+	v0Wrapper := newV0ServiceWrapper(gService)
+	ncproxygrpcv0.RegisterNetworkConfigProxyServer(s.grpc, v0Wrapper)
+	log.G(ctx).Warnf("ncproxygprc api v0 is deprecated, please use ncproxygrpc api v1")
 
 	tService := newTTRPCService(ctx, s.cache, s.agentStore)
 	ncproxyttrpc.RegisterNetworkConfigProxyService(s.ttrpc, tService)
