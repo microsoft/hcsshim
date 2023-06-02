@@ -223,8 +223,15 @@ func Mount(
 		// as the mountType unless `Filesystem` was given.
 		deviceFS, err = _getDeviceFsType(source)
 		if err != nil {
-			if config.Filesystem == "" || !errors.Is(err, ErrUnknownFilesystem) {
-				return fmt.Errorf("getting device's filesystem: %w", err)
+			// TODO (ambarve): add better retry logic, SCSI mounts sometimes return ENONENT or
+			// ENXIO error if we try to open those devices immediately after mount. retry after a
+			// few milliseconds.
+			log.G(ctx).WithError(err).Trace("get device filesystem failed, retrying in 500ms")
+			time.Sleep(500 * time.Millisecond)
+			if deviceFS, err = _getDeviceFsType(source); err != nil {
+				if config.Filesystem == "" || !errors.Is(err, ErrUnknownFilesystem) {
+					return fmt.Errorf("getting device's filesystem: %w", err)
+				}
 			}
 		}
 		log.G(ctx).WithField("filesystem", deviceFS).Debug("filesystem found on device")

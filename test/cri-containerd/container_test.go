@@ -916,9 +916,9 @@ func Test_Container_NFSMount_LCOW(t *testing.T) {
 	defer stopContainer(t, client, ctx, containerID)
 
 	execHelper := func(ctrID string, cmd []string) {
+		t.Helper()
 		stdout, stderr, errcode := execContainer(t, client, ctx, ctrID, cmd)
 		if errcode != 0 {
-			t.Helper()
 			t.Logf("stdout: %s \n\n stderr: %s\n\n", stdout, stderr)
 			t.Fatalf("failed to run '%v'\n: errcode: %d", cmd, errcode)
 		}

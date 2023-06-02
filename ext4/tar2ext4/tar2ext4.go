@@ -13,6 +13,7 @@ import (
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/ext4/internal/compactext4"
 	"github.com/Microsoft/hcsshim/ext4/internal/format"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/pkg/errors"
 )
 
@@ -259,6 +260,9 @@ func IsDeviceExt4(devicePath string) bool {
 	// ReadExt4SuperBlock will check the superblock magic number for us,
 	// so we know if no error is returned, this is an ext4 device.
 	_, err := ReadExt4SuperBlock(devicePath)
+	if err != nil {
+		log.L.Warnf("failed to read Ext4 superblock: %s", err)
+	}
 	return err == nil
 }
 
