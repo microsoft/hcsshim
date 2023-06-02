@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -74,37 +75,54 @@ func policyFromOpts(t *testing.T, policyType string, opts ...securitypolicy.Poli
 	return base64.StdEncoding.EncodeToString([]byte(policyString))
 }
 
-func securityPolicyFromImageWithOpts(t *testing.T, imageName string, policyType string, allowEnvironmentVariableDropping bool, allowCapabilityDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
+func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool, allowCapabilityDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
 	t.Helper()
-	alpineContainer := securitypolicy.ContainerConfig{
-		ImageName:                imageName,
-		Command:                  validPolicyAlpineCommand,
-		AllowPrivilegeEscalation: true,
-	}
-
-	for _, o := range opts {
-		if err := o(&alpineContainer); err != nil {
-			t.Fatalf("failed to apply config opt: %s", err)
-		}
-	}
-
-	return policyFromOpts(
+	containerConfigOpts := append(
+		[]securitypolicy.ContainerConfigOpt{
+			securitypolicy.WithCommand(validPolicyAlpineCommand),
+			securitypolicy.WithAllowPrivilegeEscalation(true),
+		},
+		opts...,
+	)
+	return policyFromImageWithOpts(
 		t,
+		imageLcowAlpine,
 		policyType,
-		securitypolicy.WithContainers([]securitypolicy.ContainerConfig{alpineContainer}),
-		securitypolicy.WithExternalProcesses(defaultExternalProcesses),
-		securitypolicy.WithAllowUnencryptedScratch(true),
-		securitypolicy.WithAllowEnvVarDropping(allowEnvironmentVariableDropping),
-		securitypolicy.WithAllowCapabilityDropping(allowCapabilityDropping),
-		securitypolicy.WithAllowRuntimeLogging(true),
-		securitypolicy.WithAllowPropertiesAccess(true),
-		securitypolicy.WithAllowDumpStacks(true),
+		[]securitypolicy.PolicyConfigOpt{
+			securitypolicy.WithAllowEnvVarDropping(allowEnvironmentVariableDropping),
+			securitypolicy.WithAllowCapabilityDropping(allowCapabilityDropping),
+		},
+		containerConfigOpts,
 	)
 }
 
-func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool, allowCapabilityDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
+func policyFromImageWithOpts(
+	t *testing.T,
+	imageName string,
+	policyType string,
+	policyOpts []securitypolicy.PolicyConfigOpt,
+	containerOpts []securitypolicy.ContainerConfigOpt,
+) string {
 	t.Helper()
-	return securityPolicyFromImageWithOpts(t, imageLcowAlpine, policyType, allowEnvironmentVariableDropping, allowCapabilityDropping, opts...)
+	containerConfig := securitypolicy.ContainerConfig{
+		ImageName: imageName,
+	}
+	for _, o := range containerOpts {
+		if err := o(&containerConfig); err != nil {
+			t.Fatalf("failed to apply container config opt: %s", err)
+		}
+	}
+	finalPolicyOpts := append(
+		[]securitypolicy.PolicyConfigOpt{
+			securitypolicy.WithContainers([]securitypolicy.ContainerConfig{containerConfig}),
+		},
+		policyOpts...,
+	)
+	return policyFromOpts(
+		t,
+		policyType,
+		finalPolicyOpts...,
+	)
 }
 
 func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandboxRequest {
@@ -117,6 +135,7 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 				annotations.NoSecurityHardware:  strconv.FormatBool(!*flagSevSnp),
 				annotations.SecurityPolicy:      policy,
 				annotations.VPMemNoMultiMapping: "true",
+				annotations.VPMemCount:          "0",
 				// This allows for better experience for policy only tests.
 				annotations.EncryptedScratchDisk: strconv.FormatBool(*flagSevSnp),
 			},
@@ -1533,7 +1552,19 @@ func Test_RunContainer_WithPolicy_And_RunAs(t *testing.T) {
 	defer cancel()
 
 	cmd := []string{"sh", "-c", "echo 'Hello'"}
-	policy := securityPolicyFromImageWithOpts(t, imageLcowCustomUser, "rego", false, false, securitypolicy.WithCommand(cmd), securitypolicy.WithUser(userConfig(1000, 1000)))
+	policy := policyFromImageWithOpts(
+		t,
+		imageLcowCustomUser,
+		"rego",
+		[]securitypolicy.PolicyConfigOpt{
+			securitypolicy.WithAllowEnvVarDropping(false),
+			securitypolicy.WithAllowCapabilityDropping(false),
+		},
+		[]securitypolicy.ContainerConfigOpt{
+			securitypolicy.WithCommand(cmd),
+			securitypolicy.WithUser(userConfig(1000, 1000)),
+		},
+	)
 
 	for _, config := range []struct {
 		name    string
@@ -1965,6 +1996,115 @@ func Test_Plan9Mount_WithPolicy(t *testing.T) {
 				expectedErrStr := "invalid mount list: /mounts/p9"
 				if !assertErrorContains(t, err, expectedErrStr) {
 					t.Fatalf("expected '%s' policy error, got: %s", expectedErrStr, err)
+				}
+			}
+		})
+	}
+}
+
+func Test_DumpStacks_WithPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, stacksAllowed := range []bool{true, false} {
+		t.Run(fmt.Sprintf("Allowed_%t", stacksAllowed), func(t *testing.T) {
+			policy := policyFromOpts(
+				t,
+				"rego",
+				securitypolicy.WithAllowUnencryptedScratch(true),
+				securitypolicy.WithAllowDumpStacks(stacksAllowed),
+			)
+			sandboxRequest := sandboxRequestWithPolicy(t, policy)
+			sandboxRequest.Config.Annotations[annotations.EncryptedScratchDisk] = "false"
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			shimName := fmt.Sprintf("k8s.io-%s", podID)
+			shim, err := shimdiag.GetShim(shimName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shimClient := shimdiag.NewShimDiagClient(shim)
+
+			// note that this will always return at least the host stacks, but
+			// we need to explicitly check for the guest stacks to make sure
+			// that the enforcement works.
+			stacks, _ := shimClient.DiagStacks(ctx, &shimdiag.StacksRequest{})
+			if stacksAllowed {
+				if len(stacks.GuestStacks) == 0 {
+					t.Fatal("GCS stacks must be available")
+				}
+			} else {
+				if len(stacks.GuestStacks) > 0 {
+					t.Fatal("GCS stacks must be empty")
+				}
+			}
+		})
+	}
+}
+
+func Test_GetProperties_WithPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, allowGetProperties := range []bool{true, false} {
+		t.Run(fmt.Sprintf("Allowed_%t", allowGetProperties), func(t *testing.T) {
+			policy := policyFromImageWithOpts(
+				t,
+				imageLcowAlpine,
+				"rego",
+				[]securitypolicy.PolicyConfigOpt{
+					securitypolicy.WithAllowUnencryptedScratch(true),
+					securitypolicy.WithAllowPropertiesAccess(allowGetProperties),
+				},
+				[]securitypolicy.ContainerConfigOpt{
+					securitypolicy.WithCommand(validPolicyAlpineCommand),
+					securitypolicy.WithAllowPrivilegeEscalation(true),
+				},
+			)
+			sandboxRequest := sandboxRequestWithPolicy(t, policy)
+			sandboxRequest.Config.Annotations[annotations.EncryptedScratchDisk] = "false"
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			containerRequest := getCreateContainerRequest(
+				podID,
+				"alpine-get-properties",
+				imageLcowAlpine,
+				validPolicyAlpineCommand,
+				sandboxRequest.Config,
+			)
+			containerID := createContainer(t, client, ctx, containerRequest)
+			defer removeContainer(t, client, ctx, containerID)
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			_, err := client.ContainerStats(ctx, &runtime.ContainerStatsRequest{ContainerId: containerID})
+			if err != nil {
+				if allowGetProperties {
+					t.Fatalf("container stats should be allowed: %s", err)
+				}
+				// unfortunately the errors returned during stats collection
+				// are not bubbled up, so we can only rely on the fact that
+				// the metrics response is invalid.
+				if !strings.Contains(err.Error(), " unexpected metrics response: []") {
+					t.Fatalf("expected different error: %s", err)
+				}
+			} else {
+				if !allowGetProperties {
+					t.Fatal("container stats should not be allowed")
 				}
 			}
 		})
