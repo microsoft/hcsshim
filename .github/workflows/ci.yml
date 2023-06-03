@@ -319,20 +319,17 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      # needs to be a separate step since terminal reload is required to bring in new env variables and PATH
+      - name: Upgrade Chocolaty
+        shell: powershell
+        run: |
+          choco upgrade -y chocolatey 2>&1
+
       - name: Install mingw
         shell: powershell
         run: |
           $VerbosePreference = 'Continue'
           # dont set $ErrorActionPreference since we want to allow choco install to fail later on
-
-          Write-Output '::group::Update chocolaty'
-          choco upgrade -y chocolatey
-          Write-Output '::endgroup::'
-
-          if ( $LASTEXITCODE ) {
-            Write-Output '::error::Could not update chocolatey.'
-            exit $LASTEXITCODE
-          }
 
           Write-Output 'Install mingw'
           # Install sometimes fails when downloading mingw zip from source-forge with:
@@ -350,7 +347,7 @@ jobs:
               Sleep -Seconds 60
             }
 
-            choco install -y --no-progress --stop-on-first-failure --force mingw --allow-downgrade --version 10.2.0
+            choco install -y --no-progress --stop-on-first-failure --force mingw --allow-downgrade --version 10.3.0
             Write-Output '::endgroup::'
             if ( -not $LASTEXITCODE ) {
               Write-Output "Attempt $i succeeded (exit code: $LASTEXITCODE)"
@@ -363,6 +360,9 @@ jobs:
             Write-Output "::error::Could not install mingw after $i attempts."
             exit $LASTEXITCODE
           }
+
+          # verify mingw32-make was installed
+          Get-Command -CommandType Application -ErrorAction Stop mingw32-make.exe
 
       - name: Build binaries
         shell: bash
