@@ -24,7 +24,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.1.0-rc.2
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
-	github.com/sirupsen/logrus v1.9.2
+	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli v1.22.13
 	github.com/veraison/go-cose v1.0.0-rc.1
 	github.com/vishvananda/netlink v1.2.1-beta.2
