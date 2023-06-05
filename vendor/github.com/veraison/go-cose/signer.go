@@ -15,11 +15,12 @@ type Signer interface {
 	// Algorithm returns the signing algorithm associated with the private key.
 	Algorithm() Algorithm
 
-	// Sign signs digest with the private key, possibly using entropy from rand.
+	// Sign signs message content with the private key, possibly using entropy
+	// from rand.
 	// The resulting signature should follow RFC 8152 section 8.
 	//
 	// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8
-	Sign(rand io.Reader, digest []byte) ([]byte, error)
+	Sign(rand io.Reader, content []byte) ([]byte, error)
 }
 
 // NewSigner returns a signer with a given signing key.
@@ -40,7 +41,7 @@ func NewSigner(alg Algorithm, key crypto.Signer) (Signer, error) {
 	case AlgorithmPS256, AlgorithmPS384, AlgorithmPS512:
 		vk, ok := key.Public().(*rsa.PublicKey)
 		if !ok {
-			return nil, fmt.Errorf("%v: %w", alg, ErrAlgorithmMismatch)
+			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
 		// RFC 8230 6.1 requires RSA keys having a minimum size of 2048 bits.
 		// Reference: https://www.rfc-editor.org/rfc/rfc8230.html#section-6.1
@@ -54,7 +55,7 @@ func NewSigner(alg Algorithm, key crypto.Signer) (Signer, error) {
 	case AlgorithmES256, AlgorithmES384, AlgorithmES512:
 		vk, ok := key.Public().(*ecdsa.PublicKey)
 		if !ok {
-			return nil, fmt.Errorf("%v: %w", alg, ErrAlgorithmMismatch)
+			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
 		if sk, ok := key.(*ecdsa.PrivateKey); ok {
 			return &ecdsaKeySigner{
@@ -69,7 +70,7 @@ func NewSigner(alg Algorithm, key crypto.Signer) (Signer, error) {
 		}, nil
 	case AlgorithmEd25519:
 		if _, ok := key.Public().(ed25519.PublicKey); !ok {
-			return nil, fmt.Errorf("%v: %w", alg, ErrAlgorithmMismatch)
+			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
 		return &ed25519Signer{
 			key: key,

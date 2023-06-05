@@ -16,14 +16,15 @@ func (es *ed25519Signer) Algorithm() Algorithm {
 	return AlgorithmEd25519
 }
 
-// Sign signs digest with the private key, possibly using entropy from rand.
+// Sign signs message content with the private key, possibly using entropy from
+// rand.
 // The resulting signature should follow RFC 8152 section 8.2.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8.2
-func (es *ed25519Signer) Sign(rand io.Reader, digest []byte) ([]byte, error) {
+func (es *ed25519Signer) Sign(rand io.Reader, content []byte) ([]byte, error) {
 	// crypto.Hash(0) must be passed as an option.
 	// Reference: https://pkg.go.dev/crypto/ed25519#PrivateKey.Sign
-	return es.key.Sign(rand, digest, crypto.Hash(0))
+	return es.key.Sign(rand, content, crypto.Hash(0))
 }
 
 // ed25519Verifier is a Pure EdDSA based verifier with golang built-in keys.
@@ -36,12 +37,13 @@ func (ev *ed25519Verifier) Algorithm() Algorithm {
 	return AlgorithmEd25519
 }
 
-// Verify verifies digest with the public key, returning nil for success.
+// Verify verifies message content with the public key, returning nil for
+// success.
 // Otherwise, it returns ErrVerification.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8.2
-func (ev *ed25519Verifier) Verify(digest []byte, signature []byte) error {
-	if verified := ed25519.Verify(ev.key, digest, signature); !verified {
+func (ev *ed25519Verifier) Verify(content []byte, signature []byte) error {
+	if verified := ed25519.Verify(ev.key, content, signature); !verified {
 		return ErrVerification
 	}
 	return nil

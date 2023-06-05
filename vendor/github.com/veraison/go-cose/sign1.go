@@ -10,11 +10,11 @@ import (
 
 // sign1Message represents a COSE_Sign1 CBOR object:
 //
-//   COSE_Sign1 = [
-//       Headers,
-//       payload : bstr / nil,
-//       signature : bstr
-//   ]
+//	COSE_Sign1 = [
+//	    Headers,
+//	    payload : bstr / nil,
+//	    signature : bstr
+//	]
 //
 // Reference: https://tools.ietf.org/html/rfc8152#section-4.2
 type sign1Message struct {
@@ -52,22 +52,11 @@ func NewSign1Message() *Sign1Message {
 
 // MarshalCBOR encodes Sign1Message into a COSE_Sign1_Tagged object.
 func (m *Sign1Message) MarshalCBOR() ([]byte, error) {
-	if m == nil {
-		return nil, errors.New("cbor: MarshalCBOR on nil Sign1Message pointer")
-	}
-	if len(m.Signature) == 0 {
-		return nil, ErrEmptySignature
-	}
-	protected, unprotected, err := m.Headers.marshal()
+	content, err := m.getContent()
 	if err != nil {
 		return nil, err
 	}
-	content := sign1Message{
-		Protected:   protected,
-		Unprotected: unprotected,
-		Payload:     m.Payload,
-		Signature:   m.Signature,
-	}
+
 	return encMode.Marshal(cbor.Tag{
 		Number:  CBORTagSign1Message,
 		Content: content,
@@ -85,28 +74,7 @@ func (m *Sign1Message) UnmarshalCBOR(data []byte) error {
 		return errors.New("cbor: invalid COSE_Sign1_Tagged object")
 	}
 
-	// decode to sign1Message and parse
-	var raw sign1Message
-	if err := decModeWithTagsForbidden.Unmarshal(data[1:], &raw); err != nil {
-		return err
-	}
-	if len(raw.Signature) == 0 {
-		return ErrEmptySignature
-	}
-	msg := Sign1Message{
-		Headers: Headers{
-			RawProtected:   raw.Protected,
-			RawUnprotected: raw.Unprotected,
-		},
-		Payload:   raw.Payload,
-		Signature: raw.Signature,
-	}
-	if err := msg.Headers.UnmarshalFromRaw(); err != nil {
-		return err
-	}
-
-	*m = msg
-	return nil
+	return m.doUnmarshal(data[1:])
 }
 
 // Sign signs a Sign1Message using the provided Signer.
@@ -138,11 +106,11 @@ func (m *Sign1Message) Sign(rand io.Reader, external []byte, signer Signer) erro
 	}
 
 	// sign the message
-	digest, err := m.digestToBeSigned(alg, external)
+	toBeSigned, err := m.toBeSigned(external)
 	if err != nil {
 		return err
 	}
-	sig, err := signer.Sign(rand, digest)
+	sig, err := signer.Sign(rand, toBeSigned)
 	if err != nil {
 		return err
 	}
@@ -175,20 +143,17 @@ func (m *Sign1Message) Verify(external []byte, verifier Verifier) error {
 	}
 
 	// verify the message
-	digest, err := m.digestToBeSigned(alg, external)
+	toBeSigned, err := m.toBeSigned(external)
 	if err != nil {
 		return err
 	}
-	return verifier.Verify(digest, m.Signature)
+	return verifier.Verify(toBeSigned, m.Signature)
 }
 
-// digestToBeSigned constructs Sig_structure, computes ToBeSigned, and returns
-// the digest of ToBeSigned.
-// If the signing algorithm does not have a hash algorithm associated,
-// ToBeSigned is returned instead.
+// toBeSigned constructs Sig_structure, computes and returns ToBeSigned.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.4
-func (m *Sign1Message) digestToBeSigned(alg Algorithm, external []byte) ([]byte, error) {
+func (m *Sign1Message) toBeSigned(external []byte) ([]byte, error) {
 	// create a Sig_structure and populate it with the appropriate fields.
 	//
 	//   Sig_structure = [
@@ -199,6 +164,10 @@ func (m *Sign1Message) digestToBeSigned(alg Algorithm, external []byte) ([]byte,
 	//   ]
 	var protected cbor.RawMessage
 	protected, err := m.Headers.MarshalProtected()
+	if err != nil {
+		return nil, err
+	}
+	protected, err = deterministicBinaryString(protected)
 	if err != nil {
 		return nil, err
 	}
@@ -214,14 +183,54 @@ func (m *Sign1Message) digestToBeSigned(alg Algorithm, external []byte) ([]byte,
 
 	// create the value ToBeSigned by encoding the Sig_structure to a byte
 	// string.
-	toBeSigned, err := encMode.Marshal(sigStructure)
+	return encMode.Marshal(sigStructure)
+}
+
+func (m *Sign1Message) getContent() (sign1Message, error) {
+	if m == nil {
+		return sign1Message{}, errors.New("cbor: MarshalCBOR on nil Sign1Message pointer")
+	}
+	if len(m.Signature) == 0 {
+		return sign1Message{}, ErrEmptySignature
+	}
+	protected, unprotected, err := m.Headers.marshal()
 	if err != nil {
-		return nil, err
+		return sign1Message{}, err
 	}
 
-	// hash toBeSigned if there is a hash algorithm associated with the signing
-	// algorithm.
-	return alg.computeHash(toBeSigned)
+	content := sign1Message{
+		Protected:   protected,
+		Unprotected: unprotected,
+		Payload:     m.Payload,
+		Signature:   m.Signature,
+	}
+
+	return content, nil
+}
+
+func (m *Sign1Message) doUnmarshal(data []byte) error {
+	// decode to sign1Message and parse
+	var raw sign1Message
+	if err := decModeWithTagsForbidden.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.Signature) == 0 {
+		return ErrEmptySignature
+	}
+	msg := Sign1Message{
+		Headers: Headers{
+			RawProtected:   raw.Protected,
+			RawUnprotected: raw.Unprotected,
+		},
+		Payload:   raw.Payload,
+		Signature: raw.Signature,
+	}
+	if err := msg.Headers.UnmarshalFromRaw(); err != nil {
+		return err
+	}
+
+	*m = msg
+	return nil
 }
 
 // Sign1 signs a Sign1Message using the provided Signer.
@@ -231,6 +240,74 @@ func (m *Sign1Message) digestToBeSigned(alg Algorithm, external []byte) ([]byte,
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.4
 func Sign1(rand io.Reader, signer Signer, headers Headers, payload []byte, external []byte) ([]byte, error) {
 	msg := Sign1Message{
+		Headers: headers,
+		Payload: payload,
+	}
+	err := msg.Sign(rand, external, signer)
+	if err != nil {
+		return nil, err
+	}
+	return msg.MarshalCBOR()
+}
+
+type UntaggedSign1Message Sign1Message
+
+// MarshalCBOR encodes UntaggedSign1Message into a COSE_Sign1 object.
+func (m *UntaggedSign1Message) MarshalCBOR() ([]byte, error) {
+	content, err := (*Sign1Message)(m).getContent()
+	if err != nil {
+		return nil, err
+	}
+
+	return encMode.Marshal(content)
+}
+
+// UnmarshalCBOR decodes a COSE_Sign1 object into an UnataggedSign1Message.
+func (m *UntaggedSign1Message) UnmarshalCBOR(data []byte) error {
+	if m == nil {
+		return errors.New("cbor: UnmarshalCBOR on nil UntaggedSign1Message pointer")
+	}
+
+	if len(data) == 0 {
+		return errors.New("cbor: zero length data")
+	}
+
+	// fast message check - ensure the frist byte indicates a four-element array
+	if data[0] != sign1MessagePrefix[1] {
+		return errors.New("cbor: invalid COSE_Sign1 object")
+	}
+
+	return (*Sign1Message)(m).doUnmarshal(data)
+}
+
+// Sign signs an UnttaggedSign1Message using the provided Signer.
+// The signature is stored in m.Signature.
+//
+// Note that m.Signature is only valid as long as m.Headers.Protected and
+// m.Payload remain unchanged after calling this method.
+// It is possible to modify m.Headers.Unprotected after signing,
+// i.e., add counter signatures or timestamps.
+//
+// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.4
+func (m *UntaggedSign1Message) Sign(rand io.Reader, external []byte, signer Signer) error {
+	return (*Sign1Message)(m).Sign(rand, external, signer)
+}
+
+// Verify verifies the signature on the UntaggedSign1Message returning nil on success or
+// a suitable error if verification fails.
+//
+// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.4
+func (m *UntaggedSign1Message) Verify(external []byte, verifier Verifier) error {
+	return (*Sign1Message)(m).Verify(external, verifier)
+}
+
+// Sign1Untagged signs an UntaggedSign1Message using the provided Signer.
+//
+// This method is a wrapper of `UntaggedSign1Message.Sign()`.
+//
+// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.4
+func Sign1Untagged(rand io.Reader, signer Signer, headers Headers, payload []byte, external []byte) ([]byte, error) {
+	msg := UntaggedSign1Message{
 		Headers: headers,
 		Payload: payload,
 	}
