@@ -4,7 +4,7 @@ on:
   - pull_request
 
 env:
-  GO_VERSION: "1.19.x"
+  GO_VERSION: "1.20.x"
   GOTESTSUM_VERSION: "latest"
 
 jobs:
