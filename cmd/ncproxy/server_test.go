@@ -12,12 +12,16 @@ import (
 	computeagentMock "github.com/Microsoft/hcsshim/internal/computeagent/mock"
 	ncproxystore "github.com/Microsoft/hcsshim/internal/ncproxy/store"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
+	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
+	nodenetsvcMockV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0/mock"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 	nodenetsvcMock "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1/mock"
 	"github.com/containerd/ttrpc"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestRegisterComputeAgent(t *testing.T) {
@@ -65,7 +69,7 @@ func TestRegisterComputeAgent(t *testing.T) {
 	}
 }
 
-func TestConfigureNetworking(t *testing.T) {
+func TestConfigureNetworking_V1(t *testing.T) {
 	ctx := context.Background()
 
 	// setup test database
@@ -86,11 +90,99 @@ func TestConfigureNetworking(t *testing.T) {
 	nodeNetCtrl := gomock.NewController(t)
 	defer nodeNetCtrl.Finish()
 	mockedClient := nodenetsvcMock.NewMockNodeNetworkServiceClient(nodeNetCtrl)
+	mockedClientV0 := nodenetsvcMockV0.NewMockNodeNetworkServiceClient(nodeNetCtrl)
 	nodeNetSvcClient = &nodeNetSvcConn{
-		addr:   "",
-		client: mockedClient,
+		addr:     "",
+		client:   mockedClient,
+		v0Client: mockedClientV0,
 	}
+
+	// allow calls to v1 mock api
 	mockedClient.EXPECT().ConfigureNetworking(gomock.Any(), gomock.Any()).Return(&nodenetsvc.ConfigureNetworkingResponse{}, nil).AnyTimes()
+
+	type config struct {
+		name          string
+		containerID   string
+		requestType   ncproxyttrpc.RequestTypeInternal
+		errorExpected bool
+	}
+	containerID := t.Name() + "-containerID"
+	tests := []config{
+		{
+			name:          "Configure Networking setup returns no error",
+			containerID:   containerID,
+			requestType:   ncproxyttrpc.RequestTypeInternal_Setup,
+			errorExpected: false,
+		},
+		{
+			name:          "Configure Networking teardown returns no error",
+			containerID:   containerID,
+			requestType:   ncproxyttrpc.RequestTypeInternal_Teardown,
+			errorExpected: false,
+		},
+		{
+			name:          "Configure Networking setup returns error when container ID is empty",
+			containerID:   "",
+			requestType:   ncproxyttrpc.RequestTypeInternal_Setup,
+			errorExpected: true,
+		},
+		{
+			name:          "Configure Networking setup returns error when request type is not supported",
+			containerID:   containerID,
+			requestType:   3, // unsupported request type
+			errorExpected: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(_ *testing.T) {
+			req := &ncproxyttrpc.ConfigureNetworkingInternalRequest{
+				ContainerID: test.containerID,
+				RequestType: test.requestType,
+			}
+			_, err := tService.ConfigureNetworking(ctx, req)
+			if test.errorExpected && err == nil {
+				t.Fatalf("expected ConfigureNetworking to return an error")
+			}
+			if !test.errorExpected && err != nil {
+				t.Fatalf("expected ConfigureNetworking to return no error, instead got %v", err)
+			}
+		})
+	}
+}
+
+func TestConfigureNetworking_V0(t *testing.T) {
+	ctx := context.Background()
+
+	// setup test database
+	tempDir := t.TempDir()
+
+	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// create test TTRPC service
+	store := ncproxystore.NewComputeAgentStore(db)
+	agentCache := newComputeAgentCache()
+	tService := newTTRPCService(ctx, agentCache, store)
+
+	// setup mocked client and mocked calls for nodenetsvc
+	nodeNetCtrl := gomock.NewController(t)
+	defer nodeNetCtrl.Finish()
+	mockedClient := nodenetsvcMock.NewMockNodeNetworkServiceClient(nodeNetCtrl)
+	mockedClientV0 := nodenetsvcMockV0.NewMockNodeNetworkServiceClient(nodeNetCtrl)
+	nodeNetSvcClient = &nodeNetSvcConn{
+		addr:     "",
+		client:   mockedClient,
+		v0Client: mockedClientV0,
+	}
+
+	// v1 api calls should return "Unimplemented" so that we will try the v0 code path
+	// allow succcessful calls to v0 api
+	mockedClientV0.EXPECT().ConfigureNetworking(gomock.Any(), gomock.Any()).Return(&nodenetsvcV0.ConfigureNetworkingResponse{}, nil).AnyTimes()
+	mockedClient.EXPECT().ConfigureNetworking(gomock.Any(), gomock.Any()).Return(nil, status.Error(codes.Unimplemented, "mock the v1 api not implemented")).AnyTimes()
 
 	type config struct {
 		name          string

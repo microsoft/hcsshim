@@ -1,0 +1,63 @@
+syntax = "proto3";
+package azure.nodenetworkservice;
+option go_package = "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0";
+option deprecated = true;
+
+service NodeNetworkService {
+    rpc ConfigureNetworking(ConfigureNetworkingRequest) returns (ConfigureNetworkingResponse);
+    rpc ConfigureContainerNetworking(ConfigureContainerNetworkingRequest) returns (ConfigureContainerNetworkingResponse);
+    rpc PingNodeNetworkService(PingNodeNetworkServiceRequest) returns (PingNodeNetworkServiceResponse);
+    rpc GetHostLocalIpAddress(GetHostLocalIpAddressRequest) returns (GetHostLocalIpAddressResponse);
+}
+
+message ConfigureNetworkingRequest {
+    string container_id = 1;
+    RequestType request_type = 2;
+}
+
+message ConfigureNetworkingResponse {}
+
+message PingNodeNetworkServiceRequest {
+    string ping_request_message = 1;
+}
+
+message PingNodeNetworkServiceResponse {
+    string ping_response_message = 1;
+}
+
+enum RequestType { 
+    Setup = 0;
+    Teardown = 1;
+}
+
+message ConfigureContainerNetworkingRequest {    
+    RequestType request_type = 1;
+    string container_id = 2;
+    string network_namespace_id = 3;
+}
+
+message ConfigureContainerNetworkingResponse {     
+    repeated ContainerNetworkInterface interfaces = 1;
+}
+
+message ContainerIPAddress {
+    string version = 1;        
+    string ip = 3;    
+    string prefix_length = 4;
+    string default_gateway = 5;
+}
+
+message ContainerNetworkInterface {
+    string name = 1;
+    string mac_address = 2;
+    string network_namespace_id = 3;    
+    repeated ContainerIPAddress ipaddresses = 4;
+}
+
+message GetHostLocalIpAddressRequest {
+    string container_id = 1;
+}
+
+message GetHostLocalIpAddressResponse {
+    string ip_addr = 1;
+}
