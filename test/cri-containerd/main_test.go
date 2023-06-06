@@ -62,7 +62,7 @@ const (
 	alpineAspnetUpgrade     = "mcr.microsoft.com/dotnet/core/aspnet:3.1.2-alpine3.11"
 
 	imageWindowsProcessDump = "cplatpublic.azurecr.io/crashdump:latest"
-	imageWindowsArgsEscaped = "cplatpublic.azurecr.io/args-escaped-test-image-ns:latest"
+	imageWindowsArgsEscaped = "cplatpublic.azurecr.io/argsescaped:latest"
 	imageWindowsTimezone    = "cplatpublic.azurecr.io/timezone:latest"
 
 	imageJobContainerHNS     = "cplatpublic.azurecr.io/jobcontainer_hns:latest"
