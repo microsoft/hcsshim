@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package ncproxygrpc;
 option go_package = "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v0";
+option deprecated = true;
 
 service NetworkConfigProxy {
     rpc AddNIC(AddNICRequest) returns (AddNICResponse) {}
