@@ -566,6 +566,9 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]runhcsopts.ProcessDetails, error
 	// Get the guest pids
 	props, err := ht.c.Properties(ctx, schema1.PropertyTypeProcessList)
 	if err != nil {
+		if isStatsNotFound(err) {
+			return nil, errors.Wrapf(errdefs.ErrNotFound, "failed to fetch pids: %s", err)
+		}
 		return nil, err
 	}
 
