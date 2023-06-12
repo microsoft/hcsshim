@@ -21,135 +21,172 @@ service NetworkConfigProxy {
 }
 
 message AddNICRequest {
-    string container_id = 1;
-    string nic_id = 2;
-    string endpoint_name = 3;
+    option deprecated = true;
+    string container_id = 1 [deprecated = true]; 
+    string nic_id = 2 [deprecated = true];
+    string endpoint_name = 3 [deprecated = true];
 }
 
-message AddNICResponse {}
+message AddNICResponse {
+    option deprecated = true;
+}
 
 message ModifyNICRequest {
-    string container_id = 1;
-    string nic_id = 2;
-    string endpoint_name = 3;
-    IovEndpointPolicySetting iov_policy_settings = 4;
+    option deprecated = true;
+    string container_id = 1 [deprecated = true];
+    string nic_id = 2 [deprecated = true];
+    string endpoint_name = 3 [deprecated = true];
+    IovEndpointPolicySetting iov_policy_settings = 4 [deprecated = true];
 }
 
-message ModifyNICResponse {}
+message ModifyNICResponse {
+    option deprecated = true;
+}
 
 message DeleteNICRequest {
-    string container_id = 1;
-    string nic_id = 2;
-    string endpoint_name = 3;
+    option deprecated = true;
+    string container_id = 1 [deprecated = true];
+    string nic_id = 2 [deprecated = true];
+    string endpoint_name = 3 [deprecated = true];
 }
 
-message DeleteNICResponse {}
+message DeleteNICResponse {
+    option deprecated = true;
+}
 
 message CreateNetworkRequest {
+    option deprecated = true;
     enum NetworkMode
     {
-        Transparent = 0;
-        NAT = 1;
+        option deprecated = true;
+        Transparent = 0 [deprecated = true];
+        NAT = 1 [deprecated = true];
     }
 
     enum IpamType
     {
-        Static = 0;
-        DHCP = 1;
+        option deprecated = true;
+        Static = 0 [deprecated = true];
+        DHCP = 1 [deprecated = true];
     }
 
-    string name = 1;
-    NetworkMode mode = 2;
-    string switch_name = 3;
-    IpamType ipam_type = 4;
-    repeated string subnet_ipaddress_prefix = 5;
-    string default_gateway = 6;
+    string name = 1 [deprecated = true];
+    NetworkMode mode = 2 [deprecated = true];
+    string switch_name = 3 [deprecated = true];
+    IpamType ipam_type = 4 [deprecated = true];
+    repeated string subnet_ipaddress_prefix = 5 [deprecated = true];
+    string default_gateway = 6 [deprecated = true];
 }
 
 message CreateNetworkResponse{
-    string id = 1;
+    option deprecated = true;
+    string id = 1 [deprecated = true];
 }
 
 message PortNameEndpointPolicySetting {
-    string port_name = 1;
+    option deprecated = true;
+    string port_name = 1 [deprecated = true];
 }
 
 message IovEndpointPolicySetting {
-    uint32 iov_offload_weight = 1;
-    uint32 queue_pairs_requested = 2;
-    uint32 interrupt_moderation = 3;
+    option deprecated = true;
+    uint32 iov_offload_weight = 1 [deprecated = true];
+    uint32 queue_pairs_requested = 2 [deprecated = true];
+    uint32 interrupt_moderation = 3 [deprecated = true];
 }
 
 message DnsSetting {
-    repeated string server_ip_addrs = 1;
-    string domain = 2;
-    repeated string search = 3;
+    option deprecated = true;
+    repeated string server_ip_addrs = 1 [deprecated = true];
+    string domain = 2 [deprecated = true];
+    repeated string search = 3 [deprecated = true];
 }
 
 message CreateEndpointRequest {
+    option deprecated = true;
     reserved 8 to 15;
-    string name = 1;
-    string macaddress = 2;
-    string ipaddress = 3;
-    string ipaddress_prefixlength = 4;
-    string network_name = 5;
-    PortNameEndpointPolicySetting portname_policy_setting = 6;
-    IovEndpointPolicySetting iov_policy_settings = 7;
-    DnsSetting dns_setting = 16;
+    string name = 1 [deprecated = true];
+    string macaddress = 2 [deprecated = true];
+    string ipaddress = 3 [deprecated = true];
+    string ipaddress_prefixlength = 4 [deprecated = true];
+    string network_name = 5 [deprecated = true];
+    PortNameEndpointPolicySetting portname_policy_setting = 6 [deprecated = true];
+    IovEndpointPolicySetting iov_policy_settings = 7 [deprecated = true];
+    DnsSetting dns_setting = 16 [deprecated = true];
 }
 
 message CreateEndpointResponse{
-    string id = 1;
+    option deprecated = true;
+    string id = 1 [deprecated = true];
 }
 
 message AddEndpointRequest {
-    string name = 1;
-    string namespace_id = 2;
+    option deprecated = true;
+    string name = 1 [deprecated = true];
+    string namespace_id = 2 [deprecated = true];
 }
 
-message AddEndpointResponse{}
+message AddEndpointResponse{
+    option deprecated = true;
+}
 
 message DeleteEndpointRequest {
-    string name = 1;
+    option deprecated = true;
+    string name = 1 [deprecated = true];
 }
 
-message DeleteEndpointResponse{}
+message DeleteEndpointResponse{
+    option deprecated = true;
+}
 
 message DeleteNetworkRequest{
-    string name = 1;
+    option deprecated = true;
+    string name = 1 [deprecated = true];
 }
 
-message DeleteNetworkResponse{}
+message DeleteNetworkResponse{
+    option deprecated = true;
+}
 
 message GetEndpointRequest{
-    string name = 1;
+    option deprecated = true;
+    string name = 1 [deprecated = true];
 }
 
 message GetEndpointResponse{
-    string id = 1;
-    string name = 2;
-    string network = 3; // GUID
-    string namespace = 4; // GUID
-    DnsSetting dns_setting = 5;
+    option deprecated = true;
+    string id = 1 [deprecated = true];
+    string name = 2 [deprecated = true];
+    string network = 3 [deprecated = true]; // GUID
+    string namespace = 4 [deprecated = true]; // GUID
+    DnsSetting dns_setting = 5 [deprecated = true];
 }
 
 message GetNetworkRequest{
-    string name = 1;
+    option deprecated = true;
+    string name = 1 [deprecated = true];
 }
 
 message GetNetworkResponse{
-    string id = 1;
-    string name = 2;
+    option deprecated = true;
+    string id = 1 [deprecated = true];
+    string name = 2 [deprecated = true];
 }
 
-message GetEndpointsRequest{}
+message GetEndpointsRequest{
+    option deprecated = true;
+}
 
 message GetEndpointsResponse{
-    repeated GetEndpointResponse endpoints = 1;
+    option deprecated = true;
+    repeated GetEndpointResponse endpoints = 1 [deprecated = true];
 }
 
-message GetNetworksRequest{}
+message GetNetworksRequest{
+    option deprecated = true;
+}
 
 message GetNetworksResponse{
-    repeated GetNetworkResponse networks = 1;
+    option deprecated = true;
+    repeated GetNetworkResponse networks = 1 [deprecated = true];
 }
