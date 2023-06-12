@@ -11,53 +11,65 @@ service NodeNetworkService {
 }
 
 message ConfigureNetworkingRequest {
-    string container_id = 1;
-    RequestType request_type = 2;
+    option deprecated = true;
+    string container_id = 1 [deprecated = true];
+    RequestType request_type = 2 [deprecated = true];
 }
 
-message ConfigureNetworkingResponse {}
+message ConfigureNetworkingResponse {
+    option deprecated = true;
+}
 
 message PingNodeNetworkServiceRequest {
-    string ping_request_message = 1;
+    option deprecated = true;
+    string ping_request_message = 1 [deprecated = true];
 }
 
 message PingNodeNetworkServiceResponse {
-    string ping_response_message = 1;
+    option deprecated = true;
+    string ping_response_message = 1 [deprecated = true];
 }
 
-enum RequestType { 
-    Setup = 0;
-    Teardown = 1;
+enum RequestType {
+    option deprecated = true;
+    Setup = 0 [deprecated = true];
+    Teardown = 1 [deprecated = true];
 }
 
-message ConfigureContainerNetworkingRequest {    
-    RequestType request_type = 1;
-    string container_id = 2;
-    string network_namespace_id = 3;
+message ConfigureContainerNetworkingRequest {
+    option deprecated = true;
+    RequestType request_type = 1 [deprecated = true];
+    string container_id = 2 [deprecated = true];
+    string network_namespace_id = 3 [deprecated = true];
 }
 
-message ConfigureContainerNetworkingResponse {     
-    repeated ContainerNetworkInterface interfaces = 1;
+message ConfigureContainerNetworkingResponse { 
+    option deprecated = true;
+    repeated ContainerNetworkInterface interfaces = 1 [deprecated = true];
 }
 
 message ContainerIPAddress {
-    string version = 1;        
-    string ip = 3;    
-    string prefix_length = 4;
-    string default_gateway = 5;
+    option deprecated = true;
+    string version = 1 [deprecated = true];        
+    string ip = 3 [deprecated = true];    
+    string prefix_length = 4 [deprecated = true];
+    string default_gateway = 5 [deprecated = true];
 }
 
 message ContainerNetworkInterface {
-    string name = 1;
-    string mac_address = 2;
-    string network_namespace_id = 3;    
-    repeated ContainerIPAddress ipaddresses = 4;
+    option deprecated = true;
+    string name = 1 [deprecated = true];
+    string mac_address = 2 [deprecated = true];
+    string network_namespace_id = 3 [deprecated = true];    
+    repeated ContainerIPAddress ipaddresses = 4 [deprecated = true];
 }
 
 message GetHostLocalIpAddressRequest {
-    string container_id = 1;
+    option deprecated = true;
+    string container_id = 1 [deprecated = true];
 }
 
 message GetHostLocalIpAddressResponse {
-    string ip_addr = 1;
+    option deprecated = true;
+    string ip_addr = 1 [deprecated = true];
 }
