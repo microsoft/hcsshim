@@ -126,7 +126,7 @@ const (
 	// MemoryHighMMIOBaseInMB indicates the high MMIO base in MB
 	MemoryHighMMIOBaseInMB = "io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb"
 
-	// MemoryHighMMIOBaseInMB indicates the high MMIO gap in MB
+	// MemoryHighMMIOGapInMB indicates the high MMIO gap in MB
 	MemoryHighMMIOGapInMB = "io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb"
 
 	// ProcessorCount overrides the hypervisor isolated vCPU count set
@@ -293,6 +293,9 @@ const (
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
 	// case the UVM crashes.
 	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
+
+	// GuestReadVerity tells the guest uVM to read verity info from mounted device.
+	GuestReadVerity = "io.microsoft.virtualmachine.lcow.guest-read-verity"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of

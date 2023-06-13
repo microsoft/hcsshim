@@ -167,12 +167,8 @@ func Mount(
 	}
 
 	if readonly {
-		var deviceHash string
 		if config.VerityInfo != nil {
-			deviceHash = config.VerityInfo.RootDigest
-		}
-
-		if config.VerityInfo != nil {
+			deviceHash := config.VerityInfo.RootDigest
 			dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, partition, deviceHash)
 			if source, err = createVerityTarget(spnCtx, source, dmVerityName, config.VerityInfo); err != nil {
 				return err

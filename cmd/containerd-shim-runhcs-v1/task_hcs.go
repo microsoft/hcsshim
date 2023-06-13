@@ -154,7 +154,8 @@ func createContainer(
 			if s.Windows != nil {
 				layerFolders = s.Windows.LayerFolders
 			}
-			lcowLayers, err := getLCOWLayers(rootfs, layerFolders)
+			guestReadVerity := oci.ParseAnnotationsBool(ctx, s.Annotations, annotations.GuestReadVerity, false)
+			lcowLayers, err := getLCOWLayers(rootfs, layerFolders, guestReadVerity)
 			if err != nil {
 				return nil, nil, err
 			}

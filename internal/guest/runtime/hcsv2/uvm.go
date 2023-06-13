@@ -40,6 +40,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/verity"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
@@ -972,11 +973,29 @@ func modifyMappedVirtualDisk(
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
+			verityInfo := mvd.VerityInfo
 			if mvd.ReadOnly {
+				// The only time the policy is empty, and we want it to be empty
+				// is when no policy is provided, and we default to open door
+				// policy. In any other case, e.g. explicit open door or any
+				// other rego policy we would like to mount layers with verity.
+				if len(securityPolicy.EncodedSecurityPolicy()) > 0 {
+					mvd.GuestReadVerity = true
+				}
 				// containers only have read-only layers so only enforce for them
 				var deviceHash string
-				if mvd.VerityInfo != nil {
+				if verityInfo != nil {
 					deviceHash = mvd.VerityInfo.RootDigest
+				} else if mvd.GuestReadVerity {
+					devPath, err := scsi.GetDevicePath(ctx, mvd.Controller, mvd.Lun, mvd.Partition)
+					if err != nil {
+						return err
+					}
+					verityInfo, err = verity.ReadVeritySuperBlock(ctx, devPath)
+					if err != nil {
+						return err
+					}
+					deviceHash = verityInfo.RootDigest
 				}
 
 				err = securityPolicy.EnforceDeviceMountPolicy(ctx, mvd.MountPath, deviceHash)
@@ -986,7 +1005,7 @@ func modifyMappedVirtualDisk(
 			}
 			config := &scsi.Config{
 				Encrypted:        mvd.Encrypted,
-				VerityInfo:       mvd.VerityInfo,
+				VerityInfo:       verityInfo,
 				EnsureFilesystem: mvd.EnsureFilesystem,
 				Filesystem:       mvd.Filesystem,
 			}
@@ -996,14 +1015,28 @@ func modifyMappedVirtualDisk(
 		return nil
 	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
+			verityInfo := mvd.VerityInfo
+			if len(securityPolicy.EncodedSecurityPolicy()) > 0 {
+				mvd.GuestReadVerity = true
+			}
 			if mvd.ReadOnly {
+				if mvd.GuestReadVerity {
+					devPath, err := scsi.GetDevicePath(ctx, mvd.Controller, mvd.Lun, mvd.Partition)
+					if err != nil {
+						return err
+					}
+					verityInfo, err = verity.ReadVeritySuperBlock(ctx, devPath)
+					if err != nil {
+						return err
+					}
+				}
 				if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
 					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
 				}
 			}
 			config := &scsi.Config{
 				Encrypted:        mvd.Encrypted,
-				VerityInfo:       mvd.VerityInfo,
+				VerityInfo:       verityInfo,
 				EnsureFilesystem: mvd.EnsureFilesystem,
 				Filesystem:       mvd.Filesystem,
 			}

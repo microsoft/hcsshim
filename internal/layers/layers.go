@@ -27,8 +27,9 @@ import (
 )
 
 type LCOWLayer struct {
-	VHDPath   string
-	Partition uint64
+	VHDPath         string
+	Partition       uint64
+	GuestReadVerity bool
 }
 
 // Defines a set of LCOW layers.
@@ -128,8 +129,8 @@ func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers
 		Encrypted: vm.ScratchEncryptionEnabled(),
 		// For scratch disks, we support formatting the disk if it is not already
 		// formatted.
-		EnsureFileystem: true,
-		Filesystem:      "ext4",
+		EnsureFilesystem: true,
+		Filesystem:       "ext4",
 	}
 	if vm.ScratchEncryptionEnabled() {
 		// Encrypted scratch devices are formatted with xfs
@@ -420,7 +421,17 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvm
 		}
 	}
 
-	sm, err := vm.SCSIManager.AddVirtualDisk(ctx, layer.VHDPath, true, "", &scsi.MountConfig{Partition: layer.Partition, Options: []string{"ro"}})
+	sm, err := vm.SCSIManager.AddVirtualDisk(
+		ctx,
+		layer.VHDPath,
+		true,
+		"",
+		&scsi.MountConfig{
+			Partition:       layer.Partition,
+			Options:         []string{"ro"},
+			GuestReadVerity: layer.GuestReadVerity,
+		},
+	)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to add SCSI layer: %s", err)
 	}

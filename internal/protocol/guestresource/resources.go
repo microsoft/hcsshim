@@ -88,6 +88,7 @@ type LCOWMappedVirtualDisk struct {
 	VerityInfo       *DeviceVerityInfo `json:"VerityInfo,omitempty"`
 	EnsureFilesystem bool              `json:"EnsureFilesystem,omitempty"`
 	Filesystem       string            `json:"Filesystem,omitempty"`
+	GuestReadVerity  bool              `json:"GuestReadVerity,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {
