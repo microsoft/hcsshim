@@ -432,11 +432,17 @@ jobs:
         run: |
           go build -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
 
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+
       - name: Run containerd integration tests
         shell: bash
         working-directory: src/github.com/containerd/containerd
         run: |
-          export EXTRA_TESTFLAGS="-timeout=20m"
+          # TODO: when https://github.com/containerd/containerd/pull/8691 makes it into the next release (container v1.6.22?), remove the skip
+          # `-skip` is only available in go1.20
+          export EXTRA_TESTFLAGS='-timeout=20m -run="[^(TestConvert)]"'
+          export GOTEST='gotestsum --format=standard-verbose --debug --'
           make integration
 
       - name: Run containerd CRI integration tests
