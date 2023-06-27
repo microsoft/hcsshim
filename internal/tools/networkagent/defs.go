@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
+	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 )
 
@@ -22,7 +23,10 @@ type service struct {
 	containerToNetwork   map[string][]string
 }
 
-var _ nodenetsvc.NodeNetworkServiceServer = &service{}
+type v0ServiceWrapper struct {
+	s *service
+	nodenetsvcV0.UnimplementedNodeNetworkServiceServer
+}
 
 type hnsSettings struct {
 	SwitchName  string                                `json:"switch_name,omitempty"`
