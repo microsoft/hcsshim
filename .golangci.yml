@@ -140,4 +140,9 @@ issues:
     - path: cmd\\ncproxy\\
       linters:
         - staticcheck
-      text: "^SA1019: (ncproxygrpcv0|nodenetsvcV0)"
+      text: "^SA1019: .*(ncproxygrpc|nodenetsvc)[/]?v0"
+
+    - path: internal\\tools\\networkagent
+      linters:
+        - staticcheck
+      text: "^SA1019: .*nodenetsvc[/]?v0"
