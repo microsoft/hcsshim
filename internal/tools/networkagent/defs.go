@@ -7,6 +7,7 @@ import (
 	"os"
 
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
+	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
 	"github.com/pkg/errors"
 )
 
@@ -16,6 +17,11 @@ type service struct {
 	containerToNamespace map[string]string
 	endpointToNicID      map[string]string
 	containerToNetwork   map[string][]string
+}
+
+type v0ServiceWrapper struct {
+	s *service
+	nodenetsvcV0.UnimplementedNodeNetworkServiceServer
 }
 
 type hnsSettings struct {

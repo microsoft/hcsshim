@@ -18,6 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
+	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -74,12 +75,17 @@ func generateIPs(prefixLength string) (string, string, string) {
 
 func (s *service) configureHCNNetworkingHelper(ctx context.Context, req *nodenetsvc.ConfigureContainerNetworkingRequest) (_ *nodenetsvc.ConfigureContainerNetworkingResponse, err error) {
 	prefixIP, gatewayIP, midIP := generateIPs(strconv.Itoa(int(prefixLength)))
+
+	mode := ncproxygrpc.HostComputeNetworkSettings_NAT
+	if s.conf.NetworkingSettings.HNSSettings.IOVSettings != nil {
+		mode = ncproxygrpc.HostComputeNetworkSettings_Transparent
+	}
 	addNetworkReq := &ncproxygrpc.CreateNetworkRequest{
 		Network: &ncproxygrpc.Network{
 			Settings: &ncproxygrpc.Network_HcnNetwork{
 				HcnNetwork: &ncproxygrpc.HostComputeNetworkSettings{
 					Name:                  req.ContainerID + "_network_hcn",
-					Mode:                  ncproxygrpc.HostComputeNetworkSettings_Transparent,
+					Mode:                  mode,
 					SwitchName:            s.conf.NetworkingSettings.HNSSettings.SwitchName,
 					IpamType:              ncproxygrpc.HostComputeNetworkSettings_Static,
 					SubnetIpaddressPrefix: []string{prefixIP},
@@ -105,6 +111,11 @@ func (s *service) configureHCNNetworkingHelper(ctx context.Context, req *nodenet
 		return nil, err
 	}
 
+	policies := &ncproxygrpc.HcnEndpointPolicies{}
+	if s.conf.NetworkingSettings.HNSSettings.IOVSettings != nil {
+		policies.IovPolicySettings = s.conf.NetworkingSettings.HNSSettings.IOVSettings
+	}
+
 	name := req.ContainerID + "_endpoint_hcn"
 	endpointCreateReq := &ncproxygrpc.CreateEndpointRequest{
 		EndpointSettings: &ncproxygrpc.EndpointSettings{
@@ -115,9 +126,7 @@ func (s *service) configureHCNNetworkingHelper(ctx context.Context, req *nodenet
 					Ipaddress:             midIP,
 					IpaddressPrefixlength: prefixLength,
 					NetworkName:           network.Name,
-					Policies: &ncproxygrpc.HcnEndpointPolicies{
-						IovPolicySettings: s.conf.NetworkingSettings.HNSSettings.IOVSettings,
-					},
+					Policies:              policies,
 				},
 			},
 		},
@@ -296,14 +305,14 @@ func (s *service) ConfigureContainerNetworking(ctx context.Context, req *nodenet
 
 	if req.RequestType == nodenetsvc.RequestType_Setup {
 		interfaces := []*nodenetsvc.ContainerNetworkInterface{}
-		if s.conf.NetworkingSettings.HNSSettings != nil {
+		if s.conf.NetworkingSettings != nil && s.conf.NetworkingSettings.HNSSettings != nil {
 			result, err := s.configureHCNNetworkingHelper(ctx, req)
 			if err != nil {
 				return nil, err
 			}
 			interfaces = append(interfaces, result.Interfaces...)
 		}
-		if s.conf.NetworkingSettings.NCProxyNetworkingSettings != nil {
+		if s.conf.NetworkingSettings != nil && s.conf.NetworkingSettings.NCProxyNetworkingSettings != nil {
 			result, err := s.configureNCProxyNetworkingHelper(ctx, req)
 			if err != nil {
 				return nil, err
@@ -435,8 +444,6 @@ func (s *service) ConfigureNetworking(ctx context.Context, req *nodenetsvc.Confi
 	return s.teardownHelper(ctx, req, containerNamespaceID)
 }
 
-// GetHostLocalIpAddress is defined in the nodenetworksvc proto which is owned by the azure vnetagent team
-//
 //nolint:stylecheck
 func (s *service) GetHostLocalIpAddress(ctx context.Context, req *nodenetsvc.GetHostLocalIpAddressRequest) (*nodenetsvc.GetHostLocalIpAddressResponse, error) {
 	return &nodenetsvc.GetHostLocalIpAddressResponse{IpAddr: ""}, nil
@@ -484,8 +491,12 @@ func main() {
 		endpointToNicID:      make(map[string]string),
 		containerToNetwork:   make(map[string][]string),
 	}
+	v0Service := &v0ServiceWrapper{
+		s: service,
+	}
 	server := grpc.NewServer()
 	nodenetsvc.RegisterNodeNetworkServiceServer(server, service)
+	nodenetsvcV0.RegisterNodeNetworkServiceServer(server, v0Service)
 
 	grpcListener, err := net.Listen("tcp", conf.NodeNetSvcAddr)
 	if err != nil {
