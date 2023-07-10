@@ -118,7 +118,7 @@ func containerSpecOpts(_ context.Context, tb testing.TB,
 		// this will be set based on the security context below
 		oci.WithNewPrivileges,
 		criopts.WithProcessArgs(cfg, img),
-		criopts.WithPodNamespaces(nil, sandboxPID, sandboxPID),
+		criopts.WithPodNamespaces(nil, sandboxPID, sandboxPID, nil /* uids */, nil /* gids */),
 	)
 
 	hostname := name

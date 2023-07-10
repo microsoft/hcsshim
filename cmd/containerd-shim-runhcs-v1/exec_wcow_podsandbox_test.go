@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/pkg/errors"
 )
 
@@ -25,7 +25,7 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd
 		t.Fatalf("expected bundle: '%s' got: '%s'", t.Name(), status.Bundle)
 	}
 	var expectedPid uint32
-	if wasStarted && es != containerd_v1_types.StatusCreated {
+	if wasStarted && es != containerd_v1_types.Status_CREATED {
 		expectedPid = 1
 	}
 	if status.Pid != expectedPid {
@@ -48,9 +48,9 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd
 	}
 	var expectedExitStatus uint32
 	switch es {
-	case containerd_v1_types.StatusCreated, containerd_v1_types.StatusRunning:
+	case containerd_v1_types.Status_CREATED, containerd_v1_types.Status_RUNNING:
 		expectedExitStatus = 255
-	case containerd_v1_types.StatusStopped:
+	case containerd_v1_types.Status_STOPPED:
 		if !wasStarted {
 			expectedExitStatus = 1
 		} else {
@@ -60,12 +60,12 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd
 	if status.ExitStatus != expectedExitStatus {
 		t.Fatalf("expected exitstatus: '%d' got: '%d'", expectedExitStatus, status.ExitStatus)
 	}
-	if es != containerd_v1_types.StatusStopped {
-		if !status.ExitedAt.IsZero() {
+	if es != containerd_v1_types.Status_STOPPED {
+		if !status.ExitedAt.AsTime().IsZero() {
 			t.Fatalf("expected exitedat: '%v' got: '%v'", time.Time{}, status.ExitedAt)
 		}
 	} else {
-		if status.ExitedAt.IsZero() {
+		if status.ExitedAt.AsTime().IsZero() {
 			t.Fatalf("expected exitedat: > '%v' got: '%v'", time.Time{}, status.ExitedAt)
 		}
 	}
@@ -74,7 +74,7 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd
 func Test_newWcowPodSandboxExec(t *testing.T) {
 	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
-	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusCreated, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.Status_CREATED, wpse.Status())
 }
 
 func Test_newWcowPodSandboxExec_ID(t *testing.T) {
@@ -144,7 +144,7 @@ func Test_newWcowPodSandboxExec_State(t *testing.T) {
 func Test_newWcowPodSandboxExec_Status(t *testing.T) {
 	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
-	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusCreated, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.Status_CREATED, wpse.Status())
 
 	// Start it
 	err := wpse.Start(context.TODO())
@@ -152,7 +152,7 @@ func Test_newWcowPodSandboxExec_Status(t *testing.T) {
 		t.Fatalf("should not have failed to start got: %v", err)
 	}
 
-	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusRunning, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.Status_RUNNING, wpse.Status())
 
 	// Stop it
 	err = wpse.Kill(context.TODO(), 0x0)
@@ -160,7 +160,7 @@ func Test_newWcowPodSandboxExec_Status(t *testing.T) {
 		t.Fatalf("should not have failed to stop got: %v", err)
 	}
 
-	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.Status_STOPPED, wpse.Status())
 }
 
 func Test_newWcowPodSandboxExec_Start(t *testing.T) {
@@ -300,13 +300,13 @@ func Test_newWcowPodSandboxExec_Wait_Created(t *testing.T) {
 	}
 
 	status := <-waitExit
-	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusStopped, status)
-	if status.ExitedAt.Before(now) {
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.Status_STOPPED, status)
+	if status.ExitedAt.AsTime().Before(now) {
 		t.Fatal("exit should not have unblocked previous to kill")
 	}
 
 	// Verify the wait in the exited state doesnt block.
-	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusStopped, wpse.Wait())
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.Status_STOPPED, wpse.Wait())
 }
 
 func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
@@ -332,11 +332,11 @@ func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
 	}
 
 	status := <-waitExit
-	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, status)
-	if status.ExitedAt.Before(now) {
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.Status_STOPPED, status)
+	if status.ExitedAt.AsTime().Before(now) {
 		t.Fatal("exit should not have unblocked previous to kill")
 	}
 
 	// Verify the wait in the exited state doesnt block.
-	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, wpse.Wait())
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.Status_STOPPED, wpse.Wait())
 }

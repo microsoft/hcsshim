@@ -6,17 +6,23 @@ import (
 	"encoding/json"
 	"os"
 
-	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/pkg/errors"
+
+	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
+	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 )
 
 type service struct {
+	nodenetsvc.UnimplementedNodeNetworkServiceServer
+
 	conf                 *config
 	client               ncproxygrpc.NetworkConfigProxyClient
 	containerToNamespace map[string]string
 	endpointToNicID      map[string]string
 	containerToNetwork   map[string][]string
 }
+
+var _ nodenetsvc.NodeNetworkServiceServer = &service{}
 
 type hnsSettings struct {
 	SwitchName  string                                `json:"switch_name,omitempty"`

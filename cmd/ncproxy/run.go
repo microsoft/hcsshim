@@ -15,12 +15,6 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/internal/computeagent"
-	"github.com/Microsoft/hcsshim/internal/debug"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
-	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -29,7 +23,15 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+
+	"github.com/Microsoft/hcsshim/internal/computeagent"
+	"github.com/Microsoft/hcsshim/internal/debug"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
+	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 )
 
 type nodeNetSvcConn struct {
@@ -222,7 +224,10 @@ func run(clicontext *cli.Context) error {
 		log.G(ctx).Infof("Connecting to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 
 		dialCtx := ctx
-		opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithStatsHandler(&ocgrpc.ClientHandler{})}
+		opts := []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
+		}
 		if conf.Timeout > 0 {
 			var cancel context.CancelFunc
 			dialCtx, cancel = context.WithTimeout(ctx, time.Duration(conf.Timeout)*time.Second)

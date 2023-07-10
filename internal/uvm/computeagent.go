@@ -8,7 +8,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/containerd/ttrpc"
-	"github.com/containerd/typeurl"
+	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"

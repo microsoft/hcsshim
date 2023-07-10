@@ -2,16 +2,14 @@ syntax = "proto3";
 
 option go_package = "github.com/Microsoft/hcsshim/internal/extendedtask;extendedtask";
 
-import weak "gogoproto/gogo.proto";
-
 service ExtendedTask {
     rpc ComputeProcessorInfo(ComputeProcessorInfoRequest) returns (ComputeProcessorInfoResponse);
 }
 
 message ComputeProcessorInfoRequest {
-    string id = 1;  
+    string id = 1;
 }
 
 message ComputeProcessorInfoResponse {
-    int32 count = 1; 
+    int32 count = 1;
 }

@@ -8,14 +8,15 @@ import (
 	"net"
 	"os/exec"
 
+	"github.com/containerd/ttrpc"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/vm"
 	"github.com/Microsoft/hcsshim/internal/vmservice"
-	"github.com/containerd/ttrpc"
-	ptypes "github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 var _ vm.UVMBuilder = &utilityVMBuilder{}
@@ -91,7 +92,7 @@ func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS
 
 func (uvmb *utilityVMBuilder) Create(ctx context.Context) (vm.UVM, error) {
 	// Grab what capabilities the virtstack supports up front.
-	capabilities, err := uvmb.client.CapabilitiesVM(ctx, &ptypes.Empty{})
+	capabilities, err := uvmb.client.CapabilitiesVM(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get virtstack capabilities from vmservice")
 	}

@@ -5,4 +5,4 @@
 // used for ncproxy.
 package v1
 
-//go:generate go run github.com/golang/mock/mockgen -source=nodenetsvc.pb.go -package=nodenetsvc_v1_mock -destination=mock\nodenetsvc_mock.pb.go
+//go:generate go run github.com/golang/mock/mockgen -source=nodenetsvc_grpc.pb.go -package=nodenetsvc_v1_mock -destination=mock\nodenetsvc_mock.pb.go

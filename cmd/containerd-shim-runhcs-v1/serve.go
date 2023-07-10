@@ -13,16 +13,16 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/log"
-	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
-	"github.com/containerd/typeurl"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
+	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
@@ -278,7 +278,7 @@ func readOptions(r io.Reader) (*runhcsopts.Options, error) {
 		return nil, errors.Wrap(err, "failed to read input")
 	}
 	if len(d) > 0 {
-		var a types.Any
+		var a anypb.Any
 		if err := proto.Unmarshal(d, &a); err != nil {
 			return nil, errors.Wrap(err, "failed unmarshalling into Any")
 		}

@@ -148,7 +148,7 @@ func verifyDeleteSuccessValues(t *testing.T, pid int, status uint32, at time.Tim
 	if status != e.status {
 		t.Fatalf("status expected '%d' got: '%d'", e.status, status)
 	}
-	if at != e.at {
+	if !at.Equal(e.at) {
 		t.Fatalf("at expected '%v' got: '%v'", e.at, at)
 	}
 }

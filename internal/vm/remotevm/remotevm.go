@@ -5,11 +5,12 @@ package remotevm
 import (
 	"context"
 
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/vm"
 	"github.com/Microsoft/hcsshim/internal/vmservice"
-	ptypes "github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
 )
 
 var _ vm.UVM = &utilityVM{}
@@ -39,21 +40,21 @@ func (uvm *utilityVM) ID() string {
 
 func (uvm *utilityVM) Start(ctx context.Context) error {
 	// The expectation is the VM should be in a paused state after creation.
-	if _, err := uvm.client.ResumeVM(ctx, &ptypes.Empty{}); err != nil {
+	if _, err := uvm.client.ResumeVM(ctx, &emptypb.Empty{}); err != nil {
 		return errors.Wrap(err, "failed to start remote VM")
 	}
 	return nil
 }
 
 func (uvm *utilityVM) Stop(ctx context.Context) error {
-	if _, err := uvm.client.TeardownVM(ctx, &ptypes.Empty{}); err != nil {
+	if _, err := uvm.client.TeardownVM(ctx, &emptypb.Empty{}); err != nil {
 		return errors.Wrap(err, "failed to stop remote VM")
 	}
 	return nil
 }
 
 func (uvm *utilityVM) Wait() error {
-	_, err := uvm.client.WaitVM(context.Background(), &ptypes.Empty{})
+	_, err := uvm.client.WaitVM(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		uvm.waitError = err
 		return errors.Wrap(err, "failed to wait on remote VM")
@@ -62,14 +63,14 @@ func (uvm *utilityVM) Wait() error {
 }
 
 func (uvm *utilityVM) Pause(ctx context.Context) error {
-	if _, err := uvm.client.PauseVM(ctx, &ptypes.Empty{}); err != nil {
+	if _, err := uvm.client.PauseVM(ctx, &emptypb.Empty{}); err != nil {
 		return errors.Wrap(err, "failed to pause remote VM")
 	}
 	return nil
 }
 
 func (uvm *utilityVM) Resume(ctx context.Context) error {
-	if _, err := uvm.client.ResumeVM(ctx, &ptypes.Empty{}); err != nil {
+	if _, err := uvm.client.ResumeVM(ctx, &emptypb.Empty{}); err != nil {
 		return errors.Wrap(err, "failed to resume remote VM")
 	}
 	return nil

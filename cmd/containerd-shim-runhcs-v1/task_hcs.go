@@ -11,15 +11,16 @@ import (
 	"time"
 
 	eventstypes "github.com/containerd/containerd/api/events"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
-	"github.com/containerd/containerd/runtime/v2/task"
-	"github.com/containerd/typeurl"
+	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
@@ -547,10 +548,10 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 		return 0, 0, time.Time{}, err
 	}
 
-	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
+	return int(status.Pid), status.ExitStatus, status.ExitedAt.AsTime(), nil
 }
 
-func (ht *hcsTask) Pids(ctx context.Context) ([]runhcsopts.ProcessDetails, error) {
+func (ht *hcsTask) Pids(ctx context.Context) ([]*runhcsopts.ProcessDetails, error) {
 	// Map all user created exec's to pid/exec-id
 	pidMap := make(map[int]string)
 	ht.execs.Range(func(key, value interface{}) bool {
@@ -573,10 +574,12 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]runhcsopts.ProcessDetails, error
 	}
 
 	// Copy to pid/exec-id pair's
-	pairs := make([]runhcsopts.ProcessDetails, len(props.ProcessList))
+	pairs := make([]*runhcsopts.ProcessDetails, len(props.ProcessList))
 	for i, p := range props.ProcessList {
+		pairs[i] = &runhcsopts.ProcessDetails{}
+
 		pairs[i].ImageName = p.ImageName
-		pairs[i].CreatedAt = p.CreateTimestamp
+		pairs[i].CreatedAt = timestamppb.New(p.CreateTimestamp)
 		pairs[i].KernelTime_100Ns = p.KernelTime100ns
 		pairs[i].MemoryCommitBytes = p.MemoryCommitBytes
 		pairs[i].MemoryWorkingSetPrivateBytes = p.MemoryWorkingSetPrivateBytes
@@ -784,8 +787,8 @@ func (ht *hcsTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error 
 func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_Windows {
 	wcs := &stats.Statistics_Windows{Windows: &stats.WindowsContainerStatistics{}}
 	if props.Statistics != nil {
-		wcs.Windows.Timestamp = props.Statistics.Timestamp
-		wcs.Windows.ContainerStartTime = props.Statistics.ContainerStartTime
+		wcs.Windows.Timestamp = timestamppb.New(props.Statistics.Timestamp)
+		wcs.Windows.ContainerStartTime = timestamppb.New(props.Statistics.ContainerStartTime)
 		wcs.Windows.UptimeNS = props.Statistics.Uptime100ns * 100
 		if props.Statistics.Processor != nil {
 			wcs.Windows.Processor = &stats.WindowsContainerProcessorStatistics{

@@ -12,8 +12,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -68,7 +68,7 @@ type shimTask interface {
 	DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error)
 	// Pids returns all process pid's in this `shimTask` including ones not
 	// created by the caller via a `CreateExec`.
-	Pids(ctx context.Context) ([]options.ProcessDetails, error)
+	Pids(ctx context.Context) ([]*options.ProcessDetails, error)
 	// Waits for the the init task to complete.
 	//
 	// Note: If the `request.ExecID == ""` the caller should instead call `Wait`

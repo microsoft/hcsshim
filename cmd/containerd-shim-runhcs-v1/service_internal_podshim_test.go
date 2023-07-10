@@ -12,9 +12,10 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/runtime/v2/task"
-	"github.com/containerd/typeurl"
+	"github.com/containerd/containerd/protobuf"
+	typeurl "github.com/containerd/typeurl/v2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -605,7 +606,7 @@ func Test_PodShim_updateInternal_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: any})
+	resp, err := s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: protobuf.FromAny(any)})
 	if err != nil {
 		t.Fatalf("should not have failed with error, got: %v", err)
 	}
@@ -623,7 +624,7 @@ func Test_PodShim_updateInternal_Error(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: any})
+	_, err = s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: protobuf.FromAny(any)})
 	if err == nil {
 		t.Fatal("expected to get an error for incorrect resource's type")
 	}

@@ -9,12 +9,13 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	eventstypes "github.com/containerd/containerd/api/events"
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
-	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func newWcowPodSandboxExec(ctx context.Context, events publisher, tid, bundle string) *wcowPodSandboxExec {
@@ -100,11 +101,11 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 	var s containerd_v1_types.Status
 	switch wpse.state {
 	case shimExecStateCreated:
-		s = containerd_v1_types.StatusCreated
+		s = containerd_v1_types.Status_CREATED
 	case shimExecStateRunning:
-		s = containerd_v1_types.StatusRunning
+		s = containerd_v1_types.Status_RUNNING
 	case shimExecStateExited:
-		s = containerd_v1_types.StatusStopped
+		s = containerd_v1_types.Status_STOPPED
 	}
 
 	return &task.StateResponse{
@@ -118,7 +119,7 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 		Stderr:     "", // NilIO
 		Terminal:   false,
 		ExitStatus: wpse.exitStatus,
-		ExitedAt:   wpse.exitedAt,
+		ExitedAt:   timestamppb.New(wpse.exitedAt),
 	}
 }
 
