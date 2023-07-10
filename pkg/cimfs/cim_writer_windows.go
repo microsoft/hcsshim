@@ -62,6 +62,35 @@ func Create(imagePath string, oldFSName string, newFSName string) (_ *CimFsWrite
 	return &CimFsWriter{handle: handle, name: filepath.Join(imagePath, fsName)}, nil
 }
 
+// CreateMergedCim creates a new merged CIM from the CIMs provided in the `cimPaths` array.  CIM at index 0 is
+// considered to be the base CIM and the CIM at index `cimPath.length-1` is considered the topmost CIM
+// on. When mounting this merged CIM the source CIMs MUST be provided in the same order. Ensure all CIM paths
+// are absolute paths. `imageDir` is the directory inside which the merged cim is stored with the name `name`.
+func CreateMergedCim(imageDir, name string, cimPaths []string) (err error) {
+	if !IsMergedCimSupported() {
+		return ErrMergedCimNotSupported
+	}
+	cim, err := Create(imageDir, "", name)
+	if err != nil {
+		return fmt.Errorf("create cim image: %w", err)
+	}
+	defer winapi.CimCloseImage(cim.handle)
+
+	// CimAddFsToMergedImage expects that topmost CIM is added first and the bottom most CIM is added
+	// last.
+	for i := len(cimPaths) - 1; i >= 0; i-- {
+		if err := winapi.CimAddFsToMergedImage(cim.handle, cimPaths[i]); err != nil {
+			return fmt.Errorf("add cim to merged image: %w", err)
+		}
+	}
+
+	err = winapi.CimCommitImage(cim.handle)
+	if err != nil {
+		return fmt.Errorf("commit merged image: %w", err)
+	}
+	return nil
+}
+
 // CreateAlternateStream creates alternate stream of given size at the given path inside the cim. This will
 // replace the current active stream. Always, finish writing current active stream and then create an
 // alternate stream.
@@ -210,9 +239,7 @@ func (c *CimFsWriter) Close() error {
 	if err := c.commit(); err != nil {
 		return &OpError{Cim: c.name, Op: "commit", Err: err}
 	}
-	if err := winapi.CimCloseImage(c.handle); err != nil {
-		return &OpError{Cim: c.name, Op: "close", Err: err}
-	}
+	winapi.CimCloseImage(c.handle)
 	c.handle = 0
 	return nil
 }

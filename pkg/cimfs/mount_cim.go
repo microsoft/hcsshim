@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
 )
 
 type MountError struct {
@@ -62,4 +63,37 @@ func Unmount(volumePath string) error {
 	}
 
 	return nil
+}
+
+// MountMergedCims mounts the given merged CIM (usually created with `CreateMergedCim`) at the a volume with
+// given GUID. The `cimPaths` MUST be identical to the `cimPaths` passed to `CreateMergedCim` when creating
+// this merged CIM.
+func MountMergedCims(cimPaths []string, mergedCimPath string, mountFlags uint32, volumeGUID guid.GUID) (string, error) {
+	if !IsMergedCimSupported() {
+		return "", ErrMergedCimNotSupported
+	}
+	// win32 mount merged CIM API expects an array of all CIMs. 0th entry in the array should be the
+	// merged CIM. All remaining entries should be the source CIM paths in the same order that was used
+	// while creating the merged CIM.
+	allcims := append([]string{mergedCimPath}, cimPaths...)
+	cimsToMerge := []winapi.CimFsImagePath{}
+	for _, cimPath := range allcims {
+		cimDir, err := windows.UTF16PtrFromString(filepath.Dir(cimPath))
+		if err != nil {
+			return "", fmt.Errorf("convert string to utf16: %w", err)
+		}
+		cimName, err := windows.UTF16PtrFromString(filepath.Base(cimPath))
+		if err != nil {
+			return "", fmt.Errorf("convert string to utf16: %w", err)
+		}
+
+		cimsToMerge = append(cimsToMerge, winapi.CimFsImagePath{
+			ImageDir:  cimDir,
+			ImageName: cimName,
+		})
+	}
+	if err := winapi.CimMergeMountImage(uint32(len(cimsToMerge)), &cimsToMerge[0], mountFlags, &volumeGUID); err != nil {
+		return "", &MountError{Cim: mergedCimPath, Op: "MountMerged", Err: err}
+	}
+	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
 }
