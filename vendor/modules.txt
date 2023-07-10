@@ -10,7 +10,6 @@ github.com/Microsoft/go-winio/pkg/etwlogrus
 github.com/Microsoft/go-winio/pkg/fs
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
-github.com/Microsoft/go-winio/tools/mkwinsyscall
 github.com/Microsoft/go-winio/vhd
 # github.com/OneOfOne/xxhash v1.2.8
 ## explicit; go 1.11
@@ -73,10 +72,6 @@ github.com/containerd/fifo
 # github.com/containerd/go-runc v1.0.0
 ## explicit; go 1.13
 github.com/containerd/go-runc
-# github.com/containerd/protobuild v0.3.0
-## explicit; go 1.13
-github.com/containerd/protobuild
-github.com/containerd/protobuild/cmd/go-fix-acronym
 # github.com/containerd/stargz-snapshotter/estargz v0.14.3
 ## explicit; go 1.19
 github.com/containerd/stargz-snapshotter/estargz
@@ -84,7 +79,6 @@ github.com/containerd/stargz-snapshotter/estargz/errorutil
 # github.com/containerd/ttrpc v1.2.2
 ## explicit; go 1.13
 github.com/containerd/ttrpc
-github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc
 # github.com/containerd/typeurl/v2 v2.1.1
 ## explicit; go 1.13
 github.com/containerd/typeurl/v2
@@ -183,13 +177,10 @@ github.com/golang/groupcache/lru
 # github.com/golang/mock v1.6.0
 ## explicit; go 1.11
 github.com/golang/mock/gomock
-github.com/golang/mock/mockgen
-github.com/golang/mock/mockgen/model
 # github.com/golang/protobuf v1.5.3
 ## explicit; go 1.9
 github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
-github.com/golang/protobuf/protoc-gen-go/descriptor
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
@@ -435,9 +426,6 @@ golang.org/x/crypto/curve25519
 golang.org/x/crypto/curve25519/internal/field
 # golang.org/x/mod v0.10.0
 ## explicit; go 1.17
-golang.org/x/mod/internal/lazyregexp
-golang.org/x/mod/modfile
-golang.org/x/mod/module
 golang.org/x/mod/semver
 # golang.org/x/net v0.10.0
 ## explicit; go 1.17
@@ -471,21 +459,16 @@ golang.org/x/text/unicode/norm
 # golang.org/x/tools v0.8.0
 ## explicit; go 1.18
 golang.org/x/tools/cmd/stringer
-golang.org/x/tools/go/ast/astutil
 golang.org/x/tools/go/gcexportdata
 golang.org/x/tools/go/internal/packagesdriver
 golang.org/x/tools/go/packages
 golang.org/x/tools/go/types/objectpath
-golang.org/x/tools/imports
 golang.org/x/tools/internal/event
 golang.org/x/tools/internal/event/core
 golang.org/x/tools/internal/event/keys
 golang.org/x/tools/internal/event/label
-golang.org/x/tools/internal/fastwalk
 golang.org/x/tools/internal/gcimporter
 golang.org/x/tools/internal/gocommand
-golang.org/x/tools/internal/gopathwalk
-golang.org/x/tools/internal/imports
 golang.org/x/tools/internal/packagesinternal
 golang.org/x/tools/internal/pkgbits
 golang.org/x/tools/internal/tokeninternal
@@ -545,14 +528,8 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
-## explicit; go 1.9
-google.golang.org/grpc/cmd/protoc-gen-go-grpc
 # google.golang.org/protobuf v1.30.0
 ## explicit; go 1.11
-google.golang.org/protobuf/cmd/protoc-gen-go
-google.golang.org/protobuf/cmd/protoc-gen-go/internal_gengo
-google.golang.org/protobuf/compiler/protogen
 google.golang.org/protobuf/encoding/protojson
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
@@ -570,7 +547,6 @@ google.golang.org/protobuf/internal/filetype
 google.golang.org/protobuf/internal/flags
 google.golang.org/protobuf/internal/genid
 google.golang.org/protobuf/internal/impl
-google.golang.org/protobuf/internal/msgfmt
 google.golang.org/protobuf/internal/order
 google.golang.org/protobuf/internal/pragma
 google.golang.org/protobuf/internal/set
@@ -578,21 +554,17 @@ google.golang.org/protobuf/internal/strs
 google.golang.org/protobuf/internal/version
 google.golang.org/protobuf/proto
 google.golang.org/protobuf/reflect/protodesc
-google.golang.org/protobuf/reflect/protopath
-google.golang.org/protobuf/reflect/protorange
 google.golang.org/protobuf/reflect/protoreflect
 google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
-google.golang.org/protobuf/types/dynamicpb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/emptypb
 google.golang.org/protobuf/types/known/fieldmaskpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
-google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2

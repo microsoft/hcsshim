@@ -37,11 +37,6 @@ require (
 )
 
 require (
-	github.com/containerd/protobuild v0.3.0
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
-)
-
-require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.0.1 // indirect
 	github.com/containerd/continuity v0.3.0 // indirect

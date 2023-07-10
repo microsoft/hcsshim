@@ -75,6 +75,15 @@ certify they either authored the work themselves or otherwise have permission to
 more info, as well as to make sure that you can attest to the rules listed. Our CI uses the [DCO Github app](https://github.com/apps/dco) to ensure
 that all commits in a given PR are signed-off.
 
+### Auto-Generated Code
+
+This project uses `protoc` to generate gRPC and ttrpc code, as well as `//go:generate` directives.
+To re-generate `*.pb.go` code, run `./script/Update-Proto.ps1`.
+To re-generate other auto-generate files, run `./tools/Install-Tools.ps1` to install the required go tools, then
+use `go gen ./...`.
+
+See `.github/workflows/ci.yml` for concerete examples.
+
 ## Code of Conduct
 
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).

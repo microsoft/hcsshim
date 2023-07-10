@@ -155,6 +155,24 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Validate tools/go.mod
+        shell: powershell
+        working-directory: tools
+        run: |
+          Write-Output "::group::go mod tidy"
+          go mod tidy
+          Write-Output "::endgroup::"
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error ::./tools/go.mod is not up to date. Please run ``go mod tidy`` from within ``./tools``"
+            exit $LASTEXITCODE
+          }
+
   go-gen:
     name: Go Generate
     runs-on: "windows-2022"
@@ -166,6 +184,12 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Install go tools
+        shell: powershell
+        working-directory: tools
+        run: |
+          .\Install-Tools.ps1
 
       - name: Validate go generate
         shell: powershell

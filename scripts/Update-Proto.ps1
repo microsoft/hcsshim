@@ -18,15 +18,7 @@ function run([string]$cmd, [string[]]$params) {
 }
 
 # Install protobuild and co.
-# calling `go install` without a version will install current module (ie., the vendor directory)
-# this relies on `./tools.go` to vendor correct dependencies
-@(
-    'github.com/containerd/protobuild',
-    'github.com/containerd/protobuild/cmd/go-fix-acronym',
-    'github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc',
-    'google.golang.org/grpc/cmd/protoc-gen-go-grpc',
-    'google.golang.org/protobuf/cmd/protoc-gen-go'
-) | ForEach-Object { run go ('install', $_) }
+& (Join-Path $root '\tools\Install-Tools.ps1')
 
 # difficult to exclude a directory from Get-ChildItem
 Get-ChildItem -Filter *.proto -Recurse -Name -Path $root |

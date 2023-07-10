@@ -5,4 +5,4 @@
 // used for ncproxy.
 package computeagent
 
-//go:generate go run github.com/golang/mock/mockgen -source=computeagent_ttrpc.pb.go -package=computeagent_mock -destination=mock\computeagent_mock.pb.go
+//go:generate mockgen -source=computeagent_ttrpc.pb.go -package=computeagent_mock -destination=mock\computeagent_mock.pb.go
