@@ -13,7 +13,7 @@ import (
 	computeagentMock "github.com/Microsoft/hcsshim/internal/computeagent/mock"
 	"github.com/Microsoft/hcsshim/osversion"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 const (

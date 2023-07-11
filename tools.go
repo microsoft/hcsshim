@@ -16,5 +16,5 @@ import (
 	_ "github.com/Microsoft/go-winio/tools/mkwinsyscall"
 
 	// mock gRPC client and servers
-	_ "github.com/golang/mock/mockgen"
+	_ "go.uber.org/mock/mockgen"
 )

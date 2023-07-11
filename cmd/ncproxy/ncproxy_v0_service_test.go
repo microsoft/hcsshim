@@ -11,7 +11,7 @@ import (
 	computeagentMock "github.com/Microsoft/hcsshim/internal/computeagent/mock"
 	"github.com/Microsoft/hcsshim/osversion"
 	ncproxygrpcv0 "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v0"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 func TestAddNIC_V0_HCN(t *testing.T) {

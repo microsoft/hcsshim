@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	computeagent "github.com/Microsoft/hcsshim/internal/computeagent"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockComputeAgentService is a mock of ComputeAgentService interface.

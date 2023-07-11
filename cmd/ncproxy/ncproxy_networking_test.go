@@ -10,7 +10,7 @@ import (
 	computeagentMock "github.com/Microsoft/hcsshim/internal/computeagent/mock"
 	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 func TestAddNIC_NCProxy(t *testing.T) {
