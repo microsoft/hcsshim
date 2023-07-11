@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	v0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	grpc "google.golang.org/grpc"
 )
 

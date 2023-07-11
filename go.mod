@@ -13,7 +13,6 @@ require (
 	github.com/containerd/protobuild v0.3.0
 	github.com/containerd/ttrpc v1.2.2
 	github.com/containerd/typeurl/v2 v2.1.1
-	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/go-containerregistry v0.15.2
 	github.com/lestrrat-go/jwx v1.2.26
@@ -31,6 +30,7 @@ require (
 	github.com/vishvananda/netns v0.0.4
 	go.etcd.io/bbolt v1.3.7
 	go.opencensus.io v0.24.0
+	go.uber.org/mock v0.2.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.10.0
 	google.golang.org/grpc v1.56.2
