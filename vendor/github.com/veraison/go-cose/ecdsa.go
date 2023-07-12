@@ -47,12 +47,16 @@ func (es *ecdsaKeySigner) Algorithm() Algorithm {
 	return es.alg
 }
 
-// Sign signs digest with the private key using entropy from rand.
+// Sign signs message content with the private key using entropy from rand.
 // The resulting signature should follow RFC 8152 section 8.1,
 // although it does not follow the recommendation of being deterministic.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
-func (es *ecdsaKeySigner) Sign(rand io.Reader, digest []byte) ([]byte, error) {
+func (es *ecdsaKeySigner) Sign(rand io.Reader, content []byte) ([]byte, error) {
+	digest, err := es.alg.computeHash(content)
+	if err != nil {
+		return nil, err
+	}
 	r, s, err := ecdsa.Sign(rand, es.key, digest)
 	if err != nil {
 		return nil, err
@@ -72,11 +76,16 @@ func (es *ecdsaCryptoSigner) Algorithm() Algorithm {
 	return es.alg
 }
 
-// Sign signs digest with the private key, possibly using entropy from rand.
+// Sign signs message content with the private key, possibly using entropy from
+// rand.
 // The resulting signature should follow RFC 8152 section 8.1.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
-func (es *ecdsaCryptoSigner) Sign(rand io.Reader, digest []byte) ([]byte, error) {
+func (es *ecdsaCryptoSigner) Sign(rand io.Reader, content []byte) ([]byte, error) {
+	digest, err := es.alg.computeHash(content)
+	if err != nil {
+		return nil, err
+	}
 	sigASN1, err := es.signer.Sign(rand, digest, nil)
 	if err != nil {
 		return nil, err
@@ -133,14 +142,16 @@ func (ev *ecdsaVerifier) Algorithm() Algorithm {
 	return ev.alg
 }
 
-// Verify verifies digest with the public key, returning nil for success.
+// Verify verifies message content with the public key, returning nil for
+// success.
 // Otherwise, it returns ErrVerification.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
-func (ev *ecdsaVerifier) Verify(digest []byte, signature []byte) error {
-	// verify digest size
-	if h, ok := ev.alg.hashFunc(); !ok || h.Size() != len(digest) {
-		return ErrVerification
+func (ev *ecdsaVerifier) Verify(content []byte, signature []byte) error {
+	// compute digest
+	digest, err := ev.alg.computeHash(content)
+	if err != nil {
+		return err
 	}
 
 	// verify signature

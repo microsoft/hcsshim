@@ -19,14 +19,15 @@ func (rs *rsaSigner) Algorithm() Algorithm {
 	return rs.alg
 }
 
-// Sign signs digest with the private key, using entropy from rand.
+// Sign signs message content with the private key, using entropy from rand.
 // The resulting signature should follow RFC 8152 section 8.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8
-func (rs *rsaSigner) Sign(rand io.Reader, digest []byte) ([]byte, error) {
-	hash, ok := rs.alg.hashFunc()
-	if !ok {
-		return nil, ErrInvalidAlgorithm
+func (rs *rsaSigner) Sign(rand io.Reader, content []byte) ([]byte, error) {
+	hash := rs.alg.hashFunc()
+	digest, err := computeHash(hash, content)
+	if err != nil {
+		return nil, err
 	}
 	return rs.key.Sign(rand, digest, &rsa.PSSOptions{
 		SaltLength: rsa.PSSSaltLengthEqualsHash, // defined in RFC 8230 sec 2
@@ -47,14 +48,16 @@ func (rv *rsaVerifier) Algorithm() Algorithm {
 	return rv.alg
 }
 
-// Verify verifies digest with the public key, returning nil for success.
+// Verify verifies message content with the public key, returning nil for
+// success.
 // Otherwise, it returns ErrVerification.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8
-func (rv *rsaVerifier) Verify(digest []byte, signature []byte) error {
-	hash, ok := rv.alg.hashFunc()
-	if !ok {
-		return ErrInvalidAlgorithm
+func (rv *rsaVerifier) Verify(content []byte, signature []byte) error {
+	hash := rv.alg.hashFunc()
+	digest, err := computeHash(hash, content)
+	if err != nil {
+		return err
 	}
 	if err := rsa.VerifyPSS(rv.key, hash, digest, signature, &rsa.PSSOptions{
 		SaltLength: rsa.PSSSaltLengthEqualsHash, // defined in RFC 8230 sec 2

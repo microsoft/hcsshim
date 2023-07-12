@@ -4,7 +4,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	didx509resolver "github.com/Microsoft/hcsshim/internal/did-x509-resolver"
+	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 
 	"github.com/sirupsen/logrus"
 

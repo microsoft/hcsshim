@@ -14,11 +14,12 @@ type Verifier interface {
 	// Algorithm returns the signing algorithm associated with the public key.
 	Algorithm() Algorithm
 
-	// Verify verifies digest with the public key, returning nil for success.
+	// Verify verifies message content with the public key, returning nil for
+	// success.
 	// Otherwise, it returns ErrVerification.
 	//
 	// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8
-	Verify(digest, signature []byte) error
+	Verify(content, signature []byte) error
 }
 
 // NewVerifier returns a verifier with a given public key.
@@ -44,6 +45,9 @@ func NewVerifier(alg Algorithm, key crypto.PublicKey) (Verifier, error) {
 		vk, ok := key.(*ecdsa.PublicKey)
 		if !ok {
 			return nil, fmt.Errorf("%v: %w", alg, ErrAlgorithmMismatch)
+		}
+		if !vk.Curve.IsOnCurve(vk.X, vk.Y) {
+			return nil, errors.New("public key point is not on curve")
 		}
 		return &ecdsaVerifier{
 			alg: alg,
