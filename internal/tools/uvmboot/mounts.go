@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -23,7 +22,7 @@ func mountSCSI(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
 			m.host,
 			!m.writable,
 			vm.ID(),
-			&scsi.MountConfig{},
+			nil,
 		)
 		if err != nil {
 			return fmt.Errorf("could not mount disk %s: %w", m.host, err)
