@@ -30,7 +30,7 @@ func NewVerifier(alg Algorithm, key crypto.PublicKey) (Verifier, error) {
 	case AlgorithmPS256, AlgorithmPS384, AlgorithmPS512:
 		vk, ok := key.(*rsa.PublicKey)
 		if !ok {
-			return nil, fmt.Errorf("%v: %w", alg, ErrAlgorithmMismatch)
+			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
 		// RFC 8230 6.1 requires RSA keys having a minimun size of 2048 bits.
 		// Reference: https://www.rfc-editor.org/rfc/rfc8230.html#section-6.1
@@ -44,7 +44,7 @@ func NewVerifier(alg Algorithm, key crypto.PublicKey) (Verifier, error) {
 	case AlgorithmES256, AlgorithmES384, AlgorithmES512:
 		vk, ok := key.(*ecdsa.PublicKey)
 		if !ok {
-			return nil, fmt.Errorf("%v: %w", alg, ErrAlgorithmMismatch)
+			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
 		if !vk.Curve.IsOnCurve(vk.X, vk.Y) {
 			return nil, errors.New("public key point is not on curve")
@@ -56,7 +56,7 @@ func NewVerifier(alg Algorithm, key crypto.PublicKey) (Verifier, error) {
 	case AlgorithmEd25519:
 		vk, ok := key.(ed25519.PublicKey)
 		if !ok {
-			return nil, fmt.Errorf("%v: %w", alg, ErrAlgorithmMismatch)
+			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
 		return &ed25519Verifier{
 			key: vk,
