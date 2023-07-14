@@ -15,11 +15,12 @@ type Signer interface {
 	// Algorithm returns the signing algorithm associated with the private key.
 	Algorithm() Algorithm
 
-	// Sign signs digest with the private key, possibly using entropy from rand.
+	// Sign signs message content with the private key, possibly using entropy
+	// from rand.
 	// The resulting signature should follow RFC 8152 section 8.
 	//
 	// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8
-	Sign(rand io.Reader, digest []byte) ([]byte, error)
+	Sign(rand io.Reader, content []byte) ([]byte, error)
 }
 
 // NewSigner returns a signer with a given signing key.

@@ -28,8 +28,8 @@ func init() {
 
 	// init encode mode
 	encOpts := cbor.EncOptions{
-		Sort:        cbor.SortCanonical,        // sort map keys
-		IndefLength: cbor.IndefLengthForbidden, // no streaming
+		Sort:        cbor.SortCoreDeterministic, // sort map keys
+		IndefLength: cbor.IndefLengthForbidden,  // no streaming
 	}
 	encMode, err = encOpts.EncMode()
 	if err != nil {

@@ -10,11 +10,11 @@ import (
 
 // sign1Message represents a COSE_Sign1 CBOR object:
 //
-//   COSE_Sign1 = [
-//       Headers,
-//       payload : bstr / nil,
-//       signature : bstr
-//   ]
+//	COSE_Sign1 = [
+//	    Headers,
+//	    payload : bstr / nil,
+//	    signature : bstr
+//	]
 //
 // Reference: https://tools.ietf.org/html/rfc8152#section-4.2
 type sign1Message struct {
@@ -138,11 +138,11 @@ func (m *Sign1Message) Sign(rand io.Reader, external []byte, signer Signer) erro
 	}
 
 	// sign the message
-	digest, err := m.digestToBeSigned(alg, external)
+	toBeSigned, err := m.toBeSigned(external)
 	if err != nil {
 		return err
 	}
-	sig, err := signer.Sign(rand, digest)
+	sig, err := signer.Sign(rand, toBeSigned)
 	if err != nil {
 		return err
 	}
@@ -175,20 +175,17 @@ func (m *Sign1Message) Verify(external []byte, verifier Verifier) error {
 	}
 
 	// verify the message
-	digest, err := m.digestToBeSigned(alg, external)
+	toBeSigned, err := m.toBeSigned(external)
 	if err != nil {
 		return err
 	}
-	return verifier.Verify(digest, m.Signature)
+	return verifier.Verify(toBeSigned, m.Signature)
 }
 
-// digestToBeSigned constructs Sig_structure, computes ToBeSigned, and returns
-// the digest of ToBeSigned.
-// If the signing algorithm does not have a hash algorithm associated,
-// ToBeSigned is returned instead.
+// toBeSigned constructs Sig_structure, computes and returns ToBeSigned.
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.4
-func (m *Sign1Message) digestToBeSigned(alg Algorithm, external []byte) ([]byte, error) {
+func (m *Sign1Message) toBeSigned(external []byte) ([]byte, error) {
 	// create a Sig_structure and populate it with the appropriate fields.
 	//
 	//   Sig_structure = [
@@ -214,14 +211,7 @@ func (m *Sign1Message) digestToBeSigned(alg Algorithm, external []byte) ([]byte,
 
 	// create the value ToBeSigned by encoding the Sig_structure to a byte
 	// string.
-	toBeSigned, err := encMode.Marshal(sigStructure)
-	if err != nil {
-		return nil, err
-	}
-
-	// hash toBeSigned if there is a hash algorithm associated with the signing
-	// algorithm.
-	return alg.computeHash(toBeSigned)
+	return encMode.Marshal(sigStructure)
 }
 
 // Sign1 signs a Sign1Message using the provided Signer.

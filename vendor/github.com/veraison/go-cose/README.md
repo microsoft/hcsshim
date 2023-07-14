@@ -8,7 +8,7 @@ A golang library for the [COSE specification][cose-spec]
 
 ## Project Status
 
-**Current Release**: [go-cose alpha 1][release-alpha-1] 
+**Current Release**: [go-cose rc 1][release-rc-1] 
 
 The project was *initially* forked from the  upstream [mozilla-services/go-cose][mozilla-go-cose] project, however the Veraison and Mozilla maintainers have agreed to retire the mozilla-services/go-cose project and focus on [veraison/go-cose][veraison-go-cose] as the active project.
 
@@ -40,40 +40,97 @@ go get github.com/veraison/go-cose@main
 
 ## Usage
 
+### Signing and Verification
+
 ```go
 import "github.com/veraison/go-cose"
 ```
 
-Construct a new COSE_Sign1 message, then sign it using ECDSA w/ SHA-512 and finally marshal it. For example:
+Construct a new COSE_Sign1 message, then sign it using ECDSA w/ SHA-256 and finally marshal it. For example:
 
 ```go
-// create a signer
-privateKey, _ := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
-signer, _ := cose.NewSigner(cose.AlgorithmES512, privateKey)
+package main
 
-// create message header
-headers := cose.Headers{
-    Protected: cose.ProtectedHeader{
-        cose.HeaderLabelAlgorithm: cose.AlgorithmES512,
-    },
+import (
+    "crypto/ecdsa"
+    "crypto/elliptic"
+    "crypto/rand"
+    _ "crypto/sha256"
+
+    "github.com/veraison/go-cose"
+)
+
+func SignP256(data []byte) ([]byte, error) {
+    // create a signer
+    privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+    if err != nil {
+        return nil, err
+    }
+    signer, err := cose.NewSigner(cose.AlgorithmES256, privateKey)
+    if err != nil {
+        return nil, err
+    }
+
+    // create message header
+    headers := cose.Headers{
+        Protected: cose.ProtectedHeader{
+            cose.HeaderLabelAlgorithm: cose.AlgorithmES256,
+        },
+    }
+
+    // sign and marshal message
+    return cose.Sign1(rand.Reader, signer, headers, data, nil)
 }
-
-// sign and marshal message
-sig, _ := cose.Sign1(rand.Reader, signer, headers, []byte("hello world"), nil)
 ```
 
 Verify a raw COSE_Sign1 message. For example:
 
 ```go
-// create a verifier from a trusted private key
-publicKey := privateKey.Public()
-verifier, _ := cose.NewVerifier(cose.AlgorithmES512, publicKey)
+package main
 
-// create a sign message from a raw COSE_Sign1 payload
-var msg cose.Sign1Message
-_ = msg.UnmarshalCBOR(raw)
-_ = msg.Verify(nil, verifier)
+import (
+    "crypto"
+    _ "crypto/sha256"
+
+    "github.com/veraison/go-cose"
+)
+
+func VerifyP256(publicKey crypto.PublicKey, sig []byte) error {
+    // create a verifier from a trusted private key
+    verifier, err := cose.NewVerifier(cose.AlgorithmES256, publicKey)
+    if err != nil {
+        return err
+    }
+
+    // create a sign message from a raw COSE_Sign1 payload
+    var msg cose.Sign1Message
+    if err = msg.UnmarshalCBOR(sig); err != nil {
+        return err
+    }
+    return msg.Verify(nil, verifier)
+}
 ```
+
+See [example_test.go](./example_test.go) for more examples.
+
+### About hashing
+
+`go-cose` does not import any hash package by its own to avoid linking unnecessary algorithms to the final binary.
+It is the the responsibility of the `go-cose` user to make the necessary hash functions available at runtime, i.e.,
+by using a blank import:
+
+```go
+import (
+    _ "crypto/sha256"
+    _ "crypto/sha512"
+)
+```
+
+These are the required packages for each built-in cose.Algorithm:
+
+- cose.AlgorithmPS256, cose.AlgorithmES256: `crypto/sha256`
+- cose.AlgorithmPS384, cose.AlgorithmPS512, cose.AlgorithmES384, cose.AlgorithmES512: `crypto/sha512`
+- cose.AlgorithmEd25519: none
 
 ## Features
 
@@ -110,12 +167,12 @@ per RFC 8152, are rejected by the go-cose library.
 
 ### Conformance Tests
 
-go-cose runs the [GlueCOSE](https://github.com/gluecose/test-vectors) test suite on every local `go test` execution.
+`go-cose` runs the [GlueCOSE](https://github.com/gluecose/test-vectors) test suite on every local `go test` execution.
 These are also executed on every CI job.
 
 ### Fuzz Tests
 
-go-cose implements several fuzz tests using [Go's native fuzzing](https://go.dev/doc/fuzz).
+`go-cose` implements several fuzz tests using [Go's native fuzzing](https://go.dev/doc/fuzz).
 
 Fuzzing requires Go 1.18 or higher, and can be executed as follows:
 
@@ -123,8 +180,12 @@ Fuzzing requires Go 1.18 or higher, and can be executed as follows:
 go test -fuzz=FuzzSign1
 ```
 
-[cose-spec]:            https://datatracker.ietf.org/doc/draft-ietf-cose-rfc8152bis-struct/
+### Security Reviews
+
+`go-cose` undergoes periodic security review. The security review reports are located [here](./reports)
+
+[cose-spec]:            https://datatracker.ietf.org/doc/rfc9052/
 [mozilla-contributors]: https://github.com/mozilla-services/go-cose/graphs/contributors
 [mozilla-go-cose]:      http://github.com/mozilla-services/go-cose
 [veraison-go-cose]:     https://github.com/veraison/go-cose
-[release-alpha-1]:      https://github.com/veraison/go-cose/releases/tag/v1.0.0-alpha.1
+[release-rc-1]:      https://github.com/veraison/go-cose/releases/tag/v1.0.0-rc.1
