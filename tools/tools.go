@@ -1,6 +1,6 @@
 //go:build tools
 
-package hcsshim
+package tools
 
 import (
 	// protobuf/gRPC/ttrpc generation
@@ -14,6 +14,9 @@ import (
 
 	// generate Win32 API code
 	_ "github.com/Microsoft/go-winio/tools/mkwinsyscall"
+
+	// create syso files for manifesting
+	_ "github.com/josephspurrier/goversioninfo/cmd/goversioninfo"
 
 	// mock gRPC client and servers
 	_ "go.uber.org/mock/mockgen"
