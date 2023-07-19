@@ -81,14 +81,14 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 	tarballPath := ctx.GlobalString(tarballFlag)
 	ref, err := name.ParseReference(image)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse image reference: %s", image)
+		return nil, fmt.Errorf("failed to parse image reference %s: %w", image, err)
 	}
 
 	dockerDaemon := ctx.GlobalBool(dockerFlag)
 
 	// error check to make sure docker and tarball are not both defined
 	if dockerDaemon && tarballPath != "" {
-		return nil, errors.Errorf("cannot use both docker and tarball for image source")
+		return nil, errors.New("cannot use both docker and tarball for image source")
 	}
 
 	// by default, using remote as source
@@ -98,7 +98,7 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		var imageNameAndTag name.Tag
 		imageNameAndTag, err = name.NewTag(image)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to failed to create a tag to search tarball for: %s", image)
+			return nil, fmt.Errorf("failed to failed to create a tag to search tarball for %s: %w", image, err)
 		}
 		// if only an image name is provided and not a tag, the default is "latest"
 		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
@@ -113,7 +113,7 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 			}
 			authConf, err := auth.Authorization()
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to set remote")
+				return nil, fmt.Errorf("failed to set remote: %w", err)
 			}
 			log.Debug("using basic auth")
 			authOpt := remote.WithAuth(authn.FromConfig(*authConf))
@@ -123,7 +123,7 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		img, err = remote.Image(ref, remoteOpts...)
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "unable to fetch image %q, make sure it exists", image)
+		return nil, fmt.Errorf("unable to fetch image %q, make sure it exists: %w", image, err)
 	}
 	conf, _ := img.ConfigName()
 	log.Debugf("Image id: %s", conf.String())
@@ -165,68 +165,85 @@ var createVHDCommand = cli.Command{
 
 		layers, err := fetchImageLayers(ctx)
 		if err != nil {
-			return errors.Wrap(err, "failed to fetch image layers")
+			return fmt.Errorf("failed to fetch image layers: %w", err)
 		}
 
 		outDir := ctx.String(outputDirFlag)
 		if _, err := os.Stat(outDir); os.IsNotExist(err) {
 			log.Debugf("creating output directory %q", outDir)
 			if err := os.MkdirAll(outDir, 0755); err != nil {
-				return errors.Wrapf(err, "failed to create output directory %s", outDir)
+				return fmt.Errorf("failed to create output directory %s: %w", outDir, err)
 			}
 		}
 
-		log.Debug("creating layer VHDs with dm-verity:")
+		log.Debug("creating layer VHDs with dm-verity")
 		for layerNumber, layer := range layers {
-			diffID, err := layer.DiffID()
+			diff, err := layer.DiffID()
 			if err != nil {
-				return errors.Wrap(err, "failed to read layer diff")
+				return fmt.Errorf("failed to read layer diff: %w", err)
 			}
-			log.Debugf("Layer #%d, layer hash: %s", layerNumber, diffID.String())
-
-			rc, err := layer.Uncompressed()
-			if err != nil {
-				return errors.Wrapf(err, "failed to uncompress layer %s", diffID.String())
+			log.WithFields(log.Fields{
+				"layerNumber": layerNumber,
+				"layerDiff":   diff.String(),
+			}).Debug("converting tar to layer VHD")
+			if err := createVHD(layer, ctx.String(outputDirFlag), ctx.Bool(hashDeviceVhdFlag)); err != nil {
+				return err
 			}
-
-			vhdPath := filepath.Join(ctx.String(outputDirFlag), diffID.Hex+".vhd")
-			out, err := os.Create(vhdPath)
-			if err != nil {
-				return errors.Wrapf(err, "failed to create layer vhd %s", vhdPath)
-			}
-
-			log.Debug("converting tar to layer VHD")
-			opts := []tar2ext4.Option{
-				tar2ext4.ConvertWhiteout,
-				tar2ext4.MaximumDiskSize(maxVHDSize),
-			}
-			if !ctx.Bool(hashDeviceVhdFlag) {
-				opts = append(opts, tar2ext4.AppendDMVerity)
-			}
-			if err := tar2ext4.Convert(rc, out, opts...); err != nil {
-				return errors.Wrap(err, "failed to convert tar to ext4")
-			}
-			if ctx.Bool(hashDeviceVhdFlag) {
-				hashDevPath := filepath.Join(ctx.String(outputDirFlag), diffID.Hex+".hash-dev.vhd")
-				hashDev, err := os.Create(hashDevPath)
-				if err != nil {
-					return errors.Wrap(err, "failed to create hash device VHD file")
-				}
-				if err := dmverity.ComputeAndWriteHashDevice(out, hashDev); err != nil {
-					return err
-				}
-				if err := tar2ext4.ConvertToVhd(hashDev); err != nil {
-					return err
-				}
-				fmt.Fprintf(os.Stdout, "Layer %d: hash device created at %s\n", layerNumber, hashDevPath)
-			}
-			if err := tar2ext4.ConvertToVhd(out); err != nil {
-				return errors.Wrap(err, "failed to append VHD footer")
-			}
-			fmt.Fprintf(os.Stdout, "Layer %d: layer VHD created at %s\n", layerNumber, vhdPath)
 		}
 		return nil
 	},
+}
+
+func createVHD(layer v1.Layer, outDir string, verityHashDev bool) error {
+	diffID, err := layer.DiffID()
+	if err != nil {
+		return fmt.Errorf("failed to read layer diff: %w", err)
+	}
+
+	rc, err := layer.Uncompressed()
+	if err != nil {
+		return fmt.Errorf("failed to uncompress layer %s: %w", diffID.String(), err)
+	}
+	defer rc.Close()
+
+	vhdPath := filepath.Join(outDir, diffID.Hex+".vhd")
+	out, err := os.Create(vhdPath)
+	if err != nil {
+		return fmt.Errorf("failed to create layer vhd file %s: %w", vhdPath, err)
+	}
+	defer out.Close()
+
+	opts := []tar2ext4.Option{
+		tar2ext4.ConvertWhiteout,
+		tar2ext4.MaximumDiskSize(maxVHDSize),
+	}
+	if !verityHashDev {
+		opts = append(opts, tar2ext4.AppendDMVerity)
+	}
+	if err := tar2ext4.Convert(rc, out, opts...); err != nil {
+		return fmt.Errorf("failed to convert tar to ext4: %w", err)
+	}
+	if verityHashDev {
+		hashDevPath := filepath.Join(outDir, diffID.Hex+".hash-dev.vhd")
+		hashDev, err := os.Create(hashDevPath)
+		if err != nil {
+			return fmt.Errorf("failed to create hash device VHD file: %w", err)
+		}
+		defer hashDev.Close()
+
+		if err := dmverity.ComputeAndWriteHashDevice(out, hashDev); err != nil {
+			return err
+		}
+		if err := tar2ext4.ConvertToVhd(hashDev); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stdout, "hash device created at %s\n", hashDevPath)
+	}
+	if err := tar2ext4.ConvertToVhd(out); err != nil {
+		return fmt.Errorf("failed to append VHD footer: %w", err)
+	}
+	fmt.Fprintf(os.Stdout, "Layer VHD created at %s\n", vhdPath)
+	return nil
 }
 
 var rootHashVHDCommand = cli.Command{
@@ -255,27 +272,39 @@ var rootHashVHDCommand = cli.Command{
 
 		layers, err := fetchImageLayers(ctx)
 		if err != nil {
-			return errors.Wrap(err, "failed to fetch image layers")
+			return fmt.Errorf("failed to fetch image layers: %w", err)
 		}
 		log.Debugf("%d layers found", len(layers))
+
+		convertFunc := func(layer v1.Layer) (string, error) {
+			rc, err := layer.Uncompressed()
+			if err != nil {
+				return "", err
+			}
+			defer rc.Close()
+
+			hash, err := tar2ext4.ConvertAndComputeRootDigest(rc)
+			if err != nil {
+				return "", err
+			}
+			return hash, err
+		}
 
 		for layerNumber, layer := range layers {
 			diffID, err := layer.DiffID()
 			if err != nil {
-				return errors.Wrap(err, "failed to read layer diff")
+				return fmt.Errorf("failed to read layer diff: %w", err)
 			}
-			log.Debugf("Layer %d. Uncompressed layer hash: %s", layerNumber, diffID.String())
+			log.WithFields(log.Fields{
+				"layerNumber": layerNumber,
+				"layerDiff":   diffID.String(),
+			}).Debug("uncompressed layer")
 
-			rc, err := layer.Uncompressed()
+			hash, err := convertFunc(layer)
 			if err != nil {
-				return errors.Wrapf(err, "failed to uncompress layer %s", diffID.String())
+				return fmt.Errorf("failed to compute root digest: %w", err)
 			}
-
-			hash, err := tar2ext4.ConvertAndComputeRootDigest(rc)
-			if err != nil {
-				return errors.Wrap(err, "failed to compute root hash")
-			}
-			fmt.Fprintf(os.Stdout, "Layer %d\nroot hash: %s\n", layerNumber, hash)
+			fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, hash)
 		}
 		return nil
 	},
