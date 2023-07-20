@@ -117,6 +117,10 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		case *uvm.OptionsLCOW:
 			lopts = (opts).(*uvm.OptionsLCOW)
 			lopts.BundleDirectory = req.Bundle
+			log.G(ctx).WithField("tid", req.ID).Debug("Before calling uvm.createLCOW(), setting preprovisioneduvm to true for testing.")
+			// Hack: Set this to true to test preprovisioned uvm
+			lopts.PreprovisionedUvm = true
+			log.G(ctx).WithField("tid", req.ID).Debug("Calling uvm.createLCOW()")
 			parent, err = uvm.CreateLCOW(ctx, lopts)
 			if err != nil {
 				return nil, err
@@ -191,8 +195,15 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			cid = id
 		}
 		caAddr := fmt.Sprintf(uvm.ComputeAgentAddrFmt, cid)
-		if err := parent.CreateAndAssignNetworkSetup(ctx, caAddr, cid); err != nil {
-			return nil, err
+
+		// Skip network setup if this is a preprovisioned uvm.
+		if lopts.PreprovisionedUvm == false {
+			log.G(ctx).WithField("tid", req.ID).Debug("Calling parent.CreateAndAssignNetworkSetup()")
+			if err := parent.CreateAndAssignNetworkSetup(ctx, caAddr, cid); err != nil {
+				return nil, err
+			}
+		} else {
+			log.G(ctx).Debug("Skip calling parent.CreateAndAssignNetworkSetup() if preprovisioned Uvm")
 		}
 	}
 
@@ -302,6 +313,7 @@ func (p *pod) ID() string {
 }
 
 func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
+	log.G(ctx).Debug("Inside pod.go::CreateTask -> Printing p.id", p.id)
 	if req.ID == p.id {
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists", req.ID)
 	}
@@ -354,6 +366,24 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 			annotations.KubernetesSandboxID,
 			p.id,
 			sid)
+	}
+
+	// For preprovisioned UVMs, we skip creating the container during the pre-provision stage.
+	// Subsequently, we try to create and assign network for the UVM during the creation of
+	// (non-sandbox) container.
+	var parent *uvm.UtilityVM
+	parent = p.host
+	if parent != nil && ct != oci.KubernetesContainerTypeSandbox {
+		cid := req.ID
+		if id, ok := s.Annotations[annotations.NcproxyContainerID]; ok {
+			cid = id
+		}
+		caAddr := fmt.Sprintf(uvm.ComputeAgentAddrFmt, cid)
+
+		log.G(ctx).Debug("pod.go:CreateTask -> Calling parent.CreateAndAssignNetworkSetup()")
+		if err := parent.CreateAndAssignNetworkSetup(ctx, caAddr, cid); err != nil {
+			return nil, err
+		}
 	}
 
 	st, err := newHcsTask(ctx, p.events, p.host, false, req, s)

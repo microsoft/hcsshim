@@ -252,6 +252,7 @@ func (uvm *UtilityVM) Close() (err error) {
 // CreateContainer creates a container in the utility VM.
 func (uvm *UtilityVM) CreateContainer(ctx context.Context, id string, settings interface{}) (cow.Container, error) {
 	if uvm.gc != nil {
+		log.G(ctx).Debug("Inside uVM CreateContainer")
 		c, err := uvm.gc.CreateContainer(ctx, id, settings)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create container %s: %s", id, err)

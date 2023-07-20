@@ -132,16 +132,24 @@ var ErrNoNetworkSetup = errors.New("no network setup present for UVM")
 //
 // `addr` is an optional parameter
 func (uvm *UtilityVM) CreateAndAssignNetworkSetup(ctx context.Context, addr, containerID string) (err error) {
+	log.G(ctx).Debug("Inside CreateAndAssignNetworkSetup")
+	// if uvm.preprovisionedUvm {
+	// 	log.G(ctx).Debug("Skipping CreateAndAssignNetworkSetup")
+	// 	return nil
+	// }
+
 	if uvm.NCProxyEnabled() {
 		if addr == "" || containerID == "" {
 			return errors.New("received empty field(s) for external network setup")
 		}
+		log.G(ctx).Debug("creating external network setup for UVM")
 		setup, err := NewExternalNetworkSetup(ctx, uvm, addr, containerID)
 		if err != nil {
 			return err
 		}
 		uvm.networkSetup = setup
 	} else {
+		log.G(ctx).Debug("creating internal network setup for UVM")
 		uvm.networkSetup = NewInternalNetworkSetup(uvm)
 	}
 	return nil

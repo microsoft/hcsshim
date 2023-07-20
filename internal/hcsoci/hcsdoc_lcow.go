@@ -17,6 +17,7 @@ import (
 
 func createLCOWSpec(ctx context.Context, coi *createOptionsInternal) (*specs.Spec, error) {
 	// Remarshal the spec to perform a deep copy.
+	log.G(ctx).Debug("Inside createLCOWSpec")
 	j, err := json.Marshal(coi.Spec)
 	if err != nil {
 		return nil, err
@@ -31,7 +32,12 @@ func createLCOWSpec(ctx context.Context, coi *createOptionsInternal) (*specs.Spe
 	// network namespace and windows devices
 	spec.Windows = nil
 	if coi.Spec.Windows != nil {
-		setWindowsNetworkNamespace(coi, spec)
+		if coi.actualNetworkNamespace != "" {
+			log.G(ctx).Debug("Setting up Windows Network Namespace")
+			setWindowsNetworkNamespace(coi, spec, ctx)
+		} else {
+			log.G(ctx).Debug("Skip setting up Windows Network Namespace")
+		}
 		setWindowsDevices(coi, spec)
 	}
 
@@ -55,12 +61,14 @@ func createLCOWSpec(ctx context.Context, coi *createOptionsInternal) (*specs.Spe
 	return spec, nil
 }
 
-func setWindowsNetworkNamespace(coi *createOptionsInternal, spec *specs.Spec) {
+func setWindowsNetworkNamespace(coi *createOptionsInternal, spec *specs.Spec, ctx context.Context) {
+	log.G(ctx).Debug("Inside setWindowsNetworkNamespace")
 	if coi.Spec.Windows.Network != nil &&
 		coi.Spec.Windows.Network.NetworkNamespace != "" {
 		if spec.Windows == nil {
 			spec.Windows = &specs.Windows{}
 		}
+		log.G(ctx).Debug("Network namespace from coi.Spec: ", coi.Spec.Windows.Network.NetworkNamespace)
 		spec.Windows.Network = &specs.WindowsNetwork{
 			NetworkNamespace: coi.Spec.Windows.Network.NetworkNamespace,
 		}

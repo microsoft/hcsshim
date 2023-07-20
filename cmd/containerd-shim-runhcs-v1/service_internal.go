@@ -21,6 +21,7 @@ import (
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 )
@@ -73,6 +74,7 @@ func (s *service) stateInternal(ctx context.Context, req *task.StateRequest) (*t
 }
 
 func (s *service) createInternal(ctx context.Context, req *task.CreateTaskRequest) (*task.CreateTaskResponse, error) {
+	log.G(ctx).Debug("Inside service_internal::createInternal")
 	setupDebuggerEvent()
 
 	shimOpts := &runhcsopts.Options{}
@@ -162,6 +164,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	if s.isSandbox {
 		pod, err := s.getPod()
 		if err == nil {
+			log.G(ctx).Debug("Inside service_internal::createInternal -> Pod found, Printing Pod ID", pod.ID())
 			// The POD sandbox was previously created. Unlock and forward to the POD
 			s.cl.Unlock()
 			t, err := pod.CreateTask(ctx, req, &spec)
@@ -172,6 +175,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 			resp.Pid = uint32(e.Pid())
 			return resp, nil
 		}
+		log.G(ctx).Debug("Inside service_internal::createInternal -> Pod not found, creating pod")
 		pod, err = createPod(ctx, s.events, req, &spec)
 		if err != nil {
 			s.cl.Unlock()
@@ -182,6 +186,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		resp.Pid = uint32(e.Pid())
 		s.taskOrPod.Store(pod)
 	} else {
+		log.G(ctx).Debug("Inside service_internal::createInternal -> Not sandbox, creating standalone task")
 		t, err := newHcsStandaloneTask(ctx, s.events, req, &spec)
 		if err != nil {
 			s.cl.Unlock()

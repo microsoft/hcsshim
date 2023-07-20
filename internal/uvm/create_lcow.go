@@ -120,6 +120,7 @@ type OptionsLCOW struct {
 	VPCIEnabled             bool                // Whether the kernel should enable pci
 	EnableScratchEncryption bool                // Whether the scratch should be encrypted
 	DisableTimeSyncService  bool                // Disables the time synchronization service
+	PreprovisionedUvm       bool                // Whether the UVM is preprovisioned
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -781,6 +782,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		encryptScratch:          opts.EnableScratchEncryption,
 		noWritableFileShares:    opts.NoWritableFileShares,
 		confidentialUVMOptions:  opts.ConfidentialOptions,
+		preprovisionedUvm:       opts.PreprovisionedUvm,
 	}
 
 	defer func() {

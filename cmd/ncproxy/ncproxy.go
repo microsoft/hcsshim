@@ -66,6 +66,7 @@ func newGRPCService(agentCache *computeAgentCache, ncproxyNetworking *ncproxysto
 var _ ncproxygrpc.NetworkConfigProxyServer = &grpcService{}
 
 func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest) (_ *ncproxygrpc.AddNICResponse, err error) {
+	log.G(ctx).Debug("Inside ncproxy/AddNIC")
 	ctx, span := oc.StartSpan(ctx, "AddNIC")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -310,6 +311,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 }
 
 func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.CreateNetworkRequest) (_ *ncproxygrpc.CreateNetworkResponse, err error) {
+	log.G(ctx).Debug("Inside CreateNetwork")
 	ctx, span := oc.StartSpan(ctx, "CreateNetwork")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

@@ -85,6 +85,7 @@ func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) er
 }
 
 func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) (*createOptionsInternal, error) {
+	log.G(ctx).Debug("Inside initializeCreateOptions")
 	coi := &createOptionsInternal{
 		CreateOptions: createOptions,
 		actualID:      createOptions.ID,
@@ -125,9 +126,12 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 // configureSandboxNetwork creates a new network namespace for the pod (sandbox)
 // if required and then adds that namespace to the pod.
 func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, ct oci.KubernetesContainerType) error {
+	log.G(ctx).Debug("Inside configureSandboxNetwork")
 	if coi.NetworkNamespace != "" {
+		log.G(ctx).Debug("coi.NetworkNamespace is not empty")
 		r.SetNetNS(coi.NetworkNamespace)
 	} else {
+		log.G(ctx).Debug("Invoking createNetworkNamespace")
 		err := createNetworkNamespace(ctx, coi, r)
 		if err != nil {
 			return err
@@ -139,25 +143,28 @@ func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r 
 		// Only add the network namespace to a standalone or sandbox
 		// container but not a workload container in a sandbox that inherits
 		// the namespace.
-		if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
-			if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
-				// No network setup type was specified for this UVM. Create and assign one here unless
-				// we received a different error.
-				if err == uvm.ErrNoNetworkSetup {
-					if err := coi.HostingSystem.CreateAndAssignNetworkSetup(ctx, "", ""); err != nil {
-						return err
-					}
-					if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
-						return err
-					}
-				} else {
+		// However in case of preprovisioned UVM, we skip network creation for sandbox
+		// container. Hence we configure the network in case of workload container.
+		log.G(ctx).Debug("Container type: ", ct)
+		//if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
+		if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
+			// No network setup type was specified for this UVM. Create and assign one here unless
+			// we received a different error.
+			if err == uvm.ErrNoNetworkSetup {
+				if err := coi.HostingSystem.CreateAndAssignNetworkSetup(ctx, "", ""); err != nil {
 					return err
 				}
+				if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
+					return err
+				}
+			} else {
+				return err
 			}
-			r.SetAddedNetNSToVM(true)
 		}
+		r.SetAddedNetNSToVM(true)
+		//}
 	}
-
+	log.G(ctx).Debug("Network namespace: ", coi.actualNetworkNamespace)
 	return nil
 }
 
@@ -168,6 +175,9 @@ func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r 
 // release the resources on failure, so that the client can make the necessary
 // call to release resources that have been allocated as part of calling this function.
 func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *resources.Resources, err error) {
+	// log.G(ctx).Debug("Inside CreateContainer")
+	// return nil, nil, nil
+
 	coi, err := initializeCreateOptions(ctx, createOptions)
 	if err != nil {
 		return nil, nil, err
@@ -210,13 +220,18 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	isSandbox := ct == oci.KubernetesContainerTypeSandbox
 
 	// Create a network namespace if necessary.
+	log.G(ctx).Debug("hcsshim: IsSandboxContainer:", isSandbox)
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
-		schemaversion.IsV21(coi.actualSchemaVersion) {
+		schemaversion.IsV21(coi.actualSchemaVersion) &&
+		!isSandbox {
+		log.G(ctx).Debug("hcsshim::CreateContainer configuring sandbox network for workload container")
 		err = configureSandboxNetwork(ctx, coi, r, ct)
 		if err != nil {
 			return nil, r, fmt.Errorf("failure while creating namespace for container: %s", err)
 		}
+	} else {
+		log.G(ctx).Debug("hcsshim::CreateContainer skipping network creation for sandbox container")
 	}
 
 	var hcsDocument, gcsDocument interface{}
@@ -269,8 +284,8 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		}
 	}
 
-	log.G(ctx).Debug("hcsshim::CreateContainer creating compute system")
 	if gcsDocument != nil {
+		log.G(ctx).Debug("hcsshim::CreateContainer creating container")
 		c, err := coi.HostingSystem.CreateContainer(ctx, coi.actualID, gcsDocument)
 		if err != nil {
 			return nil, r, err
@@ -278,6 +293,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		return c, r, nil
 	}
 
+	log.G(ctx).Debug("hcsshim::CreateContainer creating compute system")
 	system, err := hcs.CreateComputeSystem(ctx, coi.actualID, hcsDocument)
 	if err != nil {
 		return nil, r, err

@@ -214,7 +214,9 @@ func newHcsTask(
 		return nil, err
 	}
 
+	log.G(ctx).Debug("Inside task_hcs/newHCSTask")
 	container, resources, err := createContainer(ctx, req.ID, owner, netNS, s, parent, shimOpts, req.Rootfs)
+
 	if err != nil {
 		return nil, err
 	}
