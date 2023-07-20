@@ -397,6 +397,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				_ = os.RemoveAll(settings.OCIBundlePath)
 			}
 		}()
+		if err := policy.ExtendPolicyWithNetworkingMounts(id, h.securityPolicyEnforcer,
+			settings.OCISpecification); err != nil {
+			return nil, err
+		}
 	}
 
 	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(id, settings.OCISpecification.Process)
