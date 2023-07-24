@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	securityPolicyTest "github.com/Microsoft/hcsshim/test/pkg/securitypolicy"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -40,41 +41,6 @@ var defaultExternalProcesses = []securitypolicy.ExternalProcessConfig{
 	},
 }
 
-func policyFromOpts(t *testing.T, policyType string, opts ...securitypolicy.PolicyConfigOpt) string {
-	t.Helper()
-	defaultOpts := []securitypolicy.PolicyConfigOpt{
-		securitypolicy.WithContainers(helpers.DefaultContainerConfigs()),
-	}
-
-	defaultOpts = append(defaultOpts, opts...)
-	config, err := securitypolicy.NewPolicyConfig(defaultOpts...)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	pc, err := helpers.PolicyContainersFromConfigs(config.Containers)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policyString, err := securitypolicy.MarshalPolicy(
-		policyType,
-		false,
-		pc,
-		config.ExternalProcesses,
-		config.Fragments,
-		config.AllowPropertiesAccess,
-		config.AllowDumpStacks,
-		config.AllowRuntimeLogging,
-		config.AllowEnvironmentVariableDropping,
-		config.AllowUnencryptedScratch,
-		config.AllowCapabilityDropping,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return base64.StdEncoding.EncodeToString([]byte(policyString))
-}
-
 func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool, allowCapabilityDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
 	t.Helper()
 	containerConfigOpts := append(
@@ -84,44 +50,16 @@ func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVaria
 		},
 		opts...,
 	)
-	return policyFromImageWithOpts(
+	return securityPolicyTest.PolicyFromImageWithOpts(
 		t,
 		imageLcowAlpine,
 		policyType,
+		containerConfigOpts,
 		[]securitypolicy.PolicyConfigOpt{
 			securitypolicy.WithAllowEnvVarDropping(allowEnvironmentVariableDropping),
 			securitypolicy.WithAllowCapabilityDropping(allowCapabilityDropping),
+			securitypolicy.WithAllowUnencryptedScratch(!*flagSevSnp),
 		},
-		containerConfigOpts,
-	)
-}
-
-func policyFromImageWithOpts(
-	t *testing.T,
-	imageName string,
-	policyType string,
-	policyOpts []securitypolicy.PolicyConfigOpt,
-	containerOpts []securitypolicy.ContainerConfigOpt,
-) string {
-	t.Helper()
-	containerConfig := securitypolicy.ContainerConfig{
-		ImageName: imageName,
-	}
-	for _, o := range containerOpts {
-		if err := o(&containerConfig); err != nil {
-			t.Fatalf("failed to apply container config opt: %s", err)
-		}
-	}
-	finalPolicyOpts := append(
-		[]securitypolicy.PolicyConfigOpt{
-			securitypolicy.WithContainers([]securitypolicy.ContainerConfig{containerConfig}),
-		},
-		policyOpts...,
-	)
-	return policyFromOpts(
-		t,
-		policyType,
-		finalPolicyOpts...,
 	)
 }
 
@@ -141,31 +79,6 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 			},
 		),
 	)
-}
-
-func assertErrorContains(t *testing.T, err error, expected string) bool {
-	t.Helper()
-	if err == nil {
-		t.Error("expected error but got nil")
-		return false
-	}
-
-	if strings.Contains(err.Error(), expected) {
-		return true
-	}
-
-	policyDecisionJSON, err := securitypolicy.ExtractPolicyDecision(err.Error())
-	if err != nil {
-		t.Error(err)
-		return false
-	}
-
-	if !strings.Contains(policyDecisionJSON, expected) {
-		t.Errorf("expected policy decision JSON to contain %q", expected)
-		return false
-	}
-
-	return true
 }
 
 type policyConfig struct {
@@ -198,7 +111,7 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			sandboxPolicy := policyFromOpts(
+			sandboxPolicy := securityPolicyTest.PolicyWithOpts(
 				t,
 				pc.input,
 				securitypolicy.WithAllowUnencryptedScratch(true),
@@ -397,7 +310,7 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected container start failure")
 			}
-			if !assertErrorContains(t, err, testConfig.expectedError) {
+			if !securityPolicyTest.AssertErrorContains(t, err, testConfig.expectedError) {
 				t.Fatalf("expected %q in error message, got: %q", testConfig.expectedError, err)
 			}
 		})
@@ -680,7 +593,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			if err == nil {
 				t.Fatal("expected container start failure")
 			}
-			if !assertErrorContains(t, err, testConfig.expectedError) {
+			if !securityPolicyTest.AssertErrorContains(t, err, testConfig.expectedError) {
 				t.Fatalf("expected %q in error message, got: %q", testConfig.expectedError, err)
 			}
 		})
@@ -771,7 +684,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 		t.Fatalf("expected to fail")
 	} else {
 		expectedErrStr := "privileged escalation not allowed"
-		if !assertErrorContains(t, err, expectedErrStr) {
+		if !securityPolicyTest.AssertErrorContains(t, err, expectedErrStr) {
 			t.Fatalf("expected different error: %s", err)
 		}
 	}
@@ -805,7 +718,7 @@ func Test_RunContainer_WithPolicy_CannotSet_AllowAll_And_Containers(t *testing.T
 	if err == nil {
 		t.Fatal("expected to fail")
 	}
-	if !assertErrorContains(t, err, securitypolicy.ErrInvalidOpenDoorPolicy.Error()) {
+	if !securityPolicyTest.AssertErrorContains(t, err, securitypolicy.ErrInvalidOpenDoorPolicy.Error()) {
 		t.Fatalf("expected error %s, got %s", securitypolicy.ErrInvalidOpenDoorPolicy, err)
 	}
 }
@@ -1043,7 +956,7 @@ func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
 			if tc.encryptAnnotation && !*flagSevSnp {
 				t.Skip("not running on SNP hardware, dm-crypt not supported")
 			}
-			policy := policyFromOpts(
+			policy := securityPolicyTest.PolicyWithOpts(
 				t,
 				"rego",
 				securitypolicy.WithExternalProcesses(defaultExternalProcesses),
@@ -1080,7 +993,7 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	policy := policyFromOpts(
+	policy := securityPolicyTest.PolicyWithOpts(
 		t,
 		"rego",
 		securitypolicy.WithExternalProcesses(defaultExternalProcesses),
@@ -1105,7 +1018,7 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 		t.Fatalf("expected to fail")
 	}
 	expectedError := "unencrypted scratch not allowed"
-	if !assertErrorContains(t, err, expectedError) {
+	if !securityPolicyTest.AssertErrorContains(t, err, expectedError) {
 		t.Fatalf("expected '%s' error, got '%s'", expectedError, err)
 	}
 }
@@ -1253,7 +1166,7 @@ func Test_ExecInContainer_WithPolicy(t *testing.T) {
 				if !tc.shouldFail {
 					t.Fatalf("unexpected exec failure: %s", err)
 				}
-				if !assertErrorContains(t, err, "invalid command") {
+				if !securityPolicyTest.AssertErrorContains(t, err, "invalid command") {
 					t.Fatalf("expected 'invalid command' error, got '%s' instead", err)
 				}
 			}
@@ -1345,7 +1258,7 @@ func Test_ExecInContainer_WithPolicy_Privileged(t *testing.T) {
 				if !tc.shouldFail {
 					t.Fatalf("unexpected exec failure: %s", err)
 				}
-				if !assertErrorContains(t, err, "invalid command") {
+				if !securityPolicyTest.AssertErrorContains(t, err, "invalid command") {
 					t.Fatalf("expected 'invalid command' error, got '%s' instead", err)
 				}
 			}
@@ -1385,7 +1298,7 @@ func Test_ExecInUVM_WithPolicy(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("ShouldFail_%t", tc.shouldFail), func(t *testing.T) {
-			policy := policyFromOpts(t, "rego",
+			policy := securityPolicyTest.PolicyWithOpts(t, "rego",
 				securitypolicy.WithExternalProcesses([]securitypolicy.ExternalProcessConfig{tc.execInUVMConfig}),
 				securitypolicy.WithAllowRuntimeLogging(true),
 				securitypolicy.WithAllowUnencryptedScratch(true),
@@ -1400,7 +1313,7 @@ func Test_ExecInUVM_WithPolicy(t *testing.T) {
 				if !tc.shouldFail {
 					t.Fatalf("external process exec should succeed, got error instead: %s", err)
 				}
-				if !assertErrorContains(t, err, "invalid command") {
+				if !securityPolicyTest.AssertErrorContains(t, err, "invalid command") {
 					t.Fatalf("expected invalid command error, got %s", err)
 				}
 			} else {
@@ -1422,7 +1335,7 @@ func Test_RunPodSandbox_Concurrently(t *testing.T) {
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			policy := policyFromOpts(
+			policy := securityPolicyTest.PolicyWithOpts(
 				t,
 				"rego",
 				securitypolicy.WithAllowUnencryptedScratch(true),
@@ -1552,17 +1465,18 @@ func Test_RunContainer_WithPolicy_And_RunAs(t *testing.T) {
 	defer cancel()
 
 	cmd := []string{"sh", "-c", "echo 'Hello'"}
-	policy := policyFromImageWithOpts(
+	policy := securityPolicyTest.PolicyFromImageWithOpts(
 		t,
 		imageLcowCustomUser,
 		"rego",
-		[]securitypolicy.PolicyConfigOpt{
-			securitypolicy.WithAllowEnvVarDropping(false),
-			securitypolicy.WithAllowCapabilityDropping(false),
-		},
 		[]securitypolicy.ContainerConfigOpt{
 			securitypolicy.WithCommand(cmd),
 			securitypolicy.WithUser(userConfig(1000, 1000)),
+		},
+		[]securitypolicy.PolicyConfigOpt{
+			securitypolicy.WithAllowEnvVarDropping(false),
+			securitypolicy.WithAllowCapabilityDropping(false),
+			securitypolicy.WithAllowUnencryptedScratch(true),
 		},
 	)
 
@@ -1994,7 +1908,7 @@ func Test_Plan9Mount_WithPolicy(t *testing.T) {
 					t.Fatalf("container creation should have succeeded: %s", err)
 				}
 				expectedErrStr := "invalid mount list: /mounts/p9"
-				if !assertErrorContains(t, err, expectedErrStr) {
+				if !securityPolicyTest.AssertErrorContains(t, err, expectedErrStr) {
 					t.Fatalf("expected '%s' policy error, got: %s", expectedErrStr, err)
 				}
 			}
@@ -2012,7 +1926,7 @@ func Test_DumpStacks_WithPolicy(t *testing.T) {
 
 	for _, stacksAllowed := range []bool{true, false} {
 		t.Run(fmt.Sprintf("Allowed_%t", stacksAllowed), func(t *testing.T) {
-			policy := policyFromOpts(
+			policy := securityPolicyTest.PolicyWithOpts(
 				t,
 				"rego",
 				securitypolicy.WithAllowUnencryptedScratch(true),
@@ -2059,17 +1973,17 @@ func Test_GetProperties_WithPolicy(t *testing.T) {
 
 	for _, allowGetProperties := range []bool{true, false} {
 		t.Run(fmt.Sprintf("Allowed_%t", allowGetProperties), func(t *testing.T) {
-			policy := policyFromImageWithOpts(
+			policy := securityPolicyTest.PolicyFromImageWithOpts(
 				t,
 				imageLcowAlpine,
 				"rego",
-				[]securitypolicy.PolicyConfigOpt{
-					securitypolicy.WithAllowUnencryptedScratch(true),
-					securitypolicy.WithAllowPropertiesAccess(allowGetProperties),
-				},
 				[]securitypolicy.ContainerConfigOpt{
 					securitypolicy.WithCommand(validPolicyAlpineCommand),
 					securitypolicy.WithAllowPrivilegeEscalation(true),
+				},
+				[]securitypolicy.PolicyConfigOpt{
+					securitypolicy.WithAllowUnencryptedScratch(true),
+					securitypolicy.WithAllowPropertiesAccess(allowGetProperties),
 				},
 			)
 			sandboxRequest := sandboxRequestWithPolicy(t, policy)
