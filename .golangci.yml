@@ -141,3 +141,8 @@ issues:
       linters:
         - staticcheck
       text: "^SA1019: .*(ncproxygrpc|nodenetsvc)[/]?v0"
+
+    - path: internal\\tools\\networkagent
+      linters:
+        - staticcheck
+      text: "^SA1019: .*nodenetsvc[/]?v0"
