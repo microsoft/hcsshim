@@ -219,7 +219,7 @@ func DestroyCim(ctx context.Context, cimPath string) (retErr error) {
 	regionFilePaths, err := getRegionFilePaths(ctx, cimPath)
 	if err != nil {
 		log.G(ctx).WithError(err).Warnf("get region files for cim %s", cimPath)
-		if retErr == nil {
+		if retErr == nil { //nolint:govet // nilness: consistency with below
 			retErr = err
 		}
 	}

@@ -214,7 +214,7 @@ func (r *RegoPolicyInterpreter) GetMetadata(name string, key string) (interface{
 
 	if metadata, ok := metadataRoot[name]; ok {
 		if value, ok := metadata[key]; ok {
-			value, err := copyValue(value)
+			value, err := copyValue(value) //nolint:govet // shadow
 			if err != nil {
 				return nil, fmt.Errorf("unable to copy value: %w", err)
 			}

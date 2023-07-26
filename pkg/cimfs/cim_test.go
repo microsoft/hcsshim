@@ -87,9 +87,7 @@ func TestCimReadWrite(t *testing.T) {
 		// give some time and then remove.
 		time.Sleep(3 * time.Second)
 		if err := DestroyCim(context.Background(), cimPath); err != nil {
-			if err != nil {
-				t.Fatalf("destroy cim failed: %s", err)
-			}
+			t.Fatalf("destroy cim failed: %s", err)
 		}
 	}()
 

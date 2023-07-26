@@ -52,7 +52,7 @@ type lcowLayersCloser struct {
 func (lc *lcowLayersCloser) Release(ctx context.Context) (retErr error) {
 	if err := lc.uvm.RemoveCombinedLayersLCOW(ctx, lc.guestCombinedLayersPath); err != nil {
 		log.G(ctx).WithError(err).Error("failed RemoveCombinedLayersLCOW")
-		if retErr == nil {
+		if retErr == nil { //nolint:govet // nilness: consistency with below
 			retErr = fmt.Errorf("first error: %w", err)
 		}
 	}
@@ -307,7 +307,7 @@ type wcowIsolatedLayersCloser struct {
 func (lc *wcowIsolatedLayersCloser) Release(ctx context.Context) (retErr error) {
 	if err := lc.uvm.RemoveCombinedLayersWCOW(ctx, lc.guestCombinedLayersPath); err != nil {
 		log.G(ctx).WithError(err).Error("failed RemoveCombinedLayersWCOW")
-		if retErr == nil {
+		if retErr == nil { //nolint:govet // nilness: consistency with below
 			retErr = fmt.Errorf("first error: %w", err)
 		}
 	}

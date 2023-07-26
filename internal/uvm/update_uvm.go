@@ -22,7 +22,7 @@ func (uvm *UtilityVM) Update(ctx context.Context, data interface{}, annots map[s
 			memoryLimitInBytes = resources.Memory.Limit
 		}
 		if resources.CPU != nil {
-			processorLimits := &hcsschema.ProcessorLimits{}
+			processorLimits = &hcsschema.ProcessorLimits{}
 			if resources.CPU.Maximum != nil {
 				processorLimits.Limit = uint64(*resources.CPU.Maximum)
 			}
@@ -36,7 +36,7 @@ func (uvm *UtilityVM) Update(ctx context.Context, data interface{}, annots map[s
 			memoryLimitInBytes = &mem
 		}
 		if resources.CPU != nil {
-			processorLimits := &hcsschema.ProcessorLimits{}
+			processorLimits = &hcsschema.ProcessorLimits{}
 			if resources.CPU.Quota != nil {
 				processorLimits.Limit = uint64(*resources.CPU.Quota)
 			}

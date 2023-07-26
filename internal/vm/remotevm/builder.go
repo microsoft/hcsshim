@@ -40,7 +40,8 @@ func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS
 		opts := &jobobject.Options{
 			Name: id,
 		}
-		job, err := jobobject.Create(ctx, opts)
+		var err error
+		job, err = jobobject.Create(ctx, opts)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create job object for remotevm process")
 		}

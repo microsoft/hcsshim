@@ -276,7 +276,7 @@ func RemoveAllRelative(path string, root *os.File) error {
 	}
 
 	// It is necessary to use os.Open as Readdirnames does not work with
-	// OpenRelative. This is safe because the above lstatrelative fails
+	// OpenRelative. This is safe because the above LstatRelative fails
 	// if the target is outside the root, and we know this is not a
 	// symlink from the above FILE_ATTRIBUTE_REPARSE_POINT check.
 	fd, err := os.Open(filepath.Join(root.Name(), path))
@@ -293,12 +293,13 @@ func RemoveAllRelative(path string, root *os.File) error {
 	for {
 		names, err1 := fd.Readdirnames(100)
 		for _, name := range names {
-			err1 := RemoveAllRelative(path+string(os.PathSeparator)+name, root)
+			err1 := RemoveAllRelative(path+string(os.PathSeparator)+name, root) //nolint:govet // shadow
 			if err == nil {
 				err = err1
 			}
 		}
 		if err1 == io.EOF {
+			// Readdirnames has no more files to return
 			break
 		}
 		// If Readdirnames returned an error, use it.
