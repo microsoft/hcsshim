@@ -230,6 +230,7 @@ jobs:
     needs: [lint, protos, verify-vendor, go-gen]
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-2019, windows-2022]
     steps:
