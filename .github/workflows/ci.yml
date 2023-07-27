@@ -6,9 +6,9 @@ on:
 env:
   GO_VERSION: "1.19.x"
   GOTESTSUM_VERSION: "latest"
+  GOTESTCMD: "gotestsum --format standard-verbose --debug --"
 
 jobs:
-
   lint:
     runs-on: "windows-2022"
     strategy:
@@ -211,16 +211,16 @@ jobs:
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
 
       - name: Test standard security policy
-        run: gotestsum --format standard-verbose --debug -- -timeout=30m -mod=mod -gcflags=all=-d=checkptr ./pkg/securitypolicy
+        run: ${{ env.GOTESTCMD }} -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
 
       - name: Test rego security policy
-        run: gotestsum --format standard-verbose --debug -- -tags=rego -timeout=30m -mod=mod -gcflags=all=-d=checkptr ./pkg/securitypolicy
+        run: ${{ env.GOTESTCMD }} -tags=rego -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
 
       - name: Test rego policy interpreter
-        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter
+        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter/...
 
       - name: Run guest code unit tests
-        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/guest/...
+        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr ./internal/guest/...
 
       - name: Build gcs Testing Binary
         run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./gcs
@@ -247,12 +247,12 @@ jobs:
 
       # run tests
       - name: Test repo
-        run: gotestsum --format standard-verbose --debug -- -gcflags=all=-d=checkptr -tags admin ./...
-      - name: Test schema version
-        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr -tags admin ./internal
+        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr -tags admin ./...
+
+      - name: Run non-functional tests
+        run: ${{ env.GOTESTCMD }} -mod=mod -gcflags=all=-d=checkptr -tags admin ./...
+
         working-directory: test
-      - name: Test rego policy interpreter
-        run: gotestsum --format standard-verbose --debug -- -mod=mod -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter
 
       - name: Run containerd-shim-runhcs-v1 tests
         shell: powershell
@@ -261,7 +261,7 @@ jobs:
             cd '../..'
             go build -trimpath -o './test/containerd-shim-runhcs-v1' ./cmd/containerd-shim-runhcs-v1
           }
-          gotestsum --format standard-verbose --debug -- -mod=mod -tags functional -gcflags=all=-d=checkptr ./...
+          ${{ env.GOTESTCMD }} -mod=mod -tags functional -gcflags=all=-d=checkptr ./...
         working-directory: test/containerd-shim-runhcs-v1
 
       # build testing binaries
