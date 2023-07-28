@@ -44,9 +44,7 @@ func TestLCOW_ContainerLifecycle(t *testing.T) {
 		container.Wait(ctx, t, c)
 	})
 	cmd.Kill(ctx, t, init)
-	if e := cmd.Wait(ctx, t, init); e != 137 {
-		t.Errorf("got exit code %d, wanted %d", e, 137)
-	}
+	cmd.WaitExitCode(ctx, t, init, cmd.ForcedKilledExitCode)
 }
 
 var ioTests = []struct {
