@@ -18,6 +18,9 @@ import (
 
 const CopyAfterExitTimeout = time.Second
 
+// ForcedKilledExitCode is the (Linux) exit code when processes are foreably killed.
+const ForcedKilledExitCode = 137
+
 func desc(c *cmd.Cmd) string {
 	desc := "init command"
 	if c.Spec != nil {

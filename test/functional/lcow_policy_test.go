@@ -99,9 +99,7 @@ func Test_GetProperties_WithPolicy(t *testing.T) {
 			}
 
 			cmd.Kill(ctx, t, init)
-			if e := cmd.Wait(ctx, t, init); e != 137 {
-				t.Errorf("got exit code %d, wanted %d", e, 137)
-			}
+			cmd.WaitExitCode(ctx, t, init, cmd.ForcedKilledExitCode)
 		})
 	}
 }
