@@ -194,9 +194,9 @@ func requireFeatures(tb testing.TB, features ...string) {
 
 func defaultLCOWOptions(tb testing.TB) *uvm.OptionsLCOW {
 	tb.Helper()
-	opts := testuvm.DefaultLCOWOptions(tb, util.CleanName(tb.Name()), hcsOwner)
+	opts := testuvm.DefaultLCOWOptions(context.TODO(), tb, util.CleanName(tb.Name()), hcsOwner)
 	if p := *flagLinuxBootFilesPath; p != "" {
-		opts.BootFilesPath = p
+		opts.UpdateBootFilesPath(context.TODO(), p)
 	}
 	return opts
 }
