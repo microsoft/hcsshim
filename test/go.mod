@@ -6,7 +6,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.1
 	github.com/Microsoft/hcsshim v0.10.0-rc.8
 	github.com/containerd/cgroups/v3 v3.0.2
-	github.com/containerd/containerd v1.7.0
+	github.com/containerd/containerd v1.7.3
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.2.2
 	github.com/containerd/typeurl/v2 v2.1.1
@@ -24,7 +24,7 @@ require (
 	golang.org/x/sys v0.10.0
 	google.golang.org/grpc v1.57.0
 	google.golang.org/protobuf v1.31.0
-	k8s.io/cri-api v0.26.2
+	k8s.io/cri-api v0.27.1
 )
 
 require (
@@ -110,6 +110,15 @@ require (
 
 replace (
 	github.com/Microsoft/hcsshim => ../
-	// keep CRI version frozen for cri-containerd tests
+	// containerd v1.7.1+ uses "k8s.io/cri-api" v0.26.0, and we cannot upgrade that dependency past 0.25.x
+	// because cri-containerd tests use "k8s.io/cri-api/pkg/apis/runtime/v1alpha2", which is removed
+	// in "k8s.io/cri-api" v0.26.0.
+	// "k8s.io/cri-api/pkg/apis/runtime/v1" changes between 0.25 and 0.27.
+	// This causes an issue when importing from "github.com/containerd/containerd/pkg/cri/*", wich ultimetly
+	// relies on "k8s.io/cri-api/pkg/apis/runtime/v1".
+	//
+	// todo: delete this when test/cri-containerd is moved out or upgraded off of "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	github.com/containerd/containerd => github.com/containerd/containerd v1.7.0
+	// keep CRI version frozen for cri-containerd tests, which need "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	k8s.io/cri-api => k8s.io/cri-api v0.25.8
 )

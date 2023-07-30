@@ -36,9 +36,9 @@ func LinuxSandboxRuntimeConfig(name string) *runtime.PodSandboxConfig {
 }
 
 // based off of:
-// containerd\pkg\cri\server\sandbox_run_windows.go
-// containerd\pkg\cri\server\container_create.go
-// containerd\pkg\cri\server\container_create_windows.go
+// github.com/containerd/containerd/pkg/cri/server/sandbox_run_windows.go
+// github.com/containerd/containerd/pkg/cri/server/container_create.go
+// github.com/containerd/containerd/pkg/cri/server/container_create_windows.go
 
 func LinuxSandboxImageConfig(pause bool) *imagespec.ImageConfig {
 	entry := []string{"/bin/sh", "-c", TailNullArgs}
