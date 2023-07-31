@@ -6,7 +6,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.1
 	github.com/Microsoft/hcsshim v0.10.0-rc.8
 	github.com/containerd/cgroups/v3 v3.0.2
-	github.com/containerd/containerd v1.7.0
+	github.com/containerd/containerd v1.7.3
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.2.2
 	github.com/containerd/typeurl/v2 v2.1.1
@@ -24,7 +24,7 @@ require (
 	golang.org/x/sys v0.10.0
 	google.golang.org/grpc v1.56.2
 	google.golang.org/protobuf v1.31.0
-	k8s.io/cri-api v0.26.2
+	k8s.io/cri-api v0.27.1
 )
 
 require (
