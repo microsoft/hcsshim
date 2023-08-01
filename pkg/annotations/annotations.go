@@ -223,6 +223,9 @@ const (
 	// This allows for better fallback mechanics.
 	SecurityPolicyEnforcer = "io.microsoft.virtualmachine.lcow.enforcer"
 
+	// HclEnabled specifies whether to enable the host compatibility layer.
+	HclEnabled = "io.microsoft.virtualmachine.lcow.hcl-enabled"
+
 	// ContainerProcessDumpLocation specifies a path inside of containers to save process dumps to. As
 	// the scratch space for a container is generally cleaned up after exit, this is best set to a volume mount of
 	// some kind (vhd, bind mount, fileshare mount etc.)
