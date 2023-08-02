@@ -110,6 +110,7 @@ func verifyTaskUpdateResourcesType(data interface{}) error {
 	case *specs.WindowsResources:
 	case *specs.LinuxResources:
 	case *ctrdtaskapi.PolicyFragment:
+	case *ctrdtaskapi.MappedPipe:
 	default:
 		return errNotSupportedResourcesRequest
 	}

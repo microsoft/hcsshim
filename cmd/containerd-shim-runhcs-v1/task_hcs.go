@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,6 +45,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 )
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
@@ -901,7 +903,11 @@ func isValidWindowsCPUResources(c *specs.WindowsCPUResources) bool {
 func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, annotations map[string]string) error {
 	resources, ok := data.(*specs.WindowsResources)
 	if !ok {
-		return errors.New("must have resources be type *WindowsResources when updating a wcow container")
+		mp, ok := data.(*ctrdtaskapi.MappedPipe)
+		if !ok {
+			return errors.New("must have resources be type *WindowsResources or *MappedPipe when updating a wcow container")
+		}
+		return ht.updateWCOWMappedPipe(ctx, mp)
 	}
 	if resources.Memory != nil && resources.Memory.Limit != nil {
 		newMemorySizeInMB := *resources.Memory.Limit / memory.MiB
@@ -919,6 +925,33 @@ func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, an
 		}
 	}
 	return nil
+}
+
+func (ht *hcsTask) updateWCOWMappedPipe(ctx context.Context, mp *ctrdtaskapi.MappedPipe) error {
+	// ContainerPath fails to map if it contains the pipe prefix. So always remove before modify if the caller passed.
+	mp.ContainerPath = strings.TrimPrefix(mp.ContainerPath, `\\.\pipe\`)
+
+	// Create the request
+	req := &hcsschema.ModifySettingRequest{
+		ResourcePath: resourcepaths.SiloMappedPipeResourcePath,
+		Settings:     nil,
+	}
+	if !mp.IsRemove {
+		if !strings.HasPrefix(mp.HostPath, `\\.\pipe\`) {
+			return errors.New(`HostPath must have prefix '\\.\pipe\' for add operation`)
+		}
+		req.Settings = &hcsschema.MappedPipe{
+			HostPath:          mp.HostPath,
+			ContainerPipeName: mp.ContainerPath,
+		}
+	} else {
+		req.RequestType = guestrequest.RequestTypeRemove
+		req.Settings = &hcsschema.MappedPipe{
+			ContainerPipeName: mp.ContainerPath,
+		}
+	}
+
+	return ht.c.Modify(ctx, req)
 }
 
 func (ht *hcsTask) updateLCOWResources(ctx context.Context, data interface{}, annotations map[string]string) error {
