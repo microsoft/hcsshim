@@ -168,7 +168,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 	}
 
 	// Add some debug logging
-	if entry.Logger.GetLevel() >= logrus.DebugLevel {
+	if entry.Logger.IsLevelEnabled(logrus.DebugLevel) {
 		curNS, _ := netns.Get()
 		// Refresh link attributes/state
 		link, _ = netlink.LinkByIndex(link.Attrs().Index)

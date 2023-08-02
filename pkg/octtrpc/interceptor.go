@@ -10,6 +10,7 @@ import (
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -18,6 +19,21 @@ import (
 type options struct {
 	sampler trace.Sampler
 	attrs   []trace.Attribute
+	// add the request/response messages as span attributes
+	addMsg bool
+	// hook to update/modify a copy of the request/response messages before adding them as span attributes
+	msgAttrHook func(proto.Message)
+}
+
+func (o *options) msgHook(v any) any {
+	m, ok := v.(proto.Message)
+	if !ok || o.msgAttrHook == nil {
+		return v
+	}
+
+	m = proto.Clone(m)
+	o.msgAttrHook(m)
+	return m
 }
 
 // Option represents an option function that can be used with the OC TTRPC
@@ -36,6 +52,37 @@ func WithSampler(sampler trace.Sampler) Option {
 func WithAttributes(attr ...trace.Attribute) Option {
 	return func(opts *options) {
 		opts.attrs = append(opts.attrs, attr...)
+	}
+}
+
+// these are (currently) ServerInterceptor-specific options, but we cannot create a new [ServerOption] type
+// since that would break our API
+
+// WithAddMessage adds the request and response messages as attributes to the ttrpc method span.
+//
+// [ServerInterceptor] only.
+func WithAddMessage() Option {
+	return func(opts *options) {
+		opts.addMsg = true
+	}
+}
+
+// WithAddMessageHook specifies a hook to modify the ttrpc request or response messages
+// before adding them to the ttrpc method span.
+// This is intended to allow scrubbing sensitive fields from a the message.
+//
+// The function will be called with a clone of the original message (via [proto.Clone]) only if:
+//   - the interceptor is created with the [WithAddMessage] option
+//   - the function is non-nil
+//   - the ttrpc request or response are of type [proto.Message]
+//
+// Since ttrpc is a gRPC replacement, we are guaranteed that the messages will
+// implement [proto.Message].
+//
+// [ServerInterceptor] only.
+func WithAddMessageHook(f func(proto.Message)) Option {
+	return func(opts *options) {
+		opts.msgAttrHook = f
 	}
 }
 
@@ -124,8 +171,8 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 		}
 		defer span.End()
 		defer func() {
-			if err == nil {
-				span.AddAttributes(trace.StringAttribute("response", log.Format(ctx, resp)))
+			if o.addMsg && err == nil {
+				span.AddAttributes(trace.StringAttribute("response", log.Format(ctx, o.msgHook(resp))))
 			}
 			setSpanStatus(span, err)
 		}()
@@ -133,9 +180,10 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 			span.AddAttributes(o.attrs...)
 		}
 
-		return method(ctx, func(req interface{}) (err error) {
-			if err = unmarshal(req); err == nil {
-				span.AddAttributes(trace.StringAttribute("request", log.Format(ctx, req)))
+		return method(ctx, func(req interface{}) error {
+			err := unmarshal(req)
+			if o.addMsg {
+				span.AddAttributes(trace.StringAttribute("request", log.Format(ctx, o.msgHook(req))))
 			}
 			return err
 		})

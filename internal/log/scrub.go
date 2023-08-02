@@ -6,6 +6,11 @@ import (
 	"errors"
 	"sync/atomic"
 
+	task "github.com/containerd/containerd/api/runtime/task/v2"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
@@ -22,6 +27,7 @@ var (
 	// case sensitive keywords, so "env" is not a substring on "Environment"
 	_scrubKeywords = [][]byte{[]byte("env"), []byte("Environment")}
 
+	// TODO (go1.19) atomic.Bool
 	_scrub int32
 )
 
@@ -40,8 +46,27 @@ func IsScrubbingEnabled() bool {
 	return v != 0
 }
 
+func ScrubShimTTRPC(m proto.Message) {
+	if !IsScrubbingEnabled() {
+		return
+	}
+
+	switch t := m.(type) {
+	case *task.ExecProcessRequest:
+		// the spec will be logged elsewhere, so scrub the entire spec wholesale to avoid
+		// needing to unmarshall from then re-marshal back to an anypb.Any
+		//
+		// ignore errors with creating an anypb.Any and use nil response since nil is a
+		// "valid" proto.Message that it signifies an invlaid message
+		// see comment here: https://pkg.go.dev/google.golang.org/protobuf@v1.31.0/proto#Equal
+		a, _ := anypb.New(wrapperspb.String(_scrubbedReplacement))
+		t.Spec = a
+	default:
+	}
+}
+
 // ScrubProcessParameters scrubs HCS Create Process requests with config parameters of
-// type internal/hcs/schema2.ScrubProcessParameters (aka hcsshema.ScrubProcessParameters)
+// type internal/hcs/schema2.ScrubProcessParameters (aka hcsschema.ScrubProcessParameters)
 func ScrubProcessParameters(s string) (string, error) {
 	// todo: deal with v1 ProcessConfig
 	b := []byte(s)

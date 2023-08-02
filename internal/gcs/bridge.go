@@ -244,7 +244,7 @@ func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, r
 		brdg.log.WithField("reason", ctx.Err()).Warn("ignoring response to bridge message")
 		return ctx.Err()
 	case <-t.C:
-		//todo: dont kill bridge on message timeout
+		// TODO: don't kill bridge on message timeout
 		brdg.kill(errors.New("message timeout"))
 		<-call.ch
 		return call.Err()
@@ -390,7 +390,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 	// Update the message header with the size.
 	binary.LittleEndian.PutUint32(buf.Bytes()[hdrOffSize:], uint32(buf.Len()))
 
-	if brdg.log.Logger.GetLevel() >= logrus.DebugLevel {
+	if brdg.log.Logger.IsLevelEnabled(logrus.DebugLevel) {
 		b := buf.Bytes()[hdrSize:]
 		switch typ {
 		// container environment vars are in rpCreate for linux; rpcExecuteProcess for windows

@@ -294,6 +294,9 @@ func (s *service) IsShutdown() bool {
 }
 
 func (s *service) logEntry(ctx context.Context) *logrus.Entry {
+	if s == nil {
+		return log.G(ctx)
+	}
 	return log.G(ctx).WithFields(logrus.Fields{
 		logfields.ShimID:    s.tid,
 		logfields.IsSandbox: s.isSandbox,
