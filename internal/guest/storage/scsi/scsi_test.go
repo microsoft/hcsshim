@@ -1085,7 +1085,7 @@ func Test_Unmount_CleanupCryptDevice_Called(t *testing.T) {
 		return nil
 	}
 	cleanupCryptDeviceCalled := false
-	cleanupCryptDevice = func(devName string) error {
+	cleanupCryptDevice = func(_ context.Context, devName string) error {
 		expectedDevName := fmt.Sprintf(cryptDeviceFmt, 0, 0, 0)
 		if devName != expectedDevName {
 			t.Fatalf("expected crypt target %q, got %q", expectedDevName, devName)

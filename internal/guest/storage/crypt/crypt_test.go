@@ -69,7 +69,7 @@ func Test_Encrypt_Cryptsetup_Format_Error(t *testing.T) {
 	expectedKeyFilePath := tempDir + "keyfile"
 
 	expectedErr := errors.New("expected error message")
-	_cryptsetupFormat = func(source string, keyFilePath string) error {
+	_cryptsetupFormat = func(_ context.Context, source string, keyFilePath string) error {
 		if source != expectedSource {
 			t.Fatalf("expected source: '%s' got: '%s'", expectedSource, source)
 		}
@@ -97,7 +97,7 @@ func Test_Encrypt_Cryptsetup_Open_Error(t *testing.T) {
 	_osRemoveAll = func(path string) error {
 		return nil
 	}
-	_cryptsetupFormat = func(source string, keyFilePath string) error {
+	_cryptsetupFormat = func(_ context.Context, source string, keyFilePath string) error {
 		return nil
 	}
 
@@ -106,7 +106,7 @@ func Test_Encrypt_Cryptsetup_Open_Error(t *testing.T) {
 	expectedKeyFilePath := tempDir + "keyfile"
 
 	expectedErr := errors.New("expected error message")
-	_cryptsetupOpen = func(source string, deviceName string, keyFilePath string) error {
+	_cryptsetupOpen = func(_ context.Context, source string, deviceName string, keyFilePath string) error {
 		if source != expectedSource {
 			t.Fatalf("expected source: '%s' got: '%s'", expectedSource, source)
 		}
@@ -135,10 +135,10 @@ func Test_Encrypt_Success(t *testing.T) {
 	_osRemoveAll = func(path string) error {
 		return nil
 	}
-	_cryptsetupFormat = func(source string, keyFilePath string) error {
+	_cryptsetupFormat = func(_ context.Context, source string, keyFilePath string) error {
 		return nil
 	}
-	_cryptsetupOpen = func(source string, deviceName string, keyFilePath string) error {
+	_cryptsetupOpen = func(_ context.Context, source string, deviceName string, keyFilePath string) error {
 		return nil
 	}
 	_zeroFirstBlock = func(_ string, _ int) error {
@@ -167,14 +167,14 @@ func Test_Cleanup_Dm_Crypt_Error(t *testing.T) {
 	dmCryptName := "dm-crypt-target"
 	expectedErr := errors.New("expected error message")
 
-	_cryptsetupClose = func(deviceName string) error {
+	_cryptsetupClose = func(_ context.Context, deviceName string) error {
 		if deviceName != dmCryptName {
 			t.Fatalf("expected device name: '%s' got: '%s'", dmCryptName, deviceName)
 		}
 		return expectedErr
 	}
 
-	err := CleanupCryptDevice(dmCryptName)
+	err := CleanupCryptDevice(context.TODO(), dmCryptName)
 	if errors.Unwrap(err) != expectedErr {
 		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
 	}
@@ -185,12 +185,12 @@ func Test_Cleanup_Dm_Crypt_Success(t *testing.T) {
 
 	// Test what happens when cryptsetup succeeds to close an encrypted device.
 
-	_cryptsetupClose = func(deviceName string) error {
+	_cryptsetupClose = func(_ context.Context, deviceName string) error {
 		return nil
 	}
 
 	source := "/dev/sda"
-	err := CleanupCryptDevice(source)
+	err := CleanupCryptDevice(context.TODO(), source)
 	if err != nil {
 		t.Fatalf("unexpected err: '%v'", err)
 	}

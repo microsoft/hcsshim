@@ -9,9 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // Test dependencies
@@ -26,21 +30,49 @@ var (
 )
 
 // cryptsetupCommand runs cryptsetup with the provided arguments
-func cryptsetupCommand(args []string) error {
-	// --debug and -v are used to increase the information printed by
-	// cryptsetup. By default, it doesn't print much information, which makes it
-	// hard to debug it when there are problems.
-	cmd := exec.Command("cryptsetup", append([]string{"--debug", "-v"}, args...)...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "failed to execute cryptsetup: %s", string(output))
+func cryptsetupCommand(ctx context.Context, args []string) error {
+	// Occasionally the /dev/sd* arrive with a delay and one of the errors below
+	// could be returned as a result. Keep retrying cryptsetup command until
+	// successful or a context deadline is reached.
+	retryErrors := []string{
+		fmt.Sprint(unix.ENOENT),
+		fmt.Sprint(unix.ENXIO),
+		fmt.Sprint(unix.ENODEV),
 	}
-	return nil
+retry:
+	for {
+		// --debug and -v are used to increase the information printed by
+		// cryptsetup. By default, it doesn't print much information, which makes it
+		// hard to debug it when there are problems.
+		cmd := exec.Command("cryptsetup", append([]string{"--debug", "-v"}, args...)...)
+		output, err := cmd.CombinedOutput()
+		strOutput := string(output)
+		if err != nil {
+			log.G(ctx).WithError(err).WithFields(logrus.Fields{
+				"args":   args,
+				"output": string(output),
+			}).Warning("cryptsetup failed")
+			for _, e := range retryErrors {
+				if strings.Contains(strOutput, e) {
+					select {
+					case <-ctx.Done():
+						log.G(ctx).WithError(err).Warning("cryptsetup failed, context timeout")
+						return fmt.Errorf("cryptsetup failed: %w", err)
+					default:
+						time.Sleep(100 * time.Millisecond)
+						continue retry
+					}
+				}
+			}
+			return fmt.Errorf("cryptsetup failed: %w", err)
+		}
+		return nil
+	}
 }
 
 // cryptsetupFormat runs "cryptsetup luksFormat" with the right arguments to use
 // dm-crypt and dm-integrity.
-func cryptsetupFormat(source string, keyFilePath string) error {
+func cryptsetupFormat(ctx context.Context, source string, keyFilePath string) error {
 	formatArgs := []string{
 		// Mount source using LUKS2
 		"luksFormat", source, "--type", "luks2",
@@ -66,25 +98,25 @@ func cryptsetupFormat(source string, keyFilePath string) error {
 		// it would be bypassed completely, but this isn't possible.
 		"--pbkdf", "pbkdf2", "--pbkdf-force-iterations", "1000"}
 
-	return cryptsetupCommand(formatArgs)
+	return cryptsetupCommand(ctx, formatArgs)
 }
 
 // cryptsetupOpen runs "cryptsetup luksOpen" with the right arguments.
-func cryptsetupOpen(source string, deviceName string, keyFilePath string) error {
+func cryptsetupOpen(ctx context.Context, source string, deviceName string, keyFilePath string) error {
 	openArgs := []string{
 		// Open device with the key passed to luksFormat
 		"luksOpen", source, deviceName, "--key-file", keyFilePath,
 		// Don't use a journal to increase performance
 		"--integrity-no-journal", "--persistent"}
 
-	return cryptsetupCommand(openArgs)
+	return cryptsetupCommand(ctx, openArgs)
 }
 
 // cryptsetupClose runs "cryptsetup luksClose" with the right arguments.
-func cryptsetupClose(deviceName string) error {
+func cryptsetupClose(ctx context.Context, deviceName string) error {
 	closeArgs := []string{"luksClose", deviceName}
 
-	return cryptsetupCommand(closeArgs)
+	return cryptsetupCommand(ctx, closeArgs)
 }
 
 // EncryptDevice creates a dm-crypt target for a container scratch vhd.
@@ -133,18 +165,18 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 	}
 
 	// 2. Format device
-	if err = _cryptsetupFormat(source, keyFilePath); err != nil {
+	if err = _cryptsetupFormat(ctx, source, keyFilePath); err != nil {
 		return "", fmt.Errorf("luksFormat failed: %s: %w", source, err)
 	}
 
 	// 3. Open device
-	if err := _cryptsetupOpen(source, dmCryptName, keyFilePath); err != nil {
+	if err := _cryptsetupOpen(ctx, source, dmCryptName, keyFilePath); err != nil {
 		return "", fmt.Errorf("luksOpen failed: %s: %w", source, err)
 	}
 
 	defer func() {
 		if err != nil {
-			if inErr := CleanupCryptDevice(source); inErr != nil {
+			if inErr := CleanupCryptDevice(ctx, source); inErr != nil {
 				log.G(ctx).WithError(inErr).Debug("failed to cleanup crypt device")
 			}
 		}
@@ -163,9 +195,9 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 }
 
 // CleanupCryptDevice removes the dm-crypt device created by EncryptDevice
-func CleanupCryptDevice(dmCryptName string) error {
+func CleanupCryptDevice(ctx context.Context, dmCryptName string) error {
 	// Close dm-crypt device
-	if err := _cryptsetupClose(dmCryptName); err != nil {
+	if err := _cryptsetupClose(ctx, dmCryptName); err != nil {
 		return fmt.Errorf("luksClose failed: %s: %w", dmCryptName, err)
 	}
 	return nil

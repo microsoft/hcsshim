@@ -319,7 +319,7 @@ func Unmount(
 
 	if config.Encrypted {
 		dmCryptName := fmt.Sprintf(cryptDeviceFmt, controller, lun, partition)
-		if err := cleanupCryptDevice(dmCryptName); err != nil {
+		if err := cleanupCryptDevice(ctx, dmCryptName); err != nil {
 			return fmt.Errorf("failed to cleanup dm-crypt target %s: %w", dmCryptName, err)
 		}
 	}
