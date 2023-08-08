@@ -107,22 +107,10 @@ function Invoke-TestCommand {
         $TestCmd,
 
         [string]
-        $TestCmdPreamble = $TestCmd,
-
-        [string]
         $OutputFile = '',
 
         [string]
-        $OutputCmd,
-
-        [switch]
-        $Preamble,
-
-        [DateTime]
-        $Date = (Get-Date),
-
-        [string]
-        $Note
+        $OutputCmd
     )
     Write-Verbose "Running command: $TestCmd"
 
@@ -132,19 +120,6 @@ function Invoke-TestCommand {
         Write-Verbose "Saving output to: $OutputFile"
     }
 
-
-    if ( $Preamble ) {
-        & {
-            Write-Output "test.date: $(Get-Date -Date $Date -UFormat '%FT%R%Z' -AsUTC)"
-            if ( $Note ) {
-                Write-Output "note: $Note"
-            }
-            Write-Output "test.command: $TestCmdPreamble"
-            if ( Get-Command -ErrorAction Ignore 'git' ) {
-                Write-Output "pkg.commit: $(git rev-parse HEAD 2>$null)"
-            }
-        } | Tee-Object -Encoding utf8 -FilePath $OutputFile
-    }
     Invoke-Expression $TestCmd |
         Tee-Object -Encoding utf8 -Append -FilePath $OutputFile
 

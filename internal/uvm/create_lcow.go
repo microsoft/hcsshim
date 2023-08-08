@@ -508,7 +508,7 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 }
 */
 
-// Make the ComputeSystem document object that will be serialised to json to be presented to the HCS api.
+// Make the ComputeSystem document object that will be serialized to json to be presented to the HCS api.
 func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
 	logrus.Tracef("makeLCOWDoc %v\n", opts)
 
