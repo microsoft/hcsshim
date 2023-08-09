@@ -293,9 +293,8 @@ func RemoveAllRelative(path string, root *os.File) error {
 	for {
 		names, err1 := fd.Readdirnames(100)
 		for _, name := range names {
-			err1 := RemoveAllRelative(path+string(os.PathSeparator)+name, root) //nolint:govet // shadow
-			if err == nil {
-				err = err1
+			if err2 := RemoveAllRelative(path+string(os.PathSeparator)+name, root); err == nil {
+				err = err2
 			}
 		}
 		if err1 == io.EOF {
