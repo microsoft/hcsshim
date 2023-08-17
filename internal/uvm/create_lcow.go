@@ -120,7 +120,7 @@ type OptionsLCOW struct {
 	VPCIEnabled             bool                // Whether the kernel should enable pci
 	EnableScratchEncryption bool                // Whether the scratch should be encrypted
 	DisableTimeSyncService  bool                // Disables the time synchronization service
-	HclEnabled              bool                // Whether to enable the host compatibility layer
+	HclEnabled              *bool               // Whether to enable the host compatibility layer
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW

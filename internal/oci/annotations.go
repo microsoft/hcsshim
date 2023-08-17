@@ -78,6 +78,27 @@ func ParseAnnotationsBool(ctx context.Context, a map[string]string, key string, 
 	return def
 }
 
+// ParseAnnotationsNullableBool searches `a` for `key` and if found verifies that the
+// value is `true` or `false`. If `key` is not found it returns a null pointer.
+// The JSON Marshaller will omit null pointers and will serialise non-null pointers as
+// the value they point at.
+func ParseAnnotationsNullableBool(ctx context.Context, a map[string]string, key string) *bool {
+	if v, ok := a[key]; ok {
+		switch strings.ToLower(v) {
+		case "true":
+			_bool := true
+			return &_bool
+		case "false":
+			_bool := false
+			return &_bool
+		default:
+			err := errors.New("boolean fields must be 'true', 'false', or not set")
+			logAnnotationParseError(ctx, key, v, logfields.Bool, err)
+		}
+	}
+	return nil
+}
+
 // parseAnnotationsUint32 searches `a` for `key` and if found verifies that the
 // value is a 32 bit unsigned integer. If `key` is not found returns `def`.
 func parseAnnotationsUint32(ctx context.Context, a map[string]string, key string, def uint32) uint32 {
