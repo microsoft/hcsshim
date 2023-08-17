@@ -47,8 +47,8 @@ const (
 	serviceConfigFailureActions = 2
 )
 
-func initPanicFile(path string) error {
-	panicFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+func initPanicFile(path string) (err error) {
+	panicFile, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}
@@ -92,6 +92,10 @@ func initPanicFile(path string) error {
 }
 
 func removePanicFile() {
+	if panicFile == nil {
+		// shouldn't get here, but somehow launchService was called before initPanicFile
+		return
+	}
 	if st, err := panicFile.Stat(); err == nil {
 		// If there's anything in the file we wrote (e.g. panic logs), don't delete it.
 		if st.Size() == 0 {

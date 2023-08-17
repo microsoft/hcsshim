@@ -259,7 +259,7 @@ func (s *service) teardownConfigureContainerNetworking(ctx context.Context, req 
 
 	for _, endpoint := range resp.Endpoints {
 		if endpoint == nil {
-			log.G(ctx).WithField("name", endpoint.ID).Warn("failed to find endpoint to delete")
+			log.G(ctx).Warn("failed to find endpoint to delete")
 			continue
 		}
 		if endpoint.Endpoint == nil || endpoint.Endpoint.Settings == nil {
@@ -340,7 +340,7 @@ func (s *service) addHelper(ctx context.Context, req *nodenetsvc.ConfigureNetwor
 
 	for _, endpoint := range resp.Endpoints {
 		if endpoint == nil {
-			log.G(ctx).WithField("name", endpoint.ID).Warn("failed to find endpoint")
+			log.G(ctx).Warn("failed to find endpoint")
 			continue
 		}
 		if endpoint.Endpoint == nil || endpoint.Endpoint.Settings == nil {
@@ -393,7 +393,7 @@ func (s *service) teardownHelper(ctx context.Context, req *nodenetsvc.ConfigureN
 
 	for _, endpoint := range resp.Endpoints {
 		if endpoint == nil {
-			log.G(ctx).WithField("name", endpoint.ID).Warn("failed to find endpoint to delete")
+			log.G(ctx).Warn("failed to find endpoint to delete")
 			continue
 		}
 		if endpoint.Endpoint == nil || endpoint.Endpoint.Settings == nil {

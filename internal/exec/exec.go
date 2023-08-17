@@ -176,7 +176,7 @@ func (e *Exec) Start() error {
 	pSec := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(zeroSec)), InheritHandle: 1}
 	tSec := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(zeroSec)), InheritHandle: 1}
 
-	siEx.ProcThreadAttributeList = e.attrList.List()
+	siEx.ProcThreadAttributeList = e.attrList.List() //nolint:govet // unusedwrite: ProcThreadAttributeList will be read in syscall
 	siEx.Cb = uint32(unsafe.Sizeof(*siEx))
 	if e.execConfig.token != 0 {
 		err = windows.CreateProcessAsUser(

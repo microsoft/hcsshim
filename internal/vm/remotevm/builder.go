@@ -29,7 +29,7 @@ type utilityVMBuilder struct {
 	client  vmservice.VMService
 }
 
-func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS vm.GuestOS) (vm.UVMBuilder, error) {
+func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS vm.GuestOS) (_ vm.UVMBuilder, err error) {
 	var job *jobobject.JobObject
 	if binPath != "" {
 		log.G(ctx).WithFields(logrus.Fields{
@@ -40,7 +40,7 @@ func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS
 		opts := &jobobject.Options{
 			Name: id,
 		}
-		job, err := jobobject.Create(ctx, opts)
+		job, err = jobobject.Create(ctx, opts)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create job object for remotevm process")
 		}

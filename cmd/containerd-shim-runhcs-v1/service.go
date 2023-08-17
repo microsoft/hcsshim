@@ -511,7 +511,7 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 
 	t, _ := s.getTask(s.tid)
 	if t != nil {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second) //nolint:govet // shadow
 		defer cancel()
 		resp.GuestStacks = t.DumpGuestStacks(ctx)
 	}
