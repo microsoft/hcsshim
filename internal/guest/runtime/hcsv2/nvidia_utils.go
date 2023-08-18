@@ -15,7 +15,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
-	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hooks"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
@@ -34,10 +33,6 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec) error {
 	}
 
 	debugOption := fmt.Sprintf("--debug=%s", nvidiaDebugFilePath)
-
-	// TODO katiewasnothere: right now both host and container ldconfig do not work as expected for nvidia-container-cli
-	// ldconfig needs to be run in the container to setup the correct symlinks to the library files nvidia-container-cli
-	// maps into the container
 	args := []string{
 		genericHookPath,
 		nvidiaToolBinary,
@@ -74,40 +69,9 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec) error {
 	return hooks.AddOCIHook(spec, hooks.CreateRuntime, nvidiaHook)
 }
 
-// Helper function to find the usr/lib path for the installed nvidia library files.
-// This function assumes that the drivers have been installed using
-// gcstool's `install-drivers` binary.
-func getNvidiaDriversUsrLibPath() string {
-	return fmt.Sprintf("%s/content/usr/lib", guestpath.LCOWNvidiaMountPath)
-}
-
-// Helper function to find the usr/bin path for the installed nvidia tools.
-// This function assumes that the drivers have been installed using
-// gcstool's `install-drivers` binary.
-func getNvidiaDriverUsrBinPath() string {
-	return fmt.Sprintf("%s/content/usr/bin", guestpath.LCOWNvidiaMountPath)
-}
-
-// updateEnvWithNvidiaVariables creates an env with the nvidia gpu vhd in PATH and insecure mode set
+// updateEnvWithNvidiaVariables creates an env with the nvidia specific variables set
 func updateEnvWithNvidiaVariables() []string {
-	env := updatePathEnv(getNvidiaDriverUsrBinPath())
 	// NVC_INSECURE_MODE allows us to run nvidia-container-cli without seccomp
 	// we don't currently use seccomp in the uvm, so avoid using it here for now as well
-	env = append(env, "NVC_INSECURE_MODE=1")
-	return env
-}
-
-// updatePathEnv adds specified `dirs` to PATH variable and returns the result environment variables.
-func updatePathEnv(dirs ...string) []string {
-	pathPrefix := "PATH="
-	additionalDirs := strings.Join(dirs, ":")
-	env := os.Environ()
-	for i, v := range env {
-		if strings.HasPrefix(v, pathPrefix) {
-			newPath := fmt.Sprintf("%s:%s", v, additionalDirs)
-			env[i] = newPath
-			return env
-		}
-	}
-	return append(env, fmt.Sprintf("PATH=%s", additionalDirs))
+	return append(os.Environ(), "NVC_INSECURE_MODE=1")
 }
