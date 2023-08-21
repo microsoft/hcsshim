@@ -80,7 +80,11 @@ func isDisconnectError(err error) bool {
 	return hcs.IsAny(err, windows.WSAECONNABORTED, windows.WSAECONNRESET)
 }
 
-func parseLogrus(vmid string) func(r io.Reader) {
+func parseLogrus(o *Options) OutputHandler {
+	vmid := ""
+	if o != nil {
+		vmid = o.ID
+	}
 	return func(r io.Reader) {
 		j := json.NewDecoder(r)
 		e := log.L.Dup()
@@ -163,6 +167,11 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	// initalizing the channel and waiting on it during acceptAndClose
 	uvm.exitCh = make(chan struct{})
 
+	e := log.G(ctx).WithField(logfields.UVMID, uvm.id)
+
+	// log errors in the the wait groups, since if multiple go routines return an error,
+	// theres no guarantee on which will be returned.
+
 	// Prepare to provide entropy to the init process in the background. This
 	// must be done in a goroutine since, when using the internal bridge, the
 	// call to Start() will block until the GCS launches, and this cannot occur
@@ -172,12 +181,14 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			conn, err := uvm.acceptAndClose(gctx, uvm.entropyListener)
 			uvm.entropyListener = nil
 			if err != nil {
-				return fmt.Errorf("failed to connect to entropy socket: %s", err)
+				e.WithError(err).Error("failed to connect to entropy socket")
+				return fmt.Errorf("failed to connect to entropy socket: %w", err)
 			}
 			defer conn.Close()
 			_, err = io.CopyN(conn, rand.Reader, entropyBytes)
 			if err != nil {
-				return fmt.Errorf("failed to write entropy: %s", err)
+				e.WithError(err).Error("failed to write entropy")
+				return fmt.Errorf("failed to write entropy: %w", err)
 			}
 			return nil
 		})
@@ -188,12 +199,15 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			conn, err := uvm.acceptAndClose(gctx, uvm.outputListener)
 			uvm.outputListener = nil
 			if err != nil {
+				e.WithError(err).Error("failed to connect to log socket")
 				close(uvm.outputProcessingDone)
-				return fmt.Errorf("failed to connect to log socket: %s", err)
+				return fmt.Errorf("failed to connect to log socket: %w", err)
 			}
 			go func() {
+				e.Trace("uvm output handler starting")
 				uvm.outputHandler(conn)
 				close(uvm.outputProcessingDone)
+				e.Debug("uvm output handler finished")
 			}()
 			return nil
 		})
@@ -257,7 +271,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		// Start the GCS protocol.
 		gcc := &gcs.GuestConnectionConfig{
 			Conn:           conn,
-			Log:            log.G(ctx).WithField(logfields.UVMID, uvm.id),
+			Log:            e,
 			IoListen:       gcs.HvsockIoListen(uvm.runtimeID),
 			InitGuestState: initGuestState,
 		}

@@ -227,9 +227,11 @@ func createLCOWOptions(_ context.Context, c *cli.Context, id string) (*uvm.Optio
 		if c.IsSet(outputHandlingArgName) {
 			switch strings.ToLower(c.String(outputHandlingArgName)) {
 			case "stdout":
-				options.OutputHandler = uvm.OutputHandler(func(r io.Reader) {
-					_, _ = io.Copy(os.Stdout, r)
-				})
+				options.OutputHandlerCreator = func(*uvm.Options) uvm.OutputHandler {
+					return func(r io.Reader) {
+						_, _ = io.Copy(os.Stdout, r)
+					}
+				}
 			default:
 				return nil, unrecognizedError(c.String(outputHandlingArgName), outputHandlingArgName)
 			}
