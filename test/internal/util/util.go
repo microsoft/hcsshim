@@ -40,12 +40,9 @@ func RunningBenchmarks() (b bool) {
 
 	// go doesn't run benchmarks unless -test.bench flag is passed, so thats our cue.
 	// ref: https://pkg.go.dev/testing#hdr-Benchmarks
-
-	// `go test` (and `go test -c`) runs in a binary with a suite of `-test.*` flags defined.
-	// use that as our cue that we are in a testing binary.
 	//
-	// even if benchmarks are run via `go test -bench='.' `, go will still compile a testing binary
-	// and pass the flags as `-test.*`
+	// (even if benchmarks are run via `go test -bench='.' `, go will still compile a testing binary
+	// and pass the flags as `-test.*`)
 	f := flag.Lookup("test.bench")
 	return f != nil && f.Value.String() != ""
 }
@@ -56,9 +53,8 @@ func RunningBenchmarks() (b bool) {
 //   - go version
 //   - version information from [github.com/Microsoft/hcsshim/internal/version] (if set)
 //
-// Benchmark configuration format:
-// https://go.googlesource.com/proposal/+/master/design/14313-benchmark-format.md#configuration-lines
-//
+// Benchmark configuration format: https://golang.org/design/14313-benchmark-format#configuration-lines
+
 // For default configuration printed, see: [testing.(*B).Run()] in src/testing/benchmark.go
 func PrintAdditionalBenchmarkConfig() {
 	// test binaries are not built with module information, so [debug.ReadBuildInfo] will only give
@@ -123,4 +119,34 @@ func RandNameSuffix(xs ...any) (s string) {
 	_, _ = rand.Read(b)
 	s += "-" + hex.EncodeToString(b)
 	return s
+}
+
+const (
+	RemoveAttempts = 3
+	RemoveWait     = time.Millisecond
+)
+
+// RemoveAll tries [RemoveAttempts] times to remove the path via [os.RemoveAll], waiting
+// [RemoveWait] between attempts.
+func RemoveAll(p string) (err error) {
+	// os.RemoveAll does not error if path doesn't exist
+	return repeat(func() error { return os.RemoveAll(p) }, RemoveAttempts, RemoveWait)
+}
+
+func repeat(f func() error, n int, d time.Duration) (err error) {
+	if n < 1 {
+		n = 1
+	}
+
+	err = f()
+	for i := 1; i < n; i++ {
+		if err == nil {
+			break
+		}
+
+		time.Sleep(d)
+		err = f()
+	}
+
+	return err
 }

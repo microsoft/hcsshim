@@ -12,6 +12,8 @@ import (
 	"github.com/Microsoft/hcsshim/test/pkg/images"
 )
 
+// TODO: add cleanup return to CreateWCOWUVM*(), and have it remove layer and scratch dirs
+
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the
 // UtilityVM object; folder used as its scratch.
 func CreateWCOWUVM(ctx context.Context, tb testing.TB, id, image string) (*uvm.UtilityVM, []string, string) {

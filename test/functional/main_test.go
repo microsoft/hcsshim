@@ -10,7 +10,7 @@ package functional
 import (
 	"context"
 	"flag"
-	"log"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -18,12 +18,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/go-winio/pkg/etw"
+	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -110,7 +113,7 @@ var (
 
 func init() {
 	if !winapi.IsElevated() {
-		log.Fatal("tests must be run in an elevated context")
+		panic("tests must be run in an elevated context")
 	}
 
 	// This allows for debugging a utility VM.
@@ -148,9 +151,33 @@ func TestMain(m *testing.M) {
 	// print additional configuration options when running benchmarks, so we can better track performance.
 	if util.RunningBenchmarks() {
 		util.PrintAdditionalBenchmarkConfig()
+
+		// also, print to ETW instead of stdout to mirror actual deployments, and prevent logs from
+		// interfering with benchmarking output
+
+		provider, err := etw.NewProviderWithOptions("Microsoft.Virtualization.RunHCS")
+		if err != nil {
+			logrus.Error(err)
+		} else {
+			if hook, err := etwlogrus.NewHookFromProvider(provider); err == nil {
+				logrus.AddHook(hook)
+			} else {
+				logrus.WithError(err).Error("could not create ETW logrus hook")
+			}
+		}
+
+		// regardless of ETW provider status, still discard logs
+		logrus.SetFormatter(log.NopFormatter{})
+		logrus.SetOutput(io.Discard)
 	}
 
 	e := m.Run()
+
+	if util.RunningBenchmarks() {
+		// un-discard logs during cleanup
+		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		logrus.SetOutput(os.Stdout)
+	}
 
 	// close any uVMs that escaped
 	cmdStr := ` foreach ($vm in Get-ComputeProcess -Owner '` + hcsOwner +
@@ -166,8 +193,14 @@ func TestMain(m *testing.M) {
 
 	// delete downloaded layers; cant use defer, since os.exit does not run them
 	for _, l := range images {
-		// just ignore errors: they are logged, and no other cleanup possible
-		_ = l.Close(context.Background())
+		// just log errors: no other cleanup possible
+		if err := l.Close(context.Background()); err != nil {
+			logrus.WithFields(logrus.Fields{
+				logrus.ErrorKey: err,
+				"image":         l.Image,
+				"platform":      l.Platform,
+			}).Warning("layer cleanup failed")
+		}
 	}
 
 	os.Exit(e)

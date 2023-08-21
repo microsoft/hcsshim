@@ -31,8 +31,14 @@ function New-TestCommand {
         [switch]
         $Shuffle,
 
+        # whether to enable verbose testing logs, ie the `-test.v` flag
         [switch]
         $TestVerbose,
+
+        # the log level of the shim code itself (ie, logrus, via the `-log-level` flag)
+        [string]
+        [ValidateSet('', 'panic', 'fatal', 'error', 'warn', 'warning', 'info', 'debug', 'trace')]
+        $LogLevel,
 
         [int]
         $Count,
@@ -83,6 +89,10 @@ function New-TestCommand {
         }
     }
 
+    if ( -not [string]::IsNullOrWhiteSpace($LogLevel) ) {
+        $testcmd += "'-log-level=$($LogLevel.ToLower())' "
+    }
+
     foreach ( $Feature in $Features ) {
         $Feature = $Feature -replace ' ', ''
         if ( $Feature ) {
@@ -96,7 +106,7 @@ function New-TestCommand {
     }
     $out = Join-Path $OutDirectory "$f-$(Get-Date -Date $date -Format FileDateTime).txt"
 
-    return $testcmd, $out
+    return $testcmd.Trim(), $out
 }
 
 function Invoke-TestCommand {
@@ -125,7 +135,11 @@ function Invoke-TestCommand {
 
     if ( $OutputCmd -and $OutputFile -ne 'nul' ) {
         $oc = "$OutputCmd $OutputFile"
-        Write-Verbose "Running command: $oc"
-        Invoke-Expression $oc
+        if ( Test-Path -PathType Leaf $OutputFile ) {
+            Write-Verbose "Running output command: $oc"
+            Invoke-Expression $oc
+        } else {
+            Write-Warning "Cannot run output command with non-existant output file: $oc"
+        }
     }
 }

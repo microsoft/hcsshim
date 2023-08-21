@@ -20,7 +20,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/pkg/ociwclayer"
 
 	"github.com/Microsoft/hcsshim/test/internal/util"
@@ -52,12 +51,9 @@ func (x *LazyImageLayers) Close(ctx context.Context) error {
 		return nil
 	}
 
-	if _, err := os.Stat(x.dir); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("path %q is not valid: %w", x.dir, err)
-	}
 	// DestroyLayer will remove the entire directory and all its contents, regardless of if
 	// its a Windows container layer or not.
-	if err := wclayer.DestroyLayer(ctx, x.dir); err != nil {
+	if err := util.DestroyLayer(ctx, x.dir); err != nil {
 		return fmt.Errorf("could not destroy layer directory %q: %w", x.dir, err)
 	}
 	return nil

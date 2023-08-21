@@ -41,11 +41,15 @@ param (
     $TestVerbose,
 
     [string]
+    $LogLevel,
+
+    [string]
     $Run,
 
     [string[]]
     $Features
 )
+
 $ErrorActionPreference = 'Stop'
 Import-Module ( Join-Path $PSScriptRoot Testing.psm1 ) -Force
 
@@ -65,6 +69,7 @@ $testcmd, $out = New-TestCommand `
     -Note $Note `
     -Shuffle:$Shuffle `
     -TestVerbose:$TestVerbose `
+    -LogLevel $LogLevel `
     -Count $Count `
     -BenchTime $BenchTime `
     -Timeout $Timeout `
@@ -75,5 +80,9 @@ $testcmd, $out = New-TestCommand `
 Invoke-TestCommand `
     -TestCmd $testcmd `
     -OutputFile $out `
-    -OutputCmd (& { if ( $Action -eq 'Bench' ) { $BenchstatPath } }) `
+    -OutputCmd (& {
+        if ( $Action -eq 'Bench' -and -not [string]::IsNullOrWhiteSpace($BenchstatPath) ) {
+            "$BenchstatPath -table=`"`""
+        }
+    }) `
     -Verbose:$Verbose
