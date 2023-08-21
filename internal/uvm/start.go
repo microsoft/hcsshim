@@ -222,13 +222,16 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			// use parent context, to prevent 2 minute timout (set above) from overridding terminate operation's
 			// timeout and erroring out prematurely
 			_ = uvm.hcsSystem.Terminate(pCtx)
-			_ = uvm.hcsSystem.Wait()
+			_ = uvm.hcsSystem.WaitCtx(pCtx)
 		}
 	}()
 
 	// Start waiting on the utility VM.
 	go func() {
-		err := uvm.hcsSystem.Wait()
+		// the original context may have timeout or propagate a cancellation
+		// copy the original to prevent it affecting the background wait go routine
+		cCtx := log.Copy(context.Background(), pCtx)
+		err := uvm.hcsSystem.WaitCtx(cCtx)
 		if err == nil {
 			err = uvm.hcsSystem.ExitError()
 		}

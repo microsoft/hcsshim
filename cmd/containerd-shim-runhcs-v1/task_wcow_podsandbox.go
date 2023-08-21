@@ -228,7 +228,7 @@ func (wpst *wcowPodSandboxTask) waitParentExit() {
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
-	werr := wpst.host.Wait()
+	werr := wpst.host.WaitCtx(ctx)
 	if werr != nil {
 		log.G(ctx).WithError(werr).Error("parent wait failed")
 	}

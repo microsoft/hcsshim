@@ -187,7 +187,7 @@ func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 	defer func() {
 		if system != nil {
 			_ = system.Terminate(ctx)
-			_ = system.Wait()
+			_ = system.WaitCtx(ctx)
 		}
 	}()
 
@@ -208,17 +208,29 @@ func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 }
 
 // Close terminates and releases resources associated with the utility VM.
-func (uvm *UtilityVM) Close() (err error) {
-	ctx, span := oc.StartSpan(context.Background(), "uvm::Close")
+func (uvm *UtilityVM) Close() error { return uvm.CloseCtx(context.Background()) }
+
+// CloseCtx is similar to [UtilityVM.Close], but accepts a context.
+//
+// The context is used for all operations, including waits, so timeouts/cancellations may prevent
+// proper uVM cleanup.
+func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
+	ctx, span := oc.StartSpan(ctx, "uvm::Close")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
+
+	// TODO: check if uVM already closed
 
 	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
 		_ = uvm.hcsSystem.Terminate(ctx)
-		_ = uvm.Wait()
+		// uvm.Wait() waits on <-uvm.outputProcessingDone, which may not be closed until below
+		// (for a Create -> Stop without a Start), or uvm.outputHandler may be blocked on IO and
+		// take a while to close.
+		// In either case, we want to wait on the system closing, not IO completion.
+		_ = uvm.hcsSystem.WaitCtx(ctx)
 	}
 
 	if err := uvm.CloseGCSConnection(); err != nil {
@@ -234,16 +246,24 @@ func (uvm *UtilityVM) Close() (err error) {
 		uvm.outputListener = nil
 	}
 
+	if uvm.hcsSystem != nil {
+		// wait for IO to finish
+		// [WaitCtx] calls [uvm.hcsSystem.WaitCtx] again, but since we waited on it above already
+		// it should nop and return without issue.
+		_ = uvm.WaitCtx(ctx)
+	}
+
 	if uvm.confidentialUVMOptions != nil && uvm.confidentialUVMOptions.GuestStateFile != "" {
 		vmgsFullPath := filepath.Join(uvm.confidentialUVMOptions.BundleDirectory, uvm.confidentialUVMOptions.GuestStateFile)
-		log.G(context.Background()).WithField("VMGS file", vmgsFullPath).Debug("removing VMGS file")
+		e := log.G(ctx).WithField("VMGS file", vmgsFullPath)
+		e.Debug("removing VMGS file")
 		if err := os.Remove(vmgsFullPath); err != nil {
-			log.G(ctx).WithError(err).Error("failed to remove VMGS file")
+			e.WithError(err).Error("failed to remove VMGS file")
 		}
 	}
 
 	if uvm.hcsSystem != nil {
-		return uvm.hcsSystem.Close()
+		return uvm.hcsSystem.CloseCtx(ctx)
 	}
 
 	return nil
