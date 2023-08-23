@@ -16,8 +16,6 @@ import (
 	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
-const lcowGPUBootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
-
 // findTestDevices returns the first pcip device on the host
 func findTestVirtualDevice() (string, error) {
 	out, err := exec.Command(
@@ -56,7 +54,6 @@ func TestVirtualDevice(t *testing.T) {
 	opts.KernelFile = uvm.KernelFile
 	opts.RootFSFile = uvm.InitrdFile
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
-	opts.BootFilesPath = lcowGPUBootFilesPath
 
 	// create test uvm and ensure we can assign and remove the device
 	vm := tuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
