@@ -70,6 +70,7 @@ const (
 	// `spec.Windows.Resources.Storage.Iops`.
 	ContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
 
+	// Deprecated: GPU VHDs are no longer supported.
 	// GPUVHDPath overrides the default path to search for the gpu vhd
 	GPUVHDPath = "io.microsoft.lcow.gpuvhdpath"
 
