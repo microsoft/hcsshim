@@ -9,11 +9,12 @@ import (
 
 // tests for testing fixtures ...
 
-// calling New(Exclude)?StringSet will add it to the default flag set, which may cause problems since [testing] already defines flags
+// calling New(IncludeExclude)?StringSet will add it to the default flag set,
+// which may cause problems since [testing] already defines flags
 
 func Test_ExcludeStringSetFlag(t *testing.T) {
 	all := []string{"one", "two", "three", "four", "zero"}
-	es := &ExcludeStringSet{
+	es := &IncludeExcludeStringSet{
 		inc: &StringSet{
 			s:  make(map[string]struct{}),
 			cs: false,
@@ -27,7 +28,7 @@ func Test_ExcludeStringSetFlag(t *testing.T) {
 
 	orderlessEq(t, all, es.Strings())
 	for _, s := range all {
-		assert(t, es.IsSet(s), s+" is not set")
+		assert(t, es.IsSet(s), s+" is expected to be set, but is not")
 	}
 
 	for i, tc := range []struct {
@@ -64,9 +65,9 @@ func Test_ExcludeStringSetFlag(t *testing.T) {
 
 			for _, s := range all {
 				if slices.Contains(tc.exp, s) {
-					assert(t, es.IsSet(s), s+" is not set")
+					assert(t, es.IsSet(s), s+" is expected to be set, but is not")
 				} else {
-					assert(t, !es.IsSet(s), s+" is set")
+					assert(t, !es.IsSet(s), s+" is not expected to be set, but is")
 				}
 			}
 		})
@@ -86,13 +87,13 @@ func Test_StringSetFlag(t *testing.T) {
 
 	orderlessEq(t, exp, ss.Strings())
 	for _, s := range exp {
-		assert(t, ss.IsSet(s), s+"is not set")
+		assert(t, ss.IsSet(s), s+"is expected to be set, but is not")
 	}
 	for _, s := range []string{"HI", "bYe", "BYE", "  not A wOrD"} {
-		assert(t, ss.IsSet(s), s+"is not set")
+		assert(t, ss.IsSet(s), s+"is expected to be set, but is not")
 	}
 	for _, s := range []string{"hello", "goodbye", "also not a word"} {
-		assert(t, !ss.IsSet(s), s+"is set")
+		assert(t, !ss.IsSet(s), s+"is not expected to be set, but is")
 	}
 }
 

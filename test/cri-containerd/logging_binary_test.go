@@ -12,9 +12,8 @@ import (
 	"testing"
 	"time"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
-
 	"github.com/Microsoft/hcsshim/test/pkg/require"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 // This test requires compiling a helper logging binary which can be found

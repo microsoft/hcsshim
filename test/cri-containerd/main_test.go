@@ -144,6 +144,10 @@ func requireFeatures(tb testing.TB, features ...string) {
 	require.Features(tb, flagFeatures, features...)
 }
 
+// requireAnyFeatures checks in flagFeatures if at least one of the required features
+// was enabled, and skips the test if all are missing.
+//
+// See: [requireFeatures]
 func requireAnyFeature(tb testing.TB, features ...string) {
 	tb.Helper()
 	require.AnyFeature(tb, flagFeatures, features...)

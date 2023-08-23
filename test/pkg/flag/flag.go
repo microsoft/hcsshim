@@ -14,21 +14,21 @@ const (
 	ExcludeFeatureFlagName = "exclude"
 )
 
-// NewFeatureFlag defines two flags, [FeatureFlagName] and [ExcludeFeatureFlagName], to all
-// setting and excluding certain features.
-func NewFeatureFlag(features []string) *ExcludeStringSet {
+// NewFeatureFlag defines two flags, [FeatureFlagName] and [ExcludeFeatureFlagName], to
+// allow setting and excluding certain features.
+func NewFeatureFlag(features []string) *IncludeExcludeStringSet {
 	fs := NewStringSet(FeatureFlagName,
 		"`features` to test; can be set multiple times, with a comma-separated list, or both. "+
 			"Leave empty to enable all features. "+
 			"(supported features: "+strings.Join(features, ", ")+")", false)
 
-	return NewExcludeStringSet(fs, ExcludeFeatureFlagName,
+	return NewIncludeExcludeStringSet(fs, ExcludeFeatureFlagName,
 		"`features` to exclude from tests (see "+FeatureFlagName+" for more details)",
 		features)
 }
 
-// ExcludeStringSet allows unsetting strings seen in a [StringSet].
-type ExcludeStringSet struct {
+// IncludeExcludeStringSet allows unsetting strings seen in a [StringSet].
+type IncludeExcludeStringSet struct {
 	// flags explicitly included
 	inc *StringSet
 	// flags explicitly excluded
@@ -38,9 +38,9 @@ type ExcludeStringSet struct {
 	def []string
 }
 
-// NewStringSet returns a new ExcludeStringSet.
-func NewExcludeStringSet(include *StringSet, name, usage string, all []string) *ExcludeStringSet {
-	es := &ExcludeStringSet{
+// NewIncludeExcludeStringSet returns a new NewIncludeExcludeStringSet.
+func NewIncludeExcludeStringSet(include *StringSet, name, usage string, all []string) *IncludeExcludeStringSet {
+	es := &IncludeExcludeStringSet{
 		inc: include,
 		exc: &StringSet{
 			s:  make(map[string]struct{}),
@@ -52,11 +52,11 @@ func NewExcludeStringSet(include *StringSet, name, usage string, all []string) *
 	return es
 }
 
-var _ flag.Value = &ExcludeStringSet{}
+var _ flag.Value = &IncludeExcludeStringSet{}
 
-func (es *ExcludeStringSet) Set(s string) error { return es.exc.Set(s) }
+func (es *IncludeExcludeStringSet) Set(s string) error { return es.exc.Set(s) }
 
-func (es *ExcludeStringSet) String() string {
+func (es *IncludeExcludeStringSet) String() string {
 	if es == nil { // may be called by flag package on nil receiver
 		return ""
 	}
@@ -67,10 +67,10 @@ func (es *ExcludeStringSet) String() string {
 	return "[" + strings.Join(ss, ", ") + "]"
 }
 
-func (es *ExcludeStringSet) Strings() []string { return es.strings() }
-func (es *ExcludeStringSet) Len() int          { return len(es.strings()) }
+func (es *IncludeExcludeStringSet) Strings() []string { return es.strings() }
+func (es *IncludeExcludeStringSet) Len() int          { return len(es.strings()) }
 
-func (es *ExcludeStringSet) strings() []string {
+func (es *IncludeExcludeStringSet) strings() []string {
 	ss := es.def
 	set := make([]string, 0, len(ss))
 	if es.inc != nil && es.inc.Len() > 0 {
@@ -85,7 +85,7 @@ func (es *ExcludeStringSet) strings() []string {
 	return set
 }
 
-func (es *ExcludeStringSet) IsSet(s string) bool {
+func (es *IncludeExcludeStringSet) IsSet(s string) bool {
 	if es.inc == nil || es.inc.Len() == 0 || es.inc.IsSet(s) {
 		// either no values were included, or value was explicitly provided
 		return !es.exc.IsSet(s)
@@ -147,7 +147,7 @@ func (ss *StringSet) standardize(s string) string {
 	return s
 }
 
-// an actual (mathematical?) set
+// stringSet is a set of strings.
 type stringSet map[string]struct{}
 
 func (ss stringSet) set(s string) { ss[s] = struct{}{} }
@@ -156,7 +156,7 @@ func (ss stringSet) isSet(s string) bool {
 	return ok
 }
 
-// LogrusLevel is a flag that accepts logrus logging levels, as strings.
+// LogrusLevel is a flag that accepts logrus logging levels as strings.
 type LogrusLevel struct {
 	Level logrus.Level
 }

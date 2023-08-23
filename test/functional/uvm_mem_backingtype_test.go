@@ -6,24 +6,26 @@ package functional
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
+	"github.com/sirupsen/logrus"
 
-	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
+	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
 	t.Helper()
-	u := testuvm.CreateAndStartLCOWFromOpts(context.Background(), t, opts)
+	u := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, opts)
 	u.Close()
 }
 
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
 	t.Helper()
-	u, _, _ := testuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
+	u, _, _ := tuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
 	u.Close()
 }
 
@@ -102,6 +104,7 @@ func BenchmarkMemBackingTypeVirtualLCOW(b *testing.B) {
 
 	require.Build(b, osversion.RS5)
 	requireFeatures(b, featureLCOW)
+	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, true, false)
 }
@@ -111,6 +114,7 @@ func BenchmarkMemBackingTypeVirtualDeferredLCOW(b *testing.B) {
 
 	require.Build(b, osversion.RS5)
 	requireFeatures(b, featureLCOW)
+	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, true, true)
 }
@@ -120,6 +124,7 @@ func BenchmarkMemBackingTypePhyscialLCOW(b *testing.B) {
 
 	require.Build(b, osversion.RS5)
 	requireFeatures(b, featureLCOW)
+	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, false, false)
 }
