@@ -396,7 +396,9 @@ Required for `-t fragment`. Specifies the fragment Rego namespace.
 
 ### `-v`
 
-Required for `-t fragment`. Specified the fragment SVN as a semantic versioning number, *e.g.*, "1.0.0"
+Required for `-t fragment`. Specified the fragment SVN as a monotonically increasing integer.
+*e.g.*, 1.
+Typically only incremented for security relevent changes.
 
 ## Authorization
 
