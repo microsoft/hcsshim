@@ -274,6 +274,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 
 		// override the default GuestState filename if specified
 		lopts.GuestStateFile = parseAnnotationsString(s.Annotations, annotations.GuestStateFile, lopts.GuestStateFile)
+		// Set HclEnabled if specified. Else default to a null pointer, which is omitted from the resulting JSON.
+		lopts.HclEnabled = ParseAnnotationsNullableBool(ctx, s.Annotations, annotations.HclEnabled)
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)

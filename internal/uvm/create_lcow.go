@@ -120,6 +120,7 @@ type OptionsLCOW struct {
 	VPCIEnabled             bool                // Whether the kernel should enable pci
 	EnableScratchEncryption bool                // Whether the scratch should be encrypted
 	DisableTimeSyncService  bool                // Disables the time synchronization service
+	HclEnabled              *bool               // Whether to enable the host compatibility layer
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -280,7 +281,8 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
         "SecuritySettings": {
             "Isolation": {
                 "IsolationType": "SecureNestedPaging",
-                "LaunchData": "kBifgKNijdHjxdSUshmavrNofo2B01LiIi1cr8R4ytI="
+                "LaunchData": "kBifgKNijdHjxdSUshmavrNofo2B01LiIi1cr8R4ytI=",
+				"HclEnabled": false
             }
         },
         "Version": {
@@ -460,6 +462,7 @@ func makeLCOWSecurityDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM)
 			IsolationType: "SecureNestedPaging",
 			LaunchData:    hostData,
 			// HclEnabled:    true, /* Not available in schema 2.5 - REQUIRED when using BlockStorage in 2.6 */
+			HclEnabled: opts.HclEnabled,
 		},
 	}
 
