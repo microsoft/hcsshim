@@ -34,6 +34,7 @@ const maxDNSSearches = 6
 
 // GenerateEtcHostsContent generates a /etc/hosts file based on `hostname`.
 func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
+	log.G(ctx).Debug("Inside guest-network-GenerateEtcHostsContent")
 	_, span := oc.StartSpan(ctx, "network::GenerateEtcHostsContent")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("hostname", hostname))

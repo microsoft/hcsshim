@@ -357,12 +357,14 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 		case "container":
+			namespaceID = getNetworkNamespaceID(settings.OCISpecification)
 			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 			sandboxID = sid
 			if !ok || sid == "" {
 				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
 			}
 			if err := setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification); err != nil {
+				log.G(ctx).Debug("UVM:CreateContainer: Failed in setupWorkloadContainerSpec")
 				return nil, err
 			}
 
@@ -381,8 +383,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				}
 			}()
 			if err := policy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityPolicyEnforcer, settings.OCISpecification); err != nil {
+				log.G(ctx).Debug("UVM:CreateContainer: Failed in ExtendPolicyWithNetworkingMounts")
 				return nil, err
 			}
+			log.G(ctx).Debug("UVM:CreateContainer: Completed set up workload container spec")
 		default:
 			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
 		}
@@ -509,7 +513,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, errors.Wrapf(err, "failed to flush writer for config.json at: '%s'", configFile)
 	}
 
+	log.G(ctx).Debug("UVM:CreateContainer: Calling h.rtime.CreateContainer")
 	con, err := h.rtime.CreateContainer(id, settings.OCIBundlePath, nil)
+	log.G(ctx).Debug("UVM:CreateContainer: Completed h.rtime.CreateContainer")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create container")
 	}
@@ -522,7 +528,13 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	c.initProcess = newProcess(c, settings.OCISpecification.Process, init, uint32(c.container.Pid()), true)
 
 	// Sandbox or standalone, move the networks to the container namespace
-	if criType == "sandbox" || !isCRI {
+	// However in case of preprovisioned VMs, we create the network in case
+	// of workload containers, so we need to move the networks to the container
+	// namespace.
+	log.G(ctx).Debug("Logging namespace ID:", namespaceID)
+	log.G(ctx).Debug("criType =", criType)
+	if criType != "sandbox" || !isCRI {
+		log.G(ctx).Debug("Moving networks to namespace")
 		ns, err := getNetworkNamespace(namespaceID)
 		if isCRI && err != nil {
 			return nil, err
@@ -536,6 +548,8 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 		}
+	} else {
+		log.G(ctx).Debug("Skip moving networks to namespace")
 	}
 
 	c.setStatus(containerCreated)

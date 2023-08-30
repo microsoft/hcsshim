@@ -7,13 +7,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 
-	"github.com/Microsoft/hcsshim/internal/guest/network"
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -64,20 +62,20 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	}
 
 	// Write the hosts
-	sandboxHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
-	sandboxHostsPath := getSandboxHostsPath(id)
-	if err := os.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
-		return errors.Wrapf(err, "failed to write sandbox hosts to %q", sandboxHostsPath)
-	}
+	// sandboxHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
+	// sandboxHostsPath := getSandboxHostsPath(id)
+	// if err := os.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
+	// 	return errors.Wrapf(err, "failed to write sandbox hosts to %q", sandboxHostsPath)
+	// }
 
 	// Write resolv.conf
-	ns, err := getNetworkNamespace(getNetworkNamespaceID(spec))
-	if err != nil {
-		return err
-	}
-	var searches, servers []string
-	for _, n := range ns.Adapters() {
-		if len(n.DNSSuffix) > 0 {
+	// ns, err := getNetworkNamespace(getNetworkNamespaceID(spec))
+	// if err != nil {
+	// 	return err
+	// }
+	// var searches, servers []string
+	// for _, n := range ns.Adapters() {
+	/*	if len(n.DNSSuffix) > 0 {
 			searches = network.MergeValues(searches, strings.Split(n.DNSSuffix, ","))
 		}
 		if len(n.DNSServerList) > 0 {
@@ -91,7 +89,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	sandboxResolvPath := getSandboxResolvPath(id)
 	if err := os.WriteFile(sandboxResolvPath, []byte(resolvContent), 0644); err != nil {
 		return errors.Wrap(err, "failed to write sandbox resolv.conf")
-	}
+	}*/
 
 	// User.Username is generally only used on Windows, but as there's no (easy/fast at least) way to grab
 	// a uid:gid pairing for a username string on the host, we need to defer this work until we're here in the
