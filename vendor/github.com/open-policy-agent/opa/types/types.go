@@ -48,6 +48,8 @@ func NewNull() Null {
 	return Null{}
 }
 
+// NamedType represents a type alias with an arbitrary name and description.
+// This is useful for generating documentation for built-in functions.
 type NamedType struct {
 	Name, Descr string
 	Type        Type
@@ -77,6 +79,9 @@ func (n *NamedType) Description(d string) *NamedType {
 	return n
 }
 
+// Named returns the passed type as a named type.
+// Named types are only valid at the top level of built-in functions.
+// Note that nested named types cause panic.
 func Named(name string, t Type) *NamedType {
 	return &NamedType{
 		Type: t,
@@ -254,6 +259,10 @@ func NewSet(of Type) *Set {
 	}
 }
 
+func (t *Set) Of() Type {
+	return t.of
+}
+
 // MarshalJSON returns the JSON encoding of t.
 func (t *Set) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.toMap())
@@ -421,6 +430,77 @@ func (t *Object) Select(name interface{}) Type {
 	return nil
 }
 
+func (t *Object) Merge(other Type) *Object {
+	if otherObj, ok := other.(*Object); ok {
+		return mergeObjects(t, otherObj)
+	}
+
+	var typeK Type
+	var typeV Type
+	dynProps := t.DynamicProperties()
+	if dynProps != nil {
+		typeK = Or(Keys(other), dynProps.Key)
+		typeV = Or(Values(other), dynProps.Value)
+		dynProps = NewDynamicProperty(typeK, typeV)
+	} else {
+		typeK = Keys(other)
+		typeV = Values(other)
+		if typeK != nil && typeV != nil {
+			dynProps = NewDynamicProperty(typeK, typeV)
+		}
+	}
+
+	return NewObject(t.StaticProperties(), dynProps)
+}
+
+func mergeObjects(a, b *Object) *Object {
+	var dynamicProps *DynamicProperty
+	if a.dynamic != nil && b.dynamic != nil {
+		typeK := Or(a.dynamic.Key, b.dynamic.Key)
+		var typeV Type
+		aObj, aIsObj := a.dynamic.Value.(*Object)
+		bObj, bIsObj := b.dynamic.Value.(*Object)
+		if aIsObj && bIsObj {
+			typeV = mergeObjects(aObj, bObj)
+		} else {
+			typeV = Or(a.dynamic.Value, b.dynamic.Value)
+		}
+		dynamicProps = NewDynamicProperty(typeK, typeV)
+	} else if a.dynamic != nil {
+		dynamicProps = a.dynamic
+	} else {
+		dynamicProps = b.dynamic
+	}
+
+	staticPropsMap := make(map[interface{}]Type)
+
+	for _, sp := range a.static {
+		staticPropsMap[sp.Key] = sp.Value
+	}
+
+	for _, sp := range b.static {
+		currV := staticPropsMap[sp.Key]
+		if currV != nil {
+			currVObj, currVIsObj := currV.(*Object)
+			spVObj, spVIsObj := sp.Value.(*Object)
+			if currVIsObj && spVIsObj {
+				staticPropsMap[sp.Key] = mergeObjects(currVObj, spVObj)
+			} else {
+				staticPropsMap[sp.Key] = Or(currV, sp.Value)
+			}
+		} else {
+			staticPropsMap[sp.Key] = sp.Value
+		}
+	}
+
+	staticProps := make([]*StaticProperty, 0, len(staticPropsMap))
+	for k, v := range staticPropsMap {
+		staticProps = append(staticProps, NewStaticProperty(k, v))
+	}
+
+	return NewObject(staticProps, dynamicProps)
+}
+
 // Any represents a dynamic type.
 type Any []Type
 
@@ -430,9 +510,7 @@ var A = NewAny()
 // NewAny returns a new Any type.
 func NewAny(of ...Type) Any {
 	sl := make(Any, len(of))
-	for i := range sl {
-		sl[i] = of[i]
-	}
+	copy(sl, of)
 	sort.Sort(typeSlice(sl))
 	return sl
 }
@@ -442,10 +520,14 @@ func (t Any) Contains(other Type) bool {
 	if _, ok := other.(*Function); ok {
 		return false
 	}
-	for i := range t {
-		if Compare(t[i], other) == 0 {
-			return true
-		}
+	// Note(philipc): We used to do this as a linear search.
+	// Since this is always sorted, we can use a binary search instead.
+	i := sort.Search(len(t), func(i int) bool {
+		return Compare(t[i], other) >= 0
+	})
+	if i < len(t) && Compare(t[i], other) == 0 {
+		// x is present at t[i]
+		return true
 	}
 	return len(t) == 0
 }
@@ -492,9 +574,7 @@ func (t Any) Union(other Any) Any {
 		return other
 	}
 	cpy := make(Any, len(t))
-	for i := range cpy {
-		cpy[i] = t[i]
-	}
+	copy(cpy, t)
 	for i := range other {
 		if !cpy.Contains(other[i]) {
 			cpy = append(cpy, other[i])
@@ -684,7 +764,7 @@ type FuncArgs struct {
 }
 
 func (a FuncArgs) String() string {
-	var buf []string
+	buf := make([]string, 0, len(a.Args)+1)
 	for i := range a.Args {
 		buf = append(buf, Sprint(a.Args[i]))
 	}
@@ -929,8 +1009,8 @@ func Values(a Type) Type {
 		return Or(tpe, a.dynamic)
 	case *Object:
 		var tpe Type
-		for _, v := range a.static {
-			tpe = Or(tpe, v.Value)
+		for i := range a.static {
+			tpe = Or(tpe, a.static[i].Value)
 		}
 		if a.dynamic != nil {
 			tpe = Or(tpe, a.dynamic.Value)
