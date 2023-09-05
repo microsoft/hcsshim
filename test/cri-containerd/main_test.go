@@ -45,8 +45,7 @@ const (
 	testDeviceUtilFilePath    = "C:\\ContainerPlat\\device-util.exe"
 	testJobObjectUtilFilePath = "C:\\ContainerPlat\\jobobject-util.exe"
 
-	testDriversPath  = "C:\\ContainerPlat\\testdrivers"
-	testGPUBootFiles = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
+	testDriversPath = "C:\\ContainerPlat\\testdrivers"
 
 	testVMServiceAddress = "C:\\ContainerPlat\\vmservice.sock"
 	testVMServiceBinary  = "C:\\Containerplat\\vmservice.exe"

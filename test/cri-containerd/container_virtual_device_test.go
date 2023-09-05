@@ -122,8 +122,6 @@ func findTestVirtualDeviceID() (string, error) {
 }
 
 var lcowPodGPUAnnotations = map[string]string{
-	annotations.KernelDirectBoot:    "false",
-	annotations.AllowOvercommit:     "false",
 	annotations.PreferredRootFSType: "initrd",
 	annotations.VPMemCount:          "0",
 	annotations.VPCIEnabled:         "true",
@@ -131,7 +129,7 @@ var lcowPodGPUAnnotations = map[string]string{
 	// if a given gpu device needs more, this test will fail to create the container
 	// and may hang.
 	annotations.MemoryHighMMIOGapInMB: "64000",
-	annotations.BootFilesRootPath:     testGPUBootFiles,
+	annotations.FullyPhysicallyBacked: "true",
 }
 
 func getGPUContainerRequestLCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {

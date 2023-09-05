@@ -24,12 +24,11 @@ import (
 // `share` is a directory path on the host that contains files for standard driver installation.
 // For windows this means files for pnp installation (.inf, .cat, .sys, .cert files).
 // For linux this means a vhd file that contains the drivers under /lib/modules/`uname -r` for use
-// with depmod and modprobe. For GPU, this vhd may also contain library files (under /usr/lib) and
-// binaries (under /usr/bin or /usr/sbin) to be used in conjunction with the modules.
+// with depmod and modprobe.
 //
 // Returns a ResourceCloser for the added mount. On failure, the mounted share will be released,
 // the returned ResourceCloser will be nil, and an error will be returned.
-func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string, gpuDriver bool) (closer resources.ResourceCloser, err error) {
+func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string) (closer resources.ResourceCloser, err error) {
 	defer func() {
 		if err != nil && closer != nil {
 			// best effort clean up allocated resource on failure
@@ -77,10 +76,6 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string, gpuDri
 		return closer, fmt.Errorf("failed to create a guid path for driver %+v: %s", share, err)
 	}
 	uvmReadWritePath := fmt.Sprintf(guestpath.LCOWGlobalDriverPrefixFmt, driverGUID.String())
-	if gpuDriver {
-		// if installing gpu drivers in lcow, use the nvidia mount path instead
-		uvmReadWritePath = guestpath.LCOWNvidiaMountPath
-	}
 
 	// install drivers using gcs tool `install-drivers`
 	return closer, execGCSInstallDriver(ctx, vm, uvmPathForShare, uvmReadWritePath)

@@ -1,9 +1,6 @@
 package guestpath
 
 const (
-	// LCOWNvidiaMountPath is the path format in LCOW UVM where nvidia tools
-	// are mounted keep this value in sync with opengcs
-	LCOWNvidiaMountPath = "/run/nvidia"
 	// LCOWRootPrefixInUVM is the path inside UVM where LCOW container's root
 	// file system will be mounted
 	LCOWRootPrefixInUVM = "/run/gcs/c"

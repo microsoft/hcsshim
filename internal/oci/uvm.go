@@ -309,10 +309,6 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 		s.Annotations[annotations.MemorySizeInMB] = strconv.FormatInt(int64(opts.VmMemorySizeInMb), 10)
 	}
 
-	if _, ok := s.Annotations[annotations.GPUVHDPath]; !ok && opts.GPUVHDPath != "" {
-		s.Annotations[annotations.GPUVHDPath] = opts.GPUVHDPath
-	}
-
 	if _, ok := s.Annotations[annotations.NetworkConfigProxy]; !ok && opts.NCProxyAddr != "" {
 		s.Annotations[annotations.NetworkConfigProxy] = opts.NCProxyAddr
 	}
