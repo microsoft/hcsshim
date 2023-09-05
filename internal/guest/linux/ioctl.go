@@ -46,3 +46,10 @@ func Ioctl(f *os.File, command int, dataPtr unsafe.Pointer) error {
 	}
 	return nil
 }
+
+// Ported from _IOWR macro.
+// Returns value for `command` parameter in Ioctl().
+func Iowr(subsystem, ID, parameterSize uint64) int {
+	ioctlBase := IocWRBase | subsystem<<IocTypeShift | parameterSize<<IocSizeShift
+	return int(ID | ioctlBase)
+}
