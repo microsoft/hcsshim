@@ -3,6 +3,7 @@
 package uvm
 
 import (
+	"io"
 	"net"
 	"sync"
 
@@ -146,3 +147,8 @@ type UtilityVM struct {
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
 	return uvm.encryptScratch
 }
+
+// OutputHandler is used to process the output from the program run in the UVM.
+type OutputHandler func(io.Reader)
+
+type OutputHandlerCreator func(*Options) OutputHandler

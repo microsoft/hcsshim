@@ -63,9 +63,6 @@ const (
 	linuxLogVsockPort = 109
 )
 
-// OutputHandler is used to process the output from the program run in the UVM.
-type OutputHandler func(io.Reader)
-
 const (
 	// InitrdFile is the default file name for an initrd.img used to boot LCOW.
 	InitrdFile = "initrd.img"
@@ -100,27 +97,27 @@ type OptionsLCOW struct {
 	*Options
 	*ConfidentialOptions
 
-	BootFilesPath           string              // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
-	KernelFile              string              // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
-	KernelDirect            bool                // Skip UEFI and boot directly to `kernel`
-	RootFSFile              string              // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
-	KernelBootOptions       string              // Additional boot options for the kernel
-	EnableGraphicsConsole   bool                // If true, enable a graphics console for the utility VM
-	ConsolePipe             string              // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	UseGuestConnection      bool                // Whether the HCS should connect to the UVM's GCS. Defaults to true
-	ExecCommandLine         string              // The command line to exec from init. Defaults to GCS
-	ForwardStdout           bool                // Whether stdout will be forwarded from the executed program. Defaults to false
-	ForwardStderr           bool                // Whether stderr will be forwarded from the executed program. Defaults to true
-	OutputHandler           OutputHandler       `json:"-"` // Controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
-	VPMemDeviceCount        uint32              // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
-	VPMemSizeBytes          uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
-	VPMemNoMultiMapping     bool                // Disables LCOW layer multi mapping
-	PreferredRootFSType     PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
-	EnableColdDiscardHint   bool                // Whether the HCS should use cold discard hints. Defaults to false
-	VPCIEnabled             bool                // Whether the kernel should enable pci
-	EnableScratchEncryption bool                // Whether the scratch should be encrypted
-	DisableTimeSyncService  bool                // Disables the time synchronization service
-	HclEnabled              *bool               // Whether to enable the host compatibility layer
+	BootFilesPath           string               // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	KernelFile              string               // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
+	KernelDirect            bool                 // Skip UEFI and boot directly to `kernel`
+	RootFSFile              string               // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
+	KernelBootOptions       string               // Additional boot options for the kernel
+	EnableGraphicsConsole   bool                 // If true, enable a graphics console for the utility VM
+	ConsolePipe             string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
+	UseGuestConnection      bool                 // Whether the HCS should connect to the UVM's GCS. Defaults to true
+	ExecCommandLine         string               // The command line to exec from init. Defaults to GCS
+	ForwardStdout           bool                 // Whether stdout will be forwarded from the executed program. Defaults to false
+	ForwardStderr           bool                 // Whether stderr will be forwarded from the executed program. Defaults to true
+	OutputHandlerCreator    OutputHandlerCreator `json:"-"` // Creates an [OutputHandler] that controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
+	VPMemDeviceCount        uint32               // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
+	VPMemSizeBytes          uint64               // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
+	VPMemNoMultiMapping     bool                 // Disables LCOW layer multi mapping
+	PreferredRootFSType     PreferredRootFSType  // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
+	EnableColdDiscardHint   bool                 // Whether the HCS should use cold discard hints. Defaults to false
+	VPCIEnabled             bool                 // Whether the kernel should enable pci
+	EnableScratchEncryption bool                 // Whether the scratch should be encrypted
+	DisableTimeSyncService  bool                 // Disables the time synchronization service
+	HclEnabled              *bool                // Whether to enable the host compatibility layer
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -158,7 +155,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		ExecCommandLine:         fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
 		ForwardStdout:           false,
 		ForwardStderr:           true,
-		OutputHandler:           parseLogrus(id),
+		OutputHandlerCreator:    parseLogrus,
 		VPMemDeviceCount:        DefaultVPMEMCount,
 		VPMemSizeBytes:          DefaultVPMemSizeBytes,
 		VPMemNoMultiMapping:     osversion.Get().Build < osversion.V19H1,
@@ -511,7 +508,7 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 }
 */
 
-// Make the ComputeSystem document object that will be serialised to json to be presented to the HCS api.
+// Make the ComputeSystem document object that will be serialized to json to be presented to the HCS api.
 func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
 	logrus.Tracef("makeLCOWDoc %v\n", opts)
 
@@ -764,9 +761,9 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
 	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
 
-	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
-	if opts.OutputHandler == nil {
-		opts.OutputHandler = parseLogrus(opts.ID)
+	// We don't serialize OutputHandlerCreator so if it is missing we need to put it back to the default.
+	if opts.OutputHandlerCreator == nil {
+		opts.OutputHandlerCreator = parseLogrus
 	}
 
 	uvm := &UtilityVM{
@@ -829,7 +826,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	// Create a socket that the executed program can send to. This is usually
 	// used by GCS to send log data.
 	if opts.ForwardStdout || opts.ForwardStderr {
-		uvm.outputHandler = opts.OutputHandler
+		uvm.outputHandler = opts.OutputHandlerCreator(opts.Options)
 		uvm.outputProcessingDone = make(chan struct{})
 		uvm.outputListener, err = uvm.listenVsock(linuxLogVsockPort)
 		if err != nil {
