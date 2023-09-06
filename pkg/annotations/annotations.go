@@ -293,9 +293,6 @@ const (
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
 	// case the UVM crashes.
 	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
-
-	// GuestReadVerity tells the guest uVM to read verity info from mounted device.
-	GuestReadVerity = "io.microsoft.virtualmachine.lcow.guest-read-verity"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of

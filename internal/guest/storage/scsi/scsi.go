@@ -146,26 +146,6 @@ func Mount(
 		return err
 	}
 
-	// The `source` found by GetDevicePath can take some time
-	// before its actually available under `/dev/sd*`. Retry while we
-	// wait for `source` to show up.
-	for {
-		if _, err := osStat(source); err != nil {
-			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ENXIO) {
-				select {
-				case <-ctx.Done():
-					log.G(ctx).Warnf("context timed out while retrying to find device %s: %v", source, err)
-					return err
-				default:
-					time.Sleep(10 * time.Millisecond)
-					continue
-				}
-			}
-			return err
-		}
-		break
-	}
-
 	if readonly {
 		if config.VerityInfo != nil {
 			deviceHash := config.VerityInfo.RootDigest
@@ -324,7 +304,8 @@ func Unmount(
 }
 
 // GetDevicePath finds the `/dev/sd*` path to the SCSI device on `controller`
-// index `lun` with partition index `partition`.
+// index `lun` with partition index `partition` and also ensures that the device
+// is available under that path or context is canceled.
 func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64) (_ string, err error) {
 	ctx, span := oc.StartSpan(ctx, "scsi::GetDevicePath")
 	defer span.End()
@@ -394,6 +375,26 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 
 	devicePath := filepath.Join("/dev", deviceName)
 	log.G(ctx).WithField("devicePath", devicePath).Debug("found device path")
+
+	// devicePath can take some time before its actually available under
+	// `/dev/sd*`. Retry while we wait for it to show up.
+	for {
+		if _, err := osStat(devicePath); err != nil {
+			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ENXIO) {
+				select {
+				case <-ctx.Done():
+					log.G(ctx).Warnf("context timed out while retrying to find device %s: %v", devicePath, err)
+					return "", err
+				default:
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
+			}
+			return "", err
+		}
+		break
+	}
+
 	return devicePath, nil
 }
 

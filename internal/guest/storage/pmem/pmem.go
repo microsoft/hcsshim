@@ -56,6 +56,11 @@ func mount(ctx context.Context, source, target string) (err error) {
 	return nil
 }
 
+// GetDevicePath returns VPMem device path
+func GetDevicePath(devNumber uint32) string {
+	return fmt.Sprintf(pMemFmt, devNumber)
+}
+
 // Mount mounts the pmem device at `/dev/pmem<device>` to `target` in a basic scenario.
 // If either mappingInfo or verityInfo are non-nil, the device-mapper framework is used
 // to create linear and verity targets accordingly. If both are non-nil, the linear
@@ -84,7 +89,7 @@ func Mount(
 		trace.Int64Attribute("deviceNumber", int64(device)),
 		trace.StringAttribute("target", target))
 
-	devicePath := fmt.Sprintf(pMemFmt, device)
+	devicePath := GetDevicePath(device)
 
 	// dm-linear target has to be created first. When verity info is also present, the linear target becomes the data
 	// device instead of the original VPMem.

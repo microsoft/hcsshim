@@ -7,11 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/internal/verity"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -85,9 +81,6 @@ type MountConfig struct {
 	// mounted as.
 	// This is only supported for LCOW.
 	Filesystem string
-	// GuestReadVerity indicates if the guest uVM should attempt to read verity
-	// info from mounted device.
-	GuestReadVerity bool
 }
 
 // Mount represents a SCSI device that has been attached to a VM, and potentially
@@ -155,19 +148,13 @@ func (m *Manager) AddVirtualDisk(
 	}
 	var mcInternal *mountConfig
 	if mc != nil {
-		var dmverity *guestresource.DeviceVerityInfo
-		if !mc.GuestReadVerity {
-			dmverity = readVerityInfo(ctx, hostPath)
-		}
 		mcInternal = &mountConfig{
 			partition:        mc.Partition,
 			readOnly:         readOnly,
 			encrypted:        mc.Encrypted,
 			options:          mc.Options,
-			verity:           dmverity,
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
-			guestReadVerity:  mc.GuestReadVerity,
 		}
 	}
 	return m.add(ctx,
@@ -206,19 +193,13 @@ func (m *Manager) AddPhysicalDisk(
 	}
 	var mcInternal *mountConfig
 	if mc != nil {
-		var dmverity *guestresource.DeviceVerityInfo
-		if !mc.GuestReadVerity {
-			dmverity = readVerityInfo(ctx, hostPath)
-		}
 		mcInternal = &mountConfig{
 			partition:        mc.Partition,
 			readOnly:         readOnly,
 			encrypted:        mc.Encrypted,
 			options:          mc.Options,
-			verity:           dmverity,
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
-			guestReadVerity:  mc.GuestReadVerity,
 		}
 	}
 	return m.add(ctx,
@@ -263,7 +244,6 @@ func (m *Manager) AddExtensibleVirtualDisk(
 			options:          mc.Options,
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
-			guestReadVerity:  mc.GuestReadVerity,
 		}
 	}
 	return m.add(ctx,
@@ -314,21 +294,6 @@ func (m *Manager) remove(ctx context.Context, controller, lun uint, guestPath st
 		return err
 	}
 
-	return nil
-}
-
-func readVerityInfo(ctx context.Context, path string) *guestresource.DeviceVerityInfo {
-	if v, iErr := verity.ReadVeritySuperBlock(ctx, path); iErr != nil {
-		log.G(ctx).WithError(iErr).WithField("hostPath", path).Debug("unable to read dm-verity information from VHD")
-	} else {
-		if v != nil {
-			log.G(ctx).WithFields(logrus.Fields{
-				"hostPath":   path,
-				"rootDigest": v.RootDigest,
-			}).Debug("adding SCSI with dm-verity")
-		}
-		return v
-	}
 	return nil
 }
 

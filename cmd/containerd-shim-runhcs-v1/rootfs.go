@@ -75,7 +75,7 @@ func parseLegacyRootfsMount(m *types.Mount) (string, []string, error) {
 // for an LCOW container. It takes as input the set of rootfs mounts and the layer folders
 // from the OCI spec, it is assumed that these were previously checked with validateRootfsAndLayers
 // such that only one of them is populated.
-func getLCOWLayers(rootfs []*types.Mount, layerFolders []string, guestReadVerity bool) (*layers.LCOWLayers, error) {
+func getLCOWLayers(rootfs []*types.Mount, layerFolders []string) (*layers.LCOWLayers, error) {
 	legacyLayer := func(scratchLayer string, parentLayers []string) *layers.LCOWLayers {
 		// Each read-only layer should have a layer.vhd, and the scratch layer should have a sandbox.vhdx.
 		roLayers := make([]*layers.LCOWLayer, 0, len(parentLayers))
@@ -83,8 +83,7 @@ func getLCOWLayers(rootfs []*types.Mount, layerFolders []string, guestReadVerity
 			roLayers = append(
 				roLayers,
 				&layers.LCOWLayer{
-					VHDPath:         filepath.Join(parentLayer, "layer.vhd"),
-					GuestReadVerity: guestReadVerity,
+					VHDPath: filepath.Join(parentLayer, "layer.vhd"),
 				},
 			)
 		}
@@ -131,9 +130,8 @@ func getLCOWLayers(rootfs []*types.Mount, layerFolders []string, guestReadVerity
 			roLayers = append(
 				roLayers,
 				&layers.LCOWLayer{
-					VHDPath:         layer.Path,
-					Partition:       layer.Partition,
-					GuestReadVerity: guestReadVerity,
+					VHDPath:   layer.Path,
+					Partition: layer.Partition,
 				},
 			)
 		}

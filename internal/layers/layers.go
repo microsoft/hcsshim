@@ -27,12 +27,11 @@ import (
 )
 
 type LCOWLayer struct {
-	VHDPath         string
-	Partition       uint64
-	GuestReadVerity bool
+	VHDPath   string
+	Partition uint64
 }
 
-// Defines a set of LCOW layers.
+// LCOWLayers defines a set of LCOW layers.
 // For future extensibility, the LCOWLayer type could be swapped for an interface,
 // and we could either call some method on the interface to "apply" it directly to the UVM,
 // or type cast it to the various types that we support, and use the one it matches.
@@ -427,9 +426,8 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvm
 		true,
 		"",
 		&scsi.MountConfig{
-			Partition:       layer.Partition,
-			Options:         []string{"ro"},
-			GuestReadVerity: layer.GuestReadVerity,
+			Partition: layer.Partition,
+			Options:   []string{"ro"},
 		},
 	)
 	if err != nil {

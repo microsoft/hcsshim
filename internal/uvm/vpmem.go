@@ -15,7 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/internal/verity"
 )
 
 const (
@@ -127,17 +126,6 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 		DeviceNumber: deviceNumber,
 		MountPath:    uvmPath,
 	}
-	if v, iErr := verity.ReadVeritySuperBlock(ctx, hostPath); iErr != nil {
-		log.G(ctx).WithError(iErr).WithField("hostPath", hostPath).Debug("unable to read dm-verity information from VHD")
-	} else {
-		if v != nil {
-			log.G(ctx).WithFields(logrus.Fields{
-				"hostPath":   hostPath,
-				"rootDigest": v.RootDigest,
-			}).Debug("adding VPMem with dm-verity")
-		}
-		guestSettings.VerityInfo = v
-	}
 
 	modification.GuestRequest = guestrequest.ModificationRequest{
 		ResourceType: guestresource.ResourceTypeVPMemDevice,
@@ -167,13 +155,6 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 		return nil
 	}
 
-	v, _ := verity.ReadVeritySuperBlock(ctx, hostPath)
-	if v != nil {
-		log.G(ctx).WithFields(logrus.Fields{
-			"hostPath":   hostPath,
-			"rootDigest": v.RootDigest,
-		}).Debug("removing VPMem with dm-verity")
-	}
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeRemove,
 		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
@@ -183,7 +164,6 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 			Settings: guestresource.LCOWMappedVPMemDevice{
 				DeviceNumber: deviceNumber,
 				MountPath:    device.uvmPath,
-				VerityInfo:   v,
 			},
 		},
 	}
