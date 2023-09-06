@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -145,23 +144,13 @@ func requireFeatures(tb testing.TB, features ...string) {
 	require.Features(tb, flagFeatures, features...)
 }
 
-// requireBinary checks if `binary` exists in the same directory as the test
-// binary.
-// Returns full binary path if it exists, otherwise, skips the test.
-func requireBinary(tb testing.TB, binary string) string {
+// requireAnyFeatures checks in flagFeatures if at least one of the required features
+// was enabled, and skips the test if all are missing.
+//
+// See: [requireFeatures]
+func requireAnyFeature(tb testing.TB, features ...string) {
 	tb.Helper()
-	executable, err := os.Executable()
-	if err != nil {
-		tb.Skipf("error locating executable: %s", err)
-		return ""
-	}
-	baseDir := filepath.Dir(executable)
-	binaryPath := filepath.Join(baseDir, binary)
-	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-		tb.Skipf("binary not found: %s", binaryPath)
-		return ""
-	}
-	return binaryPath
+	require.AnyFeature(tb, flagFeatures, features...)
 }
 
 func getWindowsNanoserverImage(build uint16) string {

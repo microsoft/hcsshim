@@ -250,8 +250,7 @@ jobs:
         run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr -tags admin ./...
 
       - name: Run non-functional tests
-        run: ${{ env.GOTESTCMD }} -mod=mod -gcflags=all=-d=checkptr -tags admin ./...
-
+        run: ${{ env.GOTESTCMD }} -mod=mod -gcflags=all=-d=checkptr ./internal/... ./pkg/...
         working-directory: test
 
       - name: Run containerd-shim-runhcs-v1 tests

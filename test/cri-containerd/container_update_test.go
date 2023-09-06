@@ -34,7 +34,9 @@ func calculateJobCPURate(hostProcs uint32, processorCount uint32) uint32 {
 }
 
 func Test_Container_UpdateResources_CPUShare(t *testing.T) {
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
 	require.Build(t, osversion.V20H2)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -142,6 +144,9 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 }
 
 func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
+	requireFeatures(t, featureCRIUpdateContainer)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -153,7 +158,7 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 	tests := []config{
 		{
 			name:             "WCOW_Process",
-			requiredFeatures: []string{featureWCOWProcess, featureCRIUpdateContainer},
+			requiredFeatures: []string{featureWCOWProcess},
 			runtimeHandler:   wcowProcessRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 			containerImage:   imageWindowsNanoserver,
@@ -161,7 +166,7 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 		},
 		{
 			name:             "WCOW_Hypervisor",
-			requiredFeatures: []string{featureWCOWHypervisor, featureCRIUpdateContainer},
+			requiredFeatures: []string{featureWCOWHypervisor},
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 			containerImage:   imageWindowsNanoserver,
@@ -169,7 +174,7 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 		},
 		{
 			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW, featureCRIUpdateContainer},
+			requiredFeatures: []string{featureLCOW},
 			runtimeHandler:   lcowRuntimeHandler,
 			sandboxImage:     imageLcowK8sPause,
 			containerImage:   imageLcowAlpine,
@@ -249,6 +254,9 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 }
 
 func Test_Container_UpdateResources_Memory(t *testing.T) {
+	requireFeatures(t, featureCRIUpdateContainer)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -260,7 +268,7 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 	tests := []config{
 		{
 			name:             "WCOW_Process",
-			requiredFeatures: []string{featureWCOWProcess, featureCRIUpdateContainer},
+			requiredFeatures: []string{featureWCOWProcess},
 			runtimeHandler:   wcowProcessRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 			containerImage:   imageWindowsNanoserver,
@@ -268,7 +276,7 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 		},
 		{
 			name:             "WCOW_Hypervisor",
-			requiredFeatures: []string{featureWCOWHypervisor, featureCRIUpdateContainer},
+			requiredFeatures: []string{featureWCOWHypervisor},
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 			containerImage:   imageWindowsNanoserver,
@@ -276,7 +284,7 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 		},
 		{
 			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW, featureCRIUpdateContainer},
+			requiredFeatures: []string{featureLCOW},
 			runtimeHandler:   lcowRuntimeHandler,
 			sandboxImage:     imageLcowK8sPause,
 			containerImage:   imageLcowAlpine,

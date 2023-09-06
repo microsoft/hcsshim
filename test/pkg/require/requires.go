@@ -9,9 +9,12 @@ import (
 )
 
 // Features checks the wanted features are present in given,
-// and skips the test if any are missing. If the given set is empty,
-// the function returns (by default all features are enabled).
-func Features(tb testing.TB, given *flag.StringSet, want ...string) {
+// and skips the test if any are missing or explicitly excluded.
+// If the given set is empty, the function returns
+// (by default, all features are enabled).
+//
+// See [flag.NewFeatureFlag] and [flag.IncludeExcludeStringSet] for more details.
+func Features(tb testing.TB, given *flag.IncludeExcludeStringSet, want ...string) {
 	tb.Helper()
 	if given.Len() == 0 {
 		return
@@ -21,6 +24,22 @@ func Features(tb testing.TB, given *flag.StringSet, want ...string) {
 			tb.Skipf("skipping test due to feature not set: %s", f)
 		}
 	}
+}
+
+// AnyFeature checks if at least one of the features are enabled.
+//
+// See [Features] for more information.
+func AnyFeature(tb testing.TB, given *flag.IncludeExcludeStringSet, want ...string) {
+	tb.Helper()
+	if given.Len() == 0 {
+		return
+	}
+	for _, f := range want {
+		if given.IsSet(f) {
+			return
+		}
+	}
+	tb.Skipf("skipping test due to missing features: %s", want)
 }
 
 // Binary checks if `binary` exists in the same directory as the test

@@ -84,6 +84,8 @@ func Test_Container_Network_LCOW(t *testing.T) {
 }
 
 func Test_Container_Network_Hostname(t *testing.T) {
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	type config struct {
 		name             string
 		requiredFeatures []string

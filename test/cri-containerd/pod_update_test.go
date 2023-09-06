@@ -16,6 +16,8 @@ import (
 )
 
 func Test_Pod_UpdateResources_Memory(t *testing.T) {
+	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -87,6 +89,8 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 }
 
 func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
+	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -159,6 +163,8 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 }
 
 func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
+	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -222,6 +228,8 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 
 func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 	t.Skip("Skipping for now")
+	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+
 	ctx := context.Background()
 
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)

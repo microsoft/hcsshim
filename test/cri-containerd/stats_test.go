@@ -186,6 +186,8 @@ func Test_SandboxStats_List_PodID_LCOW(t *testing.T) {
 }
 
 func Test_ContainerStats_ContainerID(t *testing.T) {
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -260,6 +262,8 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 }
 
 func Test_ContainerStats_List_ContainerID(t *testing.T) {
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	type config struct {
 		name             string
 		requiredFeatures []string
@@ -334,6 +338,8 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 }
 
 func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
+	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+
 	type config struct {
 		name             string
 		requiredFeatures []string

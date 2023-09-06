@@ -16,6 +16,7 @@ import (
 
 func Test_RunContainer_GMSA_WCOW(t *testing.T) {
 	requireFeatures(t, featureGMSA)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	credSpec := gmsaSetup(t)
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
@@ -98,6 +99,7 @@ func Test_RunContainer_GMSA_WCOW(t *testing.T) {
 }
 func Test_RunContainer_GMSA_Disabled(t *testing.T) {
 	requireFeatures(t, featureGMSA)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	credSpec := "totally real and definitely not a fake or arbitrary gMSA credential spec that is 1000%% properly formatted as JSON"
 	pullRequiredImages(t, []string{imageWindowsNanoserver})

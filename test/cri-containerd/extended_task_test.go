@@ -24,6 +24,8 @@ func getPodProcessorInfo(ctx context.Context, podID string) (*extendedtask.Compu
 }
 
 func Test_ExtendedTask_ProcessorInfo(t *testing.T) {
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+
 	type config struct {
 		name             string
 		requiredFeatures []string

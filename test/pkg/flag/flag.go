@@ -1,6 +1,3 @@
-// This package augments the default "flags" package with functionality similar
-// to that in "github.com/urfave/cli", since the two packages do not mix easily
-// and the "testing" package uses a default flagset that we cannot easily update.
 package flag
 
 import (
@@ -8,24 +5,101 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
-const FeatureFlagName = "feature"
+const (
+	FeatureFlagName        = "feature"
+	ExcludeFeatureFlagName = "exclude"
+)
 
-func NewFeatureFlag(all []string) *StringSet {
-	return NewStringSet(FeatureFlagName,
-		"set of `features` to test; can be set multiple times, with a comma-separated list, or both "+
-			"(supported features: "+strings.Join(all, ", ")+")",
-		false,
-	)
+// NewFeatureFlag defines two flags, [FeatureFlagName] and [ExcludeFeatureFlagName], to
+// allow setting and excluding certain features.
+func NewFeatureFlag(features []string) *IncludeExcludeStringSet {
+	fs := NewStringSet(FeatureFlagName,
+		"`features` to test; can be set multiple times, with a comma-separated list, or both. "+
+			"Leave empty to enable all features. "+
+			"(supported features: "+strings.Join(features, ", ")+")", false)
+
+	return NewIncludeExcludeStringSet(fs, ExcludeFeatureFlagName,
+		"`features` to exclude from tests (see "+FeatureFlagName+" for more details)",
+		features)
+}
+
+// IncludeExcludeStringSet allows unsetting strings seen in a [StringSet].
+type IncludeExcludeStringSet struct {
+	// flags explicitly included
+	inc *StringSet
+	// flags explicitly excluded
+	exc *StringSet
+	// def value, if no values set
+	// we don't error if an unknown value is provided
+	def []string
+}
+
+// NewIncludeExcludeStringSet returns a new NewIncludeExcludeStringSet.
+func NewIncludeExcludeStringSet(include *StringSet, name, usage string, all []string) *IncludeExcludeStringSet {
+	es := &IncludeExcludeStringSet{
+		inc: include,
+		exc: &StringSet{
+			s:  make(map[string]struct{}),
+			cs: include.cs,
+		},
+		def: slices.Clone(all),
+	}
+	flag.Var(es, name, usage)
+	return es
+}
+
+var _ flag.Value = &IncludeExcludeStringSet{}
+
+func (es *IncludeExcludeStringSet) Set(s string) error { return es.exc.Set(s) }
+
+func (es *IncludeExcludeStringSet) String() string {
+	if es == nil { // may be called by flag package on nil receiver
+		return ""
+	}
+	ss := es.strings()
+	if len(ss) == 0 {
+		return ""
+	}
+	return "[" + strings.Join(ss, ", ") + "]"
+}
+
+func (es *IncludeExcludeStringSet) Strings() []string { return es.strings() }
+func (es *IncludeExcludeStringSet) Len() int          { return len(es.strings()) }
+
+func (es *IncludeExcludeStringSet) strings() []string {
+	ss := es.def
+	set := make([]string, 0, len(ss))
+	if es.inc != nil && es.inc.Len() > 0 {
+		// include values were explicitly set
+		ss = es.inc.Strings()
+	}
+	for _, s := range ss {
+		if !es.exc.IsSet(s) {
+			set = append(set, s)
+		}
+	}
+	return set
+}
+
+func (es *IncludeExcludeStringSet) IsSet(s string) bool {
+	if es.inc == nil || es.inc.Len() == 0 || es.inc.IsSet(s) {
+		// either no values were included, or value was explicitly provided
+		return !es.exc.IsSet(s)
+	}
+	return false
 }
 
 // StringSet is a type to be used with the standard library's flag.Var
 // function as a custom flag value, similar to "github.com/urfave/cli".StringSet,
 // but it only tracks unique instances.
+//
 // It takes either a comma-separated list of strings, or repeated invocations.
 type StringSet struct {
-	s map[string]struct{}
+	s stringSet
 	// cs indicates if the set is case sensitive or not
 	cs bool
 }
@@ -43,36 +117,28 @@ func NewStringSet(name, usage string, caseSensitive bool) *StringSet {
 }
 
 // Strings returns a string slice of the flags provided to the flag
-func (ss *StringSet) Strings() []string {
-	a := make([]string, 0, len(ss.s))
-	for k := range ss.s {
-		a = append(a, k)
-	}
-
-	return a
-}
+func (ss *StringSet) Strings() []string { return maps.Keys(ss.s) }
 
 func (ss *StringSet) String() string {
+	if ss == nil || ss.Len() == 0 { // may be called by flag package on nil receiver
+		return ""
+	}
 	return "[" + strings.Join(ss.Strings(), ", ") + "]"
 }
 
 func (ss *StringSet) Len() int { return len(ss.s) }
 
-func (ss *StringSet) IsSet(s string) bool {
-	_, ok := ss.s[ss.standardize(s)]
-	return ok
-}
+func (ss *StringSet) IsSet(s string) bool { return ss.s.isSet(ss.standardize(s)) }
 
-// Set is called by `flag` each time the flag is seen when parsing the
-// command line.
+// Set is called by `flag` each time the flag is seen when parsing the command line.
 func (ss *StringSet) Set(s string) error {
 	for _, f := range strings.Split(s, ",") {
-		ss.s[ss.standardize(f)] = struct{}{}
+		ss.s.set(ss.standardize(f))
 	}
 	return nil
 }
 
-// Standardize formats the feature flag s to be consistent (ie, trim and to lowercase)
+// standardize formats the feature flag s to be consistent (ie, trim and to lowercase)
 func (ss *StringSet) standardize(s string) string {
 	s = strings.TrimSpace(s)
 	if !ss.cs {
@@ -81,7 +147,16 @@ func (ss *StringSet) standardize(s string) string {
 	return s
 }
 
-// LogrusLevel is a flag that accepts logrus logging levels, as strings.
+// stringSet is a set of strings.
+type stringSet map[string]struct{}
+
+func (ss stringSet) set(s string) { ss[s] = struct{}{} }
+func (ss stringSet) isSet(s string) bool {
+	_, ok := ss[s]
+	return ok
+}
+
+// LogrusLevel is a flag that accepts logrus logging levels as strings.
 type LogrusLevel struct {
 	Level logrus.Level
 }

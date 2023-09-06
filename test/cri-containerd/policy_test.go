@@ -22,6 +22,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/tools/securitypolicy/helpers"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
 
 var validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
@@ -1025,12 +1026,11 @@ func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T
 
 func Test_RunContainer_WithPolicy_And_Binary_Logger_Without_Stdio(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
+	binaryPath := require.Binary(t, "sample-logging-driver.exe")
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	binaryPath := requireBinary(t, "sample-logging-driver.exe")
 
 	logPath := "binary:///" + binaryPath
 
