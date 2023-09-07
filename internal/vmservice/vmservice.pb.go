@@ -12,6 +12,7 @@ import (
 	types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
+	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -25,7 +26,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type ModifyType int32
 
@@ -195,7 +196,7 @@ func (m *DirectBoot) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_DirectBoot.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -238,7 +239,7 @@ func (m *UEFI) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_UEFI.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +286,7 @@ func (m *MemoryConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
 		return xxx_messageInfo_MemoryConfig.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -326,7 +327,7 @@ func (m *ProcessorConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return xxx_messageInfo_ProcessorConfig.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +369,7 @@ func (m *DevicesConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error
 		return xxx_messageInfo_DevicesConfig.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -417,7 +418,7 @@ func (m *VMConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_VMConfig.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -443,10 +444,10 @@ type isVMConfig_BootConfig interface {
 }
 
 type VMConfig_DirectBoot struct {
-	DirectBoot *DirectBoot `protobuf:"bytes,5,opt,name=direct_boot,json=directBoot,proto3,oneof"`
+	DirectBoot *DirectBoot `protobuf:"bytes,5,opt,name=direct_boot,json=directBoot,proto3,oneof" json:"direct_boot,omitempty"`
 }
 type VMConfig_Uefi struct {
-	Uefi *UEFI `protobuf:"bytes,6,opt,name=uefi,proto3,oneof"`
+	Uefi *UEFI `protobuf:"bytes,6,opt,name=uefi,proto3,oneof" json:"uefi,omitempty"`
 }
 
 func (*VMConfig_DirectBoot) isVMConfig_BootConfig() {}
@@ -473,78 +474,12 @@ func (m *VMConfig) GetUefi() *UEFI {
 	return nil
 }
 
-// XXX_OneofFuncs is for the internal use of the proto package.
-func (*VMConfig) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
-	return _VMConfig_OneofMarshaler, _VMConfig_OneofUnmarshaler, _VMConfig_OneofSizer, []interface{}{
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*VMConfig) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
 		(*VMConfig_DirectBoot)(nil),
 		(*VMConfig_Uefi)(nil),
 	}
-}
-
-func _VMConfig_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
-	m := msg.(*VMConfig)
-	// BootConfig
-	switch x := m.BootConfig.(type) {
-	case *VMConfig_DirectBoot:
-		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.DirectBoot); err != nil {
-			return err
-		}
-	case *VMConfig_Uefi:
-		_ = b.EncodeVarint(6<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.Uefi); err != nil {
-			return err
-		}
-	case nil:
-	default:
-		return fmt.Errorf("VMConfig.BootConfig has unexpected type %T", x)
-	}
-	return nil
-}
-
-func _VMConfig_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
-	m := msg.(*VMConfig)
-	switch tag {
-	case 5: // BootConfig.direct_boot
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(DirectBoot)
-		err := b.DecodeMessage(msg)
-		m.BootConfig = &VMConfig_DirectBoot{msg}
-		return true, err
-	case 6: // BootConfig.uefi
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(UEFI)
-		err := b.DecodeMessage(msg)
-		m.BootConfig = &VMConfig_Uefi{msg}
-		return true, err
-	default:
-		return false, nil
-	}
-}
-
-func _VMConfig_OneofSizer(msg proto.Message) (n int) {
-	m := msg.(*VMConfig)
-	// BootConfig
-	switch x := m.BootConfig.(type) {
-	case *VMConfig_DirectBoot:
-		s := proto.Size(x.DirectBoot)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *VMConfig_Uefi:
-		s := proto.Size(x.Uefi)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case nil:
-	default:
-		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
-	}
-	return n
 }
 
 // WindowsOptions contains virtual machine configurations that are only present on a Windows host.
@@ -568,7 +503,7 @@ func (m *WindowsOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, erro
 		return xxx_messageInfo_WindowsOptions.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -607,7 +542,7 @@ func (m *SerialConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
 		return xxx_messageInfo_SerialConfig.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -648,7 +583,7 @@ func (m *SerialConfig_Config) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return xxx_messageInfo_SerialConfig_Config.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -691,7 +626,7 @@ func (m *CreateVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return xxx_messageInfo_CreateVMRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -731,7 +666,7 @@ func (m *InspectVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return xxx_messageInfo_InspectVMRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -770,7 +705,7 @@ func (m *InspectVMResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return xxx_messageInfo_InspectVMResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -812,7 +747,7 @@ func (m *MemoryStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) 
 		return xxx_messageInfo_MemoryStats.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -851,7 +786,7 @@ func (m *ProcessorStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, erro
 		return xxx_messageInfo_ProcessorStats.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -890,7 +825,7 @@ func (m *PropertiesVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return xxx_messageInfo_PropertiesVMRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -930,7 +865,7 @@ func (m *PropertiesVMResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return xxx_messageInfo_PropertiesVMResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -970,7 +905,7 @@ func (m *CapabilitiesVMResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return xxx_messageInfo_CapabilitiesVMResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1014,7 +949,7 @@ func (m *CapabilitiesVMResponse_SupportedResource) XXX_Marshal(b []byte, determi
 		return xxx_messageInfo_CapabilitiesVMResponse_SupportedResource.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1056,7 +991,7 @@ func (m *HVSocketListen) XXX_Marshal(b []byte, deterministic bool) ([]byte, erro
 		return xxx_messageInfo_HVSocketListen.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1096,7 +1031,7 @@ func (m *VSockListen) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) 
 		return xxx_messageInfo_VSockListen.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1139,7 +1074,7 @@ func (m *VMSocketRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return xxx_messageInfo_VMSocketRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1165,10 +1100,10 @@ type isVMSocketRequest_Config interface {
 }
 
 type VMSocketRequest_HvsocketList struct {
-	HvsocketList *HVSocketListen `protobuf:"bytes,2,opt,name=hvsocket_list,json=hvsocketList,proto3,oneof"`
+	HvsocketList *HVSocketListen `protobuf:"bytes,2,opt,name=hvsocket_list,json=hvsocketList,proto3,oneof" json:"hvsocket_list,omitempty"`
 }
 type VMSocketRequest_VsockListen struct {
-	VsockListen *VSockListen `protobuf:"bytes,3,opt,name=vsock_listen,json=vsockListen,proto3,oneof"`
+	VsockListen *VSockListen `protobuf:"bytes,3,opt,name=vsock_listen,json=vsockListen,proto3,oneof" json:"vsock_listen,omitempty"`
 }
 
 func (*VMSocketRequest_HvsocketList) isVMSocketRequest_Config() {}
@@ -1195,78 +1130,12 @@ func (m *VMSocketRequest) GetVsockListen() *VSockListen {
 	return nil
 }
 
-// XXX_OneofFuncs is for the internal use of the proto package.
-func (*VMSocketRequest) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
-	return _VMSocketRequest_OneofMarshaler, _VMSocketRequest_OneofUnmarshaler, _VMSocketRequest_OneofSizer, []interface{}{
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*VMSocketRequest) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
 		(*VMSocketRequest_HvsocketList)(nil),
 		(*VMSocketRequest_VsockListen)(nil),
 	}
-}
-
-func _VMSocketRequest_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
-	m := msg.(*VMSocketRequest)
-	// Config
-	switch x := m.Config.(type) {
-	case *VMSocketRequest_HvsocketList:
-		_ = b.EncodeVarint(2<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.HvsocketList); err != nil {
-			return err
-		}
-	case *VMSocketRequest_VsockListen:
-		_ = b.EncodeVarint(3<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.VsockListen); err != nil {
-			return err
-		}
-	case nil:
-	default:
-		return fmt.Errorf("VMSocketRequest.Config has unexpected type %T", x)
-	}
-	return nil
-}
-
-func _VMSocketRequest_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
-	m := msg.(*VMSocketRequest)
-	switch tag {
-	case 2: // Config.hvsocket_list
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(HVSocketListen)
-		err := b.DecodeMessage(msg)
-		m.Config = &VMSocketRequest_HvsocketList{msg}
-		return true, err
-	case 3: // Config.vsock_listen
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(VSockListen)
-		err := b.DecodeMessage(msg)
-		m.Config = &VMSocketRequest_VsockListen{msg}
-		return true, err
-	default:
-		return false, nil
-	}
-}
-
-func _VMSocketRequest_OneofSizer(msg proto.Message) (n int) {
-	m := msg.(*VMSocketRequest)
-	// Config
-	switch x := m.Config.(type) {
-	case *VMSocketRequest_HvsocketList:
-		s := proto.Size(x.HvsocketList)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *VMSocketRequest_VsockListen:
-		s := proto.Size(x.VsockListen)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case nil:
-	default:
-		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
-	}
-	return n
 }
 
 type SCSIDisk struct {
@@ -1293,7 +1162,7 @@ func (m *SCSIDisk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_SCSIDisk.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1334,7 +1203,7 @@ func (m *VPMEMDisk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_VPMEMDisk.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1378,7 +1247,7 @@ func (m *NICConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_NICConfig.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1418,7 +1287,7 @@ func (m *WindowsPCIDevice) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return xxx_messageInfo_WindowsPCIDevice.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1457,7 +1326,7 @@ func (m *ModifyMemoryRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return xxx_messageInfo_ModifyMemoryRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1497,7 +1366,7 @@ func (m *ModifyProcessorRequest) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return xxx_messageInfo_ModifyProcessorRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1537,7 +1406,7 @@ func (m *ModifyProcessorConfigRequest) XXX_Marshal(b []byte, deterministic bool)
 		return xxx_messageInfo_ModifyProcessorConfigRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1585,7 +1454,7 @@ func (m *ModifyResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return xxx_messageInfo_ModifyResourceRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1611,25 +1480,25 @@ type isModifyResourceRequest_Resource interface {
 }
 
 type ModifyResourceRequest_Processor struct {
-	Processor *ModifyProcessorRequest `protobuf:"bytes,2,opt,name=processor,proto3,oneof"`
+	Processor *ModifyProcessorRequest `protobuf:"bytes,2,opt,name=processor,proto3,oneof" json:"processor,omitempty"`
 }
 type ModifyResourceRequest_ProcessorConfig struct {
-	ProcessorConfig *ModifyProcessorConfigRequest `protobuf:"bytes,3,opt,name=processor_config,json=processorConfig,proto3,oneof"`
+	ProcessorConfig *ModifyProcessorConfigRequest `protobuf:"bytes,3,opt,name=processor_config,json=processorConfig,proto3,oneof" json:"processor_config,omitempty"`
 }
 type ModifyResourceRequest_Memory struct {
-	Memory *ModifyMemoryRequest `protobuf:"bytes,4,opt,name=memory,proto3,oneof"`
+	Memory *ModifyMemoryRequest `protobuf:"bytes,4,opt,name=memory,proto3,oneof" json:"memory,omitempty"`
 }
 type ModifyResourceRequest_ScsiDisk struct {
-	ScsiDisk *SCSIDisk `protobuf:"bytes,5,opt,name=scsi_disk,json=scsiDisk,proto3,oneof"`
+	ScsiDisk *SCSIDisk `protobuf:"bytes,5,opt,name=scsi_disk,json=scsiDisk,proto3,oneof" json:"scsi_disk,omitempty"`
 }
 type ModifyResourceRequest_VpmemDisk struct {
-	VpmemDisk *VPMEMDisk `protobuf:"bytes,6,opt,name=vpmem_disk,json=vpmemDisk,proto3,oneof"`
+	VpmemDisk *VPMEMDisk `protobuf:"bytes,6,opt,name=vpmem_disk,json=vpmemDisk,proto3,oneof" json:"vpmem_disk,omitempty"`
 }
 type ModifyResourceRequest_NicConfig struct {
-	NicConfig *NICConfig `protobuf:"bytes,7,opt,name=nic_config,json=nicConfig,proto3,oneof"`
+	NicConfig *NICConfig `protobuf:"bytes,7,opt,name=nic_config,json=nicConfig,proto3,oneof" json:"nic_config,omitempty"`
 }
 type ModifyResourceRequest_WindowsDevice struct {
-	WindowsDevice *WindowsPCIDevice `protobuf:"bytes,8,opt,name=windows_device,json=windowsDevice,proto3,oneof"`
+	WindowsDevice *WindowsPCIDevice `protobuf:"bytes,8,opt,name=windows_device,json=windowsDevice,proto3,oneof" json:"windows_device,omitempty"`
 }
 
 func (*ModifyResourceRequest_Processor) isModifyResourceRequest_Resource()       {}
@@ -1696,9 +1565,9 @@ func (m *ModifyResourceRequest) GetWindowsDevice() *WindowsPCIDevice {
 	return nil
 }
 
-// XXX_OneofFuncs is for the internal use of the proto package.
-func (*ModifyResourceRequest) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
-	return _ModifyResourceRequest_OneofMarshaler, _ModifyResourceRequest_OneofUnmarshaler, _ModifyResourceRequest_OneofSizer, []interface{}{
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*ModifyResourceRequest) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
 		(*ModifyResourceRequest_Processor)(nil),
 		(*ModifyResourceRequest_ProcessorConfig)(nil),
 		(*ModifyResourceRequest_Memory)(nil),
@@ -1707,162 +1576,6 @@ func (*ModifyResourceRequest) XXX_OneofFuncs() (func(msg proto.Message, b *proto
 		(*ModifyResourceRequest_NicConfig)(nil),
 		(*ModifyResourceRequest_WindowsDevice)(nil),
 	}
-}
-
-func _ModifyResourceRequest_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
-	m := msg.(*ModifyResourceRequest)
-	// resource
-	switch x := m.Resource.(type) {
-	case *ModifyResourceRequest_Processor:
-		_ = b.EncodeVarint(2<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.Processor); err != nil {
-			return err
-		}
-	case *ModifyResourceRequest_ProcessorConfig:
-		_ = b.EncodeVarint(3<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.ProcessorConfig); err != nil {
-			return err
-		}
-	case *ModifyResourceRequest_Memory:
-		_ = b.EncodeVarint(4<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.Memory); err != nil {
-			return err
-		}
-	case *ModifyResourceRequest_ScsiDisk:
-		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.ScsiDisk); err != nil {
-			return err
-		}
-	case *ModifyResourceRequest_VpmemDisk:
-		_ = b.EncodeVarint(6<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.VpmemDisk); err != nil {
-			return err
-		}
-	case *ModifyResourceRequest_NicConfig:
-		_ = b.EncodeVarint(7<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.NicConfig); err != nil {
-			return err
-		}
-	case *ModifyResourceRequest_WindowsDevice:
-		_ = b.EncodeVarint(8<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.WindowsDevice); err != nil {
-			return err
-		}
-	case nil:
-	default:
-		return fmt.Errorf("ModifyResourceRequest.Resource has unexpected type %T", x)
-	}
-	return nil
-}
-
-func _ModifyResourceRequest_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
-	m := msg.(*ModifyResourceRequest)
-	switch tag {
-	case 2: // resource.processor
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(ModifyProcessorRequest)
-		err := b.DecodeMessage(msg)
-		m.Resource = &ModifyResourceRequest_Processor{msg}
-		return true, err
-	case 3: // resource.processor_config
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(ModifyProcessorConfigRequest)
-		err := b.DecodeMessage(msg)
-		m.Resource = &ModifyResourceRequest_ProcessorConfig{msg}
-		return true, err
-	case 4: // resource.memory
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(ModifyMemoryRequest)
-		err := b.DecodeMessage(msg)
-		m.Resource = &ModifyResourceRequest_Memory{msg}
-		return true, err
-	case 5: // resource.scsi_disk
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(SCSIDisk)
-		err := b.DecodeMessage(msg)
-		m.Resource = &ModifyResourceRequest_ScsiDisk{msg}
-		return true, err
-	case 6: // resource.vpmem_disk
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(VPMEMDisk)
-		err := b.DecodeMessage(msg)
-		m.Resource = &ModifyResourceRequest_VpmemDisk{msg}
-		return true, err
-	case 7: // resource.nic_config
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(NICConfig)
-		err := b.DecodeMessage(msg)
-		m.Resource = &ModifyResourceRequest_NicConfig{msg}
-		return true, err
-	case 8: // resource.windows_device
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(WindowsPCIDevice)
-		err := b.DecodeMessage(msg)
-		m.Resource = &ModifyResourceRequest_WindowsDevice{msg}
-		return true, err
-	default:
-		return false, nil
-	}
-}
-
-func _ModifyResourceRequest_OneofSizer(msg proto.Message) (n int) {
-	m := msg.(*ModifyResourceRequest)
-	// resource
-	switch x := m.Resource.(type) {
-	case *ModifyResourceRequest_Processor:
-		s := proto.Size(x.Processor)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *ModifyResourceRequest_ProcessorConfig:
-		s := proto.Size(x.ProcessorConfig)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *ModifyResourceRequest_Memory:
-		s := proto.Size(x.Memory)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *ModifyResourceRequest_ScsiDisk:
-		s := proto.Size(x.ScsiDisk)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *ModifyResourceRequest_VpmemDisk:
-		s := proto.Size(x.VpmemDisk)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *ModifyResourceRequest_NicConfig:
-		s := proto.Size(x.NicConfig)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *ModifyResourceRequest_WindowsDevice:
-		s := proto.Size(x.WindowsDevice)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case nil:
-	default:
-		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
-	}
-	return n
 }
 
 func init() {
@@ -2058,7 +1771,7 @@ var fileDescriptor_272f12cfdaa6c7c8 = []byte{
 func (m *DirectBoot) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2066,38 +1779,47 @@ func (m *DirectBoot) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DirectBoot) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DirectBoot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.KernelPath) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.KernelPath)))
-		i += copy(dAtA[i:], m.KernelPath)
-	}
-	if len(m.InitrdPath) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.InitrdPath)))
-		i += copy(dAtA[i:], m.InitrdPath)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.KernelCmdline) > 0 {
-		dAtA[i] = 0x1a
-		i++
+		i -= len(m.KernelCmdline)
+		copy(dAtA[i:], m.KernelCmdline)
 		i = encodeVarintVmservice(dAtA, i, uint64(len(m.KernelCmdline)))
-		i += copy(dAtA[i:], m.KernelCmdline)
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.InitrdPath) > 0 {
+		i -= len(m.InitrdPath)
+		copy(dAtA[i:], m.InitrdPath)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.InitrdPath)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if len(m.KernelPath) > 0 {
+		i -= len(m.KernelPath)
+		copy(dAtA[i:], m.KernelPath)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.KernelPath)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *UEFI) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2105,38 +1827,47 @@ func (m *UEFI) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *UEFI) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *UEFI) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.FirmwarePath) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.FirmwarePath)))
-		i += copy(dAtA[i:], m.FirmwarePath)
-	}
-	if len(m.DevicePath) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.DevicePath)))
-		i += copy(dAtA[i:], m.DevicePath)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.OptionalData) > 0 {
-		dAtA[i] = 0x1a
-		i++
+		i -= len(m.OptionalData)
+		copy(dAtA[i:], m.OptionalData)
 		i = encodeVarintVmservice(dAtA, i, uint64(len(m.OptionalData)))
-		i += copy(dAtA[i:], m.OptionalData)
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.DevicePath) > 0 {
+		i -= len(m.DevicePath)
+		copy(dAtA[i:], m.DevicePath)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.DevicePath)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if len(m.FirmwarePath) > 0 {
+		i -= len(m.FirmwarePath)
+		copy(dAtA[i:], m.FirmwarePath)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.FirmwarePath)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *MemoryConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2144,90 +1875,96 @@ func (m *MemoryConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *MemoryConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MemoryConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MemoryMb != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.MemoryMb))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if m.AllowOvercommit {
-		dAtA[i] = 0x10
-		i++
-		if m.AllowOvercommit {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+	if m.HighMmioGapInMb != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.HighMmioGapInMb))
+		i--
+		dAtA[i] = 0x48
 	}
-	if m.DeferredCommit {
-		dAtA[i] = 0x18
-		i++
-		if m.DeferredCommit {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+	if m.HighMmioBaseInMb != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.HighMmioBaseInMb))
+		i--
+		dAtA[i] = 0x40
 	}
-	if m.HotHint {
-		dAtA[i] = 0x20
-		i++
-		if m.HotHint {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
-	}
-	if m.ColdHint {
-		dAtA[i] = 0x28
-		i++
-		if m.ColdHint {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+	if m.LowMmioGapInMb != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.LowMmioGapInMb))
+		i--
+		dAtA[i] = 0x38
 	}
 	if m.ColdDiscardHint {
-		dAtA[i] = 0x30
-		i++
+		i--
 		if m.ColdDiscardHint {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x30
 	}
-	if m.LowMmioGapInMb != 0 {
-		dAtA[i] = 0x38
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.LowMmioGapInMb))
+	if m.ColdHint {
+		i--
+		if m.ColdHint {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x28
 	}
-	if m.HighMmioBaseInMb != 0 {
-		dAtA[i] = 0x40
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.HighMmioBaseInMb))
+	if m.HotHint {
+		i--
+		if m.HotHint {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x20
 	}
-	if m.HighMmioGapInMb != 0 {
-		dAtA[i] = 0x48
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.HighMmioGapInMb))
+	if m.DeferredCommit {
+		i--
+		if m.DeferredCommit {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x18
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.AllowOvercommit {
+		i--
+		if m.AllowOvercommit {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
 	}
-	return i, nil
+	if m.MemoryMb != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.MemoryMb))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ProcessorConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2235,35 +1972,41 @@ func (m *ProcessorConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ProcessorConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ProcessorConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.ProcessorCount != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorCount))
-	}
-	if m.ProcessorWeight != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorWeight))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.ProcessorLimit != 0 {
-		dAtA[i] = 0x18
-		i++
 		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorLimit))
+		i--
+		dAtA[i] = 0x18
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.ProcessorWeight != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorWeight))
+		i--
+		dAtA[i] = 0x10
 	}
-	return i, nil
+	if m.ProcessorCount != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorCount))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *DevicesConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2271,68 +2014,82 @@ func (m *DevicesConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DevicesConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DevicesConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ScsiDisks) > 0 {
-		for _, msg := range m.ScsiDisks {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintVmservice(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.VpmemDisks) > 0 {
-		for _, msg := range m.VpmemDisks {
-			dAtA[i] = 0x12
-			i++
-			i = encodeVarintVmservice(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+	if len(m.WindowsDevice) > 0 {
+		for iNdEx := len(m.WindowsDevice) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.WindowsDevice[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintVmservice(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x22
 		}
 	}
 	if len(m.NicConfig) > 0 {
-		for _, msg := range m.NicConfig {
+		for iNdEx := len(m.NicConfig) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.NicConfig[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintVmservice(dAtA, i, uint64(size))
+			}
+			i--
 			dAtA[i] = 0x1a
-			i++
-			i = encodeVarintVmservice(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
 		}
 	}
-	if len(m.WindowsDevice) > 0 {
-		for _, msg := range m.WindowsDevice {
-			dAtA[i] = 0x22
-			i++
-			i = encodeVarintVmservice(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+	if len(m.VpmemDisks) > 0 {
+		for iNdEx := len(m.VpmemDisks) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.VpmemDisks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintVmservice(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x12
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.ScsiDisks) > 0 {
+		for iNdEx := len(m.ScsiDisks) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.ScsiDisks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintVmservice(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *VMConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2340,122 +2097,156 @@ func (m *VMConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *VMConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VMConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MemoryConfig != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.MemoryConfig.Size()))
-		n1, err := m.MemoryConfig.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	if m.ProcessorConfig != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorConfig.Size()))
-		n2, err := m.ProcessorConfig.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	if m.DevicesConfig != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.DevicesConfig.Size()))
-		n3, err := m.DevicesConfig.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	if m.SerialConfig != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.SerialConfig.Size()))
-		n4, err := m.SerialConfig.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
-	}
-	if m.BootConfig != nil {
-		nn5, err := m.BootConfig.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += nn5
-	}
-	if m.WindowsOptions != nil {
-		dAtA[i] = 0x3a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.WindowsOptions.Size()))
-		n6, err := m.WindowsOptions.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n6
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.ExtraData) > 0 {
-		for k, _ := range m.ExtraData {
-			dAtA[i] = 0x42
-			i++
+		for k := range m.ExtraData {
 			v := m.ExtraData[k]
-			mapSize := 1 + len(k) + sovVmservice(uint64(len(k))) + 1 + len(v) + sovVmservice(uint64(len(v)))
-			i = encodeVarintVmservice(dAtA, i, uint64(mapSize))
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintVmservice(dAtA, i, uint64(len(k)))
-			i += copy(dAtA[i:], k)
-			dAtA[i] = 0x12
-			i++
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
 			i = encodeVarintVmservice(dAtA, i, uint64(len(v)))
-			i += copy(dAtA[i:], v)
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintVmservice(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintVmservice(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x42
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.WindowsOptions != nil {
+		{
+			size, err := m.WindowsOptions.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x3a
 	}
-	return i, nil
+	if m.BootConfig != nil {
+		{
+			size := m.BootConfig.Size()
+			i -= size
+			if _, err := m.BootConfig.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	if m.SerialConfig != nil {
+		{
+			size, err := m.SerialConfig.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.DevicesConfig != nil {
+		{
+			size, err := m.DevicesConfig.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.ProcessorConfig != nil {
+		{
+			size, err := m.ProcessorConfig.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.MemoryConfig != nil {
+		{
+			size, err := m.MemoryConfig.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *VMConfig_DirectBoot) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VMConfig_DirectBoot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.DirectBoot != nil {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.DirectBoot.Size()))
-		n7, err := m.DirectBoot.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.DirectBoot.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n7
+		i--
+		dAtA[i] = 0x2a
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *VMConfig_Uefi) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VMConfig_Uefi) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.Uefi != nil {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Uefi.Size()))
-		n8, err := m.Uefi.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Uefi.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n8
+		i--
+		dAtA[i] = 0x32
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *WindowsOptions) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2463,25 +2254,31 @@ func (m *WindowsOptions) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *WindowsOptions) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *WindowsOptions) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.CpuGroupID != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.CpuGroupID))
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.CpuGroupID != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.CpuGroupID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *SerialConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2489,32 +2286,40 @@ func (m *SerialConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SerialConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SerialConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Ports) > 0 {
-		for _, msg := range m.Ports {
-			dAtA[i] = 0x1a
-			i++
-			i = encodeVarintVmservice(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Ports) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Ports[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintVmservice(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x1a
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *SerialConfig_Config) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2522,31 +2327,38 @@ func (m *SerialConfig_Config) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SerialConfig_Config) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SerialConfig_Config) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Port != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Port))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.SocketPath) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.SocketPath)
+		copy(dAtA[i:], m.SocketPath)
 		i = encodeVarintVmservice(dAtA, i, uint64(len(m.SocketPath)))
-		i += copy(dAtA[i:], m.SocketPath)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Port != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Port))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *CreateVMRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2554,36 +2366,45 @@ func (m *CreateVMRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CreateVMRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CreateVMRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Config != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Config.Size()))
-		n9, err := m.Config.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n9
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.LogID) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.LogID)
+		copy(dAtA[i:], m.LogID)
 		i = encodeVarintVmservice(dAtA, i, uint64(len(m.LogID)))
-		i += copy(dAtA[i:], m.LogID)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Config != nil {
+		{
+			size, err := m.Config.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *InspectVMRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2591,31 +2412,38 @@ func (m *InspectVMRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *InspectVMRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *InspectVMRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Query) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.Query)))
-		i += copy(dAtA[i:], m.Query)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.RecursionLimit != 0 {
-		dAtA[i] = 0x10
-		i++
 		i = encodeVarintVmservice(dAtA, i, uint64(m.RecursionLimit))
+		i--
+		dAtA[i] = 0x10
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.Query) > 0 {
+		i -= len(m.Query)
+		copy(dAtA[i:], m.Query)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.Query)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *InspectVMResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2623,30 +2451,38 @@ func (m *InspectVMResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *InspectVMResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *InspectVMResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Result != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Result.Size()))
-		n10, err := m.Result.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n10
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.Result != nil {
+		{
+			size, err := m.Result.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *MemoryStats) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2654,40 +2490,46 @@ func (m *MemoryStats) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *MemoryStats) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MemoryStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.WorkingSetBytes != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.WorkingSetBytes))
-	}
-	if m.AvailableMemory != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.AvailableMemory))
-	}
-	if m.ReservedMemory != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ReservedMemory))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.AssignedMemory != 0 {
-		dAtA[i] = 0x20
-		i++
 		i = encodeVarintVmservice(dAtA, i, uint64(m.AssignedMemory))
+		i--
+		dAtA[i] = 0x20
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.ReservedMemory != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.ReservedMemory))
+		i--
+		dAtA[i] = 0x18
 	}
-	return i, nil
+	if m.AvailableMemory != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.AvailableMemory))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.WorkingSetBytes != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.WorkingSetBytes))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ProcessorStats) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2695,25 +2537,31 @@ func (m *ProcessorStats) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ProcessorStats) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ProcessorStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.TotalRuntimeNs != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.TotalRuntimeNs))
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.TotalRuntimeNs != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.TotalRuntimeNs))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *PropertiesVMRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2721,37 +2569,44 @@ func (m *PropertiesVMRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PropertiesVMRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PropertiesVMRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Types) > 0 {
-		dAtA12 := make([]byte, len(m.Types)*10)
-		var j11 int
+		dAtA11 := make([]byte, len(m.Types)*10)
+		var j10 int
 		for _, num := range m.Types {
 			for num >= 1<<7 {
-				dAtA12[j11] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA11[j10] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j11++
+				j10++
 			}
-			dAtA12[j11] = uint8(num)
-			j11++
+			dAtA11[j10] = uint8(num)
+			j10++
 		}
+		i -= j10
+		copy(dAtA[i:], dAtA11[:j10])
+		i = encodeVarintVmservice(dAtA, i, uint64(j10))
+		i--
 		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(j11))
-		i += copy(dAtA[i:], dAtA12[:j11])
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *PropertiesVMResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2759,40 +2614,50 @@ func (m *PropertiesVMResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PropertiesVMResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PropertiesVMResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MemoryStats != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.MemoryStats.Size()))
-		n13, err := m.MemoryStats.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n13
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.ProcessorStats != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorStats.Size()))
-		n14, err := m.ProcessorStats.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.ProcessorStats.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n14
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.MemoryStats != nil {
+		{
+			size, err := m.MemoryStats.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *CapabilitiesVMResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2800,49 +2665,58 @@ func (m *CapabilitiesVMResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CapabilitiesVMResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CapabilitiesVMResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.SupportedResources) > 0 {
-		for _, msg := range m.SupportedResources {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintVmservice(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.SupportedGuestOs) > 0 {
-		dAtA16 := make([]byte, len(m.SupportedGuestOs)*10)
-		var j15 int
+		dAtA15 := make([]byte, len(m.SupportedGuestOs)*10)
+		var j14 int
 		for _, num := range m.SupportedGuestOs {
 			for num >= 1<<7 {
-				dAtA16[j15] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA15[j14] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j15++
+				j14++
 			}
-			dAtA16[j15] = uint8(num)
-			j15++
+			dAtA15[j14] = uint8(num)
+			j14++
 		}
+		i -= j14
+		copy(dAtA[i:], dAtA15[:j14])
+		i = encodeVarintVmservice(dAtA, i, uint64(j14))
+		i--
 		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(j15))
-		i += copy(dAtA[i:], dAtA16[:j15])
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.SupportedResources) > 0 {
+		for iNdEx := len(m.SupportedResources) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.SupportedResources[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintVmservice(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *CapabilitiesVMResponse_SupportedResource) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2850,55 +2724,61 @@ func (m *CapabilitiesVMResponse_SupportedResource) Marshal() (dAtA []byte, err e
 }
 
 func (m *CapabilitiesVMResponse_SupportedResource) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CapabilitiesVMResponse_SupportedResource) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Add {
-		dAtA[i] = 0x8
-		i++
-		if m.Add {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if m.Remove {
-		dAtA[i] = 0x10
-		i++
-		if m.Remove {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+	if m.Resource != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Resource))
+		i--
+		dAtA[i] = 0x20
 	}
 	if m.Update {
-		dAtA[i] = 0x18
-		i++
+		i--
 		if m.Update {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x18
 	}
-	if m.Resource != 0 {
-		dAtA[i] = 0x20
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Resource))
+	if m.Remove {
+		i--
+		if m.Remove {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Add {
+		i--
+		if m.Add {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *HVSocketListen) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2906,32 +2786,40 @@ func (m *HVSocketListen) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *HVSocketListen) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HVSocketListen) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ServiceID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.ServiceID)))
-		i += copy(dAtA[i:], m.ServiceID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.ListenerPath) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.ListenerPath)
+		copy(dAtA[i:], m.ListenerPath)
 		i = encodeVarintVmservice(dAtA, i, uint64(len(m.ListenerPath)))
-		i += copy(dAtA[i:], m.ListenerPath)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.ServiceID) > 0 {
+		i -= len(m.ServiceID)
+		copy(dAtA[i:], m.ServiceID)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.ServiceID)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *VSockListen) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2939,31 +2827,38 @@ func (m *VSockListen) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *VSockListen) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VSockListen) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Port != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Port))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.ListenerPath) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.ListenerPath)
+		copy(dAtA[i:], m.ListenerPath)
 		i = encodeVarintVmservice(dAtA, i, uint64(len(m.ListenerPath)))
-		i += copy(dAtA[i:], m.ListenerPath)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Port != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Port))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *VMSocketRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2971,60 +2866,82 @@ func (m *VMSocketRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *VMSocketRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VMSocketRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Type != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Config != nil {
-		nn17, err := m.Config.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size := m.Config.Size()
+			i -= size
+			if _, err := m.Config.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
 		}
-		i += nn17
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Type != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *VMSocketRequest_HvsocketList) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VMSocketRequest_HvsocketList) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.HvsocketList != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.HvsocketList.Size()))
-		n18, err := m.HvsocketList.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.HvsocketList.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n18
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *VMSocketRequest_VsockListen) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VMSocketRequest_VsockListen) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.VsockListen != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.VsockListen.Size()))
-		n19, err := m.VsockListen.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.VsockListen.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n19
+		i--
+		dAtA[i] = 0x1a
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *SCSIDisk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3032,51 +2949,58 @@ func (m *SCSIDisk) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SCSIDisk) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SCSIDisk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Controller != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Controller))
-	}
-	if m.Lun != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Lun))
-	}
-	if len(m.HostPath) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.HostPath)))
-		i += copy(dAtA[i:], m.HostPath)
-	}
-	if m.Type != 0 {
-		dAtA[i] = 0x20
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.ReadOnly {
-		dAtA[i] = 0x28
-		i++
+		i--
 		if m.ReadOnly {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x28
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Type != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+		i--
+		dAtA[i] = 0x20
 	}
-	return i, nil
+	if len(m.HostPath) > 0 {
+		i -= len(m.HostPath)
+		copy(dAtA[i:], m.HostPath)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.HostPath)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.Lun != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Lun))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Controller != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Controller))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *VPMEMDisk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3084,41 +3008,48 @@ func (m *VPMEMDisk) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *VPMEMDisk) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VPMEMDisk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.HostPath) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.HostPath)))
-		i += copy(dAtA[i:], m.HostPath)
-	}
-	if m.Type != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.ReadOnly {
-		dAtA[i] = 0x18
-		i++
+		i--
 		if m.ReadOnly {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x18
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Type != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+		i--
+		dAtA[i] = 0x10
 	}
-	return i, nil
+	if len(m.HostPath) > 0 {
+		i -= len(m.HostPath)
+		copy(dAtA[i:], m.HostPath)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.HostPath)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *NICConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3126,50 +3057,61 @@ func (m *NICConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *NICConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *NICConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.NicID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.NicID)))
-		i += copy(dAtA[i:], m.NicID)
-	}
-	if len(m.PortID) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.PortID)))
-		i += copy(dAtA[i:], m.PortID)
-	}
-	if len(m.MacAddress) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.MacAddress)))
-		i += copy(dAtA[i:], m.MacAddress)
-	}
-	if len(m.SwitchID) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.SwitchID)))
-		i += copy(dAtA[i:], m.SwitchID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.NicName) > 0 {
-		dAtA[i] = 0x2a
-		i++
+		i -= len(m.NicName)
+		copy(dAtA[i:], m.NicName)
 		i = encodeVarintVmservice(dAtA, i, uint64(len(m.NicName)))
-		i += copy(dAtA[i:], m.NicName)
+		i--
+		dAtA[i] = 0x2a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.SwitchID) > 0 {
+		i -= len(m.SwitchID)
+		copy(dAtA[i:], m.SwitchID)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.SwitchID)))
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if len(m.MacAddress) > 0 {
+		i -= len(m.MacAddress)
+		copy(dAtA[i:], m.MacAddress)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.MacAddress)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.PortID) > 0 {
+		i -= len(m.PortID)
+		copy(dAtA[i:], m.PortID)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.PortID)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.NicID) > 0 {
+		i -= len(m.NicID)
+		copy(dAtA[i:], m.NicID)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.NicID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *WindowsPCIDevice) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3177,26 +3119,33 @@ func (m *WindowsPCIDevice) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *WindowsPCIDevice) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *WindowsPCIDevice) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.InstanceID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(len(m.InstanceID)))
-		i += copy(dAtA[i:], m.InstanceID)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if len(m.InstanceID) > 0 {
+		i -= len(m.InstanceID)
+		copy(dAtA[i:], m.InstanceID)
+		i = encodeVarintVmservice(dAtA, i, uint64(len(m.InstanceID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ModifyMemoryRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3204,25 +3153,31 @@ func (m *ModifyMemoryRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ModifyMemoryRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyMemoryRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MemoryMb != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.MemoryMb))
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.MemoryMb != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.MemoryMb))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ModifyProcessorRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3230,25 +3185,31 @@ func (m *ModifyProcessorRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ModifyProcessorRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyProcessorRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.ProcessorIndex != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorIndex))
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.ProcessorIndex != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorIndex))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ModifyProcessorConfigRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3256,30 +3217,36 @@ func (m *ModifyProcessorConfigRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ModifyProcessorConfigRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyProcessorConfigRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.ProcessorWeight != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorWeight))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.ProcessorLimit != 0 {
-		dAtA[i] = 0x10
-		i++
 		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorLimit))
+		i--
+		dAtA[i] = 0x10
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.ProcessorWeight != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorWeight))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ModifyResourceRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -3287,134 +3254,193 @@ func (m *ModifyResourceRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ModifyResourceRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Type != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Resource != nil {
-		nn20, err := m.Resource.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size := m.Resource.Size()
+			i -= size
+			if _, err := m.Resource.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
 		}
-		i += nn20
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Type != 0 {
+		i = encodeVarintVmservice(dAtA, i, uint64(m.Type))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ModifyResourceRequest_Processor) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest_Processor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.Processor != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Processor.Size()))
-		n21, err := m.Processor.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Processor.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n21
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *ModifyResourceRequest_ProcessorConfig) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest_ProcessorConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.ProcessorConfig != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ProcessorConfig.Size()))
-		n22, err := m.ProcessorConfig.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.ProcessorConfig.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n22
+		i--
+		dAtA[i] = 0x1a
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *ModifyResourceRequest_Memory) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest_Memory) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.Memory != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.Memory.Size()))
-		n23, err := m.Memory.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Memory.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n23
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *ModifyResourceRequest_ScsiDisk) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest_ScsiDisk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.ScsiDisk != nil {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.ScsiDisk.Size()))
-		n24, err := m.ScsiDisk.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.ScsiDisk.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n24
+		i--
+		dAtA[i] = 0x2a
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *ModifyResourceRequest_VpmemDisk) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest_VpmemDisk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.VpmemDisk != nil {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.VpmemDisk.Size()))
-		n25, err := m.VpmemDisk.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.VpmemDisk.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n25
+		i--
+		dAtA[i] = 0x32
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *ModifyResourceRequest_NicConfig) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest_NicConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.NicConfig != nil {
-		dAtA[i] = 0x3a
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.NicConfig.Size()))
-		n26, err := m.NicConfig.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.NicConfig.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n26
+		i--
+		dAtA[i] = 0x3a
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func (m *ModifyResourceRequest_WindowsDevice) MarshalTo(dAtA []byte) (int, error) {
-	i := 0
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyResourceRequest_WindowsDevice) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	if m.WindowsDevice != nil {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintVmservice(dAtA, i, uint64(m.WindowsDevice.Size()))
-		n27, err := m.WindowsDevice.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.WindowsDevice.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVmservice(dAtA, i, uint64(size))
 		}
-		i += n27
+		i--
+		dAtA[i] = 0x42
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 func encodeVarintVmservice(dAtA []byte, offset int, v uint64) int {
+	offset -= sovVmservice(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *DirectBoot) Size() (n int) {
 	if m == nil {
@@ -4192,14 +4218,7 @@ func (m *ModifyResourceRequest_WindowsDevice) Size() (n int) {
 }
 
 func sovVmservice(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozVmservice(x uint64) (n int) {
 	return sovVmservice(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -4266,11 +4285,31 @@ func (this *DevicesConfig) String() string {
 	if this == nil {
 		return "nil"
 	}
+	repeatedStringForScsiDisks := "[]*SCSIDisk{"
+	for _, f := range this.ScsiDisks {
+		repeatedStringForScsiDisks += strings.Replace(f.String(), "SCSIDisk", "SCSIDisk", 1) + ","
+	}
+	repeatedStringForScsiDisks += "}"
+	repeatedStringForVpmemDisks := "[]*VPMEMDisk{"
+	for _, f := range this.VpmemDisks {
+		repeatedStringForVpmemDisks += strings.Replace(f.String(), "VPMEMDisk", "VPMEMDisk", 1) + ","
+	}
+	repeatedStringForVpmemDisks += "}"
+	repeatedStringForNicConfig := "[]*NICConfig{"
+	for _, f := range this.NicConfig {
+		repeatedStringForNicConfig += strings.Replace(f.String(), "NICConfig", "NICConfig", 1) + ","
+	}
+	repeatedStringForNicConfig += "}"
+	repeatedStringForWindowsDevice := "[]*WindowsPCIDevice{"
+	for _, f := range this.WindowsDevice {
+		repeatedStringForWindowsDevice += strings.Replace(f.String(), "WindowsPCIDevice", "WindowsPCIDevice", 1) + ","
+	}
+	repeatedStringForWindowsDevice += "}"
 	s := strings.Join([]string{`&DevicesConfig{`,
-		`ScsiDisks:` + strings.Replace(fmt.Sprintf("%v", this.ScsiDisks), "SCSIDisk", "SCSIDisk", 1) + `,`,
-		`VpmemDisks:` + strings.Replace(fmt.Sprintf("%v", this.VpmemDisks), "VPMEMDisk", "VPMEMDisk", 1) + `,`,
-		`NicConfig:` + strings.Replace(fmt.Sprintf("%v", this.NicConfig), "NICConfig", "NICConfig", 1) + `,`,
-		`WindowsDevice:` + strings.Replace(fmt.Sprintf("%v", this.WindowsDevice), "WindowsPCIDevice", "WindowsPCIDevice", 1) + `,`,
+		`ScsiDisks:` + repeatedStringForScsiDisks + `,`,
+		`VpmemDisks:` + repeatedStringForVpmemDisks + `,`,
+		`NicConfig:` + repeatedStringForNicConfig + `,`,
+		`WindowsDevice:` + repeatedStringForWindowsDevice + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
@@ -4291,12 +4330,12 @@ func (this *VMConfig) String() string {
 	}
 	mapStringForExtraData += "}"
 	s := strings.Join([]string{`&VMConfig{`,
-		`MemoryConfig:` + strings.Replace(fmt.Sprintf("%v", this.MemoryConfig), "MemoryConfig", "MemoryConfig", 1) + `,`,
-		`ProcessorConfig:` + strings.Replace(fmt.Sprintf("%v", this.ProcessorConfig), "ProcessorConfig", "ProcessorConfig", 1) + `,`,
-		`DevicesConfig:` + strings.Replace(fmt.Sprintf("%v", this.DevicesConfig), "DevicesConfig", "DevicesConfig", 1) + `,`,
-		`SerialConfig:` + strings.Replace(fmt.Sprintf("%v", this.SerialConfig), "SerialConfig", "SerialConfig", 1) + `,`,
+		`MemoryConfig:` + strings.Replace(this.MemoryConfig.String(), "MemoryConfig", "MemoryConfig", 1) + `,`,
+		`ProcessorConfig:` + strings.Replace(this.ProcessorConfig.String(), "ProcessorConfig", "ProcessorConfig", 1) + `,`,
+		`DevicesConfig:` + strings.Replace(this.DevicesConfig.String(), "DevicesConfig", "DevicesConfig", 1) + `,`,
+		`SerialConfig:` + strings.Replace(this.SerialConfig.String(), "SerialConfig", "SerialConfig", 1) + `,`,
 		`BootConfig:` + fmt.Sprintf("%v", this.BootConfig) + `,`,
-		`WindowsOptions:` + strings.Replace(fmt.Sprintf("%v", this.WindowsOptions), "WindowsOptions", "WindowsOptions", 1) + `,`,
+		`WindowsOptions:` + strings.Replace(this.WindowsOptions.String(), "WindowsOptions", "WindowsOptions", 1) + `,`,
 		`ExtraData:` + mapStringForExtraData + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
@@ -4338,8 +4377,13 @@ func (this *SerialConfig) String() string {
 	if this == nil {
 		return "nil"
 	}
+	repeatedStringForPorts := "[]*SerialConfig_Config{"
+	for _, f := range this.Ports {
+		repeatedStringForPorts += strings.Replace(fmt.Sprintf("%v", f), "SerialConfig_Config", "SerialConfig_Config", 1) + ","
+	}
+	repeatedStringForPorts += "}"
 	s := strings.Join([]string{`&SerialConfig{`,
-		`Ports:` + strings.Replace(fmt.Sprintf("%v", this.Ports), "SerialConfig_Config", "SerialConfig_Config", 1) + `,`,
+		`Ports:` + repeatedStringForPorts + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
@@ -4362,7 +4406,7 @@ func (this *CreateVMRequest) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&CreateVMRequest{`,
-		`Config:` + strings.Replace(fmt.Sprintf("%v", this.Config), "VMConfig", "VMConfig", 1) + `,`,
+		`Config:` + strings.Replace(this.Config.String(), "VMConfig", "VMConfig", 1) + `,`,
 		`LogID:` + fmt.Sprintf("%v", this.LogID) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
@@ -4433,8 +4477,8 @@ func (this *PropertiesVMResponse) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&PropertiesVMResponse{`,
-		`MemoryStats:` + strings.Replace(fmt.Sprintf("%v", this.MemoryStats), "MemoryStats", "MemoryStats", 1) + `,`,
-		`ProcessorStats:` + strings.Replace(fmt.Sprintf("%v", this.ProcessorStats), "ProcessorStats", "ProcessorStats", 1) + `,`,
+		`MemoryStats:` + strings.Replace(this.MemoryStats.String(), "MemoryStats", "MemoryStats", 1) + `,`,
+		`ProcessorStats:` + strings.Replace(this.ProcessorStats.String(), "ProcessorStats", "ProcessorStats", 1) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
@@ -4444,8 +4488,13 @@ func (this *CapabilitiesVMResponse) String() string {
 	if this == nil {
 		return "nil"
 	}
+	repeatedStringForSupportedResources := "[]*CapabilitiesVMResponse_SupportedResource{"
+	for _, f := range this.SupportedResources {
+		repeatedStringForSupportedResources += strings.Replace(fmt.Sprintf("%v", f), "CapabilitiesVMResponse_SupportedResource", "CapabilitiesVMResponse_SupportedResource", 1) + ","
+	}
+	repeatedStringForSupportedResources += "}"
 	s := strings.Join([]string{`&CapabilitiesVMResponse{`,
-		`SupportedResources:` + strings.Replace(fmt.Sprintf("%v", this.SupportedResources), "CapabilitiesVMResponse_SupportedResource", "CapabilitiesVMResponse_SupportedResource", 1) + `,`,
+		`SupportedResources:` + repeatedStringForSupportedResources + `,`,
 		`SupportedGuestOs:` + fmt.Sprintf("%v", this.SupportedGuestOs) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
@@ -5025,10 +5074,7 @@ func (m *DirectBoot) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -5175,10 +5221,7 @@ func (m *UEFI) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -5405,10 +5448,7 @@ func (m *MemoryConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -5516,10 +5556,7 @@ func (m *ProcessorConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -5706,10 +5743,7 @@ func (m *DevicesConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6120,7 +6154,7 @@ func (m *VMConfig) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthVmservice
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -6137,10 +6171,7 @@ func (m *VMConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6210,10 +6241,7 @@ func (m *WindowsOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6298,10 +6326,7 @@ func (m *SerialConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6403,10 +6428,7 @@ func (m *SerialConfig_Config) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6525,10 +6547,7 @@ func (m *CreateVMRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6630,10 +6649,7 @@ func (m *InspectVMRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6720,10 +6736,7 @@ func (m *InspectVMResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6850,10 +6863,7 @@ func (m *MemoryStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -6923,10 +6933,7 @@ func (m *ProcessorStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7046,10 +7053,7 @@ func (m *PropertiesVMRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7172,10 +7176,7 @@ func (m *PropertiesVMResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7329,10 +7330,7 @@ func (m *CapabilitiesVMResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7462,10 +7460,7 @@ func (m *CapabilitiesVMResponse_SupportedResource) Unmarshal(dAtA []byte) error 
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7580,10 +7575,7 @@ func (m *HVSocketListen) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7685,10 +7677,7 @@ func (m *VSockListen) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7828,10 +7817,7 @@ func (m *VMSocketRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -7991,10 +7977,7 @@ func (m *SCSIDisk) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8116,10 +8099,7 @@ func (m *VPMEMDisk) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8330,10 +8310,7 @@ func (m *NICConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8416,10 +8393,7 @@ func (m *WindowsPCIDevice) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8489,10 +8463,7 @@ func (m *ModifyMemoryRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8562,10 +8533,7 @@ func (m *ModifyProcessorRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8654,10 +8622,7 @@ func (m *ModifyProcessorConfigRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8972,10 +8937,7 @@ func (m *ModifyResourceRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthVmservice
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthVmservice
 			}
 			if (iNdEx + skippy) > l {
@@ -8994,6 +8956,7 @@ func (m *ModifyResourceRequest) Unmarshal(dAtA []byte) error {
 func skipVmservice(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -9025,10 +8988,8 @@ func skipVmservice(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -9049,55 +9010,30 @@ func skipVmservice(dAtA []byte) (n int, err error) {
 				return 0, ErrInvalidLengthVmservice
 			}
 			iNdEx += length
-			if iNdEx < 0 {
-				return 0, ErrInvalidLengthVmservice
-			}
-			return iNdEx, nil
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowVmservice
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipVmservice(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-				if iNdEx < 0 {
-					return 0, ErrInvalidLengthVmservice
-				}
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupVmservice
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthVmservice
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthVmservice = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowVmservice   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthVmservice        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowVmservice          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupVmservice = fmt.Errorf("proto: unexpected end of group")
 )
