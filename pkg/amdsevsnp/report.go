@@ -56,22 +56,12 @@ type guestRequest6 struct {
 
 // AMD SEV ioctl definitions for kernel 5.x.
 const (
-	// SEV-SNP IOCTL type.
-	guestType5 = 'S'
-	// SEV-SNP IOCTL size, same as unsafe.Sizeof(guestRequest5{}).
-	guestSize5 = 40
-	// SEV-SNP requests
-	reportCode5 = 0x1
+	snpGetReportIoctlCode5 = 3223868161
 )
 
 // AMD SEV ioctl definitions for kernel 6.x.
 const (
-	// SEV-SNP IOCTL type.
-	guestType6 = 'S'
-	// SEV-SNP IOCTL size, same as unsafe.Sizeof(guestRequest6{}).
-	guestSize6 = 32
-	// SEV-SNP requests
-	reportCode6 = 0x0
+	snpGetReportIoctlCode6 = 3223343872
 )
 
 // reportRequest used to issue SEV-SNP request
@@ -222,7 +212,7 @@ func fetchRawSNPReport5(reportData []byte) ([]byte, error) {
 		Error:           0,
 	}
 
-	if err := linux.Ioctl(f, linux.Iowr(guestType5, reportCode5, guestSize5), unsafe.Pointer(payload)); err != nil {
+	if err := linux.Ioctl(f, snpGetReportIoctlCode5, unsafe.Pointer(payload)); err != nil {
 		return nil, err
 	}
 	return msgReportOut.Report[:], nil
@@ -257,7 +247,7 @@ func fetchRawSNPReport6(reportData []byte) ([]byte, error) {
 		Error:        0,
 	}
 
-	if err := linux.Ioctl(f, linux.Iowr(guestType6, reportCode6, guestSize6), unsafe.Pointer(payload)); err != nil {
+	if err := linux.Ioctl(f, snpGetReportIoctlCode6, unsafe.Pointer(payload)); err != nil {
 		return nil, err
 	}
 
