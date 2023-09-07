@@ -4,70 +4,285 @@ on:
   - pull_request
 
 env:
-  GO_VERSION: '1.19.x'
+  GO_VERSION: "1.19.x"
+  CONTAINERD_VERSION: "v1.6.23"
+  GOTESTSUM_VERSION: "latest"
+  GOTESTCMD: "gotestsum --format standard-verbose --debug --"
 
 jobs:
   lint:
-    runs-on: 'windows-2019'
+    runs-on: "windows-2022"
+    strategy:
+      fail-fast: false
+      matrix:
+        root: ["", test] # cannot specify "./... ./test/..." unless in go workspace
+
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install go
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          # sometimes go cache causes issues with lint
+          cache: false
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v2
+      # lint issues in Windows code
+      # linter does not work for GOOS=linux since not Windows-specific code is gated with `//go:build windows`
+      - uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.48
-          args: --timeout=5m -v
-          skip-go-installation: true
-          only-new-issues: true
+          version: v1.52
+          args: >-
+            --verbose
+            --max-issues-per-linter=0
+            --max-same-issues=0
+            --modules-download-mode=readonly
+            --timeout=10m
+            --issues-exit-code 0
+          working-directory: ${{ matrix.root }}
+        env:
+          GOOS: windows
 
-  verify-main-vendor:
-    runs-on: 'windows-2019'
+  protos:
+    runs-on: "windows-2022"
+
+    env:
+      # translating from github.com/Microsoft/hcsshim/<path> (via `go list`) to <path> is easier if hcsshim is in GOPATH/src
+      GOPATH: '${{ github.workspace }}\go'
+
+    steps:
+      # protobuild requires the code to be in $GOPATH to translate from github.com/Microsoft/hcsshim
+      # to the correct path on disk
+      - name: Checkout hcsshim
+        uses: actions/checkout@v3
+        with:
+          path: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
+
+      - name: Checkout containerd
+        uses: actions/checkout@v3
+        with:
+          repository: containerd/containerd
+          ref: ${{ env.CONTAINERD_VERSION }}
+          path: "${{ github.workspace }}/go/src/github.com/containerd/containerd"
+
+      - name: Install go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/go.sum
+            ${{ github.workspace }}/go/src/github.com/containerd/containerd/go.sum
+
+      # cannot use `go install` because of replace directive in `go.mod`
+      - name: Install protoc-gen-gogoctrd
+        shell: powershell
+        run: |
+          $bin = Join-Path (go env GOPATH) 'bin'
+          mkdir -f $bin
+
+          go build -o $bin ./cmd/protoc-gen-gogoctrd
+        working-directory: "${{ github.workspace }}/go/src/github.com/containerd/containerd"
+
+      - name: Install protoc
+        shell: powershell
+        run: |
+          gh release download -R protocolbuffers/protobuf -p 'protoc-*-win32.zip' -O protoc.zip 'v23.2'
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not download protoc.'
+            exit $LASTEXITCODE
+          }
+
+          tar.exe xf protoc.zip
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not install protoc.'
+            exit $LASTEXITCODE
+          }
+
+          mkdir -f ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
+          mv include/* ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/protobuf
+
+          # put protoc in GOBIN to make things easier
+          $bin = Join-Path (go env GOPATH) 'bin'
+          mkdir -f $bin
+          mv bin\protoc.exe $bin
+
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run protobuild
+        shell: powershell
+        run: |
+          go install github.com/containerd/protobuild@v0.3.0
+
+          Write-Output "::group::protobuild"
+          protobuild $(go list ./... | grep -v /vendor/)
+          Write-Output "::endgroup::"
+
+          # look for any new files not previously tracked
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --exit-code
+          Write-Output "::endgroup::"
+        working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
+
+  verify-vendor:
+    runs-on: "windows-2022"
     env:
       GOPROXY: "https://proxy.golang.org,direct"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install go
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Validate main modules
+
+      - name: Validate go.mod and vendoring
         shell: powershell
         run: |
-          $currentPath = (Get-Location).Path
-          $process = Start-Process powershell.exe -PassThru -Verb runAs -Wait -ArgumentList $currentPath/scripts/Verify-GoModules.ps1, $currentPath
-          if ($process.ExitCode -ne 0) {
-            Write-Error "Main modules are not up to date. Please validate your go version >= this job's and run `go mod vendor` followed by `go mod tidy` in the repo root path."
-          }
-          exit $process.ExitCode
+          Write-Output "::group::go mod tidy & vendor"
+          go mod tidy
+          go mod vendor
+          Write-Output "::endgroup::"
 
-  test:
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error ::./go.mod is not up to date. Please run ``go mod tidy && go mod vendor`` "
+            exit $LASTEXITCODE
+          }
+
+      - name: Validate test/go.mod
+        shell: powershell
+        working-directory: test
+        run: |
+          Write-Output "::group::go mod tidy"
+          go mod tidy
+          Write-Output "::endgroup::"
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error ::./test/go.mod is not up to date. Please run ``go mod tidy && go mod vendor`` from within ``./test``"
+            exit $LASTEXITCODE
+          }
+
+  go-gen:
+    name: Go Generate
+    runs-on: "windows-2022"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install goversioninfo
+        run: |
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
+
+      - name: Validate go generate
+        shell: powershell
+        run: |
+          Write-Output "::group::go generate"
+          go generate -x .\...
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Go Generate::Error running go generate."
+            exit $LASTEXITCODE
+          }
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error ::Generated files are not up to date. Please run ``go generate .\...``."
+            exit $LASTEXITCODE
+          }
+
+  test-linux:
+    needs: [lint, protos, verify-vendor, go-gen]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+
+      - name: Run guest code unit tests
+        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr ./internal/guest/...
+
+  test-windows:
+    needs: [lint, protos, verify-vendor, go-gen]
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-2019, windows-2022]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install go
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - run: go test -gcflags=all=-d=checkptr -v ./... -tags admin
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal -tags admin
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./containerd-shim-runhcs-v1/ -tags functional
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./cri-containerd/ -tags functional
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./functional/ -tags functional
-        working-directory: test
-      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./runhcs/ -tags functional
-        working-directory: test
-      - run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+
+      # run tests
+      - name: Test repo
+        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr -tags admin ./...
+
+      - name: Run non-functional tests
+        run: ${{ env.GOTESTCMD }} -mod=mod -gcflags=all=-d=checkptr ./internal/...
         working-directory: test
 
-      - uses: actions/upload-artifact@v2
+      - name: Run containerd-shim-runhcs-v1 tests
+        shell: powershell
+        run: |
+          powershell {
+            cd '../..'
+            go build -trimpath -o './test/containerd-shim-runhcs-v1' ./cmd/containerd-shim-runhcs-v1
+          }
+          ${{ env.GOTESTCMD }} -mod=mod -tags functional -gcflags=all=-d=checkptr ./...
+        working-directory: test/containerd-shim-runhcs-v1
+
+      # build testing binaries
+      - name: Build cri-containerd Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./cri-containerd
+        working-directory: test
+      - name: Build functional Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./functional
+        working-directory: test
+      - name: Build runhcs Testing Binary
+        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./runhcs
+        working-directory: test
+      - name: Build logging-driver Binary
+        run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
+        working-directory: test
+
+      - uses: actions/upload-artifact@v3
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           name: test_binaries_${{ matrix.os }}
           path: |
@@ -77,11 +292,162 @@ jobs:
             test/runhcs.test.exe
             test/sample-logging-driver.exe
 
-  build:
-    runs-on: 'windows-2019'
+  integration-tests:
+    needs: [lint, protos, verify-vendor, go-gen]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2019, windows-2022]
+
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - name: Checkout hcsshim
+        uses: actions/checkout@v3
+        with:
+          path: src/github.com/Microsoft/hcsshim
+
+      - name: Checkout containerd
+        uses: actions/checkout@v3
+        with:
+          path: src/github.com/containerd/containerd
+          repository: "containerd/containerd"
+          ref: ${{ env.CONTAINERD_VERSION }}
+
+      - name: Install go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache-dependency-path: |
+            src/github.com/Microsoft/hcsshim/go.sum
+            src/github.com/containerd/containerd/go.sum
+
+      - name: Set env
+        shell: bash
+        run: |
+          mkdir -p "${{ github.workspace }}/bin"
+          echo "GOPATH=${{ github.workspace }}" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/bin" >> $GITHUB_PATH
+          echo "${{ github.workspace }}/src/github.com/containerd/containerd/bin" >> $GITHUB_PATH
+
+      - name: Install crictl
+        shell: powershell
+        run: |
+          gh release download -R kubernetes-sigs/cri-tools -p 'crictl-*-windows-amd64.tar.gz' -O c:\crictl.tar.gz 'v1.24.2'
+          tar.exe xf c:\crictl.tar.gz -C '${{ github.workspace }}/bin'
+
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not install crictl.'
+            exit $LASTEXITCODE
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # needs to be a separate step since terminal reload is required to bring in new env variables and PATH
+      - name: Upgrade Chocolaty
+        shell: powershell
+        run: |
+          choco upgrade -y chocolatey 2>&1
+
+      - name: Install mingw
+        shell: powershell
+        run: |
+          $VerbosePreference = 'Continue'
+          # dont set $ErrorActionPreference since we want to allow choco install to fail later on
+
+          Write-Output 'Install mingw'
+          # Install sometimes fails when downloading mingw zip from source-forge with:
+          #  "ERROR: The remote file either doesn't exist, is unauthorized, or is forbidden for url"
+          # Issue is with accessing from source-forge, which version 10.3+ do not use, but cannot upgrade versions.
+
+          # Add retry and backoff
+          foreach ( $i in 1..3 ) {
+            Write-Output "::group::Attempt $i"
+            if ( $i -gt 1 ) {
+              # remove any left-over state
+              choco uninstall -y --no-progress --force mingw
+
+              Write-Output 'Sleeping for 60 seconds'
+              Sleep -Seconds 60
+            }
+
+            choco install -y --no-progress --stop-on-first-failure --force mingw --allow-downgrade --version 10.3.0
+            Write-Output '::endgroup::'
+            if ( -not $LASTEXITCODE ) {
+              Write-Output "Attempt $i succeeded (exit code: $LASTEXITCODE)"
+              break
+            }
+            Write-Output "::warning title=mingw::Attempt $i failed (exit code: $LASTEXITCODE)"
+          }
+
+          if ( $LASTEXITCODE ) {
+            Write-Output "::error::Could not install mingw after $i attempts."
+            exit $LASTEXITCODE
+          }
+
+          # verify mingw32-make was installed
+          Get-Command -CommandType Application -ErrorAction Stop mingw32-make.exe
+
+      - name: Build binaries
+        shell: bash
+        working-directory: src/github.com/containerd/containerd
+        run: |
+          set -o xtrace
+          mingw32-make.exe binaries
+          script/setup/install-cni-windows
+
+      - name: Build the shim
+        working-directory: src/github.com/Microsoft/hcsshim
+        shell: powershell
+        run: |
+          go build -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+
+      - name: Run containerd integration tests
+        shell: bash
+        working-directory: src/github.com/containerd/containerd
+        run: |
+          # TODO: when https://github.com/containerd/containerd/pull/8691 makes it into the next release (container v1.6.22?), remove the skip
+          # `-skip` is only available in go1.20
+          export EXTRA_TESTFLAGS='-timeout=20m -run="[^(TestConvert)]"'
+          export GOTEST='gotestsum --format=standard-verbose --debug --'
+          make integration
+
+      - name: Run containerd CRI integration tests
+        shell: bash
+        working-directory: src/github.com/containerd/containerd
+        env:
+          TEST_IMAGE_LIST: ${{github.workspace}}/repolist.toml
+          BUSYBOX_TESTING_IMAGE_REF: "k8s.gcr.io/e2e-test-images/busybox:1.29-2"
+          RESOURCE_CONSUMER_TESTING_IMAGE_REF: "k8s.gcr.io/e2e-test-images/resource-consumer:1.10"
+          CGO_ENABLED: 1
+        run: |
+          cat > "${{ env.TEST_IMAGE_LIST }}" << EOF
+          busybox = "${{ env.BUSYBOX_TESTING_IMAGE_REF }}"
+          ResourceConsumer = "${{ env.RESOURCE_CONSUMER_TESTING_IMAGE_REF }}"
+          EOF
+          # In the stable version of hcsshim that is used in containerd, killing a task
+          # that has already exited or a task that has not yet been started, yields a
+          # ErrNotFound. The master version of hcsshim returns nil, which is in line with
+          # how the linux runtime behaves. See:
+          # https://github.com/containerd/containerd/blob/f4f41296c2b0ac7d60aae3dd9c219a7636b0a07e/integration/restart_test.go#L152-L160
+          #
+          # We skip this test here, until a new release of hcsshim is cut and the one in
+          # containerd is updated. When the shim is updated in containerd, this test will
+          # also need to be updated and the special case for windows, removed.
+          FOCUS="[^TestContainerdRestart$]" make cri-integration
+
+  build:
+    needs: [test-windows, test-linux]
+    runs-on: "windows-2022"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install go
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -92,35 +458,47 @@ jobs:
       - run: go build ./cmd/device-util
       - run: go build ./cmd/ncproxy
       - run: go build ./cmd/dmverity-vhd
+      - run: go build ./cmd/dmverity-vhd
+        env:
+          GOOS: linux
+          GOARCH: amd64
       - run: go build ./internal/tools/grantvmgroupaccess
       - run: go build ./internal/tools/securitypolicy
       - run: go build ./internal/tools/uvmboot
       - run: go build ./internal/tools/zapdir
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           name: binaries
           path: |
             containerd-shim-runhcs-v1.exe
             runhcs.exe
             tar2ext4.exe
-            device-util.exe
             wclayer.exe
+            device-util.exe
+            ncproxy.exe
+            dmverity-vhd.exe
+            dmverity-vhd
             grantvmgroupaccess.exe
+            securitypolicy.exe
             uvmboot.exe
             zapdir.exe
-            ncproxy.exe
 
   build_gcs:
+    needs: test-linux
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Test
+        run: make test
 
       - name: Pull busybox image
         run: docker pull busybox
@@ -132,7 +510,5 @@ jobs:
         run: |
           docker export base_image_container | gzip > base.tar.gz
 
-      - name: Build And Test
-        run: |
-          BASE=./base.tar.gz
-          make all test
+      - name: Build
+        run: make BASE=./base.tar.gz all
