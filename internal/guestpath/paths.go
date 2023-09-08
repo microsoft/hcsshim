@@ -16,6 +16,8 @@ const (
 	// HugePagesMountPrefix is mount prefix used in container spec to mark a
 	// huge-pages mount
 	HugePagesMountPrefix = "hugepages://"
+	// PipePrefix is the mount prefix used in container spec to mark a named pipe
+	PipePrefix = `\\.\pipe`
 	// LCOWMountPathPrefixFmt is the path format in the LCOW UVM where
 	// non-global mounts, such as Plan9 mounts are added
 	LCOWMountPathPrefixFmt = "/mounts/m%d"
