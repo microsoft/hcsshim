@@ -5,29 +5,30 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
+
+const shimExe = "containerd-shim-runhcs-v1.exe"
 
 func runGlobalCommand(t *testing.T, args []string) (string, string, error) {
 	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed os.Getwd() with: %v", err)
-	}
+
+	shim := require.BinaryInPath(t, shimExe)
 	cmd := exec.Command(
-		filepath.Join(wd, "containerd-shim-runhcs-v1.exe"),
+		shim,
 		args...,
 	)
+	t.Logf("execing global command: %s", cmd.String())
 
 	outb := bytes.Buffer{}
 	errb := bytes.Buffer{}
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
-	err = cmd.Run()
+	err := cmd.Run()
 	return outb.String(), errb.String(), err
 }
 

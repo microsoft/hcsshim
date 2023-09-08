@@ -1,7 +1,10 @@
 package require
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -42,14 +45,35 @@ func AnyFeature(tb testing.TB, given *flag.IncludeExcludeStringSet, want ...stri
 	tb.Skipf("skipping test due to missing features: %s", want)
 }
 
+// Binary tries to locate `binary` in the PATH (or the current working directory),
+// or the same the same directory as the currently-executing binary.
+//
+// Returns full binary path if it exists, otherwise, skips the test.
+func BinaryInPath(tb testing.TB, binary string) string {
+	tb.Helper()
+
+	if path, err := exec.LookPath(binary); err == nil || errors.Is(err, exec.ErrDot) {
+		p, found, err := fileExists(path)
+		if found {
+			return p
+		}
+		tb.Logf("did not find binary %q at path %q: %v", binary, path, err)
+	} else {
+		tb.Logf("could not look up binary %q: %v", binary, err)
+	}
+
+	return Binary(tb, binary)
+}
+
 // Binary checks if `binary` exists in the same directory as the test
 // binary.
 // Returns full binary path if it exists, otherwise, skips the test.
 func Binary(tb testing.TB, binary string) string {
 	tb.Helper()
+
 	executable, err := os.Executable()
 	if err != nil {
-		tb.Skipf("error locating executable: %s", err)
+		tb.Skipf("error locating executable: %v", err)
 		return ""
 	}
 
@@ -61,22 +85,33 @@ func Binary(tb testing.TB, binary string) string {
 // if it exists. Otherwise, it skips the test.
 func File(tb testing.TB, path, file string) string {
 	tb.Helper()
+
+	p, found, err := fileExists(filepath.Join(path, file))
+	if err != nil {
+		tb.Fatal(err)
+	} else if !found {
+		tb.Skipf("file %q not found in %q", file, path)
+	}
+	return p
+}
+
+// fileExists checks if path points to a valid file.
+func fileExists(path string) (string, bool, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
-		tb.Fatalf("could not resolve path %q: %v", path, err)
+		return "", false, fmt.Errorf("could not resolve path %q: %w", path, err)
 	}
 
-	p := filepath.Join(path, file)
-	fi, err := os.Stat(p)
+	fi, err := os.Stat(path)
 	switch {
 	case os.IsNotExist(err):
-		tb.Skipf("file %q not found", p)
+		return path, false, nil
 	case err != nil:
-		tb.Fatalf("could not stat file %q: %v", p, err)
+		return "", false, fmt.Errorf("could not stat file %q: %w", path, err)
 	case fi.IsDir():
-		tb.Fatalf("path %q is a directory", p)
+		return "", false, fmt.Errorf("path %q is a directory", path)
 	default:
 	}
 
-	return p
+	return path, true, nil
 }
