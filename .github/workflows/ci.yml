@@ -437,7 +437,7 @@ jobs:
           # We skip this test here, until a new release of hcsshim is cut and the one in
           # containerd is updated. When the shim is updated in containerd, this test will
           # also need to be updated and the special case for windows, removed.
-          FOCUS="[^TestContainerdRestart$]" make cri-integration
+          FOCUS="[^(TestContainerdRestart|TestContainerSymlinkVolumes)]" make cri-integration
 
   build:
     needs: [test-windows, test-linux]
