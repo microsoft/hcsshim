@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	v1 "github.com/containerd/cgroups/stats/v1"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
@@ -107,7 +108,24 @@ func (tst *testShimTask) Update(ctx context.Context, req *task.UpdateTaskRequest
 	if err != nil {
 		return errors.Wrapf(err, "failed to unmarshal resources for container %s update request", req.ID)
 	}
-	return verifyTaskUpdateResourcesType(data)
+	if err := verifyTaskUpdateResourcesType(data); err != nil {
+		return err
+	}
+
+	if tst.isWCOW {
+		switch request := data.(type) {
+		case *ctrdtaskapi.ContainerMount:
+			// Adding mount to a running container is currently only supported for windows containers
+			if isMountTypeSupported(request.HostPath, request.Type) {
+				return nil
+			} else {
+				return errNotSupportedResourcesRequest
+			}
+		default:
+			return nil
+		}
+	}
+	return nil
 }
 
 func (tst *testShimTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {

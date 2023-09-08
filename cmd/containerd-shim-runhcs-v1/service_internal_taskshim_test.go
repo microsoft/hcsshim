@@ -6,12 +6,16 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
@@ -532,6 +536,67 @@ func Test_TaskShim_updateInternal_Success(t *testing.T) {
 	}
 	if resp == nil {
 		t.Fatalf("should have returned an empty resp")
+	}
+}
+
+// Tests if a requested mount is valid for windows containers.
+// Currently only host volumes/directories are supported to be mounted
+// on a running windows container.
+func Test_TaskShimWindowsMount_updateInternal_Success(t *testing.T) {
+	s, t1, _ := setupTaskServiceWithFakes(t)
+	t1.isWCOW = true
+
+	hostRWSharedDirectory := t.TempDir()
+	fRW, _ := os.OpenFile(filepath.Join(hostRWSharedDirectory, "readwrite"), os.O_RDWR|os.O_CREATE, 0755)
+	fRW.Close()
+
+	resources := &ctrdtaskapi.ContainerMount{
+		HostPath:      hostRWSharedDirectory,
+		ContainerPath: hostRWSharedDirectory,
+		ReadOnly:      true,
+		Type:          "",
+	}
+	any, err := typeurl.MarshalAny(resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: any})
+	if err != nil {
+		t.Fatalf("should not have failed update mount with error, got: %v", err)
+	}
+	if resp == nil {
+		t.Fatalf("should have returned an empty resp")
+	}
+}
+
+func Test_TaskShimWindowsMount_updateInternal_Error(t *testing.T) {
+	s, t1, _ := setupTaskServiceWithFakes(t)
+	t1.isWCOW = true
+
+	hostRWSharedDirectory := t.TempDir()
+	tmpVhdPath := filepath.Join(hostRWSharedDirectory, "test-vhd.vhdx")
+
+	fRW, _ := os.OpenFile(filepath.Join(tmpVhdPath, "readwrite"), os.O_RDWR|os.O_CREATE, 0755)
+	fRW.Close()
+
+	resources := &ctrdtaskapi.ContainerMount{
+		HostPath:      tmpVhdPath,
+		ContainerPath: tmpVhdPath,
+		ReadOnly:      true,
+		Type:          hcsoci.MountTypeVirtualDisk,
+	}
+	any, err := typeurl.MarshalAny(resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: any})
+	if err == nil {
+		t.Fatalf("should have failed update mount with error")
+	}
+	if resp != nil {
+		t.Fatalf("should have returned a nil resp, got: %v", resp)
 	}
 }
 
