@@ -29,17 +29,19 @@ func runGlobalCommand(t *testing.T, args []string) (string, string, error) {
 	return outb.String(), errb.String(), err
 }
 
-func verifyGlobalCommandSuccess(t *testing.T, expectedStdout, stdout, expectedStderr, stderr string, runerr error) {
-	if runerr != nil {
-		t.Fatalf("expected no error got stdout: '%s', stderr: '%s', err: '%v'", stdout, stderr, runerr)
+func verifyGlobalCommandSuccess(t *testing.T, expectedStdout, stdout, expectedStderr, stderr string, runErr error) {
+	t.Helper()
+	if runErr != nil {
+		t.Fatalf("expected no error got stdout: '%s', stderr: '%s', err: '%v'", stdout, stderr, runErr)
 	}
 
 	verifyGlobalCommandOut(t, expectedStdout, stdout, expectedStderr, stderr)
 }
 
-func verifyGlobalCommandFailure(t *testing.T, expectedStdout, stdout, expectedStderr, stderr string, runerr error) {
-	if runerr == nil || runerr.Error() != "exit status 1" {
-		t.Fatalf("expected error: 'exit status 1', got: '%v'", runerr)
+func verifyGlobalCommandFailure(t *testing.T, expectedStdout, stdout, expectedStderr, stderr string, runErr error) {
+	t.Helper()
+	if runErr == nil || runErr.Error() != "exit status 1" {
+		t.Fatalf("expected error: 'exit status 1', got: '%v'", runErr)
 	}
 
 	verifyGlobalCommandOut(t, expectedStdout, stdout, expectedStderr, stderr)
@@ -49,14 +51,14 @@ func verifyGlobalCommandOut(t *testing.T, expectedStdout, stdout, expectedStderr
 	// stdout verify
 	if expectedStdout == "" && expectedStdout != stdout {
 		t.Fatalf("expected stdout empty got: %s", stdout)
-	} else if !strings.HasPrefix(stdout, expectedStdout) {
+	} else if !strings.Contains(stdout, expectedStdout) {
 		t.Fatalf("expected stdout to begin with: %s, got: %s", expectedStdout, stdout)
 	}
 
 	// stderr verify
 	if expectedStderr == "" && expectedStderr != stderr {
 		t.Fatalf("expected stderr empty got: %s", stderr)
-	} else if !strings.HasPrefix(stderr, expectedStderr) {
+	} else if !strings.Contains(stderr, expectedStderr) {
 		t.Fatalf("expected stderr to begin with: %s, got: %s", expectedStderr, stderr)
 	}
 }

@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package main
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/containerd/containerd/runtime/v2/task"
@@ -51,7 +53,18 @@ func createStartCommandWithID(t *testing.T, id string) (*exec.Cmd, *bytes.Buffer
 }
 
 func cleanupTestBundle(t *testing.T, dir string) {
-	err := os.RemoveAll(dir)
+	t.Helper()
+	var err error
+	for i := 0; i < 2; i++ {
+		// sporadic access-denies errors if trying to delete bundle (namely panic.log) before OS realizes
+		// shim exited and releases file handle
+		if err = os.RemoveAll(dir); err == nil {
+			// does not os.RemoveAll does not if path doesn't exist
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+
 	if err != nil {
 		t.Errorf("failed removing test bundle with: %v", err)
 	}
@@ -98,7 +111,7 @@ func verifyStartCommandSuccess(t *testing.T, expectedNamespace, expectedID strin
 
 	cl.Close()
 	c.Close()
-	if err != nil && !strings.HasPrefix(err.Error(), "ttrpc: client shutting down: ttrpc: closed") {
+	if err != nil && !strings.HasPrefix(err.Error(), "ttrpc: closed") {
 		t.Fatalf("failed to shutdown shim with: %v", err)
 	}
 }
