@@ -310,3 +310,28 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string, readO
 func getVSMBShareKey(hostPath string, readOnly bool) string {
 	return fmt.Sprintf("%v-%v", hostPath, readOnly)
 }
+
+/*
+func (uvm *UtilityVM) requestAddContainerMount(ctx context.Context, resourcePath string, settings interface{}) error {
+	//	var modification interface{}
+	//if ht.isWCOW {
+	modification := &hcsschema.ModifySettingRequest{
+		ResourcePath: resourcePath,
+		RequestType:  guestrequest.RequestTypeUpdate,
+		Settings:     settings,
+	}
+	//}
+	//else {
+	//	modification = guestrequest.ModificationRequest{
+	//		ResourceType: guestresource.ResourceTypeContainerConstraints,
+	//		RequestType:  guestrequest.RequestTypeUpdate,
+	//		Settings:     settings,
+	//	}
+	//}
+
+	if err := uvm.modify(ctx, modification); err != nil {
+		return err
+	}
+	return nil
+}
+*/

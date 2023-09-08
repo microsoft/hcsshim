@@ -843,6 +843,7 @@ func (computeSystem *System) Modify(ctx context.Context, config interface{}) err
 	}
 
 	requestJSON := string(requestBytes)
+	log.G(ctx).Debug(".Modify(), requestBytes %v, requestJSON %v", requestBytes, requestJSON)
 	resultJSON, err := vmcompute.HcsModifyComputeSystem(ctx, computeSystem.handle, requestJSON)
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {

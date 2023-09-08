@@ -83,6 +83,8 @@ const (
 	// For LCOW, this may include a vhd file that contains kernel modules as *.ko files.
 	VirtualMachineKernelDrivers = "io.microsoft.virtualmachine.kerneldrivers"
 
+	AddVolumeToRunningContainer = "microsoft.com/add-mount"
+
 	// DeviceExtensions contains a comma separated list of full paths to device extension files.
 	// The content of these are added to a container's hcs create document.
 	DeviceExtensions = "io.microsoft.container.wcow.deviceextensions"

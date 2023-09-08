@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	//hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
@@ -68,5 +69,25 @@ func (uvm *UtilityVM) Update(ctx context.Context, data interface{}, annots map[s
 		}
 	}
 
+	// check if annotation for mounting volumes was added
+	/*
+		if annots["mount"] != "" {
+			mountPaths := strings.Split(annots["mount"], "::")
+			// make sure there is host and container path
+			if len(mountPaths) != 2 {
+				return fmt.Errorf("host and container path not specified")
+			}
+
+			log.G(ctx).Debug("mountPaths[0] %v mountPaths[1] %v", mountPaths[0], mountPaths[1])
+			settings := hcsschema.MappedDirectory{
+				HostPath:      mountPaths[0],
+				ContainerPath: mountPaths[1],
+				ReadOnly:      true,
+			}
+			if err := uvm.requestAddContainerMount(ctx, resourcepaths.VSMBShareResourcePath, settings); err != nil {
+				return err
+			}
+		}
+	*/
 	return nil
 }

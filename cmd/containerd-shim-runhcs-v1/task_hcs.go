@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -853,6 +854,13 @@ func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) erro
 		return err
 	}
 
+	log.G(ctx).Debug("!! hcstask.Update, ht.ownsHost %v, ht.host %v", ht.ownsHost, ht.host)
+	log.G(ctx).Debug("!! hcstask.Update, annotations: %v", req.Annotations)
+	//ht.ownsHost &&
+	//			gcsDocument = &hcsschema.HostedSystem{
+	//	SchemaVersion: schemaversion.SchemaV21(),
+	//	Container:     v2,
+	//}
 	if ht.ownsHost && ht.host != nil {
 		return ht.host.Update(ctx, resources, req.Annotations)
 	}
@@ -918,6 +926,66 @@ func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, an
 			return err
 		}
 	}
+	if annotations["add-mount"] != "" {
+		/*
+			mountPaths := strings.Split(annotations["mount"], "::")
+			// make sure there is host and container path
+			if len(mountPaths) != 2 {
+				return fmt.Errorf("host and container path not specified")
+			}
+
+			log.G(ctx).Debug("mountPaths[0] %v mountPaths[1] %v", mountPaths[0], mountPaths[1])
+			var settings hcsschema.MappedDirectory
+			//	if ht.host == nil {
+			settings = hcsschema.MappedDirectory{
+				HostPath:      mountPaths[0],
+				ContainerPath: mountPaths[1],
+				ReadOnly:      true,
+			}
+			if err := ht.requestAddContainerMount(ctx, resourcepaths.SiloMappedDirectoryResourcePath, settings); err != nil {
+				return err
+			}
+			//}
+			else {
+				settings = hcsschema.MappedDirectory{
+					HostPath:      mountPaths[0],
+					ContainerPath: mountPaths[1],
+					ReadOnly:      true,
+				}
+				if err := ht.requestAddContainerMount(ctx, resourcepaths.VSMBShareResourcePath, settings); err != nil {
+					return err
+				}
+			}
+		*/
+		newMountPaths := strings.Split(annotations["add-mount"], ",")
+		if len(newMountPaths) < 2 {
+			return fmt.Errorf("mount path not specified properly")
+		}
+
+		src := strings.Split(newMountPaths[0], "=")[1]
+		dst := strings.Split(newMountPaths[1], "=")[1]
+
+		isRO := true
+
+		if len(newMountPaths) == 3 {
+			if strings.Split(newMountPaths[2], "=")[1] == "false" {
+				isRO = false
+			}
+		}
+
+		var settings hcsschema.MappedDirectory
+		// if process isolated
+		if ht.host == nil {
+			settings = hcsschema.MappedDirectory{
+				HostPath:      src,
+				ContainerPath: dst,
+				ReadOnly:      isRO,
+			}
+			if err := ht.requestAddContainerMount(ctx, resourcepaths.SiloMappedDirectoryResourcePath, settings); err != nil {
+				return fmt.Errorf("Failed to add mount to running container with err: %v", err)
+			}
+		} // TODO: else case
+	}
 	return nil
 }
 
@@ -930,6 +998,21 @@ func (ht *hcsTask) updateLCOWResources(ctx context.Context, data interface{}, an
 		Linux: *resources,
 	}
 	return ht.requestUpdateContainer(ctx, "", settings)
+}
+
+func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath string, settings interface{}) error {
+	var modification interface{}
+	//if ht.isWCOW {
+	modification = &hcsschema.ModifySettingRequest{
+		ResourcePath: resourcePath,
+		RequestType:  guestrequest.RequestTypeAdd,
+		Settings:     settings,
+	}
+	//	}
+	//else {
+	//
+	//}
+	return ht.c.Modify(ctx, modification)
 }
 
 func (ht *hcsTask) requestUpdateContainer(ctx context.Context, resourcePath string, settings interface{}) error {
