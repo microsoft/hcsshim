@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,10 +23,12 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/Microsoft/go-winio/pkg/fs"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
@@ -44,6 +47,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 )
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
@@ -862,7 +866,15 @@ func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) erro
 
 func (ht *hcsTask) updateTaskContainerResources(ctx context.Context, data interface{}, annotations map[string]string) error {
 	if ht.isWCOW {
-		return ht.updateWCOWResources(ctx, data, annotations)
+		switch resources := data.(type) {
+		case *specs.WindowsResources:
+			return ht.updateWCOWResources(ctx, resources, annotations)
+		case *ctrdtaskapi.ContainerMount:
+			// Adding mount to a running container is currently only supported for windows containers
+			return ht.updateWCOWContainerMount(ctx, resources, annotations)
+		default:
+			return errNotSupportedResourcesRequest
+		}
 	}
 
 	return ht.updateLCOWResources(ctx, data, annotations)
@@ -898,11 +910,7 @@ func isValidWindowsCPUResources(c *specs.WindowsCPUResources) bool {
 		(c.Maximum != nil && (c.Count == nil && c.Shares == nil))
 }
 
-func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, annotations map[string]string) error {
-	resources, ok := data.(*specs.WindowsResources)
-	if !ok {
-		return errors.New("must have resources be type *WindowsResources when updating a wcow container")
-	}
+func (ht *hcsTask) updateWCOWResources(ctx context.Context, resources *specs.WindowsResources, annotations map[string]string) error {
 	if resources.Memory != nil && resources.Memory.Limit != nil {
 		newMemorySizeInMB := *resources.Memory.Limit / memory.MiB
 		memoryLimit := hcsoci.NormalizeMemorySize(ctx, ht.id, newMemorySizeInMB)
@@ -960,4 +968,90 @@ func (ht *hcsTask) ProcessorInfo(ctx context.Context) (*processorInfo, error) {
 	return &processorInfo{
 		count: ht.host.ProcessorCount(),
 	}, nil
+}
+
+func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath string, settings interface{}) error {
+	modification := &hcsschema.ModifySettingRequest{
+		ResourcePath: resourcePath,
+		RequestType:  guestrequest.RequestTypeAdd,
+		Settings:     settings,
+	}
+	return ht.c.Modify(ctx, modification)
+}
+
+func isMountTypeSupported(hostPath, mountType string) bool {
+	// currently we only support mounting of host volumes/directories
+	switch mountType {
+	case hcsoci.MountTypeBind, hcsoci.MountTypePhysicalDisk,
+		hcsoci.MountTypeVirtualDisk, hcsoci.MountTypeExtensibleVirtualDisk:
+		return false
+	default:
+		// Ensure that host path is not sandbox://, hugepages://
+		if strings.HasPrefix(hostPath, guestpath.SandboxMountPrefix) ||
+			strings.HasPrefix(hostPath, guestpath.HugePagesMountPrefix) ||
+			strings.HasPrefix(hostPath, guestpath.PipePrefix) {
+			return false
+		} else {
+			// hcsshim treats mountType == "" as a normal directory mount
+			// and this is supported
+			return mountType == ""
+		}
+	}
+}
+
+func (ht *hcsTask) updateWCOWContainerMount(ctx context.Context, resources *ctrdtaskapi.ContainerMount, annotations map[string]string) error {
+	// Hcsschema v2 should be supported
+	if osversion.Build() < osversion.RS5 {
+		// OSVerions < RS5 only support hcsshema v1
+		return fmt.Errorf("hcsschema v1 unsupported")
+	}
+
+	if resources.HostPath == "" || resources.ContainerPath == "" {
+		return fmt.Errorf("invalid OCI spec - a mount must have both host and container path set")
+	}
+
+	// Check for valid mount type
+	if !isMountTypeSupported(resources.HostPath, resources.Type) {
+		return fmt.Errorf("invalid mount type %v. Currently only host volumes/directories can be mounted to running containers", resources.Type)
+	}
+
+	if ht.host == nil {
+		// HCS has a bug where it does not correctly resolve file (not dir) paths
+		// if the path includes a symlink. Therefore, we resolve the path here before
+		// passing it in. The issue does not occur with VSMB, so don't need to worry
+		// about the isolated case.
+		hostPath, err := fs.ResolvePath(resources.HostPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to resolve path for hostPath %s", resources.HostPath)
+		}
+
+		// process isolated windows container
+		settings := hcsschema.MappedDirectory{
+			HostPath:      hostPath,
+			ContainerPath: resources.ContainerPath,
+			ReadOnly:      resources.ReadOnly,
+		}
+		if err := ht.requestAddContainerMount(ctx, resourcepaths.SiloMappedDirectoryResourcePath, settings); err != nil {
+			return errors.Wrapf(err, "failed to add mount to process isolated container")
+		}
+	} else {
+		// if it is a mount request for a running hyperV WCOW container, we should first mount volume to the
+		// UVM as a VSMB share and then mount to the running container using the src path as seen by the UVM
+		vsmbShare, guestPath, err := ht.host.AddVsmbAndGetSharePath(ctx, resources.HostPath, resources.ContainerPath, resources.ReadOnly)
+		if err != nil {
+			return err
+		}
+		// Add mount to list of resources to be released on container cleanup
+		ht.cr.Add(vsmbShare)
+
+		settings := hcsschema.MappedDirectory{
+			HostPath:      guestPath,
+			ContainerPath: resources.ContainerPath,
+			ReadOnly:      resources.ReadOnly,
+		}
+		if err := ht.requestAddContainerMount(ctx, resourcepaths.SiloMappedDirectoryResourcePath, settings); err != nil {
+			return errors.Wrapf(err, "failed to add mount to hyperV container")
+		}
+	}
+	return nil
 }
