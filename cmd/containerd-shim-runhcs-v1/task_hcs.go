@@ -973,10 +973,14 @@ func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, an
 			}
 		}
 
-		var settings hcsschema.MappedDirectory
+		if src == "" || dst == "" {
+			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: src:%v dst:%v", src, dst)
+		}
+
+		//	var settings hcsschema.MappedDirectory
 		// if process isolated
 		if ht.host == nil {
-			settings = hcsschema.MappedDirectory{
+			settings := hcsschema.MappedDirectory{
 				HostPath:      src,
 				ContainerPath: dst,
 				ReadOnly:      isRO,
@@ -984,9 +988,64 @@ func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, an
 			if err := ht.requestAddContainerMount(ctx, resourcepaths.SiloMappedDirectoryResourcePath, settings); err != nil {
 				return fmt.Errorf("Failed to add mount to running container with err: %v", err)
 			}
-		} // TODO: else case
+		} else { // TODO: else case
+			//
+			guestPath, err := ht.setupNewMount(ctx, src, dst, isRO)
+			if err != nil {
+				return err
+			}
+			settings := hcsschema.MappedDirectory{
+				HostPath:      guestPath,
+				ContainerPath: dst,
+				ReadOnly:      isRO,
+			}
+			//guestRequest := guestrequest.ModificationRequest
+			modification := &hcsschema.ModifySettingRequest{
+				ResourcePath: resourcepaths.SiloMappedDirectoryResourcePath,
+				RequestType:  guestrequest.RequestTypeAdd,
+				Settings:     settings,
+			}
+			return ht.c.Modify(ctx, modification)
+		}
 	}
 	return nil
+}
+
+func (ht *hcsTask) setupNewMount(ctx context.Context, src string, dst string, isRO bool) (string, error) {
+	//var err error
+	/*
+		r := resources.NewContainerResources(ht.c.ID())
+		defer func() {
+			if err != nil {
+				//	if !coi.DoNotReleaseResourcesOnFailure {
+				_ = resources.ReleaseResources(ctx, r, ht.host, true)
+				//	}
+			}
+		}()
+	*/
+	// TODO: a bunch of other if else. See setupMounts
+	//l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
+	options := ht.host.DefaultVSMBOptions(isRO)
+	// share,
+	_, err := ht.host.AddVSMB(ctx, src, options)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to add VSMB share to utility VM for newmount src: %+v, dst: %v", src, dst)
+		/*
+			err2 := ht.host.RemoveVSMB(ctx, src, isRO)
+			if err2 != nil {
+				err = errors.Wrapf(err, "failed to remove VSMB share for hostPath %v", src)
+			}
+		*/
+		return "", err
+	}
+	//r.Add(share)
+
+	guestPath, err := ht.host.GetVSMBUvmPath(ctx, src, isRO)
+	if err != nil {
+		return "", fmt.Errorf("err getting vsmb path for hostPath %v", src)
+	}
+
+	return guestPath, nil
 }
 
 func (ht *hcsTask) updateLCOWResources(ctx context.Context, data interface{}, annotations map[string]string) error {
@@ -1002,16 +1061,13 @@ func (ht *hcsTask) updateLCOWResources(ctx context.Context, data interface{}, an
 
 func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath string, settings interface{}) error {
 	var modification interface{}
-	//if ht.isWCOW {
-	modification = &hcsschema.ModifySettingRequest{
-		ResourcePath: resourcePath,
-		RequestType:  guestrequest.RequestTypeAdd,
-		Settings:     settings,
+	if ht.host == nil {
+		modification = &hcsschema.ModifySettingRequest{
+			ResourcePath: resourcePath,
+			RequestType:  guestrequest.RequestTypeAdd,
+			Settings:     settings,
+		}
 	}
-	//	}
-	//else {
-	//
-	//}
 	return ht.c.Modify(ctx, modification)
 }
 
