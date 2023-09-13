@@ -126,7 +126,7 @@ const (
 	// MemoryHighMMIOBaseInMB indicates the high MMIO base in MB
 	MemoryHighMMIOBaseInMB = "io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb"
 
-	// MemoryHighMMIOBaseInMB indicates the high MMIO gap in MB
+	// MemoryHighMMIOGapInMB indicates the high MMIO gap in MB
 	MemoryHighMMIOGapInMB = "io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb"
 
 	// ProcessorCount overrides the hypervisor isolated vCPU count set

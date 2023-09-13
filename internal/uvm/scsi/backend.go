@@ -174,8 +174,8 @@ func mountRequest(controller, lun uint, path string, config *mountConfig, osType
 		if controller != 0 {
 			return guestrequest.ModificationRequest{}, errors.New("WCOW only supports SCSI controller 0")
 		}
-		if config.encrypted || config.verity != nil || len(config.options) != 0 ||
-			config.ensureFileystem || config.filesystem != "" || config.partition != 0 {
+		if config.encrypted || len(config.options) != 0 ||
+			config.ensureFilesystem || config.filesystem != "" || config.partition != 0 {
 			return guestrequest.ModificationRequest{},
 				errors.New("WCOW does not support encrypted, verity, guest options, partitions, specifying mount filesystem, or ensuring filesystem on mounts")
 		}
@@ -192,8 +192,7 @@ func mountRequest(controller, lun uint, path string, config *mountConfig, osType
 			ReadOnly:         config.readOnly,
 			Encrypted:        config.encrypted,
 			Options:          config.options,
-			VerityInfo:       config.verity,
-			EnsureFilesystem: config.ensureFileystem,
+			EnsureFilesystem: config.ensureFilesystem,
 			Filesystem:       config.filesystem,
 		}
 	default:
@@ -219,7 +218,6 @@ func unmountRequest(controller, lun uint, path string, config *mountConfig, osTy
 			Lun:        uint8(lun),
 			Partition:  config.partition,
 			Controller: uint8(controller),
-			VerityInfo: config.verity,
 		}
 	default:
 		return guestrequest.ModificationRequest{}, fmt.Errorf("unsupported os type: %s", osType)

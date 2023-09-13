@@ -80,7 +80,12 @@ func getLCOWLayers(rootfs []*types.Mount, layerFolders []string) (*layers.LCOWLa
 		// Each read-only layer should have a layer.vhd, and the scratch layer should have a sandbox.vhdx.
 		roLayers := make([]*layers.LCOWLayer, 0, len(parentLayers))
 		for _, parentLayer := range parentLayers {
-			roLayers = append(roLayers, &layers.LCOWLayer{VHDPath: filepath.Join(parentLayer, "layer.vhd")})
+			roLayers = append(
+				roLayers,
+				&layers.LCOWLayer{
+					VHDPath: filepath.Join(parentLayer, "layer.vhd"),
+				},
+			)
 		}
 		return &layers.LCOWLayers{
 			Layers:         roLayers,
@@ -122,7 +127,13 @@ func getLCOWLayers(rootfs []*types.Mount, layerFolders []string) (*layers.LCOWLa
 		}
 		roLayers := make([]*layers.LCOWLayer, 0, len(layerData))
 		for _, layer := range layerData {
-			roLayers = append(roLayers, &layers.LCOWLayer{VHDPath: layer.Path, Partition: layer.Partition})
+			roLayers = append(
+				roLayers,
+				&layers.LCOWLayer{
+					VHDPath:   layer.Path,
+					Partition: layer.Partition,
+				},
+			)
 		}
 		return &layers.LCOWLayers{Layers: roLayers, ScratchVHDPath: scratchPath}, nil
 	default:

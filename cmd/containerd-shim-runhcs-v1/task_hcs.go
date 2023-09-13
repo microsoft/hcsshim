@@ -11,11 +11,11 @@ import (
 	"time"
 
 	eventstypes "github.com/containerd/containerd/api/events"
-	task "github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
-	typeurl "github.com/containerd/typeurl/v2"
+	"github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"sort"
 	"sync"
-
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 type mountManager struct {
@@ -38,13 +36,12 @@ type mount struct {
 }
 
 type mountConfig struct {
-	partition       uint64
-	readOnly        bool
-	encrypted       bool
-	verity          *guestresource.DeviceVerityInfo
-	options         []string
-	ensureFileystem bool
-	filesystem      string
+	partition        uint64
+	readOnly         bool
+	encrypted        bool
+	options          []string
+	ensureFilesystem bool
+	filesystem       string
 }
 
 func (mm *mountManager) mount(ctx context.Context, controller, lun uint, c *mountConfig) (_ string, err error) {

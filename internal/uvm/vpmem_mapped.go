@@ -16,7 +16,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/internal/verity"
 )
 
 const (
@@ -83,16 +82,6 @@ func newMappedVPMemModifyRequest(
 			DeviceOffsetInBytes: md.mappedRegion.Offset(),
 			DeviceSizeInBytes:   md.sizeInBytes,
 		},
-	}
-
-	if verity, err := verity.ReadVeritySuperBlock(ctx, md.hostPath); err != nil {
-		log.G(ctx).WithError(err).WithField("hostPath", md.hostPath).Debug("unable to read dm-verity information from VHD")
-	} else {
-		log.G(ctx).WithFields(logrus.Fields{
-			"hostPath":   md.hostPath,
-			"rootDigest": verity.RootDigest,
-		}).Debug("adding multi-mapped VPMem with dm-verity")
-		guestSettings.VerityInfo = verity
 	}
 
 	request := &hcsschema.ModifySettingRequest{

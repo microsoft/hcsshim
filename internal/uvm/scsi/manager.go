@@ -7,11 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/internal/verity"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -80,7 +76,7 @@ type MountConfig struct {
 	// EnsureFilesystem indicates to format the mount as `Filesystem`
 	// if it is not already formatted with that fs type.
 	// This is only supported for LCOW.
-	EnsureFileystem bool
+	EnsureFilesystem bool
 	// Filesystem is the target filesystem that a device will be
 	// mounted as.
 	// This is only supported for LCOW.
@@ -153,13 +149,12 @@ func (m *Manager) AddVirtualDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
-			partition:       mc.Partition,
-			readOnly:        readOnly,
-			encrypted:       mc.Encrypted,
-			options:         mc.Options,
-			verity:          readVerityInfo(ctx, hostPath),
-			ensureFileystem: mc.EnsureFileystem,
-			filesystem:      mc.Filesystem,
+			partition:        mc.Partition,
+			readOnly:         readOnly,
+			encrypted:        mc.Encrypted,
+			options:          mc.Options,
+			ensureFilesystem: mc.EnsureFilesystem,
+			filesystem:       mc.Filesystem,
 		}
 	}
 	return m.add(ctx,
@@ -199,13 +194,12 @@ func (m *Manager) AddPhysicalDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
-			partition:       mc.Partition,
-			readOnly:        readOnly,
-			encrypted:       mc.Encrypted,
-			options:         mc.Options,
-			verity:          readVerityInfo(ctx, hostPath),
-			ensureFileystem: mc.EnsureFileystem,
-			filesystem:      mc.Filesystem,
+			partition:        mc.Partition,
+			readOnly:         readOnly,
+			encrypted:        mc.Encrypted,
+			options:          mc.Options,
+			ensureFilesystem: mc.EnsureFilesystem,
+			filesystem:       mc.Filesystem,
 		}
 	}
 	return m.add(ctx,
@@ -244,12 +238,12 @@ func (m *Manager) AddExtensibleVirtualDisk(
 	var mcInternal *mountConfig
 	if mc != nil {
 		mcInternal = &mountConfig{
-			partition:       mc.Partition,
-			readOnly:        readOnly,
-			encrypted:       mc.Encrypted,
-			options:         mc.Options,
-			ensureFileystem: mc.EnsureFileystem,
-			filesystem:      mc.Filesystem,
+			partition:        mc.Partition,
+			readOnly:         readOnly,
+			encrypted:        mc.Encrypted,
+			options:          mc.Options,
+			ensureFilesystem: mc.EnsureFilesystem,
+			filesystem:       mc.Filesystem,
 		}
 	}
 	return m.add(ctx,
@@ -300,21 +294,6 @@ func (m *Manager) remove(ctx context.Context, controller, lun uint, guestPath st
 		return err
 	}
 
-	return nil
-}
-
-func readVerityInfo(ctx context.Context, path string) *guestresource.DeviceVerityInfo {
-	if v, iErr := verity.ReadVeritySuperBlock(ctx, path); iErr != nil {
-		log.G(ctx).WithError(iErr).WithField("hostPath", path).Debug("unable to read dm-verity information from VHD")
-	} else {
-		if v != nil {
-			log.G(ctx).WithFields(logrus.Fields{
-				"hostPath":   path,
-				"rootDigest": v.RootDigest,
-			}).Debug("adding SCSI with dm-verity")
-		}
-		return v
-	}
 	return nil
 }
 

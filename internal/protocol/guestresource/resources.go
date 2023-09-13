@@ -78,13 +78,14 @@ type SCSIDevice struct {
 // LCOWMappedVirtualDisk represents a disk on the host which is mapped into a
 // directory in the guest in the V2 schema.
 type LCOWMappedVirtualDisk struct {
-	MountPath        string            `json:"MountPath,omitempty"`
-	Lun              uint8             `json:"Lun,omitempty"`
-	Controller       uint8             `json:"Controller,omitempty"`
-	Partition        uint64            `json:"Partition,omitempty"`
-	ReadOnly         bool              `json:"ReadOnly,omitempty"`
-	Encrypted        bool              `json:"Encrypted,omitempty"`
-	Options          []string          `json:"Options,omitempty"`
+	MountPath  string   `json:"MountPath,omitempty"`
+	Lun        uint8    `json:"Lun,omitempty"`
+	Controller uint8    `json:"Controller,omitempty"`
+	Partition  uint64   `json:"Partition,omitempty"`
+	ReadOnly   bool     `json:"ReadOnly,omitempty"`
+	Encrypted  bool     `json:"Encrypted,omitempty"`
+	Options    []string `json:"Options,omitempty"`
+	// Deprecated: verity info is read by the guest
 	VerityInfo       *DeviceVerityInfo `json:"VerityInfo,omitempty"`
 	EnsureFilesystem bool              `json:"EnsureFilesystem,omitempty"`
 	Filesystem       string            `json:"Filesystem,omitempty"`
@@ -112,6 +113,8 @@ type LCOWVPMemMappingInfo struct {
 
 // DeviceVerityInfo represents dm-verity metadata of a block device.
 // Most of the fields can be directly mapped to table entries https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html
+// Deprecated: verity info is now read inside the guest and this message will be
+// removed.
 type DeviceVerityInfo struct {
 	// Ext4SizeInBytes is the size of ext4 file system
 	Ext4SizeInBytes int64 `json:",omitempty"`
@@ -136,6 +139,7 @@ type LCOWMappedVPMemDevice struct {
 	// MappingInfo is used when multiple devices are mapped onto a single VPMem device
 	MappingInfo *LCOWVPMemMappingInfo `json:"MappingInfo,omitempty"`
 	// VerityInfo is used when the VPMem has read-only integrity protection enabled
+	// Deprecated: verity info is now read inside the guest.
 	VerityInfo *DeviceVerityInfo `json:"VerityInfo,omitempty"`
 }
 
