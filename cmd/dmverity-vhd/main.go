@@ -103,7 +103,13 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		// if only an image name is provided and not a tag, the default is "latest"
 		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
 	} else if dockerDaemon {
-		img, err = daemon.Image(ref)
+		// use the unbuffered opener, the tradeoff being the image will stream as needed
+		// so it is slower but much more memory efficient
+		var opts []daemon.Option
+		opt := daemon.WithUnbufferedOpener()
+		opts = append(opts, opt)
+
+		img, err = daemon.Image(ref, opts...)
 	} else {
 		var remoteOpts []remote.Option
 		if ctx.IsSet(usernameFlag) && ctx.IsSet(passwordFlag) {
