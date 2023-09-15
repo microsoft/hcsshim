@@ -45,7 +45,7 @@ func Create(width, height int16, flags uint32) (*Pty, error) {
 
 	var hpc windows.Handle
 	coord := windows.Coord{X: width, Y: height}
-	err = winapi.CreatePseudoConsole(coord, windows.Handle(ptyIn.Fd()), windows.Handle(ptyOut.Fd()), 0, &hpc)
+	err = winapi.CreatePseudoConsole(coord, windows.Handle(ptyIn.Fd()), windows.Handle(ptyOut.Fd()), flags, &hpc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pseudo console: %w", err)
 	}
