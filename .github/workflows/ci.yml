@@ -382,9 +382,7 @@ jobs:
         shell: bash
         working-directory: src/github.com/containerd/containerd
         run: |
-          # TODO: when https://github.com/containerd/containerd/pull/8691 makes it into the next release (container v1.6.22?), remove the skip
-          # `-skip` is only available in go1.20
-          export EXTRA_TESTFLAGS='-timeout=20m -run="[^(TestConvert)]"'
+          export EXTRA_TESTFLAGS='-timeout=20m'
           export GOTEST='gotestsum --format=standard-verbose --debug --'
           make integration
 
@@ -410,7 +408,7 @@ jobs:
           # We skip this test here, until a new release of hcsshim is cut and the one in
           # containerd is updated. When the shim is updated in containerd, this test will
           # also need to be updated and the special case for windows, removed.
-          FOCUS="[^TestContainerdRestart$]" make cri-integration
+          FOCUS="[^(TestContainerdRestart|TestContainerSymlinkVolumes)]" make cri-integration
 
   #      Enable these tests once the required JobContainer images are updated.
   #
