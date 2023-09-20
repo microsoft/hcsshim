@@ -52,7 +52,6 @@ type StartOpts struct {
 	ContainerdBinary string
 	Address          string
 	TTRPCAddress     string
-	Debug            bool
 }
 
 type StopStatus struct {
@@ -104,12 +103,6 @@ type Config struct {
 
 type ttrpcService interface {
 	RegisterTTRPC(*ttrpc.Server) error
-}
-
-type ttrpcServerOptioner interface {
-	ttrpcService
-
-	UnaryInterceptor() ttrpc.UnaryServerInterceptor
 }
 
 type taskService struct {
@@ -176,7 +169,7 @@ func setLogger(ctx context.Context, id string) (context.Context, error) {
 		l.Logger.SetLevel(logrus.DebugLevel)
 	}
 	f, err := openLog(ctx, id)
-	if err != nil { //nolint:nolintlint,staticcheck // Ignore SA4023 as some platforms always return error
+	if err != nil { //nolint:staticcheck // Ignore SA4023 as some platforms always return error
 		return ctx, err
 	}
 	l.Logger.SetOutput(f)
@@ -262,12 +255,12 @@ func run(ctx context.Context, manager Manager, initFunc Init, name string, confi
 	setRuntime()
 
 	signals, err := setupSignals(config)
-	if err != nil { //nolint:nolintlint,staticcheck // Ignore SA4023 as some platforms always return error
+	if err != nil { //nolint:staticcheck // Ignore SA4023 as some platforms always return error
 		return err
 	}
 
 	if !config.NoSubreaper {
-		if err := subreaper(); err != nil { //nolint:nolintlint,staticcheck // Ignore SA4023 as some platforms always return error
+		if err := subreaper(); err != nil { //nolint:staticcheck // Ignore SA4023 as some platforms always return error
 			return err
 		}
 	}
@@ -334,7 +327,6 @@ func run(ctx context.Context, manager Manager, initFunc Init, name string, confi
 			ContainerdBinary: containerdBinaryFlag,
 			Address:          addressFlag,
 			TTRPCAddress:     ttrpcAddress,
-			Debug:            debugFlag,
 		}
 
 		address, err := manager.Start(ctx, id, opts)
@@ -374,8 +366,6 @@ func run(ctx context.Context, manager Manager, initFunc Init, name string, confi
 	var (
 		initialized   = plugin.NewPluginSet()
 		ttrpcServices = []ttrpcService{}
-
-		ttrpcUnaryInterceptors = []ttrpc.UnaryServerInterceptor{}
 	)
 	plugins := plugin.Graph(func(*plugin.Registration) bool { return false })
 	for _, p := range plugins {
@@ -397,14 +387,14 @@ func run(ctx context.Context, manager Manager, initFunc Init, name string, confi
 		initContext.TTRPCAddress = ttrpcAddress
 
 		// load the plugin specific configuration if it is provided
-		// TODO: Read configuration passed into shim, or from state directory?
-		// if p.Config != nil {
+		//TODO: Read configuration passed into shim, or from state directory?
+		//if p.Config != nil {
 		//	pc, err := config.Decode(p)
 		//	if err != nil {
 		//		return nil, err
 		//	}
 		//	initContext.Config = pc
-		// }
+		//}
 
 		result := p.Init(initContext)
 		if err := initialized.Add(result); err != nil {
@@ -415,29 +405,20 @@ func run(ctx context.Context, manager Manager, initFunc Init, name string, confi
 		if err != nil {
 			if plugin.IsSkipPlugin(err) {
 				log.G(ctx).WithError(err).WithField("type", p.Type).Infof("skip loading plugin %q...", id)
-				continue
+			} else {
+				log.G(ctx).WithError(err).Warnf("failed to load plugin %s", id)
 			}
-			return fmt.Errorf("failed to load plugin %s: %w", id, err)
+			continue
 		}
 
 		if src, ok := instance.(ttrpcService); ok {
 			logrus.WithField("id", id).Debug("registering ttrpc service")
 			ttrpcServices = append(ttrpcServices, src)
-
-		}
-
-		if src, ok := instance.(ttrpcServerOptioner); ok {
-			ttrpcUnaryInterceptors = append(ttrpcUnaryInterceptors, src.UnaryInterceptor())
 		}
 	}
 
-	if len(ttrpcServices) == 0 {
-		return fmt.Errorf("required that ttrpc service")
-	}
-
-	unaryInterceptor := chainUnaryServerInterceptors(ttrpcUnaryInterceptors...)
-	server, err := newServer(ttrpc.WithUnaryServerInterceptor(unaryInterceptor))
-	if err != nil {
+	server, err := newServer()
+	if err != nil { //nolint:staticcheck // Ignore SA4023 as some platforms always return error
 		return fmt.Errorf("failed creating server: %w", err)
 	}
 
@@ -447,7 +428,7 @@ func run(ctx context.Context, manager Manager, initFunc Init, name string, confi
 		}
 	}
 
-	if err := serve(ctx, server, signals, sd.Shutdown); err != nil { //nolint:nolintlint,staticcheck // Ignore SA4023 as some platforms always return error
+	if err := serve(ctx, server, signals, sd.Shutdown); err != nil { //nolint:staticcheck // Ignore SA4023 as some platforms always return error
 		if err != shutdown.ErrShutdown {
 			return err
 		}
@@ -479,7 +460,7 @@ func serve(ctx context.Context, server *ttrpc.Server, signals chan os.Signal, sh
 	}
 
 	l, err := serveListener(socketFlag)
-	if err != nil { //nolint:nolintlint,staticcheck // Ignore SA4023 as some platforms always return error
+	if err != nil { //nolint:staticcheck // Ignore SA4023 as some platforms always return error
 		return err
 	}
 	go func() {
