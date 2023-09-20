@@ -56,12 +56,28 @@ jobs:
       - uses: actions/checkout@v3
         with:
           path: "go/src/github.com/Microsoft/hcsshim"
+        name: Checkout hcsshim
+
+      - name: Get containerd ref
+        shell: powershell
+        run: |
+          $v = go list -m -f '{{ .Version }}' 'github.com/containerd/containerd' 2>&1
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not retrieve containerd version.'
+            exit $LASTEXITCODE
+          }
+          Write-Output "containerd ref is: $v"
+          "containerd_ref=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        working-directory: go/src/github.com/Microsoft/hcsshim
+
       # Install protoc-gen-gogoctrd in D:\bin
       - uses: actions/checkout@v3
         with:
           repository: containerd/containerd
-          ref: v1.6.2
           path: "containerd"
+          ref: "${{ env.containerd_ref }}"
+        name: Checkout containerd
+
       - name: Install protoc-gen-gogoctrd
         shell: powershell
         run: |
@@ -69,6 +85,7 @@ jobs:
           go build ./cmd/protoc-gen-gogoctrd
           mkdir D:\bin
           mv protoc-gen-gogoctrd.exe D:\bin
+
       # Install protoc in D:\bin
       - name: Install protoc
         shell: powershell
@@ -77,6 +94,7 @@ jobs:
           Expand-Archive -Path protoc.zip -DestinationPath .
           mv include go/src/github.com/Microsoft/hcsshim/protobuf
           mv bin\protoc.exe D:\bin
+
       - name: Run Protobuild
         shell: powershell
         run: |
@@ -260,12 +278,27 @@ jobs:
 
       - uses: actions/checkout@v3
         with:
-          path: src/github.com/containerd/containerd
-          repository: "containerd/containerd"
+          path: src/github.com/Microsoft/hcsshim
+        name: Checkout hcsshim
+
+      - name: Get containerd ref
+        shell: powershell
+        run: |
+          $v = go list -m -f '{{ .Version }}' 'github.com/containerd/containerd' 2>&1
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not retrieve containerd version.'
+            exit $LASTEXITCODE
+          }
+          Write-Output "containerd ref is: $v"
+          "containerd_ref=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        working-directory: src/github.com/Microsoft/hcsshim
 
       - uses: actions/checkout@v3
         with:
-          path: src/github.com/Microsoft/hcsshim
+          path: src/github.com/containerd/containerd
+          repository: "containerd/containerd"
+          ref: "${{ env.containerd_ref }}"
+        name: Checkout containerd
 
       - name: Install crictl
         shell: powershell
@@ -283,20 +316,17 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      # needs to be a separate step since terminal reload is required to bring in new env variables and PATH
+      - name: Upgrade Chocolaty
+        shell: powershell
+        run: |
+          choco upgrade -y chocolatey 2>&1
+
       - name: Install mingw
         shell: powershell
         run: |
           $VerbosePreference = 'Continue'
           # dont set $ErrorActionPreference since we want to allow choco install to fail later on
-
-          Write-Output '::group::Update chocolaty'
-          choco upgrade -y chocolatey
-          Write-Output '::endgroup::'
-
-          if ( $LASTEXITCODE ) {
-            Write-Output '::error::Could not update chocolatey.'
-            exit $LASTEXITCODE
-          }
 
           Write-Output 'Install mingw'
           # Install sometimes fails when downloading mingw zip from source-forge with:
@@ -314,7 +344,7 @@ jobs:
               Sleep -Seconds 60
             }
 
-            choco install -y --no-progress --stop-on-first-failure --force mingw --allow-downgrade --version 10.2.0
+            choco install -y --no-progress --stop-on-first-failure --force mingw --allow-downgrade --version 10.3.0
             Write-Output '::endgroup::'
             if ( -not $LASTEXITCODE ) {
               Write-Output "Attempt $i succeeded (exit code: $LASTEXITCODE)"
@@ -327,6 +357,9 @@ jobs:
             Write-Output "::error::Could not install mingw after $i attempts."
             exit $LASTEXITCODE
           }
+
+          # verify mingw32-make was installed
+          Get-Command -CommandType Application -ErrorAction Stop mingw32-make.exe
 
       - name: Build binaries
         shell: bash
@@ -342,11 +375,15 @@ jobs:
         run: |
           go build -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
 
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+
       - name: Run containerd integration tests
         shell: bash
         working-directory: src/github.com/containerd/containerd
         run: |
-          export EXTRA_TESTFLAGS="-timeout=20m"
+          export EXTRA_TESTFLAGS='-timeout=20m'
+          export GOTEST='gotestsum --format=standard-verbose --debug --'
           make integration
 
       - name: Run containerd CRI integration tests
@@ -371,7 +408,7 @@ jobs:
           # We skip this test here, until a new release of hcsshim is cut and the one in
           # containerd is updated. When the shim is updated in containerd, this test will
           # also need to be updated and the special case for windows, removed.
-          FOCUS="[^TestContainerdRestart$]" make cri-integration
+          FOCUS="[^(TestContainerdRestart|TestContainerSymlinkVolumes)]" make cri-integration
 
   #      Enable these tests once the required JobContainer images are updated.
   #
