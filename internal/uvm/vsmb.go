@@ -17,7 +17,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
 )
@@ -54,7 +53,7 @@ func (uvm *UtilityVM) DefaultVSMBOptions(readOnly bool) *hcsschema.VirtualSmbSha
 	}
 	if readOnly {
 		opts.ShareRead = true
-		opts.CacheIo = true
+		opts.CacheIO = true
 		opts.ReadOnly = true
 		opts.PseudoOplocks = true
 	}
@@ -178,11 +177,11 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		options.NoDirectmap = true
 	}
 
-	var requestType = guestrequest.RequestTypeUpdate
+	var requestType = hcsschema.ModifyRequestType_UPDATE
 	shareKey := getVSMBShareKey(hostPath, options.ReadOnly)
 	share, err := uvm.findVSMBShare(ctx, m, shareKey)
 	if err == ErrNotAttached {
-		requestType = guestrequest.RequestTypeAdd
+		requestType = hcsschema.ModifyRequestType_ADD
 		uvm.vsmbCounter++
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
@@ -202,24 +201,29 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 	// AllowedFileList, and in fact will return an error if RestrictFileAccess
 	// isn't set (e.g. if used on an unrestricted share). So we only call Modify
 	// if we are either doing an Add, or if RestrictFileAccess is set.
-	if requestType == guestrequest.RequestTypeAdd || options.RestrictFileAccess {
+	if requestType == hcsschema.ModifyRequestType_ADD || options.RestrictFileAccess {
 		log.G(ctx).WithFields(logrus.Fields{
 			"name":      share.name,
 			"path":      hostPath,
 			"options":   fmt.Sprintf("%+#v", options),
 			"operation": requestType,
 		}).Info("Modifying VSMB share")
-		modification := &hcsschema.ModifySettingRequest{
-			RequestType: requestType,
-			Settings: hcsschema.VirtualSmbShare{
+
+		request, err := hcsschema.NewModifySettingRequest(
+			resourcepaths.VSMBShareResourcePath,
+			requestType,
+			hcsschema.VirtualSmbShare{
 				Name:         share.name,
 				Options:      options,
 				Path:         hostPath,
 				AllowedFiles: newAllowedFiles,
 			},
-			ResourcePath: resourcepaths.VSMBShareResourcePath,
+			nil, // guestRequest
+		)
+		if err != nil {
+			return nil, err
 		}
-		if err := uvm.modify(ctx, modification); err != nil {
+		if err := uvm.modify(ctx, &request); err != nil {
 			return nil, err
 		}
 	}
@@ -262,13 +266,18 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly 
 		return nil
 	}
 
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeRemove,
-		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
-		ResourcePath: resourcepaths.VSMBShareResourcePath,
+	request, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.VSMBShareResourcePath,
+		hcsschema.ModifyRequestType_REMOVE,
+		hcsschema.VirtualSmbShare{Name: share.name},
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	if err := uvm.modify(ctx, modification); err != nil {
-		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)
+
+	if err := uvm.modify(ctx, &request); err != nil {
+		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, request, err)
 	}
 
 	delete(m, shareKey)

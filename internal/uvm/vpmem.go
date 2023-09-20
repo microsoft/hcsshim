@@ -111,29 +111,30 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 		return "", err
 	}
 
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.VirtualPMemDevice{
+	uvmPath := fmt.Sprintf(lcowDefaultVPMemLayerFmt, deviceNumber)
+	img := hcsschema.VirtualPMemImageFormat_VHD1
+	request, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
+		hcsschema.ModifyRequestType_ADD,
+		hcsschema.VirtualPMemDevice{
 			HostPath:    hostPath,
 			ReadOnly:    true,
-			ImageFormat: "Vhd1",
+			ImageFormat: &img,
 		},
-		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
+		guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeVPMemDevice,
+			RequestType:  guestrequest.RequestTypeAdd,
+			Settings: guestresource.LCOWMappedVPMemDevice{
+				DeviceNumber: deviceNumber,
+				MountPath:    uvmPath,
+			},
+		},
+	)
+	if err != nil {
+		return "", err
 	}
 
-	uvmPath := fmt.Sprintf(lcowDefaultVPMemLayerFmt, deviceNumber)
-	guestSettings := guestresource.LCOWMappedVPMemDevice{
-		DeviceNumber: deviceNumber,
-		MountPath:    uvmPath,
-	}
-
-	modification.GuestRequest = guestrequest.ModificationRequest{
-		ResourceType: guestresource.ResourceTypeVPMemDevice,
-		RequestType:  guestrequest.RequestTypeAdd,
-		Settings:     guestSettings,
-	}
-
-	if err := uvm.modify(ctx, modification); err != nil {
+	if err := uvm.modify(ctx, &request); err != nil {
 		return "", errors.Errorf("uvm::addVPMemDefault: failed to modify utility VM configuration: %s", err)
 	}
 
@@ -155,10 +156,11 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 		return nil
 	}
 
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeRemove,
-		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
-		GuestRequest: guestrequest.ModificationRequest{
+	request, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
+		hcsschema.ModifyRequestType_REMOVE,
+		nil, // settings
+		guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeVPMemDevice,
 			RequestType:  guestrequest.RequestTypeRemove,
 			Settings: guestresource.LCOWMappedVPMemDevice{
@@ -166,8 +168,12 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 				MountPath:    device.uvmPath,
 			},
 		},
+	)
+	if err != nil {
+		return err
 	}
-	if err := uvm.modify(ctx, modification); err != nil {
+
+	if err := uvm.modify(ctx, &request); err != nil {
 		return errors.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 	}
 	log.G(ctx).WithFields(logrus.Fields{

@@ -97,7 +97,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 				// must be present in the UVM'S HCS document before being sent over as hot adding
 				// an HvSocket service was not possible.
 				hvSockConfig := ccgInstance.HvSocketConfig
-				if err := coi.HostingSystem.UpdateHvSocketService(ctx, hvSockConfig.ServiceId, hvSockConfig.ServiceConfig); err != nil {
+				if err := coi.HostingSystem.UpdateHvSocketService(ctx, hvSockConfig.ServiceID, hvSockConfig.ServiceConfig); err != nil {
 					return errors.Wrap(err, "failed to update hvsocket service")
 				}
 			}

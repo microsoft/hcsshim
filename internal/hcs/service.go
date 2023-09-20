@@ -11,7 +11,7 @@ import (
 )
 
 // GetServiceProperties returns properties of the host compute service.
-func GetServiceProperties(ctx context.Context, q hcsschema.PropertyQuery) (*hcsschema.ServiceProperties, error) {
+func GetServiceProperties(ctx context.Context, q hcsschema.ServicePropertyQuery) (*hcsschema.ServiceProperties, error) {
 	operation := "hcs::GetServiceProperties"
 
 	queryb, err := json.Marshal(q)

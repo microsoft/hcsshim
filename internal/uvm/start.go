@@ -137,15 +137,18 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 		ParentAddress: gcs.WindowsGcsHvHostID.String(),
 	}
 
-	conSetupReq := &hcsschema.ModifySettingRequest{
-		GuestRequest: guestrequest.ModificationRequest{
+	req, err := hcsschema.NewModifySettingGuestRequest(
+		guestrequest.ModificationRequest{
 			RequestType:  guestrequest.RequestTypeUpdate,
 			ResourceType: guestresource.ResourceTypeHvSocket,
 			Settings:     hvsocketAddress,
 		},
+	)
+	if err != nil {
+		return err
 	}
 
-	if err = uvm.modify(ctx, conSetupReq); err != nil {
+	if err = uvm.modify(ctx, &req); err != nil {
 		return fmt.Errorf("failed to configure HVSOCK for external GCS: %s", err)
 	}
 

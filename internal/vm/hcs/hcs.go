@@ -60,8 +60,9 @@ func (uvm *utilityVM) Resume(ctx context.Context) error {
 }
 
 func (uvm *utilityVM) Save(ctx context.Context) error {
+	st := hcsschema.SaveType_AS_TEMPLATE
 	saveOptions := hcsschema.SaveOptions{
-		SaveType: "AsTemplate",
+		SaveType: &st,
 	}
 	if err := uvm.cs.Save(ctx, saveOptions); err != nil {
 		return errors.Wrap(err, "failed to save utility VM state")

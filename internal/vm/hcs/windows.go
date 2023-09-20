@@ -9,6 +9,6 @@ import (
 )
 
 func (uvmb *utilityVMBuilder) SetCPUGroup(ctx context.Context, id string) error {
-	uvmb.doc.VirtualMachine.ComputeTopology.Processor.CpuGroup = &hcsschema.CpuGroup{Id: id}
+	uvmb.doc.VirtualMachine.ComputeTopology.Processor.CpuGroup = &hcsschema.CpuGroup{ID: id}
 	return nil
 }

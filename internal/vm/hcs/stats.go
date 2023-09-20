@@ -113,7 +113,7 @@ func (uvm *utilityVM) getVMMEMProcess(ctx context.Context) (windows.Handle, erro
 
 func (uvm *utilityVM) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, error) {
 	s := &stats.VirtualMachineStatistics{}
-	props, err := uvm.cs.PropertiesV2(ctx, hcsschema.PTStatistics, hcsschema.PTMemory)
+	props, err := uvm.cs.PropertiesV2(ctx, hcsschema.SystemPropertyType_STATISTICS, hcsschema.SystemPropertyType_MEMORY)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (uvm *utilityVM) Stats(ctx context.Context) (*stats.VirtualMachineStatistic
 	}
 
 	if props.Memory != nil {
-		s.Memory.VirtualNodeCount = props.Memory.VirtualNodeCount
+		s.Memory.VirtualNodeCount = uint32(props.Memory.VirtualNodeCount)
 		s.Memory.VmMemory = &stats.VirtualMachineMemory{}
 		s.Memory.VmMemory.AvailableMemory = props.Memory.VirtualMachineMemory.AvailableMemory
 		s.Memory.VmMemory.AvailableMemoryBuffer = props.Memory.VirtualMachineMemory.AvailableMemoryBuffer

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
@@ -161,7 +162,7 @@ func (m *Manager) AddVirtualDisk(
 		&attachConfig{
 			path:     hostPath,
 			readOnly: readOnly,
-			typ:      "VirtualDisk",
+			typ:      hcsschema.AttachmentType_VIRTUAL_DISK,
 		},
 		mcInternal)
 }
@@ -206,7 +207,7 @@ func (m *Manager) AddPhysicalDisk(
 		&attachConfig{
 			path:     hostPath,
 			readOnly: readOnly,
-			typ:      "PassThru",
+			typ:      hcsschema.AttachmentType_PASS_THRU,
 		},
 		mcInternal)
 }
@@ -250,7 +251,7 @@ func (m *Manager) AddExtensibleVirtualDisk(
 		&attachConfig{
 			path:     mountPath,
 			readOnly: readOnly,
-			typ:      "ExtensibleVirtualDisk",
+			typ:      hcsschema.AttachmentType_EXTENSIBLE_VIRTUAL_DISK,
 			evdType:  evdType,
 		},
 		mcInternal)

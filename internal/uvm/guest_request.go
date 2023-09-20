@@ -10,8 +10,9 @@ import (
 
 // GuestRequest send an arbitrary guest request to the UVM.
 func (uvm *UtilityVM) GuestRequest(ctx context.Context, guestReq interface{}) error {
-	msr := &hcsschema.ModifySettingRequest{
-		GuestRequest: guestReq,
+	msr, err := hcsschema.NewModifySettingGuestRequest(guestReq)
+	if err != nil {
+		return err
 	}
-	return uvm.modify(ctx, msr)
+	return uvm.modify(ctx, &msr)
 }

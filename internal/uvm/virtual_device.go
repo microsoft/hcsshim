@@ -102,8 +102,8 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		return existingVPCIDevice, nil
 	}
 
-	targetDevice := hcsschema.VirtualPciDevice{
-		Functions: []hcsschema.VirtualPciFunction{
+	targetDevice := hcsschema.VirtualPCIDevice{
+		Functions: []hcsschema.VirtualPCIFunction{
 			{
 				DeviceInstancePath: deviceID,
 				VirtualFunction:    index,
@@ -111,19 +111,14 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		},
 	}
 
-	request := &hcsschema.ModifySettingRequest{
-		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmBusGUID),
-		RequestType:  guestrequest.RequestTypeAdd,
-		Settings:     targetDevice,
-	}
-
 	// WCOW (when supported) does not require a guest request as part of the
 	// device assignment
+	var guestReq *guestrequest.ModificationRequest
 	if uvm.operatingSystem != "windows" {
 		// for LCOW, we need to make sure that specific paths relating to the
 		// device exist so they are ready to be used by later
 		// work in openGCS
-		request.GuestRequest = guestrequest.ModificationRequest{
+		guestReq = &guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeVPCIDevice,
 			RequestType:  guestrequest.RequestTypeAdd,
 			Settings: guestresource.LCOWMappedVPCIDevice{
@@ -131,8 +126,17 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 			},
 		}
 	}
+	request, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmBusGUID),
+		hcsschema.ModifyRequestType_ADD,
+		targetDevice,
+		guestReq,
+	)
+	if err != nil {
+		return nil, err
+	}
 
-	if err := uvm.modify(ctx, request); err != nil {
+	if err := uvm.modify(ctx, &request); err != nil {
 		return nil, err
 	}
 	result := &VPCIDevice{
@@ -166,9 +170,10 @@ func (uvm *UtilityVM) RemoveDevice(ctx context.Context, deviceInstanceID string,
 	vpci.refCount--
 	if vpci.refCount == 0 {
 		delete(uvm.vpciDevices, key)
+		rt := hcsschema.ModifyRequestType_REMOVE
 		return uvm.modify(ctx, &hcsschema.ModifySettingRequest{
 			ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vpci.VMBusGUID),
-			RequestType:  guestrequest.RequestTypeRemove,
+			RequestType:  &rt,
 		})
 	}
 	return nil

@@ -87,16 +87,22 @@ func (uvm *UtilityVM) SetConfidentialUVMOptions(ctx context.Context, opts ...Con
 			return err
 		}
 	}
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		GuestRequest: guestrequest.ModificationRequest{
+
+	request, err := hcsschema.NewModifySettingRequest(
+		"",
+		hcsschema.ModifyRequestType_ADD,
+		nil, // settings
+		guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeSecurityPolicy,
 			RequestType:  guestrequest.RequestTypeAdd,
 			Settings:     *confOpts,
 		},
+	)
+	if err != nil {
+		return err
 	}
 
-	if err := uvm.modify(ctx, modification); err != nil {
+	if err := uvm.modify(ctx, &request); err != nil {
 		return fmt.Errorf("uvm::Policy: failed to modify utility VM configuration: %s", err)
 	}
 
@@ -108,15 +114,21 @@ func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdta
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
-	mod := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeUpdate,
-		GuestRequest: guestrequest.ModificationRequest{
+	request, err := hcsschema.NewModifySettingRequest(
+		"",
+		hcsschema.ModifyRequestType_UPDATE,
+		nil, // settings
+		guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypePolicyFragment,
 			RequestType:  guestrequest.RequestTypeAdd,
 			Settings: guestresource.LCOWSecurityPolicyFragment{
 				Fragment: fragment.Fragment,
 			},
 		},
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.modify(ctx, mod)
+
+	return uvm.modify(ctx, &request)
 }

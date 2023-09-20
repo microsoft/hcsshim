@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -21,8 +24,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
 )
 
 type System struct {
@@ -35,7 +36,9 @@ type System struct {
 	waitBlock      chan struct{}
 	waitError      error
 	exitError      error
-	os, typ, owner string
+	os             hcsschema.OSType
+	typ            hcsschema.SystemType
+	owner          string
 	startTime      time.Time
 }
 
@@ -142,26 +145,30 @@ func (computeSystem *System) getCachedProperties(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	computeSystem.typ = strings.ToLower(props.SystemType)
-	computeSystem.os = strings.ToLower(props.RuntimeOSType)
+	if computeSystem.typ, err = hcsschema.NewSystemType(props.SystemType); err != nil {
+		return err
+	}
+	if computeSystem.os, err = hcsschema.NewOSType(props.RuntimeOSType); err != nil {
+		return nil
+	}
 	computeSystem.owner = strings.ToLower(props.Owner)
-	if computeSystem.os == "" && computeSystem.typ == "container" {
+	if computeSystem.os == hcsschema.OSType_EMPTY && computeSystem.typ == hcsschema.SystemType_CONTAINER {
 		// Pre-RS5 HCS did not return the OS, but it only supported containers
 		// that ran Windows.
-		computeSystem.os = "windows"
+		computeSystem.os = hcsschema.OSType_WINDOWS
 	}
 	return nil
 }
 
 // OS returns the operating system of the compute system, "linux" or "windows".
 func (computeSystem *System) OS() string {
-	return computeSystem.os
+	return strings.ToLower(string(computeSystem.os))
 }
 
 // IsOCI returns whether processes in the compute system should be created via
 // OCI.
 func (computeSystem *System) IsOCI() bool {
-	return computeSystem.os == "linux" && computeSystem.typ == "container"
+	return computeSystem.os == hcsschema.OSType_LINUX && computeSystem.typ == hcsschema.SystemType_CONTAINER
 }
 
 // GetComputeSystems gets a list of the compute systems on the system that match the query
@@ -373,8 +380,8 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 func (computeSystem *System) queryInProc(
 	ctx context.Context,
 	props *hcsschema.Properties,
-	types []hcsschema.PropertyType,
-) ([]hcsschema.PropertyType, error) {
+	types []hcsschema.SystemPropertyType,
+) ([]hcsschema.SystemPropertyType, error) {
 	// In the future we can make use of some new functionality in the HCS that allows you
 	// to pass a job object for HCS to use for the container. Currently, the only way we'll
 	// be able to open the job/silo is if we're running as SYSTEM.
@@ -388,10 +395,10 @@ func (computeSystem *System) queryInProc(
 	}
 	defer job.Close()
 
-	var fallbackQueryTypes []hcsschema.PropertyType
+	var fallbackQueryTypes []hcsschema.SystemPropertyType
 	for _, propType := range types {
 		switch propType {
-		case hcsschema.PTStatistics:
+		case hcsschema.SystemPropertyType_STATISTICS:
 			// Handle a bad caller asking for the same type twice. No use in re-querying if this is
 			// filled in already.
 			if props.Statistics == nil {
@@ -477,14 +484,14 @@ func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcssch
 }
 
 // hcsPropertiesV2Query is a helper to make a HcsGetComputeSystemProperties call using the V2 schema property types.
-func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []hcsschema.PropertyType) (*hcsschema.Properties, error) {
+func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []hcsschema.SystemPropertyType) (*hcsschema.Properties, error) {
 	operation := "hcs::System::PropertiesV2"
 
 	if computeSystem.handle == 0 {
 		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
-	queryBytes, err := json.Marshal(hcsschema.PropertyQuery{PropertyTypes: types})
+	queryBytes, err := json.Marshal(hcsschema.SystemPropertyQuery{PropertyTypes: types})
 	if err != nil {
 		return nil, makeSystemError(computeSystem, operation, err, nil)
 	}
@@ -507,21 +514,24 @@ func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []h
 }
 
 // PropertiesV2 returns the requested compute systems properties targeting a V2 schema compute system.
-func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
+func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschema.SystemPropertyType) (_ *hcsschema.Properties, err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
 	// Let HCS tally up the total for VM based queries instead of querying ourselves.
-	if computeSystem.typ != "container" {
+	if computeSystem.typ == hcsschema.SystemType_VIRTUAL_MACHINE {
 		return computeSystem.hcsPropertiesV2Query(ctx, types)
 	}
 
+	// copy these values just in case they somehow get modified during the query
+	typ := computeSystem.typ
+	os := computeSystem.os
 	// Define a starter Properties struct with the default fields returned from every
 	// query. Owner is only returned from Statistics but it's harmless to include.
 	properties := &hcsschema.Properties{
-		Id:            computeSystem.id,
-		SystemType:    computeSystem.typ,
-		RuntimeOsType: computeSystem.os,
+		ID:            computeSystem.id,
+		SystemType:    &typ,
+		RuntimeOSType: &os,
 		Owner:         computeSystem.owner,
 	}
 

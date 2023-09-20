@@ -11,13 +11,12 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func (uvmb *utilityVMBuilder) AddVPMemController(maximumDevices uint32, maximumSizeBytes uint64) error {
 	uvmb.doc.VirtualMachine.Devices.VirtualPMem = &hcsschema.VirtualPMemController{
-		MaximumCount:     maximumDevices,
+		MaximumCount:     uint8(maximumDevices),
 		MaximumSizeBytes: maximumSizeBytes,
 	}
 	uvmb.doc.VirtualMachine.Devices.VirtualPMem.Devices = make(map[string]hcsschema.VirtualPMemDevice)
@@ -35,7 +34,7 @@ func (uvmb *utilityVMBuilder) AddVPMemDevice(ctx context.Context, id uint32, pat
 	uvmb.doc.VirtualMachine.Devices.VirtualPMem.Devices[strconv.Itoa(int(id))] = hcsschema.VirtualPMemDevice{
 		HostPath:    path,
 		ReadOnly:    readOnly,
-		ImageFormat: imageFormatString,
+		ImageFormat: &imageFormatString,
 	}
 	return nil
 }
@@ -53,32 +52,37 @@ func (uvm *utilityVM) AddVPMemDevice(ctx context.Context, id uint32, path string
 	if err != nil {
 		return err
 	}
-	request := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.VirtualPMemDevice{
+	request, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, id),
+		hcsschema.ModifyRequestType_ADD,
+		hcsschema.VirtualPMemDevice{
 			HostPath:    path,
 			ReadOnly:    readOnly,
-			ImageFormat: imageFormatString,
+			ImageFormat: &imageFormatString,
 		},
-		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, id),
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.cs.Modify(ctx, request)
+	return uvm.cs.Modify(ctx, &request)
 }
 
 func (uvm *utilityVM) RemoveVPMemDevice(ctx context.Context, id uint32, path string) error {
+	rt := hcsschema.ModifyRequestType_REMOVE
 	request := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeRemove,
+		RequestType:  &rt,
 		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, id),
 	}
 	return uvm.cs.Modify(ctx, request)
 }
 
-func getVPMemImageFormatString(imageFormat vm.VPMemImageFormat) (string, error) {
+func getVPMemImageFormatString(imageFormat vm.VPMemImageFormat) (hcsschema.VirtualPMemImageFormat, error) {
 	switch imageFormat {
 	case vm.VPMemImageFormatVHD1:
-		return "Vhd1", nil
+		return hcsschema.VirtualPMemImageFormat_VHD1, nil
 	case vm.VPMemImageFormatVHDX:
-		return "Vhdx", nil
+		return hcsschema.VirtualPMemImageFormat_VHDX, nil
 	default:
 		return "", fmt.Errorf("unsupported VPMem image format: %d", imageFormat)
 	}

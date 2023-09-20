@@ -12,11 +12,13 @@ import (
 //
 // This will also change package name due to an inbound breaking change.
 
+// TODO: replace with [hcsschema.ModifyResourceType] and [hcschema.LinuxModifyResourceType] constants
+
 const (
 	// These are constants for v2 schema modify guest requests.
 
 	// ResourceTypeMappedDirectory is the modify resource type for mapped
-	// directories
+	// directories.
 	ResourceTypeMappedDirectory guestrequest.ResourceType = "MappedDirectory"
 	// ResourceTypeSCSIDevice is the modify resources type for SCSI devices.
 	// Note this type is not related to mounting a device in the guest, only
@@ -24,29 +26,31 @@ const (
 	// Currently it only supports Remove, to cleanly remove a SCSI device.
 	ResourceTypeSCSIDevice guestrequest.ResourceType = "SCSIDevice"
 	// ResourceTypeMappedVirtualDisk is the modify resource type for mapped
-	// virtual disks
+	// virtual disks.
 	ResourceTypeMappedVirtualDisk guestrequest.ResourceType = "MappedVirtualDisk"
 	// ResourceTypeNetwork is the modify resource type for the `NetworkAdapterV2`
 	// device.
 	ResourceTypeNetwork          guestrequest.ResourceType = "Network"
 	ResourceTypeNetworkNamespace guestrequest.ResourceType = "NetworkNamespace"
 	// ResourceTypeCombinedLayers is the modify resource type for combined
-	// layers
+	// layers.
 	ResourceTypeCombinedLayers guestrequest.ResourceType = "CombinedLayers"
-	// ResourceTypeVPMemDevice is the modify resource type for VPMem devices
+	// ResourceTypeVPMemDevice is the modify resource type for VPMem devices.
 	ResourceTypeVPMemDevice guestrequest.ResourceType = "VPMemDevice"
-	// ResourceTypeVPCIDevice is the modify resource type for vpci devices
+	// ResourceTypeVPCIDevice is the modify resource type for vpci devices.
 	ResourceTypeVPCIDevice guestrequest.ResourceType = "VPCIDevice"
 	// ResourceTypeContainerConstraints is the modify resource type for updating
-	// container constraints
+	// container constraints.
 	ResourceTypeContainerConstraints guestrequest.ResourceType = "ContainerConstraints"
 	ResourceTypeHvSocket             guestrequest.ResourceType = "HvSocket"
 	// ResourceTypeSecurityPolicy is the modify resource type for updating the security
-	// policy
+	// policy.
 	ResourceTypeSecurityPolicy guestrequest.ResourceType = "SecurityPolicy"
 	// ResourceTypePolicyFragment is the modify resource type for injecting policy fragments.
 	ResourceTypePolicyFragment guestrequest.ResourceType = "SecurityPolicyFragment"
 )
+
+// TODO: replace with [hcsschema.LinuxCombinedLayers] and [hcsschema.CombinedLayers]
 
 // This class is used by a modify request to add or remove a combined layers
 // structure in the guest. For windows, the GCS applies a filter in ContainerRootPath
@@ -75,6 +79,8 @@ type SCSIDevice struct {
 	Lun        uint8 `json:"Lun,omitempty"`
 }
 
+// TODO: replace with [hcsschema.LinuxMappedVirtualDisk]
+
 // LCOWMappedVirtualDisk represents a disk on the host which is mapped into a
 // directory in the guest in the V2 schema.
 type LCOWMappedVirtualDisk struct {
@@ -91,10 +97,14 @@ type LCOWMappedVirtualDisk struct {
 	Filesystem       string            `json:"Filesystem,omitempty"`
 }
 
+// TODO: replace with [hcsschema.MappedVirtualDisk]
+
 type WCOWMappedVirtualDisk struct {
 	ContainerPath string `json:"ContainerPath,omitempty"`
 	Lun           int32  `json:"Lun,omitempty"`
 }
+
+// TODO: replace with [hcsschema.LinuxMappedDirectory]
 
 // LCOWMappedDirectory represents a directory on the host which is mapped to a
 // directory on the guest through Plan9 in the V2 schema.
@@ -105,7 +115,7 @@ type LCOWMappedDirectory struct {
 	ReadOnly  bool   `json:"ReadOnly,omitempty"`
 }
 
-// LCOWVPMemMappingInfo is one of potentially multiple read-only layers mapped on a VPMem device
+// LCOWVPMemMappingInfo is one of potentially multiple read-only layers mapped on a VPMem device.
 type LCOWVPMemMappingInfo struct {
 	DeviceOffsetInBytes uint64 `json:"DeviceOffsetInBytes,omitempty"`
 	DeviceSizeInBytes   uint64 `json:"DeviceSizeInBytes,omitempty"`
@@ -176,6 +186,8 @@ type LCOWContainerConstraints struct {
 type SignalProcessOptionsLCOW struct {
 	Signal int `json:",omitempty"`
 }
+
+// TODO: replace with [hcsschema.SignalProcessOptions]
 
 // SignalProcessOptionsWCOW is the options passed to WCOW to signal a given
 // process.

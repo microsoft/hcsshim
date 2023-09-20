@@ -11,33 +11,37 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func (uvmb *utilityVMBuilder) AddSCSIController(id uint32) error {
-	if uvmb.doc.VirtualMachine.Devices.Scsi == nil {
-		uvmb.doc.VirtualMachine.Devices.Scsi = make(map[string]hcsschema.Scsi, 1)
+	if uvmb.doc.VirtualMachine.Devices.SCSI == nil {
+		uvmb.doc.VirtualMachine.Devices.SCSI = make(map[string]hcsschema.SCSI, 1)
 	}
-	uvmb.doc.VirtualMachine.Devices.Scsi[strconv.Itoa(int(id))] = hcsschema.Scsi{
+	uvmb.doc.VirtualMachine.Devices.SCSI[strconv.Itoa(int(id))] = hcsschema.SCSI{
 		Attachments: make(map[string]hcsschema.Attachment),
 	}
 	return nil
 }
 
 func (uvmb *utilityVMBuilder) AddSCSIDisk(ctx context.Context, controller uint32, lun uint32, path string, typ vm.SCSIDiskType, readOnly bool) error {
-	if uvmb.doc.VirtualMachine.Devices.Scsi == nil {
+	diskType, err := getSCSIDiskTypeString(typ)
+	if err != nil {
+		return err
+	}
+
+	if uvmb.doc.VirtualMachine.Devices.SCSI == nil {
 		return errors.New("no SCSI controller found")
 	}
 
-	ctrl, ok := uvmb.doc.VirtualMachine.Devices.Scsi[strconv.Itoa(int(controller))]
+	ctrl, ok := uvmb.doc.VirtualMachine.Devices.SCSI[strconv.Itoa(int(controller))]
 	if !ok {
 		return fmt.Errorf("no scsi controller with index %d found", controller)
 	}
 
 	ctrl.Attachments[strconv.Itoa(int(lun))] = hcsschema.Attachment{
 		Path:     path,
-		Type_:    string(typ),
+		Type_:    &diskType,
 		ReadOnly: readOnly,
 	}
 
@@ -53,39 +57,46 @@ func (uvm *utilityVM) AddSCSIController(id uint32) error {
 }
 
 func (uvm *utilityVM) AddSCSIDisk(ctx context.Context, controller uint32, lun uint32, path string, typ vm.SCSIDiskType, readOnly bool) error {
-	diskTypeString, err := getSCSIDiskTypeString(typ)
+	diskType, err := getSCSIDiskTypeString(typ)
 	if err != nil {
 		return err
 	}
-	request := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.Attachment{
+
+	request, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.SCSIResourceFormat, strconv.Itoa(int(controller)), lun),
+		hcsschema.ModifyRequestType_ADD,
+		hcsschema.Attachment{
 			Path:     path,
-			Type_:    diskTypeString,
+			Type_:    &diskType,
 			ReadOnly: readOnly,
 		},
-		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, strconv.Itoa(int(controller)), lun),
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
+
 	return uvm.cs.Modify(ctx, request)
 }
 
 func (uvm *utilityVM) RemoveSCSIDisk(ctx context.Context, controller uint32, lun uint32, path string) error {
+	rt := hcsschema.ModifyRequestType_REMOVE
 	request := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeRemove,
+		RequestType:  &rt,
 		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, strconv.Itoa(int(controller)), lun),
 	}
 
 	return uvm.cs.Modify(ctx, request)
 }
 
-func getSCSIDiskTypeString(typ vm.SCSIDiskType) (string, error) {
+func getSCSIDiskTypeString(typ vm.SCSIDiskType) (hcsschema.AttachmentType, error) {
 	switch typ {
 	case vm.SCSIDiskTypeVHD1:
 		fallthrough
 	case vm.SCSIDiskTypeVHDX:
-		return "VirtualDisk", nil
+		return hcsschema.AttachmentType_VIRTUAL_DISK, nil
 	case vm.SCSIDiskTypePassThrough:
-		return "PassThru", nil
+		return hcsschema.AttachmentType_PASS_THRU, nil
 	default:
 		return "", fmt.Errorf("unsupported SCSI disk type: %d", typ)
 	}

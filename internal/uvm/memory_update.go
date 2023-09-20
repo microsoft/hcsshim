@@ -19,16 +19,23 @@ const bytesPerPage = 4096
 func (uvm *UtilityVM) UpdateMemory(ctx context.Context, sizeInBytes uint64) error {
 	requestedSizeInMB := sizeInBytes / memory.MiB
 	actual := uvm.normalizeMemorySize(ctx, requestedSizeInMB)
-	req := &hcsschema.ModifySettingRequest{
-		ResourcePath: resourcepaths.MemoryResourcePath,
-		Settings:     actual,
+
+	req, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.MemoryResourcePath,
+		hcsschema.ModifyRequestType_UPDATE,
+		actual,
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.modify(ctx, req)
+	req.RequestType = nil // request type is unneeded, so remove it
+	return uvm.modify(ctx, &req)
 }
 
 // GetAssignedMemoryInBytes returns the amount of assigned memory for the UVM in bytes
 func (uvm *UtilityVM) GetAssignedMemoryInBytes(ctx context.Context) (uint64, error) {
-	props, err := uvm.hcsSystem.PropertiesV2(ctx, hcsschema.PTMemory)
+	props, err := uvm.hcsSystem.PropertiesV2(ctx, hcsschema.SystemPropertyType_MEMORY)
 	if err != nil {
 		return 0, err
 	}

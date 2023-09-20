@@ -7,34 +7,42 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 func (uvm *utilityVM) AddPlan9(ctx context.Context, path, name string, port int32, flags int32, allowed []string) error {
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.Plan9Share{
+
+	request, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.Plan9ShareResourcePath,
+		hcsschema.ModifyRequestType_ADD,
+		hcsschema.Plan9Share{
 			Name:         name,
 			AccessName:   name,
 			Path:         path,
-			Port:         port,
-			Flags:        flags,
+			Port:         uint32(port),
+			Flags:        int64(flags),
 			AllowedFiles: allowed,
 		},
-		ResourcePath: resourcepaths.Plan9ShareResourcePath,
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.cs.Modify(ctx, modification)
+	return uvm.cs.Modify(ctx, request)
 }
 
 func (uvm *utilityVM) RemovePlan9(ctx context.Context, name string, port int32) error {
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeRemove,
-		Settings: hcsschema.Plan9Share{
+	request, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.Plan9ShareResourcePath,
+		hcsschema.ModifyRequestType_REMOVE,
+		hcsschema.Plan9Share{
 			Name:       name,
 			AccessName: name,
-			Port:       port,
+			Port:       uint32(port),
 		},
-		ResourcePath: resourcepaths.Plan9ShareResourcePath,
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.cs.Modify(ctx, modification)
+	return uvm.cs.Modify(ctx, request)
 }

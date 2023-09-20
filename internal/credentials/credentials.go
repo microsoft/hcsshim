@@ -68,27 +68,27 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 	// to HCS for creation. For pod scenarios currently we don't have the OCI
 	// spec of a container at UVM creation time, therefore the service table entry
 	// for the CCG instance will have to be hot added.
-	transport := "LRPC"
+	transport := hcsschema.ContainerCredentialGuardTransport_LRPC
 	if hypervisorIsolated {
-		transport = "HvSocket"
+		transport = hcsschema.ContainerCredentialGuardTransport_HV_SOCKET
 	}
-	req := hcsschema.ModificationRequest{
-		PropertyType: hcsschema.PTContainerCredentialGuard,
-		Settings: &hcsschema.ContainerCredentialGuardOperationRequest{
-			Operation: hcsschema.AddInstance,
-			OperationDetails: &hcsschema.ContainerCredentialGuardAddInstanceRequest{
-				Id:             id,
-				CredentialSpec: credSpec,
-				Transport:      transport,
-			},
+	req, err := newCredentialGuardRequest(
+		hcsschema.ContainerCredentialGuardModifyOperation_ADD_INSTANCE,
+		hcsschema.ContainerCredentialGuardAddInstanceRequest{
+			ID:             id,
+			CredentialSpec: credSpec,
+			Transport:      &transport,
 		},
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 	if err := hcs.ModifyServiceSettings(ctx, req); err != nil {
 		return nil, nil, fmt.Errorf("failed to generate container credential guard instance: %s", err)
 	}
 
-	q := hcsschema.PropertyQuery{
-		PropertyTypes: []hcsschema.PropertyType{hcsschema.PTContainerCredentialGuard},
+	q := hcsschema.ServicePropertyQuery{
+		PropertyTypes: []hcsschema.GetPropertyType{hcsschema.GetPropertyType_CONTAINER_CREDENTIAL_GUARD},
 	}
 	serviceProps, err := hcs.GetServiceProperties(ctx, q)
 	if err != nil {
@@ -103,7 +103,7 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 		return nil, nil, fmt.Errorf("failed to unmarshal container credential guard instances: %s", err)
 	}
 	for _, ccgInstance := range ccgSysInfo.Instances {
-		if ccgInstance.Id == id {
+		if ccgInstance.ID == id {
 			ccgResource := &CCGResource{
 				id,
 			}
@@ -117,14 +117,33 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 func removeCredentialGuard(ctx context.Context, id string) error {
 	log.G(ctx).WithField("containerID", id).Debug("removing container credential guard")
 
-	req := hcsschema.ModificationRequest{
-		PropertyType: hcsschema.PTContainerCredentialGuard,
-		Settings: &hcsschema.ContainerCredentialGuardOperationRequest{
-			Operation: hcsschema.RemoveInstance,
-			OperationDetails: &hcsschema.ContainerCredentialGuardRemoveInstanceRequest{
-				Id: id,
-			},
+	req, err := newCredentialGuardRequest(
+		hcsschema.ContainerCredentialGuardModifyOperation_REMOVE_INSTANCE,
+		hcsschema.ContainerCredentialGuardRemoveInstanceRequest{
+			ID: id,
 		},
+	)
+	if err != nil {
+		return err
 	}
 	return hcs.ModifyServiceSettings(ctx, req)
+}
+
+func newCredentialGuardRequest(
+	operation hcsschema.ContainerCredentialGuardModifyOperation,
+	details any,
+) (hcsschema.ModificationRequest, error) {
+	d, err := hcsschema.ToRawMessage(details)
+	if err != nil {
+		return hcsschema.ModificationRequest{},
+			fmt.Errorf("encode container credential guard operation %q details (%+v) to json: %w", operation, details, err)
+	}
+
+	return hcsschema.NewModificationRequest(
+		hcsschema.ModifyPropertyType_CONTAINER_CREDENTIAL_GUARD,
+		hcsschema.ContainerCredentialGuardOperationRequest{
+			Operation:        &operation,
+			OperationDetails: d,
+		},
+	)
 }

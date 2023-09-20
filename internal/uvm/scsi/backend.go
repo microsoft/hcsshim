@@ -58,22 +58,27 @@ func NewHCSHostBackend(system *hcs.System) HostBackend {
 }
 
 func (hhb *hcsHostBackend) attach(ctx context.Context, controller, lun uint, config *attachConfig) error {
-	req := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.Attachment{
+	req, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.SCSIResourceFormat, guestrequest.ScsiControllerGuids[controller], lun),
+		hcsschema.ModifyRequestType_ADD,
+		hcsschema.Attachment{
 			Path:                      config.path,
-			Type_:                     config.typ,
+			Type_:                     &config.typ,
 			ReadOnly:                  config.readOnly,
 			ExtensibleVirtualDiskType: config.evdType,
 		},
-		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, guestrequest.ScsiControllerGuids[controller], lun),
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return hhb.system.Modify(ctx, req)
+	return hhb.system.Modify(ctx, &req)
 }
 
 func (hhb *hcsHostBackend) detach(ctx context.Context, controller, lun uint) error {
+	rt := hcsschema.ModifyRequestType_REMOVE
 	req := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeRemove,
+		RequestType:  &rt,
 		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, guestrequest.ScsiControllerGuids[controller], lun),
 	}
 	return hhb.system.Modify(ctx, req)
@@ -137,30 +142,42 @@ func NewHCSGuestBackend(system *hcs.System, osType string) GuestBackend {
 }
 
 func (hgb *hcsGuestBackend) mount(ctx context.Context, controller, lun uint, path string, config *mountConfig) error {
-	req, err := mountRequest(controller, lun, path, config, hgb.osType)
+	gReq, err := mountRequest(controller, lun, path, config, hgb.osType)
 	if err != nil {
 		return err
 	}
-	return hgb.system.Modify(ctx, &hcsschema.ModifySettingRequest{GuestRequest: req})
+	req, err := hcsschema.NewModifySettingGuestRequest(gReq)
+	if err != nil {
+		return err
+	}
+	return hgb.system.Modify(ctx, &req)
 }
 
 func (hgb *hcsGuestBackend) unmount(ctx context.Context, controller, lun uint, path string, config *mountConfig) error {
-	req, err := unmountRequest(controller, lun, path, config, hgb.osType)
+	gReq, err := unmountRequest(controller, lun, path, config, hgb.osType)
 	if err != nil {
 		return err
 	}
-	return hgb.system.Modify(ctx, &hcsschema.ModifySettingRequest{GuestRequest: req})
+	req, err := hcsschema.NewModifySettingGuestRequest(gReq)
+	if err != nil {
+		return err
+	}
+	return hgb.system.Modify(ctx, &req)
 }
 
 func (hgb *hcsGuestBackend) unplug(ctx context.Context, controller, lun uint) error {
-	req, err := unplugRequest(controller, lun, hgb.osType)
+	gReq, err := unplugRequest(controller, lun, hgb.osType)
 	if err != nil {
 		return err
 	}
-	if req.RequestType == "" {
+	if gReq.RequestType == "" {
 		return nil
 	}
-	return hgb.system.Modify(ctx, &hcsschema.ModifySettingRequest{GuestRequest: req})
+	req, err := hcsschema.NewModifySettingGuestRequest(gReq)
+	if err != nil {
+		return err
+	}
+	return hgb.system.Modify(ctx, &req)
 }
 
 func mountRequest(controller, lun uint, path string, config *mountConfig, osType string) (guestrequest.ModificationRequest, error) {
