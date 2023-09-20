@@ -27,13 +27,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/ttrpc"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	exec "golang.org/x/sys/execabs"
-
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/pkg/atomicfile"
 )
 
 type CommandConfig struct {
@@ -120,16 +117,17 @@ func WritePidFile(path string, pid int) error {
 	if err != nil {
 		return err
 	}
-	f, err := atomicfile.New(path, 0o666)
+	tempPath := filepath.Join(filepath.Dir(path), fmt.Sprintf(".%s", filepath.Base(path)))
+	f, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0666)
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(f, "%d", pid)
+	f.Close()
 	if err != nil {
-		f.Cancel()
 		return err
 	}
-	return f.Close()
+	return os.Rename(tempPath, path)
 }
 
 // WriteAddress writes a address file atomically
@@ -138,16 +136,17 @@ func WriteAddress(path, address string) error {
 	if err != nil {
 		return err
 	}
-	f, err := atomicfile.New(path, 0o666)
+	tempPath := filepath.Join(filepath.Dir(path), fmt.Sprintf(".%s", filepath.Base(path)))
+	f, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0666)
 	if err != nil {
 		return err
 	}
-	_, err = f.Write([]byte(address))
+	_, err = f.WriteString(address)
+	f.Close()
 	if err != nil {
-		f.Cancel()
 		return err
 	}
-	return f.Close()
+	return os.Rename(tempPath, path)
 }
 
 // ErrNoAddress is returned when the address file has no content
@@ -167,29 +166,4 @@ func ReadAddress(path string) (string, error) {
 		return "", ErrNoAddress
 	}
 	return string(data), nil
-}
-
-// chainUnaryServerInterceptors creates a single ttrpc server interceptor from
-// a chain of many interceptors executed from first to last.
-func chainUnaryServerInterceptors(interceptors ...ttrpc.UnaryServerInterceptor) ttrpc.UnaryServerInterceptor {
-	n := len(interceptors)
-
-	// force to use default interceptor in ttrpc
-	if n == 0 {
-		return nil
-	}
-
-	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (interface{}, error) {
-		currentMethod := method
-
-		for i := n - 1; i > 0; i-- {
-			interceptor := interceptors[i]
-			innerMethod := currentMethod
-
-			currentMethod = func(currentCtx context.Context, currentUnmarshal func(interface{}) error) (interface{}, error) {
-				return interceptor(currentCtx, currentUnmarshal, info, innerMethod)
-			}
-		}
-		return interceptors[0](ctx, unmarshal, info, currentMethod)
-	}
 }

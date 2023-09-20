@@ -24,7 +24,6 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -468,12 +467,14 @@ func (c *serverConn) run(sctx context.Context) {
 			// branch. Basically, it means that we are no longer receiving
 			// requests due to a terminal error.
 			recvErr = nil // connection is now "closing"
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				// The client went away and we should stop processing
 				// requests, so that the client connection is closed
 				return
 			}
-			logrus.WithError(err).Error("error receiving message")
+			if err != nil {
+				logrus.WithError(err).Error("error receiving message")
+			}
 		case <-shutdown:
 			return
 		}
