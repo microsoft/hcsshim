@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: "windows-2019"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
