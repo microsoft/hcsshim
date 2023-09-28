@@ -12,6 +12,7 @@ require (
 	github.com/containerd/ttrpc v1.2.2
 	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/google/go-containerregistry v0.17.0
+	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/kevpar/cri v1.11.1-0.20220302210600-4c5c347230b2
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0-rc3
@@ -36,6 +37,7 @@ require (
 	github.com/Microsoft/didx509go v0.0.2 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.0.1 // indirect
+	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/container-orchestrated-devices/container-device-interface v0.5.4 // indirect
 	github.com/containerd/console v1.0.3 // indirect

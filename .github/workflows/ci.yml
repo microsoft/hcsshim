@@ -239,6 +239,27 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Validate go generate in test
+        shell: powershell
+        working-directory: test
+        run: |
+          Write-Output "::group::go generate"
+          go generate -x .\...
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Go Generate::Error running go generate."
+            exit $LASTEXITCODE
+          }
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error ::Generated files are not up to date. Please run ``go generate .\...`` from within ``./test``."
+            exit $LASTEXITCODE
+          }
+
   test-linux:
     needs: [lint, protos, verify-vendor, go-gen]
     runs-on: ubuntu-latest
