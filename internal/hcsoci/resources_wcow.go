@@ -138,9 +138,9 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 		}
 		switch mount.Type {
 		case "":
-		case "physical-disk":
-		case "virtual-disk":
-		case "extensible-virtual-disk":
+		case MountTypePhysicalDisk:
+		case MountTypeVirtualDisk:
+		case MountTypeExtensibleVirtualDisk:
 		default:
 			return fmt.Errorf("invalid OCI spec - Type '%s' not supported", mount.Type)
 		}
@@ -154,13 +154,13 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				}
 			}
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
-			if mount.Type == "physical-disk" || mount.Type == "virtual-disk" || mount.Type == "extensible-virtual-disk" {
+			if mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeVirtualDisk || mount.Type == MountTypeExtensibleVirtualDisk {
 				var (
 					scsiMount *scsi.Mount
 					err       error
 				)
 				switch mount.Type {
-				case "physical-disk":
+				case MountTypePhysicalDisk:
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
 					scsiMount, err = coi.HostingSystem.SCSIManager.AddPhysicalDisk(
 						ctx,
@@ -169,7 +169,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						coi.HostingSystem.ID(),
 						&scsi.MountConfig{},
 					)
-				case "virtual-disk":
+				case MountTypeVirtualDisk:
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
 					scsiMount, err = coi.HostingSystem.SCSIManager.AddVirtualDisk(
 						ctx,
@@ -178,7 +178,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						coi.HostingSystem.ID(),
 						&scsi.MountConfig{},
 					)
-				case "extensible-virtual-disk":
+				case MountTypeExtensibleVirtualDisk:
 					l.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
 					scsiMount, err = coi.HostingSystem.SCSIManager.AddExtensibleVirtualDisk(
 						ctx,

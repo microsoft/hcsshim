@@ -7,6 +7,18 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// MountType represents the type of mount being added
+type MountType = string
+
+// MountType const
+const (
+	// supported internal mount types
+	MountTypeBind                  MountType = "bind"
+	MountTypePhysicalDisk          MountType = "physical-disk"
+	MountTypeVirtualDisk           MountType = "virtual-disk"
+	MountTypeExtensibleVirtualDisk MountType = "extensible-virtual-disk"
+)
+
 // NormalizeProcessorCount returns the `Min(requested, logical CPU count)`.
 func NormalizeProcessorCount(ctx context.Context, cid string, requestedCount, hostCount int32) int32 {
 	if requestedCount > hostCount {

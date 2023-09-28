@@ -68,7 +68,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 					return nil, fmt.Errorf("failed to resolve path for mount source %q: %s", mount.Source, err)
 				}
 				mdv2.HostPath = src
-			} else if mount.Type == "virtual-disk" || mount.Type == "physical-disk" || mount.Type == "extensible-virtual-disk" {
+			} else if mount.Type == MountTypeVirtualDisk || mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeExtensibleVirtualDisk {
 				// For v2 schema containers, any disk mounts will be part of coi.additionalMounts.
 				// For v1 schema containers, we don't even get here, since there is no HostingSystem.
 				continue
