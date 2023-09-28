@@ -58,9 +58,9 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 	for i, mount := range coi.Spec.Mounts {
 		switch mount.Type {
-		case "bind":
-		case "physical-disk":
-		case "virtual-disk":
+		case MountTypeBind:
+		case MountTypePhysicalDisk:
+		case MountTypeVirtualDisk:
 		default:
 			// Unknown mount type
 			continue
@@ -83,7 +83,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 			}
 
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
-			if mount.Type == "physical-disk" {
+			if mount.Type == MountTypePhysicalDisk {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI physical disk for OCI mount")
 				uvmPathForShare = fmt.Sprintf(guestpath.LCOWGlobalMountPrefixFmt, coi.HostingSystem.UVMMountCounter())
 				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly, mount.Options)
@@ -94,7 +94,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				uvmPathForFile = scsiMount.UVMPath
 				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
-			} else if mount.Type == "virtual-disk" {
+			} else if mount.Type == MountTypeVirtualDisk {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI virtual disk for OCI mount")
 				uvmPathForShare = fmt.Sprintf(guestpath.LCOWGlobalMountPrefixFmt, coi.HostingSystem.UVMMountCounter())
 
