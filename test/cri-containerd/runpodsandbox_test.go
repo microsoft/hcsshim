@@ -24,7 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/shimdiag"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
-	"github.com/containerd/containerd/log"
+	"github.com/containerd/log"
 	"golang.org/x/sys/windows"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )

@@ -14,7 +14,6 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/pkg/errors"
@@ -109,7 +108,7 @@ var serveCommand = cli.Command{
 		switch shimOpts.DebugType {
 		case runhcsopts.Options_NPIPE:
 			logrus.SetFormatter(&logrus.TextFormatter{
-				TimestampFormat: log.RFC3339NanoFixed,
+				TimestampFormat: hcslog.TimeFormat,
 				FullTimestamp:   true,
 			})
 			// Setup the log listener
