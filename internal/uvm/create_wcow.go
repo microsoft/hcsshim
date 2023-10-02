@@ -10,6 +10,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/containerd/containerd/api/types"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 
@@ -22,10 +23,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/security"
-	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
-	"github.com/Microsoft/hcsshim/internal/uvmfolder"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
-	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -33,6 +30,9 @@ import (
 type OptionsWCOW struct {
 	*Options
 
+	// For now we accept both RootFS and LayerFolders to maintain compatibility with older code but in
+	// future we should aim to remove use of LayerFolders directly.
+	RootFS       []*types.Mount
 	LayerFolders []string // Set of folders for base layers and scratch. Ordered from top most read-only through base read-only layer, followed by scratch
 
 	// NoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM
@@ -69,7 +69,7 @@ func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
 	return nil
 }
 
-func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uvmFolder string) (*hcsschema.ComputeSystem, error) {
+func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*hcsschema.ComputeSystem, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
@@ -81,20 +81,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
-
-	// UVM rootfs share is readonly.
-	vsmbOpts := uvm.DefaultVSMBOptions(true)
-	vsmbOpts.TakeBackupPrivilege = true
-	virtualSMB := &hcsschema.VirtualSmb{
-		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
-		Shares: []hcsschema.VirtualSmbShare{
-			{
-				Name:    "os",
-				Path:    filepath.Join(uvmFolder, `UtilityVM\Files`),
-				Options: vsmbOpts,
-			},
-		},
-	}
 
 	var registryChanges hcsschema.RegistryChanges
 	// We're getting asked to setup local dump collection for WCOW. We need to:
@@ -195,9 +181,19 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
 					},
 				},
-				VirtualSmb: virtualSMB,
 			},
 		},
+	}
+
+	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+	for i := 0; i < int(uvm.scsiControllerCount); i++ {
+		doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
+			Attachments: make(map[string]hcsschema.Attachment),
+		}
+	}
+
+	if err := uvm.wcowLayerManager.Configure(ctx, uvm, doc); err != nil {
+		return nil, fmt.Errorf("failed to config UVM layers: %w", err)
 	}
 
 	// Handle StorageQoS if set
@@ -261,7 +257,6 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		vsmbNoDirectMap:         opts.NoDirectMap,
 		noWritableFileShares:    opts.NoWritableFileShares,
-		createOpts:              *opts,
 	}
 
 	defer func() {
@@ -274,58 +269,15 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
 
-	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, opts.LayerFolders)
+	uvm.wcowLayerManager, err = newWCOWUVMLegacyLayerManager(opts.LayerFolders, opts.RootFS)
 	if err != nil {
-		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
+		return nil, fmt.Errorf("failed to create layer manager: %w", err)
 	}
 
-	// TODO: BUGBUG Remove this. @jhowardmsft
-	//       It should be the responsibility of the caller to do the creation and population.
-	//       - Update runhcs too (vm.go).
-	//       - Remove comment in function header
-	//       - Update tests that rely on this current behavior.
-	// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
-	scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
-
-	// Create the directory if it doesn't exist
-	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
-			return nil, fmt.Errorf("failed to create utility VM scratch folder: %s", err)
-		}
-	}
-
-	doc, err := prepareConfigDoc(ctx, uvm, opts, uvmFolder)
+	doc, err := prepareConfigDoc(ctx, uvm, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error in preparing config doc: %s", err)
 	}
-
-	// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it
-	scratchPath := filepath.Join(scratchFolder, "sandbox.vhdx")
-	if _, err := os.Stat(scratchPath); os.IsNotExist(err) {
-		if err := wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, uvm.id); err != nil {
-			return nil, fmt.Errorf("failed to create scratch: %s", err)
-		}
-	} else {
-		// Sandbox.vhdx exists, just need to grant vm access to it.
-		if err := wclayer.GrantVmAccess(ctx, uvm.id, scratchPath); err != nil {
-			return nil, errors.Wrap(err, "failed to grant vm access to scratch")
-		}
-	}
-
-	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
-	for i := 0; i < int(uvm.scsiControllerCount); i++ {
-		doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
-			Attachments: make(map[string]hcsschema.Attachment),
-		}
-	}
-
-	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
-
-		Path:  scratchPath,
-		Type_: "VirtualDisk",
-	}
-
-	uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
 
 	err = uvm.create(ctx, doc)
 	if err != nil {

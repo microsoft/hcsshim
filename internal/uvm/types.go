@@ -124,10 +124,6 @@ type UtilityVM struct {
 	// Location that container process dumps will get written too.
 	processDumpLocation string
 
-	// The CreateOpts used to create this uvm. These can be either of type
-	// uvm.OptionsLCOW or uvm.OptionsWCOW
-	createOpts interface{}
-
 	// Network config proxy client. If nil then this wasn't requested and the
 	// uvms network will be configured locally.
 	ncProxyClientAddress string
@@ -142,6 +138,8 @@ type UtilityVM struct {
 
 	// confidentialUVMOptions hold confidential UVM specific options
 	confidentialUVMOptions *ConfidentialOptions
+
+	wcowLayerManager wcowUVMLayerManager
 }
 
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {

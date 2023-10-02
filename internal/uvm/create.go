@@ -133,9 +133,6 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
 			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
 		}
-		if len(opts.LayerFolders) < 2 {
-			return errors.New("at least 2 LayerFolders must be supplied")
-		}
 		if opts.SCSIControllerCount != 1 {
 			return errors.New("exactly 1 SCSI controller is required for WCOW")
 		}
@@ -243,7 +240,15 @@ func (uvm *UtilityVM) Close() (err error) {
 	}
 
 	if uvm.hcsSystem != nil {
-		return uvm.hcsSystem.Close()
+		if err := uvm.hcsSystem.Close(); err != nil {
+			log.G(ctx).WithError(err).Error("failed to close hcs compute system")
+		}
+	}
+
+	if uvm.wcowLayerManager != nil {
+		if err := uvm.wcowLayerManager.Close(); err != nil {
+			log.G(ctx).WithError(err).Error("failed to cleanup UVM layers")
+		}
 	}
 
 	return nil
