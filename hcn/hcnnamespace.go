@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim"
 	icni "github.com/Microsoft/hcsshim/internal/cni"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/regstate"
@@ -63,6 +64,7 @@ type HostComputeNamespace struct {
 	Type          NamespaceType       `json:",omitempty"` // Host, HostDefault, Guest, GuestDefault
 	Resources     []NamespaceResource `json:",omitempty"`
 	SchemaVersion SchemaVersion       `json:",omitempty"`
+	ReadyOnCreate bool                `json:",omitempty"`
 }
 
 // ModifyNamespaceSettingRequest is the structure used to send request to modify a namespace.
@@ -307,6 +309,19 @@ func GetNamespaceContainerIds(namespaceID string) ([]string, error) {
 	return containerIds, nil
 }
 
+func CanRemovePauseContainer() bool {
+	// HNS versions >= 15.2 change how network compartments are
+	// initialized for pods. This supports removal of pause containers
+	// for process isolation.
+	hnsGlobals, err := hcsshim.GetHNSGlobals()
+	if err == nil {
+		return (hnsGlobals.Version.Major > 15) ||
+			(hnsGlobals.Version.Major == 15 && hnsGlobals.Version.Minor >= 2)
+	}
+
+	return false
+}
+
 // NewNamespace creates a new Namespace object
 func NewNamespace(nsType NamespaceType) *HostComputeNamespace {
 	return &HostComputeNamespace{
@@ -318,6 +333,12 @@ func NewNamespace(nsType NamespaceType) *HostComputeNamespace {
 // Create Namespace.
 func (namespace *HostComputeNamespace) Create() (*HostComputeNamespace, error) {
 	logrus.Debugf("hcn::HostComputeNamespace::Create id=%s", namespace.Id)
+
+	// Set ReadyOnCreate flag to true only if pause containers
+	// can be removed.
+	if CanRemovePauseContainer() {
+		namespace.ReadyOnCreate = true
+	}
 
 	jsonString, err := json.Marshal(namespace)
 	if err != nil {
