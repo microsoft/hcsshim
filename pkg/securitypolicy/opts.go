@@ -149,3 +149,10 @@ func WithAllowDumpStacks(allow bool) PolicyConfigOpt {
 		return nil
 	}
 }
+
+func WithPolicyFragments(fragments []FragmentConfig) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.Fragments = append(config.Fragments, fragments...)
+		return nil
+	}
+}
