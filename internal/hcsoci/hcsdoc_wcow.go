@@ -31,6 +31,8 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
+const createContainerSubdirectoryForProcessDumpSuffix = "{container_id}"
+
 // A simple wrapper struct around the container mount configs that should be added to the
 // container.
 type mountsConfig struct {
@@ -416,7 +418,23 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 
 	if dumpPath != "" {
+		//  If dumpPath specified has createContainerSubdirectoryForProcessDumpSuffix substring
+		// specified as a suffix, then create subdirectory for this container at the specified
+		// dumpPath location. When a fileshare from the host is mounted to the specified dumpPath,
+		// this behavior will help identify dumps coming from differnet containers in the pod.
+		// Check for createContainerSubdirectoryForProcessDumpSuffix in lower case and upper case
+		if strings.HasSuffix(dumpPath, createContainerSubdirectoryForProcessDumpSuffix) {
+			// replace {container_id} with the actual container id
+			dumpPath = strings.TrimSuffix(dumpPath, createContainerSubdirectoryForProcessDumpSuffix) + coi.ID
+		} else if strings.HasSuffix(dumpPath, strings.ToUpper(createContainerSubdirectoryForProcessDumpSuffix)) {
+			// replace {CONTAINER_ID} with the actual container id
+			dumpPath = strings.TrimSuffix(dumpPath, strings.ToUpper(createContainerSubdirectoryForProcessDumpSuffix)) + coi.ID
+		}
 		dumpType, err := parseDumpType(coi.Spec.Annotations)
+		if err != nil {
+			return nil, nil, err
+		}
+		dumpCount, err := parseDumpCount(coi.Spec.Annotations)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -440,6 +458,15 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 				},
 				Name:       "DumpType",
 				DWordValue: dumpType,
+				Type_:      "DWord",
+			},
+			{
+				Key: &hcsschema.RegistryKey{
+					Hive: "Software",
+					Name: "Microsoft\\Windows\\Windows Error Reporting\\LocalDumps",
+				},
+				Name:       "DumpCount",
+				DWordValue: dumpCount,
 				Type_:      "DWord",
 			},
 		}...)
@@ -477,6 +504,23 @@ func parseAssignedDevices(ctx context.Context, coi *createOptionsInternal, v2 *h
 	}
 	v2.AssignedDevices = v2AssignedDevices
 	return nil
+}
+
+func parseDumpCount(annots map[string]string) (int32, error) {
+	dmpCountStr := annots[annotations.WCOWProcessDumpCount]
+	if dmpCountStr == "" {
+		// If no count is specified, default of 10 is set.
+		return 10, nil
+	}
+
+	dumpCount, err := strconv.Atoi(dmpCountStr)
+	if err != nil {
+		return -1, err
+	}
+	if dumpCount > 0 {
+		return int32(dumpCount), nil
+	}
+	return -1, fmt.Errorf("invaid dump count specified: %v", dmpCountStr)
 }
 
 // parseDumpType parses the passed in string representation of the local user mode process dump type to the
