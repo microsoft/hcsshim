@@ -233,6 +233,11 @@ const (
 	// See DumpType: https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps
 	WCOWProcessDumpType = "io.microsoft.wcow.processdumptype"
 
+	// WCOWProcessDumpCount specifies the maximum number of dumps to be collected in the specified
+	// ContainerProcessDumpLocation path. When the maximum value is exceeded, the oldest dump file in the
+	// folder will be replaced by the new dump file. The default value is 10.
+	WCOWProcessDumpCount = "io.microsoft.wcow.processdumpcount"
+
 	// RLimitCore specifies the core rlimit value for a container. This will need to be set
 	// in order to have core dumps generated for a given container.
 	RLimitCore = "io.microsoft.lcow.rlimitcore"
