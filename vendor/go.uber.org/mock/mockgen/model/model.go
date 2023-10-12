@@ -147,12 +147,14 @@ type Type interface {
 }
 
 func init() {
-	gob.Register(&ArrayType{})
-	gob.Register(&ChanType{})
-	gob.Register(&FuncType{})
-	gob.Register(&MapType{})
-	gob.Register(&NamedType{})
-	gob.Register(&PointerType{})
+	// Call gob.RegisterName with pkgPath as prefix to avoid conflicting with
+	// github.com/golang/mock/mockgen/model 's registration.
+	gob.RegisterName(pkgPath+".ArrayType", &ArrayType{})
+	gob.RegisterName(pkgPath+".ChanType", &ChanType{})
+	gob.RegisterName(pkgPath+".FuncType", &FuncType{})
+	gob.RegisterName(pkgPath+".MapType", &MapType{})
+	gob.RegisterName(pkgPath+".NamedType", &NamedType{})
+	gob.RegisterName(pkgPath+".PointerType", &PointerType{})
 
 	// Call gob.RegisterName to make sure it has the consistent name registered
 	// for both gob decoder and encoder.
@@ -467,7 +469,7 @@ func typeFromType(t reflect.Type) (Type, error) {
 	case reflect.Interface:
 		// Two special interfaces.
 		if t.NumMethod() == 0 {
-			return PredeclaredType("interface{}"), nil
+			return PredeclaredType("any"), nil
 		}
 		if t == errorType {
 			return PredeclaredType("error"), nil
