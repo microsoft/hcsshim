@@ -105,25 +105,29 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 	// This supposedly should be fixed soon but for now keep this until we know which container images
 	// (1809, 1903/9, 2004 etc.) this went out too.
 	if opts.ProcessDumpLocation != "" {
+		system := hcsschema.RegistryHive_SYSTEM
+		software := hcsschema.RegistryHive_SOFTWARE
+		dwordType := hcsschema.RegistryValueType_D_WORD
+
 		uvm.processDumpLocation = opts.ProcessDumpLocation
 		registryChanges.AddValues = append(registryChanges.AddValues,
 			hcsschema.RegistryValue{
 				Key: &hcsschema.RegistryKey{
-					Hive: "System",
+					Hive: &system,
 					Name: "ControlSet001\\Services\\WerSvc",
 				},
 				Name:       "Start",
 				DWordValue: 2,
-				Type_:      "DWord",
+				Type_:      &dwordType,
 			},
 			hcsschema.RegistryValue{
 				Key: &hcsschema.RegistryKey{
-					Hive: "Software",
+					Hive: &software,
 					Name: "Microsoft\\Windows\\Windows Error Reporting",
 				},
 				Name:       "Disabled",
 				DWordValue: 1,
-				Type_:      "DWord",
+				Type_:      &dwordType,
 			},
 		)
 	}
@@ -133,32 +137,36 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 	// with a recent change to fix SMB share access in the UVM, this registry key will be checked to
 	// enable the change in question inside GNS.dll.
 	if !opts.DisableCompartmentNamespace {
+		system := hcsschema.RegistryHive_SYSTEM
+		dwordType := hcsschema.RegistryValueType_D_WORD
+
 		registryChanges.AddValues = append(registryChanges.AddValues,
 			hcsschema.RegistryValue{
 				Key: &hcsschema.RegistryKey{
-					Hive: "System",
+					Hive: &system,
 					Name: "CurrentControlSet\\Services\\gns",
 				},
 				Name:       "EnableCompartmentNamespace",
 				DWordValue: 1,
-				Type_:      "DWord",
+				Type_:      &dwordType,
 			},
 		)
 	}
 
-	processor := &hcsschema.Processor2{
-		Count:  uvm.processorCount,
-		Limit:  opts.ProcessorLimit,
-		Weight: opts.ProcessorWeight,
+	processor := &hcsschema.VirtualMachineProcessor{
+		Count:  uint32(uvm.processorCount),
+		Limit:  uint64(opts.ProcessorLimit),
+		Weight: uint64(opts.ProcessorWeight),
 	}
 	// We can set a cpu group for the VM at creation time in recent builds.
 	if opts.CPUGroupID != "" {
 		if osversion.Build() < osversion.V21H1 {
 			return nil, errCPUGroupCreateNotSupported
 		}
-		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}
+		processor.CpuGroup = &hcsschema.CpuGroup{ID: opts.CPUGroupID}
 	}
 
+	dt := hcsschema.UefiBootDevice_VMB_FS
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
@@ -169,13 +177,13 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 				Uefi: &hcsschema.Uefi{
 					BootThis: &hcsschema.UefiBootEntry{
 						DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
-						DeviceType: "VmbFs",
+						DeviceType: &dt,
 					},
 				},
 			},
 			RegistryChanges: &registryChanges,
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					SizeInMB:        memorySizeInMB,
 					AllowOvercommit: opts.AllowOvercommit,
 					// EnableHotHint is not compatible with physical.
@@ -188,7 +196,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 				Processor: processor,
 			},
 			Devices: &hcsschema.Devices{
-				HvSocket: &hcsschema.HvSocket2{
+				HvSocket: &hcsschema.VirtualMachineHvSocket{
 					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
 						// Allow administrators and SYSTEM to bind to vsock sockets
 						// so that we can create a GCS log socket.
@@ -203,8 +211,8 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 	// Handle StorageQoS if set
 	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
 		doc.VirtualMachine.StorageQoS = &hcsschema.StorageQoS{
-			IopsMaximum:      opts.StorageQoSIopsMaximum,
-			BandwidthMaximum: opts.StorageQoSBandwidthMaximum,
+			IOPSMaximum:      uint64(opts.StorageQoSIopsMaximum),
+			BandwidthMaximum: uint64(opts.StorageQoSBandwidthMaximum),
 		}
 	}
 
@@ -312,17 +320,17 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 	}
 
-	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+	doc.VirtualMachine.Devices.SCSI = map[string]hcsschema.SCSI{}
 	for i := 0; i < int(uvm.scsiControllerCount); i++ {
-		doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
+		doc.VirtualMachine.Devices.SCSI[guestrequest.ScsiControllerGuids[i]] = hcsschema.SCSI{
 			Attachments: make(map[string]hcsschema.Attachment),
 		}
 	}
 
-	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
-
+	typ := hcsschema.AttachmentType_VIRTUAL_DISK
+	doc.VirtualMachine.Devices.SCSI[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
 		Path:  scratchPath,
-		Type_: "VirtualDisk",
+		Type_: &typ,
 	}
 
 	uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})

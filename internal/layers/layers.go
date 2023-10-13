@@ -452,7 +452,7 @@ func GetHCSLayers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (layer
 		if err != nil {
 			return nil, err
 		}
-		layers = append(layers, hcsschema.Layer{Id: layerID.String(), Path: uvmPath})
+		layers = append(layers, hcsschema.Layer{ID: layerID.String(), Path: uvmPath})
 	}
 	return layers, nil
 }

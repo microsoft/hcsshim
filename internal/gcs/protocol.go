@@ -291,14 +291,14 @@ func (q *containerPropertiesQuery) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, (*schema1.PropertyQuery)(q))
 }
 
-type containerPropertiesQueryV2 hcsschema.PropertyQuery
+type containerPropertiesQueryV2 hcsschema.SystemPropertyQuery
 
 func (q *containerPropertiesQueryV2) MarshalText() ([]byte, error) {
-	return json.Marshal((*hcsschema.PropertyQuery)(q))
+	return json.Marshal((*hcsschema.SystemPropertyQuery)(q))
 }
 
 func (q *containerPropertiesQueryV2) UnmarshalText(b []byte) error {
-	return json.Unmarshal(b, (*hcsschema.PropertyQuery)(q))
+	return json.Unmarshal(b, (*hcsschema.SystemPropertyQuery)(q))
 }
 
 type containerGetProperties struct {

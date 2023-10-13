@@ -55,7 +55,7 @@ type ProcessHost interface {
 	// (either hcsschema.ProcessParameters or lcow.ProcessParameters).
 	CreateProcess(ctx context.Context, config interface{}) (Process, error)
 	// OS returns the host's operating system, "linux" or "windows".
-	OS() string
+	OS() string // TODO: switch to either hcsschema.OSType or a custom enum defined here
 	// IsOCI specifies whether this is an OCI-compliant process host. If true,
 	// then the configuration passed to CreateProcess should have an OCI process
 	// spec (or nil if this is the initial process in an OCI container).
@@ -75,7 +75,7 @@ type Container interface {
 	// Properties returns the requested container properties targeting a V1 schema container.
 	Properties(ctx context.Context, types ...schema1.PropertyType) (*schema1.ContainerProperties, error)
 	// PropertiesV2 returns the requested container properties targeting a V2 schema container.
-	PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error)
+	PropertiesV2(ctx context.Context, types ...hcsschema.SystemPropertyType) (*hcsschema.Properties, error)
 	// Start starts a container.
 	Start(ctx context.Context) error
 	// Shutdown sends a shutdown request to the container (but does not wait for

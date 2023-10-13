@@ -822,7 +822,7 @@ func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_
 
 func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	s := &stats.Statistics{}
-	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
+	props, err := ht.c.PropertiesV2(ctx, hcsschema.SystemPropertyType_STATISTICS)
 	if err != nil {
 		if isStatsNotFound(err) {
 			return nil, errors.Wrapf(errdefs.ErrNotFound, "failed to fetch stats: %s", err)
@@ -881,22 +881,22 @@ func (ht *hcsTask) updateTaskContainerResources(ctx context.Context, data interf
 }
 
 func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.WindowsCPUResources) error {
-	// if host is 20h2+ then we can make a request directly to hcs
+	// if host is 20h2+ then we can make a request directly to HCS
 	if osversion.Get().Build >= osversion.V20H2 {
-		req := &hcsschema.Processor{}
+		req := &hcsschema.ContainerProcessor{}
 		if cpu.Count != nil {
 			procCount := int32(*cpu.Count)
 			hostProcs := processorinfo.ProcessorCount()
 			if ht.host != nil {
 				hostProcs = ht.host.ProcessorCount()
 			}
-			req.Count = hcsoci.NormalizeProcessorCount(ctx, ht.id, procCount, hostProcs)
+			req.Count = uint32(hcsoci.NormalizeProcessorCount(ctx, ht.id, procCount, hostProcs))
 		}
 		if cpu.Maximum != nil {
-			req.Maximum = int32(*cpu.Maximum)
+			req.Maximum = int64(*cpu.Maximum)
 		}
 		if cpu.Shares != nil {
-			req.Weight = int32(*cpu.Shares)
+			req.Weight = int64(*cpu.Shares)
 		}
 		return ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req)
 	}
@@ -943,10 +943,14 @@ func (ht *hcsTask) updateLCOWResources(ctx context.Context, data interface{}, an
 func (ht *hcsTask) requestUpdateContainer(ctx context.Context, resourcePath string, settings interface{}) error {
 	var modification interface{}
 	if ht.isWCOW {
-		modification = &hcsschema.ModifySettingRequest{
-			ResourcePath: resourcePath,
-			RequestType:  guestrequest.RequestTypeUpdate,
-			Settings:     settings,
+		var err error
+		if modification, err = hcsschema.NewModifySettingRequest(
+			resourcePath,
+			hcsschema.ModifyRequestType_UPDATE,
+			settings,
+			nil, // guestRequest
+		); err != nil {
+			return err
 		}
 	} else {
 		modification = guestrequest.ModificationRequest{

@@ -518,11 +518,11 @@ func (c *JobContainer) shutdown(ctx context.Context) error {
 // PropertiesV2 returns properties relating to the job container. This is an HCS construct but
 // to adhere to the interface for containers on Windows it is partially implemented. The only
 // supported property is schema2.PTStatistics.
-func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error) {
+func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.SystemPropertyType) (*hcsschema.Properties, error) {
 	if len(types) == 0 {
 		return nil, errors.New("no property types supplied for PropertiesV2 call")
 	}
-	if types[0] != hcsschema.PTStatistics {
+	if types[0] != hcsschema.SystemPropertyType_STATISTICS {
 		return nil, errors.New("PTStatistics is the only supported property type for job containers")
 	}
 

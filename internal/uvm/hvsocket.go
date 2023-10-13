@@ -8,7 +8,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // UpdateHvSocketService calls HCS to update/create the hvsocket service for
@@ -28,19 +27,28 @@ import (
 // will behave identically to a call to RemoveHvSocketService. Prefer RemoveHvSocketService for this
 // behavior as the relevant fields are set on HCS' side.
 func (uvm *UtilityVM) UpdateHvSocketService(ctx context.Context, sid string, doc *hcsschema.HvSocketServiceConfig) error {
-	request := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeUpdate,
-		ResourcePath: fmt.Sprintf(resourcepaths.HvSocketConfigResourceFormat, sid),
-		Settings:     doc,
+	request, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.HvSocketConfigResourceFormat, sid),
+		hcsschema.ModifyRequestType_UPDATE,
+		doc,
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.modify(ctx, request)
+	return uvm.modify(ctx, &request)
 }
 
 // RemoveHvSocketService will remove an hvsocket service entry if it exists.
 func (uvm *UtilityVM) RemoveHvSocketService(ctx context.Context, sid string) error {
-	request := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeRemove,
-		ResourcePath: fmt.Sprintf(resourcepaths.HvSocketConfigResourceFormat, sid),
+	request, err := hcsschema.NewModifySettingRequest(
+		fmt.Sprintf(resourcepaths.HvSocketConfigResourceFormat, sid),
+		hcsschema.ModifyRequestType_REMOVE,
+		nil,
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.modify(ctx, request)
+	return uvm.modify(ctx, &request)
 }

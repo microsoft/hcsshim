@@ -9,10 +9,11 @@ import (
 )
 
 func (uvmb *utilityVMBuilder) SetUEFIBoot(dir string, path string, args string) error {
+	dt := hcsschema.UefiBootDevice_VMB_FS
 	uvmb.doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
 		BootThis: &hcsschema.UefiBootEntry{
 			DevicePath:    path,
-			DeviceType:    "VmbFs",
+			DeviceType:    &dt,
 			VmbFsRootPath: dir,
 			OptionalData:  args,
 		},

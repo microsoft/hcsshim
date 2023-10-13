@@ -5,13 +5,17 @@ package guestrequest
 type RequestType string
 type ResourceType string
 
-// RequestType const
+// TODO: repace with [hcsschema.ModifyRequestType]/[hcsschema.LinuxModifyRequestType]
+
+// RequestType const.
 const (
 	RequestTypeAdd    RequestType = "Add"
 	RequestTypeRemove RequestType = "Remove"
 	RequestTypePreAdd RequestType = "PreAdd" // For networking
 	RequestTypeUpdate RequestType = "Update"
 )
+
+// TODO: replace with [hcsschema.ProcessSignal]
 
 type SignalValueWCOW string
 
@@ -23,6 +27,8 @@ const (
 	SignalValueWCOWCtrlShutdown SignalValueWCOW = "CtrlShutdown"
 )
 
+// TODO: replace with [hcsschema.GuestModifySettingRequest] and [hcsschema.LinuxGuestModifySettingRequest]
+
 // ModificationRequest is for modify commands passed to the guest.
 type ModificationRequest struct {
 	RequestType  RequestType  `json:"RequestType,omitempty"`
@@ -30,11 +36,15 @@ type ModificationRequest struct {
 	Settings     interface{}  `json:"Settings,omitempty"`
 }
 
+// TODO: replace with [hcsschema.NetworkModifySettingRequest]
+
 type NetworkModifyRequest struct {
 	AdapterId   string      `json:"AdapterId,omitempty"` //nolint:stylecheck
 	RequestType RequestType `json:"RequestType,omitempty"`
 	Settings    interface{} `json:"Settings,omitempty"`
 }
+
+// TODO: replace with [hcsschema.Rs4NetworkModifySettingRequest]
 
 type RS4NetworkModifyRequest struct {
 	AdapterInstanceId string      `json:"AdapterInstanceId,omitempty"` //nolint:stylecheck

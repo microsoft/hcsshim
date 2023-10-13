@@ -258,12 +258,16 @@ func (uvm *UtilityVM) CreateContainer(ctx context.Context, id string, settings i
 		}
 		return c, nil
 	}
+	s, err := hcsschema.ToRawMessage(settings)
+	if err != nil {
+		return nil, err
+	}
 	doc := hcsschema.ComputeSystem{
-		HostingSystemId:                   uvm.id,
+		HostingSystemID:                   uvm.id,
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
 		ShouldTerminateOnLastHandleClosed: true,
-		HostedSystem:                      settings,
+		HostedSystem:                      s,
 	}
 	c, err := hcs.CreateComputeSystem(ctx, id, &doc)
 	if err != nil {

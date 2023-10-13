@@ -90,6 +90,10 @@ func (err *ExitError) Error() string {
 	return fmt.Sprintf("process exited with exit code %d", err.ExitCode())
 }
 
+// TODO: replace with [hcsschema.LinuxProcessParameters]
+// NOTE: the Linux GCS uses the hcsschema.ProcessParameters field to exec an (external) process
+//  in the uVM, which is a custom modification to the bridge protocol.
+
 // Additional fields to hcsschema.ProcessParameters used by LCOW
 type lcowProcessParameters struct {
 	hcsschema.ProcessParameters
@@ -167,9 +171,9 @@ func (c *Cmd) Start() error {
 		wpp.Environment = environment
 
 		if c.Spec.ConsoleSize != nil {
-			wpp.ConsoleSize = []int32{
-				int32(c.Spec.ConsoleSize.Height),
-				int32(c.Spec.ConsoleSize.Width),
+			wpp.ConsoleSize = []uint16{
+				uint16(c.Spec.ConsoleSize.Height),
+				uint16(c.Spec.ConsoleSize.Width),
 			}
 		}
 		x = wpp

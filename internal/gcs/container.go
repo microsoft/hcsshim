@@ -157,7 +157,7 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 }
 
 // PropertiesV2 returns the requested container properties targeting a V2 schema container.
-func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
+func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.SystemPropertyType) (_ *hcsschema.Properties, err error) {
 	ctx, span := oc.StartSpan(ctx, "gcs::Container::PropertiesV2", oc.WithClientSpanKind)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

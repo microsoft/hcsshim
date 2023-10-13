@@ -544,7 +544,8 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 					Key: "PATH", Value: "C:\\Windows\\system32;C:\\Windows",
 				},
 			},
-			exec: []string{"cmd", "/c", "IF", "%PATH%", "==", "C:\\Windows\\system32;C:\\Windows", "( exit 0 )", "ELSE", "(exit -1)"},
+			exec: []string{"cmd", "/c",
+				`IF "%PATH%"=="C:\Windows\system32;C:\Windows" (exit 0) ELSE ( ECHO "%PATH%" && exit -1)`},
 		},
 		{
 			name:           "JobContainer_VolumeMount_WithMountPoint",
@@ -556,7 +557,8 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 					Key: "PATH", Value: "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows",
 				},
 			},
-			exec: []string{"cmd", "/c", "IF", "%PATH%", "==", "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows", "( exit -1 )", "ELSE", "(exit 0)"},
+			exec: []string{"cmd", "/c",
+				`IF "%PATH%"=="%CONTAINER_SANDBOX_MOUNT_POINT%\apps\vim\;C:\Windows\system32;C:\Windows" ( exit 0 ) ELSE ( ECHO "%PATH%" && exit -1)`},
 		},
 	}
 
@@ -587,6 +589,9 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 				Cmd:         test.exec,
 			})
 			if r.ExitCode != 0 {
+				if len(r.Stdout) > 0 {
+					t.Logf("stdout: %s", string(r.Stdout))
+				}
 				t.Fatalf("failed with exit code %d checking for job container mount: %s", r.ExitCode, string(r.Stderr))
 			}
 		})

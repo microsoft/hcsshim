@@ -16,8 +16,8 @@ import (
 // and NUMA configuration. This is also used to reliably get the hosts number of logical
 // processors in multi processor group settings.
 func HostProcessorInfo(ctx context.Context) (*hcsschema.ProcessorTopology, error) {
-	q := hcsschema.PropertyQuery{
-		PropertyTypes: []hcsschema.PropertyType{hcsschema.PTProcessorTopology},
+	q := hcsschema.ServicePropertyQuery{
+		PropertyTypes: []hcsschema.GetPropertyType{hcsschema.GetPropertyType_PROCESSOR_TOPOLOGY},
 	}
 	serviceProps, err := hcs.GetServiceProperties(ctx, q)
 	if err != nil {

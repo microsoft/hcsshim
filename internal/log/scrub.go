@@ -41,7 +41,7 @@ func IsScrubbingEnabled() bool {
 }
 
 // ScrubProcessParameters scrubs HCS Create Process requests with config parameters of
-// type internal/hcs/schema2.ScrubProcessParameters (aka hcsshema.ScrubProcessParameters)
+// type internal/hcs/schema2.ProcessParameters (aka hcsschema.ProcessParameters).
 func ScrubProcessParameters(s string) (string, error) {
 	// todo: deal with v1 ProcessConfig
 	b := []byte(s)

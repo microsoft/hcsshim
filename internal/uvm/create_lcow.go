@@ -189,7 +189,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 }
 
 // Get an acceptable number of processors given option and actual constraints.
-func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hcsschema.Processor2, error) {
+func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hcsschema.VirtualMachineProcessor, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
@@ -199,17 +199,17 @@ func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hc
 	// a user CPU count if the setting is not possible.
 	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
 
-	processor := &hcsschema.Processor2{
-		Count:  uvm.processorCount,
-		Limit:  opts.ProcessorLimit,
-		Weight: opts.ProcessorWeight,
+	processor := &hcsschema.VirtualMachineProcessor{
+		Count:  uint32(uvm.processorCount),
+		Limit:  uint64(opts.ProcessorLimit),
+		Weight: uint64(opts.ProcessorWeight),
 	}
 	// We can set a cpu group for the VM at creation time in recent builds.
 	if opts.CPUGroupID != "" {
 		if osversion.Build() < osversion.V21H1 {
 			return nil, errCPUGroupCreateNotSupported
 		}
-		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}
+		processor.CpuGroup = &hcsschema.CpuGroup{ID: opts.CPUGroupID}
 	}
 	return processor, nil
 }
@@ -307,7 +307,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		return nil, fmt.Errorf("cannot override rootfs when using VMGS file")
 	}
 
-	var processor *hcsschema.Processor2
+	var processor *hcsschema.VirtualMachineProcessor
 	processor, err = fetchProcessor(ctx, opts, uvm)
 	if err != nil {
 		return nil, err
@@ -351,7 +351,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 			StopOnReset: true,
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					SizeInMB:              memorySizeInMB,
 					AllowOvercommit:       opts.AllowOvercommit,
 					EnableDeferredCommit:  opts.EnableDeferredCommit,
@@ -363,7 +363,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 				Processor: processor,
 			},
 			Devices: &hcsschema.Devices{
-				HvSocket: &hcsschema.HvSocket2{
+				HvSocket: &hcsschema.VirtualMachineHvSocket{
 					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
 						// Allow administrators and SYSTEM to bind to vsock sockets
 						// so that we can create a GCS log socket.
@@ -394,15 +394,15 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	// Handle StorageQoS if set
 	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
 		doc.VirtualMachine.StorageQoS = &hcsschema.StorageQoS{
-			IopsMaximum:      opts.StorageQoSIopsMaximum,
-			BandwidthMaximum: opts.StorageQoSBandwidthMaximum,
+			IOPSMaximum:      uint64(opts.StorageQoSIopsMaximum),
+			BandwidthMaximum: uint64(opts.StorageQoSBandwidthMaximum),
 		}
 	}
 
 	if uvm.scsiControllerCount > 0 {
-		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+		doc.VirtualMachine.Devices.SCSI = map[string]hcsschema.SCSI{}
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
-			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
+			doc.VirtualMachine.Devices.SCSI[guestrequest.ScsiControllerGuids[i]] = hcsschema.SCSI{
 				Attachments: make(map[string]hcsschema.Attachment),
 			}
 		}
@@ -410,16 +410,18 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 
 	// Required by HCS for the isolated boot scheme, see also https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/learn-more/generation-2-virtual-machine-security-settings-for-hyper-v
 	// A complete explanation of the why's and wherefores of starting an encrypted, isolated VM are beond the scope of these comments.
+	asbt := hcsschema.ApplySecureBootTemplateType_APPLY
 	doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
-		ApplySecureBootTemplate: "Apply",
-		SecureBootTemplateId:    "1734c6e8-3154-4dda-ba5f-a874cc483422", // aka MicrosoftWindowsSecureBootTemplateGUID equivalent to "Microsoft Windows" template from Get-VMHost | select SecureBootTemplates,
+		ApplySecureBootTemplate: &asbt,
+		SecureBootTemplateID:    "1734c6e8-3154-4dda-ba5f-a874cc483422", // aka MicrosoftWindowsSecureBootTemplateGUID equivalent to "Microsoft Windows" template from Get-VMHost | select SecureBootTemplates,
 
 	}
 
 	// Point at the file that contains the linux kernel and initrd images.
+	gsft := hcsschema.GuestStateFileType_FILE_MODE
 	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
 		GuestStateFilePath:  vmgsFile.Name(),
-		GuestStateFileType:  "FileMode",
+		GuestStateFileType:  &gsft,
 		ForceTransientState: true, // tell HCS that this is just the source of the images, not ongoing state
 	}
 
@@ -453,10 +455,11 @@ func makeLCOWSecurityDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM)
 	// Put the measurement into the LaunchData field of the HCS creation command.
 	// This will end-up in HOST_DATA of SNP_LAUNCH_FINISH command the and ATTESTATION_REPORT
 	// retrieved by the guest later.
+	iso := hcsschema.GuestIsolationType_SECURE_NESTED_PAGING
 	doc.VirtualMachine.SecuritySettings = &hcsschema.SecuritySettings{
 		EnableTpm: false,
 		Isolation: &hcsschema.IsolationSettings{
-			IsolationType: "SecureNestedPaging",
+			IsolationType: &iso,
 			LaunchData:    hostData,
 			// HclEnabled:    true, /* Not available in schema 2.5 - REQUIRED when using BlockStorage in 2.6 */
 			HclEnabled: opts.HclEnabled,
@@ -521,7 +524,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
 	}
 
-	var processor *hcsschema.Processor2
+	var processor *hcsschema.VirtualMachineProcessor
 	processor, err = fetchProcessor(ctx, opts, uvm) // must happen after the file existence tests above.
 	if err != nil {
 		return nil, err
@@ -538,7 +541,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 			StopOnReset: true,
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					SizeInMB:              memorySizeInMB,
 					AllowOvercommit:       opts.AllowOvercommit,
 					EnableDeferredCommit:  opts.EnableDeferredCommit,
@@ -550,7 +553,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				Processor: processor,
 			},
 			Devices: &hcsschema.Devices{
-				HvSocket: &hcsschema.HvSocket2{
+				HvSocket: &hcsschema.VirtualMachineHvSocket{
 					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
 						// Allow administrators and SYSTEM to bind to vsock sockets
 						// so that we can create a GCS log socket.
@@ -565,15 +568,15 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	// Handle StorageQoS if set
 	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
 		doc.VirtualMachine.StorageQoS = &hcsschema.StorageQoS{
-			IopsMaximum:      opts.StorageQoSIopsMaximum,
-			BandwidthMaximum: opts.StorageQoSBandwidthMaximum,
+			IOPSMaximum:      uint64(opts.StorageQoSIopsMaximum),
+			BandwidthMaximum: uint64(opts.StorageQoSBandwidthMaximum),
 		}
 	}
 
 	if uvm.scsiControllerCount > 0 {
-		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+		doc.VirtualMachine.Devices.SCSI = map[string]hcsschema.SCSI{}
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
-			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
+			doc.VirtualMachine.Devices.SCSI[guestrequest.ScsiControllerGuids[i]] = hcsschema.SCSI{
 				Attachments: make(map[string]hcsschema.Attachment),
 			}
 		}
@@ -581,7 +584,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 
 	if uvm.vpmemMaxCount > 0 {
 		doc.VirtualMachine.Devices.VirtualPMem = &hcsschema.VirtualPMemController{
-			MaximumCount:     uvm.vpmemMaxCount,
+			MaximumCount:     uint8(uvm.vpmemMaxCount),
 			MaximumSizeBytes: uvm.vpmemMaxSizeBytes,
 		}
 	}
@@ -596,15 +599,15 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		if uvm.vpmemMaxCount > 0 {
 			// Support for VPMem VHD(X) booting rather than initrd..
 			kernelArgs = "root=/dev/pmem0 ro rootwait init=/init"
-			imageFormat := "Vhd1"
+			imageFormat := hcsschema.VirtualPMemImageFormat_VHD1
 			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
-				imageFormat = "Vhdx"
+				imageFormat = hcsschema.VirtualPMemImageFormat_VHDX
 			}
 			doc.VirtualMachine.Devices.VirtualPMem.Devices = map[string]hcsschema.VirtualPMemDevice{
 				"0": {
 					HostPath:    rootfsFullPath,
 					ReadOnly:    true,
-					ImageFormat: imageFormat,
+					ImageFormat: &imageFormat,
 				},
 			}
 			if uvm.vpmemMultiMapping {
@@ -639,8 +642,9 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 			}
 		} else {
 			kernelArgs = "root=/dev/sda ro rootwait init=/init"
-			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
-				Type_:    "VirtualDisk",
+			typ := hcsschema.AttachmentType_VIRTUAL_DISK
+			doc.VirtualMachine.Devices.SCSI[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
+				Type_:    &typ,
 				Path:     rootfsFullPath,
 				ReadOnly: true,
 			}
@@ -722,10 +726,11 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	kernelArgs += ` brd.rd_nr=0 pmtmr=0 -- ` + initArgs
 
 	if !opts.KernelDirect {
+		dt := hcsschema.UefiBootDevice_VMB_FS
 		doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
 			BootThis: &hcsschema.UefiBootEntry{
 				DevicePath:    `\` + opts.KernelFile,
-				DeviceType:    "VmbFs",
+				DeviceType:    &dt,
 				VmbFsRootPath: opts.BootFilesPath,
 				OptionalData:  kernelArgs,
 			},

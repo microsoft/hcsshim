@@ -167,7 +167,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 
 	if coi.Spec.Hostname != "" {
 		v1.HostName = coi.Spec.Hostname
-		v2Container.GuestOs = &hcsschema.GuestOs{HostName: coi.Spec.Hostname}
+		v2Container.GuestOS = &hcsschema.GuestOS{HostName: coi.Spec.Hostname}
 	}
 
 	var (
@@ -234,17 +234,17 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v1.ProcessorMaximum = int64(cpuLimit)
 	v1.ProcessorWeight = uint64(cpuWeight)
 
-	v2Container.Processor = &hcsschema.Processor{
-		Count:   cpuCount,
-		Maximum: cpuLimit,
-		Weight:  cpuWeight,
+	v2Container.Processor = &hcsschema.ContainerProcessor{
+		Count:   uint32(cpuCount),
+		Maximum: int64(cpuLimit),
+		Weight:  int64(cpuWeight),
 	}
 
 	// Memory Resources
 	memoryMaxInMB := oci.ParseAnnotationsMemory(ctx, coi.Spec, annotations.ContainerMemorySizeInMB, 0)
 	if memoryMaxInMB > 0 {
 		v1.MemoryMaximumInMB = int64(memoryMaxInMB)
-		v2Container.Memory = &hcsschema.Memory{
+		v2Container.Memory = &hcsschema.ContainerMemory{
 			SizeInMB: memoryMaxInMB,
 		}
 	}
@@ -256,8 +256,8 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v1.StorageBandwidthMaximum = uint64(storageBandwidthMax)
 		v1.StorageIOPSMaximum = uint64(storageIopsMax)
 		v2Container.Storage.QoS = &hcsschema.StorageQoS{
-			BandwidthMaximum: storageBandwidthMax,
-			IopsMaximum:      storageIopsMax,
+			BandwidthMaximum: uint64(storageBandwidthMax),
+			IOPSMaximum:      uint64(storageIopsMax),
 		}
 	}
 
@@ -270,11 +270,11 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v2Container.Networking.Namespace = coi.actualNetworkNamespace
 
 		v1.AllowUnqualifiedDNSQuery = coi.Spec.Windows.Network.AllowUnqualifiedDNSQuery
-		v2Container.Networking.AllowUnqualifiedDnsQuery = v1.AllowUnqualifiedDNSQuery
+		v2Container.Networking.AllowUnqualifiedDNSQuery = v1.AllowUnqualifiedDNSQuery
 
 		if coi.Spec.Windows.Network.DNSSearchList != nil {
 			v1.DNSSearchList = strings.Join(coi.Spec.Windows.Network.DNSSearchList, ",")
-			v2Container.Networking.DnsSearchList = v1.DNSSearchList
+			v2Container.Networking.DNSSearchList = v1.DNSSearchList
 		}
 
 		v1.NetworkSharedContainerName = coi.Spec.Windows.Network.NetworkSharedContainerName
@@ -349,7 +349,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 				return nil, nil, err
 			}
 			v1.Layers = append(v1.Layers, schema1.Layer{ID: layerID.String(), Path: layerPath})
-			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschema.Layer{Id: layerID.String(), Path: layerPath})
+			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschema.Layer{ID: layerID.String(), Path: layerPath})
 		}
 	}
 
@@ -403,15 +403,17 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 
 	// 'WaitToKillServiceTimeout' reg key value is arbitrarily chosen and set to a
 	// value that is long enough that no one will want to wait longer
+	system := hcsschema.RegistryHive_SYSTEM
+	stringType := hcsschema.RegistryValueType_STRING_
 	registryAdd := []hcsschema.RegistryValue{
 		{
 			Key: &hcsschema.RegistryKey{
-				Hive: "System",
+				Hive: &system,
 				Name: "ControlSet001\\Control",
 			},
 			Name:        "WaitToKillServiceTimeout",
 			StringValue: strconv.Itoa(math.MaxInt32),
-			Type_:       "String",
+			Type_:       &stringType,
 		},
 	}
 
@@ -421,26 +423,28 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 			return nil, nil, err
 		}
 
+		software := hcsschema.RegistryHive_SOFTWARE
+		dwordType := hcsschema.RegistryValueType_D_WORD
 		// Setup WER registry keys for local process dump creation if specified.
 		// https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps
 		registryAdd = append(registryAdd, []hcsschema.RegistryValue{
 			{
 				Key: &hcsschema.RegistryKey{
-					Hive: "Software",
+					Hive: &software,
 					Name: "Microsoft\\Windows\\Windows Error Reporting\\LocalDumps",
 				},
 				Name:        "DumpFolder",
 				StringValue: dumpPath,
-				Type_:       "String",
+				Type_:       &stringType,
 			},
 			{
 				Key: &hcsschema.RegistryKey{
-					Hive: "Software",
+					Hive: &software,
 					Name: "Microsoft\\Windows\\Windows Error Reporting\\LocalDumps",
 				},
 				Name:       "DumpType",
-				DWordValue: dumpType,
-				Type_:      "DWord",
+				DWordValue: uint32(dumpType),
+				Type_:      &dwordType,
 			},
 		}...)
 	}
@@ -464,11 +468,12 @@ func parseAssignedDevices(ctx context.Context, coi *createOptionsInternal, v2 *h
 		switch d.IDType {
 		case uvm.VPCILocationPathIDType:
 			v2Dev.LocationPath = d.ID
-			v2Dev.Type = hcsschema.DeviceInstanceID
+			dt := hcsschema.DeviceType_DEVICE_INSTANCE
+			v2Dev.Type_ = &dt
 		case uvm.VPCIClassGUIDTypeLegacy:
-			v2Dev.InterfaceClassGuid = d.ID
+			v2Dev.InterfaceClassGUID = d.ID
 		case uvm.VPCIClassGUIDType:
-			v2Dev.InterfaceClassGuid = d.ID
+			v2Dev.InterfaceClassGUID = d.ID
 		default:
 			return fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}

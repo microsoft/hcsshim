@@ -33,13 +33,19 @@ func (uvm *UtilityVM) SetCPUGroup(ctx context.Context, id string) error {
 
 // setCPUGroup sets the VM's cpugroup
 func (uvm *UtilityVM) setCPUGroup(ctx context.Context, id string) error {
-	req := &hcsschema.ModifySettingRequest{
-		ResourcePath: resourcepaths.CPUGroupResourcePath,
-		Settings: &hcsschema.CpuGroup{
-			Id: id,
+	req, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.CPUGroupResourcePath,
+		hcsschema.ModifyRequestType_UPDATE,
+		&hcsschema.CpuGroup{
+			ID: id,
 		},
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	if err := uvm.modify(ctx, req); err != nil {
+	req.RequestType = nil // request type is unneeded, so remove it
+	if err := uvm.modify(ctx, &req); err != nil {
 		return err
 	}
 	return nil

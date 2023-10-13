@@ -7,7 +7,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
@@ -34,7 +33,7 @@ func vmVSMBOptionsToHCS(options *vm.VSMBOptions) *hcsschema.VirtualSmbShareOptio
 	return &hcsschema.VirtualSmbShareOptions{
 		ReadOnly:            options.ReadOnly,
 		ShareRead:           options.ShareRead,
-		CacheIo:             options.CacheIo,
+		CacheIO:             options.CacheIo,
 		NoOplocks:           options.NoOplocks,
 		NoDirectmap:         options.NoDirectMap,
 		TakeBackupPrivilege: options.TakeBackupPrivilege,
@@ -44,24 +43,33 @@ func vmVSMBOptionsToHCS(options *vm.VSMBOptions) *hcsschema.VirtualSmbShareOptio
 }
 
 func (uvm *utilityVM) AddVSMB(ctx context.Context, path string, name string, allowed []string, options *vm.VSMBOptions) error {
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.VirtualSmbShare{
+	request, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.VSMBShareResourcePath,
+		hcsschema.ModifyRequestType_ADD,
+		hcsschema.VirtualSmbShare{
 			Name:         name,
 			Options:      vmVSMBOptionsToHCS(options),
 			Path:         path,
 			AllowedFiles: allowed,
 		},
-		ResourcePath: resourcepaths.VSMBShareResourcePath,
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.cs.Modify(ctx, modification)
+
+	return uvm.cs.Modify(ctx, &request)
 }
 
 func (uvm *utilityVM) RemoveVSMB(ctx context.Context, name string) error {
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  guestrequest.RequestTypeRemove,
-		Settings:     hcsschema.VirtualSmbShare{Name: name},
-		ResourcePath: resourcepaths.VSMBShareResourcePath,
+	request, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.VSMBShareResourcePath,
+		hcsschema.ModifyRequestType_REMOVE,
+		hcsschema.VirtualSmbShare{Name: name},
+		nil, // guestRequest
+	)
+	if err != nil {
+		return err
 	}
-	return uvm.cs.Modify(ctx, modification)
+	return uvm.cs.Modify(ctx, &request)
 }

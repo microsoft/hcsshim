@@ -18,6 +18,6 @@ func (uvmb *utilityVMBuilder) SetCPUGroup(ctx context.Context, id string) error 
 	if err != nil {
 		return err
 	}
-	uvmb.config.WindowsOptions.CpuGroupID = conf.HypervisorGroupId
+	uvmb.config.WindowsOptions.CpuGroupID = conf.HypervisorGroupID
 	return nil
 }

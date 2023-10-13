@@ -61,7 +61,7 @@ func isDeviceExtensionsSupported() bool {
 
 // getDeviceExtensions is a helper function to read the files at `extensionPaths` and unmarshal the contents
 // into a `hcsshema.DeviceExtension` to be added to a container's hcs create document.
-func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDefinitionDevice, error) {
+func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainersDefDevice, error) {
 	extensionPaths, err := getDeviceExtensionPaths(annotations)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDef
 		return nil, fmt.Errorf("device extensions are not supported on this build (%d)", osversion.Build())
 	}
 
-	results := &hcsschema.ContainerDefinitionDevice{
+	results := &hcsschema.ContainersDefDevice{
 		DeviceExtension: []hcsschema.DeviceExtension{},
 	}
 	for _, extensionPath := range extensionPaths {

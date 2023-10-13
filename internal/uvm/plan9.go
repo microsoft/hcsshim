@@ -51,10 +51,10 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 	// TODO: JTERRY75 - These are marked private in the schema. For now use them
 	// but when there are public variants we need to switch to them.
 	const (
-		shareFlagsReadOnly           int32 = 0x00000001
-		shareFlagsLinuxMetadata      int32 = 0x00000004
-		shareFlagsCaseSensitive      int32 = 0x00000008
-		shareFlagsRestrictFileAccess int32 = 0x00000080
+		shareFlagsReadOnly           int64 = 0x00000001
+		shareFlagsLinuxMetadata      int64 = 0x00000004
+		shareFlagsCaseSensitive      int64 = 0x00000008
+		shareFlagsRestrictFileAccess int64 = 0x00000080
 	)
 
 	// TODO: JTERRY75 - `shareFlagsCaseSensitive` only works if the Windows
@@ -74,9 +74,10 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 	uvm.m.Unlock()
 	name := strconv.FormatUint(index, 10)
 
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.Plan9Share{
+	request, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.Plan9ShareResourcePath,
+		hcsschema.ModifyRequestType_ADD,
+		hcsschema.Plan9Share{
 			Name:         name,
 			AccessName:   name,
 			Path:         hostPath,
@@ -84,8 +85,7 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 			Flags:        flags,
 			AllowedFiles: allowedNames,
 		},
-		ResourcePath: resourcepaths.Plan9ShareResourcePath,
-		GuestRequest: guestrequest.ModificationRequest{
+		guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedDirectory,
 			RequestType:  guestrequest.RequestTypeAdd,
 			Settings: guestresource.LCOWMappedDirectory{
@@ -95,9 +95,12 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 				ReadOnly:  readOnly,
 			},
 		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := uvm.modify(ctx, modification); err != nil {
+	if err := uvm.modify(ctx, &request); err != nil {
 		return nil, err
 	}
 
@@ -115,15 +118,15 @@ func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) error 
 		return errNotSupported
 	}
 
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeRemove,
-		Settings: hcsschema.Plan9Share{
+	request, err := hcsschema.NewModifySettingRequest(
+		resourcepaths.Plan9ShareResourcePath,
+		hcsschema.ModifyRequestType_REMOVE,
+		hcsschema.Plan9Share{
 			Name:       share.name,
 			AccessName: share.name,
 			Port:       plan9Port,
 		},
-		ResourcePath: resourcepaths.Plan9ShareResourcePath,
-		GuestRequest: guestrequest.ModificationRequest{
+		guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedDirectory,
 			RequestType:  guestrequest.RequestTypeRemove,
 			Settings: guestresource.LCOWMappedDirectory{
@@ -132,9 +135,12 @@ func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) error 
 				Port:      plan9Port,
 			},
 		},
+	)
+	if err != nil {
+		return err
 	}
-	if err := uvm.modify(ctx, modification); err != nil {
-		return fmt.Errorf("failed to remove plan9 share %s from %s: %+v: %s", share.name, uvm.id, modification, err)
+	if err := uvm.modify(ctx, &request); err != nil {
+		return fmt.Errorf("failed to remove plan9 share %s from %s: %+v: %s", share.name, uvm.id, request, err)
 	}
 	return nil
 }

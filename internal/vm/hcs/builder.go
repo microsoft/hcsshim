@@ -29,13 +29,13 @@ func NewUVMBuilder(id string, owner string, guestOS vm.GuestOS) (vm.UVMBuilder, 
 			StopOnReset: true,
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					AllowOvercommit: true,
 				},
-				Processor: &hcsschema.Processor2{},
+				Processor: &hcsschema.VirtualMachineProcessor{},
 			},
 			Devices: &hcsschema.Devices{
-				HvSocket: &hcsschema.HvSocket2{
+				HvSocket: &hcsschema.VirtualMachineHvSocket{
 					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
 						// Allow administrators and SYSTEM to bind to vsock sockets
 						// so that we can create a GCS log socket.

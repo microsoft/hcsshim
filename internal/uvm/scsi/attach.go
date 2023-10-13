@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
 type attachManager struct {
@@ -49,7 +51,7 @@ type attachment struct {
 type attachConfig struct {
 	path     string
 	readOnly bool
-	typ      string
+	typ      hcsschema.AttachmentType
 	evdType  string
 }
 

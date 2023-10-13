@@ -70,7 +70,7 @@ func pageAlign(t uint64) uint64 {
 // for the multi-mapping setup
 func newMappedVPMemModifyRequest(
 	ctx context.Context,
-	rType guestrequest.RequestType,
+	rType hcsschema.ModifyRequestType,
 	deviceNumber uint32,
 	md *mappedDeviceInfo,
 	uvm *UtilityVM,
@@ -84,47 +84,55 @@ func newMappedVPMemModifyRequest(
 		},
 	}
 
-	request := &hcsschema.ModifySettingRequest{
-		RequestType: rType,
-		GuestRequest: guestrequest.ModificationRequest{
-			ResourceType: guestresource.ResourceTypeVPMemDevice,
-			RequestType:  rType,
-			Settings:     guestSettings,
-		},
-	}
-
+	var rp string
+	var settings any
 	pmem := uvm.vpmemDevicesMultiMapped[deviceNumber]
 	switch rType {
-	case guestrequest.RequestTypeAdd:
+	case hcsschema.ModifyRequestType_ADD:
 		if pmem == nil {
-			request.Settings = hcsschema.VirtualPMemDevice{
+			img := hcsschema.VirtualPMemImageFormat_VHD1
+			settings = hcsschema.VirtualPMemDevice{
 				ReadOnly:    true,
 				HostPath:    md.hostPath,
-				ImageFormat: "Vhd1",
+				ImageFormat: &img,
 			}
-			request.ResourcePath = fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber)
+			rp = fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber)
 		} else {
-			request.Settings = hcsschema.VirtualPMemMapping{
+			img := hcsschema.VirtualPMemImageFormat_VHD1
+			settings = hcsschema.VirtualPMemMapping{
 				HostPath:    md.hostPath,
-				ImageFormat: "Vhd1",
+				ImageFormat: &img,
 			}
-			request.ResourcePath = fmt.Sprintf(resourcepaths.VPMemDeviceResourceFormat, deviceNumber, md.mappedRegion.Offset())
+			rp = fmt.Sprintf(resourcepaths.VPMemDeviceResourceFormat, deviceNumber, md.mappedRegion.Offset())
 		}
-	case guestrequest.RequestTypeRemove:
+	case hcsschema.ModifyRequestType_REMOVE:
 		if pmem == nil {
 			return nil, errors.Errorf("no device found at location %d", deviceNumber)
 		}
-		request.ResourcePath = fmt.Sprintf(resourcepaths.VPMemDeviceResourceFormat, deviceNumber, md.mappedRegion.Offset())
+		rp = fmt.Sprintf(resourcepaths.VPMemDeviceResourceFormat, deviceNumber, md.mappedRegion.Offset())
 	default:
 		return nil, errors.New("unsupported request type")
 	}
 
+	request, err := hcsschema.NewModifySettingRequest(
+		rp,
+		rType,
+		settings,
+		guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeVPMemDevice,
+			RequestType:  guestrequest.RequestType(string(rType)),
+			Settings:     guestSettings,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
 	log.G(ctx).WithFields(logrus.Fields{
 		"deviceNumber": deviceNumber,
 		"hostPath":     md.hostPath,
 		"uvmPath":      md.uvmPath,
 	}).Debugf("new mapped VPMem modify request: %v", request)
-	return request, nil
+	return &request, nil
 }
 
 // mapVHDLayer adds `device` to mappings
@@ -253,13 +261,13 @@ func (uvm *UtilityVM) addVPMemMappedDevice(ctx context.Context, hostPath string)
 
 	uvmPath := fmt.Sprintf(lcowPackedVPMemLayerFmt, deviceNumber, memReg.Offset(), devSize)
 	md := newVPMemMappedDevice(hostPath, uvmPath, devSize, memReg)
-	modification, err := newMappedVPMemModifyRequest(ctx, guestrequest.RequestTypeAdd, deviceNumber, md, uvm)
+	modification, err := newMappedVPMemModifyRequest(ctx, hcsschema.ModifyRequestType_ADD, deviceNumber, md, uvm)
 	if err := uvm.modify(ctx, modification); err != nil {
 		return "", errors.Errorf("uvm::addVPMemMappedDevice: failed to modify utility VM configuration: %s", err)
 	}
 	defer func() {
 		if err != nil {
-			rmRequest, _ := newMappedVPMemModifyRequest(ctx, guestrequest.RequestTypeRemove, deviceNumber, md, uvm)
+			rmRequest, _ := newMappedVPMemModifyRequest(ctx, hcsschema.ModifyRequestType_REMOVE, deviceNumber, md, uvm)
 			if err := uvm.modify(ctx, rmRequest); err != nil {
 				log.G(ctx).WithError(err).Debugf("failed to rollback modification")
 			}
@@ -297,7 +305,7 @@ func (uvm *UtilityVM) removeVPMemMappedDevice(ctx context.Context, hostPath stri
 		return nil
 	}
 
-	modification, err := newMappedVPMemModifyRequest(ctx, guestrequest.RequestTypeRemove, devNum, md, uvm)
+	modification, err := newMappedVPMemModifyRequest(ctx, hcsschema.ModifyRequestType_REMOVE, devNum, md, uvm)
 	if err != nil {
 		return err
 	}

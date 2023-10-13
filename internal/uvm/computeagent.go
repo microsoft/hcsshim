@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
@@ -163,19 +164,21 @@ func (ca *computeAgent) ModifyNIC(ctx context.Context, req *computeagent.ModifyN
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", endpt.Name)
 		}
 
-		moderationValue := hcsschema.InterruptModerationValue(req.IovPolicySettings.InterruptModeration)
-		moderationName := hcsschema.InterruptModerationValueToName[moderationValue]
+		moderationName, err := hcsschema.NewInterruptModerationModeFromInt64(int64(req.IovPolicySettings.InterruptModeration))
+		if err != nil {
+			return nil, fmt.Errorf("unknown interrupt mode: %w", err)
+		}
 
-		iovSettings := &hcsschema.IovSettings{
+		iovSettings := &hcsschema.IOVSettings{
 			OffloadWeight:       &req.IovPolicySettings.IovOffloadWeight,
 			QueuePairsRequested: &req.IovPolicySettings.QueuePairsRequested,
 			InterruptModeration: &moderationName,
 		}
 
 		nic := &hcsschema.NetworkAdapter{
-			EndpointId:  hnsEndpoint.Id,
+			EndpointID:  hnsEndpoint.Id,
 			MacAddress:  hnsEndpoint.MacAddress,
-			IovSettings: iovSettings,
+			IOVSettings: iovSettings,
 		}
 
 		if err := ca.uvm.UpdateNIC(ctx, req.NicID, nic); err != nil {
