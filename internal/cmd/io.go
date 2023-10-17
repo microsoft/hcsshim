@@ -4,11 +4,11 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -57,7 +57,7 @@ func NewUpstreamIO(ctx context.Context, id, stdout, stderr, stdin string, termin
 
 	// Create IO for binary logging driver.
 	if u.Scheme != "binary" {
-		return nil, errors.Errorf("scheme must be 'binary', got: '%s'", u.Scheme)
+		return nil, fmt.Errorf("scheme must be 'binary', got: '%s'", u.Scheme)
 	}
 
 	return NewBinaryIO(ctx, id, u)

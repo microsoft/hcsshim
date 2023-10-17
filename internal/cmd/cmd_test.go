@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -213,46 +214,69 @@ func TestCmdStdinBlocked(t *testing.T) {
 	}
 }
 
-type stuckIoProcessHost struct {
+type stuckIOProcessHost struct {
 	cow.ProcessHost
 }
 
-type stuckIoProcess struct {
+type stuckIOProcess struct {
 	cow.Process
-	stdin, pstdout, pstderr *io.PipeWriter
-	pstdin, stdout, stderr  *io.PipeReader
+
+	// don't initialize p.stdin, since it complicates the logic
+	pstdout, pstderr *os.File
+	stdout, stderr   *os.File
 }
 
-func (h *stuckIoProcessHost) CreateProcess(ctx context.Context, cfg interface{}) (cow.Process, error) {
+func (h *stuckIOProcessHost) CreateProcess(ctx context.Context, cfg interface{}) (cow.Process, error) {
 	p, err := h.ProcessHost.CreateProcess(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	sp := &stuckIoProcess{
+	sp := &stuckIOProcess{
 		Process: p,
 	}
-	sp.pstdin, sp.stdin = io.Pipe()
-	sp.stdout, sp.pstdout = io.Pipe()
-	sp.stderr, sp.pstderr = io.Pipe()
+
+	if sp.stdout, sp.pstdout, err = os.Pipe(); err != nil {
+		return nil, fmt.Errorf("create stdout pipe: %w", err)
+	}
+	if sp.stderr, sp.pstderr, err = os.Pipe(); err != nil {
+		return nil, fmt.Errorf("create stderr pipe: %w", err)
+	}
 	return sp, nil
 }
 
-func (p *stuckIoProcess) Stdio() (io.Writer, io.Reader, io.Reader) {
-	return p.stdin, p.stdout, p.stderr
+func (p *stuckIOProcess) Stdio() (io.Writer, io.Reader, io.Reader) {
+	return nil, p.stdout, p.stderr
 }
 
-func (p *stuckIoProcess) Close() error {
-	p.stdin.Close()
+func (*stuckIOProcess) CloseStdin(context.Context) error {
+	return nil
+}
+
+func (p *stuckIOProcess) CloseStdout(context.Context) error {
+	_ = p.pstdout.Close()
+	return p.stdout.Close()
+}
+
+func (p *stuckIOProcess) CloseStderr(context.Context) error {
+	_ = p.pstderr.Close()
+	return p.stderr.Close()
+}
+
+func (p *stuckIOProcess) Close() error {
+	p.pstdout.Close()
+	p.pstderr.Close()
+
 	p.stdout.Close()
 	p.stderr.Close()
+
 	return p.Process.Close()
 }
 
 func TestCmdStuckIo(t *testing.T) {
-	cmd := Command(&stuckIoProcessHost{&localProcessHost{}}, "cmd", "/c", "echo", "hello")
+	cmd := Command(&stuckIOProcessHost{&localProcessHost{}}, "cmd", "/c", "(exit 0)")
 	cmd.CopyAfterExitTimeout = time.Millisecond * 200
 	_, err := cmd.Output()
-	if err != io.ErrClosedPipe { //nolint:errorlint
-		t.Fatal(err)
+	if !errors.Is(err, errIOTimeOut) {
+		t.Fatalf("expected: %v; got: %v", errIOTimeOut, err)
 	}
 }
