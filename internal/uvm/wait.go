@@ -24,11 +24,13 @@ func (uvm *UtilityVM) WaitCtx(ctx context.Context) (err error) {
 		select {
 		case <-uvm.outputProcessingDone:
 		case <-ctx.Done():
-			if err2 := ctx.Err(); err2 != nil {
+			err2 := ctx.Err()
+			// TODO (go1.20): use multierror for err & err2 and remove log Warning
+			if err == nil {
+				err = fmt.Errorf("failed to wait on uvm output processing: %w", err2)
+			} else {
+				// log err2 since it won't get returned to user
 				e.WithError(err2).Warning("failed to wait on uvm output processing")
-				if err == nil {
-					err = fmt.Errorf("failed to wait on uvm output processing: %w", err2)
-				}
 			}
 		}
 	}

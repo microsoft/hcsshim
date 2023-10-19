@@ -102,9 +102,9 @@ func translateGOARCH(s string) string {
 	return s
 }
 
-// RandNameSuffix concants the provided parameters and appends a random 4 byte sequence as as hex string.
+// RandNameSuffix concats the provided parameters, and appends a random 4 byte sequence as hex string.
 //
-// This is ensure uniqueness when creating uVMs or containers across multiple test runs (benchmark iterations),
+// This is to ensure uniqueness when creating uVMs or containers across multiple test runs (benchmark iterations),
 // where the test (benchmark) name is already used as the ID.
 func RandNameSuffix(xs ...any) (s string) {
 	for _, x := range xs {
