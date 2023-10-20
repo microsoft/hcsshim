@@ -5,6 +5,7 @@ package oci
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -123,21 +124,25 @@ func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation strin
 
 // parseAnnotationsPreferredRootFSType searches `a` for `key` and verifies that the
 // value is in the set of allowed values. If `key` is not found returns `def`.
-func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]string, key string, def uvm.PreferredRootFSType) uvm.PreferredRootFSType {
+func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]string, key string, def uvm.PreferredRootFSType) (uvm.PreferredRootFSType, error) {
+	var err error = nil
 	if v, ok := a[key]; ok {
 		switch v {
 		case "initrd":
-			return uvm.PreferredRootFSTypeInitRd
+			return uvm.PreferredRootFSTypeInitRd, nil
 		case "vhd":
-			return uvm.PreferredRootFSTypeVHD
+			return uvm.PreferredRootFSTypeVHD, nil
+		case "":
+			return def, nil
 		default:
 			log.G(ctx).WithFields(logrus.Fields{
 				"annotation": key,
 				"value":      v,
-			}).Warn("annotation value must be 'initrd' or 'vhd'")
+			}).Warn("annotation value must be 'initrd', 'vhd', or unset.")
+			err = fmt.Errorf("Got '%s' but annotation value must be 'initrd', 'vhd', or unset.", v)
 		}
 	}
-	return def
+	return uvm.PreferredRootFSTypeNA, err
 }
 
 // handleAnnotationKernelDirectBoot handles parsing annotationKernelDirectBoot and setting
@@ -151,14 +156,26 @@ func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, 
 
 // handleAnnotationPreferredRootFSType handles parsing annotationPreferredRootFSType and setting
 // implied annotations from the result
-func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
-	lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, a, annotations.PreferredRootFSType, lopts.PreferredRootFSType)
+func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) error {
+	_default := lopts.PreferredRootFSType
+	// If we have a security policy (i.e. we must assume we are in SNP mode)
+	// then the default is to not specify a preferred rootfs type, because
+	// there is only one way to boot in SNP mode.
+	if len(lopts.SecurityPolicy) > 0 {
+		_default = uvm.PreferredRootFSTypeNA
+	}
+	var err error = nil
+	lopts.PreferredRootFSType, err = parseAnnotationsPreferredRootFSType(ctx, a, annotations.PreferredRootFSType, _default)
 	switch lopts.PreferredRootFSType {
 	case uvm.PreferredRootFSTypeInitRd:
 		lopts.RootFSFile = uvm.InitrdFile
 	case uvm.PreferredRootFSTypeVHD:
 		lopts.RootFSFile = uvm.VhdFile
+	case uvm.PreferredRootFSTypeNA:
+		// In this case we use a GuestStateFile and a DmVerityVhdFile to boot
+		lopts.RootFSFile = ""
 	}
+	return err
 }
 
 // handleAnnotationFullyPhysicallyBacked handles parsing annotationFullyPhysicallyBacked and setting
@@ -196,10 +213,12 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 	if len(lopts.SecurityPolicy) > 0 && !noSecurityHardware {
 		// VPMem not supported by the enlightened kernel for SNP so set count to zero.
 		lopts.VPMemDeviceCount = 0
-		// set the default GuestState filename.
-		lopts.GuestStateFile = uvm.GuestStateFile
+		// set the default GuestState and DmVerityVhdFile filenames.
+		lopts.GuestStateFile = uvm.DefaultGuestStateFile
+		lopts.DmVerityRootFsVhd = uvm.DefaultDmVerityRootfsVhd
+		lopts.DmVerityHashVhd = uvm.DefaultDmVerityHashVhd
+		lopts.DmVerityMode = true
 		lopts.KernelBootOptions = ""
-		lopts.PreferredRootFSType = uvm.PreferredRootFSTypeNA
 		lopts.AllowOvercommit = false
 		lopts.SecurityPolicyEnabled = true
 	}
@@ -261,7 +280,10 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.UVMReferenceInfoFile = parseAnnotationsString(s.Annotations, annotations.UVMReferenceInfoFile, lopts.UVMReferenceInfoFile)
 		lopts.KernelBootOptions = parseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
-		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
+		err := handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
+		if err != nil {
+			return nil, err
+		}
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 
 		// parsing of FullyPhysicallyBacked needs to go after handling kernel direct boot and
@@ -272,8 +294,11 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		// Eg VMPem device count, overridden kernel option cannot be respected.
 		handleSecurityPolicy(ctx, s.Annotations, lopts)
 
-		// override the default GuestState filename if specified
+		// override the default GuestState and DmVerityRootFs/HashVhd filenames if specified
 		lopts.GuestStateFile = parseAnnotationsString(s.Annotations, annotations.GuestStateFile, lopts.GuestStateFile)
+		lopts.DmVerityRootFsVhd = parseAnnotationsString(s.Annotations, annotations.DmVerityRootFsVhd, lopts.DmVerityRootFsVhd)
+		lopts.DmVerityHashVhd = parseAnnotationsString(s.Annotations, annotations.DmVerityHashVhd, lopts.DmVerityHashVhd)
+		lopts.DmVerityMode = ParseAnnotationsBool(ctx, s.Annotations, annotations.DmVerityMode, lopts.DmVerityMode)
 		// Set HclEnabled if specified. Else default to a null pointer, which is omitted from the resulting JSON.
 		lopts.HclEnabled = ParseAnnotationsNullableBool(ctx, s.Annotations, annotations.HclEnabled)
 		return lopts, nil
