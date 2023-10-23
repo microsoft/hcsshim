@@ -142,6 +142,11 @@ func TestMain(m *testing.M) {
 		l.TempPath = *flagLayerTempDir
 	}
 
+	// print additional configuration options when running benchmarks, so we can better track performance.
+	if util.RunningBenchmarks() {
+		util.PrintAdditionalBenchmarkConfig()
+	}
+
 	e := m.Run()
 
 	// close any uVMs that escaped
