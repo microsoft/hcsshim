@@ -9,14 +9,21 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/containerd/log"
+	"golang.org/x/sys/windows"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+
+	iannotations "github.com/Microsoft/hcsshim/internal/annotations"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/cpugroup"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/hcs"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/lcow"
@@ -24,9 +31,6 @@ import (
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/shimdiag"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
-	"github.com/containerd/log"
-	"golang.org/x/sys/windows"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 func runPodSandboxTest(t *testing.T, request *runtime.RunPodSandboxRequest) {
@@ -1754,6 +1758,55 @@ func Test_RunPodSandbox_Timezone_NoInherit_WCOW_Hypervisor(t *testing.T) {
 
 	if string(r.Stdout) != "Coordinated Universal Time" {
 		t.Fatalf("expected 'Coordinated Universal Time' for time zone, got: %s", string(r.Stdout))
+	}
+}
+
+func Test_RunPodSandbox_AdditionalRegValues_WCOW(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	client := newTestRuntimeClient(t)
+	ctx := context.Background()
+
+	regHive := "System"
+	regKey := `Software\Microsoft\hcsshim`
+	regName := "TestKeyValueName"
+	regValue := "test key value value"
+	annot := fmt.Sprintf(
+		`[ {"Key": {"Hive": %q, "Name": %q}, "Name": %q, "Type": "String", "StringValue":  %q} ]`,
+		regHive, regKey, regName, regValue)
+	t.Logf("registry annotation: %s", annot)
+	sbRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, WithSandboxAnnotations(
+		map[string]string{
+			iannotations.AdditionalRegistryValues: annot,
+		},
+	))
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	// nanoserver doesn't come with a reg.exe, so share it (and its mui file) into the uVM
+
+	// just in case, for some wild reason, host has a system root other than `C:\Windows`
+	sys32 := os.Getenv("SystemRoot")
+	if sys32 == "" {
+		sys32 = `C:\Windows`
+	}
+	sys32 = filepath.Join(sys32, "System32")
+	for _, f := range []string{`reg.exe`, `en-US\reg.exe.mui`} {
+		shareInPod(ctx, t, podID, filepath.Join(sys32, f), filepath.Join(`C:\Windows\System32`, f), true)
+	}
+
+	out := shimDiagExecOutput(ctx, t, podID,
+		[]string{
+			"cmd.exe", "/c",
+			fmt.Sprintf(`C:\Windows\System32\reg.exe query HKEY_LOCAL_MACHINE\%s\%s /v %s /t REG_SZ`, regHive, regKey, regName),
+		},
+	)
+
+	if !strings.Contains(out, regValue) {
+		t.Fatalf("registry %q value does not contain %q:\n%s", regHive+`\`+regName, regValue, out)
 	}
 }
 
