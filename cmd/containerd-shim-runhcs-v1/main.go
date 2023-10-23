@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 
 	// register common types spec with typeurl
 	_ "github.com/containerd/containerd/runtime"
@@ -32,13 +33,15 @@ const ttrpcAddressEnv = "TTRPC_ADDRESS"
 // Add a manifest to get proper Windows version detection.
 //go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
 
-// version will be populated by the Makefile, read from
-// VERSION file of the source code.
-var version = ""
-
-// gitCommit will be the hash that the binary was built from
-// and will be populated by the Makefile
-var gitCommit = ""
+// `-ldflags '-X ...'` only works if the variable is uninitialized or set to a constant value.
+// keep empty and override with data from [internal/version] only if empty to allow
+// workflows currently setting these values to work.
+var (
+	// version will be the repo version that the binary was built from
+	version = ""
+	// gitCommit will be the hash that the binary was built from
+	gitCommit = ""
+)
 
 var (
 	namespaceFlag        string
@@ -81,11 +84,21 @@ func main() {
 		}
 	}
 
+	// fall back on embedded version info (if any), if variables above were not set
+	if version == "" {
+		version = hcsversion.Version
+	}
+	if gitCommit == "" {
+		gitCommit = hcsversion.Commit
+	}
+
 	_ = provider.WriteEvent(
 		"ShimLaunched",
 		nil,
 		etw.WithFields(
 			etw.StringArray("Args", os.Args),
+			etw.StringField("version", version),
+			etw.StringField("commit", gitCommit),
 		),
 	)
 

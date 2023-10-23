@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	cgroups "github.com/containerd/cgroups/v3/cgroup1"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
@@ -23,6 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 
+	"github.com/Microsoft/hcsshim/test/internal/util"
 	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
@@ -71,6 +75,43 @@ func TestMain(m *testing.M) {
 
 	if err := setup(); err != nil {
 		logrus.WithError(err).Fatal("could not set up testing")
+	}
+
+	// print additional configuration options when running benchmarks, so we can better track performance.
+	if util.RunningBenchmarks() {
+		util.PrintAdditionalBenchmarkConfig()
+
+		// print uname info
+		uname := &unix.Utsname{}
+		if err := unix.Uname(uname); err == nil {
+			for n, bs := range map[string][]byte{
+				"kernel-name":    uname.Sysname[:],
+				"node-name":      uname.Nodename[:],
+				"kernel-release": uname.Release[:],
+				"kernel-version": uname.Version[:],
+				"machine-name":   uname.Machine[:],
+				"domain-name":    uname.Domainname[:],
+			} {
+				if s := unix.ByteSliceToString(bs); s != "" && s != "(none)" {
+					fmt.Println(n + ": " + s)
+				}
+			}
+		}
+
+		// print additional (rootfs) build info written by Makefile to /info/
+		for _, f := range []string{
+			"tar.date",
+			"image.name",
+			"build.date",
+		} {
+			if b, err := os.ReadFile(filepath.Join("/info", f)); err == nil {
+				if s := strings.TrimSpace(string(b)); s != "" {
+					// convention for benchmark config is kebab-case
+					fmt.Println("rootfs-" + strings.ReplaceAll(f, ".", "-") + ": " + s)
+				}
+			}
+
+		}
 	}
 
 	os.Exit(m.Run())

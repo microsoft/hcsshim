@@ -76,7 +76,4 @@ Invoke-TestCommand `
     -TestCmd $testcmd `
     -OutputFile $out `
     -OutputCmd (& { if ( $Action -eq 'Bench' ) { $BenchstatPath } }) `
-    -Preamble `
-    -Date $Date `
-    -Note $Note `
     -Verbose:$Verbose
