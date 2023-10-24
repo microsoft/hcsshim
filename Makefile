@@ -40,7 +40,7 @@ GCS_TOOLS=\
 SRC:=
 VMGS_TOOL:=src/Parma/bin/vmgstool
 #IGVM_TOOL:=src/Parma/kernel-files/5.15/igvmfile.py
-IGVM_TOOL:=src/Parma/kernel-files/6.1/igvmfile.py
+IGVM_TOOL:=src/github.com/Microsoft/igvm-tooling/src/igvm/igvmgen.py
 # this is now a 5.15 kernel
 #KERNEL_PATH:=linux/linux/arch/x86/boot/bzImage
 # 6.1 kernel
