@@ -627,7 +627,7 @@ func (ht *hcsTask) waitForHostExit() {
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
-	err := ht.host.Wait()
+	err := ht.host.WaitCtx(ctx)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("failed to wait for host virtual machine exit")
 	} else {
@@ -661,6 +661,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 		// testing.
 		if ht.c != nil {
 			// Do our best attempt to tear down the container.
+			// TODO: unify timeout select statements and use [ht.c.WaitCtx] and [context.WithTimeout]
 			var werr error
 			ch := make(chan struct{})
 			go func() {
