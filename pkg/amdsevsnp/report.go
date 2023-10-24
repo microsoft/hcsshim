@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"unsafe"
@@ -35,7 +36,7 @@ const (
 	msgTypeMax
 )
 
-type guestRequest struct {
+type guestRequest5 struct {
 	RequestMsgType  byte
 	ResponseMsgType byte
 	MsgVersion      byte
@@ -46,16 +47,21 @@ type guestRequest struct {
 	Error           uint32
 }
 
-// AMD SEV ioctl definitions.
-const (
-	// SEV-SNP IOCTL type.
-	guestType = 'S'
-	// SEV-SNP IOCTL size, same as unsafe.Sizeof(SevSNPGuestRequest{}).
-	guestSize = 40
-	ioctlBase = linux.IocWRBase | guestType<<linux.IocTypeShift | guestSize<<linux.IocSizeShift
+type guestRequest6 struct {
+	MsgVersion   byte
+	RequestData  unsafe.Pointer
+	ResponseData unsafe.Pointer
+	Error        uint64
+}
 
-	// SEV-SNP requests
-	reportCode = 0x1
+// AMD SEV ioctl definitions for kernel 5.x.
+const (
+	snpGetReportIoctlCode5 = 3223868161
+)
+
+// AMD SEV ioctl definitions for kernel 6.x.
+const (
+	snpGetReportIoctlCode6 = 3223343872
 )
 
 // reportRequest used to issue SEV-SNP request
@@ -143,9 +149,39 @@ type reportResponse struct {
 	reserved2  [64]byte // padding to the size of SEV_SNP_REPORT_RSP_BUF_SZ (i.e., 1280 bytes)
 }
 
+// Size of `snp_report_resp` in include/uapi/linux/sev-guest.h.
+// It's used only for Linux 6.x.
+// It will have the conteints of reportResponse in the first unsafe.Sizeof(reportResponse{}) bytes.
+const reportResponseContainerLength6 = 4000
+
+const snpDevicePath5 = "/dev/sev"
+const snpDevicePath6 = "/dev/sev-guest"
+
+// Check if the code is being run in SNP VM for Linux kernel version 5.x.
+func isSNPVM5() bool {
+	_, err := os.Stat(snpDevicePath5)
+	return !errors.Is(err, os.ErrNotExist)
+}
+
+// Check if the code is being run in SNP VM for Linux kernel version 6.x.
+func isSNPVM6() bool {
+	_, err := os.Stat(snpDevicePath6)
+	return !errors.Is(err, os.ErrNotExist)
+}
+
 // FetchRawSNPReport returns attestation report bytes.
 func FetchRawSNPReport(reportData []byte) ([]byte, error) {
-	f, err := os.OpenFile("/dev/sev", os.O_RDWR, 0)
+	if isSNPVM5() {
+		return fetchRawSNPReport5(reportData)
+	} else if isSNPVM6() {
+		return fetchRawSNPReport6(reportData)
+	} else {
+		return nil, fmt.Errorf("SEV device is not found")
+	}
+}
+
+func fetchRawSNPReport5(reportData []byte) ([]byte, error) {
+	f, err := os.OpenFile(snpDevicePath5, os.O_RDWR, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +201,7 @@ func FetchRawSNPReport(reportData []byte) ([]byte, error) {
 		copy(msgReportIn.ReportData[:], reportData)
 	}
 
-	payload := &guestRequest{
+	payload := &guestRequest5{
 		RequestMsgType:  msgReportRequest,
 		ResponseMsgType: msgReportResponse,
 		MsgVersion:      1,
@@ -176,9 +212,50 @@ func FetchRawSNPReport(reportData []byte) ([]byte, error) {
 		Error:           0,
 	}
 
-	if err := linux.Ioctl(f, reportCode|ioctlBase, unsafe.Pointer(payload)); err != nil {
+	if err := linux.Ioctl(f, snpGetReportIoctlCode5, unsafe.Pointer(payload)); err != nil {
 		return nil, err
 	}
+	return msgReportOut.Report[:], nil
+}
+
+func fetchRawSNPReport6(reportData []byte) ([]byte, error) {
+	f, err := os.OpenFile(snpDevicePath6, os.O_RDWR, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	var (
+		msgReportIn  reportRequest
+		msgReportOut reportResponse
+	)
+	reportOutContainer := [reportResponseContainerLength6]byte{}
+
+	if reportData != nil {
+		if len(reportData) > len(msgReportIn.ReportData) {
+			return nil, fmt.Errorf("reportData too large: %s", reportData)
+		}
+		copy(msgReportIn.ReportData[:], reportData)
+	}
+
+	payload := &guestRequest6{
+		MsgVersion:   1,
+		RequestData:  unsafe.Pointer(&msgReportIn),
+		ResponseData: unsafe.Pointer(&reportOutContainer),
+		Error:        0,
+	}
+
+	if err := linux.Ioctl(f, snpGetReportIoctlCode6, unsafe.Pointer(payload)); err != nil {
+		return nil, err
+	}
+
+	reportOutSize := unsafe.Sizeof(msgReportOut)
+	reportOutPtr := unsafe.Pointer(&msgReportOut)
+	reportOutAsSlice := (*[reportResponseContainerLength6]byte)(reportOutPtr)
+	copy(reportOutAsSlice[:reportOutSize], reportOutContainer[:reportOutSize])
+
 	return msgReportOut.Report[:], nil
 }
 

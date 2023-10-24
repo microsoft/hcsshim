@@ -1,0 +1,9 @@
+VERITY header information for out/hash_device
+UUID:            	
+Hash type:       	1
+Data blocks:     	22057
+Data block size: 	4096
+Hash block size: 	4096
+Hash algorithm:  	sha256
+Salt:            	0000000000000000000000000000000000000000000000000000000000000000
+Root hash:      	736dd225bfc342f2f8df671571e90a34f41b185b8dfc2dd12449648835557599

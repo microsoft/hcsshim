@@ -1,0 +1,16 @@
+#!/bin/sh
+
+export PATH="/usr/bin:/usr/local/bin:/bin:/root/bin:/sbin:/usr/sbin:/usr/local/sbin"
+export HOME="/root"
+
+/init
+
+mkdir /rootfs-mount
+
+veritysetup open --data-blocks <BLOCK_COUNT> --data-block-size 4096 --hash-offset <HASH_OFFSET> /dev/sda verityrootfs /dev/sda <ROOT_HASH>
+
+/bin/mount /dev/mapper/verityrootfs /rootfs-mount
+
+switch_root /rootfs-mount /startup_2.sh
+### NOTHING BELOW HERE WILL RUN ###
+### INSTEAD startup_2.sh (from dmverity-rootfs.vhd) WILL BE RUNNING ###
