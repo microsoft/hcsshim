@@ -1,6 +1,8 @@
 package util
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
@@ -97,5 +99,28 @@ func translateGOARCH(s string) string {
 	case "amd64":
 		return "x86_64"
 	}
+	return s
+}
+
+// RandNameSuffix concats the provided parameters, and appends a random 4 byte sequence as hex string.
+//
+// This is to ensure uniqueness when creating uVMs or containers across multiple test runs (benchmark iterations),
+// where the test (benchmark) name is already used as the ID.
+func RandNameSuffix(xs ...any) (s string) {
+	for _, x := range xs {
+		s += "-"
+		switch x := x.(type) {
+		case string:
+			s += x
+		case fmt.Stringer:
+			s += x.String()
+		default:
+			s += fmt.Sprintf("%v", x)
+		}
+	}
+
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	s += "-" + hex.EncodeToString(b)
 	return s
 }

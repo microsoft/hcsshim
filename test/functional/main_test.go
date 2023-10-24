@@ -40,6 +40,9 @@ import (
 // owner field for uVMs.
 const hcsOwner = "hcsshim-functional-tests"
 
+// how long to allow a benchmark iteration to run for
+const benchmarkIterationTimeout = 30 * time.Second
+
 var (
 	alpineImagePaths = &layers.LazyImageLayers{
 		Image:    images.ImageLinuxAlpineLatest,

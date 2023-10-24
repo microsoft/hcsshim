@@ -32,7 +32,7 @@ func CreateWCOWUVMFromOpts(ctx context.Context, tb testing.TB, opts *uvm.Options
 		tb.Fatal(err)
 	}
 	if err := vm.Start(ctx); err != nil {
-		vm.Close()
+		_ = vm.CloseCtx(ctx)
 		tb.Fatal(err)
 	}
 
