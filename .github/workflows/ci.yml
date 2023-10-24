@@ -156,12 +156,19 @@ jobs:
       - name: Validate go.mod and vendoring
         shell: powershell
         run: |
-          Write-Output "::group::go mod tidy & vendor"
+          Write-Output "::group::go mod tidy"
           go mod tidy -v -e
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Go Mod::Error running ``go mod tidy``"
+            exit $LASTEXITCODE
+          }
+
+          Write-Output "::group::go mod vendor"
           go mod vendor -e
           Write-Output "::endgroup::"
           if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error title=Go Mod::Error running ``go mod tidy``` or ``go mod vendor``"
+            Write-Output "::error title=Go Mod::Error running ``go mod vendor``"
             exit $LASTEXITCODE
           }
 
