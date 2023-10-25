@@ -69,8 +69,8 @@ func CreateAndStartLCOWFromOpts(ctx context.Context, tb testing.TB, opts *uvm.Op
 	}
 
 	vm, cleanup := CreateLCOW(ctx, tb, opts)
-	Start(ctx, tb, vm)
 	tb.Cleanup(func() { cleanup(ctx) })
+	Start(ctx, tb, vm)
 
 	return vm
 }

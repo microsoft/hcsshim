@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Microsoft/go-winio"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
@@ -22,6 +21,8 @@ import (
 	"github.com/opencontainers/runtime-tools/generate"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+
+	"github.com/Microsoft/hcsshim/test/internal/util"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
 
@@ -56,18 +57,7 @@ func createStartCommandWithID(t *testing.T, id string) (*exec.Cmd, *bytes.Buffer
 
 func cleanupTestBundle(t *testing.T, dir string) {
 	t.Helper()
-	var err error
-	for i := 0; i < 2; i++ {
-		// sporadic access-denies errors if trying to delete bundle (namely panic.log) before OS realizes
-		// shim exited and releases dile handle
-		if err = os.RemoveAll(dir); err == nil {
-			// does not os.RemoveAll does not if path doesn't exist
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-
-	if err != nil {
+	if err := util.RemoveAll(dir); err != nil {
 		t.Errorf("failed removing test bundle with: %v", err)
 	}
 }

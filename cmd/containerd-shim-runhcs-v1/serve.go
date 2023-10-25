@@ -154,7 +154,7 @@ var serveCommand = cli.Command{
 		case runhcsopts.Options_FILE:
 			panic("file log output mode is not supported")
 		case runhcsopts.Options_ETW:
-			logrus.SetFormatter(nopFormatter{})
+			logrus.SetFormatter(hcslog.NopFormatter{})
 			logrus.SetOutput(io.Discard)
 		}
 
