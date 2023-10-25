@@ -34,17 +34,12 @@ GCS_TOOLS=\
 	generichook \
 	install-drivers
 
-# supply on the command line, eg 
-#kegordo@kegordosurface5:~/work/oct16/src/github.com/Microsoft/hcsshim$ make GO_BUILD_TAGS=rego SRC=/home/kegordo/work/oct16 BASE=/home/kegordo/work/oct12/linux/core-image-minimal-aci-rootfs.tar snp all simple
-
+# Common path prefix.
 SRC:=
-VMGS_TOOL:=src/Parma/bin/vmgstool
-#IGVM_TOOL:=src/Parma/kernel-files/5.15/igvmfile.py
-IGVM_TOOL:=src/github.com/Microsoft/igvm-tooling/src/igvm/igvmgen.py
-# this is now a 5.15 kernel
-#KERNEL_PATH:=linux/linux/arch/x86/boot/bzImage
-# 6.1 kernel
-KERNEL_PATH:=linux/linux6.1/arch/x86/boot/bzImage
+# These have SRC prepended to obtain the full path in recipies e.g. $(SRC)/$(VMGS_TOOL)
+VMGS_TOOL:=
+IGVM_TOOL:=
+KERNEL_PATH:=
 
 .PHONY: all always rootfs test
 
@@ -61,29 +56,41 @@ test:
 
 rootfs: out/rootfs.vhd
 
-snp: out/kernelinitrd.vmgs out/containerd-shim-runhcs-v1.exe out/rootfs.hash.vhd out/rootfs.vhd out/v2056.vmgs out/v2056dm.vmgs
+snp: out/kernelinitrd.vmgs out/containerd-shim-runhcs-v1.exe out/rootfs.hash.vhd out/rootfs.vhd out/v2056.vmgs
 
-simple: out/simple.vmgs out/oldstyle.vmgs snp
+simple: out/simple.vmgs snp
 
+%.vmgs: %.bin
+	rm -f $@
+	# du -BM returns the size of the bin file in M, eg 7M. The sed command replaces the M with *1024*1024 and then bc does the math to convert to bytes
+	$(SRC)/$(VMGS_TOOL) create --filepath $@ --filesize `du -BM $< | sed  "s/M.*/*1024*1024/" | bc`
+	$(SRC)/$(VMGS_TOOL) write --filepath $@ --datapath $< -i=8
 
+# Simplest debug UVM used to test changes to the linux kernel. No dmverity protection. Boots an initramdisk rather than directly booting a vhd disk.
+out/simple.bin: out/initrd.img $(SRC)/$(KERNEL_PATH) startup_simple.sh
+	rm -f $@
+	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 rdinit=/startup_simple.sh" -rdinit out/initrd.img -vtl 0
 
-#out/hash-device.vhd: out/hash_device
-#	#cp out/hash_device $@
-#	#./bin/cmd/dmverity-vhd -v convert --to-vhd --fst $@ -o foo
-#	./bin/cmd/blob2vhd -i $< -o $@
-#
-#out/hash_device: out/rootfs.vhd
-#	veritysetup format --no-superblock --salt 0000000000000000000000000000000000000000000000000000000000000000 out/rootfs.vhd $@ > out/rootfs.info
-#	
-#    # Retrieve info required by dm-verity at boot time
-#    # Get the blocksize of rootfs
-#	cat out/rootfs.info | awk '/^Root hash:/{ print $$3 }' > out/rootfs.rootdigest
-#	cat out/rootfs.info | awk '/^Salt:/{ print $$2 }' > out/rootfs.salt
-#	cat out/rootfs.info | awk '/^Data block size:/{ print $$4 }' > out/rootfs.datablocksize
-#	cat out/rootfs.info | awk '/^Hash block size:/{ print $$4 }' > out/rootfs.hashblocksize
-#	cat out/rootfs.info | awk '/^Data blocks:/{ print $$3 }' > out/rootfs.datablocks
+ROOTFS_DEVICE:=/dev/sda
+VERITY_DEVICE:=/dev/sdb
+# Debug build for use with uvmtester. UVM with dm-verity protected vhd disk mounted directly via the kernel command line. Ignores corruption in dm-verity protected disk.
+out/v2056.bin: out/rootfs.vhd out/rootfs.hash.vhd $(SRC)/$(KERNEL_PATH) out/rootfs.hash.datasectors out/rootfs.hash.datablocksize out/rootfs.hash.hashblocksize out/rootfs.hash.datablocks out/rootfs.hash.rootdigest out/rootfs.hash.salt startup_v2056.sh
+	rm -f $@
+	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 root=/dev/dm-0 dm-mod.create=\"dmverity,,,ro,0 $(shell cat out/rootfs.hash.datasectors) verity 1 $(ROOTFS_DEVICE) $(VERITY_DEVICE) $(shell cat out/rootfs.hash.datablocksize) $(shell cat out/rootfs.hash.hashblocksize) $(shell cat out/rootfs.hash.datablocks) 0 sha256 $(shell cat out/rootfs.hash.rootdigest) $(shell cat out/rootfs.hash.salt) 1 ignore_corruption\" init=/startup_v2056.sh"  -vtl 0
 
-	
+# Full UVM with dm-verity protected vhd disk mounted directly via the kernel command line.
+out/kernelinitrd.bin: out/rootfs.vhd out/rootfs.hash.vhd out/rootfs.hash.datasectors out/rootfs.hash.datablocksize out/rootfs.hash.hashblocksize out/rootfs.hash.datablocks out/rootfs.hash.rootdigest out/rootfs.hash.salt $(SRC)/$(KERNEL_PATH) startup.sh
+	rm -f $@
+	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 root=/dev/dm-0 dm-mod.create=\"dmverity,,,ro,0 $(shell cat out/rootfs.hash.datasectors) verity 1 $(ROOTFS_DEVICE) $(VERITY_DEVICE) $(shell cat out/rootfs.hash.datablocksize) $(shell cat out/rootfs.hash.hashblocksize) $(shell cat out/rootfs.hash.datablocks) 0 sha256 $(shell cat out/rootfs.hash.rootdigest) $(shell cat out/rootfs.hash.salt)\" init=/startup.sh"  -vtl 0
+
+# Rule to make a vhd from a file. This is used to create the rootfs.hash.vhd from rootfs.hash.
+%.vhd: % bin/cmd/blob2vhd
+	./bin/cmd/blob2vhd -i $< -o $@
+
+# Rule to make a vhd from an ext4 file. This is used to create the rootfs.vhd from rootfs.ext4.
+%.vhd: %.ext4 bin/cmd/blob2vhd
+	./bin/cmd/blob2vhd -i $< -o $@
+
 %.hash %.hash.info %.hash.datablocks %.hash.rootdigest %.hash.salt %hash.datablocksize %.hash.datasectors %.hash.hashblocksize: %.ext4
 	veritysetup format --no-superblock --salt 0000000000000000000000000000000000000000000000000000000000000000 $< $*.hash > $*.hash.info
     # Retrieve info required by dm-verity at boot time
@@ -96,107 +103,9 @@ simple: out/simple.vmgs out/oldstyle.vmgs snp
 	echo $$(( $$(cat $*.hash.datablocks) * $$(cat $*.hash.datablocksize) / 512 )) > $*.hash.datasectors
 
 
-## made by side effect of the above
-# %.hash.datasectors: %.hash
-
-# %.hash.datablocksize: %.hash
-
-# %.hash.hashblocksize: %.hash
-
-# %.hash.datablocks: %.hash
-
-# %.hash.rootdigest: %.hash
-
-
-# %.datasectors: %.info
-# 	echo $$(( $$(cat $@.datablocks) * $$(cat $@.datablocksize) / 512 )) > $@.datasectors
-
-
-# %.datablocksize: %.info
-# 	cat $< | awk '/^Data block size:/{ print $$4 }' > $@
-
-# %.hashblocksize: %.info
-# 	cat $<| awk '/^Hash block size:/{ print $$4 }' > $@
-
-# %.datablocks: %.info
-# 	cat $< | awk '/^Data blocks:/{ print $$3 }' > $@
-
-# %.rootdigest: %.info
-# 	cat $< | awk '/^Root hash:/{ print $$3 }' > $@
-
-
-%.vhd: % bin/cmd/blob2vhd
-	./bin/cmd/blob2vhd -i $< -o $@	
-
-
-%.vmgs: %.bin
-	rm -f $@
-	# du -BM returns the size of the bin file in M, eg 7M. The sed command replaces the M with *1024*1024 and then bc does the math to convert to bytes
-	$(SRC)/$(VMGS_TOOL) create --filepath $@ --filesize `du -BM $< | sed  "s/M.*/*1024*1024/" | bc`
-	$(SRC)/$(VMGS_TOOL) write --filepath $@ --datapath $< -i=8
-
-
-ROOTFS_DEVICE:=/dev/sda
-VERITY_DEVICE:=/dev/sdb
-# ^^^ is this ok?
-# SALT=$(shell cat out/rootfs.salt)
-# ROOT_HASH=$(shell cat out/rootfs.hash)
-# DATA_BLOCK_COUNT=$(shell cat out/rootfs.blockcount)
-# DATA_BLOCK_SIZE=$(shell cat out/rootfs.datablocksize)
-# HASH_BLOCK_SIZE=$(DATA_BLOCK_SIZE)
-# NUM_SECTORS=$(shell cat out/rootfs.datasectors)
-
-out/simple.bin: out/initrd.img $(SRC)/$(KERNEL_PATH) startup_simple.sh
-	# easy case we know works to check the kernel is good without the complication of the dm-verity mounting via the kernel command line
-	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 rdinit=/startup_simple.sh" -rdinit out/initrd.img -vtl 0
-
-	
-out/v2056.bin: out/rootfs.vhd out/rootfs.hash.vhd $(SRC)/$(KERNEL_PATH) out/rootfs.hash.datablocksize out/rootfs.hash.hashblocksize out/rootfs.hash.datablocks out/rootfs.hash.rootdigest out/rootfs.hash.salt startup_v2056.sh
-	# easy case we know works to check the kernel is good without the complication of the dm-verity mounting via the kernel command line
-	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 root=/dev/dm-0 dm-mod.create=\"jp1dmverityrfs,,,ro,0 $(shell cat out/rootfs.hash.datasectors) verity 1 $(ROOTFS_DEVICE) $(VERITY_DEVICE) $(shell cat out/rootfs.hash.datablocksize) $(shell cat out/rootfs.hash.hashblocksize) $(shell cat out/rootfs.hash.datablocks) 0 sha256 $(shell cat out/rootfs.hash.rootdigest) $(shell cat out/rootfs.hash.salt) 1 ignore_corruption\" init=/startup_v2056.sh"  -vtl 0
-
-out/oldstyle.bin: out/initrd.img $(SRC)/$(KERNEL_PATH) startup.sh
-	# easy case we know works to check the kernel is good without the complication of the dm-verity mounting via the kernel command line
-	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 rdinit=/startup.sh" -rdinit out/initrd.img -vtl 0
-
-out/v2056dm.bin:  out/rootfs.hash.datasectors out/rootfs.hash.datablocksize out/rootfs.hash.hashblocksize out/rootfs.hash.datablocks out/rootfs.hash.rootdigest out/rootfs.hash.salt $(SRC)/$(KERNEL_PATH) startup_v2056.sh
-	rm -f $@ 
-# experimental - works
-	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 root=/dev/dm-0 dm-mod.create=\"jp1dmverityrfs,,,ro,0 $(shell cat out/rootfs.hash.datasectors) verity 1 $(ROOTFS_DEVICE) $(VERITY_DEVICE) $(shell cat out/rootfs.hash.datablocksize) $(shell cat out/rootfs.hash.hashblocksize) $(shell cat out/rootfs.hash.datablocks) 0 sha256 $(shell cat out/rootfs.hash.rootdigest) $(shell cat out/rootfs.hash.salt) 1 ignore_corruption\" rdinit=/startup_v2056.sh" -rdinit out/initrd.img  -vtl 0
-    # Remember to REFORMAT the VHD WITH --no-superblock
-    # dm-verity, <name> x
-    # <blank>,   <uuid> x
-    # 3,         <minor> x go blank
-    # ro,        <flags> x
-    # <TABLE>
-    # 0        <start_sector> x
-    # 1638400  <num_sectors>  x
-    # verity   <target_type> x
-    # <TARGET_ARGS>
-    # 1          <version> x
-    # /dev/sdc1  <dev>   @ROOTFS_DEVICE@ ???
-    # /dev/sdc2  <hash_dev>   @VERITY_DEVICE@ ???
-    # 4096       <data_block_size> x
-    # 4096       <hash_block_size> x
-    # 204800     <num_data_blocks> x
-    # 1          <hash_start_block> x go with 0
-    # sha256     <algorithm>  x
-    # ac87db56303c9c1da433d7209b5a6ef3e4779df141200cbd7c157dcb8dd89c42 <digest>  x
-    # 5ebfe87f7df3235b80a117ebc4078e44f55045487ad4a96581d1adb564615b51 <salt> x
-
-out/kernelinitrd.bin: out/rootfs.vhd out/rootfs.hash.vhd out/rootfs.hash.datasectors out/rootfs.hash.datablocksize out/rootfs.hash.hashblocksize out/rootfs.hash.datablocks out/rootfs.hash.rootdigest out/rootfs.hash.salt $(SRC)/$(KERNEL_PATH) startup.sh
-	rm -f $@
-# works
-	python3 $(SRC)/$(IGVM_TOOL) -o $@ -kernel $(SRC)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 root=/dev/dm-0 dm-mod.create=\"jp1dmverityrfs,,,ro,0 $(shell cat out/rootfs.hash.datasectors) verity 1 $(ROOTFS_DEVICE) $(VERITY_DEVICE) $(shell cat out/rootfs.hash.datablocksize) $(shell cat out/rootfs.hash.hashblocksize) $(shell cat out/rootfs.hash.datablocks) 0 sha256 $(shell cat out/rootfs.hash.rootdigest) $(shell cat out/rootfs.hash.salt) 1 ignore_corruption\" init=/startup.sh"  -vtl 0
-
-
 out/rootfs.ext4: out/rootfs.tar.gz bin/cmd/tar2ext4
 	gzip -f -d ./out/rootfs.tar.gz
 	./bin/cmd/tar2ext4 -i ./out/rootfs.tar -o $@
-
-	
-%.vhd: %.ext4 bin/cmd/blob2vhd
-	./bin/cmd/blob2vhd -i $< -o $@
 
 out/rootfs.tar.gz: out/initrd.img
 	rm -rf rootfs-conv
@@ -219,7 +128,7 @@ out/delta-dev.tar.gz: out/delta.tar.gz bin/internal/tools/snp-report
 	tar -zcf $@ -C rootfs-dev .
 	rm -rf rootfs-dev
 
-out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths Makefile  bin/internal/tools/snp-report bin/debuginit startup_v2056.sh startup_simple.sh startup.sh startup_2.sh
+out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths Makefile  bin/internal/tools/snp-report bin/debuginit startup_v2056.sh startup_simple.sh startup.sh
 	@mkdir -p out
 	rm -rf rootfs
 	mkdir -p rootfs/bin/
@@ -233,10 +142,8 @@ out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/ho
 	cp startup_v2056.sh rootfs/startup_v2056.sh
 	cp startup_simple.sh rootfs/startup_simple.sh
 	cp startup.sh rootfs/startup.sh
-	cp startup_2.sh rootfs/startup_2.sh
 	cp bin/internal/tools/snp-report rootfs/bin/
 	chmod a+x rootfs/startup_v2056.sh
-	chmod a+x rootfs/startup_2.sh
 	chmod a+x rootfs/startup_simple.sh
 	chmod a+x rootfs/startup.sh
 	for tool in $(GCS_TOOLS); do ln -s gcstools rootfs/bin/$$tool; done
@@ -247,7 +154,7 @@ out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/ho
 		jq -r '.IMAGE_NAME' $(subst .tar,.testdata.json,$(BASE)) 2>/dev/null > rootfs/info/image.name && \
 		jq -r '.DATETIME' $(subst .tar,.testdata.json,$(BASE)) 2>/dev/null > rootfs/info/build.date)
 	tar -zcf $@ -C rootfs .
-	#rm -rf rootfs
+	rm -rf rootfs
 
 out/containerd-shim-runhcs-v1.exe:
 	GOOS=windows $(GO_BUILD) -o $@ $(SRCROOT)/cmd/containerd-shim-runhcs-v1
@@ -267,7 +174,6 @@ bin/init: init/init.o vsockexec/vsock.o
 bin/debuginit: debuginit/debuginit.o vsockexec/vsock.o
 	@mkdir -p bin
 	$(CC) $(LDFLAGS) -o $@ $^
-
 
 %.o: %.c
 	@mkdir -p $(dir $@)
