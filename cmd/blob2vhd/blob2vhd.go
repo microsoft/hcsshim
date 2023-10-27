@@ -35,6 +35,9 @@ func main() {
 		}
 
 		_, err = io.Copy(out, in)
+		if err != nil {
+			return err
+		}
 
 		err = tar2ext4.ConvertToVhd(out)
 		if err != nil {
