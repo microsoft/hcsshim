@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
@@ -184,15 +184,7 @@ var createVHDCommand = cli.Command{
 
 		log.Debug("creating layer VHDs with dm-verity")
 		for layerNumber, layer := range layers {
-			diff, err := layer.DiffID()
-			if err != nil {
-				return fmt.Errorf("failed to read layer diff: %w", err)
-			}
-			log.WithFields(log.Fields{
-				"layerNumber": layerNumber,
-				"layerDiff":   diff.String(),
-			}).Debug("converting tar to layer VHD")
-			if err := createVHD(layer, ctx.String(outputDirFlag), ctx.Bool(hashDeviceVhdFlag)); err != nil {
+			if err := createVHD(layerNumber, layer, ctx.String(outputDirFlag), ctx.Bool(hashDeviceVhdFlag)); err != nil {
 				return err
 			}
 		}
@@ -200,11 +192,16 @@ var createVHDCommand = cli.Command{
 	},
 }
 
-func createVHD(layer v1.Layer, outDir string, verityHashDev bool) error {
+func createVHD(layerNumber int, layer v1.Layer, outDir string, verityHashDev bool) error {
 	diffID, err := layer.DiffID()
 	if err != nil {
 		return fmt.Errorf("failed to read layer diff: %w", err)
 	}
+
+	log.WithFields(log.Fields{
+		"layerNumber": layerNumber,
+		"layerDiff":   diffID.String(),
+	}).Debug("converting tar to layer VHD")
 
 	rc, err := layer.Uncompressed()
 	if err != nil {
