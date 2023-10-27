@@ -420,7 +420,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	if uvm.scsiControllerCount > 0 {
-		if opts.DmVerityMode == true {
+		if opts.DmVerityMode {
 			logrus.Debug("makeLCOWVMGSDoc DmVerityMode true")
 			doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
 				"RootFileSystemVirtualDisk": {

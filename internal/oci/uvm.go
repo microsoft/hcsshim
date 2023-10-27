@@ -139,7 +139,7 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 				"annotation": key,
 				"value":      v,
 			}).Warn("annotation value must be 'initrd', 'vhd', or unset.")
-			err = fmt.Errorf("Got '%s' but annotation value must be 'initrd', 'vhd', or unset.", v)
+			err = fmt.Errorf("got '%s' but annotation value must be 'initrd', 'vhd', or unset", v)
 		}
 	}
 	return uvm.PreferredRootFSTypeNA, err
