@@ -9,7 +9,7 @@
 
 package hcsschema
 
-//  Passed to HcsRpc_ModifyProcess
+// Passed to HcsRpc_ModifyProcess
 type ProcessModifyRequest struct {
 	Operation string `json:"Operation,omitempty"`
 
