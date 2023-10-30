@@ -41,11 +41,11 @@ func init() {
 // path.
 //
 // See [uvm.NewDefaultOptionsLCOW] for more information.
-func DefaultLCOWOptions(tb testing.TB, id, owner string) *uvm.OptionsLCOW {
+func DefaultLCOWOptions(ctx context.Context, tb testing.TB, id, owner string) *uvm.OptionsLCOW {
 	tb.Helper()
 	opts := uvm.NewDefaultOptionsLCOW(id, owner)
 	if lcowOSBootFiles != "" {
-		opts.BootFilesPath = lcowOSBootFiles
+		opts.UpdateBootFilesPath(ctx, lcowOSBootFiles)
 	}
 	return opts
 }
@@ -55,7 +55,7 @@ func DefaultLCOWOptions(tb testing.TB, id, owner string) *uvm.OptionsLCOW {
 // See [CreateAndStartLCOWFromOpts].
 func CreateAndStartLCOW(ctx context.Context, tb testing.TB, id string) *uvm.UtilityVM {
 	tb.Helper()
-	return CreateAndStartLCOWFromOpts(ctx, tb, DefaultLCOWOptions(tb, id, ""))
+	return CreateAndStartLCOWFromOpts(ctx, tb, DefaultLCOWOptions(ctx, tb, id, ""))
 }
 
 // CreateAndStartLCOWFromOpts creates an LCOW utility VM with the specified options.

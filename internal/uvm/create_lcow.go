@@ -97,7 +97,10 @@ type OptionsLCOW struct {
 	*Options
 	*ConfidentialOptions
 
-	BootFilesPath           string               // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	// Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers.
+	//
+	// It is preferred to use [UpdateBootFilesPath] to change this value and update associated fields.
+	BootFilesPath           string
 	KernelFile              string               // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
 	KernelDirect            bool                 // Skip UEFI and boot directly to `kernel`
 	RootFSFile              string               // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
@@ -144,7 +147,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	kernelDirectSupported := osversion.Build() >= 18286
 	opts := &OptionsLCOW{
 		Options:                 newDefaultOptions(id, owner),
-		BootFilesPath:           defaultLCOWOSBootFilesPath(),
 		KernelFile:              KernelFile,
 		KernelDirect:            kernelDirectSupported,
 		RootFSFile:              InitrdFile,
@@ -170,22 +172,59 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		},
 	}
 
+	opts.UpdateBootFilesPath(context.TODO(), defaultLCOWOSBootFilesPath())
+
+	return opts
+}
+
+// UpdateBootFilesPath updates the LCOW BootFilesPath field and associated settings.
+// Specifically, if [VhdFile] is found in path, RootFS is updated, and, if KernelDirect is set,
+// KernelFile is also updated if [UncompressedKernelFile] is found in path.
+//
+// This is a nop if the current BootFilesPath is equal to path (case-insensitive).
+func (opts *OptionsLCOW) UpdateBootFilesPath(ctx context.Context, path string) {
+	if p, err := filepath.Abs(path); err == nil {
+		path = p
+	} else {
+		// if its a filesystem issue, we'll error out elsewhere when we try to access the boot files
+		// otherwise, it might be transient, or a Go issue, so log and move on
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.Path:  p,
+			logrus.ErrorKey: err,
+		}).Warning("could not make boot files path absolute")
+	}
+
+	if strings.EqualFold(opts.BootFilesPath, path) { // Windows is case-insensitive, so compare paths that way too
+		return
+	}
+
+	opts.BootFilesPath = path
+
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
 		opts.RootFSFile = VhdFile
 		opts.PreferredRootFSType = PreferredRootFSTypeVHD
+
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.UVMID: opts.ID,
+			VhdFile:         filepath.Join(opts.BootFilesPath, VhdFile),
+		}).Debug("updated LCOW root filesystem to " + VhdFile)
 	}
 
-	if kernelDirectSupported {
+	if opts.KernelDirect {
 		// KernelDirect supports uncompressed kernel if the kernel is present.
 		// Default to uncompressed if on box. NOTE: If `kernel` is already
 		// uncompressed and simply named 'kernel' it will still be used
 		// uncompressed automatically.
 		if _, err := os.Stat(filepath.Join(opts.BootFilesPath, UncompressedKernelFile)); err == nil {
 			opts.KernelFile = UncompressedKernelFile
+
+			log.G(ctx).WithFields(logrus.Fields{
+				logfields.UVMID:        opts.ID,
+				UncompressedKernelFile: filepath.Join(opts.BootFilesPath, UncompressedKernelFile),
+			}).Debug("updated LCOW kernel file to " + UncompressedKernelFile)
 		}
 	}
-	return opts
 }
 
 // Get an acceptable number of processors given option and actual constraints.
@@ -759,7 +798,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
+	log.G(ctx).WithField("options", log.Format(ctx, opts)).Debug("uvm::CreateLCOW options")
 
 	// We don't serialize OutputHandlerCreator so if it is missing we need to put it back to the default.
 	if opts.OutputHandlerCreator == nil {
