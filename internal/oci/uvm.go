@@ -125,7 +125,7 @@ func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation strin
 // parseAnnotationsPreferredRootFSType searches `a` for `key` and verifies that the
 // value is in the set of allowed values. If `key` is not found returns `def`.
 func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]string, key string, def uvm.PreferredRootFSType) (uvm.PreferredRootFSType, error) {
-	var err error = nil
+	var err error
 	if v, ok := a[key]; ok {
 		switch v {
 		case "initrd":
@@ -138,7 +138,7 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 			log.G(ctx).WithFields(logrus.Fields{
 				"annotation": key,
 				"value":      v,
-			}).Warn("annotation value must be 'initrd', 'vhd', or unset.")
+			}).Warn("annotation value must be 'initrd', 'vhd', or unset")
 			err = fmt.Errorf("got '%s' but annotation value must be 'initrd', 'vhd', or unset", v)
 		}
 	}
