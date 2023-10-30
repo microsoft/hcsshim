@@ -306,7 +306,7 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
 	// Raise an error if instructed to use a particular sort of rootfs.
 	if opts.PreferredRootFSType != PreferredRootFSTypeNA {
-		return nil, fmt.Errorf("Specifying a PreferredRootFSType is incompatible with SNP mode")
+		return nil, fmt.Errorf("specifying a PreferredRootFSType is incompatible with SNP mode")
 	}
 
 	// The kernel and minimal initrd are combined into a single vmgs file.
