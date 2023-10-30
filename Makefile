@@ -73,7 +73,7 @@ out/simple.bin: out/initrd.img $(PATH_PREFIX)/$(KERNEL_PATH) boot/startup_simple
 
 ROOTFS_DEVICE:=/dev/sda
 VERITY_DEVICE:=/dev/sdb
-# Debug build for use with uvmtester. UVM with dm-verity protected vhd disk mounted directly via the kernel command line. Ignores corruption in dm-verity protected disk.
+# Debug build for use with uvmtester. UVM with dm-verity protected vhd disk mounted directly via the kernel command line. Ignores corruption in dm-verity protected disk. (Use dmesg to see if dm-verity is ignoring data corruption.)
 out/v2056.bin: out/rootfs.vhd out/rootfs.hash.vhd $(PATH_PREFIX)/$(KERNEL_PATH) out/rootfs.hash.datasectors out/rootfs.hash.datablocksize out/rootfs.hash.hashblocksize out/rootfs.hash.datablocks out/rootfs.hash.rootdigest out/rootfs.hash.salt boot/startup_v2056.sh
 	rm -f $@
 	python3 $(PATH_PREFIX)/$(IGVM_TOOL) -o $@ -kernel $(PATH_PREFIX)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 root=/dev/dm-0 dm-mod.create=\"dmverity,,,ro,0 $(shell cat out/rootfs.hash.datasectors) verity 1 $(ROOTFS_DEVICE) $(VERITY_DEVICE) $(shell cat out/rootfs.hash.datablocksize) $(shell cat out/rootfs.hash.hashblocksize) $(shell cat out/rootfs.hash.datablocks) 0 sha256 $(shell cat out/rootfs.hash.rootdigest) $(shell cat out/rootfs.hash.salt) 1 ignore_corruption\" init=/startup_v2056.sh"  -vtl 0
