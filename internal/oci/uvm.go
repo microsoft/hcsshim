@@ -164,7 +164,7 @@ func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]strin
 	if len(lopts.SecurityPolicy) > 0 {
 		_default = uvm.PreferredRootFSTypeNA
 	}
-	var err error = nil
+	var err error
 	lopts.PreferredRootFSType, err = parseAnnotationsPreferredRootFSType(ctx, a, annotations.PreferredRootFSType, _default)
 	switch lopts.PreferredRootFSType {
 	case uvm.PreferredRootFSTypeInitRd:
