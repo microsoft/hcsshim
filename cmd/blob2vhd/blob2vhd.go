@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	input  = flag.String("i", "", "input file")
-	output = flag.String("o", "", "output file")
+	input        = flag.String("i", "", "input file")
+	output       = flag.String("o", "", "output file")
 )
 
 func main() {

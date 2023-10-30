@@ -423,14 +423,14 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		if opts.DmVerityMode {
 			logrus.Debug("makeLCOWVMGSDoc DmVerityMode true")
 			doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
-				"RootFileSystemVirtualDisk": {
+				"RootFileSystemVirtualDisk": hcsschema.Scsi{
 					Attachments: map[string]hcsschema.Attachment{
-						"0": {
+						"0": hcsschema.Attachment{
 							Type_:    "VirtualDisk",
 							Path:     dmVerityRootFsFullPath,
 							ReadOnly: true,
 						},
-						"1": {
+						"1": hcsschema.Attachment{
 							Type_:    "VirtualDisk",
 							Path:     dmVerityHashFullPath,
 							ReadOnly: true,
