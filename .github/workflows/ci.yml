@@ -30,15 +30,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          # sometimes go cache causes issues with lint
+          # sometimes go cache causes issues when linting
           cache: false
 
-      - uses: golangci/golangci-lint-action@v3
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
         with:
           version: v1.52
           args: >-
@@ -66,12 +69,23 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: go/src/github.com/Microsoft/hcsshim/go.sum
+          cache-dependency-path: |
+            ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/go.sum
+            ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/test/go.sum
+
+      - name: Pre-fill Module Cache
+        shell: powershell
+        run: |
+          go mod download
+          cd test
+          go mod download
+        working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
 
       - name: Install protoc
         shell: powershell
@@ -121,19 +135,42 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            test/go.sum
+
+      - name: Pre-fill Module Cache
+        shell: powershell
+        run: |
+          go mod download
+          cd test
+          go mod download
 
       - name: Validate go.mod and vendoring
         shell: powershell
         run: |
-          Write-Output "::group::go mod tidy & vendor"
-          go mod tidy
-          go mod vendor
+          Write-Output "::group::go mod tidy"
+          go mod tidy -v -e
           Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Go Mod::Error running ``go mod tidy``"
+            exit $LASTEXITCODE
+          }
+
+          Write-Output "::group::go mod vendor"
+          go mod vendor -e
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Go Mod::Error running ``go mod vendor``"
+            exit $LASTEXITCODE
+          }
 
           git add --all --intent-to-add .
           Write-Output "::group::git diff"
@@ -150,8 +187,12 @@ jobs:
         working-directory: test
         run: |
           Write-Output "::group::go mod tidy"
-          go mod tidy
+          go mod tidy -v -e
           Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Go Mod::Error running ``go mod tidy``` from withing ``./test``"
+            exit $LASTEXITCODE
+          }
 
           git add --all --intent-to-add .
           Write-Output "::group::git diff"
@@ -169,11 +210,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            test/go.sum
+
+      - name: Pre-fill Module Cache
+        shell: powershell
+        run: |
+          go mod download
+          cd test
+          go mod download
 
       - name: Validate go generate
         shell: powershell
@@ -201,11 +254,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            test/go.sum
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
@@ -236,11 +294,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            test/go.sum
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
@@ -301,13 +364,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: src/github.com/Microsoft/hcsshim
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
-          cache-dependency-path: src/github.com/Microsoft/hcsshim/go.sum
+          cache-dependency-path: |
+            src/github.com/Microsoft/hcsshim/go.sum
+            src/github.com/Microsoft/hcsshim/test/go.sum
 
       - name: Set env
         shell: bash
@@ -330,12 +396,13 @@ jobs:
           "containerd_ref=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         working-directory: src/github.com/Microsoft/hcsshim
 
-      - uses: actions/checkout@v4
+      - name: Checkout containerd
+        uses: actions/checkout@v4
         with:
           path: src/github.com/containerd/containerd
           repository: "containerd/containerd"
           ref: "${{ env.containerd_ref }}"
-        name: Checkout containerd
+          show-progress: false
 
       - name: Install crictl
         shell: powershell
@@ -503,11 +570,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            test/go.sum
+
+      - name: Set version info
+        shell: pwsh
+        run: |
+          # ignore errors since they won't affect build
+          try {
+            ./scripts/Set-VersionInfo.ps1
+          } catch {
+            Write-Output "::warning::Could not set hcsshim version info: $_"
+          } finally {
+            $LASTEXITCODE = 0
+          }
 
       - run: go build ./cmd/containerd-shim-runhcs-v1
       - run: go build ./cmd/runhcs
@@ -551,11 +635,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Install go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            test/go.sum
+
+      - name: Set version info
+        shell: pwsh
+        run: |
+          # ignore errors since they won't affect build
+          try {
+            ./scripts/Set-VersionInfo.ps1
+          } catch {
+            Write-Output "::warning::Could not set hcsshim version info: $_"
+          } finally {
+            $LASTEXITCODE = 0
+          }
 
       - name: Test
         run: make test

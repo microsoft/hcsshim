@@ -41,22 +41,26 @@ func init() {
 // path.
 //
 // See [uvm.NewDefaultOptionsLCOW] for more information.
-func DefaultLCOWOptions(tb testing.TB, id, owner string) *uvm.OptionsLCOW {
+func DefaultLCOWOptions(ctx context.Context, tb testing.TB, id, owner string) *uvm.OptionsLCOW {
 	tb.Helper()
 	opts := uvm.NewDefaultOptionsLCOW(id, owner)
 	if lcowOSBootFiles != "" {
-		opts.BootFilesPath = lcowOSBootFiles
+		opts.UpdateBootFilesPath(ctx, lcowOSBootFiles)
 	}
 	return opts
 }
 
 // CreateAndStartLCOW with all default options.
+//
+// See [CreateAndStartLCOWFromOpts].
 func CreateAndStartLCOW(ctx context.Context, tb testing.TB, id string) *uvm.UtilityVM {
 	tb.Helper()
-	return CreateAndStartLCOWFromOpts(ctx, tb, DefaultLCOWOptions(tb, id, ""))
+	return CreateAndStartLCOWFromOpts(ctx, tb, DefaultLCOWOptions(ctx, tb, id, ""))
 }
 
 // CreateAndStartLCOWFromOpts creates an LCOW utility VM with the specified options.
+//
+// The cleanup function will be added to `tb.Cleanup`.
 func CreateAndStartLCOWFromOpts(ctx context.Context, tb testing.TB, opts *uvm.OptionsLCOW) *uvm.UtilityVM {
 	tb.Helper()
 
@@ -64,21 +68,26 @@ func CreateAndStartLCOWFromOpts(ctx context.Context, tb testing.TB, opts *uvm.Op
 		tb.Fatal("opts must be set")
 	}
 
-	vm := CreateLCOW(ctx, tb, opts)
-	cleanup := Start(ctx, tb, vm)
-	tb.Cleanup(cleanup)
+	vm, cleanup := CreateLCOW(ctx, tb, opts)
+	tb.Cleanup(func() { cleanup(ctx) })
+	Start(ctx, tb, vm)
 
 	return vm
 }
 
-func CreateLCOW(ctx context.Context, tb testing.TB, opts *uvm.OptionsLCOW) *uvm.UtilityVM {
+func CreateLCOW(ctx context.Context, tb testing.TB, opts *uvm.OptionsLCOW) (*uvm.UtilityVM, CleanupFn) {
 	tb.Helper()
 	vm, err := uvm.CreateLCOW(ctx, opts)
 	if err != nil {
 		tb.Fatalf("could not create LCOW UVM: %v", err)
 	}
 
-	return vm
+	f := func(ctx context.Context) {
+		if err := vm.CloseCtx(ctx); err != nil {
+			tb.Logf("could not close vm %q: %v", vm.ID(), err)
+		}
+	}
+	return vm, f
 }
 
 func SetSecurityPolicy(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM, policy string) {

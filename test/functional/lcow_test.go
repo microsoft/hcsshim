@@ -6,6 +6,7 @@ package functional
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -29,17 +30,39 @@ import (
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
-// test if waiting after creating (but not starting) an LCOW uVM returns
-func TestLCOW_UVMCreateWait(t *testing.T) {
-	t.Skip("closing a created-but-not-started uVM hangs indefinitely")
+// test if closing a waiting (but not starting) uVM succeeds
+func TestLCOW_UVMCreateClose(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 	require.Build(t, osversion.RS5)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
+	ctx := context.Background()
+	vm, err := uvm.CreateLCOW(ctx, defaultLCOWOptions(t))
+	if err != nil {
+		t.Fatalf("could not create LCOW UVM: %v", err)
+	}
 
-	vm := testuvm.CreateLCOW(ctx, t, defaultLCOWOptions(t))
-	testuvm.Close(ctx, t, vm)
+	if err := vm.CloseCtx(ctx); err != nil {
+		t.Fatalf("could not close uvm %q: %s", vm.ID(), err)
+	}
+}
+
+// test if waiting after creating (but not starting) an LCOW uVM returns
+func TestLCOW_UVMCreateWait(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+	require.Build(t, osversion.RS5)
+
+	pCtx := context.Background()
+	vm, cleanup := testuvm.CreateLCOW(pCtx, t, defaultLCOWOptions(t))
+	t.Cleanup(func() { cleanup(pCtx) })
+
+	ctx, cancel := context.WithTimeout(pCtx, 3*time.Second)
+	t.Cleanup(cancel)
+	switch err := vm.WaitCtx(ctx); {
+	case err == nil:
+		t.Fatal("wait did not error")
+	case !errors.Is(err, context.DeadlineExceeded):
+		t.Fatalf("wait should have errored with '%v'; got '%v'", context.DeadlineExceeded, err)
+	}
 }
 
 // TestLCOW_UVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and

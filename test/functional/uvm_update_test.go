@@ -55,9 +55,9 @@ func Test_LCOW_Update_Resources(t *testing.T) {
 	} {
 		t.Run(config.name, func(t *testing.T) {
 			ctx := context.Background()
-			vm := uvm.CreateLCOW(ctx, t, defaultLCOWOptions(t))
-			cleanup := uvm.Start(ctx, t, vm)
-			defer cleanup()
+			vm, cleanup := uvm.CreateLCOW(ctx, t, defaultLCOWOptions(t))
+			uvm.Start(ctx, t, vm)
+			defer cleanup(ctx)
 			if err := vm.Update(ctx, config.resource, nil); err != nil {
 				if config.valid {
 					if strings.Contains(err.Error(), "invalid resource") {

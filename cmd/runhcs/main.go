@@ -10,23 +10,27 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
-	"github.com/Microsoft/hcsshim/internal/regstate"
-	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+
+	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/Microsoft/hcsshim/internal/runhcs"
+	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 )
 
 // Add a manifest to get proper Windows version detection.
 //go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
 
-// version will be populated by the Makefile, read from
-// VERSION file of the source code.
-var version = ""
-
-// gitCommit will be the hash that the binary was built from
-// and will be populated by the Makefile
-var gitCommit = ""
+// `-ldflags '-X ...'` only works if the variable is uninitialized or set to a constant value.
+// keep empty and override with data from [internal/version] only if empty to allow
+// workflows currently setting these values to work.
+var (
+	// version will be the repo version that the binary was built from
+	version = ""
+	// gitCommit will be the hash that the binary was built from
+	gitCommit = ""
+)
 
 var stateKey *regstate.Key
 
@@ -61,6 +65,14 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "runhcs"
 	app.Usage = usage
+
+	// fall back on embedded version info (if any), if variables above were not set
+	if version == "" {
+		version = hcsversion.Version
+	}
+	if gitCommit == "" {
+		gitCommit = hcsversion.Commit
+	}
 
 	var v []string
 	if version != "" {

@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/test/internal/container"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/oci"
+	"github.com/Microsoft/hcsshim/test/internal/util"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	"github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
@@ -26,11 +27,12 @@ func TestLCOW_ContainerLifecycle(t *testing.T) {
 	ctx := namespacedContext()
 	ls := linuxImageLayers(ctx, t)
 	opts := defaultLCOWOptions(t)
+	opts.ID += util.RandNameSuffix()
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 
 	scratch, _ := layers.ScratchSpace(ctx, t, vm, "", "", "")
 
-	spec := oci.CreateLinuxSpec(ctx, t, t.Name(),
+	spec := oci.CreateLinuxSpec(ctx, t, t.Name()+util.RandNameSuffix(),
 		oci.DefaultLinuxSpecOpts("",
 			ctrdoci.WithProcessArgs("/bin/sh", "-c", oci.TailNullArgs),
 			oci.WithWindowsLayerFolders(append(ls, scratch)))...)
@@ -78,12 +80,13 @@ func TestLCOW_ContainerIO(t *testing.T) {
 	ctx := namespacedContext()
 	ls := linuxImageLayers(ctx, t)
 	opts := defaultLCOWOptions(t)
+	opts.ID += util.RandNameSuffix()
 	cache := layers.CacheFile(ctx, t, "")
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 
 	for _, tt := range ioTests {
 		t.Run(tt.name, func(t *testing.T) {
-			id := strings.ReplaceAll(t.Name(), "/", "")
+			id := strings.ReplaceAll(t.Name(), "/", "") + util.RandNameSuffix()
 			scratch, _ := layers.ScratchSpace(ctx, t, vm, "", "", cache)
 			spec := oci.CreateLinuxSpec(ctx, t, id,
 				oci.DefaultLinuxSpecOpts(id,
@@ -120,9 +123,10 @@ func TestLCOW_ContainerExec(t *testing.T) {
 	ctx := namespacedContext()
 	ls := linuxImageLayers(ctx, t)
 	opts := defaultLCOWOptions(t)
+	opts.ID += util.RandNameSuffix()
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 
-	id := strings.ReplaceAll(t.Name(), "/", "")
+	id := strings.ReplaceAll(t.Name(), "/", "") + util.RandNameSuffix()
 	scratch, _ := layers.ScratchSpace(ctx, t, vm, "", "", "")
 	spec := oci.CreateLinuxSpec(ctx, t, id,
 		oci.DefaultLinuxSpecOpts(id,

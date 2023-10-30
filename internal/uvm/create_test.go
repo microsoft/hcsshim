@@ -11,10 +11,11 @@ import (
 // Unit tests for negative testing of input to uvm.Create()
 
 func TestCreateBadBootFilesPath(t *testing.T) {
+	ctx := context.Background()
 	opts := NewDefaultOptionsLCOW(t.Name(), "")
-	opts.BootFilesPath = `c:\does\not\exist\I\hope`
+	opts.UpdateBootFilesPath(ctx, `c:\does\not\exist\I\hope`)
 
-	_, err := CreateLCOW(context.Background(), opts)
+	_, err := CreateLCOW(ctx, opts)
 	if err == nil || err.Error() != `kernel: 'c:\does\not\exist\I\hope\kernel' not found` {
 		t.Fatal(err)
 	}

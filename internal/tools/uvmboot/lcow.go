@@ -161,13 +161,13 @@ func init() {
 		`.\uvmboot.exe -gcs lcow -boot-files-path "C:\ContainerPlat\LinuxBootFiles" -root-fs-type vhd -t -exec "/bin/bash"`
 }
 
-func createLCOWOptions(_ context.Context, c *cli.Context, id string) (*uvm.OptionsLCOW, error) {
+func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.OptionsLCOW, error) {
 	options := uvm.NewDefaultOptionsLCOW(id, "")
 	setGlobalOptions(c, options.Options)
 
 	// boot
 	if c.IsSet(bootFilesPathArgName) {
-		options.BootFilesPath = c.String(bootFilesPathArgName)
+		options.UpdateBootFilesPath(ctx, bootFilesPathArgName)
 	}
 
 	// kernel

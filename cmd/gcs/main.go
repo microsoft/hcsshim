@@ -29,6 +29,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/version"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -271,7 +272,11 @@ func main() {
 
 	baseLogPath := guestpath.LCOWRootPrefixInUVM
 
-	logrus.Info("GCS started")
+	logrus.WithFields(logrus.Fields{
+		"branch":  version.Branch,
+		"commit":  version.Commit,
+		"version": version.Version,
+	}).Info("GCS started")
 
 	// Set the process core dump location. This will be global to all containers as it's a kernel configuration.
 	// If no path is specified core dumps will just be placed in the working directory of wherever the process

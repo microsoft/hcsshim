@@ -92,14 +92,7 @@ if ( $shell ) {
         $gcspath = "$GCSTestMount/gcs.test"
     }
 
-    $pre = "wait-paths -p $waitfiles -t 5 ; " + `
-        'echo nproc: `$(nproc) ; ' + `
-        'echo kernel: `$(uname -a) ; ' + `
-        'echo gcs.commit: `$(cat /info/gcs.commit 2>/dev/null) ; ' + `
-        'echo gcs.branch: `$(cat /info/gcs.branch 2>/dev/null) ; ' + `
-        'echo tar.date:   `$(cat /info/tar.date 2>/dev/null) ; ' + `
-        'echo image.name: `$(cat /info/image.name 2>/dev/null) ; ' + `
-        'echo build.date: `$(cat /info/build.date 2>/dev/null) ; '
+    $pre = "wait-paths -p $waitfiles -t 5 ; "
 
     $testcmd, $out = New-TestCommand `
         -Action $Action `
@@ -144,10 +137,6 @@ $boot += " -exec `"$cmd`" "
 
 Invoke-TestCommand `
     -TestCmd $boot `
-    -TestCmdPreamble $testcmd `
     -OutputFile (& { if ( $Action -ne 'Shell' ) { $out } }) `
     -OutputCmd (& { if ( $Action -eq 'Bench' ) { 'benchstat' } }) `
-    -Preamble `
-    -Date $Date `
-    -Note $Note `
     -Verbose:$Verbose
