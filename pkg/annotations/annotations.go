@@ -262,8 +262,8 @@ const (
 
 	// DmVerityVhdFile specifies the path of the VHD (with embedded dmverity data) file to use if required. Only applies in SNP mode.
 
-	DmVerityRootFsVhd  = "io.microsoft.virtualmachine.lcow.dmverity-rootfs-vhd"
-	DmVerityHashVhd = "io.microsoft.virtualmachine.lcow.dmverity-hash-vhd"
+	DmVerityRootFsVhd = "io.microsoft.virtualmachine.lcow.dmverity-rootfs-vhd"
+	DmVerityHashVhd   = "io.microsoft.virtualmachine.lcow.dmverity-hash-vhd"
 
 	// DmVerityMode
 	DmVerityMode = "io.microsoft.virtualmachine.lcow.dmverity-mode"

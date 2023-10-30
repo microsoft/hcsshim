@@ -306,7 +306,7 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
 	// Raise an error if instructed to use a particular sort of rootfs.
 	if opts.PreferredRootFSType != PreferredRootFSTypeNA {
-		return nil, fmt.Errorf("Specifying a PreferredRootFSType is incompatible with SNP mode")
+		return nil, fmt.Errorf("specifying a PreferredRootFSType is incompatible with SNP mode")
 	}
 
 	// The kernel and minimal initrd are combined into a single vmgs file.
@@ -420,17 +420,17 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	if uvm.scsiControllerCount > 0 {
-		if opts.DmVerityMode == true {
+		if opts.DmVerityMode {
 			logrus.Debug("makeLCOWVMGSDoc DmVerityMode true")
 			doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
-				"RootFileSystemVirtualDisk": hcsschema.Scsi{
+				"RootFileSystemVirtualDisk": {
 					Attachments: map[string]hcsschema.Attachment{
-						"0": hcsschema.Attachment{
+						"0": {
 							Type_:    "VirtualDisk",
 							Path:     dmVerityRootFsFullPath,
 							ReadOnly: true,
 						},
-						"1": hcsschema.Attachment{
+						"1": {
 							Type_:    "VirtualDisk",
 							Path:     dmVerityHashFullPath,
 							ReadOnly: true,
