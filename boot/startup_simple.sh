@@ -12,7 +12,7 @@ export HOME="/root"
 /bin/vsockexec -o 2056 -e 2056 echo dmesg
 /bin/vsockexec -o 2056 -e 2056 dmesg
 
-/bin/vsockexec -o 2056 -e 2056 echo sleeping
+/bin/vsockexec -o 2056 -e 2056 echo sleeping 2
 /bin/vsockexec -o 2056 -e 2056 sleep 2
 
 /bin/vsockexec -o 2056 -e 2056 ls -Rl /dev/se*
