@@ -260,7 +260,7 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 		options.SecurityPolicyEnforcer = c.String(securityPolicyEnforcerArgName)
 	}
 	if c.IsSet(securityHardwareFlag) {
-		options.GuestStateFile = uvm.DefaultGuestStateFile
+		options.GuestStateFile = uvm.GuestStateFile
 		options.SecurityPolicyEnabled = true
 		options.AllowOvercommit = false
 	}

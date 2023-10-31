@@ -81,7 +81,7 @@ const (
 	// GuestStateFile is the default file name for a vmgs (VM Guest State) file
 	// which combines kernel and initrd and is used to mount DmVerityVhdFile
 	// when booting in the SNP case.
-	DefaultGuestStateFile = "kernelinitrd.vmgs"
+	GuestStateFile = "kernelinitrd.vmgs"
 	// UVMReferenceInfoFile is the default file name for a COSE_Sign1
 	// reference UVM info, which can be made available to workload containers
 	// and can be used for validation purposes.

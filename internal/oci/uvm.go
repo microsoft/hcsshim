@@ -178,7 +178,7 @@ func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]strin
 	case uvm.PreferredRootFSTypeVHD:
 		lopts.RootFSFile = uvm.VhdFile
 	case uvm.PreferredRootFSTypeNA:
-		// In this case we use a GuestStateFile and a DmVerityVhdFile to boot
+		// In this case we use a GuestStateFile, DmVerityRootFsVhd and DmVerityHashVhd to boot
 		lopts.RootFSFile = ""
 	}
 	return err
@@ -220,7 +220,7 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 		// VPMem not supported by the enlightened kernel for SNP so set count to zero.
 		lopts.VPMemDeviceCount = 0
 		// set the default GuestState and DmVerityVhdFile filenames.
-		lopts.GuestStateFile = uvm.DefaultGuestStateFile
+		lopts.GuestStateFile = uvm.GuestStateFile
 		lopts.DmVerityRootFsVhd = uvm.DefaultDmVerityRootfsVhd
 		lopts.DmVerityHashVhd = uvm.DefaultDmVerityHashVhd
 		lopts.DmVerityMode = true
