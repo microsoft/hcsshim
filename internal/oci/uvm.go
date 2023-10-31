@@ -5,7 +5,6 @@ package oci
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -135,7 +134,7 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 			log.G(ctx).WithFields(logrus.Fields{
 				"annotation": key,
 				"value":      v,
-			}).Warn("annotation value must be 'initrd', 'vhd'")
+			}).Warn("annotation value must be 'initrd' or 'vhd'")
 		}
 	}
 	return def
@@ -156,8 +155,8 @@ func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, 
 	}
 }
 
-// handleAnnotationPreferredRootFSType handles parsing annotationPreferredRootFSType and setting
-// implied annotations from the result
+// handleAnnotationPreferredRootFSType handles parsing annotations.PreferredRootFSType and setting
+// implied options from the result
 func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
 	lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, a, annotations.PreferredRootFSType, lopts.PreferredRootFSType)
 	switch lopts.PreferredRootFSType {
