@@ -97,7 +97,7 @@ func Test_SpecToUVMCreateOptions_Default_LCOW(t *testing.T) {
 	dopts.OutputHandlerCreator = nil
 
 	if !cmp.Equal(*lopts, *dopts) {
-		t.Fatalf("### JP1 PRINT: ###\n\n %v \n\n %v \n\n", lopts, dopts)
+		t.Fatalf("### JP1 PRINT: ###\n lopts SecPol: %s \n dopts SecPol %s \n\n %v \n\n %v \n\n %v \n", lopts.SecurityPolicy, dopts.SecurityPolicy, lopts, dopts, cmp.Diff(lopts, dopts))
 		// t.Fatalf("should not have updated create options from default when no annotation are provided:\n%s", cmp.Diff(lopts, dopts))
 	}
 }

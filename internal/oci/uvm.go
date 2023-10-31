@@ -163,12 +163,14 @@ func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, 
 // handleAnnotationPreferredRootFSType handles parsing annotationPreferredRootFSType and setting
 // implied annotations from the result
 func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) error {
-	_default := lopts.PreferredRootFSType
+	_default := lopts.PreferredRootFSType // this starts as initrd (0)
 	// If we have a security policy (i.e. we must assume we are in SNP mode)
 	// then the default is to not specify a preferred rootfs type, because
 	// there is only one way to boot in SNP mode.
-	if len(lopts.SecurityPolicy) > 0 {
-		_default = uvm.PreferredRootFSTypeNA
+	if len(lopts.SecurityPolicy) > 0 { // this starts as "" so this shouldn't be true
+		_default = uvm.PreferredRootFSTypeNA    // this shouldn't be hit
+		lopts.RootFSFile = "JP1 in conditional" // for debug
+		return nil                              // for debug
 	}
 	var err error
 	lopts.PreferredRootFSType, err = parseAnnotationsPreferredRootFSType(ctx, a, annotations.PreferredRootFSType, _default)
@@ -179,7 +181,8 @@ func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]strin
 		lopts.RootFSFile = uvm.VhdFile
 	case uvm.PreferredRootFSTypeNA:
 		// In this case we use a GuestStateFile, DmVerityRootFsVhd and DmVerityHashVhd to boot
-		lopts.RootFSFile = ""
+		// lopts.RootFSFile = ""
+		lopts.RootFSFile = "HitPreferredRootFSTypeNACase"
 	}
 	return err
 }
