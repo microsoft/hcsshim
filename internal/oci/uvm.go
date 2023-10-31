@@ -168,7 +168,7 @@ func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]strin
 	// then the default is to not specify a preferred rootfs type, because
 	// there is only one way to boot in SNP mode.
 	if len(lopts.SecurityPolicy) > 0 { // this starts as "" so this shouldn't be true
-		_default = uvm.PreferredRootFSTypeNA    // this shouldn't be hit
+		// _default = uvm.PreferredRootFSTypeNA    // this shouldn't be hit
 		lopts.RootFSFile = "JP1 in conditional" // for debug
 		return nil                              // for debug
 	}
