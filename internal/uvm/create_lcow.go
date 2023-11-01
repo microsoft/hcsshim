@@ -130,6 +130,7 @@ type OptionsLCOW struct {
 	EnableScratchEncryption bool                 // Whether the scratch should be encrypted
 	DisableTimeSyncService  bool                 // Disables the time synchronization service
 	HclEnabled              *bool                // Whether to enable the host compatibility layer
+	ExtraVSockPorts         []uint32             // Extra vsock ports to allow
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -440,7 +441,11 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	//		entropyVsockPort - 1 is the entropy port,
 	//		linuxLogVsockPort - 109 used by vsockexec to log stdout/stderr logging,
 	//		0x40000000 + 1 (LinuxGcsVsockPort + 1) is the bridge (see guestconnectiuon.go)
-	hvSockets := [...]uint32{entropyVsockPort, linuxLogVsockPort, gcs.LinuxGcsVsockPort, gcs.LinuxGcsVsockPort + 1, 2056}
+	hvSockets := []uint32{entropyVsockPort, linuxLogVsockPort, gcs.LinuxGcsVsockPort, gcs.LinuxGcsVsockPort + 1}
+	if len(opts.ExtraVSockPorts) > 0 {
+		moreHvSockets := append(hvSockets, opts.ExtraVSockPorts...)
+		hvSockets = moreHvSockets
+	}
 	for _, whichSocket := range hvSockets {
 		key := fmt.Sprintf("%08x-facb-11e6-bd58-64006a7986d3", whichSocket) // format of a linux hvsock GUID is port#-facb-11e6-bd58-64006a7986d3
 		doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable[key] = hcsschema.HvSocketServiceConfig{
