@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func IsCimFsSupported() bool {
+func IsCimFSSupported() bool {
 	rv, err := osversion.BuildRevision()
 	if err != nil {
 		logrus.WithError(err).Warn("get build revision")
