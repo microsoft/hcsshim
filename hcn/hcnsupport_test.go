@@ -128,6 +128,17 @@ func TestNestedIpSetSupport(t *testing.T) {
 	}
 }
 
+func TestDisableHostPortSupport(t *testing.T) {
+	supportedFeatures := GetSupportedFeatures()
+	err := DisableHostPortSupported()
+	if supportedFeatures.DisableHostPort && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.DisableHostPort && err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNetworkACLPolicySupport(t *testing.T) {
 	supportedFeatures := GetSupportedFeatures()
 	err := NetworkACLPolicySupported()
