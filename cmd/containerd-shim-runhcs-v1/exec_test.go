@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	task "github.com/containerd/containerd/api/runtime/task/v2"
+	task "github.com/containerd/containerd/v2/api/runtime/task/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

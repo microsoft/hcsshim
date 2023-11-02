@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/errdefs"
+	task "github.com/containerd/containerd/v2/api/runtime/task/v2"
+	"github.com/containerd/containerd/v2/errdefs"
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
 

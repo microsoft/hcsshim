@@ -6,10 +6,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/oci"
-	"github.com/containerd/containerd/pkg/cri/annotations"
-	criopts "github.com/containerd/containerd/pkg/cri/opts"
+	"github.com/containerd/containerd/v2/namespaces"
+	"github.com/containerd/containerd/v2/oci"
+	"github.com/containerd/containerd/v2/pkg/cri/annotations"
+	criopts "github.com/containerd/containerd/v2/pkg/cri/opts"
 
 	testoci "github.com/Microsoft/hcsshim/test/internal/oci"
 )

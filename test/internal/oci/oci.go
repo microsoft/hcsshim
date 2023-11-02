@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/test/pkg/images"
-	"github.com/containerd/containerd/containers"
-	"github.com/containerd/containerd/namespaces"
-	ctrdoci "github.com/containerd/containerd/oci"
-	criconstants "github.com/containerd/containerd/pkg/cri/constants"
+	"github.com/containerd/containerd/v2/containers"
+	"github.com/containerd/containerd/v2/namespaces"
+	ctrdoci "github.com/containerd/containerd/v2/oci"
+	criconstants "github.com/containerd/containerd/v2/pkg/cri/constants"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 

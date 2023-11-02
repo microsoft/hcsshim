@@ -14,8 +14,8 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/runtime/v2/shim"
+	task "github.com/containerd/containerd/v2/api/runtime/task/v2"
+	"github.com/containerd/containerd/v2/runtime/v2/shim"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -169,9 +169,6 @@ The start command can either start a new shim or return an address to an existin
 		}
 
 		if err := shim.WritePidFile(filepath.Join(cwd, "shim.pid"), pid); err != nil {
-			return err
-		}
-		if err := shim.WriteAddress(filepath.Join(cwd, "address"), address); err != nil {
 			return err
 		}
 

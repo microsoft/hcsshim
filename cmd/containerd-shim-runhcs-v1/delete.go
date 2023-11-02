@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	task "github.com/containerd/containerd/api/runtime/task/v2"
+	task "github.com/containerd/containerd/v2/api/runtime/task/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"

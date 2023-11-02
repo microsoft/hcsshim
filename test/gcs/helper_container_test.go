@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/containerd/containerd/namespaces"
-	ctrdoci "github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/v2/namespaces"
+	ctrdoci "github.com/containerd/containerd/v2/oci"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/hcsshim/internal/guest/prot"

@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	cri_util "github.com/containerd/containerd/pkg/cri/util"
+	cri_util "github.com/containerd/containerd/v2/pkg/cri/util"
 
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"

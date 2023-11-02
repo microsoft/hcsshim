@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/v2/namespaces"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
