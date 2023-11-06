@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	ctrdoci "github.com/containerd/containerd/oci"
-	cri_util "github.com/containerd/containerd/pkg/cri/util"
+	ctrdoci "github.com/containerd/containerd/v2/oci"
+	cri_util "github.com/containerd/containerd/v2/pkg/cri/util"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"

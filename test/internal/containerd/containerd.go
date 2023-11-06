@@ -8,15 +8,15 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/errdefs"
-	kubeutil "github.com/containerd/containerd/integration/remote/util"
-	"github.com/containerd/containerd/mount"
-	"github.com/containerd/containerd/platforms"
-	"github.com/containerd/containerd/remotes"
-	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/remotes/docker/config"
-	"github.com/containerd/containerd/snapshots"
+	ctrdclient "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/errdefs"
+	kubeutil "github.com/containerd/containerd/v2/integration/remote/util"
+	"github.com/containerd/containerd/v2/mount"
+	"github.com/containerd/containerd/v2/platforms"
+	"github.com/containerd/containerd/v2/remotes"
+	"github.com/containerd/containerd/v2/remotes/docker"
+	"github.com/containerd/containerd/v2/remotes/docker/config"
+	"github.com/containerd/containerd/v2/snapshots"
 	"github.com/opencontainers/image-spec/identity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -28,7 +28,7 @@ import (
 // images maps image refs -> chain ID
 var images sync.Map
 
-// default containerd.New(address) does not connect to tcp endpoints on windows
+// default ctrdclient.New(address) does not connect to tcp endpoints on windows
 func createGRPCConn(ctx context.Context, address string) (*grpc.ClientConn, error) {
 	addr, dialer, err := kubeutil.GetAddressAndDialer(address)
 	if err != nil {
@@ -48,8 +48,8 @@ type ContainerdClientOptions struct {
 func (cco ContainerdClientOptions) NewClient(
 	ctx context.Context,
 	tb testing.TB,
-	opts ...containerd.ClientOpt,
-) *containerd.Client {
+	opts ...ctrdclient.Opt,
+) *ctrdclient.Client {
 	tb.Helper()
 
 	ctx, cancel := context.WithTimeout(ctx, timeout.ConnectTimeout)
@@ -61,11 +61,11 @@ func (cco ContainerdClientOptions) NewClient(
 		tb.Fatalf("failed to dial runtime client: %v", err)
 	}
 
-	defOpts := []containerd.ClientOpt{
-		containerd.WithDefaultNamespace(cco.Namespace),
+	defOpts := []ctrdclient.Opt{
+		ctrdclient.WithDefaultNamespace(cco.Namespace),
 	}
 	opts = append(defOpts, opts...)
-	c, err := containerd.NewWithConn(conn, opts...)
+	c, err := ctrdclient.NewWithConn(conn, opts...)
 	if err != nil {
 		tb.Fatalf("could not create new containerd client: %v", err)
 	}
@@ -93,7 +93,7 @@ func GetPlatformComparer(tb testing.TB, platform string) platforms.MatchComparer
 }
 
 // GetImageChainID gets the chain id of an image. platform can be "".
-func GetImageChainID(ctx context.Context, tb testing.TB, client *containerd.Client, image, platform string) string {
+func GetImageChainID(ctx context.Context, tb testing.TB, client *ctrdclient.Client, image, platform string) string {
 	tb.Helper()
 	is := client.ImageService()
 
@@ -113,7 +113,7 @@ func GetImageChainID(ctx context.Context, tb testing.TB, client *containerd.Clie
 	return chainID
 }
 
-func CreateActiveSnapshot(ctx context.Context, tb testing.TB, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
+func CreateActiveSnapshot(ctx context.Context, tb testing.TB, client *ctrdclient.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
 	tb.Helper()
 
 	ss := client.SnapshotService(snapshotter)
@@ -135,7 +135,7 @@ func CreateActiveSnapshot(ctx context.Context, tb testing.TB, client *containerd
 
 // a view will not not create a new scratch layer/vhd, but instead return only the directory of the
 // committed snapshot `parent`
-func CreateViewSnapshot(ctx context.Context, tb testing.TB, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
+func CreateViewSnapshot(ctx context.Context, tb testing.TB, client *ctrdclient.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
 	tb.Helper()
 
 	ss := client.SnapshotService(snapshotter)
@@ -158,20 +158,20 @@ func CreateViewSnapshot(ctx context.Context, tb testing.TB, client *containerd.C
 // copied from https://github.com/containerd/containerd/blob/main/cmd/ctr/commands/images/pull.go
 
 // PullImage pulls the image for the specified platform and returns the chain ID
-func PullImage(ctx context.Context, tb testing.TB, client *containerd.Client, ref, plat string) string {
+func PullImage(ctx context.Context, tb testing.TB, client *ctrdclient.Client, ref, plat string) string {
 	tb.Helper()
 
 	if chainID, ok := images.Load(ref); ok {
 		return chainID.(string)
 	}
 
-	opts := []containerd.RemoteOpt{
-		containerd.WithPlatform(plat),
-		containerd.WithPullUnpack,
+	opts := []ctrdclient.RemoteOpt{
+		ctrdclient.WithPlatform(plat),
+		ctrdclient.WithPullUnpack,
 	}
 
 	if s, err := imagesutil.SnapshotterFromPlatform(plat); err == nil {
-		opts = append(opts, containerd.WithPullSnapshotter(s))
+		opts = append(opts, ctrdclient.WithPullSnapshotter(s))
 	}
 
 	img, err := client.Pull(ctx, ref, opts...)

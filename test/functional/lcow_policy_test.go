@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	ctrdoci "github.com/containerd/containerd/oci"
+	ctrdoci "github.com/containerd/containerd/v2/oci"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"

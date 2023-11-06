@@ -20,7 +20,7 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
-	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/v2/namespaces"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 

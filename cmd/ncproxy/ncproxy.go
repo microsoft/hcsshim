@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/containerd/containerd/protobuf"
+	"github.com/containerd/containerd/v2/protobuf"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/pkg/errors"

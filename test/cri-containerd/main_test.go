@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd"
-	eventtypes "github.com/containerd/containerd/api/events"
-	eventsapi "github.com/containerd/containerd/api/services/events/v1"
-	kubeutil "github.com/containerd/containerd/integration/remote/util"
-	eventruntime "github.com/containerd/containerd/runtime"
+	eventtypes "github.com/containerd/containerd/v2/api/events"
+	eventsapi "github.com/containerd/containerd/v2/api/services/events/v1"
+	ctrdclient "github.com/containerd/containerd/v2/client"
+	kubeutil "github.com/containerd/containerd/v2/integration/remote/util"
+	eventruntime "github.com/containerd/containerd/v2/runtime"
 	typeurl "github.com/containerd/typeurl/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -191,7 +191,7 @@ func newTestRuntimeClient(tb testing.TB) runtime.RuntimeServiceClient {
 	return runtime.NewRuntimeServiceClient(conn)
 }
 
-func newTestEventService(tb testing.TB) containerd.EventService {
+func newTestEventService(tb testing.TB) ctrdclient.EventService {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
@@ -199,7 +199,7 @@ func newTestEventService(tb testing.TB) containerd.EventService {
 	if err != nil {
 		tb.Fatalf("Failed to create a client connection %v", err)
 	}
-	return containerd.NewEventServiceFromClient(eventsapi.NewEventsClient(conn))
+	return ctrdclient.NewEventServiceFromClient(eventsapi.NewEventsClient(conn))
 }
 
 func newTestImageClient(tb testing.TB) runtime.ImageServiceClient {

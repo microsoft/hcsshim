@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/containerd/containerd/protobuf"
+	"github.com/containerd/containerd/v2/protobuf"
 	typeurl "github.com/containerd/typeurl/v2"
 
 	"github.com/Microsoft/hcsshim/hcn"

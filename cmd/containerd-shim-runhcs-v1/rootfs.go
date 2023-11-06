@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/layers"
-	"github.com/containerd/containerd/api/types"
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/v2/api/types"
+	"github.com/containerd/containerd/v2/errdefs"
+	"github.com/containerd/containerd/v2/mount"
 )
 
 // validateRootfsAndLayers checks to ensure we have appropriate information
