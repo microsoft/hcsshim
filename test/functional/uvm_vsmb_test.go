@@ -6,10 +6,12 @@ package functional
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/hcsshim/test/internal/util"
@@ -17,72 +19,153 @@ import (
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
-// TestVSMB tests adding/removing VSMB layers from a v2 Windows utility VM.
-func TestVSMB(t *testing.T) {
-	t.Skip("not yet updated")
+// TODO: vSMB benchmarks
+// TODO: re-add a removed directmapped vSMB share
+// TODO: add vSMB to created-but-not-started (or closed) uVM
 
+// TestVSMB_WCOW tests adding/removing VSMB layers from a v2 Windows utility VM.
+func TestVSMB_WCOW(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW, featureUVM, featureVSMB)
 
-	ctx := util.Context(context.Background(), t)
-	//nolint:staticcheck // SA1019: deprecated; will be replaced when test is updated
-	uvm, _, _ := testuvm.CreateWCOWUVM(ctx, t, t.Name(), "microsoft/nanoserver")
-	defer uvm.Close()
+	ctx := util.Context(namespacedContext(context.Background()), t)
 
-	dir := t.TempDir()
-	var iterations uint32 = 64
-	options := uvm.DefaultVSMBOptions(true)
-	options.TakeBackupPrivilege = true
-	for i := 0; i < int(iterations); i++ {
-		if _, err := uvm.AddVSMB(ctx, dir, options); err != nil {
-			t.Fatalf("AddVSMB failed: %s", err)
+	type testCase struct {
+		name        string
+		backupPriv  bool
+		readOnly    bool
+		noDirectMap bool
+	}
+	tests := make([]testCase, 0, 8)
+	for _, ro := range []bool{true, false} {
+		for _, backup := range []bool{true, false} {
+			for _, noDirectMap := range []bool{true, false} {
+				n := "RW"
+				if ro {
+					n = "RO"
+				}
+				if backup {
+					n += "-backup"
+				}
+				if noDirectMap {
+					n += "-noDirectMap"
+				}
+
+				tests = append(tests, testCase{
+					name:        n,
+					backupPriv:  backup,
+					readOnly:    ro,
+					noDirectMap: noDirectMap,
+				})
+			}
 		}
 	}
 
-	// Remove them all
-	for i := 0; i < int(iterations); i++ {
-		if err := uvm.RemoveVSMB(ctx, dir, true); err != nil {
-			t.Fatalf("RemoveVSMB failed: %s", err)
+	const iterations = 64
+	for _, tt := range tests {
+		for _, newDir := range []bool{true, false} {
+			name := tt.name
+			if newDir {
+				name += "-newDir"
+			}
+
+			t.Run("dir-"+name, func(t *testing.T) {
+				// create a temp directory before creating the uVM, so the uVM will be closed before
+				// temp dir's cleanup
+				dir := t.TempDir()
+				vm := testuvm.CreateAndStart(ctx, t, defaultWCOWOptions(ctx, t))
+
+				options := vm.DefaultVSMBOptions(tt.readOnly)
+				options.TakeBackupPrivilege = tt.backupPriv
+				options.NoDirectmap = tt.noDirectMap
+				t.Logf("vSMB options: %#+v", options)
+
+				var path string
+				var err error
+				for i := 0; i < iterations; i++ {
+					if i == 0 || newDir {
+						// create a temp directory on the first iteration, or on each subsequent iteration if [testCase.newDir]
+						// don't need to remove it, since `dir` will be removed whole-sale during test cleanup
+						if path, err = os.MkdirTemp(dir, ""); err != nil {
+							t.Fatalf("MkdirTemp: %v", err)
+						}
+					}
+
+					opts := *options // create a copy in case its (accidentally) modified
+					s := testuvm.AddVSMB(ctx, t, vm, path, &opts)
+					if path != s.HostPath {
+						t.Fatalf("expected vSMB path: %q; got %q", path, s.HostPath)
+					}
+				}
+			})
+
+			t.Run("file-"+name, func(t *testing.T) {
+				// create a temp directory before creating the uVM, so the uVM will be closed before
+				// temp dir's cleanup
+				dir := t.TempDir()
+				vm := testuvm.CreateAndStart(ctx, t, defaultWCOWOptions(ctx, t))
+
+				options := vm.DefaultVSMBOptions(tt.readOnly)
+				options.TakeBackupPrivilege = tt.backupPriv
+				options.NoDirectmap = tt.noDirectMap
+				t.Logf("vSMB options: %#+v", options)
+
+				var path string
+				var err error
+				for i := 0; i < iterations; i++ {
+					if i == 0 || newDir {
+						// create a temp directory on the first iteration, or on each subsequent iteration if [testCase.newDir]
+						// don't need to remove it, since `dir` will be removed whole-sale during test cleanup
+						if path, err = os.MkdirTemp(dir, ""); err != nil {
+							t.Fatalf("MkdirTemp: %v", err)
+						}
+					}
+					f := filepath.Join(path, fmt.Sprintf("f%d.txt", i))
+					if err := os.WriteFile(f, []byte(t.Name()), 0600); err != nil {
+						t.Fatal(err)
+					}
+
+					opts := *options // create a copy in case its (accidentally) modified
+					s := testuvm.AddVSMB(ctx, t, vm, f, &opts)
+					if path != s.HostPath {
+						t.Fatalf("expected vSMB path: %q; got %q", path, s.HostPath)
+					}
+				}
+			})
 		}
 	}
-}
 
-// TODO: VSMB for mapped directories
+	t.Run("NoWritableFileShares", func(t *testing.T) {
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// create a temp directory before creating the uVM, so the uVM will be closed before
+				// temp dir's cleanup
+				dir := t.TempDir()
 
-func TestVSMB_Writable(t *testing.T) {
-	t.Skip("not yet updated")
+				opts := defaultWCOWOptions(ctx, t)
+				opts.NoWritableFileShares = true
+				vm := testuvm.CreateAndStart(ctx, t, opts)
 
-	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureWCOW, featureUVM, featureVSMB)
-	ctx := util.Context(context.Background(), t)
+				options := vm.DefaultVSMBOptions(tt.readOnly)
+				options.TakeBackupPrivilege = tt.backupPriv
+				options.NoDirectmap = tt.noDirectMap
+				t.Logf("vSMB options: %#+v", options)
 
-	opts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
-	opts.NoWritableFileShares = true
-	//nolint:staticcheck // SA1019: deprecated; will be replaced when test is updated
-	vm, _, _ := testuvm.CreateWCOWUVMFromOptsWithImage(ctx, t, opts, "microsoft/nanoserver")
-	defer vm.Close()
+				s, err := vm.AddVSMB(ctx, dir, options)
 
-	dir := t.TempDir()
-	options := vm.DefaultVSMBOptions(true)
-	options.TakeBackupPrivilege = true
-	options.ReadOnly = false
-	_, err := vm.AddVSMB(ctx, dir, options)
-	defer func() {
-		if err == nil {
-			return
+				t.Cleanup(func() {
+					if err != nil {
+						return
+					}
+					if err = vm.RemoveVSMB(ctx, s.HostPath, tt.readOnly); err != nil {
+						t.Fatalf("failed to remove vSMB share: %v", err)
+					}
+				})
+
+				if !tt.readOnly && !errors.Is(err, hcs.ErrOperationDenied) {
+					t.Fatalf("AddVSMB should have failed with %v instead of: %v", hcs.ErrOperationDenied, err)
+				}
+			})
 		}
-		if err = vm.RemoveVSMB(ctx, dir, true); err != nil {
-			t.Fatalf("RemoveVSMB failed: %s", err)
-		}
-	}()
-
-	if !errors.Is(err, hcs.ErrOperationDenied) {
-		t.Fatalf("AddVSMB should have failed with %v instead of: %v", hcs.ErrOperationDenied, err)
-	}
-
-	options.ReadOnly = true
-	_, err = vm.AddVSMB(ctx, dir, options)
-	if err != nil {
-		t.Fatalf("AddVSMB failed: %s", err)
-	}
+	})
 }

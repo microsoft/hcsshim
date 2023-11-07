@@ -25,6 +25,39 @@ func newCleanupFn(_ context.Context, tb testing.TB, vm *uvm.UtilityVM) CleanupFn
 	}
 }
 
+// TODO: create interface in "internal/uvm" that both [OptionsLCOW] and [OptionsWCOW] implement
+//
+// can't use generic interface { OptionsLCOW | OptionsWCOW } since that is a type constraint and requires
+// making all calls generic as well.
+
+// Create creates a utility VM with the passed opts.
+func Create(ctx context.Context, tb testing.TB, opts any) (*uvm.UtilityVM, CleanupFn) {
+	tb.Helper()
+
+	switch opts := opts.(type) {
+	case *uvm.OptionsLCOW:
+		return CreateLCOW(ctx, tb, opts)
+	case *uvm.OptionsWCOW:
+		return CreateWCOW(ctx, tb, opts)
+	default:
+	}
+	tb.Fatalf("unknown uVM creation options: %T", opts)
+	return nil, nil
+}
+
+// CreateAndStartWCOWFromOpts creates a utility VM with the specified options.
+//
+// The cleanup function will be added to `tb.Cleanup`.
+func CreateAndStart(ctx context.Context, tb testing.TB, opts any) *uvm.UtilityVM {
+	tb.Helper()
+
+	vm, cleanup := Create(ctx, tb, opts)
+	Start(ctx, tb, vm)
+	tb.Cleanup(func() { cleanup(ctx) })
+
+	return vm
+}
+
 func Start(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
 	err := vm.Start(ctx)

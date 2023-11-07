@@ -1,5 +1,6 @@
 //go:build windows
 
+// This package provides testing wrappers around [github.com/Microsoft/hcsshim/internal/cmd]
 package cmd
 
 import (
