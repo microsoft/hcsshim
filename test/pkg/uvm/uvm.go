@@ -11,6 +11,20 @@ import (
 
 type CleanupFn = func(context.Context)
 
+func newCleanupFn(_ context.Context, tb testing.TB, vm *uvm.UtilityVM) CleanupFn {
+	tb.Helper()
+
+	return func(ctx context.Context) {
+		if vm == nil {
+			return
+		}
+
+		if err := vm.CloseCtx(ctx); err != nil {
+			tb.Errorf("could not close vm %q: %v", vm.ID(), err)
+		}
+	}
+}
+
 func Start(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
 	err := vm.Start(ctx)
@@ -36,7 +50,6 @@ func Kill(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 
 func Close(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
-	// Terminate will error on context cancellation, but close does not accept contexts
 	if err := vm.CloseCtx(ctx); err != nil {
 		tb.Fatalf("could not close uvm %q: %s", vm.ID(), err)
 	}

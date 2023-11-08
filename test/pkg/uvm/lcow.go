@@ -9,12 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/sync"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
-var lcowOSBootFiles string
-
-func init() {
+var lcowOSBootFilesOnce = sync.OnceValue(func() (string, error) {
 	// since the tests can be run from directories outside of where containerd and the
 	// LinuxBootFiles are, search through potential locations for the boot files
 	// first start with where containerd is, since there may be a leftover C:\ContainerPlat
@@ -27,11 +26,11 @@ func init() {
 	for _, p := range paths {
 		p = filepath.Join(p, "LinuxBootFiles")
 		if _, err := os.Stat(p); err == nil {
-			lcowOSBootFiles = p
-			break
+			return p, nil
 		}
 	}
-}
+	return "", nil
+})
 
 // DefaultLCOWOptions returns default options for a bootable LCOW uVM, but first checks
 // if `containerd.exe` is in the path, or C:\ContainerPlat\LinuxBootFiles exists, and
@@ -43,9 +42,10 @@ func init() {
 // See [uvm.NewDefaultOptionsLCOW] for more information.
 func DefaultLCOWOptions(ctx context.Context, tb testing.TB, id, owner string) *uvm.OptionsLCOW {
 	tb.Helper()
+
 	opts := uvm.NewDefaultOptionsLCOW(id, owner)
-	if lcowOSBootFiles != "" {
-		opts.UpdateBootFilesPath(ctx, lcowOSBootFiles)
+	if v, _ := lcowOSBootFilesOnce(); v != "" {
+		opts.UpdateBootFilesPath(ctx, v)
 	}
 	return opts
 }
@@ -82,12 +82,7 @@ func CreateLCOW(ctx context.Context, tb testing.TB, opts *uvm.OptionsLCOW) (*uvm
 		tb.Fatalf("could not create LCOW UVM: %v", err)
 	}
 
-	f := func(ctx context.Context) {
-		if err := vm.CloseCtx(ctx); err != nil {
-			tb.Logf("could not close vm %q: %v", vm.ID(), err)
-		}
-	}
-	return vm, f
+	return vm, newCleanupFn(ctx, tb, vm)
 }
 
 func SetSecurityPolicy(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM, policy string) {
