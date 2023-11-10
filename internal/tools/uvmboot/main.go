@@ -9,10 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+
+	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 const (

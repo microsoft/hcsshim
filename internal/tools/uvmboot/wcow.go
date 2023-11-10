@@ -11,11 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/containerd/console"
+	"github.com/urfave/cli"
+
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/containerd/console"
-	"github.com/urfave/cli"
 )
 
 var (
@@ -121,8 +122,8 @@ var wcowCommand = cli.Command{
 }
 
 func getLayers(imageName string) ([]string, error) {
-	cmd := exec.Command("docker", "inspect", imageName, "-f", `"{{.GraphDriver.Data.dir}}"`)
-	out, err := cmd.Output()
+	c := exec.Command("docker", "inspect", imageName, "-f", `"{{.GraphDriver.Data.dir}}"`)
+	out, err := c.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to find layers for %s", imageName)
 	}
@@ -143,7 +144,7 @@ func getLayerChain(layerFolder string) ([]string, error) {
 	var layerChain []string
 	err = json.Unmarshal(content, &layerChain)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal layerchain: %s", err)
+		return nil, fmt.Errorf("failed to unmarshal layerchain: %w", err)
 	}
 	return layerChain, nil
 }
