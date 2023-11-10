@@ -4,18 +4,17 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/containerd/console"
+	"github.com/urfave/cli"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	"github.com/containerd/console"
-	"github.com/urfave/cli"
 )
 
 const (
@@ -145,11 +144,7 @@ var lcowCommand = cli.Command{
 				return err
 			}
 
-			if err := runLCOW(ctx, options, c); err != nil {
-				return err
-			}
-
-			return nil
+			return runLCOW(ctx, options, c)
 		})
 
 		return nil
@@ -167,7 +162,7 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 
 	// boot
 	if c.IsSet(bootFilesPathArgName) {
-		options.UpdateBootFilesPath(ctx, bootFilesPathArgName)
+		options.UpdateBootFilesPath(ctx, c.String(bootFilesPathArgName))
 	}
 
 	// kernel
@@ -246,13 +241,7 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 		options.DisableTimeSyncService = true
 	}
 
-	// default to open door security policy to allow resource modifications in
-	// non-snp uvmboot scenarios.
-	openPolicy, err := securitypolicy.NewOpenDoorPolicy().EncodeToString()
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode open door policy: %s", err)
-	}
-	options.SecurityPolicy = openPolicy
+	// empty policy string defaults to open door
 	if c.IsSet(securityPolicyArgName) {
 		options.SecurityPolicy = c.String(securityPolicyArgName)
 	}
@@ -273,7 +262,9 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 	if err != nil {
 		return err
 	}
-	defer vm.Close()
+	defer func() {
+		_ = vm.CloseCtx(ctx)
+	}()
 
 	if err := vm.Start(ctx); err != nil {
 		return err
@@ -292,43 +283,44 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 	}
 
 	if options.UseGuestConnection {
-		if err := execViaGcs(vm, c); err != nil {
+		if err := execViaGCS(ctx, vm, c); err != nil {
 			return err
 		}
 		_ = vm.Terminate(ctx)
-		_ = vm.Wait()
+		_ = vm.WaitCtx(ctx)
 
 		return vm.ExitError()
 	}
 
-	return vm.Wait()
+	return vm.WaitCtx(ctx)
 }
 
-func execViaGcs(vm *uvm.UtilityVM, c *cli.Context) error {
-	cmd := cmd.Command(vm, "/bin/sh", "-c", c.String(execCommandLineArgName))
-	cmd.Log = log.L.Dup()
+func execViaGCS(ctx context.Context, vm *uvm.UtilityVM, cCtx *cli.Context) error {
+	c := cmd.CommandContext(ctx, vm, "/bin/sh", "-c", cCtx.String(execCommandLineArgName))
+	c.Log = log.L.Dup()
 	if lcowUseTerminal {
-		cmd.Spec.Terminal = true
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
+		c.Spec.Terminal = true
+		c.Stdin = os.Stdin
+		c.Stdout = os.Stdout
 		con, err := console.ConsoleFromFile(os.Stdin)
-		if err == nil {
-			err = con.SetRaw()
-			if err != nil {
+		if err != nil {
+			log.G(ctx).WithError(err).Warn("could not create console from stdin")
+		} else {
+			if err := con.SetRaw(); err != nil {
 				return err
 			}
 			defer func() {
 				_ = con.Reset()
 			}()
 		}
-	} else if c.String(outputHandlingArgName) == "stdout" {
-		if c.Bool(forwardStdoutArgName) {
-			cmd.Stdout = os.Stdout
+	} else if cCtx.String(outputHandlingArgName) == "stdout" {
+		if cCtx.Bool(forwardStdoutArgName) {
+			c.Stdout = os.Stdout
 		}
-		if c.Bool(forwardStderrArgName) {
-			cmd.Stderr = os.Stdout // match non-GCS behavior and forward to stdout
+		if cCtx.Bool(forwardStderrArgName) {
+			c.Stderr = os.Stdout // match non-GCS behavior and forward to stdout
 		}
 	}
 
-	return cmd.Run()
+	return c.Run()
 }

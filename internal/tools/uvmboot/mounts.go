@@ -7,18 +7,20 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
 func mountSCSI(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
-	for _, m := range parseMounts(c, scsiMountsArgName) {
+	for _, m := range parseMounts(ctx, c, scsiMountsArgName) {
 		if m.guest != "" {
 			return fmt.Errorf("scsi mount %s: guest path must be empty", m.host)
 		}
-		scsi, err := vm.SCSIManager.AddVirtualDisk(
+		mount, err := vm.SCSIManager.AddVirtualDisk(
 			ctx,
 			m.host,
 			!m.writable,
@@ -27,13 +29,12 @@ func mountSCSI(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
 		)
 		if err != nil {
 			return fmt.Errorf("could not mount disk %s: %w", m.host, err)
-		} else {
-			logrus.WithFields(logrus.Fields{
-				"host":     m.host,
-				"guest":    scsi.GuestPath(),
-				"writable": m.writable,
-			}).Info("Mounted SCSI disk")
 		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"host":     m.host,
+			"guest":    mount.GuestPath(),
+			"writable": m.writable,
+		}).Info("Mounted SCSI disk")
 	}
 
 	return nil
@@ -49,20 +50,19 @@ func shareFiles(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
 }
 
 func shareFilesLCOW(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
-	for _, s := range parseMounts(c, shareFilesArgName) {
+	for _, s := range parseMounts(ctx, c, shareFilesArgName) {
 		if s.guest == "" {
 			return fmt.Errorf("file shares %q has invalid quest destination: %q", s.host, s.guest)
 		}
 
 		if err := vm.Share(ctx, s.host, s.guest, !s.writable); err != nil {
 			return fmt.Errorf("could not share file or directory %s: %w", s.host, err)
-		} else {
-			logrus.WithFields(logrus.Fields{
-				"host":     s.host,
-				"guest":    s.guest,
-				"writable": s.writable,
-			}).Debug("Shared path")
 		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"host":     s.host,
+			"guest":    s.guest,
+			"writable": s.writable,
+		}).Debug("Shared path")
 	}
 
 	return nil
@@ -86,13 +86,13 @@ type mount struct {
 	writable bool
 }
 
-// parseMounts parses the mounts stored under the cli StringSlice argument, `n`
-func parseMounts(c *cli.Context, n string) []mount {
+// parseMounts parses the mounts stored under the cli StringSlice argument, `n`.
+func parseMounts(ctx context.Context, c *cli.Context, n string) []mount {
 	if c.IsSet(n) {
 		ss := c.StringSlice(n)
 		ms := make([]mount, 0, len(ss))
 		for _, s := range ss {
-			logrus.Debugf("parsing %q", s)
+			log.G(ctx).Debugf("parsing %q", s)
 
 			if m, err := mountFromString(s); err == nil {
 				ms = append(ms, m)
