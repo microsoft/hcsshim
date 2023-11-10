@@ -190,8 +190,8 @@ func TestNetworkFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if network.Flags != EnableNonPersistent {
-		t.Errorf("EnableNonPersistent flag (%d) is not set on network", EnableNonPersistent)
+	if network.Flags&EnableNonPersistent == 0 {
+		t.Errorf("EnableNonPersistent flag (%d) is not set on network. Network's flags value: %d", EnableNonPersistent, network.Flags)
 	}
 
 	err = network.Delete()
