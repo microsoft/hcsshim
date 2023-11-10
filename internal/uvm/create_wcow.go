@@ -40,6 +40,9 @@ type OptionsWCOW struct {
 
 	// NoInheritHostTimezone specifies whether to not inherit the hosts timezone for the UVM. UTC will be set as the default for the VM instead.
 	NoInheritHostTimezone bool
+
+	// AdditionalRegistryKeys are Registry keys and their values to additionally add to the uVM.
+	AdditionalRegistryKeys []hcsschema.RegistryValue
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
@@ -51,7 +54,8 @@ type OptionsWCOW struct {
 // executable files name.
 func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 	return &OptionsWCOW{
-		Options: newDefaultOptions(id, owner),
+		Options:                newDefaultOptions(id, owner),
+		AdditionalRegistryKeys: []hcsschema.RegistryValue{},
 	}
 }
 
@@ -72,7 +76,7 @@ func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
 func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uvmFolder string) (*hcsschema.ComputeSystem, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get host processor information: %s", err)
+		return nil, fmt.Errorf("failed to get host processor information: %w", err)
 	}
 
 	// To maintain compatibility with Docker we need to automatically downgrade
@@ -109,21 +113,21 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 		registryChanges.AddValues = append(registryChanges.AddValues,
 			hcsschema.RegistryValue{
 				Key: &hcsschema.RegistryKey{
-					Hive: "System",
+					Hive: hcsschema.RegistryHive_SYSTEM,
 					Name: "ControlSet001\\Services\\WerSvc",
 				},
 				Name:       "Start",
 				DWordValue: 2,
-				Type_:      "DWord",
+				Type_:      hcsschema.RegistryValueType_D_WORD,
 			},
 			hcsschema.RegistryValue{
 				Key: &hcsschema.RegistryKey{
-					Hive: "Software",
+					Hive: hcsschema.RegistryHive_SOFTWARE,
 					Name: "Microsoft\\Windows\\Windows Error Reporting",
 				},
 				Name:       "Disabled",
 				DWordValue: 1,
-				Type_:      "DWord",
+				Type_:      hcsschema.RegistryValueType_D_WORD,
 			},
 		)
 	}
@@ -136,15 +140,17 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 		registryChanges.AddValues = append(registryChanges.AddValues,
 			hcsschema.RegistryValue{
 				Key: &hcsschema.RegistryKey{
-					Hive: "System",
+					Hive: hcsschema.RegistryHive_SYSTEM,
 					Name: "CurrentControlSet\\Services\\gns",
 				},
 				Name:       "EnableCompartmentNamespace",
 				DWordValue: 1,
-				Type_:      "DWord",
+				Type_:      hcsschema.RegistryValueType_D_WORD,
 			},
 		)
 	}
+
+	registryChanges.AddValues = append(registryChanges.AddValues, opts.AdditionalRegistryKeys...)
 
 	processor := &hcsschema.Processor2{
 		Count:  uvm.processorCount,
@@ -246,7 +252,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateWCOW options")
+	log.G(ctx).WithField("options", log.Format(ctx, opts)).Debug("uvm::CreateWCOW options")
 
 	uvm := &UtilityVM{
 		id:                      opts.ID,
