@@ -157,6 +157,10 @@ const reportResponseContainerLength6 = 4000
 const snpDevicePath5 = "/dev/sev"
 const snpDevicePath6 = "/dev/sev-guest"
 
+func IsSNP() bool {
+	return isSNPVM5() || isSNPVM6()
+}
+
 // Check if the code is being run in SNP VM for Linux kernel version 5.x.
 func isSNPVM5() bool {
 	_, err := os.Stat(snpDevicePath5)
