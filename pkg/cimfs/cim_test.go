@@ -28,7 +28,7 @@ type tuple struct {
 	isDir        bool
 }
 
-// A utility function to create a file/directory and write data to it in the given cim
+// A utility function to create a file/directory and write data to it in the given cim.
 func createCimFileUtil(c *CimFsWriter, fileTuple tuple) error {
 	// create files inside the cim
 	fileInfo := &winio.FileBasicInfo{

@@ -221,9 +221,9 @@ func ParseAnnotationsNullableBool(ctx context.Context, a map[string]string, key 
 	return nil
 }
 
-// parseAnnotationsUint32 searches `a` for `key` and if found verifies that the
+// ParseAnnotationsUint32 searches `a` for `key` and if found verifies that the
 // value is a 32 bit unsigned integer. If `key` is not found returns `def`.
-func parseAnnotationsUint32(ctx context.Context, a map[string]string, key string, def uint32) uint32 {
+func ParseAnnotationsUint32(ctx context.Context, a map[string]string, key string, def uint32) uint32 {
 	if v, ok := a[key]; ok {
 		countu, err := strconv.ParseUint(v, 10, 32)
 		if err == nil {
@@ -235,9 +235,9 @@ func parseAnnotationsUint32(ctx context.Context, a map[string]string, key string
 	return def
 }
 
-// parseAnnotationsUint64 searches `a` for `key` and if found verifies that the
+// ParseAnnotationsUint64 searches `a` for `key` and if found verifies that the
 // value is a 64 bit unsigned integer. If `key` is not found returns `def`.
-func parseAnnotationsUint64(ctx context.Context, a map[string]string, key string, def uint64) uint64 {
+func ParseAnnotationsUint64(ctx context.Context, a map[string]string, key string, def uint64) uint64 {
 	if v, ok := a[key]; ok {
 		countu, err := strconv.ParseUint(v, 10, 64)
 		if err == nil {
@@ -248,8 +248,8 @@ func parseAnnotationsUint64(ctx context.Context, a map[string]string, key string
 	return def
 }
 
-// parseAnnotationsString searches `a` for `key`. If `key` is not found returns `def`.
-func parseAnnotationsString(a map[string]string, key string, def string) string {
+// ParseAnnotationsString searches `a` for `key`. If `key` is not found returns `def`.
+func ParseAnnotationsString(a map[string]string, key string, def string) string {
 	if v, ok := a[key]; ok {
 		return v
 	}
