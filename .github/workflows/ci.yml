@@ -16,16 +16,6 @@ jobs:
       matrix:
         goos: [windows, linux]
         root: ["", test] # cannot specify "./... ./test/..." unless in go workspace
-        include:
-          - goos: linux
-            root: ""
-            dirs: >-
-              ./cmd/gcs/...
-              ./cmd/gcstools/...
-              ./internal/guest...
-              ./internal/tools/...
-              ./pkg/...
-              ./ext4/...
 
     steps:
       - name: Checkout
@@ -43,15 +33,16 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.52
+          version: v1.54
           args: >-
             --verbose
             --max-issues-per-linter=0
             --max-same-issues=0
             --modules-download-mode=readonly
             --timeout=10m
-            ${{ matrix.dirs }}
-          working-directory: ${{ matrix.root }}
+            --config=${{ github.workspace }}/.golangci.yml
+          skip-cache: true # even if a cache is found, don't use it
+          working-directory: ${{ github.workspace }}/${{ matrix.root }}
         env:
           GOOS: ${{ matrix.goos }}
 

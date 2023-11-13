@@ -76,7 +76,7 @@ func (c *CimFsWriter) CreateAlternateStream(path string, size uint64) (err error
 	return nil
 }
 
-// closes the currently active stream
+// closes the currently active stream.
 func (c *CimFsWriter) closeStream() error {
 	if c.activeStream == 0 {
 		return nil
