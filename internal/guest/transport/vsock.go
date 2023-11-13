@@ -4,6 +4,7 @@
 package transport
 
 import (
+	gerrors "errors"
 	"fmt"
 	"syscall"
 	"time"
@@ -35,8 +36,8 @@ func (t *VsockTransport) Dial(port uint32) (Connection, error) {
 			return conn, nil
 		}
 		// If the error was ETIMEDOUT retry, otherwise fail.
-		cause := errors.Cause(err)
-		if errno, ok := cause.(syscall.Errno); ok && errno == syscall.ETIMEDOUT {
+		var errno syscall.Errno
+		if gerrors.As(err, &errno) && errno == syscall.ETIMEDOUT {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		} else {

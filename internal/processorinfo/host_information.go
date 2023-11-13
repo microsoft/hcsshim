@@ -21,14 +21,14 @@ func HostProcessorInfo(ctx context.Context) (*hcsschema.ProcessorTopology, error
 	}
 	serviceProps, err := hcs.GetServiceProperties(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve processor and processor topology information: %s", err)
+		return nil, fmt.Errorf("failed to retrieve processor and processor topology information: %w", err)
 	}
 	if len(serviceProps.Properties) != 1 {
 		return nil, errors.New("wrong number of service properties present")
 	}
 	processorTopology := &hcsschema.ProcessorTopology{}
 	if err := json.Unmarshal(serviceProps.Properties[0], processorTopology); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal host processor topology: %s", err)
+		return nil, fmt.Errorf("failed to unmarshal host processor topology: %w", err)
 	}
 	return processorTopology, nil
 }

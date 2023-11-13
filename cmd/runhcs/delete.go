@@ -36,7 +36,7 @@ status of "ubuntu01" as "stopped" the following will delete resources held for
 		force := context.Bool("force")
 		container, err := getContainer(id, false)
 		if err != nil {
-			if _, ok := err.(*regstate.NoStateError); ok {
+			if _, ok := err.(*regstate.NoStateError); ok { //nolint:errorlint // legacy code
 				if e := stateKey.Remove(id); e != nil {
 					fmt.Fprintf(os.Stderr, "remove %s: %v\n", id, e)
 				}

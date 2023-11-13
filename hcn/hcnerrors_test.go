@@ -18,7 +18,7 @@ func TestMissingNetworkByName(t *testing.T) {
 	if !IsNotFoundError(err) {
 		t.Fatal("Unrelated error was thrown.", err)
 	}
-	if _, ok := err.(NetworkNotFoundError); !ok {
+	if _, ok := err.(NetworkNotFoundError); !ok { //nolint:errorlint
 		t.Fatal("Wrong error type was thrown.", err)
 	}
 	if err.Error() != `Network name "Not found name" not found` {
@@ -35,7 +35,7 @@ func TestMissingNetworkById(t *testing.T) {
 	if !IsNotFoundError(err) {
 		t.Fatal("Unrelated error was thrown.", err)
 	}
-	if _, ok := err.(NetworkNotFoundError); !ok {
+	if _, ok := err.(NetworkNotFoundError); !ok { //nolint:errorlint
 		t.Fatal("Wrong error type was thrown.", err)
 	}
 	if err.Error() != `Network ID "5f0b1190-63be-4e0c-b974-bd0f55675a42" not found` {
@@ -53,7 +53,7 @@ func TestMissingNamespaceById(t *testing.T) {
 	if !IsNotFoundError(err) {
 		t.Fatal("Unrelated error was thrown.", err)
 	}
-	if _, ok := err.(NamespaceNotFoundError); !ok {
+	if _, ok := err.(NamespaceNotFoundError); !ok { //nolint:errorlint
 		t.Fatal("Wrong error type was thrown.", err)
 	}
 	if err.Error() != `Namespace ID "5f0b1190-63be-4e0c-b974-bd0f55675a42" not found` {

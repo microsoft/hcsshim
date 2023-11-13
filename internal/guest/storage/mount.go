@@ -6,6 +6,7 @@ package storage
 import (
 	"bufio"
 	"context"
+	gerrors "errors"
 	"fmt"
 	"os"
 	"strings"
@@ -104,10 +105,10 @@ func MountRShared(path string) error {
 		return errors.New("path must not be empty to mount as rshared")
 	}
 	if err := unixMount(path, path, "", syscall.MS_BIND, ""); err != nil {
-		return fmt.Errorf("failed to create bind mount for %v: %v", path, err)
+		return fmt.Errorf("failed to create bind mount for %v: %w", path, err)
 	}
 	if err := unixMount(path, path, "", syscall.MS_SHARED|syscall.MS_REC, ""); err != nil {
-		return fmt.Errorf("failed to make %v rshared: %v", path, err)
+		return fmt.Errorf("failed to make %v rshared: %w", path, err)
 	}
 	return nil
 }
@@ -133,7 +134,7 @@ func UnmountPath(ctx context.Context, target string, removeTarget bool) (err err
 	if err := unixUnmount(target, 0); err != nil {
 		// If `Unmount` returns `EINVAL` it's not mounted. Just delete the
 		// folder.
-		if err != unix.EINVAL {
+		if !gerrors.Is(err, unix.EINVAL) {
 			return errors.Wrapf(err, "failed to unmount path '%s'", target)
 		}
 	}

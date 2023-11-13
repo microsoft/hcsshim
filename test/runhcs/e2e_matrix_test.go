@@ -284,7 +284,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	var exitStatus int
 	_, eerr := p.Wait()
 	if eerr != nil {
-		if exitErr, ok := eerr.(*exec.ExitError); ok {
+		if exitErr, ok := eerr.(*exec.ExitError); ok { //nolint:errorlint
 			if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 				exitStatus = ws.ExitStatus()
 			}

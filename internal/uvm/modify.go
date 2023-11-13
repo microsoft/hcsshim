@@ -22,7 +22,7 @@ func (uvm *UtilityVM) modify(ctx context.Context, doc *hcsschema.ModifySettingRe
 	if doc.ResourcePath != "" && doc.RequestType == guestrequest.RequestTypeAdd {
 		err = uvm.hcsSystem.Modify(ctx, &hostdoc)
 		if err != nil {
-			return fmt.Errorf("adding VM resources: %s", err)
+			return fmt.Errorf("adding VM resources: %w", err)
 		}
 		defer func() {
 			if err != nil {
@@ -36,12 +36,12 @@ func (uvm *UtilityVM) modify(ctx context.Context, doc *hcsschema.ModifySettingRe
 	}
 	err = uvm.gc.Modify(ctx, doc.GuestRequest)
 	if err != nil {
-		return fmt.Errorf("guest modify: %s", err)
+		return fmt.Errorf("guest modify: %w", err)
 	}
 	if doc.ResourcePath != "" && doc.RequestType == guestrequest.RequestTypeRemove {
 		err = uvm.hcsSystem.Modify(ctx, &hostdoc)
 		if err != nil {
-			err = fmt.Errorf("removing VM resources: %s", err)
+			err = fmt.Errorf("removing VM resources: %w", err)
 			log.G(ctx).WithError(err).Error("failed to remove host resources after successful guest request")
 			return err
 		}

@@ -121,7 +121,7 @@ func handleAssignedDevicesWindows(
 	options := vm.DefaultVSMBOptions(true)
 	toolsShare, err := vm.AddVSMB(ctx, toolHostPath, options)
 	if err != nil {
-		return nil, closers, fmt.Errorf("failed to add VSMB share to utility VM for path %+v: %s", toolHostPath, err)
+		return nil, closers, fmt.Errorf("failed to add VSMB share to utility VM for path %+v: %w", toolHostPath, err)
 	}
 	closers = append(closers, toolsShare)
 	deviceUtilPath, err := vm.GetVSMBUvmPath(ctx, toolHostPath, true)

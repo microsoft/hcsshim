@@ -33,7 +33,7 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		return expectedErr
 	}
 	err := Mount(context.Background(), 0, "", nil, nil)
-	if errors.Cause(err) != expectedErr {
+	if errors.Cause(err) != expectedErr { //nolint:errorlint
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 }
@@ -108,7 +108,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		return expectedErr
 	}
 	err := Mount(context.Background(), 0, target, nil, nil)
-	if errors.Cause(err) != expectedErr {
+	if errors.Cause(err) != expectedErr { //nolint:errorlint
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 	if !removeAllCalled {
@@ -430,7 +430,7 @@ func Test_RemoveDevice_Called_For_LinearTarget_On_MountInternalFailure(t *testin
 		"/foo",
 		mappingInfo,
 		nil,
-	); err != expectedError {
+	); err != expectedError { //nolint:errorlint
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}
 	if !removeDeviceCalled {
@@ -469,7 +469,7 @@ func Test_RemoveDevice_Called_For_VerityTarget_On_MountInternalFailure(t *testin
 		"/foo",
 		nil,
 		verity,
-	); err != expectedError {
+	); err != expectedError { //nolint:errorlint
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}
 	if !removeDeviceCalled {
@@ -533,7 +533,7 @@ func Test_RemoveDevice_Called_For_Both_Targets_On_MountInternalFailure(t *testin
 		"/foo",
 		mapping,
 		verity,
-	); err != expectedError {
+	); err != expectedError { //nolint:errorlint
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}
 	if !rmLinearCalled {

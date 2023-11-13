@@ -5,6 +5,7 @@ package cri_containerd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -248,7 +249,7 @@ func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 
 	defer func() {
 		err := cpugroup.Delete(ctx, startCPUGroupID)
-		if err != nil && err != cpugroup.ErrHVStatusInvalidCPUGroupState {
+		if err != nil && !errors.Is(err, cpugroup.ErrHVStatusInvalidCPUGroupState) {
 			t.Fatalf("failed to clean up test cpugroup with: %v", err)
 		}
 	}()
@@ -260,7 +261,7 @@ func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 
 	defer func() {
 		err := cpugroup.Delete(ctx, updateCPUGroupID)
-		if err != nil && err != cpugroup.ErrHVStatusInvalidCPUGroupState {
+		if err != nil && !errors.Is(err, cpugroup.ErrHVStatusInvalidCPUGroupState) {
 			t.Fatalf("failed to clean up test cpugroup with: %v", err)
 		}
 	}()

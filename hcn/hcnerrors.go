@@ -63,8 +63,8 @@ func (e *HcnError) Error() string {
 }
 
 func CheckErrorWithCode(err error, code ErrorCode) bool {
-	hcnError, ok := err.(*HcnError)
-	if ok {
+	var hcnError *HcnError
+	if errors.As(err, &hcnError) {
 		return hcnError.code == code
 	}
 	return false
@@ -81,7 +81,7 @@ func IsPortAlreadyExistsError(err error) bool {
 func new(hr error, title string, rest string) error {
 	err := &HcnError{}
 	hcsError := hcserror.New(hr, title, rest)
-	err.HcsError = hcsError.(*hcserror.HcsError)
+	err.HcsError = hcsError.(*hcserror.HcsError) //nolint:errorlint
 	err.code = ErrorCode(hcserror.Win32FromError(hr))
 	return err
 }
@@ -147,7 +147,8 @@ func (e RouteNotFoundError) Error() string {
 // IsNotFoundError returns a boolean indicating whether the error was caused by
 // a resource not being found.
 func IsNotFoundError(err error) bool {
-	switch pe := err.(type) {
+	// TODO: update this to use `errors.As`
+	switch pe := err.(type) { //nolint:errorlint
 	case NetworkNotFoundError:
 		return true
 	case EndpointNotFoundError:
@@ -159,7 +160,7 @@ func IsNotFoundError(err error) bool {
 	case RouteNotFoundError:
 		return true
 	case *hcserror.HcsError:
-		return pe.Err == hcs.ErrElementNotFound
+		return errors.Is(pe.Err, hcs.ErrElementNotFound)
 	}
 	return false
 }

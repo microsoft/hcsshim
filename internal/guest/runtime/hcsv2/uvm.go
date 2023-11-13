@@ -182,7 +182,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 
 	unpacked, err := cosesign1.UnpackAndValidateCOSE1CertChain(raw)
 	if err != nil {
-		return fmt.Errorf("InjectFragment failed COSE validation: %s", err.Error())
+		return fmt.Errorf("InjectFragment failed COSE validation: %w", err)
 	}
 
 	payloadString := string(unpacked.Payload[:])

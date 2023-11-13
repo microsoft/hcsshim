@@ -57,7 +57,7 @@ func reflector(t *testing.T, rw io.ReadWriteCloser, delay time.Duration) {
 	for {
 		id, typ, msg, err := readMessage(rw)
 		if err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				t.Error(err)
 			}
 			return
@@ -122,7 +122,7 @@ func TestBridgeRPCContextDone(t *testing.T) {
 	req := testReq{X: 5}
 	var resp testResp
 	err := b.RPC(ctx, rpcCreate, &req, &resp, true)
-	if err != context.DeadlineExceeded {
+	if err != context.DeadlineExceeded { //nolint:errorlint
 		t.Fatalf("expected deadline exceeded, got %s", err)
 	}
 }
@@ -146,7 +146,7 @@ func TestBridgeRPCBridgeClosed(t *testing.T) {
 	eerr := errors.New("forcibly terminated")
 	b.kill(eerr)
 	err := b.RPC(context.Background(), rpcCreate, nil, nil, false)
-	if err != eerr {
+	if err != eerr { //nolint:errorlint
 		t.Fatal("unexpected: ", err)
 	}
 }

@@ -77,7 +77,7 @@ func readFilesystemHeader(f *os.File) (format.FilesystemHeader, error) {
 	}
 
 	if err := validateHeader(&fsh.Common); err != nil {
-		return fsh, fmt.Errorf("validating filesystem header: %s", err)
+		return fsh, fmt.Errorf("validating filesystem header: %w", err)
 	}
 	return fsh, nil
 }

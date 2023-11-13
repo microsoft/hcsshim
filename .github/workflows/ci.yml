@@ -41,7 +41,6 @@ jobs:
             --modules-download-mode=readonly
             --timeout=10m
             --config=${{ github.workspace }}/.golangci.yml
-          skip-cache: true # even if a cache is found, don't use it
           working-directory: ${{ github.workspace }}/${{ matrix.root }}
         env:
           GOOS: ${{ matrix.goos }}

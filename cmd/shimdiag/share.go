@@ -49,7 +49,7 @@ var shareCommand = cli.Command{
 		svc := shimdiag.NewShimDiagClient(shim)
 		_, err = svc.DiagShare(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("failed to share directory %s into UVM: %s", hostPath, err)
+			return fmt.Errorf("failed to share directory %s into UVM: %w", hostPath, err)
 		}
 
 		fmt.Printf("Shared %s into %s at %s\n", hostPath, shimName, uvmPath)

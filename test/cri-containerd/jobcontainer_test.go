@@ -262,7 +262,7 @@ func Test_RunContainer_HNS_JobContainer_WCOW(t *testing.T) {
 	// 2. If it did work we need to delete it.
 	network, err := hcn.GetNetworkByName(networkName)
 	if err != nil {
-		if _, ok := err.(hcn.NetworkNotFoundError); ok {
+		if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 			t.Fatalf("no network/switch with name %q found: %s", networkName, err)
 		}
 		t.Fatalf("failed to get network/switch with name %q: %s", networkName, err)

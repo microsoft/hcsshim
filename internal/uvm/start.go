@@ -146,7 +146,7 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 	}
 
 	if err = uvm.modify(ctx, conSetupReq); err != nil {
-		return fmt.Errorf("failed to configure HVSOCK for external GCS: %s", err)
+		return fmt.Errorf("failed to configure HVSOCK for external GCS: %w", err)
 	}
 
 	return nil
@@ -250,7 +250,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		conn, err := uvm.acceptAndClose(ctx, uvm.gcListener)
 		uvm.gcListener = nil
 		if err != nil {
-			return fmt.Errorf("failed to connect to GCS: %s", err)
+			return fmt.Errorf("failed to connect to GCS: %w", err)
 		}
 
 		var initGuestState *gcs.InitialGuestState
@@ -287,7 +287,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 
 		// initial setup required for external GCS connection
 		if err = uvm.configureHvSocketForGCS(ctx); err != nil {
-			return fmt.Errorf("failed to do initial GCS setup: %s", err)
+			return fmt.Errorf("failed to do initial GCS setup: %w", err)
 		}
 	} else {
 		// Cache the guest connection properties.

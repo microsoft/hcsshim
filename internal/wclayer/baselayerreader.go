@@ -66,7 +66,7 @@ func (r *baseLayerReader) walkUntilCancelled() error {
 		return nil
 	})
 
-	if err == errorIterationCanceled {
+	if err == errorIterationCanceled { //nolint:errorlint // explicitly returned
 		return nil
 	}
 
@@ -105,7 +105,7 @@ func (r *baseLayerReader) walkUntilCancelled() error {
 		return nil
 	})
 
-	if err == errorIterationCanceled {
+	if err == errorIterationCanceled { //nolint:errorlint // explicitly returned
 		return nil
 	}
 

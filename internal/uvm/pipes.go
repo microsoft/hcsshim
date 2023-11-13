@@ -25,7 +25,7 @@ type PipeMount struct {
 // Release frees the resources of the corresponding pipe Mount
 func (pipe *PipeMount) Release(ctx context.Context) error {
 	if err := pipe.vm.RemovePipe(ctx, pipe.HostPath); err != nil {
-		return fmt.Errorf("failed to remove pipe mount: %s", err)
+		return fmt.Errorf("failed to remove pipe mount: %w", err)
 	}
 	return nil
 }

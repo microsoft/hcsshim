@@ -207,7 +207,7 @@ func (w *v0ServiceWrapper) GetEndpoint(ctx context.Context, req *ncproxygrpcv0.G
 	}
 	v0Resp, err := v1EndpointToV0EndpointResp(resp)
 	if err != nil {
-		if err == errUnsupportedEndpointType {
+		if errors.Is(err, errUnsupportedEndpointType) {
 			return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 		}
 		return nil, err
@@ -249,7 +249,7 @@ func (w *v0ServiceWrapper) GetEndpoints(ctx context.Context, req *ncproxygrpcv0.
 	for i, e := range resp.Endpoints {
 		v0Endpoint, err := v1EndpointToV0EndpointResp(e)
 		if err != nil {
-			if err == errUnsupportedEndpointType {
+			if errors.Is(err, errUnsupportedEndpointType) {
 				// ignore unsupported endpoints
 				continue
 			}
@@ -273,7 +273,7 @@ func (w *v0ServiceWrapper) GetNetwork(ctx context.Context, req *ncproxygrpcv0.Ge
 
 	v0Resp, err := v1NetworkToV0NetworkResp(resp)
 	if err != nil {
-		if err == errUnsupportedNetworkType {
+		if errors.Is(err, errUnsupportedNetworkType) {
 			return nil, status.Errorf(codes.NotFound, "no network with name `%s` found", req.Name)
 		}
 		return nil, err
@@ -304,7 +304,7 @@ func (w *v0ServiceWrapper) GetNetworks(ctx context.Context, req *ncproxygrpcv0.G
 	for i, n := range resp.Networks {
 		v0Network, err := v1NetworkToV0NetworkResp(n)
 		if err != nil {
-			if err == errUnsupportedNetworkType {
+			if errors.Is(err, errUnsupportedNetworkType) {
 				// ignore unsupported networks
 				continue
 			}

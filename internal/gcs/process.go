@@ -115,7 +115,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	}
 	p.waitCall, err = gc.brdg.AsyncRPC(ctx, rpcWaitForProcess, &waitReq, &p.waitResp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to wait on process, leaking process: %s", err)
+		return nil, fmt.Errorf("failed to wait on process, leaking process: %w", err)
 	}
 	go p.waitBackground()
 	return p, nil

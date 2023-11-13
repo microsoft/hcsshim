@@ -246,7 +246,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 			if atomic.LoadUint32(&b.hasQuitPending) == 0 {
 				header := &prot.MessageHeader{}
 				if err := binary.Read(bridgeIn, binary.LittleEndian, header); err != nil {
-					if err == io.ErrUnexpectedEOF || err == os.ErrClosed {
+					if err == io.ErrUnexpectedEOF || err == os.ErrClosed { //nolint:errorlint
 						break
 					}
 					recverr = errors.Wrap(err, "bridge: failed reading message header")
@@ -254,7 +254,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				}
 				message := make([]byte, header.Size-prot.MessageHeaderSize)
 				if _, err := io.ReadFull(bridgeIn, message); err != nil {
-					if err == io.ErrUnexpectedEOF || err == os.ErrClosed {
+					if err == io.ErrUnexpectedEOF || err == os.ErrClosed { //nolint:errorlint
 						break
 					}
 					recverr = errors.Wrap(err, "bridge: failed reading message payload")

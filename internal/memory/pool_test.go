@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -49,7 +50,7 @@ func Test_MemAlloc_allocate_not_enough_space(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if err != ErrNotEnoughSpace {
+	if !errors.Is(err, ErrNotEnoughSpace) {
 		t.Fatalf("expected error=%s, got error=%s", ErrNotEnoughSpace, err)
 	}
 }
@@ -134,7 +135,7 @@ func Test_MemAlloc_alloc_invalid_larger_than_max(t *testing.T) {
 	if err == nil {
 		t.Fatal("no error returned")
 	}
-	if err != ErrInvalidMemoryClass {
+	if !errors.Is(err, ErrInvalidMemoryClass) {
 		t.Fatalf("expected error=%s, got error=%s", ErrInvalidMemoryClass, err)
 	}
 }
@@ -156,7 +157,7 @@ func Test_MemAlloc_release_invalid_offset(t *testing.T) {
 	if err == nil {
 		t.Fatal("no error returned")
 	}
-	if err != ErrNotAllocated {
+	if !errors.Is(err, ErrNotAllocated) {
 		t.Fatalf("wrong error returned: %s", err)
 	}
 }
@@ -243,7 +244,7 @@ func Test_GetMemoryClassSize(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s, err := GetMemoryClassSize(tc.clsType)
-			if err != tc.err {
+			if !errors.Is(err, tc.err) {
 				t.Fatalf("expected error to be %s, got %s instead", tc.err, err)
 			}
 			if s != tc.expected {
