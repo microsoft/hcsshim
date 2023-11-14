@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"sync"
@@ -443,21 +444,23 @@ func setErrorForResponseBase(response *prot.MessageResponseBase, errForResponse 
 	errorMessage := errForResponse.Error()
 	stackString := ""
 	fileName := ""
-	lineNumber := -1
+	// We use -1 as a sentinel if no line number found (or it cannot be parsed),
+	// but that will ultimately end up as [math.MaxUint32], so set it to that explicitly.
+	// (Still keep using -1 for backwards compatibility ...)
+	lineNumber := uint32(math.MaxUint32)
 	functionName := ""
 	if stack := gcserr.BaseStackTrace(errForResponse); stack != nil {
 		bottomFrame := stack[0]
 		stackString = fmt.Sprintf("%+v", stack)
 		fileName = fmt.Sprintf("%s", bottomFrame)
 		lineNumberStr := fmt.Sprintf("%d", bottomFrame)
-		var err error
-		lineNumber, err = strconv.Atoi(lineNumberStr)
-		if err != nil {
+		if n, err := strconv.ParseUint(lineNumberStr, 10, 32); err == nil {
+			lineNumber = uint32(n)
+		} else {
 			logrus.WithFields(logrus.Fields{
 				"line-number":   lineNumberStr,
 				logrus.ErrorKey: err,
 			}).Error("opengcs::bridge::setErrorForResponseBase - failed to parse line number, using -1 instead")
-			lineNumber = -1
 		}
 		functionName = fmt.Sprintf("%n", bottomFrame)
 	}
@@ -474,7 +477,7 @@ func setErrorForResponseBase(response *prot.MessageResponseBase, errForResponse 
 		StackTrace:   stackString,
 		ModuleName:   "gcs",
 		FileName:     fileName,
-		Line:         uint32(lineNumber),
+		Line:         lineNumber,
 		FunctionName: functionName,
 	}
 	response.ErrorRecords = append(response.ErrorRecords, newRecord)
