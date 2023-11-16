@@ -253,14 +253,7 @@ func fetchRawSNPReport6(reportData []byte) ([]byte, error) {
 		return nil, err
 	}
 
-<<<<<<< HEAD
 	msgReportOut = *(*reportResponse)(unsafe.Pointer(&reportOutContainer[0]))
-=======
-	reportOutSize := unsafe.Sizeof(msgReportOut)
-	reportOutPtr := unsafe.Pointer(&msgReportOut)
-	reportOutAsSlice := (*[reportResponseContainerLength6]byte)(reportOutPtr)
-	copy(reportOutAsSlice[:reportOutSize], reportOutContainer[:reportOutSize])
->>>>>>> main
 
 	return msgReportOut.Report[:], nil
 }
