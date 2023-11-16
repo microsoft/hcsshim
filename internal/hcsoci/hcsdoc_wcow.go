@@ -26,7 +26,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
@@ -345,13 +344,13 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 
 	if coi.isV2Argon() || coi.isV1Argon() { // Argon v1 or v2
-		for _, layerPath := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
-			layerID, err := wclayer.LayerID(ctx, layerPath)
-			if err != nil {
-				return nil, nil, err
-			}
-			v1.Layers = append(v1.Layers, schema1.Layer{ID: layerID.String(), Path: layerPath})
-			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschema.Layer{Id: layerID.String(), Path: layerPath})
+		mountedLayers, err := layers.ToHostHcsSchemaLayers(ctx, coi.ID, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, ml := range mountedLayers {
+			v1.Layers = append(v1.Layers, schema1.Layer{ID: ml.Id, Path: ml.Path})
+			v2Container.Storage.Layers = append(v2Container.Storage.Layers, ml)
 		}
 	}
 
