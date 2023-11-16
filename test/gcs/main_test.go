@@ -6,7 +6,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,15 +59,6 @@ var (
 		"Use `/pause` as the sandbox container command",
 	)
 )
-
-var securityPolicy string
-
-func init() {
-	var err error
-	if securityPolicy, err = securitypolicy.NewOpenDoorPolicy().EncodeToString(); err != nil {
-		log.Fatal("could not encode open door policy to string: %w", err)
-	}
-}
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -176,11 +166,11 @@ func getHost(_ context.Context, tb testing.TB, rt runtime.Runtime) *hcsv2.Host {
 }
 
 func getHostErr(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error) {
-	h := hcsv2.NewHost(rt, tp, &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}, os.Stdout)
-	cOpts := &guestresource.LCOWConfidentialOptions{
-		EncodedSecurityPolicy: securityPolicy,
-	}
-	if err := h.SetConfidentialUVMOptions(context.Background(), cOpts); err != nil {
+	h := hcsv2.NewHost(rt, tp, &securitypolicy.OpenDoorSecurityPolicyEnforcer{}, os.Stdout)
+	if err := h.SetConfidentialUVMOptions(
+		context.Background(),
+		&guestresource.LCOWConfidentialOptions{},
+	); err != nil {
 		return nil, fmt.Errorf("could not set host security policy: %w", err)
 	}
 

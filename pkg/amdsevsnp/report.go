@@ -1,8 +1,6 @@
 //go:build linux
 // +build linux
 
-// Package amdsevsnp contains minimal functionality required to fetch
-// attestation reports inside an enlightened guest.
 package amdsevsnp
 
 import (
@@ -157,6 +155,10 @@ const reportResponseContainerLength6 = 4000
 const snpDevicePath5 = "/dev/sev"
 const snpDevicePath6 = "/dev/sev-guest"
 
+func IsSNP() bool {
+	return isSNPVM5() || isSNPVM6()
+}
+
 // Check if the code is being run in SNP VM for Linux kernel version 5.x.
 func isSNPVM5() bool {
 	_, err := os.Stat(snpDevicePath5)
@@ -251,7 +253,14 @@ func fetchRawSNPReport6(reportData []byte) ([]byte, error) {
 		return nil, err
 	}
 
+<<<<<<< HEAD
 	msgReportOut = *(*reportResponse)(unsafe.Pointer(&reportOutContainer[0]))
+=======
+	reportOutSize := unsafe.Sizeof(msgReportOut)
+	reportOutPtr := unsafe.Pointer(&msgReportOut)
+	reportOutAsSlice := (*[reportResponseContainerLength6]byte)(reportOutPtr)
+	copy(reportOutAsSlice[:reportOutSize], reportOutContainer[:reportOutSize])
+>>>>>>> main
 
 	return msgReportOut.Report[:], nil
 }

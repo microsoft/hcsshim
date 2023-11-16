@@ -9,13 +9,9 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
 )
-
-// This package provides simple go wrappers on top of the win32 CIMFS mount APIs. The mounting/unmount of cim
-// layers is done by the cim mount functions in internal/wclayer/cim package.
 
 type MountError struct {
 	Cim        string
@@ -33,22 +29,13 @@ func (e *MountError) Error() string {
 	return s
 }
 
-func MountWithFlags(cimPath string, mountFlags uint32) (string, error) {
-	layerGUID, err := guid.NewV4()
-	if err != nil {
-		return "", &MountError{Cim: cimPath, Op: "Mount", Err: err}
+// Mount mounts the given cim at a volume with given GUID. Returns the full volume
+// path if mount is successful.
+func Mount(cimPath string, volumeGUID guid.GUID, mountFlags uint32) (string, error) {
+	if err := winapi.CimMountImage(filepath.Dir(cimPath), filepath.Base(cimPath), mountFlags, &volumeGUID); err != nil {
+		return "", &MountError{Cim: cimPath, Op: "Mount", VolumeGUID: volumeGUID, Err: err}
 	}
-	if err := winapi.CimMountImage(filepath.Dir(cimPath), filepath.Base(cimPath), mountFlags, &layerGUID); err != nil {
-		return "", &MountError{Cim: cimPath, Op: "Mount", VolumeGUID: layerGUID, Err: err}
-	}
-	return fmt.Sprintf("\\\\?\\Volume{%s}\\", layerGUID.String()), nil
-}
-
-// Mount mounts the cim at path `cimPath` and returns the mount location of that cim.  This method uses the
-// `CimMountFlagCacheRegions` mount flag when mounting the cim, if some other mount flag is desired use the
-// `MountWithFlags` method.
-func Mount(cimPath string) (string, error) {
-	return MountWithFlags(cimPath, hcsschema.CimMountFlagCacheFiles)
+	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
 }
 
 // Unmount unmounts the cim at mounted at path `volumePath`.

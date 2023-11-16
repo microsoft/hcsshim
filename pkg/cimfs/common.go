@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	// Equivalent to SDDL of "D:NO_ACCESS_CONTROL"
+	// Equivalent to SDDL of "D:NO_ACCESS_CONTROL".
 	nullSd = []byte{1, 0, 4, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 )
 

@@ -1,13 +1,35 @@
+# Since we have multiple build targets, and the makefile that CodeQL would use in its autobuild
+# step doesn't build everything, we need to manually add run the Go (and C++) build commands
+#
+# See:
+# https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning
+# https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages
+#
+# Additionally, see example CodeQL pipeline (in CodeQL repo):
+# https://github.com/github/codeql/blob/0342b3eba242476cea815e601942021092d0bc10/.github/workflows/codeql-analysis.yml
+
 name: "Code Scanning - CodeQL"
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+      - "hack/**"
+      - "scripts/**"
+      - ".github/**"
+      - "!.github/workflows/codeql.yml"
   schedule:
+    # run weekly, at midnight on Sunday
     # minute, hour, day of month, month, day of week
-    - cron: '0 0 * * 0'
+    - cron: "0 0 * * 0"
+
+# TODO: consolidate this with ci.yml so they both use the same Go version
+env:
+  GO_VERSION: "1.19.x"
 
 jobs:
   CodeQL-Build:
@@ -15,28 +37,77 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        goos: [windows, linux]
+        # we want a matrix across the two GOOS options, not the product of all options
+        # ! update `targets` field if more binaries are added
         include:
+          - goos: windows
+            language: go
+            targets: >-
+              cmd/containerd-shim-runhcs-v1,
+              cmd/device-util,
+              cmd/dmverity-vhd,
+              cmd/jobobject-util,
+              cmd/ncproxy,
+              cmd/runhcs,
+              cmd/shimdiag,
+              cmd/tar2ext4,
+              cmd/wclayer,
+              internal/tools/extendedtask,
+              internal/tools/grantvmgroupaccess,
+              internal/tools/networkagent,
+              internal/tools/uvmboot,
+              internal/tools/zapdir,
+
           - goos: linux
-            root: ""
-            dirs: >-
-              ./cmd/gcs/...
-              ./cmd/gcstools/...
-              ./cmd/dmverity-vhd/...
-              ./cmd/hooks/...
-              ./internal/guest...
-              ./internal/tools/...
+            language: go, cpp
+            targets: >-
+              cmd/gcs,
+              cmd/gcstools,
+              cmd/hooks/wait-paths,
+              cmd/tar2ext4,
+              internal/tools/policyenginesimulator,
+              internal/tools/securitypolicy,
+              internal/tools/snp-report,
 
     steps:
+      # setup runner before initializing & running CodeQL
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           show-progress: false
 
+      - name: Install go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
       - name: CodeQL Initialize
         uses: github/codeql-action/init@v2
         with:
-          languages: go, cpp
+          languages: ${{matrix.language}}
+
+      # build binaries
+      - name: Build go binaries
+        shell: pwsh
+        run: |
+          $targets = "${{ matrix.targets }}" -split ',' |
+            foreach { $_.Trim() } |
+            where { -not [string]::IsNullOrWhiteSpace($_) }
+          Write-Output "Targets: $targets"
+
+          foreach ( $t in $targets ) {
+            Write-Output "Build: $t"
+            go build "./$t" 2>&1
+          }
+        env:
+          GOOS: ${{ matrix.goos }}
+
+      - name: Build init and vsockexec
+        if: ${{ matrix.goos == 'linux' }}
+        run: make bin/vsockexec bin/init
 
       - name: CodeQL Analyze
         uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{matrix.language}}"

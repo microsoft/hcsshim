@@ -84,6 +84,8 @@ func shimDiagExecOutputWithErr(ctx context.Context, tb testing.TB, podID string,
 	if err != nil {
 		return "", err
 	}
+	defer shim.Close()
+
 	shimClient := shimdiag.NewShimDiagClient(shim)
 
 	bufOut := &bytes.Buffer{}
@@ -91,22 +93,30 @@ func shimDiagExecOutputWithErr(ctx context.Context, tb testing.TB, podID string,
 	bufErr := &bytes.Buffer{}
 	bwErr := bufio.NewWriter(bufErr)
 
+	tb.Logf("execing %q in shim %q", cmd, shimName)
 	exitCode, err := execInHost(ctx, shimClient, cmd, nil, bw, bwErr)
-	if err != nil {
-		return "", fmt.Errorf("failed to exec request in the host with: %s and %s", err, bufErr.String())
+	stdOut := strings.TrimSpace(bufOut.String())
+	stdErr := strings.TrimSpace(bufErr.String())
 
+	// regardless of error, still return stdout
+	if err != nil {
+		return stdOut, fmt.Errorf("failed to exec request in the host with: %v and %s", err, stdErr)
 	}
 	if exitCode != 0 {
-		return "", fmt.Errorf("exec request in host failed with exit code %v: %v", exitCode, bufErr.String())
+		return stdOut, fmt.Errorf("exec request in host failed with exit code %v: %v", exitCode, stdErr)
 	}
-	return strings.TrimSpace(bufOut.String()), nil
+
+	return stdOut, nil
 }
 
-// shimDiagExecOutput is a small wrapper on top of execInHost, that returns the exec output
+// shimDiagExecOutput is a small wrapper on top of execInHost, that returns the exec output.
 func shimDiagExecOutput(ctx context.Context, tb testing.TB, podID string, cmd []string) string {
 	tb.Helper()
 	out, err := shimDiagExecOutputWithErr(ctx, tb, podID, cmd)
 	if err != nil {
+		if out != "" {
+			tb.Logf("exec std out:\n%s", out)
+		}
 		tb.Fatal(err)
 	}
 	return out
