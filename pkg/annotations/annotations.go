@@ -307,9 +307,6 @@ const (
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
 	// case the UVM crashes.
 	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
-
-	// ExtraVSockPorts adds additional ports to the list of ports that the UVM is allowed to use.
-	ExtraVSockPorts = "io.microsoft.virtualmachine.lcow.extra-vsock-ports"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of

@@ -346,7 +346,7 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
 	// Raise an error if instructed to use a particular sort of rootfs.
 	if opts.PreferredRootFSType != PreferredRootFSTypeNA {
-		return nil, fmt.Errorf("specifying a PreferredRootFSType is incompatible with SNP mode")
+		return nil, errors.New("specifying a PreferredRootFSType is incompatible with SNP mode")
 	}
 
 	// The kernel and minimal initrd are combined into a single vmgs file.
@@ -442,10 +442,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	//		linuxLogVsockPort - 109 used by vsockexec to log stdout/stderr logging,
 	//		0x40000000 + 1 (LinuxGcsVsockPort + 1) is the bridge (see guestconnectiuon.go)
 	hvSockets := []uint32{entropyVsockPort, linuxLogVsockPort, gcs.LinuxGcsVsockPort, gcs.LinuxGcsVsockPort + 1}
-	if len(opts.ExtraVSockPorts) > 0 {
-		moreHvSockets := append(hvSockets, opts.ExtraVSockPorts...)
-		hvSockets = moreHvSockets
-	}
+	hvSockets = append(hvSockets, opts.ExtraVSockPorts...)
 	for _, whichSocket := range hvSockets {
 		key := fmt.Sprintf("%08x-facb-11e6-bd58-64006a7986d3", whichSocket) // format of a linux hvsock GUID is port#-facb-11e6-bd58-64006a7986d3
 		doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable[key] = hcsschema.HvSocketServiceConfig{
@@ -464,6 +461,8 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	if uvm.scsiControllerCount > 0 {
+		logrus.Debug("makeLCOWVMGSDoc configuring scsi devices")
+		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
 		if opts.DmVerityMode {
 			logrus.Debug("makeLCOWVMGSDoc DmVerityMode true")
 			doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
@@ -484,10 +483,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 			}
 			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
 			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 1})
-		} else {
-			logrus.Debug("makeLCOWVMGSDoc DmVerityMode false")
-			doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
-		}
+		} 
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
 			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),

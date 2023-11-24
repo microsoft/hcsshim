@@ -6,8 +6,8 @@ export HOME="/root"
 /bin/vsockexec -o 2056 -e 2056 echo Running startup_v2056.sh
 /bin/vsockexec -o 2056 -e 2056 date
 
-/bin/vsockexec -o 2056 -e 2056 echo /debuginit -e 1 /bin/vsockexec -o 2056 -e 109 /bin/gcs -v4 -log-format text -loglevel debug -logfile /tmp/gcs.log
-/debuginit -e 1 /bin/vsockexec -o 2056 -e 109 /bin/gcs -v4 -log-format text -loglevel debug -logfile /tmp/gcs.log
+/bin/vsockexec -o 2056 -e 2056 echo /init -e 1 /bin/vsockexec -o 2056 -e 109 /bin/gcs -v4 -log-format text -loglevel debug -logfile /tmp/gcs.log
+/init -e 1 /bin/vsockexec -o 2056 -e 109 /bin/gcs -v4 -log-format text -loglevel debug -logfile /tmp/gcs.log
 
 /bin/vsockexec -o 2056 -e 2056 echo ls -l /dev/dm*
 /bin/vsockexec -o 2056 -e 2056 ls -l /dev/dm*

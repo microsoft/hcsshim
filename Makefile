@@ -29,6 +29,10 @@ ifeq "$(DEV_BUILD)" "1"
 DELTA_TARGET=out/delta-dev.tar.gz
 endif
 
+ifeq "$(SNP_BUILD)" "1"
+DELTA_TARGET=out/delta-snp.tar.gz
+endif
+
 # The link aliases for gcstools
 GCS_TOOLS=\
 	generichook \
@@ -84,12 +88,12 @@ out/kernelinitrd.bin: out/rootfs.vhd out/rootfs.hash.vhd out/rootfs.hash.datasec
 	python3 $(PATH_PREFIX)/$(IGVM_TOOL) -o $@ -kernel $(PATH_PREFIX)/$(KERNEL_PATH) -append "8250_core.nr_uarts=0 panic=-1 debug loglevel=7 root=/dev/dm-0 dm-mod.create=\"dmverity,,,ro,0 $(shell cat out/rootfs.hash.datasectors) verity 1 $(ROOTFS_DEVICE) $(VERITY_DEVICE) $(shell cat out/rootfs.hash.datablocksize) $(shell cat out/rootfs.hash.hashblocksize) $(shell cat out/rootfs.hash.datablocks) 0 sha256 $(shell cat out/rootfs.hash.rootdigest) $(shell cat out/rootfs.hash.salt)\" init=/startup.sh"  -vtl 0
 
 # Rule to make a vhd from a file. This is used to create the rootfs.hash.vhd from rootfs.hash.
-%.vhd: % bin/cmd/blob2vhd
-	./bin/cmd/blob2vhd -i $< -o $@
+%.vhd: % bin/cmd/tar2ext4
+	./bin/cmd/tar2ext4 -only-vhd -i $< -o $@
 
 # Rule to make a vhd from an ext4 file. This is used to create the rootfs.vhd from rootfs.ext4.
-%.vhd: %.ext4 bin/cmd/blob2vhd
-	./bin/cmd/blob2vhd -i $< -o $@
+%.vhd: %.ext4 bin/cmd/tar2ext4
+	./bin/cmd/tar2ext4 -only-vhd -i $< -o $@
 
 %.hash %.hash.info %.hash.datablocks %.hash.rootdigest %hash.datablocksize %.hash.datasectors %.hash.hashblocksize: %.ext4 %.hash.salt
 	veritysetup format --no-superblock --salt $(shell cat out/rootfs.hash.salt) $< $*.hash > $*.hash.info
@@ -130,24 +134,30 @@ out/delta-dev.tar.gz: out/delta.tar.gz bin/internal/tools/snp-report
 	tar -zcf $@ -C rootfs-dev .
 	rm -rf rootfs-dev
 
-out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths Makefile  bin/internal/tools/snp-report bin/debuginit boot/startup_v2056.sh boot/startup_simple.sh boot/startup.sh
+out/delta-snp.tar.gz: out/delta.tar.gz bin/internal/tools/snp-report boot/startup_v2056.sh boot/startup_simple.sh boot/startup.sh
+	rm -rf rootfs-snp
+	mkdir rootfs-snp
+	tar -xzf out/delta.tar.gz -C rootfs-snp
+	cp boot/startup_v2056.sh rootfs-snp/startup_v2056.sh
+	cp boot/startup_simple.sh rootfs-snp/startup_simple.sh
+	cp boot/startup.sh rootfs-snp/startup.sh
+	cp bin/internal/tools/snp-report rootfs-snp/bin/
+	chmod a+x rootfs-snp/startup_v2056.sh
+	chmod a+x rootfs-snp/startup_simple.sh
+	chmod a+x rootfs-snp/startup.sh
+	tar -zcf $@ -C rootfs-snp .
+	rm -rf rootfs-snp
+
+out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths Makefile
 	@mkdir -p out
 	rm -rf rootfs
 	mkdir -p rootfs/bin/
 	mkdir -p rootfs/info/
 	cp bin/init rootfs/
-	cp bin/debuginit rootfs/
 	cp bin/vsockexec rootfs/bin/
 	cp bin/cmd/gcs rootfs/bin/
 	cp bin/cmd/gcstools rootfs/bin/
 	cp bin/cmd/hooks/wait-paths rootfs/bin/
-	cp boot/startup_v2056.sh rootfs/startup_v2056.sh
-	cp boot/startup_simple.sh rootfs/startup_simple.sh
-	cp boot/startup.sh rootfs/startup.sh
-	cp bin/internal/tools/snp-report rootfs/bin/
-	chmod a+x rootfs/startup_v2056.sh
-	chmod a+x rootfs/startup_simple.sh
-	chmod a+x rootfs/startup.sh
 	for tool in $(GCS_TOOLS); do ln -s gcstools rootfs/bin/$$tool; done
 	git -C $(SRCROOT) rev-parse HEAD > rootfs/info/gcs.commit && \
 	git -C $(SRCROOT) rev-parse --abbrev-ref HEAD > rootfs/info/gcs.branch && \
@@ -161,7 +171,7 @@ out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/ho
 out/containerd-shim-runhcs-v1.exe:
 	GOOS=windows $(GO_BUILD) -o $@ $(SRCROOT)/cmd/containerd-shim-runhcs-v1
 
-bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths bin/cmd/tar2ext4 bin/internal/tools/snp-report bin/cmd/dmverity-vhd bin/cmd/blob2vhd:
+bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths bin/cmd/tar2ext4 bin/internal/tools/snp-report bin/cmd/dmverity-vhd:
 	@mkdir -p $(dir $@)
 	GOOS=linux $(GO_BUILD) -o $@ $(SRCROOT)/$(@:bin/%=%)
 
@@ -170,10 +180,6 @@ bin/vsockexec: vsockexec/vsockexec.o vsockexec/vsock.o
 	$(CC) $(LDFLAGS) -o $@ $^
 
 bin/init: init/init.o vsockexec/vsock.o
-	@mkdir -p bin
-	$(CC) $(LDFLAGS) -o $@ $^
-
-bin/debuginit: debuginit/debuginit.o vsockexec/vsock.o
 	@mkdir -p bin
 	$(CC) $(LDFLAGS) -o $@ $^
 
