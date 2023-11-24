@@ -60,7 +60,7 @@ test:
 
 rootfs: out/rootfs.vhd
 
-snp: out/kernelinitrd.vmgs out/containerd-shim-runhcs-v1.exe out/rootfs.hash.vhd out/rootfs.vhd out/v2056.vmgs
+snp: out/kernelinitrd.vmgs out/rootfs.hash.vhd out/rootfs.vhd out/v2056.vmgs
 
 simple: out/simple.vmgs snp
 
