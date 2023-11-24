@@ -483,7 +483,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 			}
 			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
 			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 1})
-		} 
+		}
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
 			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),
