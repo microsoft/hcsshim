@@ -26,9 +26,9 @@ const (
 	vsmbSharePrefix = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
 )
 
-// VSMBShare contains the host path for a Vsmb Mount
+// VSMBShare contains the host path for a Vsmb Mount.
 type VSMBShare struct {
-	// UVM the resource belongs to
+	// UVM the resource belongs to.
 	vm           *UtilityVM
 	HostPath     string
 	refCount     uint32
@@ -36,11 +36,14 @@ type VSMBShare struct {
 	allowedFiles []string
 	guestPath    string
 	options      hcsschema.VirtualSmbShareOptions
+	// whether the share is mapping an entire directory.
+	// ie, if the share is stored in [vm.vsmbDirShares] or [vm.vsmbFileShares].
+	isDirShare bool
 }
 
 // Release frees the resources of the corresponding vsmb Mount
 func (vsmb *VSMBShare) Release(ctx context.Context) error {
-	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath, vsmb.options.ReadOnly); err != nil {
+	if err := vsmb.vm.removeVSMB(ctx, vsmb.HostPath, vsmb.options.ReadOnly, vsmb.isDirShare); err != nil {
 		return fmt.Errorf("failed to remove VSMB share: %s", err)
 	}
 	return nil
@@ -62,7 +65,7 @@ func (uvm *UtilityVM) DefaultVSMBOptions(readOnly bool) *hcsschema.VirtualSmbSha
 }
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
-func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare, shareKey string) (*VSMBShare, error) {
+func (*UtilityVM) findVSMBShare(_ context.Context, m map[string]*VSMBShare, shareKey string) (*VSMBShare, error) {
 	share, ok := m[shareKey]
 	if !ok {
 		return nil, ErrNotAttached
@@ -187,10 +190,11 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
 		share = &VSMBShare{
-			vm:        uvm,
-			name:      shareName,
-			guestPath: vsmbSharePrefix + shareName,
-			HostPath:  hostPath,
+			vm:         uvm,
+			name:       shareName,
+			guestPath:  vsmbSharePrefix + shareName,
+			HostPath:   hostPath,
+			isDirShare: st.IsDir(),
 		}
 	}
 	newAllowedFiles := share.allowedFiles
@@ -234,6 +238,26 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 // RemoveVSMB removes a VSMB share from a utility VM. Each VSMB share is ref-counted
 // and only actually removed when the ref-count drops to zero.
 func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly bool) error {
+	st, err := os.Stat(hostPath)
+	if err != nil {
+		return err
+	}
+	isDir := st.IsDir()
+	if !isDir {
+		hostPath = filepath.Dir(hostPath)
+	}
+	return uvm.removeVSMB(ctx, hostPath, readOnly, isDir)
+}
+
+// removeVSMB removes the share for the directory at hostPath.
+//
+// directoryShare indicates if the share is stored in [uvm.vsmbDirShares] or [uvm.vsmbFileShares].
+// Ie, it should match [VSMBShare.isDirShare].
+//
+// Regardless of whether the vSMB share is mapping a file or directory, hostPath must be the
+// directory that was shared into the uVM (and the keyname the [VSMBShare] in either
+// [uvm.vsmbDirShares] or [uvm.vsmbFileShares]).
+func (uvm *UtilityVM) removeVSMB(ctx context.Context, hostPath string, readOnly, directoryShare bool) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
@@ -241,14 +265,9 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
-	st, err := os.Stat(hostPath)
-	if err != nil {
-		return err
-	}
 	m := uvm.vsmbDirShares
-	if !st.IsDir() {
+	if !directoryShare {
 		m = uvm.vsmbFileShares
-		hostPath = filepath.Dir(hostPath)
 	}
 	hostPath = filepath.Clean(hostPath)
 	shareKey := getVSMBShareKey(hostPath, readOnly)
