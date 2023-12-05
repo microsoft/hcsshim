@@ -221,6 +221,20 @@ func ParseAnnotationsNullableBool(ctx context.Context, a map[string]string, key 
 	return nil
 }
 
+// ParseAnnotationsInt32 searches `a` for `key` and if found verifies that the
+// value is a 32-bit signed integer. If `key` is not found returns `def`.
+func ParseAnnotationsInt32(ctx context.Context, a map[string]string, key string, def int32) int32 {
+	if v, ok := a[key]; ok {
+		countu, err := strconv.ParseInt(v, 10, 32)
+		if err == nil {
+			v := int32(countu)
+			return v
+		}
+		logAnnotationParseError(ctx, key, v, logfields.Int32, err)
+	}
+	return def
+}
+
 // ParseAnnotationsUint32 searches `a` for `key` and if found verifies that the
 // value is a 32 bit unsigned integer. If `key` is not found returns `def`.
 func ParseAnnotationsUint32(ctx context.Context, a map[string]string, key string, def uint32) uint32 {

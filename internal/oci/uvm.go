@@ -21,8 +21,8 @@ import (
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPUCount(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+	if m := ParseAnnotationsInt32(ctx, s.Annotations, annotation, 0); m != 0 {
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&
@@ -38,8 +38,8 @@ func ParseAnnotationsCPUCount(ctx context.Context, s *specs.Spec, annotation str
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPULimit(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+	if m := ParseAnnotationsInt32(ctx, s.Annotations, annotation, 0); m != 0 {
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&
@@ -55,8 +55,8 @@ func ParseAnnotationsCPULimit(ctx context.Context, s *specs.Spec, annotation str
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPUWeight(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+	if m := ParseAnnotationsInt32(ctx, s.Annotations, annotation, 0); m != 0 {
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&
@@ -72,8 +72,8 @@ func ParseAnnotationsCPUWeight(ctx context.Context, s *specs.Spec, annotation st
 // annotation. If not found searches `s` for the Windows Storage section. If
 // neither are found returns `def`.
 func ParseAnnotationsStorageIops(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+	if m := ParseAnnotationsInt32(ctx, s.Annotations, annotation, 0); m != 0 {
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&
@@ -89,8 +89,8 @@ func ParseAnnotationsStorageIops(ctx context.Context, s *specs.Spec, annotation 
 // If not found searches `s` for the Windows Storage section. If neither are
 // found returns `def`.
 func ParseAnnotationsStorageBps(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := ParseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+	if m := ParseAnnotationsInt32(ctx, s.Annotations, annotation, 0); m != 0 {
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&

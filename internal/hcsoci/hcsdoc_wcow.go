@@ -245,7 +245,16 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	// Memory Resources
 	memoryMaxInMB := oci.ParseAnnotationsMemory(ctx, coi.Spec, annotations.ContainerMemorySizeInMB, 0)
 	if memoryMaxInMB > 0 {
-		v1.MemoryMaximumInMB = int64(memoryMaxInMB)
+		if memoryMaxInMB > math.MaxInt64 {
+			v1.MemoryMaximumInMB = math.MaxInt64
+			log.G(ctx).WithFields(logrus.Fields{
+				"annotation":       annotations.ContainerMemorySizeInMB,
+				"oldMemoryMaxInMB": memoryMaxInMB,
+				"newMemoryMaxInMB": v1.MemoryMaximumInMB,
+			}).Debug("container memory size limit exceeds maximum value allowed in v1 HCS schema")
+		} else {
+			v1.MemoryMaximumInMB = int64(memoryMaxInMB)
+		}
 		v2Container.Memory = &hcsschema.Memory{
 			SizeInMB: memoryMaxInMB,
 		}
@@ -479,7 +488,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 }
 
 // parseAssignedDevices parses assigned devices for the container definition
-// this is currently supported for v2 argon and xenon only
+// this is currently supported for v2 argon and xenon only.
 func parseAssignedDevices(ctx context.Context, coi *createOptionsInternal, v2 *hcsschema.Container) error {
 	if !coi.isV2Argon() && !coi.isV2Xenon() {
 		return nil
@@ -513,7 +522,7 @@ func parseDumpCount(annots map[string]string) (int32, error) {
 		return 10, nil
 	}
 
-	dumpCount, err := strconv.Atoi(dmpCountStr)
+	dumpCount, err := strconv.ParseInt(dmpCountStr, 10, 32)
 	if err != nil {
 		return -1, err
 	}
@@ -526,7 +535,7 @@ func parseDumpCount(annots map[string]string) (int32, error) {
 // parseDumpType parses the passed in string representation of the local user mode process dump type to the
 // corresponding value the registry expects to be set.
 //
-// See DumpType at https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps for the mappings
+// See DumpType at https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps for the mappings.
 func parseDumpType(annots map[string]string) (int32, error) {
 	dmpTypeStr := annots[annotations.WCOWProcessDumpType]
 	switch dmpTypeStr {
