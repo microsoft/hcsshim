@@ -78,7 +78,7 @@ jobs:
           show-progress: false
 
       - name: Install go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
