@@ -4,8 +4,6 @@ package layers
 
 import (
 	"context"
-	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/containerd/containerd"
@@ -35,13 +33,9 @@ func FromChainID(ctx context.Context, tb testing.TB, client *containerd.Client, 
 // FromMount returns the layer paths of a given mount
 func FromMount(_ context.Context, tb testing.TB, m mount.Mount) (layers []string) {
 	tb.Helper()
-	for _, option := range m.Options {
-		if strings.HasPrefix(option, mount.ParentLayerPathsFlag) {
-			err := json.Unmarshal([]byte(option[len(mount.ParentLayerPathsFlag):]), &layers)
-			if err != nil {
-				tb.Fatalf("failed to unmarshal parent layer paths from mount: %v", err)
-			}
-		}
+	layers, err := m.GetParentPaths()
+	if err != nil {
+		tb.Fatalf("failed to get mount's parent layer paths: %v", err)
 	}
 	layers = append(layers, m.Source)
 

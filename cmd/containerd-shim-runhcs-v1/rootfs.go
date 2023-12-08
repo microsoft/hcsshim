@@ -58,17 +58,10 @@ func parseLegacyRootfsMount(m *types.Mount) (string, []string, error) {
 	//
 	// The OCI spec expects:
 	//   layerN, layerN-1, ..., layer0, scratch
-	var parentLayerPaths []string
-	for _, option := range m.Options {
-		if strings.HasPrefix(option, mount.ParentLayerPathsFlag) {
-			err := json.Unmarshal([]byte(option[len(mount.ParentLayerPathsFlag):]), &parentLayerPaths)
-			if err != nil {
-				return "", nil, fmt.Errorf("unmarshal parent layer paths from mount: %v: %w", err, errdefs.ErrFailedPrecondition)
-			}
-			// Would perhaps be worthwhile to check for unrecognized options and return an error,
-			// but since this is a legacy layer mount we don't do that to avoid breaking anyone.
-			break
-		}
+	containerdMount := mount.Mount{Type: m.Type, Source: m.Source, Target: m.Target, Options: m.Options}
+	parentLayerPaths, err := containerdMount.GetParentPaths()
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get mount's parent layer paths: %v: %w", err, errdefs.ErrFailedPrecondition)
 	}
 	return m.Source, parentLayerPaths, nil
 }
@@ -102,7 +95,7 @@ func getLCOWLayers(rootfs []*types.Mount, layerFolders []string) (*layers.LCOWLa
 	m := rootfs[0]
 	switch m.Type {
 	case "lcow-layer":
-		scratchLayer, parentLayers, err := parseLegacyRootfsMount(rootfs[0])
+		scratchLayer, parentLayers, err := parseLegacyRootfsMount(m)
 		if err != nil {
 			return nil, err
 		}
