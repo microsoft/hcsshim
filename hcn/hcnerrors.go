@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
+
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/interop"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/windows"
 )
 
 var (
@@ -97,6 +98,8 @@ type NetworkNotFoundError struct {
 	NetworkID   string
 }
 
+var _ error = NetworkNotFoundError{}
+
 func (e NetworkNotFoundError) Error() string {
 	if e.NetworkName != "" {
 		return fmt.Sprintf("Network name %q not found", e.NetworkName)
@@ -110,6 +113,8 @@ type EndpointNotFoundError struct {
 	EndpointID   string
 }
 
+var _ error = EndpointNotFoundError{}
+
 func (e EndpointNotFoundError) Error() string {
 	if e.EndpointName != "" {
 		return fmt.Sprintf("Endpoint name %q not found", e.EndpointName)
@@ -122,6 +127,8 @@ type NamespaceNotFoundError struct {
 	NamespaceID string
 }
 
+var _ error = NamespaceNotFoundError{}
+
 func (e NamespaceNotFoundError) Error() string {
 	return fmt.Sprintf("Namespace ID %q not found", e.NamespaceID)
 }
@@ -130,6 +137,8 @@ func (e NamespaceNotFoundError) Error() string {
 type LoadBalancerNotFoundError struct {
 	LoadBalancerId string
 }
+
+var _ error = LoadBalancerNotFoundError{}
 
 func (e LoadBalancerNotFoundError) Error() string {
 	return fmt.Sprintf("LoadBalancer %q not found", e.LoadBalancerId)
@@ -140,6 +149,8 @@ type RouteNotFoundError struct {
 	RouteId string
 }
 
+var _ error = RouteNotFoundError{}
+
 func (e RouteNotFoundError) Error() string {
 	return fmt.Sprintf("SDN Route %q not found", e.RouteId)
 }
@@ -147,20 +158,31 @@ func (e RouteNotFoundError) Error() string {
 // IsNotFoundError returns a boolean indicating whether the error was caused by
 // a resource not being found.
 func IsNotFoundError(err error) bool {
-	// TODO: update this to use `errors.As`
-	switch pe := err.(type) { //nolint:errorlint
-	case NetworkNotFoundError:
+	// Calling [errors.As] in a loop over `[]error{NetworkNotFoundError{}, ...}` will not work,
+	// since the loop variable will be an interface type (ie, `error`) and `errors.As(error, *error)` will
+	// always succeed.
+	// Unless golang adds loops over (or arrays of) types, we need to manually call `errors.As` for
+	// each potential error type.
+	//
+	// Also, for T = NetworkNotFoundError and co, the error implementation is for T, not *T
+	if e := (NetworkNotFoundError{}); errors.As(err, &e) {
 		return true
-	case EndpointNotFoundError:
-		return true
-	case NamespaceNotFoundError:
-		return true
-	case LoadBalancerNotFoundError:
-		return true
-	case RouteNotFoundError:
-		return true
-	case *hcserror.HcsError:
-		return errors.Is(pe.Err, hcs.ErrElementNotFound)
 	}
+	if e := (EndpointNotFoundError{}); errors.As(err, &e) {
+		return true
+	}
+	if e := (NamespaceNotFoundError{}); errors.As(err, &e) {
+		return true
+	}
+	if e := (LoadBalancerNotFoundError{}); errors.As(err, &e) {
+		return true
+	}
+	if e := (RouteNotFoundError{}); errors.As(err, &e) {
+		return true
+	}
+	if e := (&hcserror.HcsError{}); errors.As(err, &e) {
+		return errors.Is(e.Err, hcs.ErrElementNotFound)
+	}
+
 	return false
 }

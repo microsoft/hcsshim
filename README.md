@@ -93,7 +93,7 @@ Our CI uses the [DCO Github app](https://github.com/apps/dco) to ensure that all
 
 Code must pass a linting stage, which uses [`golangci-lint`][lint].
 Since `./test` is a separate Go module, the linter is run from both the root and the
-`test` directories. Additionally, from the linter is run for `GOOS` set `windows` and
+`test` directories. Additionally, the linter is run with `GOOS` set to both `windows` and
 `linux`.
 
 The linting settings are stored in [`.golangci.yaml`](./.golangci.yaml), and can be run
