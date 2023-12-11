@@ -6,6 +6,7 @@ package cimfs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -136,7 +137,7 @@ func TestCimReadWrite(t *testing.T) {
 
 			// it is a file - read contents
 			rc, err := f.Read(fileContents)
-			if err != nil && err != io.EOF {
+			if err != nil && !errors.Is(err, io.EOF) {
 				t.Fatalf("failure while reading file %s from cim: %s", ft.filepath, err)
 			} else if rc != len(ft.fileContents) {
 				t.Fatalf("couldn't read complete file contents for file: %s, read %d bytes, expected: %d", ft.filepath, rc, len(ft.fileContents))

@@ -28,8 +28,8 @@ func formatDiskUvm(ctx context.Context, lcowUVM *uvm.UtilityVM, controller int, 
 		if err == nil {
 			break
 		}
-		if _, ok := err.(*cmdpkg.ExitError); !ok {
-			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %s", cmd.Spec.Args, destPath, err)
+		if _, ok := err.(*cmdpkg.ExitError); !ok { //nolint:errorlint
+			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %w", cmd.Spec.Args, destPath, err)
 		}
 		time.Sleep(time.Millisecond * 10)
 	}
@@ -41,7 +41,7 @@ func formatDiskUvm(ctx context.Context, lcowUVM *uvm.UtilityVM, controller int, 
 	lsOutput, err := cmd.Output()
 	cancel()
 	if err != nil {
-		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", cmd.Spec.Args, destPath, err)
+		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %w", cmd.Spec.Args, destPath, err)
 	}
 	device := fmt.Sprintf(`/dev/%s`, bytes.TrimSpace(lsOutput))
 	log.G(ctx).WithFields(logrus.Fields{
@@ -57,7 +57,7 @@ func formatDiskUvm(ctx context.Context, lcowUVM *uvm.UtilityVM, controller int, 
 	err = cmd.Run()
 	cancel()
 	if err != nil {
-		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s. detailed error: %s", cmd.Spec.Args, destPath, err, mkfsStderr.String())
+		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %w. detailed error: %s", cmd.Spec.Args, destPath, err, mkfsStderr.String())
 	}
 
 	log.G(ctx).WithField("dest", destPath).Debug("lcow::FormatDisk complete")

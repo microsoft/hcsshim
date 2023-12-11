@@ -341,7 +341,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 				// RS4 case
 				err = stateKey.Get(cfg.Spec.Windows.Network.NetworkSharedContainerName, keyNetNS, &netNS)
 				if err != nil {
-					if _, ok := err.(*regstate.NoStateError); !ok {
+					if _, ok := err.(*regstate.NoStateError); !ok { //nolint:errorlint // legacy code
 						return nil, err
 					}
 				}
@@ -473,7 +473,7 @@ func (c *container) VMIsolated() bool {
 func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 	r := &resources.Resources{}
 	err := stateKey.Get(c.ID, keyResources, r)
-	if _, ok := err.(*regstate.NoStateError); ok {
+	if _, ok := err.(*regstate.NoStateError); ok { //nolint:errorlint // legacy code
 		return nil
 	}
 	if err != nil {
@@ -499,7 +499,7 @@ func (c *container) Unmount(all bool) error {
 			op = runhcs.OpUnmountContainer
 		}
 		err := c.issueVMRequest(op)
-		if _, ok := err.(*noVMError); ok {
+		if _, ok := err.(*noVMError); ok { //nolint:errorlint // legacy code
 			logrus.WithFields(logrus.Fields{
 				logfields.ContainerID: c.ID,
 				logfields.UVMID:       c.HostID,
@@ -641,7 +641,7 @@ func getContainer(id string, notStopped bool) (*container, error) {
 	}
 	err = stateKey.Get(id, keyShimPid, &c.ShimPid)
 	if err != nil {
-		if _, ok := err.(*regstate.NoStateError); !ok {
+		if _, ok := err.(*regstate.NoStateError); !ok { //nolint:errorlint // legacy code
 			return nil, err
 		}
 		c.ShimPid = -1

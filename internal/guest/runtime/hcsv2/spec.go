@@ -294,6 +294,8 @@ func addDevSev(ctx context.Context, spec *oci.Spec) error {
 		var errSevGuest error
 		devSev, errSevGuest = devices.DeviceFromPath("/dev/sev-guest", "rwm")
 		if errSevGuest != nil {
+			// TODO (go1.20): use multierror via fmt.Errorf("...: %w; ...: %w", ...)
+			//nolint:errorlint // non-wrapping format verb for fmt.Errorf
 			return fmt.Errorf("%s: %w", sevErr, errSevGuest)
 		}
 	}

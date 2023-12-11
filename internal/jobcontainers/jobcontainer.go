@@ -658,7 +658,7 @@ func (c *JobContainer) pollJobMsgs(ctx context.Context) {
 		if err != nil {
 			// Queues closed or we somehow aren't registered to receive notifications. There won't be
 			// any notifications arriving so we're safe to return.
-			if err == queue.ErrQueueClosed || err == jobobject.ErrNotRegistered {
+			if errors.Is(err, queue.ErrQueueClosed) || errors.Is(err, jobobject.ErrNotRegistered) {
 				return
 			}
 			log.G(ctx).WithError(err).Warn("error while polling for job container notification")

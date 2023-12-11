@@ -110,7 +110,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 		}
 		ep, err := hcn.GetEndpointByName(req.EndpointName)
 		if err != nil {
-			if _, ok := err.(hcn.EndpointNotFoundError); ok {
+			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.EndpointName)
 			}
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
@@ -180,7 +180,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 
 	ep, err := hcn.GetEndpointByName(req.EndpointName)
 	if err != nil {
-		if _, ok := err.(hcn.EndpointNotFoundError); ok {
+		if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 			return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.EndpointName)
 		}
 		return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
@@ -281,7 +281,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 		}
 		ep, err := hcn.GetEndpointByName(req.EndpointName)
 		if err != nil {
-			if _, ok := err.(hcn.EndpointNotFoundError); ok {
+			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.EndpointName)
 			}
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
@@ -299,7 +299,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 			Endpoint:    protobuf.FromAny(anyEndpoint),
 		}
 		if _, err := agent.DeleteNIC(ctx, caReq); err != nil {
-			if err == uvm.ErrNICNotFound || err == uvm.ErrNetNSNotFound {
+			if errors.Is(err, uvm.ErrNICNotFound) || errors.Is(err, uvm.ErrNetNSNotFound) {
 				return nil, status.Errorf(codes.NotFound, "failed to remove endpoint %q from namespace %q", req.EndpointName, req.NicID)
 			}
 			return nil, err
@@ -384,7 +384,7 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 
 		network, err := hcn.GetNetworkByName(reqEndpoint.NetworkName)
 		if err != nil {
-			if _, ok := err.(hcn.NetworkNotFoundError); ok {
+			if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no network with name `%s` found", reqEndpoint.NetworkName)
 			}
 			return nil, errors.Wrapf(err, "failed to get network with name %q", reqEndpoint.NetworkName)
@@ -461,7 +461,7 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 		}
 		ep, err := hcn.GetEndpointByName(req.Name)
 		if err != nil {
-			if _, ok := err.(hcn.EndpointNotFoundError); ok {
+			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 			}
 			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.Name)
@@ -513,7 +513,7 @@ func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.Delet
 		}
 		ep, err := hcn.GetEndpointByName(req.Name)
 		if err != nil {
-			if _, ok := err.(hcn.EndpointNotFoundError); ok {
+			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 			}
 			return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.Name)
@@ -548,7 +548,7 @@ func (s *grpcService) DeleteNetwork(ctx context.Context, req *ncproxygrpc.Delete
 		}
 		network, err := hcn.GetNetworkByName(req.Name)
 		if err != nil {
-			if _, ok := err.(hcn.NetworkNotFoundError); ok {
+			if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no network with name `%s` found", req.Name)
 			}
 			return nil, errors.Wrapf(err, "failed to get network with name %q", req.Name)
@@ -615,7 +615,7 @@ func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpo
 
 	ep, err := hcn.GetEndpointByName(req.Name)
 	if err != nil {
-		if _, ok := err.(hcn.EndpointNotFoundError); ok {
+		if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 			return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 		}
 		return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.Name)
@@ -694,7 +694,7 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 
 	network, err := hcn.GetNetworkByName(req.Name)
 	if err != nil {
-		if _, ok := err.(hcn.NetworkNotFoundError); ok {
+		if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 			return nil, status.Errorf(codes.NotFound, "no network with name `%s` found", req.Name)
 		}
 		return nil, errors.Wrapf(err, "failed to get network with name %q", req.Name)

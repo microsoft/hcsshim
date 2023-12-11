@@ -231,7 +231,7 @@ func (opts *OptionsLCOW) UpdateBootFilesPath(ctx context.Context, path string) {
 func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hcsschema.Processor2, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get host processor information: %s", err)
+		return nil, fmt.Errorf("failed to get host processor information: %w", err)
 	}
 
 	// To maintain compatibility with Docker we need to automatically downgrade

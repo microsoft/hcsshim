@@ -40,7 +40,7 @@ type CCGResource struct {
 // manually as done here.
 func (ccgResource *CCGResource) Release(ctx context.Context) error {
 	if err := removeCredentialGuard(ctx, ccgResource.id); err != nil {
-		return fmt.Errorf("failed to remove container credential guard instance: %s", err)
+		return fmt.Errorf("failed to remove container credential guard instance: %w", err)
 	}
 	return nil
 }
@@ -84,7 +84,7 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 		},
 	}
 	if err := hcs.ModifyServiceSettings(ctx, req); err != nil {
-		return nil, nil, fmt.Errorf("failed to generate container credential guard instance: %s", err)
+		return nil, nil, fmt.Errorf("failed to generate container credential guard instance: %w", err)
 	}
 
 	q := hcsschema.PropertyQuery{
@@ -92,7 +92,7 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 	}
 	serviceProps, err := hcs.GetServiceProperties(ctx, q)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to retrieve container credential guard instances: %s", err)
+		return nil, nil, fmt.Errorf("failed to retrieve container credential guard instances: %w", err)
 	}
 	if len(serviceProps.Properties) != 1 {
 		return nil, nil, errors.New("wrong number of service properties present")
@@ -100,7 +100,7 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 
 	ccgSysInfo := &hcsschema.ContainerCredentialGuardSystemInfo{}
 	if err := json.Unmarshal(serviceProps.Properties[0], ccgSysInfo); err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal container credential guard instances: %s", err)
+		return nil, nil, fmt.Errorf("failed to unmarshal container credential guard instances: %w", err)
 	}
 	for _, ccgInstance := range ccgSysInfo.Instances {
 		if ccgInstance.Id == id {

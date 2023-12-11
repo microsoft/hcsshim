@@ -143,7 +143,7 @@ func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r 
 			if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
 				// No network setup type was specified for this UVM. Create and assign one here unless
 				// we received a different error.
-				if err == uvm.ErrNoNetworkSetup {
+				if errors.Is(err, uvm.ErrNoNetworkSetup) {
 					if err := coi.HostingSystem.CreateAndAssignNetworkSetup(ctx, "", ""); err != nil {
 						return err
 					}
@@ -174,7 +174,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}
 
 	if err := validateContainerConfig(ctx, coi); err != nil {
-		return nil, nil, fmt.Errorf("container config validation failed: %s", err)
+		return nil, nil, fmt.Errorf("container config validation failed: %w", err)
 	}
 
 	r := resources.NewContainerResources(coi.ID)
@@ -215,7 +215,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		schemaversion.IsV21(coi.actualSchemaVersion) {
 		err = configureSandboxNetwork(ctx, coi, r, ct)
 		if err != nil {
-			return nil, r, fmt.Errorf("failure while creating namespace for container: %s", err)
+			return nil, r, fmt.Errorf("failure while creating namespace for container: %w", err)
 		}
 	}
 

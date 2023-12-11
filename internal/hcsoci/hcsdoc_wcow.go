@@ -67,7 +67,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 				// about the isolated case.
 				src, err := fs.ResolvePath(mount.Source)
 				if err != nil {
-					return nil, fmt.Errorf("failed to resolve path for mount source %q: %s", mount.Source, err)
+					return nil, fmt.Errorf("failed to resolve path for mount source %q: %w", mount.Source, err)
 				}
 				mdv2.HostPath = src
 			} else if mount.Type == MountTypeVirtualDisk || mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeExtensibleVirtualDisk {

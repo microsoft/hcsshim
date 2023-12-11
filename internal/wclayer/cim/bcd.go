@@ -25,7 +25,7 @@ func bcdExec(storePath string, args ...string) error {
 	cmd := exec.Command("bcdedit.exe", argsArr...)
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bcd command (%s) failed: %s", cmd, err)
+		return fmt.Errorf("bcd command (%s) failed: %w", cmd, err)
 	}
 	return nil
 }

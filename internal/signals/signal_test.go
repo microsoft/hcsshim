@@ -1,6 +1,7 @@
 package signals
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -77,7 +78,7 @@ func Test_ValidateSigstr_Invalid_LCOW_No_SignalsSupported(t *testing.T) {
 	cases := []string{"90", "test"}
 	for _, c := range cases {
 		ret, err := ValidateSigstrLCOW(c, false)
-		if err != ErrInvalidSignal {
+		if !errors.Is(err, ErrInvalidSignal) {
 			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
 		}
 		if ret != nil {
@@ -90,7 +91,7 @@ func Test_ValidateSigstr_Invalid_LCOW_SignalsSupported(t *testing.T) {
 	cases := []string{"90", "SIGTEST"}
 	for _, c := range cases {
 		ret, err := ValidateSigstrLCOW(c, true)
-		if err != ErrInvalidSignal {
+		if !errors.Is(err, ErrInvalidSignal) {
 			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
 		}
 		if ret != nil {
@@ -219,7 +220,7 @@ func Test_ValidateSigstr_Invalid_WCOW_No_SignalsSupported(t *testing.T) {
 	cases := []string{"2", "test"}
 	for _, c := range cases {
 		ret, err := ValidateSigstrWCOW(c, false)
-		if err != ErrInvalidSignal {
+		if !errors.Is(err, ErrInvalidSignal) {
 			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
 		}
 		if ret != nil {
@@ -232,7 +233,7 @@ func Test_ValidateSigstr_Invalid_WCOW_SignalsSupported(t *testing.T) {
 	cases := []string{"20", "CtrlTest"}
 	for _, c := range cases {
 		ret, err := ValidateSigstrWCOW(c, true)
-		if err != ErrInvalidSignal {
+		if !errors.Is(err, ErrInvalidSignal) {
 			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
 		}
 		if ret != nil {

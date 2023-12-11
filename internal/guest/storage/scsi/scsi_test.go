@@ -908,7 +908,7 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 		true,
 		nil,
 		config,
-	); err != expectedError {
+	); err != expectedError { //nolint:errorlint
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}
 	if !removeDeviceCalled {
@@ -1070,7 +1070,7 @@ func Test_Mount_RemoveAllCalled_When_EncryptDevice_Fails(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected to fail")
 	}
-	if errors.Unwrap(err) != encryptDeviceError {
+	if errors.Unwrap(err) != encryptDeviceError { //nolint:errorlint
 		t.Fatalf("expected error %q, got %q", encryptDeviceError, err)
 	}
 	if !removeAllCalled {

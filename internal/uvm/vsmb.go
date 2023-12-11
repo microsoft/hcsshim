@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -44,7 +45,7 @@ type VSMBShare struct {
 // Release frees the resources of the corresponding vsmb Mount
 func (vsmb *VSMBShare) Release(ctx context.Context) error {
 	if err := vsmb.vm.removeVSMB(ctx, vsmb.HostPath, vsmb.options.ReadOnly, vsmb.isDirShare); err != nil {
-		return fmt.Errorf("failed to remove VSMB share: %s", err)
+		return fmt.Errorf("failed to remove VSMB share: %w", err)
 	}
 	return nil
 }
@@ -184,7 +185,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 	var requestType = guestrequest.RequestTypeUpdate
 	shareKey := getVSMBShareKey(hostPath, options.ReadOnly)
 	share, err := uvm.findVSMBShare(ctx, m, shareKey)
-	if err == ErrNotAttached {
+	if errors.Is(err, ErrNotAttached) {
 		requestType = guestrequest.RequestTypeAdd
 		uvm.vsmbCounter++
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
@@ -287,7 +288,7 @@ func (uvm *UtilityVM) removeVSMB(ctx context.Context, hostPath string, readOnly,
 		ResourcePath: resourcepaths.VSMBShareResourcePath,
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
-		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)
+		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %w", hostPath, uvm.id, modification, err)
 	}
 
 	delete(m, shareKey)

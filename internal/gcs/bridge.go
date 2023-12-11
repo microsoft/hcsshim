@@ -290,10 +290,10 @@ func (brdg *bridge) recvLoop() error {
 	for {
 		id, typ, b, err := readMessage(br)
 		if err != nil {
-			if err == io.EOF || isLocalDisconnectError(err) {
+			if err == io.EOF || isLocalDisconnectError(err) { //nolint:errorlint
 				return nil
 			}
-			return fmt.Errorf("bridge read failed: %s", err)
+			return fmt.Errorf("bridge read failed: %w", err)
 		}
 		brdg.log.WithFields(logrus.Fields{
 			"payload":    string(b),
@@ -311,7 +311,7 @@ func (brdg *bridge) recvLoop() error {
 			}
 			err := json.Unmarshal(b, call.resp)
 			if err != nil {
-				err = fmt.Errorf("bridge response unmarshal failed: %s", err)
+				err = fmt.Errorf("bridge response unmarshal failed: %w", err)
 			} else if resp := call.resp.Base(); resp.Result != 0 {
 				for _, rec := range resp.ErrorRecords {
 					brdg.log.WithFields(logrus.Fields{
@@ -340,11 +340,11 @@ func (brdg *bridge) recvLoop() error {
 			ntf.ResultInfo.Value = &json.RawMessage{}
 			err := json.Unmarshal(b, &ntf)
 			if err != nil {
-				return fmt.Errorf("bridge response unmarshal failed: %s", err)
+				return fmt.Errorf("bridge response unmarshal failed: %w", err)
 			}
 			err = brdg.notify(&ntf)
 			if err != nil {
-				return fmt.Errorf("bridge notification failed: %s", err)
+				return fmt.Errorf("bridge notification failed: %w", err)
 			}
 		default:
 			return fmt.Errorf("bridge received unknown unknown message type %s", typ)
@@ -379,7 +379,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 	buf.Write(h[:])
 	err := enc.Encode(req)
 	if err != nil {
-		return fmt.Errorf("bridge encode: %s", err)
+		return fmt.Errorf("bridge encode: %w", err)
 	}
 	// Update the message header with the size.
 	binary.LittleEndian.PutUint32(buf.Bytes()[hdrOffSize:], uint32(buf.Len()))
@@ -405,7 +405,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 	// Write the message.
 	_, err = buf.WriteTo(brdg.conn)
 	if err != nil {
-		return fmt.Errorf("bridge write: %s", err)
+		return fmt.Errorf("bridge write: %w", err)
 	}
 	return nil
 }

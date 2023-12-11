@@ -111,7 +111,7 @@ func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers
 		log.G(ctx).WithField("layerPath", layer.VHDPath).Debug("mounting layer")
 		uvmPath, closer, err := addLCOWLayer(ctx, vm, layer)
 		if err != nil {
-			return "", "", nil, fmt.Errorf("failed to add LCOW layer: %s", err)
+			return "", "", nil, fmt.Errorf("failed to add LCOW layer: %w", err)
 		}
 		layerClosers = append(layerClosers, closer)
 		lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
@@ -143,7 +143,7 @@ func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers
 		mConfig,
 	)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
+		return "", "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %w", err)
 	}
 
 	// handles the case where we want to share a scratch disk for multiple containers instead
@@ -247,8 +247,9 @@ func mountWCOWHostLayers(ctx context.Context, layerFolders []string, volumeMount
 			// tries to grab the volume path of the disk but it doesn't succeed, usually because the disk isn't actually mounted. DEVICE_NOT_CONNECTED
 			// has been observed after launching multiple containers in parallel on a machine under high load. This has also been observed to be a trigger
 			// for ERROR_NOT_READY as well.
-			if hcserr, ok := lErr.(*hcserror.HcsError); ok {
-				if hcserr.Err == windows.ERROR_NOT_READY || hcserr.Err == windows.ERROR_DEVICE_NOT_CONNECTED {
+			var hcserr *hcserror.HcsError
+			if errors.As(lErr, &hcserr) {
+				if errors.Is(hcserr.Err, windows.ERROR_NOT_READY) || errors.Is(hcserr.Err, windows.ERROR_DEVICE_NOT_CONNECTED) {
 					log.G(ctx).WithField("path", path).WithError(hcserr.Err).Warning("retrying layer operations after failure")
 
 					// Sleep for a little before a re-attempt. A probable cause for these issues in the first place is events not getting
@@ -354,7 +355,7 @@ func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolde
 		options.TakeBackupPrivilege = true
 		mount, err := vm.AddVSMB(ctx, layerPath, options)
 		if err != nil {
-			return "", nil, fmt.Errorf("failed to add VSMB layer: %s", err)
+			return "", nil, fmt.Errorf("failed to add VSMB layer: %w", err)
 		}
 		layersAdded = append(layersAdded, layerPath)
 		layerClosers = append(layerClosers, mount)
@@ -362,13 +363,13 @@ func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolde
 
 	hostPath, err := getScratchVHDPath(layerFolders)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
+		return "", nil, fmt.Errorf("failed to get scratch VHD path in layer folders: %w", err)
 	}
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
 	scsiMount, err := vm.SCSIManager.AddVirtualDisk(ctx, hostPath, false, vm.ID(), &scsi.MountConfig{})
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
+		return "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %w", err)
 	}
 	containerScratchPathInUVM := scsiMount.GuestPath()
 
@@ -415,8 +416,8 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvm
 				"layerType": "vpmem",
 			}).Debug("Added LCOW layer")
 			return mount.GuestPath, mount, nil
-		} else if err != uvm.ErrNoAvailableLocation && err != uvm.ErrMaxVPMemLayerSize {
-			return "", nil, fmt.Errorf("failed to add VPMEM layer: %s", err)
+		} else if !errors.Is(err, uvm.ErrNoAvailableLocation) && !errors.Is(err, uvm.ErrMaxVPMemLayerSize) {
+			return "", nil, fmt.Errorf("failed to add VPMEM layer: %w", err)
 		}
 	}
 
@@ -431,7 +432,7 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvm
 		},
 	)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to add SCSI layer: %s", err)
+		return "", nil, fmt.Errorf("failed to add SCSI layer: %w", err)
 	}
 	log.G(ctx).WithFields(logrus.Fields{
 		"layerPath":      layer.VHDPath,

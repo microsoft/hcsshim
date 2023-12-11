@@ -63,6 +63,8 @@ func parseLegacyRootfsMount(m *types.Mount) (string, []string, error) {
 		if strings.HasPrefix(option, mount.ParentLayerPathsFlag) {
 			err := json.Unmarshal([]byte(option[len(mount.ParentLayerPathsFlag):]), &parentLayerPaths)
 			if err != nil {
+				// TODO (go1.20): use multierror via fmt.Errorf("...: %w; ...: %w", ...)
+				//nolint:errorlint // non-wrapping format verb for fmt.Errorf
 				return "", nil, fmt.Errorf("unmarshal parent layer paths from mount: %v: %w", err, errdefs.ErrFailedPrecondition)
 			}
 			// Would perhaps be worthwhile to check for unrecognized options and return an error,

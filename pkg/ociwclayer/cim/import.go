@@ -7,6 +7,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -150,7 +151,7 @@ func writeCimLayerFromTar(ctx context.Context, r io.Reader, w *cim.CimLayerWrite
 			}
 		}
 	}
-	if loopErr != io.EOF {
+	if !errors.Is(loopErr, io.EOF) {
 		return 0, loopErr
 	}
 	return size, nil

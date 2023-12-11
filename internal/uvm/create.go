@@ -274,7 +274,7 @@ func (uvm *UtilityVM) CreateContainer(ctx context.Context, id string, settings i
 	if uvm.gc != nil {
 		c, err := uvm.gc.CreateContainer(ctx, id, settings)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create container %s: %s", id, err)
+			return nil, fmt.Errorf("failed to create container %s: %w", id, err)
 		}
 		return c, nil
 	}

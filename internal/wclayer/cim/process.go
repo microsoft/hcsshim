@@ -135,7 +135,7 @@ func processUtilityVMLayer(ctx context.Context, layerPath string) error {
 	}
 
 	if err := enableCimBoot(filepath.Join(layerPath, wclayer.UtilityVMPath, wclayer.RegFilesPath, "SYSTEM")); err != nil {
-		return fmt.Errorf("failed to setup cim image for uvm boot: %s", err)
+		return fmt.Errorf("failed to setup cim image for uvm boot: %w", err)
 	}
 
 	// Note: diff vhd creation and granting of vm group access must be done AFTER
@@ -229,7 +229,7 @@ func processLayoutFile(layerPath string) ([]pendingCimOp, error) {
 // steps. This function opens the cim file for writing and updates it.
 func (cw *CimLayerWriter) processBaseLayer(ctx context.Context, processUtilityVM bool) (err error) {
 	if err = createContainerBaseLayerVHDs(ctx, cw.path); err != nil {
-		return fmt.Errorf("failed to create container base VHDs: %s", err)
+		return fmt.Errorf("failed to create container base VHDs: %w", err)
 	}
 
 	if processUtilityVM {

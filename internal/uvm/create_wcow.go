@@ -282,7 +282,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, opts.LayerFolders)
 	if err != nil {
-		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
+		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %w", err)
 	}
 
 	// TODO: BUGBUG Remove this. @jhowardmsft
@@ -296,20 +296,20 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	// Create the directory if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
-			return nil, fmt.Errorf("failed to create utility VM scratch folder: %s", err)
+			return nil, fmt.Errorf("failed to create utility VM scratch folder: %w", err)
 		}
 	}
 
 	doc, err := prepareConfigDoc(ctx, uvm, opts, uvmFolder)
 	if err != nil {
-		return nil, fmt.Errorf("error in preparing config doc: %s", err)
+		return nil, fmt.Errorf("error in preparing config doc: %w", err)
 	}
 
 	// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it
 	scratchPath := filepath.Join(scratchFolder, "sandbox.vhdx")
 	if _, err := os.Stat(scratchPath); os.IsNotExist(err) {
 		if err := wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, uvm.id); err != nil {
-			return nil, fmt.Errorf("failed to create scratch: %s", err)
+			return nil, fmt.Errorf("failed to create scratch: %w", err)
 		}
 	} else {
 		// Sandbox.vhdx exists, just need to grant vm access to it.
@@ -335,7 +335,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 	err = uvm.create(ctx, doc)
 	if err != nil {
-		return nil, fmt.Errorf("error while creating the compute system: %s", err)
+		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
 
 	if err = uvm.startExternalGcsListener(ctx); err != nil {

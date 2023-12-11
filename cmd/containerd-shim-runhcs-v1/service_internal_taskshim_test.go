@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -615,7 +616,7 @@ func Test_TaskShim_updateInternal_Error(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected to get an error for incorrect resource's type")
 	}
-	if err != errNotSupportedResourcesRequest {
+	if !errors.Is(err, errNotSupportedResourcesRequest) {
 		t.Fatalf("expected to get errNotSupportedResourcesRequest, instead got %v", err)
 	}
 }

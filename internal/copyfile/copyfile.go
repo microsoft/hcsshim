@@ -37,7 +37,7 @@ func CopyFile(ctx context.Context, srcFile, destFile string, overwrite bool) (er
 		return err
 	}
 	if err := winapi.CopyFileW(lpExistingFileName, lpNewFileName, bFailIfExists); err != nil {
-		return fmt.Errorf("failed CopyFileW Win32 call from '%s' to '%s': %s", srcFile, destFile, err)
+		return fmt.Errorf("failed CopyFileW Win32 call from '%s' to '%s': %w", srcFile, destFile, err)
 	}
 	return nil
 }

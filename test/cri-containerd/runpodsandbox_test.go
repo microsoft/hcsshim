@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -115,7 +116,7 @@ func Test_RunPodSandbox_Events_LCOW(t *testing.T) {
 		case err := <-errs:
 			t.Fatalf("event subscription err %v", err)
 		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
+			if ctx.Err() == context.DeadlineExceeded { //nolint:errorlint
 				t.Fatalf("event %v deadline exceeded", topic)
 			}
 		}
@@ -1009,7 +1010,7 @@ func Test_RunPodSandbox_CPUGroup(t *testing.T) {
 
 	defer func() {
 		err := cpugroup.Delete(ctx, presentID)
-		if err != nil && err != cpugroup.ErrHVStatusInvalidCPUGroupState {
+		if err != nil && !errors.Is(err, cpugroup.ErrHVStatusInvalidCPUGroupState) {
 			t.Fatalf("failed to clean up test cpugroup with: %v", err)
 		}
 	}()

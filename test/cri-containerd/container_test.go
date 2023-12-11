@@ -194,7 +194,7 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 		case e := <-errs:
 			t.Fatalf("event subscription err %v", e)
 		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
+			if ctx.Err() == context.DeadlineExceeded { //nolint:errorlint
 				t.Fatalf("event %v deadline exceeded", topic)
 			}
 		}

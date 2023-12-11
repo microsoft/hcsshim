@@ -152,7 +152,7 @@ func (p *localProcess) Wait() error {
 func TestCmdExitCode(t *testing.T) {
 	cmd := Command(&localProcessHost{}, "cmd", "/c", "exit", "/b", "64")
 	err := cmd.Run()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 64 {
+	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 64 { //nolint:errorlint
 		t.Fatal("expected exit code 64, got ", err)
 	}
 }
@@ -181,7 +181,7 @@ func TestCmdContext(t *testing.T) {
 	_ = cmd.Process.Wait()
 	w.Close()
 	err = cmd.Wait()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 1 || ctx.Err() == nil {
+	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 1 || ctx.Err() == nil { //nolint:errorlint
 		t.Fatal(err)
 	}
 }
@@ -252,7 +252,7 @@ func TestCmdStuckIo(t *testing.T) {
 	cmd := Command(&stuckIoProcessHost{&localProcessHost{}}, "cmd", "/c", "echo", "hello")
 	cmd.CopyAfterExitTimeout = time.Millisecond * 200
 	_, err := cmd.Output()
-	if err != io.ErrClosedPipe {
+	if err != io.ErrClosedPipe { //nolint:errorlint
 		t.Fatal(err)
 	}
 }

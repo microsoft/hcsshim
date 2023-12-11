@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -51,7 +52,7 @@ func TestEnqueueDequeueClose(t *testing.T) {
 				q.Close()
 			}
 			continue
-		} else if err != ErrQueueClosed {
+		} else if !errors.Is(err, ErrQueueClosed) {
 			t.Fatalf("expected to receive ErrQueueClosed, instead got: %s", err)
 		}
 		break
@@ -117,7 +118,7 @@ func TestMultipleReadersClose(t *testing.T) {
 
 	// Reader 1
 	go func() {
-		if _, err := q.Dequeue(); err != ErrQueueClosed {
+		if _, err := q.Dequeue(); !errors.Is(err, ErrQueueClosed) {
 			errChan <- err
 		}
 		wg.Done()
@@ -125,7 +126,7 @@ func TestMultipleReadersClose(t *testing.T) {
 
 	// Reader 2
 	go func() {
-		if _, err := q.Dequeue(); err != ErrQueueClosed {
+		if _, err := q.Dequeue(); !errors.Is(err, ErrQueueClosed) {
 			errChan <- err
 		}
 		wg.Done()
