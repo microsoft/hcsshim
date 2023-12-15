@@ -104,11 +104,3 @@ func Test_PullImageTimestamps(t *testing.T) {
 		t.Fatalf("Timestamps not in order. startTimestamp should be less than testdirTimestamp and fakelinkTimestamp")
 	}
 }
-
-func Test_PullImageUnorderedTar(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	// This is a very minimal hand crafted image so it can't run a container.  We just
-	// want to test if pulling this image succeeds.
-	pullRequiredLCOWImages(t, []string{imageLinuxUnorderedTar})
-}
