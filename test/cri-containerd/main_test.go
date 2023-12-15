@@ -5,19 +5,12 @@ package cri_containerd
 
 import (
 	"context"
-	"errors"
 	"flag"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd"
-	eventtypes "github.com/containerd/containerd/api/events"
-	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	kubeutil "github.com/containerd/containerd/integration/remote/util"
-	eventruntime "github.com/containerd/containerd/runtime"
-	typeurl "github.com/containerd/typeurl/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -191,17 +184,6 @@ func newTestRuntimeClient(tb testing.TB) runtime.RuntimeServiceClient {
 	return runtime.NewRuntimeServiceClient(conn)
 }
 
-func newTestEventService(tb testing.TB) containerd.EventService {
-	tb.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
-	defer cancel()
-	conn, err := createGRPCConn(ctx)
-	if err != nil {
-		tb.Fatalf("Failed to create a client connection %v", err)
-	}
-	return containerd.NewEventServiceFromClient(eventsapi.NewEventsClient(conn))
-}
-
 func newTestImageClient(tb testing.TB) runtime.ImageServiceClient {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
@@ -211,44 +193,6 @@ func newTestImageClient(tb testing.TB) runtime.ImageServiceClient {
 		tb.Fatalf("failed to dial runtime client: %v", err)
 	}
 	return runtime.NewImageServiceClient(conn)
-}
-
-func getTargetRunTopics() (topicNames []string, filters []string) {
-	topicNames = []string{
-		eventruntime.TaskCreateEventTopic,
-		eventruntime.TaskStartEventTopic,
-		eventruntime.TaskExitEventTopic,
-		eventruntime.TaskDeleteEventTopic,
-	}
-
-	filters = make([]string, len(topicNames))
-
-	for i, name := range topicNames {
-		filters[i] = fmt.Sprintf(`topic=="%v"`, name)
-	}
-	return topicNames, filters
-}
-
-func convertEvent(e typeurl.Any) (string, interface{}, error) {
-	id := ""
-	evt, err := typeurl.UnmarshalAny(e)
-	if err != nil {
-		return "", nil, err
-	}
-
-	switch event := evt.(type) {
-	case *eventtypes.TaskCreate:
-		id = event.ContainerID
-	case *eventtypes.TaskStart:
-		id = event.ContainerID
-	case *eventtypes.TaskDelete:
-		id = event.ContainerID
-	case *eventtypes.TaskExit:
-		id = event.ContainerID
-	default:
-		return "", nil, errors.New("test does not support this event")
-	}
-	return id, evt, nil
 }
 
 func pullRequiredImages(tb testing.TB, images []string, opts ...SandboxConfigOpt) {

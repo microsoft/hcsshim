@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/shimdiag"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 const podJobObjectUtilPath = "C:\\jobobject-util.exe"
@@ -26,28 +25,6 @@ func createJobObjectsGetUtilArgs(ctx context.Context, cid, toolPath string, opti
 	args = append(args, options...)
 	args = append(args, containerJobObjectName(cid))
 	return args
-}
-
-func checkLCOWResourceLimit(tb testing.TB, ctx context.Context, client runtime.RuntimeServiceClient, cid, path string, expected uint64) {
-	tb.Helper()
-	cmd := []string{"cat", path}
-	containerExecReq := &runtime.ExecSyncRequest{
-		ContainerId: cid,
-		Cmd:         cmd,
-		Timeout:     20,
-	}
-	r := execSync(tb, client, ctx, containerExecReq)
-	if r.ExitCode != 0 {
-		tb.Fatalf("failed with exit code %d to cat path: %s", r.ExitCode, r.Stderr)
-	}
-	output := strings.TrimSpace(string(r.Stdout))
-	bytesActual, err := strconv.ParseUint(output, 10, 0)
-	if err != nil {
-		tb.Fatalf("could not parse output %s: %s", output, err)
-	}
-	if bytesActual != expected {
-		tb.Fatalf("expected to have a memory limit of %v, instead got %v", expected, bytesActual)
-	}
 }
 
 func checkWCOWResourceLimit(tb testing.TB, ctx context.Context, runtimeHandler, shimName, cid, query string, expected uint64) {
