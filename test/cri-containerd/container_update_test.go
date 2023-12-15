@@ -68,8 +68,7 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
-
-		if test.runtimeHandler == wcowHypervisorRuntimeHandler {
+			if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
@@ -110,8 +109,7 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 
 			var expected uint32 = 5000
 			updateReq.Windows = &runtime.WindowsContainerResources{
-					CpuShares: int64(expected),
-
+				CpuShares: int64(expected),
 			}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
@@ -120,7 +118,7 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 
 			targetShimName := "k8s.io-" + podID
 			jobExpectedValue := calculateJobCPUWeight(expected)
-			checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "cpu-weight", uint64(jobExpectedValue))			
+			checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "cpu-weight", uint64(jobExpectedValue))
 		})
 	}
 }

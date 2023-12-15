@@ -93,7 +93,7 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 			pullRequiredImages(t, []string{test.sandboxImage})
-			
+
 			var startingMemorySize int64 = 200 * memory.MiB
 			podRequest := getRunPodSandboxRequest(
 				t,
@@ -151,7 +151,7 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 			pullRequiredImages(t, []string{test.sandboxImage})
-			
+
 			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
@@ -255,7 +255,6 @@ func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 				},
 			}
 			updateReq.Windows = &runtime.WindowsContainerResources{}
-
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
 				t.Fatalf("updating container resources for %s with %v", podID, err)

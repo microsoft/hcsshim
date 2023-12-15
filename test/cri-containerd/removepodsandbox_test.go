@@ -106,7 +106,7 @@ func Test_RunPodSandbox_Without_Sandbox_Stop(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 			pullRequiredImages(t, []string{test.sandboxImage})
-			
+
 			request := getRunPodSandboxRequest(t, test.runtimeHandler)
 			runPodSandboxTestWithoutPodStop(t, request)
 		})
