@@ -4,13 +4,9 @@
 package cri_containerd
 
 import (
-	"bufio"
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )

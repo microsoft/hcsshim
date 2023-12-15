@@ -6,23 +6,16 @@ package cri_containerd
 import (
 	"context"
 	_ "embed"
-	"encoding/base64"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	securityPolicyTest "github.com/Microsoft/hcsshim/test/pkg/securitypolicy"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	"github.com/Microsoft/hcsshim/test/pkg/definitions/tools/securitypolicy/helpers"
-	"github.com/Microsoft/hcsshim/test/pkg/require"
 )
 
 var validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
@@ -101,10 +94,6 @@ var policyTestMatrix = []policyConfig{
 		input:    "json",
 	},
 }
-
-
-
-
 
 func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 	type config struct {
@@ -187,9 +176,6 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 	}
 }
 
-
-
-
 func userConfig(uid, gid int64) securitypolicy.UserConfig {
 	return securitypolicy.UserConfig{
 		UserIDName: securitypolicy.IDNameConfig{
@@ -206,8 +192,6 @@ func userConfig(uid, gid int64) securitypolicy.UserConfig {
 	}
 }
 
-
-
 func capabilitiesConfig() *securitypolicy.CapabilitiesConfig {
 	return &securitypolicy.CapabilitiesConfig{
 		Bounding:    securitypolicy.DefaultUnprivilegedCapabilities(),
@@ -218,20 +202,16 @@ func capabilitiesConfig() *securitypolicy.CapabilitiesConfig {
 	}
 }
 
-
 //go:embed seccomp_valid.json
 var validSeccomp []byte
 
 //go:embed seccomp_invalid.json
 var invalidSeccomp []byte
 
-
-
 //go:embed policy-v0.1.0.rego
 var oldPolicy []byte
 
-
-//todo: PORT TO AZCRI? 
+// todo: PORT TO AZCRI?
 func Test_GetProperties_WithPolicy(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})

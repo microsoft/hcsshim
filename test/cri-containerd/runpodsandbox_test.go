@@ -4,11 +4,9 @@
 package cri_containerd
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
-	"io"
+
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/log"
 	"golang.org/x/sys/windows"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
@@ -27,9 +24,8 @@ import (
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/cpugroup"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/hcs"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/processorinfo"
-	"github.com/Microsoft/hcsshim/test/pkg/definitions/shimdiag"
+
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func runPodSandboxTest(t *testing.T, request *runtime.RunPodSandboxRequest) {
@@ -136,7 +132,6 @@ func Test_RunPodSandbox_VSMBNoDirectMap_WCOW_Hypervisor(t *testing.T) {
 	)
 	runPodSandboxTest(t, request)
 }
-
 
 func Test_RunPodSandbox_MemorySize_WCOW_Process(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)

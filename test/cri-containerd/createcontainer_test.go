@@ -12,9 +12,8 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/test/pkg/require"
+
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -95,7 +94,6 @@ func Test_CreateContainer_WCOW_Hypervisor(t *testing.T) {
 	}
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
 }
-
 
 func Test_CreateContainer_WCOW_Process_Tty(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)

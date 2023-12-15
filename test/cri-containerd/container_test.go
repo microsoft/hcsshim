@@ -6,20 +6,12 @@ package cri_containerd
 import (
 	"bufio"
 	"context"
-	"fmt"
-	"io"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
-
-	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/test/pkg/definitions/guestpath"
 )
 
 func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, log string, logArchive string) {
@@ -104,5 +96,3 @@ func findOverlaySize(t *testing.T, ctx context.Context, client runtime.RuntimeSe
 	}
 	return cols
 }
-
-
