@@ -83,7 +83,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: CodeQL Initialize
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: ${{matrix.language}}
 
@@ -108,6 +108,6 @@ jobs:
         run: make bin/vsockexec bin/init
 
       - name: CodeQL Analyze
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
