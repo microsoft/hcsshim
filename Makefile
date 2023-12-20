@@ -45,7 +45,7 @@ VMGS_TOOL:=
 IGVM_TOOL:=
 KERNEL_PATH:=
 
-.PHONY: all always rootfs test
+.PHONY: all always rootfs test snp simple
 
 .DEFAULT_GOAL := all
 

@@ -15,7 +15,7 @@ var (
 	overlay      = flag.Bool("overlay", false, "produce overlayfs-compatible layer image")
 	convertSlash = flag.Bool("convert-slash", false, "convert backslashes ('\\') in path names to slashes ('/')")
 	vhd          = flag.Bool("vhd", false, "add a VHD footer to the end of the image")
-	onlyVhd      = flag.Bool("only-vhd", false, "adds a VHD footer to the end of the file but does not convert to ext4")
+	onlyVhd      = flag.Bool("only-vhd", false, "adds a VHD footer to the end of the file but does not convert to ext4; this implies '-vhd' and ignores all other options")
 	inlineData   = flag.Bool("inline", false, "write small file data into the inode; not compatible with DAX")
 )
 
