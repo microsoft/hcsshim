@@ -56,7 +56,7 @@ func (sfw *stdFileWriter) Add(name string) error {
 
 	// The directory of this file might be created inside the cim.
 	// make sure we have the same parent directory chain here
-	if err := os.MkdirAll(filepath.Join(sfw.path, filepath.Dir(name)), 0755); err != nil {
+	if err := safefile.MkdirAllRelative(filepath.Dir(name), sfw.root); err != nil {
 		return fmt.Errorf("failed to create file %s: %w", name, err)
 	}
 

@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/winapi"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
 
@@ -128,6 +130,8 @@ func (c *CimFsWriter) AddFile(path string, info *winio.FileBasicInfo, fileSize i
 		fileMetadata.ExtendedAttributes = unsafe.Pointer(&extendedAttributes[0])
 		fileMetadata.EACount = uint32(len(extendedAttributes))
 	}
+	// remove the trailing `\` if present, otherwise it trips off the cim writer
+	path = strings.TrimSuffix(path, "\\")
 	err = winapi.CimCreateFile(c.handle, path, fileMetadata, &c.activeStream)
 	if err != nil {
 		return &PathError{Cim: c.name, Op: "addFile", Path: path, Err: err}
@@ -230,6 +234,12 @@ func DestroyCim(ctx context.Context, cimPath string) (retErr error) {
 			retErr = err
 		}
 	}
+
+	log.G(ctx).WithFields(logrus.Fields{
+		"cimPath":     cimPath,
+		"regionFiles": regionFilePaths,
+		"objectFiles": objectFilePaths,
+	}).Debug("destroy cim")
 
 	for _, regFilePath := range regionFilePaths {
 		if err := os.Remove(regFilePath); err != nil {
