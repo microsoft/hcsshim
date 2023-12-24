@@ -439,7 +439,7 @@ go.opencensus.io/trace
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/propagation
 go.opencensus.io/trace/tracestate
-# go.uber.org/mock v0.3.0
+# go.uber.org/mock v0.4.0
 ## explicit; go 1.20
 go.uber.org/mock/gomock
 go.uber.org/mock/mockgen

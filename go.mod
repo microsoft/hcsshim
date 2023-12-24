@@ -31,7 +31,7 @@ require (
 	github.com/vishvananda/netns v0.0.4
 	go.etcd.io/bbolt v1.3.7
 	go.opencensus.io v0.24.0
-	go.uber.org/mock v0.3.0
+	go.uber.org/mock v0.4.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.13.0
