@@ -82,3 +82,48 @@ func (s *byteString) UnmarshalCBOR(data []byte) error {
 	}
 	return decModeWithTagsForbidden.Unmarshal(data, (*[]byte)(s))
 }
+
+// deterministicBinaryString converts a bstr into the deterministic encoding.
+//
+// Reference: https://www.rfc-editor.org/rfc/rfc9052.html#section-9
+func deterministicBinaryString(data cbor.RawMessage) (cbor.RawMessage, error) {
+	if len(data) == 0 {
+		return nil, io.EOF
+	}
+	if data[0]>>5 != 2 { // major type 2: bstr
+		return nil, errors.New("cbor: require bstr type")
+	}
+
+	// fast path: return immediately if bstr is already deterministic
+	if err := decModeWithTagsForbidden.Valid(data); err != nil {
+		return nil, err
+	}
+	ai := data[0] & 0x1f
+	if ai < 24 {
+		return data, nil
+	}
+	switch ai {
+	case 24:
+		if data[1] >= 24 {
+			return data, nil
+		}
+	case 25:
+		if data[1] != 0 {
+			return data, nil
+		}
+	case 26:
+		if data[1] != 0 || data[2] != 0 {
+			return data, nil
+		}
+	case 27:
+		if data[1] != 0 || data[2] != 0 || data[3] != 0 || data[4] != 0 {
+			return data, nil
+		}
+	}
+
+	// slow path: convert by re-encoding
+	// error checking is not required since `data` has been validataed
+	var s []byte
+	_ = decModeWithTagsForbidden.Unmarshal(data, &s)
+	return encMode.Marshal(s)
+}
