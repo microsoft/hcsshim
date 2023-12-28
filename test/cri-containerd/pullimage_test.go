@@ -46,7 +46,7 @@ func Test_PullImageTimestamps(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserverTestImage})
 	defer removeImages(t, []string{imageWindowsNanoserverTestImage})
 
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisor18362RuntimeHandler)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
