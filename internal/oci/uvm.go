@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	iannotations "github.com/Microsoft/hcsshim/internal/annotations"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -205,9 +206,18 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 		// set the default GuestState filename.
 		lopts.GuestStateFile = uvm.GuestStateFile
 		lopts.KernelBootOptions = ""
-		lopts.PreferredRootFSType = uvm.PreferredRootFSTypeNA
 		lopts.AllowOvercommit = false
 		lopts.SecurityPolicyEnabled = true
+
+		// There are two possible ways to boot SNP mode. Either kernelinitrd.vmgs which consists of kernel plus initrd.cpio.gz
+		// Or a kernel vmgs file (without an initrd) plus a separate vhd file which is dmverity protected via a hash vhd file.
+		// We only currently support using the dmverity scheme. Note that the dmverity file name may be explicitly specified via
+		// an annotation this is deliberately not the same annotation as the non-SNP rootfs vhd file.
+		lopts.PreferredRootFSType = uvm.PreferredRootFSTypeNA
+		lopts.RootFSFile = ""
+		lopts.DmVerityRootFsVhd = uvm.DefaultDmVerityRootfsVhd
+		lopts.DmVerityHashVhd = uvm.DefaultDmVerityHashVhd
+		lopts.DmVerityMode = true
 	}
 
 	if len(lopts.SecurityPolicy) > 0 {
@@ -260,6 +270,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.VPMemSizeBytes = ParseAnnotationsUint64(ctx, s.Annotations, annotations.VPMemSize, lopts.VPMemSizeBytes)
 		lopts.VPMemNoMultiMapping = ParseAnnotationsBool(ctx, s.Annotations, annotations.VPMemNoMultiMapping, lopts.VPMemNoMultiMapping)
 		lopts.VPCIEnabled = ParseAnnotationsBool(ctx, s.Annotations, annotations.VPCIEnabled, lopts.VPCIEnabled)
+		lopts.ExtraVSockPorts = ParseAnnotationCommaSeparatedUint32(ctx, s.Annotations, iannotations.ExtraVSockPorts, lopts.ExtraVSockPorts)
 		handleAnnotationBootFilesPath(ctx, s.Annotations, lopts)
 		lopts.EnableScratchEncryption = ParseAnnotationsBool(ctx, s.Annotations, annotations.EncryptedScratchDisk, lopts.EnableScratchEncryption)
 		lopts.SecurityPolicy = ParseAnnotationsString(s.Annotations, annotations.SecurityPolicy, lopts.SecurityPolicy)
@@ -278,8 +289,11 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		// Eg VMPem device count, overridden kernel option cannot be respected.
 		handleSecurityPolicy(ctx, s.Annotations, lopts)
 
-		// override the default GuestState filename if specified
+		// override the default GuestState and DmVerityRootFs/HashVhd filenames if specified
 		lopts.GuestStateFile = ParseAnnotationsString(s.Annotations, annotations.GuestStateFile, lopts.GuestStateFile)
+		lopts.DmVerityRootFsVhd = ParseAnnotationsString(s.Annotations, annotations.DmVerityRootFsVhd, lopts.DmVerityRootFsVhd)
+		lopts.DmVerityHashVhd = ParseAnnotationsString(s.Annotations, annotations.DmVerityHashVhd, lopts.DmVerityHashVhd)
+		lopts.DmVerityMode = ParseAnnotationsBool(ctx, s.Annotations, annotations.DmVerityMode, lopts.DmVerityMode)
 		// Set HclEnabled if specified. Else default to a null pointer, which is omitted from the resulting JSON.
 		lopts.HclEnabled = ParseAnnotationsNullableBool(ctx, s.Annotations, annotations.HclEnabled)
 		return lopts, nil
