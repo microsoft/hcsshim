@@ -106,7 +106,7 @@ func getDriveLayout(ctx context.Context, drivePhysicalPath string) (driveLayoutI
 
 	volume, err = os.OpenFile(drivePhysicalPath, os.O_RDONLY, 0)
 	if err != nil {
-		return layoutData.info, layoutData.partitions[:0], fmt.Errorf("failed to open drive: %s", err)
+		return layoutData.info, layoutData.partitions[:0], fmt.Errorf("failed to open drive: %w", err)
 	}
 	defer volume.Close()
 
@@ -119,7 +119,7 @@ func getDriveLayout(ctx context.Context, drivePhysicalPath string) (driveLayoutI
 		&outBytes,
 		nil)
 	if err != nil {
-		return layoutData.info, layoutData.partitions[:0], fmt.Errorf("IOCTL to get disk layout failed: %s", err)
+		return layoutData.info, layoutData.partitions[:0], fmt.Errorf("IOCTL to get disk layout failed: %w", err)
 	}
 
 	if layoutData.info.PartitionCount == 0 {
@@ -162,7 +162,7 @@ func GetScratchVhdPartitionInfo(ctx context.Context, vhdxPath string) (_ Scratch
 
 	diskHandle, err = vhd.OpenVirtualDisk(vhdxPath, vhd.VirtualDiskAccessNone, vhd.OpenVirtualDiskFlagNone)
 	if err != nil {
-		return ScratchVhdxPartitionInfo{}, fmt.Errorf("get scratch vhd info failed: %s", err)
+		return ScratchVhdxPartitionInfo{}, fmt.Errorf("get scratch vhd info failed: %w", err)
 	}
 	defer func() {
 		if closeErr := syscall.CloseHandle(diskHandle); closeErr != nil {
@@ -175,7 +175,7 @@ func GetScratchVhdPartitionInfo(ctx context.Context, vhdxPath string) (_ Scratch
 
 	err = vhd.AttachVirtualDisk(diskHandle, vhd.AttachVirtualDiskFlagNone, &vhd.AttachVirtualDiskParameters{Version: 2})
 	if err != nil {
-		return ScratchVhdxPartitionInfo{}, fmt.Errorf("get scratch vhd info failed: %s", err)
+		return ScratchVhdxPartitionInfo{}, fmt.Errorf("get scratch vhd info failed: %w", err)
 	}
 
 	defer func() {
@@ -189,7 +189,7 @@ func GetScratchVhdPartitionInfo(ctx context.Context, vhdxPath string) (_ Scratch
 
 	volumePath, err = vhd.GetVirtualDiskPhysicalPath(diskHandle)
 	if err != nil {
-		return ScratchVhdxPartitionInfo{}, fmt.Errorf("get vhd physical path: %s", err)
+		return ScratchVhdxPartitionInfo{}, fmt.Errorf("get vhd physical path: %w", err)
 	}
 
 	driveLayout, partitions, err = getDriveLayout(ctx, volumePath)
@@ -211,12 +211,12 @@ func GetScratchVhdPartitionInfo(ctx context.Context, vhdxPath string) (_ Scratch
 
 	bufReader := bytes.NewBuffer(driveLayout.GptMbrUnion[:])
 	if err := binary.Read(bufReader, binary.LittleEndian, &gptDriveLayout); err != nil {
-		return ScratchVhdxPartitionInfo{}, fmt.Errorf("failed to parse drive GPT layout: %s", err)
+		return ScratchVhdxPartitionInfo{}, fmt.Errorf("failed to parse drive GPT layout: %w", err)
 	}
 
 	bufReader = bytes.NewBuffer(partitions[1].GptMbrUnion[:])
 	if err := binary.Read(bufReader, binary.LittleEndian, &gptPartitionInfo); err != nil {
-		return ScratchVhdxPartitionInfo{}, fmt.Errorf("failed to parse GPT partition info: %s", err)
+		return ScratchVhdxPartitionInfo{}, fmt.Errorf("failed to parse GPT partition info: %w", err)
 	}
 
 	if gptPartitionInfo.PartitionType != partitionBasicDataGUID {

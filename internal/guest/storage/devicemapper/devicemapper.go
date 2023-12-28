@@ -235,7 +235,7 @@ retry:
 		}
 		log.G(ctx).WithError(err).Warning("CreateDevice error")
 		// In some cases
-		dmErr, ok := err.(*dmError)
+		dmErr, ok := err.(*dmError) //nolint:errorlint // explicitly returned
 		if !ok {
 			return "", err
 		}
@@ -320,7 +320,7 @@ func RemoveDevice(name string) (err error) {
 	// target has been unmounted.
 	for i := 0; i < 10; i++ {
 		if err = rm(); err != nil {
-			if e, ok := err.(*dmError); !ok || e.Err != syscall.EBUSY { //nolint:errorlint
+			if e, ok := err.(*dmError); !ok || !errors.Is(e.Err, syscall.EBUSY) { //nolint:errorlint // explicitly returned
 				break
 			}
 			time.Sleep(10 * time.Millisecond)

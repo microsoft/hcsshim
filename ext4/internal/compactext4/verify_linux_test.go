@@ -105,7 +105,7 @@ func streamEqual(r1, r2 io.Reader) (bool, error) {
 			return false, err
 		}
 		_, err = io.ReadFull(r2, b2[:n])
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
+		if err == io.EOF || err == io.ErrUnexpectedEOF { //nolint:errorlint
 			return false, nil
 		}
 		if err != nil {
@@ -211,12 +211,12 @@ func getCaps() (caps, error) {
 
 	// Get capability version
 	if _, _, errno := syscall.Syscall(syscall.SYS_CAPGET, uintptr(unsafe.Pointer(&c.hdr)), uintptr(unsafe.Pointer(nil)), 0); errno != 0 {
-		return c, fmt.Errorf("SYS_CAPGET: %v", errno)
+		return c, fmt.Errorf("SYS_CAPGET: %w", errno)
 	}
 
 	// Get current capabilities
 	if _, _, errno := syscall.Syscall(syscall.SYS_CAPGET, uintptr(unsafe.Pointer(&c.hdr)), uintptr(unsafe.Pointer(&c.data[0])), 0); errno != 0 {
-		return c, fmt.Errorf("SYS_CAPGET: %v", errno)
+		return c, fmt.Errorf("SYS_CAPGET: %w", errno)
 	}
 
 	return c, nil

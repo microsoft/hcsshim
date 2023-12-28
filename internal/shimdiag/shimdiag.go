@@ -37,7 +37,7 @@ func findPipes(pattern string) ([]string, error) {
 			names = append(names, name)
 		}
 		err = windows.FindNextFile(h, &data)
-		if err == windows.ERROR_NO_MORE_FILES {
+		if err == windows.ERROR_NO_MORE_FILES { //nolint:errorlint
 			break
 		}
 		if err != nil {

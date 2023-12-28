@@ -43,7 +43,7 @@ func runGenericHook() error {
 
 	out, err := hookCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to run nvidia cli tool with: %v, %v", string(out), err)
+		return fmt.Errorf("failed to run nvidia cli tool with: %v, %w", string(out), err)
 	}
 
 	return nil

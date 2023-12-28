@@ -239,10 +239,10 @@ func NewCimLayerWriter(ctx context.Context, path string, parentLayerPaths []stri
 	if _, err = os.Stat(cimDirPath); os.IsNotExist(err) {
 		// create cim directory
 		if err = os.Mkdir(cimDirPath, 0755); err != nil {
-			return nil, fmt.Errorf("failed while creating cim layers directory: %s", err)
+			return nil, fmt.Errorf("failed while creating cim layers directory: %w", err)
 		}
 	} else if err != nil {
-		return nil, fmt.Errorf("unable to access cim layers directory: %s", err)
+		return nil, fmt.Errorf("unable to access cim layers directory: %w", err)
 
 	}
 
@@ -252,12 +252,12 @@ func NewCimLayerWriter(ctx context.Context, path string, parentLayerPaths []stri
 
 	cim, err := cimfs.Create(cimDirPath, parentCim, GetCimNameFromLayer(path))
 	if err != nil {
-		return nil, fmt.Errorf("error in creating a new cim: %s", err)
+		return nil, fmt.Errorf("error in creating a new cim: %w", err)
 	}
 
 	sfw, err := newStdFileWriter(path, parentLayerPaths)
 	if err != nil {
-		return nil, fmt.Errorf("error in creating new standard file writer: %s", err)
+		return nil, fmt.Errorf("error in creating new standard file writer: %w", err)
 	}
 	return &CimLayerWriter{
 		ctx:              ctx,

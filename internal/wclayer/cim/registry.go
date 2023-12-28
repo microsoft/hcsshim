@@ -54,32 +54,32 @@ func enableCimBoot(hivePath string) (err error) {
 
 	var storeHandle winapi.ORHKey
 	if err = winapi.OROpenHive(hivePath, &storeHandle); err != nil {
-		return fmt.Errorf("failed to open registry store at %s: %s", hivePath, err)
+		return fmt.Errorf("failed to open registry store at %s: %w", hivePath, err)
 	}
 
 	for _, change := range regChanges {
 		var changeKey winapi.ORHKey
 		if err = winapi.ORCreateKey(storeHandle, change.keyPath, 0, 0, 0, &changeKey, nil); err != nil {
-			return fmt.Errorf("failed to open reg key %s: %s", change.keyPath, err)
+			return fmt.Errorf("failed to open reg key %s: %w", change.keyPath, err)
 		}
 
 		if err = winapi.ORSetValue(changeKey, change.valueName, uint32(change.valueType), change.data, change.dataLen); err != nil {
-			return fmt.Errorf("failed to set value for regkey %s\\%s : %s", change.keyPath, change.valueName, err)
+			return fmt.Errorf("failed to set value for regkey %s\\%s : %w", change.keyPath, change.valueName, err)
 		}
 	}
 
 	// remove the existing file first
 	if err := os.Remove(hivePath); err != nil {
-		return fmt.Errorf("failed to remove existing registry %s: %s", hivePath, err)
+		return fmt.Errorf("failed to remove existing registry %s: %w", hivePath, err)
 	}
 
 	if err = winapi.ORSaveHive(winapi.ORHKey(storeHandle), hivePath, uint32(osversion.Get().MajorVersion), uint32(osversion.Get().MinorVersion)); err != nil {
-		return fmt.Errorf("error saving the registry store: %s", err)
+		return fmt.Errorf("error saving the registry store: %w", err)
 	}
 
 	// close hive irrespective of the errors
 	if err := winapi.ORCloseHive(winapi.ORHKey(storeHandle)); err != nil {
-		return fmt.Errorf("error closing registry store; %s", err)
+		return fmt.Errorf("error closing registry store; %w", err)
 	}
 	return nil
 
@@ -91,7 +91,7 @@ func enableCimBoot(hivePath string) (err error) {
 func mergeHive(parentHivePath, deltaHivePath, mergedHivePath string) (err error) {
 	var baseHive, deltaHive, mergedHive winapi.ORHKey
 	if err := winapi.OROpenHive(parentHivePath, &baseHive); err != nil {
-		return fmt.Errorf("failed to open base hive %s: %s", parentHivePath, err)
+		return fmt.Errorf("failed to open base hive %s: %w", parentHivePath, err)
 	}
 	defer func() {
 		err2 := winapi.ORCloseHive(baseHive)
@@ -100,7 +100,7 @@ func mergeHive(parentHivePath, deltaHivePath, mergedHivePath string) (err error)
 		}
 	}()
 	if err := winapi.OROpenHive(deltaHivePath, &deltaHive); err != nil {
-		return fmt.Errorf("failed to open delta hive %s: %s", deltaHivePath, err)
+		return fmt.Errorf("failed to open delta hive %s: %w", deltaHivePath, err)
 	}
 	defer func() {
 		err2 := winapi.ORCloseHive(deltaHive)
@@ -109,7 +109,7 @@ func mergeHive(parentHivePath, deltaHivePath, mergedHivePath string) (err error)
 		}
 	}()
 	if err := winapi.ORMergeHives([]winapi.ORHKey{baseHive, deltaHive}, &mergedHive); err != nil {
-		return fmt.Errorf("failed to merge hives: %s", err)
+		return fmt.Errorf("failed to merge hives: %w", err)
 	}
 	defer func() {
 		err2 := winapi.ORCloseHive(mergedHive)
@@ -118,7 +118,7 @@ func mergeHive(parentHivePath, deltaHivePath, mergedHivePath string) (err error)
 		}
 	}()
 	if err := winapi.ORSaveHive(mergedHive, mergedHivePath, uint32(osversion.Get().MajorVersion), uint32(osversion.Get().MinorVersion)); err != nil {
-		return fmt.Errorf("failed to save hive: %s", err)
+		return fmt.Errorf("failed to save hive: %w", err)
 	}
 	return
 }
@@ -135,7 +135,7 @@ func getOsBuildNumberFromRegistry(regHivePath string) (_ string, err error) {
 	dataBuf := make([]byte, dataLen)
 
 	if err = winapi.OROpenHive(regHivePath, &storeHandle); err != nil {
-		return "", fmt.Errorf("failed to open registry store at %s: %s", regHivePath, err)
+		return "", fmt.Errorf("failed to open registry store at %s: %w", regHivePath, err)
 	}
 	defer func() {
 		if closeErr := winapi.ORCloseHive(storeHandle); closeErr != nil {
@@ -147,7 +147,7 @@ func getOsBuildNumberFromRegistry(regHivePath string) (_ string, err error) {
 	}()
 
 	if err = winapi.OROpenKey(storeHandle, keyPath, &keyHandle); err != nil {
-		return "", fmt.Errorf("failed to open key at %s: %s", keyPath, err)
+		return "", fmt.Errorf("failed to open key at %s: %w", keyPath, err)
 	}
 	defer func() {
 		if closeErr := winapi.ORCloseKey(keyHandle); closeErr != nil {
@@ -161,7 +161,7 @@ func getOsBuildNumberFromRegistry(regHivePath string) (_ string, err error) {
 	}()
 
 	if err = winapi.ORGetValue(keyHandle, "", valueName, &dataType, &dataBuf[0], &dataLen); err != nil {
-		return "", fmt.Errorf("failed to get value of %s: %s", valueName, err)
+		return "", fmt.Errorf("failed to get value of %s: %w", valueName, err)
 	}
 
 	if dataType != uint32(winapi.REG_TYPE_SZ) {

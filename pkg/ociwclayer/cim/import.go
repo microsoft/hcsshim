@@ -7,6 +7,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,10 @@ import (
 // ImportCimLayerFromTar reads a layer from an OCI layer tar stream and extracts it into
 // the CIM format at the specified path. The caller must specify the parent layers, if
 // any, ordered from lowest to highest layer.
+// This function expects that the layer paths (both the layer that is being imported & the parent layers) are
+// formatted like `.../snapshots/<id>` and the corresponding layer CIMs are located/will be created at
+// `.../snapshots/cim-layers/<id>.cim`. Each CIM file also has corresponding region & objectID files and those
+// files will also be stored inside the `cim-layers` directory.
 //
 // This function returns the total size of the layer's files, in bytes.
 func ImportCimLayerFromTar(ctx context.Context, r io.Reader, layerPath string, parentLayerPaths []string) (int64, error) {
@@ -150,7 +155,7 @@ func writeCimLayerFromTar(ctx context.Context, r io.Reader, w *cim.CimLayerWrite
 			}
 		}
 	}
-	if loopErr != io.EOF {
+	if !errors.Is(loopErr, io.EOF) {
 		return 0, loopErr
 	}
 	return size, nil

@@ -45,14 +45,16 @@ const (
 	// HrVmcomputeInvalidState is the HRESULT for:
 	//
 	// The requested virtual machine or container operation is not valid in the
-	// current state
+	// current state.
 	HrVmcomputeInvalidState = Hresult(-2143878907) // 0x80370105
 	// HrVmcomputeSystemAlreadyStopped is the HRESULT for:
 	//
 	// The virtual machine or container with the specified identifier is not
-	// running
+	// running.
 	HrVmcomputeSystemAlreadyStopped = Hresult(-2143878896) // 0x80370110
 )
+
+// TODO: update implementation to use go1.13 style errors with `errors.As` and co.
 
 // StackTracer is an interface originating (but not exported) from the
 // github.com/pkg/errors package. It defines something which can return a stack
@@ -71,11 +73,11 @@ func BaseStackTrace(e error) errors.StackTrace {
 	cause := e
 	var tracer StackTracer
 	for cause != nil {
-		serr, ok := cause.(StackTracer)
+		serr, ok := cause.(StackTracer) //nolint:errorlint
 		if ok {
 			tracer = serr
 		}
-		cerr, ok := cause.(causer)
+		cerr, ok := cause.(causer) //nolint:errorlint
 		if !ok {
 			break
 		}
@@ -130,7 +132,7 @@ func (e *wrappingHresultError) StackTrace() errors.StackTrace {
 	type stackTracer interface {
 		StackTrace() errors.StackTrace
 	}
-	serr, ok := e.Cause().(stackTracer)
+	serr, ok := e.Cause().(stackTracer) //nolint:errorlint
 	if !ok {
 		return nil
 	}
@@ -165,11 +167,11 @@ func GetHresult(e error) (Hresult, error) {
 	}
 	cause := e
 	for cause != nil {
-		herr, ok := cause.(hresulter)
+		herr, ok := cause.(hresulter) //nolint:errorlint
 		if ok {
 			return herr.Hresult(), nil
 		}
-		cerr, ok := cause.(causer)
+		cerr, ok := cause.(causer) //nolint:errorlint
 		if !ok {
 			break
 		}

@@ -163,7 +163,7 @@ func (nprw *nPipeRetryWriter) retryDialPipe() (net.Conn, error) {
 // isDisconnectedErr is a helper to determine if the error received from writing to the server end of a named pipe indicates a disconnect/severed
 // connection. This can be used to attempt a redial if it's expected that the server will come back online at some point.
 func isDisconnectedErr(err error) bool {
-	if serr, ok := err.(syscall.Errno); ok {
+	if serr, ok := err.(syscall.Errno); ok { //nolint:errorlint
 		// Server went away/something went wrong.
 		return serr == windows.ERROR_NO_DATA || serr == windows.ERROR_PIPE_NOT_CONNECTED || serr == windows.ERROR_BROKEN_PIPE
 	}

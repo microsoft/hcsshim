@@ -26,7 +26,7 @@ type Plan9Share struct {
 // Release frees the resources of the corresponding Plan9 share
 func (p9 *Plan9Share) Release(ctx context.Context) error {
 	if err := p9.vm.RemovePlan9(ctx, p9); err != nil {
-		return fmt.Errorf("failed to remove plan9 share: %s", err)
+		return fmt.Errorf("failed to remove plan9 share: %w", err)
 	}
 	return nil
 }
@@ -134,7 +134,7 @@ func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) error 
 		},
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
-		return fmt.Errorf("failed to remove plan9 share %s from %s: %+v: %s", share.name, uvm.id, modification, err)
+		return fmt.Errorf("failed to remove plan9 share %s from %s: %+v: %w", share.name, uvm.id, modification, err)
 	}
 	return nil
 }

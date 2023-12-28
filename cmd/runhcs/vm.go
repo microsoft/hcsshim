@@ -203,7 +203,7 @@ func (c *container) issueVMRequest(op runhcs.VMRequestOp) error {
 		Op: op,
 	}
 	if err := runhcs.IssueVMRequest(c.VMPipePath(), &req); err != nil {
-		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
+		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND { //nolint:errorlint // legacy code
 			return &noVMError{c.HostID}
 		}
 		return err

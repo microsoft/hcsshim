@@ -57,7 +57,7 @@ func (uvm *UtilityVM) Share(ctx context.Context, reqHostPath, reqUVMPath string,
 	} else {
 		st, err := os.Stat(reqHostPath)
 		if err != nil {
-			return fmt.Errorf("could not open '%s' path on host: %s", reqHostPath, err)
+			return fmt.Errorf("could not open '%s' path on host: %w", reqHostPath, err)
 		}
 		var (
 			hostPath       string = reqHostPath

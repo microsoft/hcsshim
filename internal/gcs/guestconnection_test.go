@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -49,7 +50,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 	for {
 		id, typ, b, err := readMessage(rw)
 		if err != nil {
-			if err == io.EOF || err == io.ErrClosedPipe {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
 				err = nil
 			}
 			return err

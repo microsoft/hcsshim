@@ -59,7 +59,7 @@ func Test_Unmount_Stat_OtherError_Error(t *testing.T) {
 		return nil, expectedErr
 	}
 	err := UnmountPath(context.Background(), "/dev/fake", false)
-	if errors.Cause(err) != expectedErr {
+	if errors.Cause(err) != expectedErr { //nolint:errorlint
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 }
@@ -129,7 +129,7 @@ func Test_Unmount_OtherError(t *testing.T) {
 		return expectedErr
 	}
 	err := UnmountPath(context.Background(), "/dev/fake", false)
-	if errors.Cause(err) != expectedErr {
+	if errors.Cause(err) != expectedErr { //nolint:errorlint
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 }

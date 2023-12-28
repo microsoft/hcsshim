@@ -130,6 +130,13 @@ func getGPUContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.P
 	}
 }
 
+func runContainerLifetime(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	stopContainer(t, client, ctx, containerID)
+}
+
 func Test_RunContainer_VirtualDevice_LocationPath_WCOW_Process(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess, featureGPU)
 

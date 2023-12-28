@@ -122,7 +122,7 @@ func ReadForever(logLevel LogLevel) {
 			// the device is kept open, the next read() will return -EPIPE,
 			// and the seek position be updated to the next available record.
 			// Subsequent reads() will return available records again."
-			if err == syscall.EPIPE {
+			if err == syscall.EPIPE { //nolint:errorlint
 				logrus.Warn("kmsg entry overwritten; skipping entry")
 				continue
 			}

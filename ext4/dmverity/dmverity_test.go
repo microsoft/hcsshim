@@ -3,13 +3,12 @@ package dmverity
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math/rand"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/pkg/errors"
 )
 
 func tempFileWithContentLength(t *testing.T, length int) *os.File {
@@ -57,7 +56,7 @@ func TestInvalidReadEOF(t *testing.T) {
 	if err == nil {
 		t.Fatalf("no error returned")
 	}
-	if errors.Unwrap(err) != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
@@ -68,7 +67,7 @@ func TestInvalidReadNotEnoughBytes(t *testing.T) {
 	if err == nil {
 		t.Fatalf("no error returned")
 	}
-	if errors.Unwrap(err) != ErrSuperBlockReadFailure || !strings.Contains(err.Error(), "unexpected bytes read") {
+	if !errors.Is(err, ErrSuperBlockReadFailure) || !strings.Contains(err.Error(), "unexpected bytes read") {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
@@ -79,7 +78,7 @@ func TestNotVeritySuperBlock(t *testing.T) {
 	if err == nil {
 		t.Fatalf("no error returned")
 	}
-	if err != ErrNotVeritySuperBlock {
+	if !errors.Is(err, ErrNotVeritySuperBlock) {
 		t.Fatalf("expected %q, got %q", ErrNotVeritySuperBlock, err)
 	}
 }
@@ -94,7 +93,7 @@ func TestNoMerkleTree(t *testing.T) {
 	if err == nil {
 		t.Fatalf("no error returned")
 	}
-	if errors.Unwrap(err) != io.EOF || !strings.Contains(err.Error(), "failed to read dm-verity root hash") {
+	if !errors.Is(err, io.EOF) || !strings.Contains(err.Error(), "failed to read dm-verity root hash") {
 		t.Fatalf("expected %q, got %q", io.EOF, err)
 	}
 }

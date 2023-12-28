@@ -41,7 +41,6 @@ jobs:
             --modules-download-mode=readonly
             --timeout=10m
             --config=${{ github.workspace }}/.golangci.yml
-          skip-cache: true # even if a cache is found, don't use it
           working-directory: ${{ github.workspace }}/${{ matrix.root }}
         env:
           GOOS: ${{ matrix.goos }}
@@ -352,7 +351,7 @@ jobs:
         run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
         working-directory: test
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: test_binaries_${{ matrix.os }}
@@ -622,7 +621,7 @@ jobs:
       - run: go build ./internal/tools/uvmboot
       - run: go build ./internal/tools/zapdir
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: binaries

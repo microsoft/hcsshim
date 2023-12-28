@@ -5,6 +5,7 @@ package devices
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -42,7 +43,7 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string) (close
 		options := vm.DefaultVSMBOptions(true)
 		closer, err = vm.AddVSMB(ctx, share, options)
 		if err != nil {
-			return closer, fmt.Errorf("failed to add VSMB share to utility VM for path %+v: %s", share, err)
+			return closer, fmt.Errorf("failed to add VSMB share to utility VM for path %+v: %w", share, err)
 		}
 		uvmPath, err := vm.GetVSMBUvmPath(ctx, share, true)
 		if err != nil {
@@ -62,7 +63,7 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string) (close
 		&scsi.MountConfig{},
 	)
 	if err != nil {
-		return closer, fmt.Errorf("failed to add SCSI disk to utility VM for path %+v: %s", share, err)
+		return closer, fmt.Errorf("failed to add SCSI disk to utility VM for path %+v: %w", share, err)
 	}
 	closer = mount
 	uvmPathForShare := mount.GuestPath()
@@ -73,7 +74,7 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string) (close
 	ns := guid.GUID{Data1: 0x914aadc8, Data2: 0xf700, Data3: 0x4365, Data4: [8]byte{0x80, 0x16, 0xdd, 0xad, 0x0a, 0x9d, 0x40, 0x6d}}
 	driverGUID, err := guid.NewV5(ns, []byte(share))
 	if err != nil {
-		return closer, fmt.Errorf("failed to create a guid path for driver %+v: %s", share, err)
+		return closer, fmt.Errorf("failed to create a guid path for driver %+v: %w", share, err)
 	}
 	uvmReadWritePath := fmt.Sprintf(guestpath.LCOWGlobalDriverPrefixFmt, driverGUID.String())
 
@@ -115,15 +116,15 @@ func execGCSInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir stri
 	// wait to finish parsing stdout results
 	select {
 	case err := <-errChan:
-		if err != nil && err != noExecOutputErr {
-			return fmt.Errorf("failed to get stderr output from command %s: %v", driverDir, err)
+		if err != nil && !errors.Is(err, noExecOutputErr) {
+			return fmt.Errorf("failed to get stderr output from command %s: %w", driverDir, err)
 		}
 	case <-ctx.Done():
-		return fmt.Errorf("timed out waiting for the console output from installing driver %s: %v", driverDir, ctx.Err())
+		return fmt.Errorf("timed out waiting for the console output from installing driver %s: %w", driverDir, ctx.Err())
 	}
 
 	if execErr != nil {
-		return fmt.Errorf("%v: failed to install driver %s in uvm with exit code %d: %v", execErr, driverDir, exitCode, stderrOutput)
+		return fmt.Errorf("%w: failed to install driver %s in uvm with exit code %d: %v", execErr, driverDir, exitCode, stderrOutput)
 	}
 	return nil
 }

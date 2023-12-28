@@ -89,7 +89,7 @@ func NewBinaryIO(ctx context.Context, id string, uri *url.URL) (_ UpstreamIO, er
 	// Wait for logging driver to signal to the wait pipe that it's ready to consume IO
 	go func() {
 		b := make([]byte, 1)
-		if _, err := waitPipe.Read(b); err != nil && err != io.EOF {
+		if _, err := waitPipe.Read(b); err != nil && err != io.EOF { //nolint:errorlint
 			errCh <- err
 			return
 		}

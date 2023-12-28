@@ -5,6 +5,7 @@ package cri_containerd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"os"
@@ -561,7 +562,7 @@ func Test_RunPodSandbox_CPUGroup(t *testing.T) {
 
 	defer func() {
 		err := cpugroup.Delete(ctx, presentID)
-		if err != nil && err != cpugroup.ErrHVStatusInvalidCPUGroupState {
+		if err != nil && !errors.Is(err, cpugroup.ErrHVStatusInvalidCPUGroupState) {
 			t.Fatalf("failed to clean up test cpugroup with: %v", err)
 		}
 	}()

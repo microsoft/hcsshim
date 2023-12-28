@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	cimlayer "github.com/Microsoft/hcsshim/internal/wclayer/cim"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
@@ -119,8 +122,31 @@ The delete command will be executed in the container's bundle as its cwd.
 		if err := winapi.NetUserDel(
 			"",
 			username,
-		); err != nil && err != winapi.NERR_UserNotFound {
+		); err != nil && !errors.Is(err, winapi.NERR_UserNotFound) {
 			fmt.Fprintf(os.Stderr, "failed to delete user %q: %v", username, err)
+		}
+
+		// cleanup the layers mounted for the container. We currently only handle cleanup of CimFS
+		// layers here.  First n-1 values should be the image layerFolders (topmost layer being at
+		// index 0) and the last entry should be the scratch layer
+		var layerFolders []string
+		f, err := os.Open(filepath.Join(bundleFlag, layersFile))
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				fmt.Fprintf(os.Stderr, "open layers file: %s", err)
+			}
+		} else {
+			defer f.Close()
+			if err = json.NewDecoder(f).Decode(&layerFolders); err != nil {
+				fmt.Fprintf(os.Stderr, "decode layers json: %s", err)
+			}
+		}
+		if err == nil && cimlayer.IsCimLayer(layerFolders[0]) {
+			scratchLayerFolderPath := layerFolders[len(layerFolders)-1]
+			err = layers.ReleaseCimFSHostLayers(ctx, scratchLayerFolderPath, idFlag)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cleanup container %q mounts: %s", idFlag, err)
+			}
 		}
 
 		if data, err := proto.Marshal(&task.DeleteResponse{

@@ -351,7 +351,7 @@ func (s *service) addHelper(ctx context.Context, req *nodenetsvc.ConfigureNetwor
 			// add endpoints that are in the namespace as NICs
 			nicID, err := guid.NewV4()
 			if err != nil {
-				return nil, fmt.Errorf("failed to create nic GUID: %s", err)
+				return nil, fmt.Errorf("failed to create nic GUID: %w", err)
 			}
 			endpointName := ""
 			switch ep := endpoint.Endpoint.GetSettings().(type) {

@@ -162,7 +162,7 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 		// searching for here. If the network exists, the vSwitch with this name exists.
 		extSwitch, err := hcn.GetNetworkByName(req.SwitchName)
 		if err != nil {
-			if _, ok := err.(hcn.NetworkNotFoundError); ok {
+			if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 				return nil, errors.Errorf("no network/switch with name `%s` found", req.SwitchName)
 			}
 			return nil, errors.Wrapf(err, "failed to get network/switch with name %q", req.SwitchName)
@@ -203,7 +203,7 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 	if len(req.SubnetIpaddressPrefixIpv6) != 0 {
 		if err := hcn.IPv6DualStackSupported(); err != nil {
 			// a request was made for an IPv6 address on a system that doesn't support IPv6
-			return nil, fmt.Errorf("IPv6 address requested but not supported: %v", err)
+			return nil, fmt.Errorf("IPv6 address requested but not supported: %w", err)
 		}
 	}
 
@@ -341,7 +341,7 @@ func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req
 	if req.Ipv6Address != "" && req.Ipv6AddressPrefixlength != 0 {
 		if err := hcn.IPv6DualStackSupported(); err != nil {
 			// a request was made for an IPv6 address on a system that doesn't support IPv6
-			return nil, fmt.Errorf("IPv6 address requested but not supported: %v", err)
+			return nil, fmt.Errorf("IPv6 address requested but not supported: %w", err)
 		}
 		ipv6Config := hcn.IpConfig{
 			IpAddress:    req.Ipv6Address,

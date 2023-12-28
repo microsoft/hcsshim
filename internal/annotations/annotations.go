@@ -18,4 +18,7 @@ const (
 	//
 	// [HCS RegistryValue]: https://learn.microsoft.com/en-us/virtualization/api/hcs/schemareference#registryvalue
 	AdditionalRegistryValues = "io.microsoft.virtualmachine.wcow.additional-reg-keys"
+
+	// ExtraVSockPorts adds additional ports to the list of ports that the UVM is allowed to use.
+	ExtraVSockPorts = "io.microsoft.virtualmachine.lcow.extra-vsock-ports"
 )

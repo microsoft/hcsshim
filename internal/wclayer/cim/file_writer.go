@@ -56,8 +56,8 @@ func (sfw *stdFileWriter) Add(name string) error {
 
 	// The directory of this file might be created inside the cim.
 	// make sure we have the same parent directory chain here
-	if err := os.MkdirAll(filepath.Join(sfw.path, filepath.Dir(name)), 0755); err != nil {
-		return fmt.Errorf("failed to create file %s: %s", name, err)
+	if err := safefile.MkdirAllRelative(filepath.Dir(name), sfw.root); err != nil {
+		return fmt.Errorf("failed to create file %s: %w", name, err)
 	}
 
 	f, err := safefile.OpenRelative(
@@ -69,7 +69,7 @@ func (sfw *stdFileWriter) Add(name string) error {
 		0,
 	)
 	if err != nil {
-		return fmt.Errorf("error creating file %s: %s", name, err)
+		return fmt.Errorf("error creating file %s: %w", name, err)
 	}
 	sfw.activeFile = f
 	return nil
@@ -84,7 +84,7 @@ func (sfw *stdFileWriter) Write(b []byte) (int, error) {
 // Close finishes the layer writing process and releases any resources.
 func (sfw *stdFileWriter) Close(ctx context.Context) error {
 	if err := sfw.closeActiveFile(); err != nil {
-		return fmt.Errorf("failed to close active file %s : %s", sfw.activeFile.Name(), err)
+		return fmt.Errorf("failed to close active file %s : %w", sfw.activeFile.Name(), err)
 	}
 	return nil
 }
