@@ -157,7 +157,9 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-			pullRequiredImages(t, []string{test.sandboxImage})
+			if test.runtimeHandler == wcowHypervisorRuntimeHandler {
+				pullRequiredImages(t, []string{test.sandboxImage})
+			}
 
 			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
@@ -244,7 +246,9 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-			pullRequiredImages(t, []string{test.sandboxImage})
+			if test.runtimeHandler == wcowHypervisorRuntimeHandler {
+				pullRequiredImages(t, []string{test.sandboxImage})
+			}
 
 			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
