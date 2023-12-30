@@ -20,13 +20,6 @@ var _containerBenchmarkTests = []struct {
 	Command     []string
 }{
 	{
-		Name:    "LCOW",
-		Feature: featureLCOW,
-		Runtime: lcowRuntimeHandler,
-		Image:   imageLcowAlpine,
-		Command: []string{"ash", "-c", "tail -f /dev/null"},
-	},
-	{
 		Name:    "WCOW_Hypervisor",
 		Feature: featureWCOWHypervisor,
 		Runtime: wcowHypervisorRuntimeHandler,
@@ -55,8 +48,6 @@ func BenchmarkPodCreate(b *testing.B) {
 			requireFeatures(b, tt.Feature)
 
 			switch tt.Feature {
-			case featureLCOW:
-				pullRequiredLCOWImages(b, append([]string{imageLcowK8sPause}, tt.Image))
 			case featureWCOWHypervisor, featureWCOWProcess:
 				pullRequiredImages(b, []string{tt.Image})
 			}
@@ -92,8 +83,6 @@ func BenchmarkContainerCreate(b *testing.B) {
 				requireFeatures(b, tt.Feature)
 
 				switch tt.Feature {
-				case featureLCOW:
-					pullRequiredLCOWImages(b, append([]string{imageLcowK8sPause}, tt.Image))
 				case featureWCOWHypervisor, featureWCOWProcess:
 					pullRequiredImages(b, []string{tt.Image})
 				}
@@ -127,8 +116,6 @@ func BenchmarkContainerCreate(b *testing.B) {
 				requireFeatures(b, tt.Feature)
 
 				switch tt.Feature {
-				case featureLCOW:
-					pullRequiredLCOWImages(b, append([]string{imageLcowK8sPause}, tt.Image))
 				case featureWCOWHypervisor, featureWCOWProcess:
 					pullRequiredImages(b, []string{tt.Image})
 				}
@@ -169,8 +156,6 @@ func BenchmarkContainerStart(b *testing.B) {
 				requireFeatures(b, tt.Feature)
 
 				switch tt.Feature {
-				case featureLCOW:
-					pullRequiredLCOWImages(b, append([]string{imageLcowK8sPause}, tt.Image))
 				case featureWCOWHypervisor, featureWCOWProcess:
 					pullRequiredImages(b, []string{tt.Image})
 				}
@@ -206,8 +191,6 @@ func BenchmarkContainerStart(b *testing.B) {
 				requireFeatures(b, tt.Feature)
 
 				switch tt.Feature {
-				case featureLCOW:
-					pullRequiredLCOWImages(b, append([]string{imageLcowK8sPause}, tt.Image))
 				case featureWCOWHypervisor, featureWCOWProcess:
 					pullRequiredImages(b, []string{tt.Image})
 				}

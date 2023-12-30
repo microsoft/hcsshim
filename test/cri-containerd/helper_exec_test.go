@@ -26,15 +26,6 @@ func execSync(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Co
 	return response
 }
 
-func execRequest(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecRequest) string {
-	tb.Helper()
-	response, err := client.Exec(ctx, request)
-	if err != nil {
-		tb.Fatalf("failed Exec request with: %v", err)
-	}
-	return response.Url
-}
-
 // execInHost executes command in the container's host.
 // `stdinBuf` is an optional parameter to specify an io.Reader that can be used as stdin for the executed program.
 // `stdoutBuf` is an optional parameter to specify an io.Writer that can be used as stdout for the executed program.
