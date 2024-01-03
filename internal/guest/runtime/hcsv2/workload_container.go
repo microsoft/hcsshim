@@ -93,7 +93,7 @@ func specHasGPUDevice(spec *oci.Spec) bool {
 	return false
 }
 
-func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec) (err error) {
+func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec, ociBundlePath string) (err error) {
 	ctx, span := oc.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -150,7 +150,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	if spec.Windows != nil {
 		// we only support Nvidia gpus right now
 		if specHasGPUDevice(spec) {
-			if err := addNvidiaDeviceHook(ctx, spec); err != nil {
+			if err := addNvidiaDeviceHook(ctx, spec, ociBundlePath); err != nil {
 				return err
 			}
 		}
