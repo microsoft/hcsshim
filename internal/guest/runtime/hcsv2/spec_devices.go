@@ -27,7 +27,7 @@ const (
 )
 
 // addAssignedDevice goes through the assigned devices that have been enumerated
-// on the spec and updates the spec so that the correct device files can be mounted
+// on the spec and updates the spec so that the correct device nodes can be mounted
 // into the resulting container by the runtime.
 func addAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 	for _, d := range spec.Windows.Devices {
@@ -38,21 +38,23 @@ func addAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 			if err != nil {
 				return errors.Wrapf(err, "failed to find device pci path for device %v", d)
 			}
-			// find the device node that links to the pci path we just got
-			dev, err := devicePathFromPCIPath(fullPCIPath)
+			// find the device nodes that link to the pci path we just got
+			devs, err := devicePathsFromPCIPath(ctx, fullPCIPath)
 			if err != nil {
 				return errors.Wrapf(err, "failed to find dev node for device %v", d)
 			}
-			addLinuxDeviceToSpec(ctx, dev, spec, true)
+			for _, dev := range devs {
+				addLinuxDeviceToSpec(ctx, dev, spec, true)
+			}
 		}
 	}
 
 	return nil
 }
 
-// devicePathFromPCIPath takes a sysfs bus path to the pci device assigned into the guest
-// and attempts to find the dev node in the guest that maps to it.
-func devicePathFromPCIPath(pciPath string) (*devices.Device, error) {
+// devicePathsFromPCIPath takes a sysfs bus path to the pci device assigned into the guest
+// and attempts to find the dev nodes in the guest that map to it.
+func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Device, error) {
 	// get the full pci path to make sure that it's the final path
 	pciFullPath, err := filepath.EvalSymlinks(pciPath)
 	if err != nil {
@@ -65,7 +67,10 @@ func devicePathFromPCIPath(pciPath string) (*devices.Device, error) {
 		return nil, err
 	}
 
-	// find corresponding entry in sysfs
+	// some drivers create multiple dev nodes associated with the PCI device
+	out := []*devices.Device{}
+
+	// find corresponding entries in sysfs
 	for _, d := range hostDevices {
 		major := d.Rule.Major
 		minor := d.Rule.Minor
@@ -83,15 +88,20 @@ func devicePathFromPCIPath(pciPath string) (*devices.Device, error) {
 		syfsDevPath := fmt.Sprintf(sysfsDevPathFormat, deviceTypeString, major, minor)
 		sysfsFullPath, err := filepath.EvalSymlinks(syfsDevPath)
 		if err != nil {
-			return nil, err
+			// Some drivers will make dev nodes that do not have a matching block or
+			// char device -- skip those.
+			log.G(ctx).WithError(err).Debugf("failed to find sysfs path for device %s", d.Path)
+			continue
 		}
 		if strings.HasPrefix(sysfsFullPath, pciFullPath) {
-			// return early once we find the device
-			return d, nil
+			out = append(out, d)
 		}
 	}
 
-	return nil, errors.New("failed to find the device node from sysfs pci path")
+	if len(out) == 0 {
+		return nil, errors.New("failed to find the device nodes for sysfs pci path")
+	}
+	return out, nil
 }
 
 func addLinuxDeviceToSpec(ctx context.Context, hostDevice *devices.Device, spec *oci.Spec, addCgroupDevice bool) {
