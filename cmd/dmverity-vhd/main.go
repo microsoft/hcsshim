@@ -22,15 +22,16 @@ import (
 const usage = `dmverity-vhd is a command line tool for creating LCOW layer VHDs with dm-verity hashes.`
 
 const (
-	usernameFlag      = "username"
-	passwordFlag      = "password"
-	imageFlag         = "image"
-	verboseFlag       = "verbose"
-	outputDirFlag     = "out-dir"
-	dockerFlag        = "docker"
-	tarballFlag       = "tarball"
-	hashDeviceVhdFlag = "hash-dev-vhd"
-	maxVHDSize        = dmverity.RecommendedVHDSizeGB
+	usernameFlag       = "username"
+	passwordFlag       = "password"
+	imageFlag          = "image"
+	verboseFlag        = "verbose"
+	outputDirFlag      = "out-dir"
+	dockerFlag         = "docker"
+	bufferedReaderFlag = "buffered-reader"
+	tarballFlag        = "tarball"
+	hashDeviceVhdFlag  = "hash-dev-vhd"
+	maxVHDSize         = dmverity.RecommendedVHDSizeGB
 )
 
 func init() {
@@ -68,6 +69,10 @@ func main() {
 			Name:  tarballFlag + ",t",
 			Usage: "Optional: path to tarball containing image info",
 		},
+		cli.BoolFlag{
+			Name:  bufferedReaderFlag + ",b",
+			Usage: "Optional: use buffered opener for image",
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -103,11 +108,13 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		// if only an image name is provided and not a tag, the default is "latest"
 		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
 	} else if dockerDaemon {
-		// use the unbuffered opener, the tradeoff being the image will stream as needed
+		// use the unbuffered opener by default, the tradeoff being the image will stream as needed
 		// so it is slower but much more memory efficient
 		var opts []daemon.Option
-		opt := daemon.WithUnbufferedOpener()
-		opts = append(opts, opt)
+		if !ctx.GlobalBool(bufferedReaderFlag) {
+			opt := daemon.WithUnbufferedOpener()
+			opts = append(opts, opt)
+		}
 
 		img, err = daemon.Image(ref, opts...)
 	} else {
