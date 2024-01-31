@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -19,20 +20,20 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
-const nvidiaDebugFilePath = "/nvidia-container.log"
-
+const nvidiaDebugFilePath = "nvidia-container.log"
 const nvidiaToolBinary = "nvidia-container-cli"
 
 // described here: https://github.com/opencontainers/runtime-spec/blob/39c287c415bf86fb5b7506528d471db5405f8ca8/config.md#posix-platform-hooks
 // addNvidiaDeviceHook builds the arguments for nvidia-container-cli and creates the prestart hook
-func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec) error {
+func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec, ociBundlePath string) error {
 	genericHookBinary := "generichook"
 	genericHookPath, err := exec.LookPath(genericHookBinary)
 	if err != nil {
 		return errors.Wrapf(err, "failed to find %s for container device support", genericHookBinary)
 	}
 
-	debugOption := fmt.Sprintf("--debug=%s", nvidiaDebugFilePath)
+	toolDebugPath := filepath.Join(ociBundlePath, nvidiaDebugFilePath)
+	debugOption := fmt.Sprintf("--debug=%s", toolDebugPath)
 	args := []string{
 		genericHookPath,
 		nvidiaToolBinary,
@@ -63,8 +64,10 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec) error {
 	// add template for pid argument to be injected later by the generic hook binary
 	args = append(args, "--no-cgroups", "--pid={{pid}}", spec.Root.Path)
 
-	hookLogDebugFileEnvOpt := fmt.Sprintf("%s=%s", generichook.LogDebugFileEnvKey, nvidiaDebugFilePath)
+	// setup environment variables for the hook to run in
+	hookLogDebugFileEnvOpt := fmt.Sprintf("%s=%s", generichook.LogDebugFileEnvKey, toolDebugPath)
 	hookEnv := append(updateEnvWithNvidiaVariables(), hookLogDebugFileEnvOpt)
+
 	nvidiaHook := hooks.NewOCIHook(genericHookPath, args, hookEnv)
 	return hooks.AddOCIHook(spec, hooks.CreateRuntime, nvidiaHook)
 }
