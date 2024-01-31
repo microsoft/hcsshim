@@ -65,7 +65,7 @@ func formatAddr(a net.Addr) string {
 func Format(ctx context.Context, v interface{}) string {
 	b, err := encode(v)
 	if err != nil {
-		// logging errors aren't really warning worthy, and can potentially spam a lot of logs out
+		// logging-related errors aren't really warning worthy, and can potentially spam a lot of logs out
 		G(ctx).WithFields(logrus.Fields{
 			logrus.ErrorKey: err,
 			"type":          fmt.Sprintf("%T", v),
@@ -93,7 +93,6 @@ func encode(v interface{}) (_ []byte, err error) {
 			// more robust to fall back on json marshalling for errors in general
 			return b, nil
 		}
-
 	}
 
 	buf := &bytes.Buffer{}

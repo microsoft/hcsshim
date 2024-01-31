@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -26,6 +27,7 @@ import (
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	hcslog "github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 )
@@ -116,7 +118,7 @@ var serveCommand = cli.Command{
 			// TODO: JTERRY75 we need this to be the reconnect log listener or
 			// switch to events
 			// TODO: JTERRY75 switch containerd to use the protected path.
-			//const logAddrFmt = "\\\\.\\pipe\\ProtectedPrefix\\Administrators\\containerd-shim-%s-%s-log"
+			// const logAddrFmt = "\\\\.\\pipe\\ProtectedPrefix\\Administrators\\containerd-shim-%s-%s-log"
 			const logAddrFmt = "\\\\.\\pipe\\containerd-shim-%s-%s-log"
 			logl, err := winio.ListenPipe(fmt.Sprintf(logAddrFmt, namespaceFlag, idFlag), nil)
 			if err != nil {
@@ -193,7 +195,15 @@ var serveCommand = cli.Command{
 			return fmt.Errorf("failed to create new service: %w", err)
 		}
 
-		s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
+		s, err := ttrpc.NewServer(
+			ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor(
+				octtrpc.WithAttributes( // TODO (helsaawy) set these in resource when we switch to OTel
+					trace.StringAttribute(logfields.ShimID, svc.tid),
+					trace.BoolAttribute(logfields.IsSandbox, svc.isSandbox),
+				),
+				octtrpc.WithAddMessage(),
+				octtrpc.WithAddMessageHook(hcslog.ScrubShimTTRPC),
+			)))
 		if err != nil {
 			return err
 		}
@@ -310,7 +320,7 @@ func createEvent(event string) (windows.Handle, error) {
 }
 
 // setupDebuggerEvent listens for an event to allow a debugger such as delve
-// to attach for advanced debugging. It's called when handling a ContainerCreate
+// to attach for advanced debugging. It's called when handling a ContainerCreate.
 func setupDebuggerEvent() {
 	if os.Getenv("CONTAINERD_SHIM_RUNHCS_V1_WAIT_DEBUGGER") == "" {
 		return

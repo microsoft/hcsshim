@@ -27,6 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
@@ -270,6 +271,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 
 				var ctx context.Context
 				var span *trace.Span
+				spanName := "opengcs::bridge::" + header.Type.String()
 				if base.OpenCensusSpanContext != nil {
 					sc := trace.SpanContext{}
 					if bytes, err := hex.DecodeString(base.OpenCensusSpanContext.TraceID); err == nil {
@@ -289,28 +291,18 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 							}
 						}
 					}
-					ctx, span = oc.StartSpanWithRemoteParent(
-						context.Background(),
-						"opengcs::bridge::request",
-						sc,
-						oc.WithServerSpanKind,
-					)
+					ctx, span = oc.StartSpanWithRemoteParent(context.Background(), spanName, sc, oc.WithServerSpanKind)
 				} else {
-					ctx, span = oc.StartSpan(
-						context.Background(),
-						"opengcs::bridge::request",
-						oc.WithServerSpanKind,
-					)
+					ctx, span = oc.StartSpan(context.Background(), spanName, oc.WithServerSpanKind)
 				}
 
 				span.AddAttributes(
 					trace.Int64Attribute("message-id", int64(header.ID)),
-					trace.StringAttribute("message-type", header.Type.String()),
 					trace.StringAttribute("activityID", base.ActivityID),
-					trace.StringAttribute("cid", base.ContainerID))
+					trace.StringAttribute(logfields.ContainerID, base.ContainerID))
 
 				entry := log.G(ctx)
-				if entry.Logger.GetLevel() >= logrus.DebugLevel {
+				if entry.Logger.IsLevelEnabled(logrus.DebugLevel) {
 					s := string(message)
 					switch header.Type {
 					case prot.ComputeSystemCreateV1:
@@ -382,10 +374,9 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				break
 			}
 
-			s := trace.FromContext(resp.ctx)
-			if s != nil {
-				log.G(resp.ctx).WithField("message", string(responseBytes)).Debug("request write response")
-				s.End()
+			log.G(resp.ctx).WithField("message", string(responseBytes)).Debug("request write response")
+			if span := trace.FromContext(resp.ctx); span != nil {
+				span.End()
 			}
 		}
 		responseErrChan <- resperr
@@ -423,7 +414,7 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 	ctx, span := oc.StartSpan(context.Background(),
 		"opengcs::bridge::PublishNotification",
 		oc.WithClientSpanKind)
-	span.AddAttributes(trace.StringAttribute("notification", fmt.Sprintf("%+v", n)))
+	span.AddAttributes(trace.StringAttribute("notification", log.Format(ctx, n)))
 	// DONT defer span.End() here. Publish is odd because bridgeResponse calls
 	// `End` on the `ctx` after the response is sent.
 

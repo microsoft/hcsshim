@@ -137,7 +137,7 @@ func (typ msgType) String() string {
 }
 
 // ocspancontext is the internal JSON representation of the OpenCensus
-// `trace.SpanContext` for fowarding to a GCS that supports it.
+// `trace.SpanContext` for forwarding to a GCS that supports it.
 type ocspancontext struct {
 	// TraceID is the `hex` encoded string of the OpenCensus
 	// `SpanContext.TraceID` to propagate to the guest.

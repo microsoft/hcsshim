@@ -10,12 +10,30 @@ import (
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 type options struct {
 	sampler trace.Sampler
+	attrs   []trace.Attribute
+	// add the request/response messages as span attributes
+	addMsg bool
+	// hook to update/modify a copy of the request/response messages before adding them as span attributes
+	msgAttrHook func(proto.Message)
+}
+
+func (o *options) msgHook(v any) any {
+	m, ok := v.(proto.Message)
+	if !ok || o.msgAttrHook == nil {
+		return v
+	}
+
+	m = proto.Clone(m)
+	o.msgAttrHook(m)
+	return m
 }
 
 // Option represents an option function that can be used with the OC TTRPC
@@ -27,6 +45,44 @@ type Option func(*options)
 func WithSampler(sampler trace.Sampler) Option {
 	return func(opts *options) {
 		opts.sampler = sampler
+	}
+}
+
+// WithAttributes specifies additional attributes to add to spans created by the interceptor.
+func WithAttributes(attr ...trace.Attribute) Option {
+	return func(opts *options) {
+		opts.attrs = append(opts.attrs, attr...)
+	}
+}
+
+// these are (currently) ServerInterceptor-specific options, but we cannot create a new [ServerOption] type
+// since that would break our API
+
+// WithAddMessage adds the request and response messages as attributes to the ttrpc method span.
+//
+// [ServerInterceptor] only.
+func WithAddMessage() Option {
+	return func(opts *options) {
+		opts.addMsg = true
+	}
+}
+
+// WithAddMessageHook specifies a hook to modify the ttrpc request or response messages
+// before adding them to the ttrpc method span.
+// This is intended to allow scrubbing sensitive fields from a the message.
+//
+// The function will be called with a clone of the original message (via [proto.Clone]) only if:
+//   - the interceptor is created with the [WithAddMessage] option
+//   - the function is non-nil
+//   - the ttrpc request or response are of type [proto.Message]
+//
+// Since ttrpc is a gRPC replacement, we are guaranteed that the messages will
+// implement [proto.Message].
+//
+// [ServerInterceptor] only.
+func WithAddMessageHook(f func(proto.Message)) Option {
+	return func(opts *options) {
+		opts.msgAttrHook = f
 	}
 }
 
@@ -70,6 +126,7 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 	for _, opt := range opts {
 		opt(&o)
 	}
+
 	return func(ctx context.Context, req *ttrpc.Request, resp *ttrpc.Response, info *ttrpc.UnaryClientInfo, inv ttrpc.Invoker) (err error) {
 		ctx, span := oc.StartSpan(
 			ctx,
@@ -78,6 +135,9 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 			oc.WithClientSpanKind)
 		defer span.End()
 		defer setSpanStatus(span, err)
+		if len(o.attrs) > 0 {
+			span.AddAttributes(o.attrs...)
+		}
 
 		spanContextBinary := propagation.Binary(span.SpanContext())
 		b64 := base64.StdEncoding.EncodeToString(spanContextBinary)
@@ -98,20 +158,34 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (_ interface{}, err error) {
+
+	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (resp interface{}, err error) {
 		name := convertMethodName(info.FullMethod)
 
 		var span *trace.Span
 		opts := []trace.StartOption{trace.WithSampler(o.sampler), oc.WithServerSpanKind}
-		parent, ok := getParentSpanFromContext(ctx)
-		if ok {
+		if parent, ok := getParentSpanFromContext(ctx); ok {
 			ctx, span = oc.StartSpanWithRemoteParent(ctx, name, parent, opts...)
 		} else {
 			ctx, span = oc.StartSpan(ctx, name, opts...)
 		}
 		defer span.End()
-		defer setSpanStatus(span, err)
+		defer func() {
+			if o.addMsg && err == nil {
+				span.AddAttributes(trace.StringAttribute("response", log.Format(ctx, o.msgHook(resp))))
+			}
+			setSpanStatus(span, err)
+		}()
+		if len(o.attrs) > 0 {
+			span.AddAttributes(o.attrs...)
+		}
 
-		return method(ctx, unmarshal)
+		return method(ctx, func(req interface{}) error {
+			err := unmarshal(req)
+			if o.addMsg {
+				span.AddAttributes(trace.StringAttribute("request", log.Format(ctx, o.msgHook(req))))
+			}
+			return err
+		})
 	}
 }

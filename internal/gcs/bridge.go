@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 const (
@@ -220,7 +221,11 @@ func (call *rpc) Wait() {
 // If allowCancel is set and the context becomes done, returns an error without
 // waiting for a response. Avoid this on messages that are not idempotent or
 // otherwise safe to ignore the response of.
-func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage, allowCancel bool) error {
+func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage, allowCancel bool) (err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::bridge::RPC::"+proc.String(), oc.WithClientSpanKind)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
 	call, err := brdg.AsyncRPC(ctx, proc, req, resp)
 	if err != nil {
 		return err
@@ -239,6 +244,7 @@ func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, r
 		brdg.log.WithField("reason", ctx.Err()).Warn("ignoring response to bridge message")
 		return ctx.Err()
 	case <-t.C:
+		// TODO: don't kill bridge on message timeout
 		brdg.kill(errors.New("message timeout"))
 		<-call.ch
 		return call.Err()
@@ -384,7 +390,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 	// Update the message header with the size.
 	binary.LittleEndian.PutUint32(buf.Bytes()[hdrOffSize:], uint32(buf.Len()))
 
-	if brdg.log.Logger.GetLevel() >= logrus.DebugLevel {
+	if brdg.log.Logger.IsLevelEnabled(logrus.DebugLevel) {
 		b := buf.Bytes()[hdrSize:]
 		switch typ {
 		// container environment vars are in rpCreate for linux; rpcExecuteProcess for windows

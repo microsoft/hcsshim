@@ -517,7 +517,7 @@ func (he *hcsExec) waitForContainerExit() {
 		trace.StringAttribute("tid", he.tid),
 		trace.StringAttribute("eid", he.id))
 
-	// wait for container or process to exit and ckean up resrources
+	// wait for container or process to exit and clean up resources
 	select {
 	case <-he.c.WaitChannel():
 		// Container exited first. We need to force the process into the exited
