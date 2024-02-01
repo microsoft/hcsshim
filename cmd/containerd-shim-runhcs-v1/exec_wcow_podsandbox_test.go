@@ -10,7 +10,7 @@ import (
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/errdefs"
 )
 
 func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd_v1_types.Status, status *task.StateResponse) {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/containerd/containerd/api/types"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/errdefs"
 )
 
 // validateRootfsAndLayers checks to ensure we have appropriate information
