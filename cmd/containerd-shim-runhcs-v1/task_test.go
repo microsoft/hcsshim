@@ -12,7 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/errdefs"
 	typeurl "github.com/containerd/typeurl/v2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"

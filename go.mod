@@ -11,6 +11,7 @@ require (
 	github.com/containerd/cgroups/v3 v3.0.2
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.7.0
+	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/protobuild v0.3.0
 	github.com/containerd/ttrpc v1.2.2
@@ -92,7 +93,7 @@ require (
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/tools v0.14.0 // indirect
-	google.golang.org/genproto v0.0.0-20230822172742-b8732ec3820d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
+	google.golang.org/genproto v0.0.0-20230920204549-e6e6cdab5c13 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20231002182017-d307bd883b97 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
