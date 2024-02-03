@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func Test_Container_Network_Hostname(t *testing.T) {
@@ -45,11 +45,7 @@ func Test_Container_Network_Hostname(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 
 			sandboxRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 			sandboxRequest.Config.Hostname = "TestHost"

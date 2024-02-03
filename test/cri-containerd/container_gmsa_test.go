@@ -11,7 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/hcs"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func Test_RunContainer_GMSA_WCOW(t *testing.T) {

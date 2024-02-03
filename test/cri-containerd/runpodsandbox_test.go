@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	iannotations "github.com/Microsoft/hcsshim/internal/annotations"
 	"github.com/Microsoft/hcsshim/osversion"

@@ -11,7 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 // This test runs a container with an image that waits for sigterm and then

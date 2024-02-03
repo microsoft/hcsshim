@@ -13,7 +13,7 @@ import (
 	kubeutil "github.com/containerd/containerd/integration/remote/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	"github.com/Microsoft/hcsshim/osversion"
 	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"
@@ -27,6 +27,7 @@ const (
 	connectTimeout = time.Second * 10
 	testNamespace  = "cri-containerd-test"
 
+	// TODO: remove lcow when shim only tests are relocated
 	lcowRuntimeHandler                = "runhcs-lcow"
 	wcowProcessRuntimeHandler         = "runhcs-wcow-process"
 	wcowHypervisorRuntimeHandler      = "runhcs-wcow-hypervisor"
@@ -42,6 +43,7 @@ const (
 	testVMServiceAddress = "C:\\ContainerPlat\\vmservice.sock"
 	testVMServiceBinary  = "C:\\Containerplat\\vmservice.exe"
 
+	// TODO: remove the lcow ones when shim only tests are relocated.
 	imageLcowK8sPause       = "mcr.microsoft.com/oss/kubernetes/pause:3.1"
 	imageLcowAlpine         = "mcr.microsoft.com/mirror/docker/library/alpine:3.16"
 	imageLcowAlpineCoreDump = "cplatpublic.azurecr.io/stackoverflow-alpine:latest"
@@ -104,9 +106,6 @@ const (
 	featureGPU                = "GPU"
 	featureCRIUpdateContainer = "UpdateContainer"
 	featureTerminateOnRestart = "TerminateOnRestart"
-	featureLCOWIntegrity      = "LCOWIntegrity"
-	featureLCOWCrypt          = "LCOWCrypt"
-	featureCRIPlugin          = "CRIPlugin"
 )
 
 var allFeatures = []string{
@@ -118,9 +117,6 @@ var allFeatures = []string{
 	featureGPU,
 	featureCRIUpdateContainer,
 	featureTerminateOnRestart,
-	featureLCOWIntegrity,
-	featureLCOWCrypt,
-	featureCRIPlugin,
 }
 
 func TestMain(m *testing.M) {

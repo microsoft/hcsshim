@@ -28,8 +28,6 @@ updates:
       - go
       - tests
     ignore:
-      # updating CRI would break tests that rely on `v1alpha2` API
-      - dependency-name: "k8s.io/cri-api"
       # keep containerd and related dependencies in sync with the shim/the root repo
       - dependency-name: "github.com/containerd/*"
       # ignore patch version increment updates in test; they shouldn't be critical

@@ -11,7 +11,6 @@ require (
 	github.com/containerd/ttrpc v1.2.2
 	github.com/google/go-containerregistry v0.17.0
 	github.com/josephspurrier/goversioninfo v1.4.0
-	github.com/kevpar/cri v1.11.1-0.20220302210600-4c5c347230b2
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0-rc3
 	github.com/opencontainers/runtime-spec v1.1.0
@@ -107,8 +106,4 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-replace (
-	github.com/Microsoft/hcsshim => ../
-	// keep CRI version frozen for cri-containerd tests
-	k8s.io/cri-api => k8s.io/cri-api v0.25.8
-)
+replace github.com/Microsoft/hcsshim => ../
