@@ -3,8 +3,8 @@ package images
 import (
 	"fmt"
 
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/errdefs"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"context"
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/errdefs"
 	"github.com/pkg/errors"
 )
 
