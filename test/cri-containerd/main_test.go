@@ -88,11 +88,10 @@ var (
 
 // Flags
 var (
-	flagFeatures              = testflag.NewFeatureFlag(allFeatures)
-	flagCRIEndpoint           = flag.String("cri-endpoint", "tcp://127.0.0.1:2376", "Address of CRI runtime and image service.")
-	flagVirtstack             = flag.String("virtstack", "", "Virtstack to use for hypervisor isolated containers")
-	flagVMServiceBinary       = flag.String("vmservice-binary", "", "Path to a binary implementing the vmservice ttrpc service")
-	flagContainerdServiceName = flag.String("containerd-service-name", "containerd", "Name of the containerd Windows service")
+	flagFeatures        = testflag.NewFeatureFlag(allFeatures)
+	flagCRIEndpoint     = flag.String("cri-endpoint", "tcp://127.0.0.1:2376", "Address of CRI runtime and image service.")
+	flagVirtstack       = flag.String("virtstack", "", "Virtstack to use for hypervisor isolated containers")
+	flagVMServiceBinary = flag.String("vmservice-binary", "", "Path to a binary implementing the vmservice ttrpc service")
 )
 
 // Features
