@@ -1,20 +1,17 @@
 package osversion
 
 import (
-	"fmt"
 	"testing"
 )
 
-func TestOSVersionString(t *testing.T) {
-	v := OSVersion{
-		Version:      809042555,
-		MajorVersion: 123,
-		MinorVersion: 2,
-		Build:        12345,
+func TestOSVersionParseGet(t *testing.T) {
+	v := Get()
+	parsed, err := Parse(v.String())
+	if err != nil {
+		t.Errorf("unexpected parse error: %q", err)
 	}
-	expected := "the version is: 123.2.12345"
-	actual := fmt.Sprintf("the version is: %s", v)
-	if actual != expected {
-		t.Errorf("expected: %q, got: %q", expected, actual)
+
+	if parsed != v {
+		t.Errorf("unable to reparse into the same version, original: %q, parsed: %q", v, parsed)
 	}
 }
