@@ -18,14 +18,7 @@ var (
 func Get() OSVersion {
 	once.Do(func() {
 		v := *windows.RtlGetVersion()
-		osv = OSVersion{}
-		osv.MajorVersion = uint8(v.MajorVersion)
-		osv.MinorVersion = uint8(v.MinorVersion)
-		osv.Build = uint16(v.BuildNumber)
-		// Fill version value so that existing clients don't break
-		osv.Version = v.BuildNumber << 16
-		osv.Version = osv.Version | (uint32(v.MinorVersion) << 8)
-		osv.Version = osv.Version | v.MajorVersion
+		osv = newVersion(uint8(v.MajorVersion), uint8(v.MinorVersion), uint16(v.BuildNumber))
 	})
 	return osv
 }

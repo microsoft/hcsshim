@@ -27,3 +27,35 @@ func TestOSVersionString(t *testing.T) {
 		}
 	})
 }
+
+func TestOSVersionIgnoreRevision(t *testing.T) {
+	expected := OSVersion{
+		Version:      809042555,
+		MajorVersion: 123,
+		MinorVersion: 2,
+		Build:        12345,
+	}
+	actual, err := Parse("123.2.12345.9876")
+	if err != nil {
+		t.Errorf("failed to parse back: %q", err)
+	}
+	if actual != expected {
+		t.Errorf("expected: %q, got: %q", expected, actual)
+	}
+}
+
+func TestOSVersionFailUnexpected(t *testing.T) {
+	for _, tc := range []string{
+		"123.2.12345.9876.432134",
+		"123",
+		"10.0",
+		"windows",
+	} {
+		t.Run(tc, func(t *testing.T) {
+			_, err := Parse(tc)
+			if err == nil {
+				t.Errorf("parsing %q should fail", tc)
+			}
+		})
+	}
+}
