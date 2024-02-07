@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	errProcNotStarted  = errors.New("process has not started yet")
-	errProcNotFinished = errors.New("process has not finished yet")
+	errProcNotStarted = errors.New("process has not started yet")
 )
 
 // Exec is an object that represents an external process. A user should NOT initialize one manually and instead should
@@ -44,7 +43,6 @@ type Exec struct {
 	// stdioPipesProcSide are the stdio pipes that will be passed into the process. These should not be interacted with at all
 	// and aren't exposed in any way to a user of Exec.
 	stdioPipesProcSide [3]*os.File
-	attrList           *windows.ProcThreadAttributeListContainer
 	*execConfig
 }
 
@@ -122,10 +120,11 @@ func (e *Exec) Start() error {
 	// 2. Pseudo console setup if one was requested.
 	// 3. Inherit only stdio handles if ones were requested.
 	// Therefore we need a list of size 3.
-	e.attrList, err = windows.NewProcThreadAttributeList(3)
+	attrList, err := windows.NewProcThreadAttributeList(3)
 	if err != nil {
 		return fmt.Errorf("failed to initialize process thread attribute list: %w", err)
 	}
+	defer attrList.Delete()
 
 	// Need to know whether the process needs to inherit stdio handles. The below setup is so that we only inherit the
 	// stdio pipes and nothing else into the new process.
@@ -139,7 +138,7 @@ func (e *Exec) Start() error {
 		}
 
 		// Set up the process to only inherit stdio handles and nothing else.
-		err := e.attrList.Update(
+		err := attrList.Update(
 			windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
 			unsafe.Pointer(&handles[0]),
 			uintptr(len(handles))*unsafe.Sizeof(handles[0]),
@@ -161,13 +160,13 @@ func (e *Exec) Start() error {
 	}
 
 	if e.job != nil {
-		if err := e.job.UpdateProcThreadAttribute(e.attrList); err != nil {
+		if err := e.job.UpdateProcThreadAttribute(attrList); err != nil {
 			return err
 		}
 	}
 
 	if e.cpty != nil {
-		if err := e.cpty.UpdateProcThreadAttribute(e.attrList); err != nil {
+		if err := e.cpty.UpdateProcThreadAttribute(attrList); err != nil {
 			return err
 		}
 	}
@@ -176,7 +175,7 @@ func (e *Exec) Start() error {
 	pSec := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(zeroSec)), InheritHandle: 1}
 	tSec := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(zeroSec)), InheritHandle: 1}
 
-	siEx.ProcThreadAttributeList = e.attrList.List() //nolint:govet // unusedwrite: ProcThreadAttributeList will be read in syscall
+	siEx.ProcThreadAttributeList = attrList.List() //nolint:govet // unusedwrite: ProcThreadAttributeList will be read in syscall
 	siEx.Cb = uint32(unsafe.Sizeof(*siEx))
 	if e.execConfig.token != 0 {
 		err = windows.CreateProcessAsUser(
@@ -214,6 +213,17 @@ func (e *Exec) Start() error {
 		_ = windows.CloseHandle(windows.Handle(pi.Thread))
 	}()
 
+	// Now that the process has started, we need to close our copies of its stdio handles.
+	// If we keep these around, then our ends of the pipes won't ever reach "EOF" after the process exits.
+	for i := range e.stdioPipesProcSide {
+		if e.stdioPipesProcSide[i] != nil {
+			if err := e.stdioPipesProcSide[i].Close(); err != nil {
+				return fmt.Errorf("close process's stdio handle %d: %w", i, err)
+			}
+			e.stdioPipesProcSide[i] = nil
+		}
+	}
+
 	// Grab an *os.Process to avoid reinventing the wheel here. The stdlib has great logic around waiting, exit code status/cleanup after a
 	// process has been launched.
 	e.process, err = os.FindProcess(int(pi.ProcessId))
@@ -234,16 +244,6 @@ func (e *Exec) Run() error {
 		return err
 	}
 	return e.Wait()
-}
-
-// Close will release resources tied to the process (stdio etc.)
-func (e *Exec) close() error {
-	if e.procState == nil {
-		return errProcNotFinished
-	}
-	e.attrList.Delete()
-	e.closeStdio()
-	return nil
 }
 
 // Pid returns the pid of the running process. If the process isn't running, this will return -1.
@@ -284,7 +284,7 @@ func (e *Exec) Wait() (err error) {
 	if err != nil {
 		return err
 	}
-	return e.close()
+	return nil
 }
 
 // Kill will forcefully kill the process.
@@ -384,21 +384,6 @@ func (e *Exec) setupStdio() error {
 		e.stdioPipesProcSide[2] = pw
 	}
 	return nil
-}
-
-func (e *Exec) closeStdio() {
-	for i, file := range e.stdioPipesOurSide {
-		if file != nil {
-			file.Close()
-		}
-		e.stdioPipesOurSide[i] = nil
-	}
-	for i, file := range e.stdioPipesProcSide {
-		if file != nil {
-			file.Close()
-		}
-		e.stdioPipesProcSide[i] = nil
-	}
 }
 
 //
