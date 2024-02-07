@@ -10,6 +10,14 @@ It is primarily used in the [Moby](https://github.com/moby/moby) and [Containerd
 
 While this repository can be used as a library of sorts to call the HCS apis, there are a couple binaries built out of the repository as well. The main ones being the Linux guest agent, and an implementation of the [runtime v2 containerd shim api](https://github.com/containerd/containerd/blob/master/runtime/v2/README.md).
 
+### Install dependencies
+To build the init binary used to launch Utility VMs, we rely on "libkmod". To install libkmod, run the following in a linux environment:
+
+```sh
+> sudo apt-get update
+> sudo apt-get install -y libkmod2 libkmod-dev
+```
+
 ### Linux Hyper-V Container Guest Agent
 
 To build the Linux guest agent itself all that's needed is to set your GOOS to "Linux" and build out of ./cmd/gcs.
