@@ -642,6 +642,12 @@ func (job *JobObject) SetIOTracking() error {
 	return enableIOTracking(job.handle)
 }
 
+// Handle returns the underlyaing job object handle.
+// FIXME (maksiman): Is this safe to do?
+func (job *JobObject) Handle() windows.Handle {
+	return job.handle
+}
+
 func enableIOTracking(job windows.Handle) error {
 	info := winapi.JOBOBJECT_IO_ATTRIBUTION_INFORMATION{
 		ControlFlags: winapi.JOBOBJECT_IO_ATTRIBUTION_CONTROL_ENABLE,
