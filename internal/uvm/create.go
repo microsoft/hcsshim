@@ -205,7 +205,7 @@ func (uvm *UtilityVM) OS() string {
 
 func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 	uvm.exitCh = make(chan struct{})
-	system, err := hcs.CreateComputeSystem(ctx, uvm.id, doc)
+	system, err := hcs.CreateComputeSystem(ctx, uvm.id, doc, nil)
 	if err != nil {
 		return err
 	}
@@ -310,7 +310,7 @@ func (uvm *UtilityVM) CreateContainer(ctx context.Context, id string, settings i
 		ShouldTerminateOnLastHandleClosed: true,
 		HostedSystem:                      settings,
 	}
-	c, err := hcs.CreateComputeSystem(ctx, id, &doc)
+	c, err := hcs.CreateComputeSystem(ctx, id, &doc, nil)
 	if err != nil {
 		return nil, err
 	}

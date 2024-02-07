@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Microsoft/hcsshim/internal/computecore"
 	"strings"
 	"sync"
 	"syscall"
@@ -28,6 +29,7 @@ import (
 type System struct {
 	handleLock     sync.RWMutex
 	handle         vmcompute.HcsSystem
+	handleV2       computecore.HCSSystem
 	id             string
 	callbackNumber uintptr
 
@@ -37,6 +39,11 @@ type System struct {
 	exitError      error
 	os, typ, owner string
 	startTime      time.Time
+}
+
+type ResourcePoolOptions struct {
+	MemoryPoolJobName string
+	CPUPoolJobName    string
 }
 
 var _ cow.Container = &System{}
@@ -55,7 +62,7 @@ func siloNameFmt(containerID string) string {
 }
 
 // CreateComputeSystem creates a new compute system with the given configuration but does not start it.
-func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface interface{}) (_ *System, err error) {
+func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface interface{}, rpOptions *ResourcePoolOptions) (_ *System, err error) {
 	operation := "hcs::CreateComputeSystem"
 
 	// hcsCreateComputeSystemContext is an async operation. Start the outer span
@@ -75,12 +82,42 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 	hcsDocument := string(hcsDocumentB)
 
 	var (
-		identity    syscall.Handle
-		resultJSON  string
-		createError error
+		//identity    syscall.Handle
+		hcsOp         computecore.HCSOperation
+		resultJSON    string
+		createError   error
+		operationOpts computecore.CreateOperationOptions
 	)
-	computeSystem.handle, resultJSON, createError = vmcompute.HcsCreateComputeSystem(ctx, id, hcsDocument, identity)
+	if rpOptions != nil {
+		// If resource pool configuration isn't empty, we should be using HCS v2
+		// APIs for creating the compute system.
+		if rpOptions.MemoryPoolJobName != "" {
+			operationOpts.JobResources = append(operationOpts.JobResources, computecore.HCSJobResource{
+				Name: rpOptions.MemoryPoolJobName,
+				Uri:  computecore.HCSMemoryJobUri,
+			})
+		}
+		if rpOptions.CPUPoolJobName != "" {
+			operationOpts.JobResources = append(operationOpts.JobResources, computecore.HCSJobResource{
+				Name: rpOptions.CPUPoolJobName,
+				Uri:  computecore.HCSCpuJobUri,
+			})
+		}
+	}
+	hcsOp, err = computecore.HcsCreateOperation(ctx, 0, 0, &operationOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if iErr := hcsOp.Close(); iErr != nil {
+			log.G(ctx).WithError(iErr).Error("failed to close HCS operation")
+		}
+	}()
+
+	//computeSystem.handle, resultJSON, createError = vmcompute.HcsCreateComputeSystem(ctx, id, hcsDocument, identity)
+	computeSystem.handleV2, resultJSON, createError = computecore.HcsCreateComputeSystem(ctx, id, hcsDocument, hcsOp, nil)
 	if createError == nil || IsPending(createError) {
+		computeSystem.handle = vmcompute.HcsSystem(computeSystem.handleV2)
 		defer func() {
 			if err != nil {
 				computeSystem.Close()
@@ -122,6 +159,8 @@ func OpenComputeSystem(ctx context.Context, id string) (*System, error) {
 		return nil, makeSystemError(computeSystem, operation, err, events)
 	}
 	computeSystem.handle = handle
+	// FIXME: is this needed?
+	computeSystem.handleV2 = computecore.HCSSystem(handle)
 	defer func() {
 		if err != nil {
 			computeSystem.Close()
@@ -359,7 +398,7 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 		return nil, makeSystemError(computeSystem, operation, err, nil)
 	}
 
-	propertiesJSON, resultJSON, err := vmcompute.HcsGetComputeSystemProperties(ctx, computeSystem.handle, string(queryBytes))
+	propertiesJSON, resultJSON, err := vmcompute.HcsGetComputeSystemProperties(ctx, vmcompute.HcsSystem(computeSystem.handle), string(queryBytes))
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
 		return nil, makeSystemError(computeSystem, operation, err, events)

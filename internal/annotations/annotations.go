@@ -48,4 +48,10 @@ const (
 	// UVMConsolePipe is the name of the named pipe that the UVM console is connected to. This works only for non-SNP
 	// scenario, for SNP use a debugger.
 	UVMConsolePipe = "io.microsoft.virtualmachine.console.pipe"
+
+	// HRMCPUJobName specifies the job name of the HRM CPU job object that the underlying HCS system should be bound to.
+	HRMCPUJobName = "io.microsoft.virtualmachine.hrm.cpu-job-name"
+
+	// HRMMemoryJobName specifies the job name of the HRM memory job object that the underlying HCS system should be bound to.
+	HRMMemoryJobName = "io.microsoft.virtualmachine.hrm.memory-job-name"
 )

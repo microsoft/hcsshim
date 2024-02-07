@@ -281,7 +281,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		return c, r, nil
 	}
 
-	system, err := hcs.CreateComputeSystem(ctx, coi.actualID, hcsDocument)
+	system, err := hcs.CreateComputeSystem(ctx, coi.actualID, hcsDocument, nil)
 	if err != nil {
 		return nil, r, err
 	}

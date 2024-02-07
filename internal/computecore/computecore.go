@@ -33,7 +33,6 @@ type (
 
 func HcsCreateComputeSystem(ctx context.Context, id string, configuration string, operation HCSOperation, securityDescriptor *uint32) (computeSystem HCSSystem, result string, hr error) {
 	ctx, span := oc.StartSpan(ctx, "computecore::HcsCreateComputeSystem")
-	defer span.End()
 	defer func() {
 		if result != "" {
 			span.AddAttributes(trace.StringAttribute("resultDocument", result))
@@ -41,6 +40,7 @@ func HcsCreateComputeSystem(ctx context.Context, id string, configuration string
 		if !errors.Is(hr, windows.ERROR_VMCOMPUTE_OPERATION_PENDING) {
 			oc.SetSpanStatus(span, hr)
 		}
+		span.End()
 	}()
 	span.AddAttributes(
 		trace.StringAttribute("id", id),
