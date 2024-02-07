@@ -209,8 +209,8 @@ func (e *Exec) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to create process: %w", err)
 	}
-	// Don't need the thread handle for anything.
 	defer func() {
+		_ = windows.CloseHandle(windows.Handle(pi.Process))
 		_ = windows.CloseHandle(windows.Handle(pi.Thread))
 	}()
 
