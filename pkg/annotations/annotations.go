@@ -102,6 +102,9 @@ const (
 	// supplied was C:\rootfs and the container's ID is 12345678 the rootfs will be located at C:\rootfs\12345678.
 	HostProcessRootfsLocation = "microsoft.com/hostprocess-rootfs-location"
 
+	// HostProcessDisableSilo indicates to turn off silo/bindflt features, even if the host supports it.
+	HostProcessDisableSilo = "microsoft.com/hostprocess-no-silo"
+
 	// AllowOvercommit indicates if we should allow over commit memory for UVM.
 	// Defaults to true. For physical backed memory, set to false.
 	AllowOvercommit = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"

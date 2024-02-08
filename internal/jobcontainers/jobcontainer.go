@@ -25,6 +25,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/winapi"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
@@ -187,6 +188,12 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 			fileBindingSupport = true
 		}
 	})
+
+	if forceNoSilo, ok := s.Annotations[annotations.HostProcessDisableSilo]; ok {
+		if forceNoSilo == "true" {
+			fileBindingSupport = false
+		}
+	}
 
 	var closer resources.ResourceCloser
 	if fileBindingSupport {

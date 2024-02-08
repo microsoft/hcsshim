@@ -332,6 +332,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 			s.Annotations,
 			annotations.HostProcessInheritUser,
 			annotations.HostProcessRootfsLocation,
+			annotations.HostProcessDisableSilo,
 		)
 	}
 
