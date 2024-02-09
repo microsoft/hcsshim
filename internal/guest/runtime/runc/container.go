@@ -5,7 +5,6 @@ package runc
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -327,7 +326,7 @@ func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.Conn
 
 	args := []string{"exec"}
 	args = append(args, "-d", "--process", filepath.Join(tempProcessDir, "process.json"))
-	return c.startProcess(tempProcessDir, processDef.Terminal, stdioSet, nil, args...)
+	return c.startProcess(tempProcessDir, processDef.Terminal, stdioSet, args...)
 }
 
 // startProcess performs the operations necessary to start a container process
@@ -338,9 +337,7 @@ func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.Conn
 func (c *container) startProcess(
 	tempProcessDir string,
 	hasTerminal bool,
-	stdioSet *stdio.ConnectionSet,
-	annotations map[string]string,
-	initialArgs ...string,
+	stdioSet *stdio.ConnectionSet, initialArgs ...string,
 ) (p *process, err error) {
 	args := initialArgs
 
@@ -389,70 +386,6 @@ func (c *container) startProcess(
 		}
 		if fileSet.Err != nil {
 			cmd.Stderr = fileSet.Err
-		}
-	}
-
-	// This is for enabling container logging via side car feature. This is in experimental stage now and need to be revisited.
-	var stdoutFifoPipe, stderrFifoPipe *os.File
-	if annotations != nil {
-		pipeNameSuffix, exists := annotations["io.microsoft.bmc.logging.pipelocation"]
-		if exists {
-			if hasTerminal {
-				return nil, fmt.Errorf("logging via side car and TTY are not supported together")
-			}
-			pipeDirectory := "/run/gcs/containerlogs/"
-			stdoutPipeName := pipeDirectory + pipeNameSuffix + "-stdout"
-			stderrPipeName := pipeDirectory + pipeNameSuffix + "-stderr"
-			err = os.MkdirAll(pipeDirectory, 0755)
-			if err != nil {
-				return nil, fmt.Errorf("error creating log directory %s for logging pipe fifo: %w", pipeDirectory, err)
-			}
-
-			_, err = os.Stat(stdoutPipeName)
-			if err != nil {
-				// fifo pipe does not exist, create one
-				err = syscall.Mkfifo(stdoutPipeName, 0666)
-				if err != nil {
-					return nil, fmt.Errorf("error creating fifo %s: %w", stdoutPipeName, err)
-				}
-			}
-
-			_, err = os.Stat(stderrPipeName)
-			if err != nil {
-				// fifo pipe does not exist, create one
-				err = syscall.Mkfifo(stderrPipeName, 0666)
-				if err != nil {
-					return nil, fmt.Errorf("error creating fifo %s: %w", stderrPipeName, err)
-				}
-			}
-
-			// pipe either exist before hand or we have created one above
-			stdoutFifoPipe, err = os.OpenFile(stdoutPipeName, os.O_RDWR|os.O_APPEND, os.ModeNamedPipe)
-			if err != nil {
-				return nil, fmt.Errorf("error opening fifo %s: %w", stdoutPipeName, err)
-			}
-
-			stderrFifoPipe, err = os.OpenFile(stderrPipeName, os.O_RDWR|os.O_APPEND, os.ModeNamedPipe)
-			if err != nil {
-				return nil, fmt.Errorf("error opening fifo %s: %w", stderrPipeName, err)
-			}
-		}
-
-		isLoggingSideCarContainerStr, exists := annotations["io.microsoft.bmc.logging.isLoggingSideCarContainer"]
-		if exists {
-			isLoggingSideCarContainer, err := strconv.ParseBool(isLoggingSideCarContainerStr)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing flag isLoggingSideCarContainer: %w", err)
-			}
-			if !isLoggingSideCarContainer {
-				// workload container needs to redirect stdout and stderr to fifo pipe.
-				cmd.Stdout = stdoutFifoPipe
-				cmd.Stderr = stderrFifoPipe
-			} else {
-				// logging side car container needs to know the pipe fd.
-				cmd.Args = append(cmd.Args, "--preserve-fds", "2")
-				cmd.ExtraFiles = []*os.File{stdoutFifoPipe, stderrFifoPipe}
-			}
 		}
 	}
 
