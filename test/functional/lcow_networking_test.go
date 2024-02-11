@@ -4,6 +4,7 @@
 package functional
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,16 +14,17 @@ import (
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/osversion"
 
-	"github.com/Microsoft/hcsshim/test/internal/cmd"
-	"github.com/Microsoft/hcsshim/test/internal/container"
-	"github.com/Microsoft/hcsshim/test/internal/layers"
-	"github.com/Microsoft/hcsshim/test/internal/oci"
+	testcmd "github.com/Microsoft/hcsshim/test/internal/cmd"
+	testcontainer "github.com/Microsoft/hcsshim/test/internal/container"
+	testlayers "github.com/Microsoft/hcsshim/test/internal/layers"
+	testoci "github.com/Microsoft/hcsshim/test/internal/oci"
+	"github.com/Microsoft/hcsshim/test/internal/util"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	"github.com/Microsoft/hcsshim/test/pkg/uvm"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func TestLCOW_IPv6_Assignment(t *testing.T) {
-	requireFeatures(t, featureLCOW)
+	requireFeatures(t, featureLCOW, featureUVM)
 	require.Build(t, osversion.RS5)
 
 	ns, err := newNetworkNamespace()
@@ -121,10 +123,10 @@ func TestLCOW_IPv6_Assignment(t *testing.T) {
 		t.Fatalf("network attachment: %v", err)
 	}
 
-	ctx := namespacedContext()
+	ctx := util.Context(namespacedContext(context.Background()), t)
 	ls := linuxImageLayers(ctx, t)
-	opts := defaultLCOWOptions(t)
-	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
+	opts := defaultLCOWOptions(ctx, t)
+	vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 
 	if err := vm.CreateAndAssignNetworkSetup(ctx, "", ""); err != nil {
 		t.Fatalf("setting up network: %v", err)
@@ -134,35 +136,35 @@ func TestLCOW_IPv6_Assignment(t *testing.T) {
 	}
 
 	cID := strings.ReplaceAll(t.Name(), "/", "")
-	scratch, _ := layers.ScratchSpace(ctx, t, vm, "", "", "")
-	spec := oci.CreateLinuxSpec(ctx, t, cID,
-		oci.DefaultLinuxSpecOpts(ns.Id,
-			ctrdoci.WithProcessArgs("/bin/sh", "-c", oci.TailNullArgs),
-			oci.WithWindowsNetworkNamespace(ns.Id),
-			oci.WithWindowsLayerFolders(append(ls, scratch)))...)
+	scratch, _ := testlayers.ScratchSpace(ctx, t, vm, "", "", "")
+	spec := testoci.CreateLinuxSpec(ctx, t, cID,
+		testoci.DefaultLinuxSpecOpts(ns.Id,
+			ctrdoci.WithProcessArgs("/bin/sh", "-c", testoci.TailNullArgs),
+			ctrdoci.WithWindowsNetworkNamespace(ns.Id),
+			testoci.WithWindowsLayerFolders(append(ls, scratch)))...)
 
-	c, _, cleanup := container.Create(ctx, t, vm, spec, cID, hcsOwner)
+	c, _, cleanup := testcontainer.Create(ctx, t, vm, spec, cID, hcsOwner)
 	t.Logf("created container %s", cID)
 	t.Cleanup(cleanup)
-	init := container.Start(ctx, t, c, nil)
+	init := testcontainer.Start(ctx, t, c, nil)
 	t.Cleanup(func() {
-		cmd.Kill(ctx, t, init)
-		cmd.Wait(ctx, t, init)
-		container.Kill(ctx, t, c)
-		container.Wait(ctx, t, c)
+		testcmd.Kill(ctx, t, init)
+		testcmd.Wait(ctx, t, init)
+		testcontainer.Kill(ctx, t, c)
+		testcontainer.Wait(ctx, t, c)
 	})
 
-	ps := oci.CreateLinuxSpec(ctx, t, cID,
-		oci.DefaultLinuxSpecOpts(ns.Id,
+	ps := testoci.CreateLinuxSpec(ctx, t, cID,
+		testoci.DefaultLinuxSpecOpts(ns.Id,
 			ctrdoci.WithDefaultPathEnv,
 			ctrdoci.WithProcessArgs("/bin/sh", "-c", `ip -o address show dev eth0 scope global`),
 		)...,
 	).Process
-	io := cmd.NewBufferedIO()
-	p := cmd.Create(ctx, t, c, ps, io)
-	cmd.Start(ctx, t, p)
+	io := testcmd.NewBufferedIO()
+	p := testcmd.Create(ctx, t, c, ps, io)
+	testcmd.Start(ctx, t, p)
 
-	e := cmd.Wait(ctx, t, p)
+	e := testcmd.Wait(ctx, t, p)
 	out, err := io.Output()
 	t.Logf("cmd output:\n%s", out)
 	if e != 0 || err != nil {

@@ -4,12 +4,18 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/url"
+	"os"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/Microsoft/go-winio"
 	"github.com/sirupsen/logrus"
+
+	"github.com/Microsoft/hcsshim/internal/hcs"
 )
 
 // UpstreamIO is an interface describing the IO to connect to above the shim.
@@ -57,13 +63,40 @@ func NewUpstreamIO(ctx context.Context, id, stdout, stderr, stdin string, termin
 
 	// Create IO for binary logging driver.
 	if u.Scheme != "binary" {
-		return nil, errors.Errorf("scheme must be 'binary', got: '%s'", u.Scheme)
+		return nil, fmt.Errorf("scheme must be 'binary', got: '%s'", u.Scheme)
 	}
 
 	return NewBinaryIO(ctx, id, u)
 }
 
+// isClosedIOErr checks if the error is from the underlying file or pipe already being closed.
+func isClosedIOErr(err error) bool {
+	for _, e := range []error{
+		os.ErrClosed,
+		net.ErrClosed,
+		io.ErrClosedPipe,
+		winio.ErrFileClosed,
+		hcs.ErrAlreadyClosed,
+	} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
 // relayIO is a glorified io.Copy that also logs when the copy has completed.
+//
+// It will ignore errors raised during the copy from attempting to read from
+// (or write to) a closed io.Reader (or Writer, respectively).
+// Ideally, this would not be necessary, since the command's stdout and stderr would
+// send an EOF first before closing, but that is not always the case (eg, [jobcontainer.JobProcess]
+// uses unnamed pipes, which do not support EOF).
+// Additionally, we do not prevent writing to the stdin of a closed Cmd, so there could be a race
+// between reading the upstream stdin, the command finishing, and attempting to write to the command's
+// stdin writer.
+//
+// See [isClosedIOErr] for the errors that are ignored.
 func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, error) {
 	n, err := io.Copy(w, r)
 	if log != nil {
@@ -72,6 +105,10 @@ func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, e
 			"file":  name,
 			"bytes": n,
 		})
+		if isClosedIOErr(err) {
+			log.WithError(err).Trace("ignoring closed IO error")
+			err = nil
+		}
 		if err != nil {
 			lvl = logrus.ErrorLevel
 			log = log.WithError(err)

@@ -30,11 +30,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var (
-	fileBindingSupport   bool
-	checkBindSupportOnce sync.Once
-)
-
 const (
 	// jobContainerNameFmt is the naming format that job objects for job containers will follow.
 	jobContainerNameFmt = "JobContainer_%s"
@@ -181,15 +176,8 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 	// show up at beforehand as you would need to know the containers ID before you launched it. Now that the
 	// rootfs location can be static, a user can easily supply C:\hpc\rest\of\path as their work dir and still
 	// supply anything outside of C:\hpc if they want another location on the host.
-	checkBindSupportOnce.Do(func() {
-		bindDLL := `C:\windows\system32\bindfltapi.dll`
-		if _, err := os.Stat(bindDLL); err == nil {
-			fileBindingSupport = true
-		}
-	})
-
 	var closer resources.ResourceCloser
-	if fileBindingSupport {
+	if FileBindingSupported() {
 		closer, err = container.bindSetup(ctx, s)
 	} else {
 		closer, err = container.fallbackSetup(ctx, s)
@@ -254,7 +242,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		// If the working directory was changed, that means the user supplied %CONTAINER_SANDBOX_MOUNT_POINT%\\my\dir or something similar.
 		// In that case there's nothing left to do, as we don't want to join it with the mount point again.. If it *wasn't* changed, and there's
 		// no bindflt support then we need to join it with the mount point, as it's some normal path.
-		if !changed && !fileBindingSupport {
+		if !changed && !FileBindingSupported() {
 			workDir = filepath.Join(c.rootfsLocation, removeDriveLetter(workDir))
 		}
 	}
@@ -335,7 +323,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	// (cmd in this case) after launch can now see C:\<rootfslocation> as it's in the silo. We could
 	// also add a new mode/flag for the shim where it's just a dummy process launcher, so we can invoke
 	// the shim instead of cmd and have more control over things.
-	if fileBindingSupport {
+	if FileBindingSupported() {
 		commandLine = "cmd /c " + commandLine
 	}
 

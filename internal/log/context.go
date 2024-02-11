@@ -101,6 +101,7 @@ func WithContext(ctx context.Context, entry *logrus.Entry) (context.Context, *lo
 // operations triggered by the cancellation require a non-cancelled context to
 // execute.
 func Copy(dst context.Context, src context.Context) context.Context {
+	// TODO (go1.21): https://pkg.go.dev/context#WithoutCancel
 	if s := trace.FromContext(src); s != nil {
 		dst = trace.NewContext(dst, s)
 	}

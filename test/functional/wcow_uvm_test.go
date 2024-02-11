@@ -1,6 +1,5 @@
-//go:build windows && (functional || wcow)
-// +build windows
-// +build functional wcow
+//go:build windows && functional
+// +build windows,functional
 
 package functional
 
@@ -368,7 +367,7 @@ func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Laye
 func TestWCOWArgonShim(t *testing.T) {
 	t.Skip("not yet updated")
 
-	requireFeatures(t, featureWCOW)
+	requireFeatures(t, featureWCOW, featureContainer)
 
 	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 
@@ -429,7 +428,7 @@ func TestWCOWArgonShim(t *testing.T) {
 func TestWCOWXenonShim(t *testing.T) {
 	t.Skip("not yet updated")
 
-	requireFeatures(t, featureWCOW)
+	requireFeatures(t, featureWCOW, featureUVM)
 
 	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 
@@ -500,7 +499,7 @@ func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, ho
 func TestWCOWArgonOciV1(t *testing.T) {
 	t.Skip("not yet updated")
 
-	requireFeatures(t, featureWCOW)
+	requireFeatures(t, featureWCOW, featureContainer)
 
 	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	argonOci1Mounted := false
@@ -548,7 +547,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 func TestWCOWXenonOciV1(t *testing.T) {
 	t.Skip("not yet updated")
 
-	requireFeatures(t, featureWCOW)
+	requireFeatures(t, featureWCOW, featureUVM)
 
 	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	xenonOci1Mounted := false
@@ -605,7 +604,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	t.Skip("not yet updated")
 
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureWCOW)
+	requireFeatures(t, featureWCOW, featureContainer)
 
 	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	argonOci2Mounted := false
@@ -655,7 +654,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	t.Skip("not yet updated")
 
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureWCOW)
+	requireFeatures(t, featureWCOW, featureUVM)
 
 	imageLayers := windowsServercoreImageLayers(context.Background(), t)
 	xenonOci2Mounted := false

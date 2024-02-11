@@ -1,6 +1,5 @@
-//go:build windows && (functional || uvmscratch)
-// +build windows
-// +build functional uvmscratch
+//go:build windows && functional
+// +build windows,functional
 
 package functional
 
@@ -12,6 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/osversion"
+
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
@@ -20,7 +20,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	t.Skip("not yet updated")
 
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureLCOW, featureScratch)
+	requireFeatures(t, featureLCOW, featureUVM, featureScratch)
 
 	tempDir := t.TempDir()
 	firstUVM := tuvm.CreateAndStartLCOW(context.Background(), t, "TestCreateLCOWScratch")
@@ -64,6 +64,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 //// VHDX and format it ext4.
 //func TestCreateLCOWScratch(t *testing.T) {
 //	t.Skip("for now")
+//
 //	cacheDir := createTempDir(t)
 //	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
 //	uvm, err := CreateContainer(&CreateOptions{Spec: getDefaultLinuxSpec(t)})

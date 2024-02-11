@@ -5,12 +5,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/test/pkg/images"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/namespaces"
 	ctrdoci "github.com/containerd/containerd/oci"
 	criconstants "github.com/containerd/containerd/pkg/cri/constants"
+	criopts "github.com/containerd/containerd/pkg/cri/opts"
 	"github.com/opencontainers/runtime-spec/specs-go"
+
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+
+	"github.com/Microsoft/hcsshim/test/pkg/images"
 )
 
 //
@@ -19,6 +23,7 @@ import (
 
 const (
 	TailNullArgs = "tail -f /dev/null"
+	PingSelfCmd  = "cmd.exe /c ping -t 127.0.0.1"
 
 	DefaultNamespace = namespaces.Default
 	CRINamespace     = criconstants.K8sContainerdNamespace
@@ -30,16 +35,30 @@ const (
 
 func DefaultLinuxSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecOpts {
 	opts := []ctrdoci.SpecOpts{
-		WithoutRunMount,
+		ctrdoci.WithoutRunMount,
 		ctrdoci.WithRootFSReadonly(),
-		WithDisabledCgroups, // we set our own cgroups
+		criopts.WithDisabledCgroups, // we set our own cgroups
 		ctrdoci.WithDefaultUnixDevices,
 		ctrdoci.WithDefaultPathEnv,
-		WithWindowsNetworkNamespace(nns),
+		ctrdoci.WithWindowsNetworkNamespace(nns),
 	}
-	opts = append(opts, extra...)
+	return append(opts, extra...)
+}
 
-	return opts
+func DefaultWindowsSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecOpts {
+	opts := []ctrdoci.SpecOpts{
+		// make sure we set the Windows field
+		func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
+			if s.Windows == nil {
+				s.Windows = &specs.Windows{}
+			}
+			return nil
+		},
+		criopts.WithoutRoot,
+		ctrdoci.WithProcessCwd(`C:\`),
+		ctrdoci.WithWindowsNetworkNamespace(nns),
+	}
+	return append(opts, extra...)
 }
 
 // DefaultLinuxSpec returns a default OCI spec for a Linux container.
@@ -68,7 +87,7 @@ func CreateWindowsSpec(ctx context.Context, tb testing.TB, id string, opts ...ct
 
 // CreateSpecWithPlatform returns the OCI spec for the specified platform.
 // The context must contain a containerd namespace added by
-// [github.com/containerd/containerd/namespaces.WithNamespace]
+// [github.com/containerd/containerd/namespaces.WithNamespace].
 func CreateSpecWithPlatform(ctx context.Context, tb testing.TB, plat, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
 	tb.Helper()
 	container := &containers.Container{ID: id}
@@ -82,7 +101,7 @@ func CreateSpecWithPlatform(ctx context.Context, tb testing.TB, plat, id string,
 }
 
 func WithWindowsLayerFolders(layers []string) ctrdoci.SpecOpts {
-	return func(ctx context.Context, client ctrdoci.Client, c *containers.Container, s *specs.Spec) error {
+	return func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
 		if len(layers) < 2 {
 			return errors.New("at least two layers are required, including the sandbox path")
 		}
@@ -96,36 +115,25 @@ func WithWindowsLayerFolders(layers []string) ctrdoci.SpecOpts {
 	}
 }
 
-//defined in containerd\pkg\cri\opts\spec_windows.go
-
-func WithWindowsNetworkNamespace(path string) ctrdoci.SpecOpts {
-	return func(ctx context.Context, client ctrdoci.Client, c *containers.Container, s *specs.Spec) error {
-		if s.Windows == nil {
-			s.Windows = &specs.Windows{}
+// AsHostProcessContainer updates the spec to create a HostProcess container.
+func AsHostProcessContainer() ctrdoci.SpecOpts {
+	return func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Annotations == nil {
+			s.Annotations = make(map[string]string)
 		}
-		if s.Windows.Network == nil {
-			s.Windows.Network = &specs.WindowsNetwork{}
-		}
-		s.Windows.Network.NetworkNamespace = path
-
+		s.Annotations[annotations.HostProcessContainer] = "true"
 		return nil
 	}
 }
 
-//defined in containerd\pkg\cri\opts\spec_linux.go
-
-// WithDisabledCgroups clears the Cgroups Path from the spec
-func WithDisabledCgroups(_ context.Context, _ ctrdoci.Client, c *containers.Container, s *specs.Spec) error {
-	if s.Linux == nil {
-		s.Linux = &specs.Linux{}
+// HostProcessInheritUser updates the spec to allow the HostProcess container to inherit the current
+// user's token.
+func HostProcessInheritUser() ctrdoci.SpecOpts {
+	return func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Annotations == nil {
+			s.Annotations = make(map[string]string)
+		}
+		s.Annotations[annotations.HostProcessInheritUser] = "true"
+		return nil
 	}
-	s.Linux.CgroupsPath = ""
-	return nil
-}
-
-// defined in containerd\oci\spec_opts_linux.go
-
-// WithoutRunMount removes the `/run` inside the spec
-func WithoutRunMount(ctx context.Context, client ctrdoci.Client, c *containers.Container, s *specs.Spec) error {
-	return ctrdoci.WithoutMounts("/run")(ctx, client, c, s)
 }

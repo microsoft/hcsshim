@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
@@ -171,6 +172,13 @@ func newDefaultOptions(id, owner string) *Options {
 // ID returns the ID of the VM's compute system.
 func (uvm *UtilityVM) ID() string {
 	return uvm.hcsSystem.ID()
+}
+
+// RuntimeID returns Hyper-V VM GUID.
+//
+// Only valid after the utility VM has been created.
+func (uvm *UtilityVM) RuntimeID() guid.GUID {
+	return uvm.runtimeID
 }
 
 // OS returns the operating system of the utility VM.

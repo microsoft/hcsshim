@@ -8,22 +8,24 @@ import (
 	"os"
 	"path/filepath"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/resources"
+	"github.com/Microsoft/hcsshim/internal/sync"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 // fallbackRootfsFormat is the fallback location for the rootfs if file binding support isn't available.
 // %s will be expanded with the container ID. Trailing backslash required for SetVolumeMountPoint and
-// DeleteVolumeMountPoint
+// DeleteVolumeMountPoint.
 const fallbackRootfsFormat = `C:\hpc\%s\`
 
 // defaultSiloRootfsLocation is the default location the rootfs for the container will show up
 // inside of a given silo. If bind filter support isn't available the rootfs will be
-// C:\hpc\<containerID>
+// C:\hpc\<containerID>.
 const defaultSiloRootfsLocation = `C:\hpc\`
 
 func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) (_ resources.ResourceCloser, err error) {
@@ -71,4 +73,23 @@ func (c *JobContainer) setupRootfsBinding(root, target string) error {
 		return fmt.Errorf("failed to bind rootfs to %s: %w", root, err)
 	}
 	return nil
+}
+
+var fileBindingSupportedOnce = sync.OnceValue(func() (bool, error) {
+	// TODO: use windows.NewLazySystemDLL("bindfltapi.dll").Load() (or windows.LoadLibraryEx directly)
+
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		root = `C:\windows` // shouldn't really need this fall back, but ...
+	}
+	bindDLL := filepath.Join(root, `system32\bindfltapi.dll`)
+	if _, err := os.Stat(bindDLL); err != nil {
+		return false, err
+	}
+	return true, nil
+})
+
+func FileBindingSupported() bool {
+	b, _ := fileBindingSupportedOnce()
+	return b
 }

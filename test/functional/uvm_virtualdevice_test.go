@@ -12,8 +12,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
+
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 // findTestDevices returns the first pcip device on the host
@@ -32,7 +33,7 @@ func TestVirtualDevice(t *testing.T) {
 	t.Skip("not yet updated")
 
 	require.Build(t, osversion.V20H1)
-	requireFeatures(t, featureLCOW)
+	requireFeatures(t, featureLCOW, featureUVM)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -56,7 +57,7 @@ func TestVirtualDevice(t *testing.T) {
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 
 	// create test uvm and ensure we can assign and remove the device
-	vm := tuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
+	vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 	defer vm.Close()
 	vpci, err := vm.AssignDevice(ctx, testDeviceInstanceID, 0, "")
 	if err != nil {

@@ -213,22 +213,22 @@ func TestCmdStdinBlocked(t *testing.T) {
 	}
 }
 
-type stuckIoProcessHost struct {
+type stuckIOProcessHost struct {
 	cow.ProcessHost
 }
 
-type stuckIoProcess struct {
+type stuckIOProcess struct {
 	cow.Process
 	stdin, pstdout, pstderr *io.PipeWriter
 	pstdin, stdout, stderr  *io.PipeReader
 }
 
-func (h *stuckIoProcessHost) CreateProcess(ctx context.Context, cfg interface{}) (cow.Process, error) {
+func (h *stuckIOProcessHost) CreateProcess(ctx context.Context, cfg interface{}) (cow.Process, error) {
 	p, err := h.ProcessHost.CreateProcess(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	sp := &stuckIoProcess{
+	sp := &stuckIOProcess{
 		Process: p,
 	}
 	sp.pstdin, sp.stdin = io.Pipe()
@@ -237,11 +237,11 @@ func (h *stuckIoProcessHost) CreateProcess(ctx context.Context, cfg interface{})
 	return sp, nil
 }
 
-func (p *stuckIoProcess) Stdio() (io.Writer, io.Reader, io.Reader) {
+func (p *stuckIOProcess) Stdio() (io.Writer, io.Reader, io.Reader) {
 	return p.stdin, p.stdout, p.stderr
 }
 
-func (p *stuckIoProcess) Close() error {
+func (p *stuckIOProcess) Close() error {
 	p.stdin.Close()
 	p.stdout.Close()
 	p.stderr.Close()
@@ -249,10 +249,10 @@ func (p *stuckIoProcess) Close() error {
 }
 
 func TestCmdStuckIo(t *testing.T) {
-	cmd := Command(&stuckIoProcessHost{&localProcessHost{}}, "cmd", "/c", "echo", "hello")
+	cmd := Command(&stuckIOProcessHost{&localProcessHost{}}, "cmd", "/c", "echo", "hello")
 	cmd.CopyAfterExitTimeout = time.Millisecond * 200
 	_, err := cmd.Output()
-	if err != io.ErrClosedPipe { //nolint:errorlint
-		t.Fatal(err)
+	if !errors.Is(err, errIOTimeOut) {
+		t.Fatalf("expected: %v; got: %v", errIOTimeOut, err)
 	}
 }

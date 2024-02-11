@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 	"unicode"
 
@@ -27,6 +29,19 @@ func CleanName(n string) string {
 		return -1
 	}
 	return strings.TrimSpace(strings.Map(mapper, n))
+}
+
+func Testing() bool {
+	// TODO (go1.21): use [testing.Testing]
+
+	b := false
+	// check if any `-test.*` flags have been defined
+	flag.VisitAll(func(f *flag.Flag) {
+		if strings.HasPrefix(f.Name, "test.") {
+			b = true
+		}
+	})
+	return b
 }
 
 // RunningBenchmarks returns whether benchmarks were requested to be run.
@@ -149,4 +164,49 @@ func repeat(f func() error, n int, d time.Duration) (err error) {
 	}
 
 	return err
+}
+
+// Context creates a [context.Context] that uses the testing.Deadline minus a small grace period (if applicable)
+// and the cancellation to the testing cleanup.
+//
+// Based heavily on (copied directly from): Go lang's src/internal/testenv/Command.Context
+// https://cs.opensource.google/go/go/+/master:src/internal/testenv/exec.go;l=133;drc=5613882df7555484680ecabc0462b7c23c6f5205
+func Context(ctx context.Context, tb testing.TB) context.Context {
+	tb.Helper()
+
+	var (
+		cancelCtx   context.CancelFunc
+		gracePeriod time.Duration // unlimited unless the test has a deadline (to allow for interactive debugging)
+	)
+
+	if t, ok := tb.(interface {
+		testing.TB
+		Deadline() (time.Time, bool)
+	}); ok {
+		if td, ok := t.Deadline(); ok {
+			// Start with a minimum grace period, to allow cleanup before testing is stopped
+			gracePeriod = 100 * time.Millisecond
+
+			// If time allows, increase the termination grace period to 5% of the
+			// test's remaining time.
+			testTimeout := time.Until(td)
+			if gp := testTimeout / 20; gp > gracePeriod {
+				gracePeriod = gp
+			}
+
+			timeout := testTimeout - 2*gracePeriod
+			if cd, ok := ctx.Deadline(); !ok || time.Until(cd) > timeout {
+				// Either ctx doesn't have a deadline, or its deadline would expire
+				// after (or too close before) the test has already timed out.
+				// Add a shorter timeout so that the test will produce useful output.
+				ctx, cancelCtx = context.WithTimeout(ctx, timeout)
+			}
+		}
+	}
+
+	if cancelCtx != nil {
+		tb.Cleanup(cancelCtx)
+	}
+
+	return ctx
 }
