@@ -310,7 +310,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					trace.StringAttribute("cid", base.ContainerID))
 
 				entry := log.G(ctx)
-				if entry.Logger.GetLevel() >= logrus.DebugLevel {
+				if entry.Logger.GetLevel() > logrus.DebugLevel {
 					s := string(message)
 					switch header.Type {
 					case prot.ComputeSystemCreateV1:
@@ -320,7 +320,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 							entry.WithError(err).Warning("could not scrub bridge payload")
 						}
 					}
-					entry.WithField("message", s).Debug("request read message")
+					entry.WithField("message", s).Trace("request read message")
 				}
 				requestChan <- &Request{
 					Context:     ctx,
@@ -384,7 +384,8 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 
 			s := trace.FromContext(resp.ctx)
 			if s != nil {
-				log.G(resp.ctx).WithField("message", string(responseBytes)).Debug("request write response")
+				log.G(resp.ctx).WithField("message", string(responseBytes)).Trace("request write response")
+				s.AddAttributes(trace.StringAttribute("response-message-type", resp.header.Type.String()))
 				s.End()
 			}
 		}
