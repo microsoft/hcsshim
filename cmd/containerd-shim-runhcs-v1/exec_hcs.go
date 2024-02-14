@@ -47,7 +47,7 @@ func newHcsExec(
 		"eid":    id, // Init exec ID is always same as Task ID
 		"bundle": bundle,
 		"wcow":   isWCOW,
-	}).Debug("newHcsExec")
+	}).Trace("newHcsExec")
 
 	he := &hcsExec{
 		events:      events,
