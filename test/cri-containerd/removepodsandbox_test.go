@@ -9,7 +9,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 type TestConfig struct {
@@ -85,7 +85,7 @@ func runContainerInSandboxTest(t *testing.T, tc *TestConfig) {
 }
 
 func Test_RunPodSandbox_Without_Sandbox_Stop(t *testing.T) {
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	tests := []TestConfig{
 		{
@@ -100,23 +100,12 @@ func Test_RunPodSandbox_Without_Sandbox_Stop(t *testing.T) {
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowAlpine,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage})
 
 			request := getRunPodSandboxRequest(t, test.runtimeHandler)
 			runPodSandboxTestWithoutPodStop(t, request)
@@ -125,7 +114,7 @@ func Test_RunPodSandbox_Without_Sandbox_Stop(t *testing.T) {
 }
 
 func Test_RunContainer_Without_Sandbox_Stop(t *testing.T) {
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	tests := []TestConfig{
 		{
@@ -146,27 +135,13 @@ func Test_RunContainer_Without_Sandbox_Stop(t *testing.T) {
 			containerImage:   imageWindowsNanoserver,
 			cmd:              []string{"ping", "-t", "127.0.0.1"},
 		},
-		{
-			name:             "LCOW",
-			containerName:    t.Name() + "-Container-LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-			containerImage:   imageLcowAlpine,
-			cmd:              []string{"top"},
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
-			}
-
+			pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			runContainerInSandboxTest(t, &test)
 		})
 	}

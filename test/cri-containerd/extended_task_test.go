@@ -24,7 +24,7 @@ func getPodProcessorInfo(ctx context.Context, podID string) (*extendedtask.Compu
 }
 
 func Test_ExtendedTask_ProcessorInfo(t *testing.T) {
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -48,24 +48,12 @@ func Test_ExtendedTask_ProcessorInfo(t *testing.T) {
 			sandboxImage:     imageWindowsNanoserver,
 			expectedError:    false,
 		},
-		{
-			name:             "LCOW returns correct cpu count",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowAlpine,
-			expectedError:    false,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage})
 
 			request := getRunPodSandboxRequest(
 				t,

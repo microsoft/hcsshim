@@ -12,10 +12,9 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/test/pkg/require"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func runCreateContainerTest(t *testing.T, runtimeHandler string, request *runtime.CreateContainerRequest) {
@@ -96,28 +95,6 @@ func Test_CreateContainer_WCOW_Hypervisor(t *testing.T) {
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
 }
 
-func Test_CreateContainer_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"top",
-			},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
 func Test_CreateContainer_WCOW_Process_Tty(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)
 
@@ -162,97 +139,6 @@ func Test_CreateContainer_WCOW_Hypervisor_Tty(t *testing.T) {
 		},
 	}
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
-}
-
-func Test_CreateContainer_LCOW_Tty(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Tty will hold this open until killed.
-			Command: []string{
-				"sh",
-			},
-			Tty: true,
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
-func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
-		SecurityContext: &runtime.LinuxSandboxSecurityContext{
-			Privileged: true,
-		},
-	}
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{
-				SecurityContext: &runtime.LinuxContainerSecurityContext{
-					Privileged: true,
-				},
-			},
-		},
-	}
-	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
-}
-
-func Test_CreateContainer_SandboxDevice_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
-		SecurityContext: &runtime.LinuxSandboxSecurityContext{
-			Privileged: true,
-		},
-	}
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"top",
-			},
-			Devices: []*runtime.Device{
-				{
-					HostPath: "/dev/fuse",
-				},
-			},
-		},
-	}
-	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
 }
 
 func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
@@ -375,33 +261,6 @@ func Test_CreateContainer_MemorySize_Annotation_WCOW_Hypervisor(t *testing.T) {
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
 }
 
-func Test_CreateContainer_MemorySize_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{
-				Resources: &runtime.LinuxContainerResources{
-					MemoryLimitInBytes: 768 * memory.MiB, // 768MB
-				},
-			},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
 func Test_CreateContainer_CPUCount_Config_WCOW_Process(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)
 
@@ -520,33 +379,6 @@ func Test_CreateContainer_CPUCount_Annotation_WCOW_Hypervisor(t *testing.T) {
 		},
 	}
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
-}
-
-func Test_CreateContainer_CPUCount_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{
-				Resources: &runtime.LinuxContainerResources{
-					CpusetCpus: "0",
-				},
-			},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
 
 func Test_CreateContainer_CPULimit_Config_WCOW_Process(t *testing.T) {
@@ -669,34 +501,6 @@ func Test_CreateContainer_CPULimit_Annotation_WCOW_Hypervisor(t *testing.T) {
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
 }
 
-func Test_CreateContainer_CPUQuota_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{
-				Resources: &runtime.LinuxContainerResources{
-					CpuQuota:  1000000,
-					CpuPeriod: 500000,
-				},
-			},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
 func Test_CreateContainer_CPUWeight_Config_WCOW_Process(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)
 
@@ -815,189 +619,6 @@ func Test_CreateContainer_CPUWeight_Annotation_WCOW_Hypervisor(t *testing.T) {
 		},
 	}
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
-}
-
-func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{
-				Resources: &runtime.LinuxContainerResources{
-					CpuShares: 1024,
-				},
-			},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
-func Test_CreateContainer_Mount_File_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-	require.Build(t, osversion.V19H1)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	tempFile, err := os.CreateTemp("", "test")
-
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %s", err)
-	}
-
-	tempFile.Close()
-
-	defer func() {
-		if err := os.Remove(tempFile.Name()); err != nil {
-			t.Fatalf("Failed to remove temp file: %s", err)
-		}
-	}()
-
-	containerFilePath := "/foo/test.txt"
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Mounts: []*runtime.Mount{
-				{
-					HostPath:      tempFile.Name(),
-					ContainerPath: containerFilePath,
-				},
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
-func Test_CreateContainer_Mount_ReadOnlyFile_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-	require.Build(t, osversion.V19H1)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	tempFile, err := os.CreateTemp("", "test")
-
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %s", err)
-	}
-
-	tempFile.Close()
-
-	defer func() {
-		if err := os.Remove(tempFile.Name()); err != nil {
-			t.Fatalf("Failed to remove temp file: %s", err)
-		}
-	}()
-
-	containerFilePath := "/foo/test.txt"
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Mounts: []*runtime.Mount{
-				{
-					HostPath:      tempFile.Name(),
-					ContainerPath: containerFilePath,
-					Readonly:      true,
-				},
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
-func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	tempDir := t.TempDir()
-
-	containerFilePath := "/foo"
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Mounts: []*runtime.Mount{
-				{
-					HostPath:      tempDir,
-					ContainerPath: containerFilePath,
-				},
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
-func Test_CreateContainer_Mount_ReadOnlyDir_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
-	tempDir := t.TempDir()
-
-	containerFilePath := "/foo"
-
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Mounts: []*runtime.Mount{
-				{
-					HostPath:      tempDir,
-					ContainerPath: containerFilePath,
-					Readonly:      true,
-				},
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			Command: []string{
-				"top",
-			},
-			Linux: &runtime.LinuxContainerConfig{},
-		},
-	}
-	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
 
 func Test_CreateContainer_Mount_File_WCOW(t *testing.T) {

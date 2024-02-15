@@ -12,7 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 const processorWeightMax = 10000
@@ -34,7 +34,7 @@ func calculateJobCPURate(hostProcs uint32, processorCount uint32) uint32 {
 }
 
 func Test_Container_UpdateResources_CPUShare(t *testing.T) {
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 	require.Build(t, osversion.V20H2)
 
 	type config struct {
@@ -62,23 +62,13 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 			containerImage:   imageWindowsNanoserver,
 			cmd:              []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW, featureCRIUpdateContainer},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-			containerImage:   imageLcowAlpine,
-			cmd:              []string{"top"},
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
+			if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
@@ -118,34 +108,24 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 			}
 
 			var expected uint32 = 5000
-			if test.runtimeHandler == lcowRuntimeHandler {
-				updateReq.Linux = &runtime.LinuxContainerResources{
-					CpuShares: int64(expected),
-				}
-			} else {
-				updateReq.Windows = &runtime.WindowsContainerResources{
-					CpuShares: int64(expected),
-				}
+			updateReq.Windows = &runtime.WindowsContainerResources{
+				CpuShares: int64(expected),
 			}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
 				t.Fatalf("updating container resources for %s with %v", containerID, err)
 			}
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				checkLCOWResourceLimit(t, ctx, client, containerID, "/sys/fs/cgroup/cpu/cpu.shares", uint64(expected))
-			} else {
-				targetShimName := "k8s.io-" + podID
-				jobExpectedValue := calculateJobCPUWeight(expected)
-				checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "cpu-weight", uint64(jobExpectedValue))
-			}
+			targetShimName := "k8s.io-" + podID
+			jobExpectedValue := calculateJobCPUWeight(expected)
+			checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "cpu-weight", uint64(jobExpectedValue))
 		})
 	}
 }
 
 func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 	requireFeatures(t, featureCRIUpdateContainer)
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -172,23 +152,12 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 			containerImage:   imageWindowsNanoserver,
 			cmd:              []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-			containerImage:   imageLcowAlpine,
-			cmd:              []string{"top"},
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
+			if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
@@ -225,14 +194,8 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 			}
 
 			var expected uint32 = 5000
-			if test.runtimeHandler == lcowRuntimeHandler {
-				updateReq.Linux = &runtime.LinuxContainerResources{
-					CpuShares: int64(expected),
-				}
-			} else {
-				updateReq.Windows = &runtime.WindowsContainerResources{
-					CpuShares: int64(expected),
-				}
+			updateReq.Windows = &runtime.WindowsContainerResources{
+				CpuShares: int64(expected),
 			}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
@@ -242,20 +205,16 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 			startContainer(t, client, ctx, containerID)
 			defer stopContainer(t, client, ctx, containerID)
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				checkLCOWResourceLimit(t, ctx, client, containerID, "/sys/fs/cgroup/cpu/cpu.shares", uint64(expected))
-			} else {
-				targetShimName := "k8s.io-" + podID
-				jobExpectedValue := calculateJobCPUWeight(expected)
-				checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "cpu-weight", uint64(jobExpectedValue))
-			}
+			targetShimName := "k8s.io-" + podID
+			jobExpectedValue := calculateJobCPUWeight(expected)
+			checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "cpu-weight", uint64(jobExpectedValue))
 		})
 	}
 }
 
 func Test_Container_UpdateResources_Memory(t *testing.T) {
 	requireFeatures(t, featureCRIUpdateContainer)
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -282,23 +241,12 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 			containerImage:   imageWindowsNanoserver,
 			cmd:              []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-			containerImage:   imageLcowAlpine,
-			cmd:              []string{"top"},
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
+			if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
@@ -342,26 +290,15 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 			}
 
 			newMemorySize := startingMemorySize / 2
-			if test.runtimeHandler == lcowRuntimeHandler {
-				updateReq.Linux = &runtime.LinuxContainerResources{
-					MemoryLimitInBytes: newMemorySize,
-				}
-			} else {
-				updateReq.Windows = &runtime.WindowsContainerResources{
-					MemoryLimitInBytes: newMemorySize,
-				}
+			updateReq.Windows = &runtime.WindowsContainerResources{
+				MemoryLimitInBytes: newMemorySize,
 			}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
 				t.Fatalf("updating container resources for %s with %v", containerID, err)
 			}
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				checkLCOWResourceLimit(t, ctx, client, containerID, "/sys/fs/cgroup/memory/memory.limit_in_bytes", uint64(newMemorySize))
-			} else {
-				targetShimName := "k8s.io-" + podID
-				checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "memory-limit", uint64(newMemorySize))
-			}
+			targetShimName := "k8s.io-" + podID
+			checkWCOWResourceLimit(t, ctx, test.runtimeHandler, targetShimName, containerID, "memory-limit", uint64(newMemorySize))
 		})
 	}
 }

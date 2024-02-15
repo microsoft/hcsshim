@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 // This test requires compiling a helper logging binary which can be found
@@ -22,7 +22,7 @@ import (
 // which this test will use to construct logPath for CreateContainerRequest and as
 // the location of stdout artifacts created by the binary
 func Test_Run_Container_With_Binary_Logger(t *testing.T) {
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 	binaryPath := require.Binary(t, "sample-logging-driver.exe")
 
 	client := newTestRuntimeClient(t)
@@ -63,16 +63,6 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 			cmd:              []string{"ping", "-t", "127.0.0.1"},
 			expectedContent:  "Pinging 127.0.0.1 with 32 bytes of data",
 		},
-		{
-			name:             "LCOW",
-			containerName:    t.Name() + "-Container-LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-			containerImage:   imageLcowAlpine,
-			cmd:              []string{"ash", "-c", "while true; do echo 'Hello, World!'; sleep 1; done"},
-			expectedContent:  "Hello, World!",
-		},
 	}
 
 	// Positive tests
@@ -81,11 +71,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			requiredImages := []string{test.sandboxImage, test.containerImage}
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, requiredImages)
-			} else {
-				pullRequiredImages(t, requiredImages)
-			}
+			pullRequiredImages(t, requiredImages)
 
 			podReq := getRunPodSandboxRequest(t, test.runtimeHandler)
 			podID := runPodSandbox(t, client, ctx, podReq)
@@ -119,11 +105,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			requiredImages := []string{test.sandboxImage, test.containerImage}
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, requiredImages)
-			} else {
-				pullRequiredImages(t, requiredImages)
-			}
+			pullRequiredImages(t, requiredImages)
 
 			podReq := getRunPodSandboxRequest(t, test.runtimeHandler)
 			podID := runPodSandbox(t, client, ctx, podReq)

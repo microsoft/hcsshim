@@ -13,11 +13,11 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/cpugroup"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/processorinfo"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func Test_Pod_UpdateResources_Memory(t *testing.T) {
-	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+	requireAnyFeature(t, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -32,23 +32,12 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage})
 			var startingMemorySize int64 = 768 * memory.MiB
 			podRequest := getRunPodSandboxRequest(
 				t,
@@ -72,14 +61,8 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 				ContainerId: podID,
 			}
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				updateReq.Linux = &runtime.LinuxContainerResources{
-					MemoryLimitInBytes: newMemorySize,
-				}
-			} else {
-				updateReq.Windows = &runtime.WindowsContainerResources{
-					MemoryLimitInBytes: newMemorySize,
-				}
+			updateReq.Windows = &runtime.WindowsContainerResources{
+				MemoryLimitInBytes: newMemorySize,
 			}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
@@ -90,7 +73,7 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 }
 
 func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
-	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+	requireAnyFeature(t, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -105,23 +88,13 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
+			pullRequiredImages(t, []string{test.sandboxImage})
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage})
-			}
 			var startingMemorySize int64 = 200 * memory.MiB
 			podRequest := getRunPodSandboxRequest(
 				t,
@@ -146,14 +119,8 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 				ContainerId: podID,
 			}
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				updateReq.Linux = &runtime.LinuxContainerResources{
-					MemoryLimitInBytes: newMemorySize,
-				}
-			} else {
-				updateReq.Windows = &runtime.WindowsContainerResources{
-					MemoryLimitInBytes: newMemorySize,
-				}
+			updateReq.Windows = &runtime.WindowsContainerResources{
+				MemoryLimitInBytes: newMemorySize,
 			}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
@@ -164,7 +131,7 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 }
 
 func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
-	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+	requireAnyFeature(t, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -179,23 +146,13 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
+			pullRequiredImages(t, []string{test.sandboxImage})
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage})
-			}
 			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
@@ -210,14 +167,8 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 				ContainerId: podID,
 			}
 
-			if test.runtimeHandler == lcowRuntimeHandler {
-				updateReq.Linux = &runtime.LinuxContainerResources{
-					CpuShares: 2000,
-				}
-			} else {
-				updateReq.Windows = &runtime.WindowsContainerResources{
-					CpuShares: 2000,
-				}
+			updateReq.Windows = &runtime.WindowsContainerResources{
+				CpuShares: 2000,
 			}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
@@ -229,7 +180,7 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 
 func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 	t.Skip("Skipping for now")
-	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+	requireAnyFeature(t, featureWCOWHypervisor)
 
 	ctx := context.Background()
 
@@ -280,22 +231,12 @@ func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage})
 
 			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler, WithSandboxAnnotations(map[string]string{
 				annotations.CPUGroupID: startCPUGroupID,
@@ -314,12 +255,7 @@ func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
 					annotations.CPUGroupID: updateCPUGroupID,
 				},
 			}
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				updateReq.Linux = &runtime.LinuxContainerResources{}
-			} else {
-				updateReq.Windows = &runtime.WindowsContainerResources{}
-			}
+			updateReq.Windows = &runtime.WindowsContainerResources{}
 
 			if _, err := client.UpdateContainerResources(ctx, updateReq); err != nil {
 				t.Fatalf("updating container resources for %s with %v", podID, err)

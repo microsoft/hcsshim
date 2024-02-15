@@ -11,7 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func runContainerAndQueryStats(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.CreateContainerRequest) {
@@ -91,102 +91,8 @@ func verifyPhysicallyBackedWorkingSet(t *testing.T, num uint64, stat *runtime.Co
 	}
 }
 
-func Test_SandboxStats_Single_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
-
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	podID := runPodSandbox(t, client, ctx, request)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
-
-	statsRequest := &runtime.ContainerStatsRequest{
-		ContainerId: podID,
-	}
-
-	stats, err := client.ContainerStats(ctx, statsRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	stat := stats.Stats
-	verifyStatsContent(t, stat)
-}
-
-func Test_SandboxStats_List_ContainerID_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
-
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	podID := runPodSandbox(t, client, ctx, request)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
-
-	statsRequest := &runtime.ListContainerStatsRequest{
-		Filter: &runtime.ContainerStatsFilter{
-			Id: podID,
-		},
-	}
-
-	stats, err := client.ListContainerStats(ctx, statsRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(stats.Stats) != 1 {
-		t.Fatalf("expected 1 stats result but got %d", len(stats.Stats))
-	}
-	stat := stats.Stats[0]
-	verifyStatsContent(t, stat)
-}
-
-func Test_SandboxStats_List_PodID_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
-
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	podID := runPodSandbox(t, client, ctx, request)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
-
-	statsRequest := &runtime.ListContainerStatsRequest{
-		Filter: &runtime.ContainerStatsFilter{
-			PodSandboxId: podID,
-		},
-	}
-
-	stats, err := client.ListContainerStats(ctx, statsRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(stats.Stats) != 1 {
-		t.Fatalf("expected 1 stats result but got %d", len(stats.Stats))
-	}
-	stat := stats.Stats[0]
-	verifyStatsContent(t, stat)
-}
-
 func Test_ContainerStats_ContainerID(t *testing.T) {
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -213,25 +119,12 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 			containerImage:   imageWindowsNanoserver,
 			cmd:              []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-			containerImage:   imageLcowAlpine,
-			cmd:              []string{"top"},
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 
 			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
@@ -262,7 +155,7 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 }
 
 func Test_ContainerStats_List_ContainerID(t *testing.T) {
-	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor, featureLCOW)
+	requireAnyFeature(t, featureWCOWProcess, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -289,25 +182,12 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 			containerImage:   imageWindowsNanoserver,
 			cmd:              []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-			containerImage:   imageLcowAlpine,
-			cmd:              []string{"top"},
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 
 			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
@@ -338,7 +218,7 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 }
 
 func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
-	requireAnyFeature(t, featureLCOW, featureWCOWHypervisor)
+	requireAnyFeature(t, featureWCOWHypervisor)
 
 	type config struct {
 		name             string
@@ -353,23 +233,12 @@ func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
 			runtimeHandler:   wcowHypervisorRuntimeHandler,
 			sandboxImage:     imageWindowsNanoserver,
 		},
-		{
-			name:             "LCOW",
-			requiredFeatures: []string{featureLCOW},
-			runtimeHandler:   lcowRuntimeHandler,
-			sandboxImage:     imageLcowK8sPause,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
-
-			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLCOWImages(t, []string{test.sandboxImage})
-			} else {
-				pullRequiredImages(t, []string{test.sandboxImage})
-			}
+			pullRequiredImages(t, []string{test.sandboxImage})
 
 			// If we go too high we run the risk of getting a not enough memory
 			// for this operation error. Seems like a nice sweetspot thats different than

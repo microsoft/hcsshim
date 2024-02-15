@@ -14,7 +14,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/cmd"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/shimdiag"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func execSync(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
@@ -24,15 +24,6 @@ func execSync(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Co
 		tb.Fatalf("failed ExecSync request with: %v", err)
 	}
 	return response
-}
-
-func execRequest(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecRequest) string {
-	tb.Helper()
-	response, err := client.Exec(ctx, request)
-	if err != nil {
-		tb.Fatalf("failed Exec request with: %v", err)
-	}
-	return response.Url
 }
 
 // execInHost executes command in the container's host.

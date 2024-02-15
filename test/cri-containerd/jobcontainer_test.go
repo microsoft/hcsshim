@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio/vhd"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/osversion"

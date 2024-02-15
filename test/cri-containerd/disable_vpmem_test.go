@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 // Use unique names for pods & containers so that if we run this test multiple times in parallel we don't

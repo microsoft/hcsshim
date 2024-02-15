@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 type SandboxConfigOpt func(*runtime.PodSandboxConfig) error
@@ -63,24 +63,6 @@ func removePodSandbox(tb testing.TB, client runtime.RuntimeServiceClient, ctx co
 	})
 	if err != nil {
 		tb.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
-	}
-}
-
-func getPodSandboxStatus(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *runtime.PodSandboxStatus {
-	tb.Helper()
-	status, err := client.PodSandboxStatus(ctx, &runtime.PodSandboxStatusRequest{
-		PodSandboxId: podID,
-	})
-	if err != nil {
-		tb.Fatalf("failed PodSandboxStatus for sandbox: %s, request with: %v", podID, err)
-	}
-	return status.Status
-}
-
-func assertPodSandboxState(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, podID string, state runtime.PodSandboxState) {
-	tb.Helper()
-	if st := getPodSandboxStatus(tb, client, ctx, podID).State; st != state {
-		tb.Fatalf("got pod sandbox %q state %q; wanted %v", podID, st.String(), state.String())
 	}
 }
 

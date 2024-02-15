@@ -5,12 +5,9 @@ package cri_containerd
 
 import (
 	"context"
-	"fmt"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/require"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func createContainer(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.CreateContainerRequest) string {
@@ -95,37 +92,6 @@ func getContainerStatusFull(tb testing.TB, client runtime.RuntimeServiceClient, 
 		tb.Fatalf("failed ContainerStatus request for container: %s, with: %v", containerID, err)
 	}
 	return response.Status
-}
-
-// requireContainerState periodically checks the state of a container, returns
-// an error if the expected container state isn't reached within 30 seconds.
-func requireContainerState(
-	ctx context.Context,
-	tb testing.TB,
-	client runtime.RuntimeServiceClient,
-	containerID string,
-	expectedState runtime.ContainerState,
-) {
-	tb.Helper()
-	require.NoError(tb, func() error {
-		start := time.Now()
-		var lastState runtime.ContainerState
-		for {
-			lastState = getContainerStatus(tb, client, ctx, containerID)
-			if lastState == expectedState {
-				return nil
-			}
-			if time.Since(start) >= 30*time.Second {
-				break
-			}
-			time.Sleep(500 * time.Millisecond)
-		}
-		return fmt.Errorf(
-			"expected state %q, last reported state %q",
-			runtime.ContainerState_name[int32(expectedState)],
-			runtime.ContainerState_name[int32(lastState)],
-		)
-	}())
 }
 
 func cleanupContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID *string) {
