@@ -5,6 +5,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -19,6 +20,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows"
 )
+
+var errIOTimeOut = errors.New("timed out waiting for stdio relay")
 
 // CmdProcessRequest stores information on command requests made through this package.
 type CmdProcessRequest struct {
@@ -62,7 +65,7 @@ type Cmd struct {
 	// ExitState is filled out after Wait() (or Run() or Output()) completes.
 	ExitState *ExitState
 
-	iogrp     errgroup.Group
+	ioGrp     errgroup.Group
 	stdinErr  atomic.Value
 	allDoneCh chan struct{}
 }
@@ -90,13 +93,13 @@ func (err *ExitError) Error() string {
 	return fmt.Sprintf("process exited with exit code %d", err.ExitCode())
 }
 
-// Additional fields to hcsschema.ProcessParameters used by LCOW
+// Additional fields to hcsschema.ProcessParameters used by LCOW.
 type lcowProcessParameters struct {
 	hcsschema.ProcessParameters
 	OCIProcess *specs.Process `json:"OciProcess,omitempty"`
 }
 
-// escapeArgs makes a Windows-style escaped command line from a set of arguments
+// escapeArgs makes a Windows-style escaped command line from a set of arguments.
 func escapeArgs(args []string) string {
 	escapedArgs := make([]string, len(args))
 	for i, a := range args {
@@ -136,9 +139,19 @@ func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg 
 // Start starts a command. The caller must ensure that if Start succeeds,
 // Wait is eventually called to clean up resources.
 func (c *Cmd) Start() error {
+	if c.Host == nil {
+		return errors.New("empty ProcessHost")
+	}
+
+	// closed in (*Cmd).Wait; signals command execution is done
 	c.allDoneCh = make(chan struct{})
+
 	var x interface{}
 	if !c.Host.IsOCI() {
+		if c.Spec == nil {
+			return errors.New("process spec is required for non-OCI ProcessHost")
+		}
+
 		wpp := &hcsschema.ProcessParameters{
 			CommandLine:      c.Spec.CommandLine,
 			User:             c.Spec.User.Username,
@@ -199,6 +212,7 @@ func (c *Cmd) Start() error {
 	// Start relaying process IO.
 	stdin, stdout, stderr := p.Stdio()
 	if c.Stdin != nil {
+		c.Log.Info("coping stdin")
 		// Do not make stdin part of the error group because there is no way for
 		// us or the caller to reliably unblock the c.Stdin read when the
 		// process exits.
@@ -218,20 +232,20 @@ func (c *Cmd) Start() error {
 	}
 
 	if c.Stdout != nil {
-		c.iogrp.Go(func() error {
+		c.ioGrp.Go(func() error {
 			_, err := relayIO(c.Stdout, stdout, c.Log, "stdout")
-			if err := p.CloseStdout(context.TODO()); err != nil {
-				c.Log.WithError(err).Warn("failed to close Cmd stdout")
+			if cErr := p.CloseStdout(context.TODO()); cErr != nil && c.Log != nil {
+				c.Log.WithError(cErr).Warn("failed to close Cmd stdout")
 			}
 			return err
 		})
 	}
 
 	if c.Stderr != nil {
-		c.iogrp.Go(func() error {
+		c.ioGrp.Go(func() error {
 			_, err := relayIO(c.Stderr, stderr, c.Log, "stderr")
-			if err := p.CloseStderr(context.TODO()); err != nil {
-				c.Log.WithError(err).Warn("failed to close Cmd stderr")
+			if cErr := p.CloseStderr(context.TODO()); cErr != nil && c.Log != nil {
+				c.Log.WithError(cErr).Warn("failed to close Cmd stderr")
 			}
 			return err
 		})
@@ -270,9 +284,16 @@ func (c *Cmd) Wait() error {
 		state.exited = true
 		state.code = code
 	}
+
 	// Terminate the IO if the copy does not complete in the requested time.
+	// Closing the process should (eventually) lead to unblocking `ioGrp`, but we still need
+	// `timeoutErrCh` to:
+	// 	1. communitate that the IO copy timed out; and
+	// 	2. prevent a race condition between setting the timeout err in the goroutine and setting it for `ioErr`.
+	timeoutErrCh := make(chan error)
 	if c.CopyAfterExitTimeout != 0 {
 		go func() {
+			defer close(timeoutErrCh)
 			t := time.NewTimer(c.CopyAfterExitTimeout)
 			defer t.Stop()
 			select {
@@ -280,17 +301,27 @@ func (c *Cmd) Wait() error {
 			case <-t.C:
 				// Close the process to cancel any reads to stdout or stderr.
 				c.Process.Close()
+				err := errIOTimeOut
+				// log the timeout, since we may not return it to the caller
 				if c.Log != nil {
-					c.Log.Warn("timed out waiting for stdio relay")
+					c.Log.WithField("timeout", c.CopyAfterExitTimeout).Warn(err.Error())
 				}
+				timeoutErrCh <- err
 			}
 		}()
+	} else {
+		close(timeoutErrCh)
 	}
-	ioErr := c.iogrp.Wait()
+
+	// TODO (go1.20): use multierror for these
+	ioErr := c.ioGrp.Wait()
 	if ioErr == nil {
 		ioErr, _ = c.stdinErr.Load().(error)
 	}
 	close(c.allDoneCh)
+	if tErr := <-timeoutErrCh; ioErr == nil {
+		ioErr = tErr
+	}
 	c.Process.Close()
 	c.ExitState = state
 	if exitErr != nil {
