@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim
 
-go 1.18
+go 1.21
 
 require (
 	github.com/Microsoft/cosesign1go v1.1.0
