@@ -2,10 +2,10 @@ package dmverity
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"io"
-	"math/rand"
 	"os"
 	"strings"
 	"testing"
