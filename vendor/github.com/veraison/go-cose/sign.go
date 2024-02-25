@@ -220,8 +220,16 @@ func (s *Signature) toBeSigned(bodyProtected cbor.RawMessage, payload, external 
 	//       external_aad : bstr,
 	//       payload : bstr
 	//   ]
+	bodyProtected, err := deterministicBinaryString(bodyProtected)
+	if err != nil {
+		return nil, err
+	}
 	var signProtected cbor.RawMessage
-	signProtected, err := s.Headers.MarshalProtected()
+	signProtected, err = s.Headers.MarshalProtected()
+	if err != nil {
+		return nil, err
+	}
+	signProtected, err = deterministicBinaryString(signProtected)
 	if err != nil {
 		return nil, err
 	}
