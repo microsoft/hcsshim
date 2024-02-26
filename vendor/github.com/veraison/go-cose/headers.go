@@ -53,7 +53,8 @@ func (h ProtectedHeader) MarshalCBOR() ([]byte, error) {
 // UnmarshalCBOR decodes a CBOR bstr object into ProtectedHeader.
 //
 // ProtectedHeader is an empty_or_serialized_map where
-// 	 empty_or_serialized_map = bstr .cbor header_map / bstr .size 0
+//
+//	empty_or_serialized_map = bstr .cbor header_map / bstr .size 0
 func (h *ProtectedHeader) UnmarshalCBOR(data []byte) error {
 	if h == nil {
 		return errors.New("cbor: UnmarshalCBOR on nil ProtectedHeader pointer")
@@ -117,8 +118,17 @@ func (h ProtectedHeader) Algorithm() (Algorithm, error) {
 		return Algorithm(alg), nil
 	case int64:
 		return Algorithm(alg), nil
+	case string:
+		v := algorithmFromString(alg)
+
+		var err error
+		if v == AlgorithmInvalid {
+			err = fmt.Errorf("unknown algorithm value %q", alg)
+		}
+
+		return v, err
 	default:
-		return 0, ErrInvalidAlgorithm
+		return AlgorithmInvalid, ErrInvalidAlgorithm
 	}
 }
 
@@ -212,22 +222,22 @@ func (h *UnprotectedHeader) UnmarshalCBOR(data []byte) error {
 //
 // It is represented by CDDL fragments:
 //
-//   Headers = (
-//       protected : empty_or_serialized_map,
-//       unprotected : header_map
-//   )
+//	Headers = (
+//	    protected : empty_or_serialized_map,
+//	    unprotected : header_map
+//	)
 //
-//   header_map = {
-//       Generic_Headers,
-//       * label => values
-//   }
+//	header_map = {
+//	    Generic_Headers,
+//	    * label => values
+//	}
 //
-//   label  = int / tstr
-//   values = any
+//	label  = int / tstr
+//	values = any
 //
-//   empty_or_serialized_map = bstr .cbor header_map / bstr .size 0
+//	empty_or_serialized_map = bstr .cbor header_map / bstr .size 0
 //
-// See Also
+// # See Also
 //
 // https://tools.ietf.org/html/rfc8152#section-3
 type Headers struct {
@@ -553,7 +563,7 @@ func (discardedCBORMessage) UnmarshalCBOR(data []byte) error {
 // validateHeaderLabelCBOR validates if all header labels are integers or
 // strings of a CBOR map object.
 //
-//   label = int / tstr
+//	label = int / tstr
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-1.4
 func validateHeaderLabelCBOR(data []byte) error {

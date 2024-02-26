@@ -4,11 +4,11 @@ This document provides the details on the veraison/go-cose security policy and d
 
 ## Supported Versions
 
-[go-cose][go-cose] is currently is in active development, moving to a [1.0.0 release][v1.0.0-milestone]. The latest pre-release will be supported until 1.0.0 is released. As 1.0.0 is released, pre-release references will need to be redirected to 1.0.0.
+The current stable release of [go-cose][go-cose] is [v1.0.0][v1.0.0-release]. Please upgrade to [v1.0.0][v1.0.0-release] if you are using a pre-release version.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| [v1.0.0-rc1][v1.0.0-rc1-release]  | Yes |
+| [v1.0.0][v1.0.0-release]  | Yes |
 
 ## Report A Vulnerability
 
@@ -23,7 +23,7 @@ To make a report please email the private security list at <a href="mailto:go-co
 [TO:]:     go-cose-security@googlegroups.com
 [SUBJECT]: go-cose Security Notification
 [BODY]:
-Release: v1.0.0-rc.1
+Release: v1.0.0
 
 Summary:
 A quick summary of the issue
@@ -85,6 +85,5 @@ Disclosures will be published on the same day as a release fixing the vulnerabil
 
 [go-cose]:                https://github.com/veraison/go-cose
 [security-advisories]:    https://github.com/veraison/go-cose/security/advisories
-[v1.0.0-rc1-release]:  https://github.com/veraison/go-cose/releases/tag/v1.0.0-rc.1
-[v1.0.0-milestone]:       https://github.com/veraison/go-cose/milestone/2
+[v1.0.0-release]:  https://github.com/veraison/go-cose/releases/tag/v1.0.0
 [go-cose-maintainers]:    https://github.com/veraison/community/blob/main/OWNERS
