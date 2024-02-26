@@ -28,13 +28,12 @@ import (
 
 // InitContext is used for plugin initialization
 type InitContext struct {
-	Context           context.Context
-	Root              string
-	State             string
-	Config            interface{}
-	Address           string
-	TTRPCAddress      string
-	RegisterReadiness func() func()
+	Context      context.Context
+	Root         string
+	State        string
+	Config       interface{}
+	Address      string
+	TTRPCAddress string
 
 	// deprecated: will be removed in 2.0, use plugin.EventType
 	Events *exchange.Exchange

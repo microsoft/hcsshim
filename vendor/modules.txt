@@ -11,7 +11,6 @@ github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/internal/fs
 github.com/Microsoft/go-winio/internal/socket
 github.com/Microsoft/go-winio/internal/stringbuffer
-github.com/Microsoft/go-winio/pkg/bindfilter
 github.com/Microsoft/go-winio/pkg/etw
 github.com/Microsoft/go-winio/pkg/etwlogrus
 github.com/Microsoft/go-winio/pkg/fs
@@ -44,7 +43,7 @@ github.com/containerd/cgroups/v3/cgroup1/stats
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
-# github.com/containerd/containerd v1.7.3
+# github.com/containerd/containerd v1.7.0
 ## explicit; go 1.19
 github.com/containerd/containerd/api/events
 github.com/containerd/containerd/api/runtime/task/v2
@@ -60,7 +59,6 @@ github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/log
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/namespaces
-github.com/containerd/containerd/pkg/atomicfile
 github.com/containerd/containerd/pkg/dialer
 github.com/containerd/containerd/pkg/randutil
 github.com/containerd/containerd/pkg/shutdown
@@ -76,7 +74,7 @@ github.com/containerd/containerd/runtime/v2/shim
 github.com/containerd/containerd/sys
 github.com/containerd/containerd/sys/reaper
 github.com/containerd/containerd/version
-# github.com/containerd/continuity v0.4.1
+# github.com/containerd/continuity v0.4.2
 ## explicit; go 1.19
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/sysx
