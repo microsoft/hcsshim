@@ -8,11 +8,30 @@ A golang library for the [COSE specification][cose-spec]
 
 ## Project Status
 
-**Current Release**: [go-cose rc 1][release-rc-1] 
+**Current Release**: [go-cose v1.0.0][current-release]
 
 The project was *initially* forked from the  upstream [mozilla-services/go-cose][mozilla-go-cose] project, however the Veraison and Mozilla maintainers have agreed to retire the mozilla-services/go-cose project and focus on [veraison/go-cose][veraison-go-cose] as the active project.
 
 We thank the [Mozilla maintainers and contributors][mozilla-contributors] for their great work that formed the base of the [veraison/go-cose][veraison-go-cose] project.
+
+## Community
+
+The [veraison/go-cose](https://github.com/veraison/go-cose) project is an open source community effort.
+
+You can reach the go-cose community via::
+
+- [Mailing List](veraison-project@confidentialcomputing.io)
+- Bi-weekly meetings: 08:00-09:00 Pacific
+  - [Zoom meeting link](https://us02web.zoom.us/j/81054434992?pwd=YjNBU21seU5VcGdtVXY3VHVjS251Zz09)
+  - [Calendar ics link](https://zoom.us/meeting/tZUtcu2srT8jE9YFubXn-lC9upuwUiiev52G/ics)
+- [Meeting Notes](https://veraison.zulipchat.com/#narrow/stream/317999-go-cose-meetings)
+- [Meeting Recordings](https://www.youtube.com/@go-cose-community3000)
+
+Participation in the go-cose community is governed by the Veraison [CODE_OF_CONDUCT.md](https://github.com/veraison/.github/blob/main/CODE_OF_CONDUCT.md) and [GOVERNANCE.md](https://github.com/veraison/community/blob/main/GOVERNANCE.md)
+
+## Code of Conduct
+
+This project has adopted the [Contributor Covenant Code of Conduct](https://github.com/veraison/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ## Installation
 
@@ -46,7 +65,7 @@ go get github.com/veraison/go-cose@main
 import "github.com/veraison/go-cose"
 ```
 
-Construct a new COSE_Sign1 message, then sign it using ECDSA w/ SHA-256 and finally marshal it. For example:
+Construct a new COSE_Sign1_Tagged message, then sign it using ECDSA w/ SHA-256 and finally marshal it. For example:
 
 ```go
 package main
@@ -83,7 +102,7 @@ func SignP256(data []byte) ([]byte, error) {
 }
 ```
 
-Verify a raw COSE_Sign1 message. For example:
+Verify a raw COSE_Sign1_Tagged message. For example:
 
 ```go
 package main
@@ -112,6 +131,11 @@ func VerifyP256(publicKey crypto.PublicKey, sig []byte) error {
 ```
 
 See [example_test.go](./example_test.go) for more examples.
+
+#### Untagged Signing and Verification
+
+Untagged COSE_Sign1 messages can be signed and verified as above, using
+`cose.UntaggedSign1Message` instead of `cose.Sign1Message`.
 
 ### About hashing
 
@@ -188,4 +212,4 @@ go test -fuzz=FuzzSign1
 [mozilla-contributors]: https://github.com/mozilla-services/go-cose/graphs/contributors
 [mozilla-go-cose]:      http://github.com/mozilla-services/go-cose
 [veraison-go-cose]:     https://github.com/veraison/go-cose
-[release-rc-1]:      https://github.com/veraison/go-cose/releases/tag/v1.0.0-rc.1
+[current-release]:      https://github.com/veraison/go-cose/releases/tag/v1.0.0
