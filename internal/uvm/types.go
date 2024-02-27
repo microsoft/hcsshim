@@ -152,3 +152,13 @@ func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
 type OutputHandler func(io.Reader)
 
 type OutputHandlerCreator func(*Options) OutputHandler
+
+type WCOWBootFiles struct {
+	// Path to the directory that contains the OS files.
+	OSFilesPath string
+	// Path of the boot directory relative to the `OSFilesPath`. This boot directory MUST
+	// contain the BCD & bootmgfw.efi files.
+	OSRelativeBootDirPath string
+	// Path for the scratch VHD of thef UVM
+	ScratchVHDPath string
+}
