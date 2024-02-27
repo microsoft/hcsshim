@@ -19,6 +19,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	crypto "crypto/rand"
+
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
@@ -39,7 +41,7 @@ const (
 func generateMAC() (string, error) {
 	buf := make([]byte, 6)
 
-	_, err := rand.Read(buf)
+	_, err := crypto.Read(buf)
 	if err != nil {
 		return "", err
 	}

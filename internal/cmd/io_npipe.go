@@ -22,7 +22,7 @@ import (
 
 func init() {
 	// Need to seed for the rng in backoff.NextBackoff()
-	rand.Seed(time.Now().UnixNano())
+	rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
 // NewNpipeIO creates connected upstream io. It is the callers responsibility to validate that `if terminal == true`, `stderr == ""`. retryTimeout
