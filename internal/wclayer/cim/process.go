@@ -170,18 +170,18 @@ func processLayoutFile(layerPath string) ([]pendingCimOp, error) {
 // steps. This function opens the cim file for writing and updates it.
 func (cw *CimLayerWriter) processBaseLayer(ctx context.Context, processUtilityVM bool) (err error) {
 	if processUtilityVM {
-		if err = processUtilityVMLayer(ctx, cw.path); err != nil {
+		if err = processUtilityVMLayer(ctx, cw.layerPath); err != nil {
 			return fmt.Errorf("process utilityVM layer: %w", err)
 		}
 	}
 
-	ops, err := processBaseLayerHives(cw.path)
+	ops, err := processBaseLayerHives(cw.layerPath)
 	if err != nil {
 		return err
 	}
 	cw.pendingOps = append(cw.pendingOps, ops...)
 
-	ops, err = processLayoutFile(cw.path)
+	ops, err = processLayoutFile(cw.layerPath)
 	if err != nil {
 		return err
 	}
@@ -196,14 +196,14 @@ func (cw *CimLayerWriter) processNonBaseLayer(ctx context.Context, processUtilit
 	for _, hv := range hives {
 		baseHive := filepath.Join(wclayer.HivesPath, hv.base)
 		deltaHive := filepath.Join(wclayer.HivesPath, hv.delta)
-		_, err := os.Stat(filepath.Join(cw.path, deltaHive))
+		_, err := os.Stat(filepath.Join(cw.layerPath, deltaHive))
 		// merge with parent layer if delta exists.
 		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("stat delta hive %s: %w", filepath.Join(cw.path, deltaHive), err)
+			return fmt.Errorf("stat delta hive %s: %w", filepath.Join(cw.layerPath, deltaHive), err)
 		} else if err == nil {
 			// merge base hive of parent layer with the delta hive of this layer and write it as
 			// the base hive of this layer.
-			err = mergeHive(filepath.Join(cw.parentLayerPaths[0], baseHive), filepath.Join(cw.path, deltaHive), filepath.Join(cw.path, baseHive))
+			err = mergeHive(filepath.Join(cw.parentLayerPaths[0], baseHive), filepath.Join(cw.layerPath, deltaHive), filepath.Join(cw.layerPath, baseHive))
 			if err != nil {
 				return err
 			}
@@ -211,7 +211,7 @@ func (cw *CimLayerWriter) processNonBaseLayer(ctx context.Context, processUtilit
 			// the newly created merged file must be added to the cim
 			cw.pendingOps = append(cw.pendingOps, &addOp{
 				pathInCim: baseHive,
-				hostPath:  filepath.Join(cw.path, baseHive),
+				hostPath:  filepath.Join(cw.layerPath, baseHive),
 				fileInfo: &winio.FileBasicInfo{
 					CreationTime:   windows.NsecToFiletime(time.Now().UnixNano()),
 					LastAccessTime: windows.NsecToFiletime(time.Now().UnixNano()),
@@ -224,7 +224,7 @@ func (cw *CimLayerWriter) processNonBaseLayer(ctx context.Context, processUtilit
 	}
 
 	if processUtilityVM {
-		return processUtilityVMLayer(ctx, cw.path)
+		return processUtilityVMLayer(ctx, cw.layerPath)
 	}
 	return nil
 }
