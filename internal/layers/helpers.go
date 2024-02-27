@@ -4,10 +4,14 @@
 package layers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/errdefs"
 )
@@ -41,6 +45,22 @@ func validateRootfsAndLayers(rootfs []*types.Mount, layerFolders []string) error
 		}
 	}
 
+	return nil
+}
+
+func ensureScratchVHD(ctx context.Context, scratchFolder string, layerFolders []string) error {
+	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
+		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
+			return fmt.Errorf("failed to auto-create container scratch folder %s: %w", scratchFolder, err)
+		}
+	}
+
+	// Create sandbox.vhdx if it doesn't exist in the scratch folder.
+	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
+		if err := wclayer.CreateScratchLayer(ctx, scratchFolder, layerFolders); err != nil {
+			return fmt.Errorf("failed to CreateSandboxLayer: %w", err)
+		}
+	}
 	return nil
 }
 

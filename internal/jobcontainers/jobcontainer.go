@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/resources"
@@ -97,8 +98,12 @@ func newJobContainer(id string, s *specs.Spec) *JobContainer {
 	}
 }
 
+type CreateOptions struct {
+	WCOWLayers layers.WCOWLayers
+}
+
 // Create creates a new JobContainer from the OCI runtime spec `s`.
-func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *resources.Resources, err error) {
+func Create(ctx context.Context, id string, s *specs.Spec, createOpts CreateOptions) (_ cow.Container, _ *resources.Resources, err error) {
 	log.G(ctx).WithField("id", id).Debug("Creating job container")
 
 	if s == nil {
@@ -116,12 +121,12 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 	container := newJobContainer(id, s)
 
 	// Create the job object all processes will run in.
-	options := &jobobject.Options{
+	jobOpts := &jobobject.Options{
 		Name:             fmt.Sprintf(jobContainerNameFmt, id),
 		Notifications:    true,
 		EnableIOTracking: true,
 	}
-	container.job, err = jobobject.Create(ctx, options)
+	container.job, err = jobobject.Create(ctx, jobOpts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create job object: %w", err)
 	}
@@ -190,9 +195,9 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 
 	var closer resources.ResourceCloser
 	if fileBindingSupport {
-		closer, err = container.bindSetup(ctx, s)
+		closer, err = container.bindSetup(ctx, s, createOpts)
 	} else {
-		closer, err = container.fallbackSetup(ctx, s)
+		closer, err = container.fallbackSetup(ctx, s, createOpts)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -765,13 +770,13 @@ func (c *JobContainer) replaceWithMountPoint(str string) (string, bool) {
 	return newStr, str != newStr
 }
 
-func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (_ resources.ResourceCloser, err error) {
+func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec, opts CreateOptions) (_ resources.ResourceCloser, err error) {
 	// Must be upgraded to a silo so we can get per silo bindings for the container.
 	if err := c.job.PromoteToSilo(); err != nil {
 		return nil, err
 	}
 	// Union the container layers.
-	closer, err := c.mountLayers(ctx, c.id, s, "")
+	closer, err := c.mountLayers(ctx, c.id, s, opts.WCOWLayers, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to mount container layers: %w", err)
 	}
@@ -798,12 +803,12 @@ func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (_ resource
 
 // This handles the fallback case where bind mounting isn't available on the machine. This mounts the
 // container layers on the host and sets up any mounts present in the OCI runtime spec.
-func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec) (_ resources.ResourceCloser, err error) {
+func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec, opts CreateOptions) (_ resources.ResourceCloser, err error) {
 	rootfsLocation := fmt.Sprintf(fallbackRootfsFormat, c.id)
 	if loc := customRootfsLocation(s.Annotations); loc != "" {
 		rootfsLocation = filepath.Join(loc, c.id)
 	}
-	closer, err := c.mountLayers(ctx, c.id, s, rootfsLocation)
+	closer, err := c.mountLayers(ctx, c.id, s, opts.WCOWLayers, rootfsLocation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to mount container layers: %w", err)
 	}

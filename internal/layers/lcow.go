@@ -5,9 +5,12 @@ package layers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 
+	"github.com/containerd/containerd/api/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
@@ -205,4 +208,78 @@ func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layer *LCOWLayer) (uvm
 		"layerType":      "scsi",
 	}).Debug("Added LCOW layer")
 	return sm.GuestPath(), sm, nil
+}
+
+// ParseLCOWLayers returns a layers.LCOWLayers describing the rootfs that should be set up
+// for an LCOW container. It takes as input the set of rootfs mounts and the layer folders
+// from the OCI spec.
+func ParseLCOWLayers(rootfs []*types.Mount, layerFolders []string) (*LCOWLayers, error) {
+	if err := validateRootfsAndLayers(rootfs, layerFolders); err != nil {
+		return nil, err
+	}
+
+	legacyLayer := func(scratchLayer string, parentLayers []string) *LCOWLayers {
+		// Each read-only layer should have a layer.vhd, and the scratch layer should have a sandbox.vhdx.
+		roLayers := make([]*LCOWLayer, 0, len(parentLayers))
+		for _, parentLayer := range parentLayers {
+			roLayers = append(
+				roLayers,
+				&LCOWLayer{
+					VHDPath: filepath.Join(parentLayer, "layer.vhd"),
+				},
+			)
+		}
+		return &LCOWLayers{
+			Layers:         roLayers,
+			ScratchVHDPath: filepath.Join(scratchLayer, "sandbox.vhdx"),
+		}
+	}
+	// Due to previous validation, we know that for a Linux container we either have LayerFolders, or
+	// a single rootfs mount.
+	if len(layerFolders) > 0 {
+		return legacyLayer(layerFolders[len(layerFolders)-1], layerFolders[:len(layerFolders)-1]), nil
+	}
+	m := rootfs[0]
+	switch m.Type {
+	case "lcow-layer":
+		scratchLayer := m.Source
+		parentLayers, err := getOptionAsArray(m, parentLayerPathsFlag)
+		if err != nil {
+			return nil, err
+		}
+		return legacyLayer(scratchLayer, parentLayers), nil
+	case "lcow-partitioned-layer":
+		var (
+			scratchPath string
+			layerData   []struct {
+				Path      string
+				Partition uint64
+			}
+		)
+		for _, opt := range m.Options {
+			if optPrefix := "scratch="; strings.HasPrefix(opt, optPrefix) {
+				scratchPath = strings.TrimPrefix(opt, optPrefix)
+			} else if optPrefix := "parent-partitioned-layers="; strings.HasPrefix(opt, optPrefix) {
+				layerJSON := strings.TrimPrefix(opt, optPrefix)
+				if err := json.Unmarshal([]byte(layerJSON), &layerData); err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, fmt.Errorf("unrecognized %s mount option: %s", m.Type, opt)
+			}
+		}
+		roLayers := make([]*LCOWLayer, 0, len(layerData))
+		for _, layer := range layerData {
+			roLayers = append(
+				roLayers,
+				&LCOWLayer{
+					VHDPath:   layer.Path,
+					Partition: layer.Partition,
+				},
+			)
+		}
+		return &LCOWLayers{Layers: roLayers, ScratchVHDPath: scratchPath}, nil
+	default:
+		return nil, fmt.Errorf("unrecognized rootfs mount type: %s", m.Type)
+	}
 }

@@ -27,13 +27,6 @@ import (
 
 var empty = &emptypb.Empty{}
 
-// TODO(ambarve): Once we can vendor containerd 2.0 in hcsshim, we should directly reference these types from
-// containerd module
-const (
-	LegacyMountType string = "windows-layer"
-	CimFSMountType  string = "CimFS"
-)
-
 // getPod returns the pod this shim is tracking or else returns `nil`. It is the
 // callers responsibility to verify that `s.isSandbox == true` before calling
 // this method.
@@ -120,53 +113,6 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		}
 		if spec.Windows.HyperV == nil {
 			spec.Windows.HyperV = &specs.WindowsHyperV{}
-		}
-	}
-
-	var layerFolders []string
-	if spec.Windows != nil {
-		layerFolders = spec.Windows.LayerFolders
-	}
-	if err := validateRootfsAndLayers(req.Rootfs, layerFolders); err != nil {
-		return nil, err
-	}
-
-	// Only work with Windows here.
-	// Parsing of the rootfs mount for Linux containers occurs later.
-	if spec.Linux == nil && len(req.Rootfs) > 0 {
-		// For Windows containers, we work with LayerFolders throughout
-		// much of the creation logic in the shim. If we were given a
-		// rootfs mount, convert it to LayerFolders here.
-		m := req.Rootfs[0]
-		if m.Type != LegacyMountType && m.Type != CimFSMountType {
-			return nil, fmt.Errorf("unsupported Windows mount type: %s", m.Type)
-		} else if m.Type == CimFSMountType && (shimOpts.SandboxIsolation == runhcsopts.Options_HYPERVISOR) {
-			// For CIMFS layers only process isolation is supported right now.
-			return nil, fmt.Errorf("cimfs doesn't support hyperv isolation")
-		}
-
-		source, parentLayerPaths, err := parseLegacyRootfsMount(m)
-		if err != nil {
-			return nil, err
-		}
-
-		// Append the parents
-		spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, parentLayerPaths...)
-		// Append the scratch
-		spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, source)
-
-		if m.Type == CimFSMountType {
-			// write the layers to a file so that it can be used for proper cleanup during shim
-			// delete. We can't write to the config.json as it is read-only for shim.
-			f, err = os.Create(filepath.Join(req.Bundle, layersFile))
-			if err != nil {
-				return nil, err
-			}
-			if err := json.NewEncoder(f).Encode(spec.Windows.LayerFolders); err != nil {
-				f.Close()
-				return nil, err
-			}
-			f.Close()
 		}
 	}
 
