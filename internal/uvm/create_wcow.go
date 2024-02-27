@@ -23,9 +23,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/security"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
-	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
-	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -33,7 +31,7 @@ import (
 type OptionsWCOW struct {
 	*Options
 
-	LayerFolders []string // Set of folders for base layers and scratch. Ordered from top most read-only through base read-only layer, followed by scratch
+	BootFiles *WCOWBootFiles
 
 	// NoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM
 	NoDirectMap bool
@@ -46,7 +44,7 @@ type OptionsWCOW struct {
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
-// WCOW. The caller `MUST` set the `LayerFolders` path on the returned value.
+// WCOW. The caller `MUST` set the `BootFiles` on the returned value.
 //
 // `id` the ID of the compute system. If not passed will generate a new GUID.
 //
@@ -73,7 +71,7 @@ func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
 	return nil
 }
 
-func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uvmFolder string) (*hcsschema.ComputeSystem, error) {
+func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*hcsschema.ComputeSystem, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %w", err)
@@ -94,7 +92,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 		Shares: []hcsschema.VirtualSmbShare{
 			{
 				Name:    "os",
-				Path:    filepath.Join(uvmFolder, `UtilityVM\Files`),
+				Path:    opts.BootFiles.OSFilesPath,
 				Options: vsmbOpts,
 			},
 		},
@@ -174,7 +172,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 			Chipset: &hcsschema.Chipset{
 				Uefi: &hcsschema.Uefi{
 					BootThis: &hcsschema.UefiBootEntry{
-						DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
+						DevicePath: filepath.Join(opts.BootFiles.OSRelativeBootDirPath, "bootmgfw.efi"),
 						DeviceType: "VmbFs",
 					},
 				},
@@ -280,42 +278,13 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
 
-	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, opts.LayerFolders)
-	if err != nil {
-		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %w", err)
-	}
-
-	// TODO: BUGBUG Remove this. @jhowardmsft
-	//       It should be the responsibility of the caller to do the creation and population.
-	//       - Update runhcs too (vm.go).
-	//       - Remove comment in function header
-	//       - Update tests that rely on this current behavior.
-	// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
-	scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
-
-	// Create the directory if it doesn't exist
-	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
-			return nil, fmt.Errorf("failed to create utility VM scratch folder: %w", err)
-		}
-	}
-
-	doc, err := prepareConfigDoc(ctx, uvm, opts, uvmFolder)
+	doc, err := prepareConfigDoc(ctx, uvm, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error in preparing config doc: %w", err)
 	}
 
-	// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it
-	scratchPath := filepath.Join(scratchFolder, "sandbox.vhdx")
-	if _, err := os.Stat(scratchPath); os.IsNotExist(err) {
-		if err := wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, uvm.id); err != nil {
-			return nil, fmt.Errorf("failed to create scratch: %w", err)
-		}
-	} else {
-		// Sandbox.vhdx exists, just need to grant vm access to it.
-		if err := wclayer.GrantVmAccess(ctx, uvm.id, scratchPath); err != nil {
-			return nil, errors.Wrap(err, "failed to grant vm access to scratch")
-		}
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.ScratchVHDPath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to scratch")
 	}
 
 	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
@@ -327,7 +296,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
 
-		Path:  scratchPath,
+		Path:  opts.BootFiles.ScratchVHDPath,
 		Type_: "VirtualDisk",
 	}
 

@@ -29,7 +29,6 @@ import (
 
 const usage = ``
 const ttrpcAddressEnv = "TTRPC_ADDRESS"
-const layersFile = "layers.json"
 
 // Add a manifest to get proper Windows version detection.
 //go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific

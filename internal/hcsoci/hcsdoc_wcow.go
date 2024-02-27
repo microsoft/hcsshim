@@ -20,7 +20,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
@@ -160,11 +159,6 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	// IgnoreFlushesDuringBoot is a property of the SCSI attachment for the scratch. Set when it's hot-added to the utility VM
 	// ID is a property on the create call in V2 rather than part of the schema.
 	v2Container := &hcsschema.Container{Storage: &hcsschema.Storage{}}
-
-	// TODO: Still want to revisit this.
-	if coi.Spec.Windows.LayerFolders == nil || len(coi.Spec.Windows.LayerFolders) < 2 {
-		return nil, nil, fmt.Errorf("invalid spec - not enough layer folders supplied")
-	}
 
 	if coi.Spec.Hostname != "" {
 		v1.HostName = coi.Spec.Hostname
@@ -310,7 +304,8 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 
 	// Strip off the top-most RW/scratch layer as that's passed in separately to HCS for v1
-	v1.LayerFolderPath = coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
+	// TODO(ambarve) Understand how this path is exactly used and fix it.
+	// v1.LayerFolderPath = coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 
 	if coi.isV2Argon() || coi.isV1Argon() {
 		// Argon v1 or v2.
@@ -334,7 +329,14 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 			v1.HvRuntime = &schema1.HvRuntime{ImagePath: coi.Spec.Windows.HyperV.UtilityVMPath}
 		} else {
 			// Client was lazy. Let's locate it from the layer folders instead.
-			uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, coi.Spec.Windows.LayerFolders)
+			// We are using v1xenon so we can't be using CimFS layers, that
+			// means mounted layers has to have individual layer directory
+			// paths that can be passed here.
+			layerFolders := []string{}
+			for _, ml := range coi.mountedWCOWLayers.MountedLayerPaths {
+				layerFolders = append(layerFolders, ml.MountedPath)
+			}
+			uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, layerFolders)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -344,22 +346,24 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		// Hosting system was supplied, so is v2 Xenon.
 		v2Container.Storage.Path = coi.Spec.Root.Path
 		if coi.HostingSystem.OS() == "windows" {
-			layers, err := layers.GetHCSLayers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
-			if err != nil {
-				return nil, nil, err
+			layers := []hcsschema.Layer{}
+			for _, ml := range coi.mountedWCOWLayers.MountedLayerPaths {
+				layers = append(layers, hcsschema.Layer{
+					Id:   ml.LayerID,
+					Path: ml.MountedPath,
+				})
 			}
 			v2Container.Storage.Layers = layers
 		}
 	}
 
 	if coi.isV2Argon() || coi.isV1Argon() { // Argon v1 or v2
-		mountedLayers, err := layers.ToHostHcsSchemaLayers(ctx, coi.ID, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, ml := range mountedLayers {
-			v1.Layers = append(v1.Layers, schema1.Layer{ID: ml.Id, Path: ml.Path})
-			v2Container.Storage.Layers = append(v2Container.Storage.Layers, ml)
+		for _, ml := range coi.mountedWCOWLayers.MountedLayerPaths {
+			v1.Layers = append(v1.Layers, schema1.Layer{ID: ml.LayerID, Path: ml.MountedPath})
+			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschema.Layer{
+				Id:   ml.LayerID,
+				Path: ml.MountedPath,
+			})
 		}
 	}
 

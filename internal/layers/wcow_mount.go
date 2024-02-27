@@ -14,7 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 
-	"github.com/Microsoft/go-winio/pkg/fs"
 	"github.com/Microsoft/hcsshim/computestorage"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
@@ -26,73 +25,68 @@ import (
 	cimlayer "github.com/Microsoft/hcsshim/internal/wclayer/cim"
 )
 
-// MountWCOWLayers is a helper for clients to hide all the complexity of layer mounting for WCOW.
-// Layer folder are in order: [rolayerN..rolayer1, base] scratch
-//
-//	v1/v2: Argon WCOW: Returns the mount path on the host as a volume GUID.
-//	v1:    Xenon WCOW: Done internally in HCS, so no point calling doing anything here.
-//	v2:    Xenon WCOW: Returns a CombinedLayersV2 structure where ContainerRootPath is a folder
-//	inside the utility VM which is a GUID mapping of the scratch folder. Each of the layers are
-//	the VSMB locations where the read-only layers are mounted.
-//
-//	Job container: Returns the mount path on the host as a volume guid, with the volume mounted on
-//	the host at `volumeMountPath`.
-func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
-	if vm == nil {
-		return mountWCOWHostLayers(ctx, layerFolders, containerID, volumeMountPath)
-	}
-
-	if vm.OS() != "windows" {
-		return "", nil, errors.New("MountWCOWLayers should only be called for WCOW")
-	}
-
-	return mountWCOWIsolatedLayers(ctx, containerID, layerFolders, volumeMountPath, vm)
-}
-
-type wcowHostLayersCloser struct {
-	containerID     string
-	volumeMountPath string
-	layers          []string
-}
-
-func ReleaseCimFSHostLayers(ctx context.Context, scratchLayerFolderPath, containerID string) error {
-	mountPath, err := wclayer.GetLayerMountPath(ctx, scratchLayerFolderPath)
-	if err != nil {
-		return err
-	}
-
-	if err = computestorage.DetachOverlayFilter(ctx, mountPath, hcsschema.UnionFS); err != nil {
-		return err
-	}
-
-	return cimlayer.CleanupContainerMounts(containerID)
-}
-
-func (lc *wcowHostLayersCloser) Release(ctx context.Context) error {
-	if lc.volumeMountPath != "" {
-		if err := RemoveSandboxMountPoint(ctx, lc.volumeMountPath); err != nil {
-			return err
+func MountWCOWLayers(ctx context.Context, containerID string, vm *uvm.UtilityVM, wl WCOWLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
+	switch l := wl.(type) {
+	case *wcowWCIFSLayers:
+		if vm == nil {
+			return mountProcessIsolatedWCIFSLayers(ctx, l)
 		}
+		return mountHypervIsolatedWCIFSLayers(ctx, l, vm)
+	case *wcowForkedCIMLayers:
+		if vm == nil {
+			return mountProcessIsolatedForkedCimLayers(ctx, containerID, l)
+		}
+		return nil, nil, fmt.Errorf("hyperv isolated containers aren't supported with forked cim layers")
+	default:
+		return nil, nil, fmt.Errorf("invalid layer type %T", wl)
 	}
-	scratchLayerFolderPath := lc.layers[len(lc.layers)-1]
-	var err error
-	if cimlayer.IsCimLayer(lc.layers[0]) {
-		err = ReleaseCimFSHostLayers(ctx, scratchLayerFolderPath, lc.containerID)
-	} else {
-		err = wclayer.UnprepareLayer(ctx, scratchLayerFolderPath)
-	}
-	if err != nil {
-		return err
-	}
-	return wclayer.DeactivateLayer(ctx, scratchLayerFolderPath)
 }
 
-func mountWCOWHostLegacyLayers(ctx context.Context, layerFolders []string, volumeMountPath string) (_ string, err error) {
-	if len(layerFolders) < 2 {
-		return "", errors.New("need at least two layers - base and scratch")
+// Represents a single layer that is mounted and ready to use. Depending on the type of
+// layers each individual layer may or may not be mounted. However, HCS still needs paths
+// of individual layers and a unique ID for each layer.
+type MountedWCOWLayer struct {
+	// A unique layer GUID is expected by HCS for every layer
+	LayerID string
+	// The path at which this layer is mounted. Could be a path on the host or a path
+	// inside the guest.
+	MountedPath string
+}
+
+type MountedWCOWLayers struct {
+	// path at which rootfs is setup - this could be a path on the host or a path
+	// inside the guest
+	RootFS string
+	// mounted read-only layer paths are required in the container doc that we send to HCS.
+	// In case of WCIFS based layers these would be layer directory paths, however, in case
+	// of CimFS layers this would a single volume path at which the CIM is mounted.
+	MountedLayerPaths []MountedWCOWLayer
+}
+
+// layer closers are used to correctly clean up layers once container exits. Note that
+// these layer closers live in the shim process so they can't cleanup the layer in case of
+// a shim crash.
+//
+// wcowHostWCIFSLayerCloser is used to cleanup WCIFS based layers mounted on the host for
+// process isolated containers.
+type wcowHostWCIFSLayerCloser struct {
+	scratchLayerData
+}
+
+func (l *wcowHostWCIFSLayerCloser) Release(ctx context.Context) error {
+	if err := wclayer.UnprepareLayer(ctx, l.scratchLayerPath); err != nil {
+		return err
 	}
-	path := layerFolders[len(layerFolders)-1]
-	rest := layerFolders[:len(layerFolders)-1]
+	return wclayer.DeactivateLayer(ctx, l.scratchLayerPath)
+}
+
+func mountProcessIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
+	// In some legacy layer use cases the scratch VHD might not be already created by the client
+	// continue to support those scenarios.
+	if err = ensureScratchVHD(ctx, l.scratchLayerPath, l.layerPaths); err != nil {
+		return nil, nil, err
+	}
+
 	// Simple retry loop to handle some behavior on RS5. Loopback VHDs used to be mounted in a different manner on RS5 (ws2019) which led to some
 	// very odd cases where things would succeed when they shouldn't have, or we'd simply timeout if an operation took too long. Many
 	// parallel invocations of this code path and stressing the machine seem to bring out the issues, but all of the possible failure paths
@@ -102,17 +96,17 @@ func mountWCOWHostLegacyLayers(ctx context.Context, layerFolders []string, volum
 	var lErr error
 	for i := 0; i < 5; i++ {
 		lErr = func() (err error) {
-			if err := wclayer.ActivateLayer(ctx, path); err != nil {
+			if err := wclayer.ActivateLayer(ctx, l.scratchLayerPath); err != nil {
 				return err
 			}
 
 			defer func() {
 				if err != nil {
-					_ = wclayer.DeactivateLayer(ctx, path)
+					_ = wclayer.DeactivateLayer(ctx, l.scratchLayerPath)
 				}
 			}()
 
-			return wclayer.PrepareLayer(ctx, path, rest)
+			return wclayer.PrepareLayer(ctx, l.scratchLayerPath, l.layerPaths)
 		}()
 
 		if lErr != nil {
@@ -123,7 +117,7 @@ func mountWCOWHostLegacyLayers(ctx context.Context, layerFolders []string, volum
 			var hcserr *hcserror.HcsError
 			if errors.As(lErr, &hcserr) {
 				if errors.Is(hcserr.Err, windows.ERROR_NOT_READY) || errors.Is(hcserr.Err, windows.ERROR_DEVICE_NOT_CONNECTED) {
-					log.G(ctx).WithField("path", path).WithError(hcserr.Err).Warning("retrying layer operations after failure")
+					log.G(ctx).WithField("path", l.scratchLayerPath).WithError(hcserr.Err).Warning("retrying layer operations after failure")
 
 					// Sleep for a little before a re-attempt. A probable cause for these issues in the first place is events not getting
 					// reported in time so might be good to give some time for things to "cool down" or get back to a known state.
@@ -132,7 +126,7 @@ func mountWCOWHostLegacyLayers(ctx context.Context, layerFolders []string, volum
 				}
 			}
 			// This was a failure case outside of the commonly known error conditions, don't retry here.
-			return "", lErr
+			return nil, nil, lErr
 		}
 
 		// No errors in layer setup, we can leave the loop
@@ -141,57 +135,95 @@ func mountWCOWHostLegacyLayers(ctx context.Context, layerFolders []string, volum
 	// If we got unlucky and ran into one of the two errors mentioned five times in a row and left the loop, we need to check
 	// the loop error here and fail also.
 	if lErr != nil {
-		return "", errors.Wrap(lErr, "layer retry loop failed")
+		return nil, nil, errors.Wrap(lErr, "layer retry loop failed")
 	}
 
 	// If any of the below fails, we want to detach the filter and unmount the disk.
 	defer func() {
 		if err != nil {
-			_ = wclayer.UnprepareLayer(ctx, path)
-			_ = wclayer.DeactivateLayer(ctx, path)
+			_ = wclayer.UnprepareLayer(ctx, l.scratchLayerPath)
+			_ = wclayer.DeactivateLayer(ctx, l.scratchLayerPath)
 		}
 	}()
 
-	mountPath, err := wclayer.GetLayerMountPath(ctx, path)
+	mountPath, err := wclayer.GetLayerMountPath(ctx, l.scratchLayerPath)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-	return mountPath, nil
 
+	layersWithID := []MountedWCOWLayer{}
+	for _, l := range l.layerPaths {
+		layerID, err := wclayer.LayerID(ctx, l)
+		if err != nil {
+			return nil, nil, err
+		}
+		layersWithID = append(layersWithID, MountedWCOWLayer{
+			LayerID:     layerID.String(),
+			MountedPath: l,
+		})
+	}
+
+	return &MountedWCOWLayers{
+			RootFS:            mountPath,
+			MountedLayerPaths: layersWithID,
+		}, &wcowHostWCIFSLayerCloser{
+			scratchLayerData: l.scratchLayerData,
+		}, nil
 }
 
-func mountWCOWHostCimFSLayers(ctx context.Context, layerFolders []string, containerID, volumeMountPath string) (_ string, err error) {
-	scratchLayer := layerFolders[len(layerFolders)-1]
-	topMostLayer := layerFolders[0]
-	if err = wclayer.ActivateLayer(ctx, scratchLayer); err != nil {
-		return "", err
+// wcowHostForkedCIMLayerCloser is used to cleanup forked CIM layers mounted on the host for process isolated
+// containers
+type wcowHostForkedCIMLayerCloser struct {
+	scratchLayerData
+	containerID string
+}
+
+func (l *wcowHostForkedCIMLayerCloser) Release(ctx context.Context) error {
+	mountPath, err := wclayer.GetLayerMountPath(ctx, l.scratchLayerPath)
+	if err != nil {
+		return err
+	}
+
+	if err = computestorage.DetachOverlayFilter(ctx, mountPath, hcsschema.UnionFS); err != nil {
+		return err
+	}
+
+	if err = cimlayer.CleanupContainerMounts(l.containerID); err != nil {
+		return err
+	}
+	return wclayer.DeactivateLayer(ctx, l.scratchLayerPath)
+}
+
+func mountProcessIsolatedForkedCimLayers(ctx context.Context, containerID string, l *wcowForkedCIMLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
+	if err = wclayer.ActivateLayer(ctx, l.scratchLayerPath); err != nil {
+		return nil, nil, err
 	}
 	defer func() {
 		if err != nil {
-			_ = wclayer.DeactivateLayer(ctx, scratchLayer)
+			_ = wclayer.DeactivateLayer(ctx, l.scratchLayerPath)
 		}
 	}()
 
-	mountPath, err := wclayer.GetLayerMountPath(ctx, scratchLayer)
+	mountPath, err := wclayer.GetLayerMountPath(ctx, l.scratchLayerPath)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
-	volume, err := cimlayer.MountCimLayer(ctx, cimlayer.GetCimPathFromLayer(topMostLayer), containerID)
+	volume, err := cimlayer.MountCimLayer(ctx, l.layers[0].cimPath, containerID)
 	if err != nil {
-		return "", fmt.Errorf("mount layer cim for %s: %w", topMostLayer, err)
+		return nil, nil, fmt.Errorf("mount layer cim: %w", err)
 	}
 	defer func() {
 		if err != nil {
-			_ = cimlayer.UnmountCimLayer(ctx, cimlayer.GetCimPathFromLayer(topMostLayer), containerID)
+			_ = cimlayer.UnmountCimLayer(ctx, l.layers[0].cimPath, containerID)
 		}
 	}()
 
 	// Use the layer path for GUID rather than the mounted volume path, so that the generated layerID
 	// remains same.
-	layerID, err := wclayer.LayerID(ctx, topMostLayer)
+	layerID, err := cimlayer.LayerID(l.layers[0].cimPath, containerID)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	layerData := computestorage.LayerData{
@@ -200,57 +232,41 @@ func mountWCOWHostCimFSLayers(ctx context.Context, layerFolders []string, contai
 		// UnionFS needs this path, so append "Files" to the layer path before passing it on.
 		Layers: []hcsschema.Layer{
 			{
-				Id:   layerID.String(),
+				Id:   layerID,
 				Path: filepath.Join(volume, "Files"),
 			},
 		},
 	}
 
 	if err = computestorage.AttachOverlayFilter(ctx, mountPath, layerData); err != nil {
-		return "", err
-	}
-	return mountPath, nil
-}
-
-func mountWCOWHostLayers(ctx context.Context, layerFolders []string, containerID, volumeMountPath string) (_ string, _ resources.ResourceCloser, err error) {
-	var mountPath string
-	if cimlayer.IsCimLayer(layerFolders[0]) {
-		mountPath, err = mountWCOWHostCimFSLayers(ctx, layerFolders, containerID, volumeMountPath)
-	} else {
-		mountPath, err = mountWCOWHostLegacyLayers(ctx, layerFolders, volumeMountPath)
-	}
-	if err != nil {
-		return "", nil, err
-	}
-	closer := &wcowHostLayersCloser{
-		volumeMountPath: volumeMountPath,
-		layers:          layerFolders,
-		containerID:     containerID,
+		return nil, nil, err
 	}
 	defer func() {
 		if err != nil {
-			_ = closer.Release(ctx)
+			_ = computestorage.DetachOverlayFilter(ctx, mountPath, hcsschema.UnionFS)
 		}
 	}()
 
-	// Mount the volume to a directory on the host if requested. This is the case for job containers.
-	if volumeMountPath != "" {
-		if err := MountSandboxVolume(ctx, volumeMountPath, mountPath); err != nil {
-			return "", nil, err
-		}
-	}
-
-	return mountPath, closer, nil
+	return &MountedWCOWLayers{
+			RootFS: mountPath,
+			MountedLayerPaths: []MountedWCOWLayer{{
+				LayerID:     layerID,
+				MountedPath: volume,
+			}},
+		}, &wcowHostForkedCIMLayerCloser{
+			containerID:      containerID,
+			scratchLayerData: l.scratchLayerData,
+		}, nil
 }
 
-type wcowIsolatedLayersCloser struct {
+type wcowIsolatedWCIFSLayerCloser struct {
 	uvm                     *uvm.UtilityVM
 	guestCombinedLayersPath string
 	scratchMount            resources.ResourceCloser
 	layerClosers            []resources.ResourceCloser
 }
 
-func (lc *wcowIsolatedLayersCloser) Release(ctx context.Context) (retErr error) {
+func (lc *wcowIsolatedWCIFSLayerCloser) Release(ctx context.Context) (retErr error) {
 	if err := lc.uvm.RemoveCombinedLayersWCOW(ctx, lc.guestCombinedLayersPath); err != nil {
 		log.G(ctx).WithError(err).Error("failed RemoveCombinedLayersWCOW")
 		if retErr == nil { //nolint:govet // nilness: consistency with below
@@ -277,16 +293,22 @@ func (lc *wcowIsolatedLayersCloser) Release(ctx context.Context) (retErr error) 
 	return
 }
 
-func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolders []string, volumeMountPath string, vm *uvm.UtilityVM) (_ string, _ resources.ResourceCloser, err error) {
+func mountHypervIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers, vm *uvm.UtilityVM) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
 	log.G(ctx).WithField("os", vm.OS()).Debug("hcsshim::MountWCOWLayers V2 UVM")
 
+	// In some legacy layer use cases the scratch VHD might not be already created by the client
+	// continue to support those scenarios.
+	if err = ensureScratchVHD(ctx, l.scratchLayerPath, l.layerPaths); err != nil {
+		return nil, nil, err
+	}
+
 	var (
-		layersAdded  []string
+		layersAdded  []*uvm.VSMBShare
 		layerClosers []resources.ResourceCloser
 	)
 	defer func() {
 		if err != nil {
-			for _, l := range layerClosers {
+			for _, l := range layersAdded {
 				if err := l.Release(ctx); err != nil {
 					log.G(ctx).WithError(err).Warn("failed to remove wcow layer on cleanup")
 				}
@@ -294,27 +316,24 @@ func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolde
 		}
 	}()
 
-	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
+	for _, layerPath := range l.layerPaths {
 		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
 		options := vm.DefaultVSMBOptions(true)
 		options.TakeBackupPrivilege = true
 		mount, err := vm.AddVSMB(ctx, layerPath, options)
 		if err != nil {
-			return "", nil, fmt.Errorf("failed to add VSMB layer: %w", err)
+			return nil, nil, fmt.Errorf("failed to add VSMB layer: %w", err)
 		}
-		layersAdded = append(layersAdded, layerPath)
+		layersAdded = append(layersAdded, mount)
 		layerClosers = append(layerClosers, mount)
 	}
 
-	hostPath, err := getScratchVHDPath(layerFolders)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to get scratch VHD path in layer folders: %w", err)
-	}
+	hostPath := filepath.Join(l.scratchLayerPath, "sandbox.vhdx")
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
 	scsiMount, err := vm.SCSIManager.AddVirtualDisk(ctx, hostPath, false, vm.ID(), &scsi.MountConfig{})
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to add SCSI scratch VHD: %w", err)
+		return nil, nil, fmt.Errorf("failed to add SCSI scratch VHD: %w", err)
 	}
 	containerScratchPathInUVM := scsiMount.GuestPath()
 
@@ -326,92 +345,43 @@ func mountWCOWIsolatedLayers(ctx context.Context, containerID string, layerFolde
 		}
 	}()
 
-	// Load the filter at the C:\s<ID> location calculated above. We pass into this
-	// request each of the read-only layer folders.
-	var layers []hcsschema.Layer
-	layers, err = GetHCSLayers(ctx, vm, layersAdded)
-	if err != nil {
-		return "", nil, err
+	ml := &MountedWCOWLayers{
+		RootFS: containerScratchPathInUVM,
 	}
-	err = vm.CombineLayersWCOW(ctx, layers, containerScratchPathInUVM)
+	// Windows GCS needs the layers in the HCS format. Convert to that format before
+	// sending to GCS
+	hcsLayers := []hcsschema.Layer{}
+	for _, a := range layersAdded {
+		uvmPath, err := vm.GetVSMBUvmPath(ctx, a.HostPath, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		layerID, err := wclayer.LayerID(ctx, a.HostPath)
+		if err != nil {
+			return nil, nil, err
+		}
+		ml.MountedLayerPaths = append(ml.MountedLayerPaths, MountedWCOWLayer{
+			LayerID:     layerID.String(),
+			MountedPath: uvmPath,
+		})
+		hcsLayers = append(hcsLayers, hcsschema.Layer{
+			Id:   layerID.String(),
+			Path: uvmPath,
+		})
+	}
+
+	err = vm.CombineLayersWCOW(ctx, hcsLayers, ml.RootFS)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 	log.G(ctx).Debug("hcsshim::MountWCOWLayers Succeeded")
-	closer := &wcowIsolatedLayersCloser{
+
+	return ml, &wcowIsolatedWCIFSLayerCloser{
 		uvm:                     vm,
-		guestCombinedLayersPath: containerScratchPathInUVM,
+		guestCombinedLayersPath: ml.RootFS,
 		scratchMount:            scsiMount,
 		layerClosers:            layerClosers,
-	}
-	return containerScratchPathInUVM, closer, nil
-}
-
-// GetHCSLayers converts host paths corresponding to container layers into HCS schema V2 layers
-func GetHCSLayers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (layers []hcsschema.Layer, err error) {
-	for _, path := range paths {
-		uvmPath, err := vm.GetVSMBUvmPath(ctx, path, true)
-		if err != nil {
-			return nil, err
-		}
-		layerID, err := wclayer.LayerID(ctx, path)
-		if err != nil {
-			return nil, err
-		}
-		layers = append(layers, hcsschema.Layer{Id: layerID.String(), Path: uvmPath})
-	}
-	return layers, nil
-}
-
-// ToHostHcsSchemaLayers converts the layer paths for Argon into HCS schema V2 layers
-func ToHostHcsSchemaLayers(ctx context.Context, containerID string, roLayers []string) ([]hcsschema.Layer, error) {
-	if cimlayer.IsCimLayer(roLayers[0]) {
-		return cimLayersToHostHcsSchemaLayers(ctx, containerID, roLayers)
-	}
-	layers := []hcsschema.Layer{}
-	for _, layerPath := range roLayers {
-		layerID, err := wclayer.LayerID(ctx, layerPath)
-		if err != nil {
-			return nil, err
-		}
-		layers = append(layers, hcsschema.Layer{Id: layerID.String(), Path: layerPath})
-	}
-	return layers, nil
-}
-
-// cimLayersToHostHcsSchemaLayers converts given cimfs Argon layers to HCS schema V2 layers.
-func cimLayersToHostHcsSchemaLayers(ctx context.Context, containerID string, paths []string) ([]hcsschema.Layer, error) {
-	topMostLayer := paths[0]
-	cimPath := cimlayer.GetCimPathFromLayer(topMostLayer)
-	volume, err := cimlayer.GetCimMountPath(cimPath, containerID)
-	if err != nil {
-		return nil, err
-	}
-	// Use the layer path for GUID rather than the mounted volume path, so that the generated layerID
-	// remains same everywhere
-	layerID, err := wclayer.LayerID(ctx, topMostLayer)
-	if err != nil {
-		return nil, err
-	}
-	// Note that when passing the hcsschema formatted layer, "Files" SHOULDN'T be appended to the volume
-	// path. The internal code automatically does that.
-	return []hcsschema.Layer{{Id: layerID.String(), Path: volume}}, nil
-
-}
-
-func getScratchVHDPath(layerFolders []string) (string, error) {
-	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
-	// For LCOW, we can reuse another container's scratch space (usually the sandbox container's).
-	//
-	// When sharing a scratch space, the `hostPath` will be a symlink to the sandbox.vhdx location to use.
-	// When not sharing a scratch space, `hostPath` will be the path to the sandbox.vhdx to use.
-	//
-	// Evaluate the symlink here (if there is one).
-	hostPath, err := fs.ResolvePath(hostPath)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to resolve path")
-	}
-	return hostPath, nil
+	}, nil
 }
 
 // Mount the sandbox vhd to a user friendly path.
