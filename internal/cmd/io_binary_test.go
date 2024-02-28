@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"testing"
 )
@@ -22,11 +23,6 @@ func Test_newBinaryCmd_Key_Value_Pair(t *testing.T) {
 		{
 			name:      "Path_With_Fwd_Slashes",
 			urlString: "binary:///executable?-key=value",
-			expected:  `\executable -key value`,
-		},
-		{
-			name:      "Path_With_Back_Slashes",
-			urlString: `binary:///\executable?-key=value`,
 			expected:  `\executable -key value`,
 		},
 		{
@@ -65,6 +61,45 @@ func Test_newBinaryCmd_Key_Value_Pair(t *testing.T) {
 
 			if cmd.String() != cfg.expected {
 				t.Fatalf("failed to create cmd. expected: '%s', actual '%s'", cfg.expected, cmd.String())
+			}
+		})
+	}
+}
+
+func Test_newBinaryCmd_Unsafe_Path(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type config struct {
+		name          string
+		urlString     string
+		expectedError error
+	}
+
+	for _, cfg := range []*config{
+		{
+			name:          "UNC_Path_With_Back_Slashes",
+			urlString:     `binary:///\server\share\executable`,
+			expectedError: ErrUnsafePath,
+		},
+		{
+			name:          "UNC_Path_With_Forward_Slashes",
+			urlString:     `binary:////server/share/executable`,
+			expectedError: ErrUnsafePath,
+		},
+	} {
+		t.Run(cfg.name, func(t *testing.T) {
+			u, err := url.Parse(cfg.urlString)
+			if err != nil {
+				t.Fatalf("failed to parse url: %s", cfg.urlString)
+			}
+
+			_, err = newBinaryCmd(ctx, u, nil)
+			if err == nil {
+				t.Fatalf("no error was returned")
+			}
+			if !errors.Is(err, cfg.expectedError) {
+				t.Fatalf("expected error: %s, actual: %s", cfg.expectedError, err)
 			}
 		})
 	}
