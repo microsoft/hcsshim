@@ -11,6 +11,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 
@@ -332,7 +333,12 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 	uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
 
-	err = uvm.create(ctx, doc)
+	rpOptions := &hcs.ResourcePoolOptions{
+		MemoryPoolJobName: opts.HRMMemoryJobName,
+		CPUPoolJobName:    opts.HRMCPUJobName,
+	}
+
+	err = uvm.create(ctx, doc, rpOptions)
 	if err != nil {
 		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}

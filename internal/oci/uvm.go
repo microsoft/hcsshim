@@ -277,6 +277,8 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 		opts.NumaProcessorCounts)
 	opts.NumaMemoryBlocksCounts = ParseAnnotationCommaSeparatedUint64(ctx, s.Annotations, annotations.NumaCountOfMemoryBlocks,
 		opts.NumaMemoryBlocksCounts)
+	opts.HRMMemoryJobName = ParseAnnotationsString(s.Annotations, annotations.HRMMemoryJobName, opts.HRMMemoryJobName)
+	opts.HRMCPUJobName = ParseAnnotationsString(s.Annotations, annotations.HRMCPUJobName, opts.HRMCPUJobName)
 	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
 }
 

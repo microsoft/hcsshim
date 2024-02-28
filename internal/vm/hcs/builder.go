@@ -63,7 +63,7 @@ func NewUVMBuilder(id string, owner string, guestOS vm.GuestOS) (vm.UVMBuilder, 
 }
 
 func (uvmb *utilityVMBuilder) Create(ctx context.Context) (_ vm.UVM, err error) {
-	cs, err := hcs.CreateComputeSystem(ctx, uvmb.id, uvmb.doc)
+	cs, err := hcs.CreateComputeSystem(ctx, uvmb.id, uvmb.doc, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create hcs compute system")
 	}

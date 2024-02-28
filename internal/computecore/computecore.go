@@ -32,6 +32,7 @@ type (
 )
 
 func HcsCreateComputeSystem(ctx context.Context, id string, configuration string, operation HCSOperation, securityDescriptor *uint32) (computeSystem HCSSystem, result string, hr error) {
+	log.G(ctx).WithField("id", id).Debug("computecore.HcsCreateComputeSystem")
 	ctx, span := oc.StartSpan(ctx, "computecore::HcsCreateComputeSystem")
 	defer func() {
 		if result != "" {
@@ -47,6 +48,7 @@ func HcsCreateComputeSystem(ctx context.Context, id string, configuration string
 		trace.StringAttribute("configuration", configuration),
 	)
 
+	log.G(ctx).WithField("id", id).Debug("computecore.execute")
 	return computeSystem, result, execute(ctx, timeout.SystemCreate, func() error {
 		var resultp *uint16
 		err := hcsCreateComputeSystem(id, configuration, operation, securityDescriptor, &computeSystem)
@@ -54,6 +56,7 @@ func HcsCreateComputeSystem(ctx context.Context, id string, configuration string
 			result = interop.ConvertAndFreeCoTaskMemString(resultp)
 		}
 
+		log.G(ctx).Debug("waiting for operation result")
 		// FIXME: here we synchronously wait for operation result, but in the future we should probably switch
 		//   to notification model.
 		if opResult, opErr := operation.WaitForResult(ctx); opErr != nil {

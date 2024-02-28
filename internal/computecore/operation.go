@@ -7,11 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"math"
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/Microsoft/hcsshim/internal/jobobject"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -81,18 +82,12 @@ func HcsCreateOperation(ctx context.Context, hcsContext uintptr, callback hcsOpe
 	if err != nil {
 		return 0, err
 	}
-	defer func() {
-		if err != nil {
-			if err := op.Close(); err != nil {
-				log.G(ctx).WithError(err).Error("failed to close operation")
-			}
-		}
-	}()
 
 	if options != nil {
 		if len(options.JobResources) > 0 {
 			for _, jr := range options.JobResources {
 				if err := op.addJobResource(ctx, jr); err != nil {
+					log.G(ctx).WithError(err).Debug("failed to add job to resource")
 					return 0, err
 				}
 			}
@@ -133,11 +128,13 @@ func (op HCSOperation) addJobResource(ctx context.Context, jr HCSJobResource) (e
 	jobOpts := jobobject.Options{
 		Name: jr.Name,
 	}
+	log.G(ctx).WithField("jobName", jr.Name).Debug("opening job object")
 	job, err := jobobject.Open(ctx, &jobOpts)
 	if err != nil {
 		return err
 	}
 	defer func() {
+		log.G(ctx).WithField("jobName", jr.Name).Debug("closing job object")
 		if err := job.Close(); err != nil {
 			log.G(ctx).WithError(err).Error("failed to close job object")
 		}
