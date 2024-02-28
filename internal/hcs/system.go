@@ -92,16 +92,14 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 		// If resource pool configuration isn't empty, we should be using HCS v2
 		// APIs for creating the compute system.
 		if rpOptions.MemoryPoolJobName != "" {
-			operationOpts.JobResources = append(operationOpts.JobResources, computecore.HCSJobResource{
-				Name: rpOptions.MemoryPoolJobName,
-				Uri:  computecore.HCSMemoryJobUri,
-			})
+			operationOpts.JobResources = append(operationOpts.JobResources,
+				computecore.NewMemoryPoolResource(rpOptions.MemoryPoolJobName))
 		}
 		if rpOptions.CPUPoolJobName != "" {
-			operationOpts.JobResources = append(operationOpts.JobResources, computecore.HCSJobResource{
-				Name: rpOptions.CPUPoolJobName,
-				Uri:  computecore.HCSCpuJobUri,
-			})
+			// FIXME (anmaxvl): Currently HCS is unable to find the CPU pool job for some reason. As a workaround, we
+			//   assigning the worker process job to memory job object.
+			operationOpts.JobResources = append(operationOpts.JobResources,
+				computecore.NewCPUPoolResource(rpOptions.MemoryPoolJobName))
 		}
 	}
 	hcsOp, err = computecore.HcsCreateOperation(ctx, 0, 0, &operationOpts)
