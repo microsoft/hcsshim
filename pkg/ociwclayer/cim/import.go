@@ -159,7 +159,3 @@ func writeCimLayerFromTar(ctx context.Context, r io.Reader, w *cim.CimLayerWrite
 	}
 	return size, nil
 }
-
-func DestroyCimLayer(layerPath string) error {
-	return cim.DestroyCimLayer(context.Background(), layerPath)
-}

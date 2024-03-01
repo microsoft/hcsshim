@@ -7,95 +7,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/vhd"
-	"github.com/Microsoft/hcsshim/computestorage"
-	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/security"
-	"github.com/Microsoft/hcsshim/internal/vhdx"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"golang.org/x/sys/windows"
 )
 
-const defaultVHDXBlockSizeInMB = 1
-
-// processUtilityVMLayer is similar to createContainerBaseLayerVHDs but along with the scratch creation it
-// also does some BCD modifications to allow the UVM to boot from the CIM. It expects that the UVM BCD file is
-// present at layerPath/`wclayer.BcdFilePath` and a UVM SYSTEM hive is present at
-// layerPath/UtilityVM/`wclayer.RegFilesPath`/SYSTEM. The scratch VHDs are created under the `layerPath`
-// directory.
+// processUtilityVMLayer will handle processing of UVM specific files when we start
+// supporting UVM based containers with CimFS in the future.
 func processUtilityVMLayer(ctx context.Context, layerPath string) error {
-	// func createUtilityVMLayerVHDs(ctx context.Context, layerPath string) error {
-	baseVhdPath := filepath.Join(layerPath, wclayer.UtilityVMPath, wclayer.UtilityVMBaseVhd)
-	diffVhdPath := filepath.Join(layerPath, wclayer.UtilityVMPath, wclayer.UtilityVMScratchVhd)
-	defaultVhdSize := uint64(10)
-
-	// Just create the vhdx for utilityVM layer, no need to format it.
-	createParams := &vhd.CreateVirtualDiskParameters{
-		Version: 2,
-		Version2: vhd.CreateVersion2{
-			MaximumSize:      defaultVhdSize * memory.GiB,
-			BlockSizeInBytes: defaultVHDXBlockSizeInMB * memory.MiB,
-		},
-	}
-
-	handle, err := vhd.CreateVirtualDisk(baseVhdPath, vhd.VirtualDiskAccessNone, vhd.CreateVirtualDiskFlagNone, createParams)
-	if err != nil {
-		return fmt.Errorf("failed to create vhdx: %w", err)
-	}
-
-	defer func() {
-		if err != nil {
-			os.RemoveAll(baseVhdPath)
-			os.RemoveAll(diffVhdPath)
-		}
-	}()
-
-	err = computestorage.FormatWritableLayerVhd(ctx, windows.Handle(handle))
-	closeErr := syscall.CloseHandle(handle)
-	if err != nil {
-		return err
-	} else if closeErr != nil {
-		return fmt.Errorf("failed to close vhdx handle: %w", closeErr)
-	}
-
-	partitionInfo, err := vhdx.GetScratchVhdPartitionInfo(ctx, baseVhdPath)
-	if err != nil {
-		return fmt.Errorf("failed to get base vhd layout info: %w", err)
-	}
-	// relativeCimPath needs to be the cim path relative to the snapshots directory. The snapshots
-	// directory is shared inside the UVM over VSMB, so during the UVM boot this relative path will be
-	// used to find the cim file under that VSMB share.
-	relativeCimPath := filepath.Join(filepath.Base(GetCimDirFromLayer(layerPath)), GetCimNameFromLayer(layerPath))
-	bcdPath := filepath.Join(layerPath, bcdFilePath)
-	if err = updateBcdStoreForBoot(bcdPath, relativeCimPath, partitionInfo.DiskID, partitionInfo.PartitionID); err != nil {
-		return fmt.Errorf("failed to update BCD: %w", err)
-	}
-
-	if err := enableCimBoot(filepath.Join(layerPath, wclayer.UtilityVMPath, wclayer.RegFilesPath, "SYSTEM")); err != nil {
-		return fmt.Errorf("failed to setup cim image for uvm boot: %w", err)
-	}
-
-	// Note: diff vhd creation and granting of vm group access must be done AFTER
-	// getting the partition info of the base VHD. Otherwise it causes the vhd parent
-	// chain to get corrupted.
-	// TODO(ambarve): figure out why this happens so that bcd update can be moved to a separate function
-
-	// Create the differencing disk that will be what's copied for the final rw layer
-	// for a container.
-	if err = vhd.CreateDiffVhd(diffVhdPath, baseVhdPath, defaultVHDXBlockSizeInMB); err != nil {
-		return fmt.Errorf("failed to create differencing disk: %w", err)
-	}
-
-	if err := security.GrantVmGroupAccess(baseVhdPath); err != nil {
-		return fmt.Errorf("failed to grant vm group access to %s: %w", baseVhdPath, err)
-	}
-	if err := security.GrantVmGroupAccess(diffVhdPath); err != nil {
-		return fmt.Errorf("failed to grant vm group access to %s: %w", diffVhdPath, err)
-	}
 	return nil
 }
 
