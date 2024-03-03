@@ -362,7 +362,7 @@ github.com/opencontainers/image-spec/specs-go/v1
 ## explicit; go 1.17
 github.com/opencontainers/runc/libcontainer/devices
 github.com/opencontainers/runc/libcontainer/user
-# github.com/opencontainers/runtime-spec v1.1.0
+# github.com/opencontainers/runtime-spec v1.2.0
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/pelletier/go-toml v1.9.5

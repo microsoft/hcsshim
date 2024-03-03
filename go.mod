@@ -23,7 +23,7 @@ require (
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/open-policy-agent/opa v0.42.2
 	github.com/opencontainers/runc v1.1.12
-	github.com/opencontainers/runtime-spec v1.1.0
+	github.com/opencontainers/runtime-spec v1.2.0
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
