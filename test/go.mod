@@ -5,16 +5,16 @@ go 1.18
 require (
 	github.com/Microsoft/go-winio v0.6.1
 	github.com/Microsoft/hcsshim v0.11.4
-	github.com/containerd/cgroups/v3 v3.0.2
+	github.com/containerd/cgroups/v3 v3.0.3
 	github.com/containerd/containerd v1.7.0
 	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/ttrpc v1.2.2
-	github.com/google/go-containerregistry v0.17.0
+	github.com/containerd/ttrpc v1.2.3
+	github.com/google/go-containerregistry v0.19.0
 	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0-rc3
-	github.com/opencontainers/runtime-spec v1.1.0
+	github.com/opencontainers/runtime-spec v1.2.0
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
@@ -31,13 +31,13 @@ require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20230306123547-8075edf89bb0 // indirect
 	github.com/Microsoft/cosesign1go v1.1.0 // indirect
-	github.com/Microsoft/didx509go v0.0.2 // indirect
+	github.com/Microsoft/didx509go v0.0.3 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.0.1 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/container-orchestrated-devices/container-device-interface v0.5.4 // indirect
-	github.com/containerd/console v1.0.3 // indirect
+	github.com/containerd/console v1.0.4 // indirect
 	github.com/containerd/continuity v0.4.2 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
