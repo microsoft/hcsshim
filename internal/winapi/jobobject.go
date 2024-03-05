@@ -160,6 +160,21 @@ type JOBOBJECT_ASSOCIATE_COMPLETION_PORT struct {
 	CompletionPort windows.Handle
 }
 
+//	typedef struct _SILOOBJECT_BASIC_INFORMATION {
+//	    DWORD SiloId;
+//	    DWORD SiloParentId;
+//	    DWORD NumberOfProcesses;
+//	    BOOLEAN IsInServerSilo;
+//	    BYTE  Reserved[3];
+//	} SILOOBJECT_BASIC_INFORMATION, *PSILOOBJECT_BASIC_INFORMATION;
+type SILOOBJECT_BASIC_INFORMATION struct {
+	SiloID            uint32
+	SiloParentID      uint32
+	NumberOfProcesses uint32
+	IsInServerSilo    bool
+	Reserved          [3]uint8
+}
+
 // BOOL IsProcessInJob(
 // 		HANDLE ProcessHandle,
 // 		HANDLE JobHandle,
