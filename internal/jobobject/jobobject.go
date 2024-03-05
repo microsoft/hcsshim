@@ -523,12 +523,16 @@ func (job *JobObject) ApplyFileBinding(root, target string, readOnly bool) error
 func isJobSilo(h windows.Handle) bool {
 	// None of the information from the structure that this info class expects will be used, this is just used as
 	// the call will fail if the job hasn't been upgraded to a silo so we can use this to tell when we open a job
-	// if it's a silo or not. Because none of the info matters simply define a dummy struct with the size that the call
-	// expects which is 16 bytes.
-	type isSiloObj struct {
-		_ [16]byte
+	// if it's a silo or not. We still need to define the struct layout as expected by Win32, else the struct
+	// alignment might be different and the call will fail.
+	type SILOOBJECT_BASIC_INFORMATION struct {
+		SiloID            uint32
+		SiloParentID      uint32
+		NumberOfProcesses uint32
+		IsInServerSilo    bool
+		Reserved          [3]uint8
 	}
-	var siloInfo isSiloObj
+	var siloInfo SILOOBJECT_BASIC_INFORMATION
 	err := winapi.QueryInformationJobObject(
 		h,
 		winapi.JobObjectSiloBasicInformation,
