@@ -16,8 +16,9 @@ const (
 
 	// Prestart commands are executed after the container namespaces are created,
 	// but before the user supplied command is executed from init.
-	// Note: This hook is now deprecated
 	// Prestart commands are called in the Runtime namespace.
+	//
+	// Deprecated: use [CreateRuntime] instead.
 	Prestart HookName = "prestart"
 
 	// CreateRuntime commands MUST be called as part of the create operation after
@@ -27,7 +28,7 @@ const (
 	CreateRuntime HookName = "createRuntime"
 )
 
-// NewOCIHook creates a new oci.Hook with given parameters
+// NewOCIHook creates a new oci.Hook with given parameters.
 func NewOCIHook(path string, args, env []string) oci.Hook {
 	return oci.Hook{
 		Path: path,
@@ -36,14 +37,12 @@ func NewOCIHook(path string, args, env []string) oci.Hook {
 	}
 }
 
-// AddOCIHook adds oci.Hook of the given hook name to spec
+// AddOCIHook adds oci.Hook of the given hook name to spec.
 func AddOCIHook(spec *oci.Spec, hn HookName, hk oci.Hook) error {
 	if spec.Hooks == nil {
 		spec.Hooks = &oci.Hooks{}
 	}
 	switch hn {
-	case Prestart:
-		spec.Hooks.Prestart = append(spec.Hooks.Prestart, hk)
 	case CreateRuntime:
 		spec.Hooks.CreateRuntime = append(spec.Hooks.CreateRuntime, hk)
 	default:
