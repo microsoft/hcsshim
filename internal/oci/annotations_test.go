@@ -1,9 +1,12 @@
 package oci
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"testing"
 
@@ -225,11 +228,122 @@ func TestParseAdditionalRegistryValues(t *testing.T) {
 			t.Logf("registry values:\n%s", tt.give)
 			v := strings.ReplaceAll(tt.give, "\n", "")
 			rvs := parseAdditionalRegistryValues(ctx, map[string]string{
-				iannotations.AdditionalRegistryValues: v,
+				"some-random-annotation":                                "random",
+				"not-microsoft.virtualmachine.wcow.additional-reg-keys": "this is fake",
+				iannotations.AdditionalRegistryValues:                   v,
 			})
 			want := tt.want
 			if want == nil {
 				want = []hcsschema.RegistryValue{}
+			}
+			if diff := cmp.Diff(want, rvs); diff != "" {
+				t.Fatal(diff)
+			}
+		})
+	}
+}
+
+func TestParseHVSocketServiceTable(t *testing.T) {
+	ctx := context.Background()
+
+	toString := func(t *testing.T, v hcsschema.HvSocketServiceConfig) string {
+		t.Helper()
+
+		buf := &bytes.Buffer{}
+		enc := json.NewEncoder(buf)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "")
+
+		if err := enc.Encode(v); err != nil {
+			t.Fatalf("encode %v to JSON: %v", v, err)
+		}
+
+		return strings.TrimSpace(buf.String())
+	}
+
+	g1 := "0b52781f-b24d-5685-ddf6-69830ed40ec3"
+	g2 := "00000000-0000-0000-0000-000000000000"
+
+	defaultConfig := hcsschema.HvSocketServiceConfig{
+		AllowWildcardBinds:     true,
+		BindSecurityDescriptor: "D:P(A;;FA;;;WD)",
+	}
+	defaultConfigStr := toString(t, defaultConfig)
+
+	disabledConfig := hcsschema.HvSocketServiceConfig{
+		Disabled: true,
+	}
+	disabledConfigStr := toString(t, disabledConfig)
+
+	for _, tt := range []struct {
+		name string
+		give map[string]string
+		want map[string]hcsschema.HvSocketServiceConfig
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name: "single",
+			give: map[string]string{
+				iannotations.UVMHyperVSocketConfigPrefix + g1: defaultConfigStr,
+			},
+			want: map[string]hcsschema.HvSocketServiceConfig{
+				g1: defaultConfig,
+			},
+		},
+		{
+			name: "invalid guid",
+			give: map[string]string{
+				iannotations.UVMHyperVSocketConfigPrefix + "not-a-guid": defaultConfigStr,
+			},
+		},
+		{
+			name: "invalid config",
+			give: map[string]string{
+				iannotations.UVMHyperVSocketConfigPrefix + g1: `["not", "a", "valid", "config"]`,
+			},
+		},
+		{
+			name: "override",
+			give: map[string]string{
+				iannotations.UVMHyperVSocketConfigPrefix + g1:                  defaultConfigStr,
+				iannotations.UVMHyperVSocketConfigPrefix + strings.ToUpper(g1): defaultConfigStr,
+			},
+			want: map[string]hcsschema.HvSocketServiceConfig{
+				g1: defaultConfig,
+			},
+		},
+		{
+			name: "multiple",
+			give: map[string]string{
+				iannotations.UVMHyperVSocketConfigPrefix + strings.ToUpper(g1): defaultConfigStr,
+				iannotations.UVMHyperVSocketConfigPrefix + g2:                  disabledConfigStr,
+
+				iannotations.UVMHyperVSocketConfigPrefix + g1:           `["not", "a", "valid", "config"]`,
+				iannotations.UVMHyperVSocketConfigPrefix + "not-a-guid": defaultConfigStr,
+				"also.not-a-guid": disabledConfigStr,
+			},
+			want: map[string]hcsschema.HvSocketServiceConfig{
+				g1: defaultConfig,
+				g2: disabledConfig,
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			annots := map[string]string{
+				"some-random-annotation":                               "random",
+				"io.microsoft.virtualmachine.hv-socket.service-table":  "should be ignored",
+				"not-microsoft.virtualmachine.hv-socket.service-table": "this is fake",
+			}
+			maps.Copy(annots, tt.give)
+			t.Logf("annotations:\n%v", annots)
+
+			rvs := parseHVSocketServiceTable(ctx, annots)
+			t.Logf("got %v", rvs)
+			want := tt.want
+			if want == nil {
+				want = map[string]hcsschema.HvSocketServiceConfig{}
 			}
 			if diff := cmp.Diff(want, rvs); diff != "" {
 				t.Fatal(diff)

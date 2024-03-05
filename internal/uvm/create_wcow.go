@@ -5,6 +5,7 @@ package uvm
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -196,15 +197,18 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{
 					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
-						// Allow administrators and SYSTEM to bind to vsock sockets
-						// so that we can create a GCS log socket.
+						// Allow administrators and SYSTEM to bind to hyper-v sockets
+						// so that we can communicate to the GCS.
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+						ServiceTable:                  make(map[string]hcsschema.HvSocketServiceConfig),
 					},
 				},
 				VirtualSmb: virtualSMB,
 			},
 		},
 	}
+
+	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)
 
 	// Handle StorageQoS if set
 	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
