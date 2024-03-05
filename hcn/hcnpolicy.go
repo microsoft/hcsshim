@@ -79,10 +79,10 @@ type SubnetPolicy struct {
 // NatFlags are flags for portmappings.
 type NatFlags uint32
 
-const (
-	NatFlagsNone NatFlags = iota
-	NatFlagsLocalRoutedVip
-	NatFlagsIPv6
+var (
+	NatFlagsNone           NatFlags = 0
+	NatFlagsLocalRoutedVip NatFlags = 1
+	NatFlagsIPv6           NatFlags = 2
 )
 
 /// Endpoint Policy objects
