@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 	"unicode"
 
@@ -35,8 +36,10 @@ func CleanName(n string) string {
 //
 // Should not be called from init() or global variable initialization since there is no guarantee on
 // if the testing flags have been defined yet (and ideally should be called after [flag.Parse]).
-func RunningBenchmarks() (b bool) {
-	// TODO (go1.21): use [testing.Testing] (ref: https://github.com/golang/go/issues/52600) to shortcircut
+func RunningBenchmarks() bool {
+	if !testing.Testing() {
+		return false
+	}
 
 	// go doesn't run benchmarks unless -test.bench flag is passed, so thats our cue.
 	// ref: https://pkg.go.dev/testing#hdr-Benchmarks

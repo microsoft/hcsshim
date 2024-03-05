@@ -153,8 +153,8 @@ func (p *localProcess) Wait() error {
 func TestCmdExitCode(t *testing.T) {
 	cmd := Command(&localProcessHost{}, "cmd", "/c", "exit", "/b", "64")
 	err := cmd.Run()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 64 { //nolint:errorlint
-		t.Fatal("expected exit code 64, got ", err)
+	if e := (&ExitError{}); !errors.As(err, &e) || e.ExitCode() != 64 {
+		t.Fatalf("expected %T with code 64, got %v", e, err)
 	}
 }
 
@@ -182,8 +182,8 @@ func TestCmdContext(t *testing.T) {
 	_ = cmd.Process.Wait()
 	w.Close()
 	err = cmd.Wait()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 1 || ctx.Err() == nil { //nolint:errorlint
-		t.Fatal(err)
+	if e := (&ExitError{}); !errors.As(err, &e) || e.ExitCode() != 1 || ctx.Err() == nil {
+		t.Fatalf("expected %T with code 64, got %v", e, err)
 	}
 }
 

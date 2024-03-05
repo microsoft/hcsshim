@@ -290,13 +290,10 @@ func addDevSev(ctx context.Context, spec *oci.Spec) error {
 	devSev, err := devices.DeviceFromPath("/dev/sev", "rwm")
 	if err != nil {
 		// try adding /dev/guest-sev, which should be present for 6.x kernel
-		sevErr := fmt.Errorf("failed to add SEV device to spec: %w", err)
 		var errSevGuest error
 		devSev, errSevGuest = devices.DeviceFromPath("/dev/sev-guest", "rwm")
 		if errSevGuest != nil {
-			// TODO (go1.20): use multierror via fmt.Errorf("...: %w; ...: %w", ...)
-			//nolint:errorlint // non-wrapping format verb for fmt.Errorf
-			return fmt.Errorf("%s: %w", sevErr, errSevGuest)
+			return fmt.Errorf("failed to add SEV device to spec: %w: %w", err, errSevGuest)
 		}
 	}
 	addLinuxDeviceToSpec(ctx, devSev, spec, true)

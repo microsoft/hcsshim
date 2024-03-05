@@ -2,11 +2,10 @@ package flag
 
 import (
 	"flag"
+	"slices"
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -116,8 +115,17 @@ func NewStringSet(name, usage string, caseSensitive bool) *StringSet {
 	return ss
 }
 
-// Strings returns a string slice of the flags provided to the flag
-func (ss *StringSet) Strings() []string { return maps.Keys(ss.s) }
+// Strings returns a string slice of the flags provided to the flag.
+func (ss *StringSet) Strings() []string {
+	// given flux around [maps.Keys], inline it directly
+	//
+	// see: https://github.com/golang/go/issues/61538
+	r := make([]string, 0, len(ss.s))
+	for k := range ss.s {
+		r = append(r, k)
+	}
+	return r
+}
 
 func (ss *StringSet) String() string {
 	if ss == nil || ss.Len() == 0 { // may be called by flag package on nil receiver
@@ -138,7 +146,7 @@ func (ss *StringSet) Set(s string) error {
 	return nil
 }
 
-// standardize formats the feature flag s to be consistent (ie, trim and to lowercase)
+// standardize formats the feature flag s to be consistent (ie, trim and to lowercase).
 func (ss *StringSet) standardize(s string) string {
 	s = strings.TrimSpace(s)
 	if !ss.cs {

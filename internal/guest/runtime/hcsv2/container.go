@@ -206,9 +206,7 @@ func (c *Container) Delete(ctx context.Context) error {
 
 	if err := os.RemoveAll(c.scratchDirPath); err != nil {
 		if retErr != nil {
-			// TODO (go1.20): use multierror via fmt.Errorf("...: %w; ...: %w", ...)
-			//nolint:errorlint // non-wrapping format verb for fmt.Errorf
-			retErr = fmt.Errorf("errors deleting container state, %s & %w", retErr, err)
+			retErr = fmt.Errorf("errors deleting container state: %w; %w", retErr, err)
 		} else {
 			retErr = err
 		}
@@ -216,9 +214,7 @@ func (c *Container) Delete(ctx context.Context) error {
 
 	if err := os.RemoveAll(c.ociBundlePath); err != nil {
 		if retErr != nil {
-			// TODO (go1.20): use multierror via fmt.Errorf("...: %w; ...: %w", ...)
-			//nolint:errorlint // non-wrapping format verb for fmt.Errorf
-			retErr = fmt.Errorf("errors deleting container oci bundle dir, %s & %w", retErr, err)
+			retErr = fmt.Errorf("errors deleting container oci bundle dir: %w; %w", retErr, err)
 		} else {
 			retErr = err
 		}

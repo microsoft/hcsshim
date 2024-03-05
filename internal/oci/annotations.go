@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 
 	iannotations "github.com/Microsoft/hcsshim/internal/annotations"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
