@@ -2,9 +2,8 @@ package flag
 
 import (
 	"fmt"
+	"slices"
 	"testing"
-
-	"golang.org/x/exp/slices"
 )
 
 // tests for testing fixtures ...

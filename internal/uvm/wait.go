@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -18,22 +19,15 @@ func (uvm *UtilityVM) Wait() error { return uvm.WaitCtx(context.Background()) }
 func (uvm *UtilityVM) WaitCtx(ctx context.Context) (err error) {
 	err = uvm.hcsSystem.WaitCtx(ctx)
 
-	e := logrus.WithField(logfields.UVMID, uvm.id)
-	e.Debug("uvm exited, waiting for output processing to complete")
+	logrus.WithField(logfields.UVMID, uvm.id).Debug("uvm exited, waiting for output processing to complete")
+	var outputErr error
 	if uvm.outputProcessingDone != nil {
 		select {
 		case <-uvm.outputProcessingDone:
 		case <-ctx.Done():
-			err2 := ctx.Err()
-			// TODO (go1.20): use multierror for err & err2 and remove log Warning
-			if err == nil {
-				err = fmt.Errorf("failed to wait on uvm output processing: %w", err2)
-			} else {
-				// log err2 since it won't get returned to user
-				e.WithError(err2).Warning("failed to wait on uvm output processing")
-			}
+			outputErr = fmt.Errorf("failed to wait on uvm output processing: %w", ctx.Err())
 		}
 	}
 
-	return err
+	return errors.Join(err, outputErr)
 }

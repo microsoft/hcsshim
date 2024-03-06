@@ -261,7 +261,7 @@ func (c *Cmd) Start() error {
 				if ctx == nil {
 					ctx = context.Background()
 				}
-				kctx := log.Copy(context.Background(), ctx)
+				kctx := context.WithoutCancel(ctx)
 				_, _ = c.Process.Kill(kctx)
 			case <-c.allDoneCh:
 			}
@@ -313,24 +313,26 @@ func (c *Cmd) Wait() error {
 		close(timeoutErrCh)
 	}
 
-	// TODO (go1.20): use multierror for these
-	ioErr := c.ioGrp.Wait()
-	if ioErr == nil {
-		ioErr, _ = c.stdinErr.Load().(error)
+	var errs []error
+	errs = append(errs, c.ioGrp.Wait())
+	if err, _ := c.stdinErr.Load().(error); err != nil {
+		errs = append(errs, err)
 	}
 	close(c.allDoneCh)
-	if tErr := <-timeoutErrCh; ioErr == nil {
-		ioErr = tErr
+	if err := <-timeoutErrCh; err != nil {
+		errs = append(errs, err)
 	}
+
 	c.Process.Close()
 	c.ExitState = state
 	if exitErr != nil {
-		return exitErr
+		errs = append(errs, exitErr)
 	}
 	if state.exited && state.code != 0 {
-		return &ExitError{state}
+		errs = append(errs, &ExitError{state})
 	}
-	return ioErr
+
+	return errors.Join(errs...)
 }
 
 // Run is equivalent to Start followed by Wait.

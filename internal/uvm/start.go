@@ -230,7 +230,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	go func() {
 		// the original context may have timeout or propagate a cancellation
 		// copy the original to prevent it affecting the background wait go routine
-		cCtx := log.Copy(context.Background(), pCtx)
+		cCtx := context.WithoutCancel(pCtx)
 		err := uvm.hcsSystem.WaitCtx(cCtx)
 		if err == nil {
 			err = uvm.hcsSystem.ExitError()
