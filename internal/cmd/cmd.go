@@ -212,7 +212,6 @@ func (c *Cmd) Start() error {
 	// Start relaying process IO.
 	stdin, stdout, stderr := p.Stdio()
 	if c.Stdin != nil {
-		c.Log.Info("coping stdin")
 		// Do not make stdin part of the error group because there is no way for
 		// us or the caller to reliably unblock the c.Stdin read when the
 		// process exits.

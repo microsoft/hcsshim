@@ -24,7 +24,11 @@ const ForcedKilledExitCode = 137
 func desc(c *cmd.Cmd) string {
 	desc := "init command"
 	if c.Spec != nil {
-		desc = strings.Join(c.Spec.Args, " ")
+		if c.Spec.CommandLine != "" {
+			desc = c.Spec.CommandLine
+		} else {
+			desc = strings.Join(c.Spec.Args, " ")
+		}
 	}
 
 	return desc

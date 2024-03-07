@@ -4,9 +4,15 @@ on:
   - pull_request
 
 env:
-  GO_VERSION: "1.21.x"
+  GO_VERSION: "oldstable"
+
+  GO_BUILD_CMD: "go build \"-ldflags=-s -w\" -trimpath"
+  GO_BUILD_TEST_CMD: "go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional"
+
   GOTESTSUM_VERSION: "latest"
-  GOTESTCMD: "gotestsum --format standard-verbose --debug --"
+
+  GOTESTSUM_CMD: "gotestsum --format standard-verbose --debug --"
+  GOTESTSUM_CMD_RAW: "gotestsum --format standard-verbose --debug --raw-command -- go tool test2json -t"
 
 jobs:
   lint:
@@ -280,19 +286,19 @@ jobs:
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
 
       - name: Test standard security policy
-        run: ${{ env.GOTESTCMD }} -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
+        run: ${{ env.GOTESTSUM_CMD }} -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
 
       - name: Test rego security policy
-        run: ${{ env.GOTESTCMD }} -tags=rego -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
+        run: ${{ env.GOTESTSUM_CMD }} -tags=rego -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
 
       - name: Test rego policy interpreter
-        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter/...
+        run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr ./internal/regopolicyinterpreter/...
 
       - name: Run guest code unit tests
-        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr ./internal/guest/...
+        run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr ./internal/guest/...
 
       - name: Build gcs Testing Binary
-        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./gcs
+        run: ${{ env.GO_BUILD_TEST_CMD }} ./gcs
         working-directory: test
 
   test-windows:
@@ -321,34 +327,45 @@ jobs:
 
       # run tests
       - name: Test repo
-        run: ${{ env.GOTESTCMD }} -gcflags=all=-d=checkptr -tags admin ./...
+        run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr -tags admin -timeout=20m ./...
 
       - name: Run non-functional tests
-        run: ${{ env.GOTESTCMD }} -mod=mod -gcflags=all=-d=checkptr ./internal/... ./pkg/...
+        run: ${{ env.GOTESTSUM_CMD }} -mod=mod -gcflags=all=-d=checkptr ./internal/... ./pkg/...
         working-directory: test
 
-      - name: Run containerd-shim-runhcs-v1 tests
+      - name: Build and run containerd-shim-runhcs-v1 tests
         shell: powershell
         run: |
-          powershell {
-            cd '../..'
-            go build -trimpath -o './test/containerd-shim-runhcs-v1' ./cmd/containerd-shim-runhcs-v1
+          pwsh {
+            cd '..'
+            ${{ env.GO_BUILD_CMD }} -o ./test ./cmd/containerd-shim-runhcs-v1 2>&1
           }
-          ${{ env.GOTESTCMD }} -mod=mod -tags functional -gcflags=all=-d=checkptr ./...
-        working-directory: test/containerd-shim-runhcs-v1
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not build containerd-shim-runhcs-v1.exe'
+            exit $LASTEXITCODE
+          }
+
+          ${{ env.GO_BUILD_TEST_CMD }} ./containerd-shim-runhcs-v1
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not build containerd-shim-runhcs-v1.test.exe'
+            exit $LASTEXITCODE
+          }
+
+          ${{ env.GOTESTSUM_CMD_RAW }} ./containerd-shim-runhcs-v1.test.exe '-test.v'
+        working-directory: test
 
       # build testing binaries
       - name: Build cri-containerd Testing Binary
-        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./cri-containerd
+        run: ${{ env.GO_BUILD_TEST_CMD }} ./cri-containerd
         working-directory: test
       - name: Build functional Testing Binary
-        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./functional
+        run: ${{ env.GO_BUILD_TEST_CMD }} ./functional
         working-directory: test
       - name: Build runhcs Testing Binary
-        run: go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional ./runhcs
+        run: ${{ env.GO_BUILD_TEST_CMD }} ./runhcs
         working-directory: test
       - name: Build logging-driver Binary
-        run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
+        run: ${{ env.GO_BUILD_CMD }} -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
         working-directory: test
 
       - uses: actions/upload-artifact@v4
@@ -485,7 +502,7 @@ jobs:
         working-directory: src/github.com/Microsoft/hcsshim
         shell: powershell
         run: |
-          go build -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
+          ${{ env.GO_BUILD_CMD }} -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
@@ -604,22 +621,35 @@ jobs:
             $LASTEXITCODE = 0
           }
 
-      - run: go build ./cmd/containerd-shim-runhcs-v1
-      - run: go build ./cmd/runhcs
-      - run: go build ./cmd/tar2ext4
-      - run: go build ./cmd/wclayer
-      - run: go build ./cmd/device-util
-      - run: go build ./cmd/ncproxy
-      - run: go build ./cmd/dmverity-vhd
-      - run: go build ./cmd/dmverity-vhd
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/containerd-shim-runhcs-v1
+        name: Build containerd-shim-runhcs-v1.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/runhcs
+        name: Build runhcs.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/tar2ext4
+        name: Build tar2ext4.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/wclayer
+        name: Build wclayer.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/device-util
+        name: Build device-util.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/ncproxy
+        name: Build ncproxy.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/dmverity-vhd
+        name: Build dmverity-vhd.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/dmverity-vhd
+        name: Build dmverity-vhd
         env:
           GOOS: linux
           GOARCH: amd64
-      - run: go build ./internal/tools/grantvmgroupaccess
-      - run: go build ./internal/tools/networkagent
-      - run: go build ./internal/tools/securitypolicy
-      - run: go build ./internal/tools/uvmboot
-      - run: go build ./internal/tools/zapdir
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/grantvmgroupaccess
+        name: Build grantvmgroupaccess.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/networkagent
+        name: Build networkagent.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
+        name: Build securitypolicy.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/uvmboot
+        name: Build uvmboot.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
+        name: Build zapdir.exe
 
       - uses: actions/upload-artifact@v4
         if: ${{ github.event_name == 'pull_request' }}

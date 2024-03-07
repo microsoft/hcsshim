@@ -14,13 +14,16 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 
+	"github.com/Microsoft/hcsshim/test/internal/util"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	"github.com/Microsoft/hcsshim/test/pkg/uvm"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
-func Test_LCOW_Update_Resources(t *testing.T) {
-	requireFeatures(t, featureLCOW)
+func TestLCOW_Update_Resources(t *testing.T) {
+	requireFeatures(t, featureLCOW, featureUVM)
 	require.Build(t, osversion.RS5)
+
+	ctx := util.Context(context.Background(), t)
 
 	for _, config := range []struct {
 		name     string
@@ -54,9 +57,8 @@ func Test_LCOW_Update_Resources(t *testing.T) {
 		},
 	} {
 		t.Run(config.name, func(t *testing.T) {
-			ctx := context.Background()
-			vm, cleanup := uvm.CreateLCOW(ctx, t, defaultLCOWOptions(t))
-			uvm.Start(ctx, t, vm)
+			vm, cleanup := testuvm.CreateLCOW(ctx, t, defaultLCOWOptions(ctx, t))
+			testuvm.Start(ctx, t, vm)
 			defer cleanup(ctx)
 			if err := vm.Update(ctx, config.resource, nil); err != nil {
 				if config.valid {

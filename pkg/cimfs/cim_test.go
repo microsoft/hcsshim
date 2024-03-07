@@ -146,5 +146,4 @@ func TestCimReadWrite(t *testing.T) {
 			}
 		}
 	}
-
 }
