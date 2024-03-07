@@ -1,6 +1,5 @@
-//go:build windows && (functional || uvmvpmem)
-// +build windows
-// +build functional uvmvpmem
+//go:build windows && functional
+// +build windows,functional
 
 package functional
 
@@ -12,20 +11,22 @@ import (
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
+
+	"github.com/Microsoft/hcsshim/test/internal/util"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	tuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
-// TestVPMEM tests adding/removing VPMem Read-Only layers from a v2 Linux utility VM
+// TestVPMEM tests adding/removing VPMem Read-Only layers from a v2 Linux utility VM.
 func TestVPMEM(t *testing.T) {
 	t.Skip("not yet updated")
 
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureLCOW, featureVPMEM)
+	requireFeatures(t, featureLCOW, featureUVM, featureVPMEM)
 
-	ctx := context.Background()
+	ctx := util.Context(context.Background(), t)
 	layers := linuxImageLayers(ctx, t)
-	u := tuvm.CreateAndStartLCOW(ctx, t, t.Name())
+	u := testuvm.CreateAndStartLCOW(ctx, t, t.Name())
 	defer u.Close()
 
 	var iterations uint32 = uvm.MaxVPMEMCount

@@ -11,14 +11,14 @@ import (
 
 	"github.com/Microsoft/hcsshim/test/internal/util"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
-	"github.com/Microsoft/hcsshim/test/pkg/uvm"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func BenchmarkLCOW_UVM(b *testing.B) {
-	requireFeatures(b, featureLCOW)
+	requireFeatures(b, featureLCOW, featureUVM)
 	require.Build(b, osversion.RS5)
 
-	pCtx := context.Background()
+	pCtx := util.Context(context.Background(), b)
 
 	b.Run("Create", func(b *testing.B) {
 		b.StopTimer()
@@ -26,11 +26,11 @@ func BenchmarkLCOW_UVM(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			opts := defaultLCOWOptions(b)
+			opts := defaultLCOWOptions(ctx, b)
 			opts.ID += util.RandNameSuffix(i)
 
 			b.StartTimer()
-			_, cleanup := uvm.CreateLCOW(ctx, b, opts)
+			_, cleanup := testuvm.CreateLCOW(ctx, b, opts)
 			b.StopTimer()
 
 			cleanup(ctx)
@@ -44,9 +44,9 @@ func BenchmarkLCOW_UVM(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			opts := defaultLCOWOptions(b)
+			opts := defaultLCOWOptions(ctx, b)
 			opts.ID += util.RandNameSuffix(i)
-			vm, cleanup := uvm.CreateLCOW(ctx, b, opts)
+			vm, cleanup := testuvm.CreateLCOW(ctx, b, opts)
 
 			b.StartTimer()
 			if err := vm.Start(ctx); err != nil {
@@ -65,13 +65,13 @@ func BenchmarkLCOW_UVM(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			opts := defaultLCOWOptions(b)
+			opts := defaultLCOWOptions(ctx, b)
 			opts.ID += util.RandNameSuffix(i)
-			vm, cleanup := uvm.CreateLCOW(ctx, b, opts)
-			uvm.Start(ctx, b, vm)
+			vm, cleanup := testuvm.CreateLCOW(ctx, b, opts)
+			testuvm.Start(ctx, b, vm)
 
 			b.StartTimer()
-			uvm.Kill(ctx, b, vm)
+			testuvm.Kill(ctx, b, vm)
 			if err := vm.WaitCtx(ctx); err != nil {
 				b.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
 			}
@@ -88,13 +88,13 @@ func BenchmarkLCOW_UVM(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			opts := defaultLCOWOptions(b)
+			opts := defaultLCOWOptions(ctx, b)
 			opts.ID += util.RandNameSuffix(i)
-			vm, cleanup := uvm.CreateLCOW(ctx, b, opts)
-			uvm.Start(ctx, b, vm)
+			vm, cleanup := testuvm.CreateLCOW(ctx, b, opts)
+			testuvm.Start(ctx, b, vm)
 
 			b.StartTimer()
-			if err := vm.Close(); err != nil {
+			if err := vm.CloseCtx(ctx); err != nil {
 				b.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
 			}
 			b.StopTimer()

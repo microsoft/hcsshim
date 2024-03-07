@@ -11,19 +11,20 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	"github.com/Microsoft/hcsshim/test/internal/cmd"
-	"github.com/Microsoft/hcsshim/test/internal/container"
-	"github.com/Microsoft/hcsshim/test/internal/layers"
-	"github.com/Microsoft/hcsshim/test/internal/oci"
+
+	testcmd "github.com/Microsoft/hcsshim/test/internal/cmd"
+	testcontainer "github.com/Microsoft/hcsshim/test/internal/container"
+	testlayers "github.com/Microsoft/hcsshim/test/internal/layers"
+	testoci "github.com/Microsoft/hcsshim/test/internal/oci"
 	"github.com/Microsoft/hcsshim/test/internal/util"
-	"github.com/Microsoft/hcsshim/test/pkg/images"
+	testimages "github.com/Microsoft/hcsshim/test/pkg/images"
 	policytest "github.com/Microsoft/hcsshim/test/pkg/securitypolicy"
-	uvmtest "github.com/Microsoft/hcsshim/test/pkg/uvm"
+	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
 func setupScratchTemplate(ctx context.Context, tb testing.TB) string {
 	tb.Helper()
-	opts := defaultLCOWOptions(tb)
+	opts := defaultLCOWOptions(ctx, tb)
 	vm, err := uvm.CreateLCOW(ctx, opts)
 	if err != nil {
 		tb.Fatalf("failed to create scratch formatting uVM: %s", err)
@@ -31,27 +32,27 @@ func setupScratchTemplate(ctx context.Context, tb testing.TB) string {
 	if err := vm.Start(ctx); err != nil {
 		tb.Fatalf("failed to start scratch formatting uVM: %s", err)
 	}
-	defer vm.Close()
-	scratch, _ := layers.ScratchSpace(ctx, tb, vm, "", "", "")
+	defer testuvm.Close(ctx, tb, vm)
+	scratch, _ := testlayers.ScratchSpace(ctx, tb, vm, "", "", "")
 	return scratch
 }
 
-func Test_GetProperties_WithPolicy(t *testing.T) {
-	requireFeatures(t, featureLCOWIntegrity)
+func TestGetProperties_WithPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOW, featureUVM, featureLCOWIntegrity)
 
-	ctx := namespacedContext()
+	ctx := util.Context(namespacedContext(context.Background()), t)
 	scratchPath := setupScratchTemplate(ctx, t)
 
 	ls := linuxImageLayers(ctx, t)
 	for _, allowProperties := range []bool{true, false} {
 		t.Run(fmt.Sprintf("AllowPropertiesAccess_%t", allowProperties), func(t *testing.T) {
-			opts := defaultLCOWOptions(t)
+			opts := defaultLCOWOptions(ctx, t)
 			policy := policytest.PolicyFromImageWithOpts(
 				t,
-				images.ImageLinuxAlpineLatest,
+				testimages.ImageLinuxAlpineLatest,
 				"rego",
 				[]securitypolicy.ContainerConfigOpt{
-					securitypolicy.WithCommand([]string{"/bin/sh", "-c", oci.TailNullArgs}),
+					securitypolicy.WithCommand([]string{"/bin/sh", "-c", testoci.TailNullArgs}),
 				},
 				[]securitypolicy.PolicyConfigOpt{
 					securitypolicy.WithAllowPropertiesAccess(allowProperties),
@@ -62,25 +63,25 @@ func Test_GetProperties_WithPolicy(t *testing.T) {
 			opts.SecurityPolicy = policy
 
 			cleanName := util.CleanName(t.Name())
-			vm := uvmtest.CreateAndStartLCOWFromOpts(ctx, t, opts)
-			spec := oci.CreateLinuxSpec(
+			vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
+			spec := testoci.CreateLinuxSpec(
 				ctx,
 				t,
 				cleanName,
-				oci.DefaultLinuxSpecOpts(
+				testoci.DefaultLinuxSpecOpts(
 					"",
-					ctrdoci.WithProcessArgs("/bin/sh", "-c", oci.TailNullArgs),
-					oci.WithWindowsLayerFolders(append(ls, scratchPath)),
+					ctrdoci.WithProcessArgs("/bin/sh", "-c", testoci.TailNullArgs),
+					testoci.WithWindowsLayerFolders(append(ls, scratchPath)),
 				)...,
 			)
 
-			c, _, cleanup := container.Create(ctx, t, vm, spec, cleanName, hcsOwner)
+			c, _, cleanup := testcontainer.Create(ctx, t, vm, spec, cleanName, hcsOwner)
 			t.Cleanup(cleanup)
 
-			init := container.Start(ctx, t, c, nil)
+			init := testcontainer.Start(ctx, t, c, nil)
 			t.Cleanup(func() {
-				container.Kill(ctx, t, c)
-				container.Wait(ctx, t, c)
+				testcontainer.Kill(ctx, t, c)
+				testcontainer.Wait(ctx, t, c)
 			})
 
 			_, err := c.Properties(ctx)
@@ -98,8 +99,8 @@ func Test_GetProperties_WithPolicy(t *testing.T) {
 				}
 			}
 
-			cmd.Kill(ctx, t, init)
-			cmd.WaitExitCode(ctx, t, init, cmd.ForcedKilledExitCode)
+			testcmd.Kill(ctx, t, init)
+			testcmd.WaitExitCode(ctx, t, init, testcmd.ForcedKilledExitCode)
 		})
 	}
 }
