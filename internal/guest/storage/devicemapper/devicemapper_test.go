@@ -4,8 +4,10 @@
 package devicemapper
 
 import (
+	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"syscall"
 	"testing"
@@ -19,6 +21,7 @@ var (
 )
 
 func clearTestDependencies() {
+	_createDevice = CreateDevice
 	removeDeviceWrapper = removeDevice
 	openMapperWrapper = openMapper
 }
@@ -73,7 +76,7 @@ func (d *device) Close() (err error) {
 }
 
 func createDevice(name string, flags CreateFlags, targets []Target) (*device, error) {
-	p, err := CreateDevice(name, flags, targets)
+	p, err := _createDevice(name, flags, targets)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +188,40 @@ func TestRemoveDeviceRetriesOnSyscallEBUSY(t *testing.T) {
 	}
 	if !retryDone {
 		t.Fatalf("expected removeDevice to be retried after initial failure")
+	}
+}
+
+func TestCreateDeviceWithRetryError(t *testing.T) {
+	for _, rerr := range retryErrors {
+		t.Run(fmt.Sprintf("error-%s", rerr), func(t *testing.T) {
+			clearTestDependencies()
+			createDeviceCalled := false
+			retryDone := false
+			createDeviceStub := func(name string, flags CreateFlags, targets []Target) (string, error) {
+				if !createDeviceCalled {
+					createDeviceCalled = true
+					return "", &dmError{
+						Op:  0,
+						Err: rerr,
+					}
+				}
+				retryDone = true
+				return fmt.Sprintf("/dev/mapper/%s", name), nil
+			}
+			_createDevice = createDeviceStub
+
+			ctx := context.Background()
+			_, err := CreateDeviceWithRetryErrors(ctx, "test-device", 0, []Target{}, retryErrors...)
+			if err != nil {
+				t.Fatalf("unexpected error: %s\n", err)
+			}
+			if !createDeviceCalled {
+				t.Fatal("CreateDevice was not called")
+			}
+			if !retryDone {
+				t.Fatalf("error %s was not retried\n", rerr)
+			}
+		})
 	}
 }
 
