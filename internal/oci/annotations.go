@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	iannotations "github.com/Microsoft/hcsshim/internal/annotations"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -66,6 +68,7 @@ func ParseAnnotationsDisableGMSA(ctx context.Context, s *specs.Spec) bool {
 }
 
 // parseAdditionalRegistryValues extracts the additional registry values to set from annotations.
+//
 // Like the [parseAnnotation*] functions, this logs errors but does not return them.
 func parseAdditionalRegistryValues(ctx context.Context, a map[string]string) []hcsschema.RegistryValue {
 	// rather than have users deal with nil vs []hcsschema.RegistryValue as returns, always
@@ -81,7 +84,7 @@ func parseAdditionalRegistryValues(ctx context.Context, a map[string]string) []h
 
 	t := []hcsschema.RegistryValue{}
 	if err := json.Unmarshal([]byte(v), &t); err != nil {
-		logAnnotationParseError(ctx, k, v, "JSON string", err)
+		logAnnotationValueParseError(ctx, k, v, fmt.Sprintf("%T", t), err)
 		return []hcsschema.RegistryValue{}
 	}
 
@@ -182,20 +185,63 @@ func parseAdditionalRegistryValues(ctx context.Context, a map[string]string) []h
 	return slices.Clip(rvs)
 }
 
+// parseHVSocketServiceTable extracts any additional Hyper-V socket service configurations from annotations.
+//
+// Like the [parseAnnotation*] functions, this logs errors but does not return them.
+func parseHVSocketServiceTable(ctx context.Context, a map[string]string) map[string]hcsschema.HvSocketServiceConfig {
+	sc := make(map[string]hcsschema.HvSocketServiceConfig)
+	// TODO(go1.23) use range over functions to implement a functional `filter | map $ a`
+	for k, v := range a {
+		sGUID, found := strings.CutPrefix(k, iannotations.UVMHyperVSocketConfigPrefix)
+		if !found {
+			continue
+		}
+
+		entry := log.G(ctx).WithFields(logrus.Fields{
+			logfields.OCIAnnotation: k,
+			logfields.Value:         v,
+			"guid":                  sGUID,
+		})
+
+		g, err := guid.FromString(sGUID)
+		if err != nil {
+			entry.WithError(err).Warn("invalid GUID string for Hyper-V socket service configuration annotation")
+			continue
+		}
+		sGUID = g.String() // overwrite the GUID string to standardize format (capitalization)
+
+		conf := hcsschema.HvSocketServiceConfig{}
+		if err := json.Unmarshal([]byte(v), &conf); err != nil {
+			logAnnotationValueParseError(ctx, k, v, fmt.Sprintf("%T", conf), err)
+			continue
+		}
+
+		if _, found := sc[sGUID]; found {
+			entry.WithFields(logrus.Fields{
+				"guid": sGUID,
+			}).Warn("overwritting existing Hyper-V socket service configuration")
+		}
+
+		if entry.Logger.IsLevelEnabled(logrus.TraceLevel) {
+			entry.WithField("configuration", log.Format(ctx, conf)).Trace("found Hyper-V socket service configuration annotation")
+		}
+		sc[sGUID] = conf
+	}
+
+	return sc
+}
+
 // general annotation parsing
 
 // ParseAnnotationsBool searches `a` for `key` and if found verifies that the
 // value is `true` or `false` in any case. If `key` is not found returns `def`.
 func ParseAnnotationsBool(ctx context.Context, a map[string]string, key string, def bool) bool {
 	if v, ok := a[key]; ok {
-		switch strings.ToLower(v) {
-		case "true":
-			return true
-		case "false":
-			return false
-		default:
-			logAnnotationParseError(ctx, key, v, logfields.Bool, nil)
+		b, err := strconv.ParseBool(v)
+		if err == nil {
+			return b
 		}
+		logAnnotationValueParseError(ctx, key, v, logfields.Bool, err)
 	}
 	return def
 }
@@ -206,17 +252,11 @@ func ParseAnnotationsBool(ctx context.Context, a map[string]string, key string, 
 // the value they point at.
 func ParseAnnotationsNullableBool(ctx context.Context, a map[string]string, key string) *bool {
 	if v, ok := a[key]; ok {
-		switch strings.ToLower(v) {
-		case "true":
-			_bool := true
-			return &_bool
-		case "false":
-			_bool := false
-			return &_bool
-		default:
-			err := errors.New("boolean fields must be 'true', 'false', or not set")
-			logAnnotationParseError(ctx, key, v, logfields.Bool, err)
+		b, err := strconv.ParseBool(v)
+		if err == nil {
+			return &b
 		}
+		logAnnotationValueParseError(ctx, key, v, logfields.Bool, err)
 	}
 	return nil
 }
@@ -230,7 +270,7 @@ func ParseAnnotationsInt32(ctx context.Context, a map[string]string, key string,
 			v := int32(countu)
 			return v
 		}
-		logAnnotationParseError(ctx, key, v, logfields.Int32, err)
+		logAnnotationValueParseError(ctx, key, v, logfields.Int32, err)
 	}
 	return def
 }
@@ -244,7 +284,7 @@ func ParseAnnotationsUint32(ctx context.Context, a map[string]string, key string
 			v := uint32(countu)
 			return v
 		}
-		logAnnotationParseError(ctx, key, v, logfields.Uint32, err)
+		logAnnotationValueParseError(ctx, key, v, logfields.Uint32, err)
 	}
 	return def
 }
@@ -257,15 +297,15 @@ func ParseAnnotationsUint64(ctx context.Context, a map[string]string, key string
 		if err == nil {
 			return countu
 		}
-		logAnnotationParseError(ctx, key, v, logfields.Uint64, err)
+		logAnnotationValueParseError(ctx, key, v, logfields.Uint64, err)
 	}
 	return def
 }
 
-// ParseAnnotationCommaSeparated searches `annotations` for `annotation` corresponding to a
-// list of comma separated strings
-func ParseAnnotationCommaSeparatedUint32(ctx context.Context, annotations map[string]string, annotation string, def []uint32) []uint32 {
-	cs, ok := annotations[annotation]
+// ParseAnnotationCommaSeparated searches `a` for `annotation` corresponding to a
+// list of comma separated strings.
+func ParseAnnotationCommaSeparatedUint32(_ context.Context, a map[string]string, key string, def []uint32) []uint32 {
+	cs, ok := a[key]
 	if !ok || cs == "" {
 		return def
 	}
@@ -289,10 +329,10 @@ func ParseAnnotationsString(a map[string]string, key string, def string) string 
 	return def
 }
 
-// ParseAnnotationCommaSeparated searches `annotations` for `annotation` corresponding to a
-// list of comma separated strings
-func ParseAnnotationCommaSeparated(annotation string, annotations map[string]string) []string {
-	cs, ok := annotations[annotation]
+// ParseAnnotationCommaSeparated searches `a` for `key` corresponding to a
+// list of comma separated strings.
+func ParseAnnotationCommaSeparated(key string, a map[string]string) []string {
+	cs, ok := a[key]
 	if !ok || cs == "" {
 		return nil
 	}
@@ -300,7 +340,7 @@ func ParseAnnotationCommaSeparated(annotation string, annotations map[string]str
 	return results
 }
 
-func logAnnotationParseError(ctx context.Context, k, v, et string, err error) {
+func logAnnotationValueParseError(ctx context.Context, k, v, et string, err error) {
 	entry := log.G(ctx).WithFields(logrus.Fields{
 		logfields.OCIAnnotation: k,
 		logfields.Value:         v,
@@ -309,5 +349,5 @@ func logAnnotationParseError(ctx context.Context, k, v, et string, err error) {
 	if err != nil {
 		entry = entry.WithError(err)
 	}
-	entry.Warning("annotation could not be parsed")
+	entry.Warning("annotation value could not be parsed")
 }

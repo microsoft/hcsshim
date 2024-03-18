@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -342,7 +343,7 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 // A large part of difference between the SNP case and the usual kernel+option+initrd case is to do with booting
 // from a VMGS file. The VMGS part may be used other than with SNP so is split out here.
 
-// Make a hcsschema.ComputeSytem with the parts that target booting from a VMGS file
+// Make a hcsschema.ComputeSytem with the parts that target booting from a VMGS file.
 func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
 	// Raise an error if instructed to use a particular sort of rootfs.
 	if opts.PreferredRootFSType != PreferredRootFSTypeNA {
@@ -437,6 +438,8 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		},
 	}
 
+	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)
+
 	// Set permissions for the VSock ports:
 	//		entropyVsockPort - 1 is the entropy port,
 	//		linuxLogVsockPort - 109 used by vsockexec to log stdout/stderr logging,
@@ -444,7 +447,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	hvSockets := []uint32{entropyVsockPort, linuxLogVsockPort, gcs.LinuxGcsVsockPort, gcs.LinuxGcsVsockPort + 1}
 	hvSockets = append(hvSockets, opts.ExtraVSockPorts...)
 	for _, whichSocket := range hvSockets {
-		key := fmt.Sprintf("%08x-facb-11e6-bd58-64006a7986d3", whichSocket) // format of a linux hvsock GUID is port#-facb-11e6-bd58-64006a7986d3
+		key := winio.VsockServiceID(whichSocket).String()
 		doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable[key] = hcsschema.HvSocketServiceConfig{
 			AllowWildcardBinds:        true,
 			BindSecurityDescriptor:    "D:P(A;;FA;;;WD)",
@@ -638,12 +641,15 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 						// Allow administrators and SYSTEM to bind to vsock sockets
 						// so that we can create a GCS log socket.
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+						ServiceTable:                  make(map[string]hcsschema.HvSocketServiceConfig),
 					},
 				},
 				Plan9: &hcsschema.Plan9{},
 			},
 		},
 	}
+
+	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)
 
 	// Handle StorageQoS if set
 	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {

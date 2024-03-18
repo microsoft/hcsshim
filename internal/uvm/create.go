@@ -102,10 +102,13 @@ type Options struct {
 
 	// DumpDirectoryPath is the path of the directory inside which all debug dumps etc are stored.
 	DumpDirectoryPath string
+
+	// 	AdditionalHyperVConfig are extra Hyper-V socket configurations to provide.
+	AdditionalHyperVConfig map[string]hcsschema.HvSocketServiceConfig
 }
 
 // Verifies that the final UVM options are correct and supported.
-func verifyOptions(ctx context.Context, options interface{}) error {
+func verifyOptions(_ context.Context, options interface{}) error {
 	switch opts := options.(type) {
 	case *OptionsLCOW:
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
@@ -150,15 +153,16 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 // If `owner` is empty it will be set to the calling executables name.
 func newDefaultOptions(id, owner string) *Options {
 	opts := &Options{
-		ID:                    id,
-		Owner:                 owner,
-		MemorySizeInMB:        1024,
-		AllowOvercommit:       true,
-		EnableDeferredCommit:  false,
-		ProcessorCount:        defaultProcessorCount(),
-		FullyPhysicallyBacked: false,
-		NoWritableFileShares:  false,
-		SCSIControllerCount:   1,
+		ID:                     id,
+		Owner:                  owner,
+		MemorySizeInMB:         1024,
+		AllowOvercommit:        true,
+		EnableDeferredCommit:   false,
+		ProcessorCount:         defaultProcessorCount(),
+		FullyPhysicallyBacked:  false,
+		NoWritableFileShares:   false,
+		SCSIControllerCount:    1,
+		AdditionalHyperVConfig: make(map[string]hcsschema.HvSocketServiceConfig),
 	}
 
 	if opts.Owner == "" {
@@ -302,7 +306,7 @@ func (uvm *UtilityVM) CreateProcess(ctx context.Context, settings interface{}) (
 
 // IsOCI returns false, indicating the parameters to CreateProcess should not
 // include an OCI spec.
-func (uvm *UtilityVM) IsOCI() bool {
+func (*UtilityVM) IsOCI() bool {
 	return false
 }
 
@@ -342,9 +346,8 @@ func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int
 			"assigned":      hostCount,
 		}).Warn("Changing user requested CPUCount to current number of processors")
 		return hostCount
-	} else {
-		return requested
 	}
+	return requested
 }
 
 // ProcessorCount returns the number of processors actually assigned to the UVM.
@@ -353,7 +356,7 @@ func (uvm *UtilityVM) ProcessorCount() int32 {
 }
 
 // PhysicallyBacked returns if the UVM is backed by physical memory
-// (Over commit and deferred commit both false)
+// (Over commit and deferred commit both false).
 func (uvm *UtilityVM) PhysicallyBacked() bool {
 	return uvm.physicallyBacked
 }
@@ -377,12 +380,12 @@ func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested uint64)
 }
 
 // DevicesPhysicallyBacked describes if additional devices added to the UVM
-// should be physically backed
+// should be physically backed.
 func (uvm *UtilityVM) DevicesPhysicallyBacked() bool {
 	return uvm.devicesPhysicallyBacked
 }
 
-// VSMBNoDirectMap returns if VSMB devices should be mounted with `NoDirectMap` set to true
+// VSMBNoDirectMap returns if VSMB devices should be mounted with `NoDirectMap` set to true.
 func (uvm *UtilityVM) VSMBNoDirectMap() bool {
 	return uvm.vsmbNoDirectMap
 }
@@ -394,11 +397,12 @@ func (uvm *UtilityVM) NoWritableFileShares() bool {
 // Closes the external GCS connection if it is being used and also closes the
 // listener for GCS connection.
 func (uvm *UtilityVM) CloseGCSConnection() (err error) {
+	// TODO: errors.Join to avoid ignoring an error
 	if uvm.gc != nil {
 		err = uvm.gc.Close()
 	}
 	if uvm.gcListener != nil {
 		err = uvm.gcListener.Close()
 	}
-	return
+	return err
 }

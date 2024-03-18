@@ -5,6 +5,7 @@ package oci
 import (
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -157,7 +158,7 @@ func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, 
 }
 
 // handleAnnotationPreferredRootFSType handles parsing annotations.PreferredRootFSType and setting
-// implied options from the result
+// implied options from the result.
 func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
 	lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, a, annotations.PreferredRootFSType, lopts.PreferredRootFSType)
 	switch lopts.PreferredRootFSType {
@@ -189,7 +190,7 @@ func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]str
 }
 
 // handleSecurityPolicy handles parsing SecurityPolicy and NoSecurityHardware and setting
-// implied options from the results. Both LCOW only, not WCOW
+// implied options from the results. Both LCOW only, not WCOW.
 func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
 	lopts.SecurityPolicy = ParseAnnotationsString(a, annotations.SecurityPolicy, lopts.SecurityPolicy)
 	// allow actual isolated boot etc to be ignored if we have no hardware. Required for dev
@@ -226,7 +227,7 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 	}
 }
 
-// sets options common to both WCOW and LCOW from annotations
+// sets options common to both WCOW and LCOW from annotations.
 func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) {
 	opts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, opts.MemorySizeInMB)
 	opts.LowMMIOGapInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, opts.LowMMIOGapInMB)
@@ -244,6 +245,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 	opts.ProcessDumpLocation = ParseAnnotationsString(s.Annotations, annotations.ContainerProcessDumpLocation, opts.ProcessDumpLocation)
 	opts.NoWritableFileShares = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableWritableFileShares, opts.NoWritableFileShares)
 	opts.DumpDirectoryPath = ParseAnnotationsString(s.Annotations, annotations.DumpDirectoryPath, opts.DumpDirectoryPath)
+	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
 }
 
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
@@ -304,7 +306,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.DisableCompartmentNamespace = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
 		wopts.NoDirectMap = ParseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)
 		wopts.NoInheritHostTimezone = ParseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
-		wopts.AdditionalRegistryKeys = parseAdditionalRegistryValues(ctx, s.Annotations)
+		wopts.AdditionalRegistryKeys = append(wopts.AdditionalRegistryKeys, parseAdditionalRegistryValues(ctx, s.Annotations)...)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		return wopts, nil
 	}

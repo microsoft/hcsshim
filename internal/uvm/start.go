@@ -122,7 +122,7 @@ func parseLogrus(o *Options) OutputHandler {
 }
 
 // When using an external GCS connection it is necessary to send a ModifySettings request
-// for HvSockt so that the GCS can setup some registry keys that are required for running
+// for HvSocket so that the GCS can setup some registry keys that are required for running
 // containers inside the UVM. In non external GCS connection scenarios this is done by the
 // HCS immediately after the GCS connection is done. Since, we are using the external GCS
 // connection we should do that setup here after we connect with the GCS.
