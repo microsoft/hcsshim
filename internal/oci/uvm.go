@@ -279,6 +279,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 		opts.NumaMemoryBlocksCounts)
 	opts.HRMMemoryJobName = ParseAnnotationsString(s.Annotations, annotations.HRMMemoryJobName, opts.HRMMemoryJobName)
 	opts.HRMCPUJobName = ParseAnnotationsString(s.Annotations, annotations.HRMCPUJobName, opts.HRMCPUJobName)
+	opts.ForbidSmallBackingPages = ParseAnnotationsBool(ctx, s.Annotations, annotations.MemoryForbidSmallBackingPages, opts.ForbidSmallBackingPages)
 	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
 }
 

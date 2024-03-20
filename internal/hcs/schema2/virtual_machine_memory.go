@@ -15,19 +15,23 @@ type VirtualMachineMemory struct {
 	SizeInMB uint64             `json:"SizeInMB,omitempty"`
 	Backing  *MemoryBackingType `json:"Backing,omitempty"`
 	// If enabled, then the VM's memory is backed by the Windows pagefile rather than physically backed, statically allocated memory.
-	AllowOvercommit bool                   `json:"AllowOvercommit,omitempty"`
+	AllowOvercommit bool `json:"AllowOvercommit,omitempty"`
 	// If enabled, then the memory hot hint feature is exposed to the VM, allowing it to prefetch pages into its working set. (if supported by the guest operating system).
 	EnableHotHint bool `json:"EnableHotHint,omitempty"`
 	// If enabled, then the memory cold hint feature is exposed to the VM, allowing it to trim zeroed pages from its working set (if supported by the guest operating system).
 	EnableColdHint bool `json:"EnableColdHint,omitempty"`
 	// If enabled, then the memory cold discard hint feature is exposed to the VM, allowing it to trim non-zeroed pages from the working set (if supported by the guest operating system).
 	EnableColdDiscardHint bool `json:"EnableColdDiscardHint,omitempty"`
+	// ForbidSmallBackingPages if enabled, then backing page chunks smaller than the backing page
+	// size are never used unless the system is under extreme memory pressure. If the backing page
+	// is `Small`, then it is forced to `Large` when this option is enabled.
+	ForbidSmallBackingPages bool `json:"ForbidSmallBackingPages,omitempty"`
 	// If enabled, then commit is not charged for each backing page until first access.
 	EnableDeferredCommit bool `json:"EnableDeferredCommit,omitempty"`
 	// Low MMIO region allocated below 4GB
 	LowMMIOGapInMB uint64 `json:"LowMmioGapInMB,omitempty"`
 	// High MMIO region allocated above 4GB (base and size)
-	HighMMIOBaseInMB         uint64                 `json:"HighMmioBaseInMB,omitempty"`
-	HighMMIOGapInMB          uint64                 `json:"HighMmioGapInMB,omitempty"`
-	SlitType                   *VirtualSlitType                   `json:"SlitType,omitempty"`
+	HighMMIOBaseInMB uint64           `json:"HighMmioBaseInMB,omitempty"`
+	HighMMIOGapInMB  uint64           `json:"HighMmioGapInMB,omitempty"`
+	SlitType         *VirtualSlitType `json:"SlitType,omitempty"`
 }
