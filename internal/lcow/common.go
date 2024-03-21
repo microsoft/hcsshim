@@ -5,6 +5,7 @@ package lcow
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -28,7 +29,7 @@ func formatDiskUvm(ctx context.Context, lcowUVM *uvm.UtilityVM, controller int, 
 		if err == nil {
 			break
 		}
-		if _, ok := err.(*cmdpkg.ExitError); !ok { //nolint:errorlint
+		if e := (&cmdpkg.ExitError{}); !errors.As(err, &e) {
 			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %w", cmd.Spec.Args, destPath, err)
 		}
 		time.Sleep(time.Millisecond * 10)

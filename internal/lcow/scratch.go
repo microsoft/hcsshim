@@ -101,7 +101,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 		if err == nil {
 			break
 		}
-		if _, ok := err.(*cmdpkg.ExitError); !ok { //nolint:errorlint
+		if e := (&cmdpkg.ExitError{}); !errors.As(err, &e) {
 			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %w", cmd.Spec.Args, destFile, err)
 		}
 		time.Sleep(time.Millisecond * 10)
