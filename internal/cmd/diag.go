@@ -59,7 +59,7 @@ func ExecInShimHost(ctx context.Context, req *CmdProcessRequest) (int, error) {
 	cmd.Stderr = np.Stderr()
 	err = cmd.Run()
 	if err != nil {
-		if exiterr, ok := err.(*exec.ExitError); ok { //nolint:errorlint
+		if exiterr := (&exec.ExitError{}); errors.As(err, &exiterr) {
 			return exiterr.ExitCode(), exiterr
 		}
 		return -1, err
