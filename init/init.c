@@ -4,6 +4,7 @@
 #include <ftw.h>
 #include <getopt.h>
 #include <libkmod.h>
+#include <linux/random.h>  // RNDADDENTROPY
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <signal.h>
@@ -19,8 +20,8 @@
 #include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "../vsockexec/vsock.h"
 
+#include "../vsockexec/vsock.h"
 
 #ifdef DEBUG
 #ifdef USE_TCP
@@ -52,12 +53,6 @@ static int opentcp(unsigned short port)
     return s;
 }
 #endif
-
-// musl-gcc doesn't use headers in /usr/include, so it can't find
-// linux/random.h which is where RNDADDENTROPY is defined. We only need this
-// single definition from linux/random.h, so we just duplicate it here as a
-// workaround.
-#define RNDADDENTROPY _IOW( 'R', 0x03, int [2] )
 
 #define DEFAULT_PATH_ENV "PATH=/sbin:/usr/sbin:/bin:/usr/bin"
 #define OPEN_FDS 15
