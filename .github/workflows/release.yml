@@ -9,6 +9,8 @@ env:
 
 jobs:
   build:
+    permissions:
+      contents: write
     runs-on: "windows-2019"
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +41,7 @@ jobs:
           name: binaries
           
       - name: Publish release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2.0.4
         with:
           prerelease: ${{ contains(github.ref, 'rc') }}
           files: |
