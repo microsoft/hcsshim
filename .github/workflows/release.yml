@@ -9,8 +9,6 @@ env:
 
 jobs:
   build:
-    permissions:
-      contents: write
     runs-on: "windows-2019"
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +32,8 @@ jobs:
   create_release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
