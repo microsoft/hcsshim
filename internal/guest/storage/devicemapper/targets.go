@@ -15,6 +15,17 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
+// retryErrors are treated as transient errors and device-mapper operations will be tried again.
+//
+// These errors are occasionally returned by the kernel when a device-mapper operation is attempted. These errors
+// are transient and can occur when the kernel is busy or the device is not ready yet.
+var retryErrors = []error{
+	unix.EBUSY,
+	unix.ENOENT,
+	unix.ENXIO,
+	unix.ENODEV,
+}
+
 // CreateZeroSectorLinearTarget creates dm-linear target for a device at `devPath` and `mappingInfo`, returns
 // virtual block device path.
 func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, mappingInfo *guestresource.LCOWVPMemMappingInfo) (_ string, err error) {
@@ -37,9 +48,7 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 		devName,
 		CreateReadOnly,
 		[]Target{linearTarget},
-		unix.ENOENT,
-		unix.ENXIO,
-		unix.ENODEV,
+		retryErrors...,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create dm-linear target, device=%s, offset=%d: %w", devPath,
@@ -94,9 +103,7 @@ func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo
 		devName,
 		CreateReadOnly,
 		[]Target{verityTarget},
-		unix.ENOENT,
-		unix.ENXIO,
-		unix.ENODEV,
+		retryErrors...,
 	)
 	if err != nil {
 		return "", fmt.Errorf("frailed to create dm-verity target for device=%s: %w", devPath, err)

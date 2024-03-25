@@ -30,6 +30,7 @@ const (
 var (
 	removeDeviceWrapper = removeDevice
 	openMapperWrapper   = openMapper
+	_createDevice       = CreateDevice
 )
 
 //nolint:stylecheck // ST1003: ALL_CAPS
@@ -229,7 +230,7 @@ func CreateDeviceWithRetryErrors(
 ) (string, error) {
 retry:
 	for {
-		dmPath, err := CreateDevice(name, flags, targets)
+		dmPath, err := _createDevice(name, flags, targets)
 		if err == nil {
 			return dmPath, nil
 		}
@@ -244,7 +245,7 @@ retry:
 			if errors.Is(dmErr.Err, e) {
 				select {
 				case <-ctx.Done():
-					log.G(ctx).WithError(err).Warning("CreateDeviceWithRetryErrors failed, context timeout")
+					log.G(ctx).WithError(err).Error("CreateDeviceWithRetryErrors failed, context timeout")
 					return "", err
 				default:
 					time.Sleep(100 * time.Millisecond)
