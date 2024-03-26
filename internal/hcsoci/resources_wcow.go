@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -26,45 +25,23 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
 const wcowSandboxMountPath = "C:\\SandboxMounts"
 
 func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, isSandbox bool) error {
-	if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.LayerFolders == nil {
-		return errors.New("field 'Spec.Windows.Layerfolders' is not populated")
-	}
-
-	scratchFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
-
-	// TODO: Remove this code for auto-creation. Make the caller responsible.
-	// Create the directory for the RW scratch layer if it doesn't exist
-	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
-			return errors.Wrapf(err, "failed to auto-create container scratch folder %s", scratchFolder)
-		}
-	}
-
-	// Create sandbox.vhdx if it doesn't exist in the scratch folder. It's called sandbox.vhdx
-	// rather than scratch.vhdx as in the v1 schema, it's hard-coded in HCS.
-	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
-		if err := wclayer.CreateScratchLayer(ctx, scratchFolder, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1]); err != nil {
-			return errors.Wrap(err, "failed to CreateSandboxLayer")
-		}
-	}
-
 	if coi.Spec.Root == nil {
 		coi.Spec.Root = &specs.Root{}
 	}
 
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
-		containerRootPath, closer, err := layers.MountWCOWLayers(ctx, coi.actualID, coi.Spec.Windows.LayerFolders, "", coi.HostingSystem)
+		mountedLayers, closer, err := layers.MountWCOWLayers(ctx, coi.actualID, coi.HostingSystem, coi.WCOWLayers)
 		if err != nil {
 			return errors.Wrap(err, "failed to mount container storage")
 		}
-		coi.Spec.Root.Path = containerRootPath
+		coi.Spec.Root.Path = mountedLayers.RootFS
+		coi.mountedWCOWLayers = mountedLayers
 		// If this is the pause container in a hypervisor-isolated pod, we can skip cleanup of
 		// layers, as that happens automatically when the UVM is terminated.
 		if !isSandbox || coi.HostingSystem == nil {

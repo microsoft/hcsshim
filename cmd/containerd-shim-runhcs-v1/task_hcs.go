@@ -35,6 +35,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -82,23 +83,15 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 				return nil, err
 			}
 		case *uvm.OptionsWCOW:
+			var layerFolders []string
+			if s.Windows != nil {
+				layerFolders = s.Windows.LayerFolders
+			}
 			wopts := (opts).(*uvm.OptionsWCOW)
-
-			// In order for the UVM sandbox.vhdx not to collide with the actual
-			// nested Argon sandbox.vhdx we append the \vm folder to the last
-			// entry in the list.
-			layersLen := len(s.Windows.LayerFolders)
-			layers := make([]string, layersLen)
-			copy(layers, s.Windows.LayerFolders)
-
-			vmPath := filepath.Join(layers[layersLen-1], "vm")
-			err := os.MkdirAll(vmPath, 0)
+			wopts.BootFiles, err = layers.GetWCOWUVMBootFilesFromLayers(ctx, req.Rootfs, layerFolders)
 			if err != nil {
 				return nil, err
 			}
-			layers[layersLen-1] = vmPath
-			wopts.LayerFolders = layers
-
 			parent, err = uvm.CreateWCOW(ctx, wopts)
 			if err != nil {
 				return nil, err
@@ -140,8 +133,24 @@ func createContainer(
 		resources *resources.Resources
 	)
 
+	var wcowLayers layers.WCOWLayers
+	var lcowLayers *layers.LCOWLayers
+	var layerFolders []string
+	if s.Windows != nil {
+		layerFolders = s.Windows.LayerFolders
+	}
+	if s.Linux != nil {
+		lcowLayers, err = layers.ParseLCOWLayers(rootfs, layerFolders)
+	} else {
+		wcowLayers, err = layers.ParseWCOWLayers(rootfs, layerFolders)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if oci.IsJobContainer(s) {
-		container, resources, err = jobcontainers.Create(ctx, id, s)
+		opts := jobcontainers.CreateOptions{WCOWLayers: wcowLayers}
+		container, resources, err = jobcontainers.Create(ctx, id, s, opts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -152,18 +161,10 @@ func createContainer(
 			Spec:             s,
 			HostingSystem:    parent,
 			NetworkNamespace: netNS,
+			LCOWLayers:       lcowLayers,
+			WCOWLayers:       wcowLayers,
 		}
-		if s.Linux != nil {
-			var layerFolders []string
-			if s.Windows != nil {
-				layerFolders = s.Windows.LayerFolders
-			}
-			lcowLayers, err := getLCOWLayers(rootfs, layerFolders)
-			if err != nil {
-				return nil, nil, err
-			}
-			opts.LCOWLayers = lcowLayers
-		}
+
 		if shimOpts != nil {
 			opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
 		}

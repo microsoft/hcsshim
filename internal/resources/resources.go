@@ -97,6 +97,12 @@ type ResourceCloser interface {
 	Release(context.Context) error
 }
 
+type ResourceCloserFunc func(context.Context) error
+
+func (f ResourceCloserFunc) Release(ctx context.Context) error {
+	return f(ctx)
+}
+
 // NewContainerResources returns a new empty container Resources struct with the
 // given container id
 func NewContainerResources(id string) *Resources {

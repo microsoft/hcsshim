@@ -25,6 +25,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opencensus.io/trace"
 
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/sync"
@@ -275,9 +276,11 @@ func defaultWCOWOptions(ctx context.Context, tb testing.TB) *uvm.OptionsWCOW {
 	opts := testuvm.DefaultWCOWOptions(ctx, tb, testName(tb), hcsOwner)
 	uvmLayers := windowsImageLayers(ctx, tb)
 	scratchDir := testlayers.WCOWScratchDir(ctx, tb, "")
-	opts.LayerFolders = append(opts.LayerFolders, uvmLayers...)
-	opts.LayerFolders = append(opts.LayerFolders, scratchDir)
-
+	bootFiles, err := layers.GetWCOWUVMBootFilesFromLayers(ctx, nil, append(uvmLayers, scratchDir))
+	if err != nil {
+		tb.Fatalf("failed to parse WCOW Boot files: %s", err)
+	}
+	opts.BootFiles = bootFiles
 	return opts
 }
 
