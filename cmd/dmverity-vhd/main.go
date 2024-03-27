@@ -113,24 +113,24 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		ctx := context.Background()
 		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("failed to instanciate docker client: %w", err)
 		}
 
 		imageTarReader, err := cli.ImageSave(ctx, []string{image})
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("failed to load image tar: %w", err)
 		}
 		defer imageTarReader.Close()
 
 		tarballPath := "/tmp/image.tar"
 		tarFile, err := os.Create(tarballPath)
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("failed to create tar file: %w", err)
 		}
 		defer tarFile.Close()
 
 		if _, err := io.Copy(tarFile, imageTarReader); err != nil {
-			panic(err)
+			return nil, fmt.Errorf("failed to save tar: %w", err)
 		}
 
 		var imageNameAndTag name.Tag
@@ -138,7 +138,7 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 
 		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("failed to load image from tar: %w", err)
 		}
 	} else {
 		var remoteOpts []remote.Option
