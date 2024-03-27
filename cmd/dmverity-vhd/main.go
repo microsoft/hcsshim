@@ -1,15 +1,17 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/daemon"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	log "github.com/sirupsen/logrus"
@@ -108,15 +110,36 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		// if only an image name is provided and not a tag, the default is "latest"
 		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
 	} else if dockerDaemon {
-		// use the unbuffered opener by default, the tradeoff being the image will stream as needed
-		// so it is slower but much more memory efficient
-		var opts []daemon.Option
-		if !ctx.GlobalBool(bufferedReaderFlag) {
-			opt := daemon.WithUnbufferedOpener()
-			opts = append(opts, opt)
+		ctx := context.Background()
+		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+		if err != nil {
+			panic(err)
 		}
 
-		img, err = daemon.Image(ref, opts...)
+		imageTarReader, err := cli.ImageSave(ctx, []string{image})
+		if err != nil {
+			panic(err)
+		}
+		defer imageTarReader.Close()
+
+		tarballPath := "/tmp/image.tar"
+		tarFile, err := os.Create(tarballPath)
+		if err != nil {
+			panic(err)
+		}
+		defer tarFile.Close()
+
+		if _, err := io.Copy(tarFile, imageTarReader); err != nil {
+			panic(err)
+		}
+
+		var imageNameAndTag name.Tag
+		imageNameAndTag, err = name.NewTag(image)
+
+		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		var remoteOpts []remote.Option
 		if ctx.IsSet(usernameFlag) && ctx.IsSet(passwordFlag) {
