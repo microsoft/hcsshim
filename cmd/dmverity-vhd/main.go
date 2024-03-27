@@ -100,7 +100,32 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 
 	// by default, using remote as source
 	var img v1.Image
-	if tarballPath != "" {
+	if tarballPath != "" || dockerDaemon {
+		if dockerDaemon {
+			ctx := context.Background()
+			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+			if err != nil {
+				return nil, fmt.Errorf("failed to instanciate docker client: %w", err)
+			}
+
+			imageTarReader, err := cli.ImageSave(ctx, []string{image})
+			if err != nil {
+				return nil, fmt.Errorf("failed to load image tar: %w", err)
+			}
+			defer imageTarReader.Close()
+
+			tarFile, err := os.CreateTemp("", "image-tar")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create tar file: %w", err)
+			}
+			defer tarFile.Close()
+
+			if _, err := io.Copy(tarFile, imageTarReader); err != nil {
+				return nil, fmt.Errorf("failed to save tar: %w", err)
+			}
+
+			tarballPath = tarFile.Name()
+		}
 		// create a tag and search the tarball for the image specified
 		var imageNameAndTag name.Tag
 		imageNameAndTag, err = name.NewTag(image)
@@ -109,36 +134,6 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		}
 		// if only an image name is provided and not a tag, the default is "latest"
 		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
-	} else if dockerDaemon {
-		ctx := context.Background()
-		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		if err != nil {
-			return nil, fmt.Errorf("failed to instanciate docker client: %w", err)
-		}
-
-		imageTarReader, err := cli.ImageSave(ctx, []string{image})
-		if err != nil {
-			return nil, fmt.Errorf("failed to load image tar: %w", err)
-		}
-		defer imageTarReader.Close()
-
-		tarFile, err := os.CreateTemp("", "image-tar")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create tar file: %w", err)
-		}
-		defer tarFile.Close()
-
-		if _, err := io.Copy(tarFile, imageTarReader); err != nil {
-			return nil, fmt.Errorf("failed to save tar: %w", err)
-		}
-
-		var imageNameAndTag name.Tag
-		imageNameAndTag, err = name.NewTag(image)
-
-		img, err = tarball.ImageFromPath(tarFile.Name(), &imageNameAndTag)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load image from tar: %w", err)
-		}
 	} else {
 		var remoteOpts []remote.Option
 		if ctx.IsSet(usernameFlag) && ctx.IsSet(passwordFlag) {
