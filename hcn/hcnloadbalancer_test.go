@@ -42,6 +42,70 @@ func TestCreateDeleteLoadBalancer(t *testing.T) {
 	}
 }
 
+func TestCreateUpdateDeleteLoadBalancer(t *testing.T) {
+	network, err := CreateTestOverlayNetwork()
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := HcnCreateTestEndpoint(network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadBalancer, err := HcnCreateTestLoadBalancer(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonString, err := json.Marshal(loadBalancer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("LoadBalancer JSON:\n%s \n", jsonString)
+
+	secondEndpoint, err := HcnCreateTestEndpoint(network)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	HcnLoadBalancerTestAddBackend(loadBalancer, secondEndpoint.Id)
+
+	loadBalancer, err = loadBalancer.Update(loadBalancer.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(loadBalancer.HostComputeEndpoints) != 2 {
+		t.Fatalf("Update loadBalancer with backend add failed")
+	}
+
+	HcnLoadBalancerTestRemoveBackend(loadBalancer, secondEndpoint.Id)
+
+	loadBalancer, err = loadBalancer.Update(loadBalancer.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(loadBalancer.HostComputeEndpoints) != 1 {
+		t.Fatalf("Update loadBalancer with backend remove failed")
+	}
+
+	err = loadBalancer.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = secondEndpoint.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = endpoint.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = network.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGetLoadBalancerById(t *testing.T) {
 	network, err := CreateTestOverlayNetwork()
 	if err != nil {
