@@ -122,8 +122,7 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		}
 		defer imageTarReader.Close()
 
-		tarballPath := "/tmp/image.tar"
-		tarFile, err := os.Create(tarballPath)
+		tarFile, err := os.CreateTemp("", "image-tar")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tar file: %w", err)
 		}
@@ -136,7 +135,7 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		var imageNameAndTag name.Tag
 		imageNameAndTag, err = name.NewTag(image)
 
-		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
+		img, err = tarball.ImageFromPath(tarFile.Name(), &imageNameAndTag)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load image from tar: %w", err)
 		}
