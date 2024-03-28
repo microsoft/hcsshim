@@ -265,12 +265,12 @@ func createVHD(layerNumber int, layer v1.Layer, outDir string, verityHashDev boo
 func computeRootHashDaemon(ctx *cli.Context) (err error) {
 	// Fetch the image from the docker daemon
 	image := ctx.String(imageFlag)
-	docker_ctx := context.Background()
+	dockerCtx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return err
 	}
-	f, err := cli.ImageSave(docker_ctx, []string{image})
+	f, err := cli.ImageSave(dockerCtx, []string{image})
 	if err != nil {
 		return err
 	}
