@@ -1,11 +1,18 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -256,6 +263,60 @@ func createVHD(layerNumber int, layer v1.Layer, outDir string, verityHashDev boo
 	return nil
 }
 
+func computeRootHashDaemon(ctx *cli.Context) (err error) {
+	image := ctx.String(imageFlag)
+	docker_ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return err
+	}
+	f, err := cli.ImageSave(docker_ctx, []string{image})
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Read the image manifest to get the layer paths
+	tf := tar.NewReader(f)
+	layerPaths := make(map[int]string)
+	layerHashes := make(map[string]string)
+	for {
+		hdr, err := tf.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if strings.HasSuffix(hdr.Name, ".tar") {
+			hash, _ := tar2ext4.ConvertAndComputeRootDigest(tf)
+			layerHashes[hdr.Name] = hash
+		}
+		if hdr.Name == "manifest.json" {
+			// Read the contents of manifest
+			buf := new(bytes.Buffer)
+			buf.ReadFrom(tf)
+
+			// Parse into JSON
+			var manifest []map[string]interface{}
+			err := json.Unmarshal(buf.Bytes(), &manifest)
+			if err != nil {
+				return err
+			}
+
+			for layerNumber, layerPath := range manifest[0]["Layers"].([]interface{}) {
+				layerPaths[layerNumber] = layerPath.(string)
+			}
+		}
+	}
+
+	for layerNumber := 0; layerNumber < len(layerPaths); layerNumber++ {
+		fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, layerHashes[layerPaths[layerNumber]])
+	}
+
+	return nil
+}
+
 var rootHashVHDCommand = cli.Command{
 	Name:  "roothash",
 	Usage: "compute root hashes for each LCOW layer VHD",
@@ -278,6 +339,13 @@ var rootHashVHDCommand = cli.Command{
 		verbose := ctx.GlobalBool(verboseFlag)
 		if verbose {
 			log.SetLevel(log.DebugLevel)
+		}
+
+		// Performant option for local docker daemon, doesn't fit with the rest of the code
+		dockerDaemon := ctx.GlobalBool(dockerFlag)
+		if dockerDaemon {
+			computeRootHashDaemon(ctx)
+			return nil
 		}
 
 		layers, err := fetchImageLayers(ctx)
