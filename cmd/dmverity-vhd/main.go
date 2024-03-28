@@ -264,6 +264,7 @@ func createVHD(layerNumber int, layer v1.Layer, outDir string, verityHashDev boo
 }
 
 func computeRootHashDaemon(ctx *cli.Context) (err error) {
+	// Fetch the image from the docker daemon
 	image := ctx.String(imageFlag)
 	docker_ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -276,7 +277,7 @@ func computeRootHashDaemon(ctx *cli.Context) (err error) {
 	}
 	defer f.Close()
 
-	// Read the image manifest to get the layer paths
+	// Load the image and compute number -> path and path -> hash
 	tf := tar.NewReader(f)
 	layerPaths := make(map[int]string)
 	layerHashes := make(map[string]string)
@@ -288,10 +289,14 @@ func computeRootHashDaemon(ctx *cli.Context) (err error) {
 		if err != nil {
 			return err
 		}
+
+		// If the file is a layer, compute the root hash
 		if strings.HasSuffix(hdr.Name, ".tar") {
 			hash, _ := tar2ext4.ConvertAndComputeRootDigest(tf)
 			layerHashes[hdr.Name] = hash
 		}
+
+		// If the layer is the manifest, link layer number to layer path
 		if hdr.Name == "manifest.json" {
 			// Read the contents of manifest
 			buf := new(bytes.Buffer)
@@ -310,6 +315,7 @@ func computeRootHashDaemon(ctx *cli.Context) (err error) {
 		}
 	}
 
+	// Print the layer number to layer hash
 	for layerNumber := 0; layerNumber < len(layerPaths); layerNumber++ {
 		fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, layerHashes[layerPaths[layerNumber]])
 	}
