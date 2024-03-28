@@ -1,11 +1,17 @@
 package main
 
 import (
+	"archive/tar"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -256,6 +262,69 @@ func createVHD(layerNumber int, layer v1.Layer, outDir string, verityHashDev boo
 	return nil
 }
 
+func computeRootHashDaemon(ctx *cli.Context) (err error) {
+	// Fetch the image from the docker daemon
+	image := ctx.String(imageFlag)
+	dockerCtx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return err
+	}
+	f, err := cli.ImageSave(dockerCtx, []string{image})
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Load the image and compute number -> path and path -> hash
+	tf := tar.NewReader(f)
+	layerPaths := make(map[int]string)
+	layerHashes := make(map[string]string)
+	for {
+		hdr, err := tf.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		// If the file is a layer, compute the root hash
+		if strings.HasSuffix(hdr.Name, ".tar") {
+			hash, _ := tar2ext4.ConvertAndComputeRootDigest(tf)
+			layerHashes[hdr.Name] = hash
+		}
+
+		// If the file is the manifest, link layer numbers to layer paths
+		if hdr.Name == "manifest.json" {
+			type manifestLayer struct {
+				Layers []string `json:"Layers"`
+			}
+			var manifests []manifestLayer
+
+			err := json.NewDecoder(tf).Decode(&manifests)
+			if err != nil {
+				return err
+			}
+
+			if len(manifests) > 0 {
+				for layerNumber, layerPath := range manifests[0].Layers {
+					layerPaths[layerNumber] = layerPath
+				}
+			} else {
+				return fmt.Errorf("manifest.json is empty")
+			}
+		}
+	}
+
+	// Print the layer number to layer hash
+	for layerNumber := 0; layerNumber < len(layerPaths); layerNumber++ {
+		fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, layerHashes[layerPaths[layerNumber]])
+	}
+
+	return nil
+}
+
 var rootHashVHDCommand = cli.Command{
 	Name:  "roothash",
 	Usage: "compute root hashes for each LCOW layer VHD",
@@ -278,6 +347,16 @@ var rootHashVHDCommand = cli.Command{
 		verbose := ctx.GlobalBool(verboseFlag)
 		if verbose {
 			log.SetLevel(log.DebugLevel)
+		}
+
+		// Performant option for local docker daemon, doesn't fit with the rest of the code
+		dockerDaemon := ctx.GlobalBool(dockerFlag)
+		if dockerDaemon {
+			err := computeRootHashDaemon(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to compute root hashes: %w", err)
+			}
+			return nil
 		}
 
 		layers, err := fetchImageLayers(ctx)
