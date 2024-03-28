@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -333,6 +334,23 @@ var rootHashVHDCommand = cli.Command{
 			}
 			fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, hash)
 		}
+
+		// Clean up tar files
+		tempDir := os.TempDir()
+		files, err := os.ReadDir(tempDir)
+		if err != nil {
+			return fmt.Errorf("failed to read temp directory: %w", err)
+		}
+
+		for _, file := range files {
+			if strings.HasPrefix(file.Name(), "image-tar") {
+				err := os.Remove(filepath.Join(tempDir, file.Name()))
+				if err != nil {
+					return fmt.Errorf("failed to remove file %s: %w", file.Name(), err)
+				}
+			}
+		}
+
 		return nil
 	},
 }
