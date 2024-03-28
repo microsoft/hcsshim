@@ -115,7 +115,7 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 			}
 			defer imageTarReader.Close()
 
-			tarFile, err := os.CreateTemp("", "image-tar")
+			tarFile, err := os.CreateTemp("", "dmverity-vhd-image-tar")
 			if err != nil {
 				return nil, fmt.Errorf("failed to create tar file: %w", err)
 			}
@@ -343,7 +343,7 @@ var rootHashVHDCommand = cli.Command{
 		}
 
 		for _, file := range files {
-			if strings.HasPrefix(file.Name(), "image-tar") {
+			if strings.HasPrefix(file.Name(), "dmverity-vhd-image-tar") {
 				err := os.Remove(filepath.Join(tempDir, file.Name()))
 				if err != nil {
 					return fmt.Errorf("failed to remove file %s: %w", file.Name(), err)
