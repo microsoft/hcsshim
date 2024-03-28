@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/daemon"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	log "github.com/sirupsen/logrus"
@@ -98,7 +101,32 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 
 	// by default, using remote as source
 	var img v1.Image
-	if tarballPath != "" {
+	if tarballPath != "" || dockerDaemon {
+		if dockerDaemon {
+			ctx := context.Background()
+			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+			if err != nil {
+				return nil, fmt.Errorf("failed to instanciate docker client: %w", err)
+			}
+
+			imageTarReader, err := cli.ImageSave(ctx, []string{image})
+			if err != nil {
+				return nil, fmt.Errorf("failed to load image tar: %w", err)
+			}
+			defer imageTarReader.Close()
+
+			tarFile, err := os.CreateTemp("", "dmverity-vhd-image-tar")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create tar file: %w", err)
+			}
+			defer tarFile.Close()
+
+			if _, err := io.Copy(tarFile, imageTarReader); err != nil {
+				return nil, fmt.Errorf("failed to save tar: %w", err)
+			}
+
+			tarballPath = tarFile.Name()
+		}
 		// create a tag and search the tarball for the image specified
 		var imageNameAndTag name.Tag
 		imageNameAndTag, err = name.NewTag(image)
@@ -107,16 +135,6 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		}
 		// if only an image name is provided and not a tag, the default is "latest"
 		img, err = tarball.ImageFromPath(tarballPath, &imageNameAndTag)
-	} else if dockerDaemon {
-		// use the unbuffered opener by default, the tradeoff being the image will stream as needed
-		// so it is slower but much more memory efficient
-		var opts []daemon.Option
-		if !ctx.GlobalBool(bufferedReaderFlag) {
-			opt := daemon.WithUnbufferedOpener()
-			opts = append(opts, opt)
-		}
-
-		img, err = daemon.Image(ref, opts...)
 	} else {
 		var remoteOpts []remote.Option
 		if ctx.IsSet(usernameFlag) && ctx.IsSet(passwordFlag) {
@@ -316,6 +334,23 @@ var rootHashVHDCommand = cli.Command{
 			}
 			fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, hash)
 		}
+
+		// Clean up tar files
+		tempDir := os.TempDir()
+		files, err := os.ReadDir(tempDir)
+		if err != nil {
+			return fmt.Errorf("failed to read temp directory: %w", err)
+		}
+
+		for _, file := range files {
+			if strings.HasPrefix(file.Name(), "dmverity-vhd-image-tar") {
+				err := os.Remove(filepath.Join(tempDir, file.Name()))
+				if err != nil {
+					return fmt.Errorf("failed to remove file %s: %w", file.Name(), err)
+				}
+			}
+		}
+
 		return nil
 	},
 }
