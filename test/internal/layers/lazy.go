@@ -24,7 +24,6 @@ import (
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/security"
-	isync "github.com/Microsoft/hcsshim/internal/sync"
 	"github.com/Microsoft/hcsshim/pkg/ociwclayer"
 
 	"github.com/Microsoft/hcsshim/test/internal/util"
@@ -103,7 +102,7 @@ func (x *LazyImageLayers) extractLayers(ctx context.Context) (err error) {
 	}
 
 	if x.TempPath == "" {
-		dir, err := tempDirOnce(ctx)
+		dir, err := tempDirOnce()
 		if err != nil {
 			return err
 		}
@@ -239,15 +238,15 @@ func withVHDFooter(fn extractHandler) extractHandler {
 	}
 }
 
-var procPrivilegesOnce = isync.OnceValueCtx(func(ctx context.Context) (struct{}, error) {
+var procPrivilegesOnce = sync.OnceValue(func() error {
 	privs := []string{winio.SeBackupPrivilege, winio.SeRestorePrivilege}
-	log.G(ctx).WithField("privileges", privs).Infof("enableing process privileges")
+	log.L.WithField("privileges", privs).Infof("enableing process privileges")
 
-	return struct{}{}, winio.EnableProcessPrivileges(privs)
+	return winio.EnableProcessPrivileges(privs)
 })
 
 func windowsImage(ctx context.Context, rc io.ReadCloser, dir string, parents []string) error {
-	if _, err := procPrivilegesOnce(ctx); err != nil {
+	if err := procPrivilegesOnce(); err != nil {
 		return fmt.Errorf("enable process Backup and Restore privileges: %w", err)
 	}
 
@@ -266,7 +265,7 @@ func windowsImage(ctx context.Context, rc io.ReadCloser, dir string, parents []s
 //
 // Since the folder is under TempDir, it will be removed on OS restart, so it is fine to persist
 // between test runs
-var tempDirOnce = isync.OnceValueCtx(func(ctx context.Context) (string, error) {
+var tempDirOnce = sync.OnceValues(func() (string, error) {
 	// ! DO NOT DELETE THE FOLDER CREATED BY THIS FUNC:
 	// We want a "stable" (relative to OS restart) directory for image layers and
 	// scratch files that we can avoid needing to recreate and re-adding defender exclusions to.
@@ -281,13 +280,13 @@ var tempDirOnce = isync.OnceValueCtx(func(ctx context.Context) (string, error) {
 	o, err := cmd.CombinedOutput()
 	if err != nil {
 		// not necessary to creating the image layers path, so log then ignore error
-		log.G(ctx).WithFields(logrus.Fields{
+		log.L.WithFields(logrus.Fields{
 			"cmd":    cmd.String(),
 			"output": strings.TrimSpace(string(o)),
 			"path":   dir,
 		}).WithError(err).Warning("failed to add MS defender exclusion for image layers directory")
 	} else {
-		log.G(ctx).WithField("path", dir).Info("added MS Defender exclusion for image layers directory")
+		log.L.WithField("path", dir).Info("added MS Defender exclusion for image layers directory")
 	}
 
 	return dir, nil
