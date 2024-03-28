@@ -10,7 +10,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/containerd/cgroups/v3 v3.0.3
 	github.com/containerd/console v1.0.4
-	github.com/containerd/containerd v1.7.13
+	github.com/containerd/containerd v1.7.14
 	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/protobuild v0.3.0
