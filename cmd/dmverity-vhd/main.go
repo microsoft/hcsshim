@@ -352,7 +352,10 @@ var rootHashVHDCommand = cli.Command{
 		// Performant option for local docker daemon, doesn't fit with the rest of the code
 		dockerDaemon := ctx.GlobalBool(dockerFlag)
 		if dockerDaemon {
-			computeRootHashDaemon(ctx)
+			err := computeRootHashDaemon(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to compute root hashes: %w", err)
+			}
 			return nil
 		}
 
