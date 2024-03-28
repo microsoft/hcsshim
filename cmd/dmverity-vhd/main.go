@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -296,21 +295,24 @@ func computeRootHashDaemon(ctx *cli.Context) (err error) {
 			layerHashes[hdr.Name] = hash
 		}
 
-		// If the layer is the manifest, link layer number to layer path
+		// If the file is the manifest, link layer numbers to layer paths
 		if hdr.Name == "manifest.json" {
-			// Read the contents of manifest
-			buf := new(bytes.Buffer)
-			buf.ReadFrom(tf)
+			type manifestLayer struct {
+				Layers []string `json:"Layers"`
+			}
+			var manifests []manifestLayer
 
-			// Parse into JSON
-			var manifest []map[string]interface{}
-			err := json.Unmarshal(buf.Bytes(), &manifest)
+			err := json.NewDecoder(tf).Decode(&manifests)
 			if err != nil {
 				return err
 			}
 
-			for layerNumber, layerPath := range manifest[0]["Layers"].([]interface{}) {
-				layerPaths[layerNumber] = layerPath.(string)
+			if len(manifests) > 0 {
+				for layerNumber, layerPath := range manifests[0].Layers {
+					layerPaths[layerNumber] = layerPath
+				}
+			} else {
+				return fmt.Errorf("manifest.json is empty")
 			}
 		}
 	}
