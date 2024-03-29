@@ -92,11 +92,6 @@ jobs:
         with:
           languages: ${{matrix.language}}
 
-      - name: Install kmod
-        shell: bash
-        run: | 
-          sudo apt-get install -y libkmod-dev
-
       # build binaries
       - name: Build go binaries
         shell: pwsh
