@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/jobobject"
-
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -73,35 +71,7 @@ const (
 
 type HCSOperationOpt func(ctx context.Context, op HCSOperation) error
 
-type CreateOperationOptions struct {
-	JobResources []HCSJobResource
-}
-
-func HcsCreateOperation(ctx context.Context, hcsContext uintptr, callback hcsOperationCompletionUintptr, options *CreateOperationOptions) (op HCSOperation, err error) {
-	op, err = createOperation(ctx, hcsContext, callback)
-	if err != nil {
-		return 0, err
-	}
-
-	if options != nil {
-		if len(options.JobResources) > 0 {
-			for _, jr := range options.JobResources {
-				if err := op.addJobResource(ctx, jr); err != nil {
-					log.G(ctx).WithError(err).Debug("failed to add job to resource")
-					return 0, err
-				}
-			}
-		}
-	}
-
-	return op, nil
-}
-
-func HcsCreateEmptyOperation(ctx context.Context) (op HCSOperation, err error) {
-	return HcsCreateOperation(ctx, 0, 0, nil)
-}
-
-func createOperation(ctx context.Context, hcsContext uintptr, callback hcsOperationCompletionUintptr) (op HCSOperation, err error) {
+func HcsCreateOperation(ctx context.Context, hcsContext uintptr, callback hcsOperationCompletionUintptr) (op HCSOperation, err error) {
 	_, span := oc.StartSpan(ctx, "computecore::HcsCreateOperation", oc.WithClientSpanKind)
 	defer func() {
 		span.AddAttributes(trace.StringAttribute("operation", op.String()))
@@ -115,6 +85,10 @@ func createOperation(ctx context.Context, hcsContext uintptr, callback hcsOperat
 	return hcsCreateOperation(hcsContext, callback)
 }
 
+func HcsCreateEmptyOperation(ctx context.Context) (op HCSOperation, err error) {
+	return HcsCreateOperation(ctx, 0, 0)
+}
+
 //   HRESULT WINAPI
 //   HcsAddResourceToOperation(
 //       _In_ HCS_OPERATION Operation,
@@ -124,28 +98,7 @@ func createOperation(ctx context.Context, hcsContext uintptr, callback hcsOperat
 //       )
 //sys hcsAddResourceToOperation(operation HCSOperation, rtype uint32, uri string, handle syscall.Handle) (hr error) = computecore.HcsAddResourceToOperation?
 
-func (op HCSOperation) addJobResource(ctx context.Context, jr HCSJobResource) (err error) {
-	jobOpts := jobobject.Options{
-		Name: jr.Name,
-	}
-	log.G(ctx).WithField("jobName", jr.Name).Debug("opening job object")
-	job, err := jobobject.Open(ctx, &jobOpts)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		log.G(ctx).WithField("jobName", jr.Name).Debug("closing job object")
-		if err := job.Close(); err != nil {
-			log.G(ctx).WithError(err).Error("failed to close job object")
-		}
-	}()
-
-	rHandle := job.Handle()
-
-	return op.addResource(ctx, ResourceTypeJob, jr.Uri, syscall.Handle(rHandle))
-}
-
-func (op HCSOperation) addResource(ctx context.Context, rtype HCSResourceType, uri HCSResourceUri, handle syscall.Handle) (err error) {
+func AddResourceToOperation(ctx context.Context, op HCSOperation, rtype HCSResourceType, uri HCSResourceUri, handle windows.Handle) (err error) {
 	_, span := oc.StartSpan(ctx, "computecore::HcsAddResourceToOperation", oc.WithClientSpanKind)
 	defer func() {
 		span.AddAttributes(trace.StringAttribute("operation", op.String()))
@@ -156,8 +109,7 @@ func (op HCSOperation) addResource(ctx context.Context, rtype HCSResourceType, u
 		trace.Int64Attribute("rtype", int64(rtype)),
 		trace.StringAttribute("uri", string(uri)),
 	)
-
-	return hcsAddResourceToOperation(op, uint32(rtype), string(uri), handle)
+	return hcsAddResourceToOperation(op, uint32(rtype), string(uri), syscall.Handle(handle))
 }
 
 //   void WINAPI

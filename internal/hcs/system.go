@@ -83,37 +83,38 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 
 	var (
 		//identity    syscall.Handle
-		hcsOp         computecore.HCSOperation
-		resultJSON    string
-		createError   error
-		operationOpts computecore.CreateOperationOptions
+		resultJSON  string
+		createError error
 	)
-	if rpOptions != nil {
-		// If resource pool configuration isn't empty, we should be using HCS v2
-		// APIs for creating the compute system.
-		if rpOptions.MemoryPoolJobName != "" {
-			operationOpts.JobResources = append(operationOpts.JobResources,
-				computecore.NewMemoryPoolResource(rpOptions.MemoryPoolJobName))
-		}
-		if rpOptions.CPUPoolJobName != "" {
-			// FIXME (anmaxvl): Currently HCS is unable to find the CPU pool job for some reason. As a workaround, we
-			//   assigning the worker process job to memory job object.
-			operationOpts.JobResources = append(operationOpts.JobResources,
-				computecore.NewCPUPoolResource(rpOptions.MemoryPoolJobName))
-		}
-	}
-	hcsOp, err = computecore.HcsCreateOperation(ctx, 0, 0, &operationOpts)
+	hcsOperation, err := CreateOperation(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if iErr := hcsOp.Close(); iErr != nil {
+		if iErr := hcsOperation.Close(ctx); iErr != nil {
 			log.G(ctx).WithError(iErr).Error("failed to close HCS operation")
 		}
 	}()
 
+	if rpOptions != nil {
+		// If resource pool configuration isn't empty, we should be using HCS v2
+		// APIs for creating the compute system.
+		if rpOptions.MemoryPoolJobName != "" {
+			if err := hcsOperation.AddResource(ctx, NewMemoryResource(rpOptions.MemoryPoolJobName)); err != nil {
+				return nil, err
+			}
+		}
+		if rpOptions.CPUPoolJobName != "" {
+			// FIXME (anmaxvl): Currently OpenJobObjectW is unable to find the worker job object. As a workarodun
+			// we pass the memory job instead.
+			if err := hcsOperation.AddResource(ctx, NewCPUResource(rpOptions.MemoryPoolJobName)); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	//computeSystem.handle, resultJSON, createError = vmcompute.HcsCreateComputeSystem(ctx, id, hcsDocument, identity)
-	computeSystem.handleV2, resultJSON, createError = computecore.HcsCreateComputeSystem(ctx, id, hcsDocument, hcsOp, nil)
+	computeSystem.handleV2, resultJSON, createError = computecore.HcsCreateComputeSystem(ctx, id, hcsDocument, hcsOperation.Handle(), nil)
 	if createError == nil || IsPending(createError) {
 		computeSystem.handle = vmcompute.HcsSystem(computeSystem.handleV2)
 		defer func() {

@@ -75,6 +75,8 @@ type Options struct {
 	// `IOTracking` enables tracking I/O statistics on the job object. More specifically this
 	// calls SetInformationJobObject with the JobObjectIoAttribution class.
 	EnableIOTracking bool
+
+	InheritHandle bool
 }
 
 // Create creates a job object.
@@ -178,17 +180,21 @@ func Open(ctx context.Context, options *Options) (_ *JobObject, err error) {
 
 	var jobHandle windows.Handle
 	if options.UseNTVariant {
+		attributes := 0
+		if options.InheritHandle {
+			attributes = windows.OBJ_INHERIT
+		}
 		oa := winapi.ObjectAttributes{
 			Length:     unsafe.Sizeof(winapi.ObjectAttributes{}),
 			ObjectName: unicodeJobName,
-			Attributes: 0,
+			Attributes: uintptr(attributes),
 		}
 		status := winapi.NtOpenJobObject(&jobHandle, winapi.JOB_OBJECT_ALL_ACCESS, &oa)
 		if status != 0 {
 			return nil, winapi.RtlNtStatusToDosError(status)
 		}
 	} else {
-		jobHandle, err = winapi.OpenJobObject(winapi.JOB_OBJECT_ALL_ACCESS, false, unicodeJobName.Buffer)
+		jobHandle, err = winapi.OpenJobObject(winapi.JOB_OBJECT_ALL_ACCESS, options.InheritHandle, unicodeJobName.Buffer)
 		if err != nil {
 			return nil, err
 		}

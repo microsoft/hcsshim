@@ -16,24 +16,5 @@ type HCSResourceUri string
 
 const (
 	HCSMemoryJobUri = HCSResourceUri("hcs:/VirtualMachine/VmmemJob")
-	HCSCpuJobUri    = HCSResourceUri("hcs:/VirtualMachine/WorkerJob")
+	HCSWorkerJobUri = HCSResourceUri("hcs:/VirtualMachine/WorkerJob")
 )
-
-type HCSJobResource struct {
-	Name string
-	Uri  HCSResourceUri
-}
-
-func NewMemoryPoolResource(name string) HCSJobResource {
-	return HCSJobResource{
-		Name: name,
-		Uri:  HCSMemoryJobUri,
-	}
-}
-
-func NewCPUPoolResource(name string) HCSJobResource {
-	return HCSJobResource{
-		Name: name,
-		Uri:  HCSCpuJobUri,
-	}
-}
