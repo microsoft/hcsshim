@@ -188,7 +188,7 @@ func Open(ctx context.Context, options *Options) (_ *JobObject, err error) {
 			return nil, winapi.RtlNtStatusToDosError(status)
 		}
 	} else {
-		jobHandle, err = winapi.OpenJobObject(winapi.JOB_OBJECT_ALL_ACCESS, 0, unicodeJobName.Buffer)
+		jobHandle, err = winapi.OpenJobObject(winapi.JOB_OBJECT_ALL_ACCESS, false, unicodeJobName.Buffer)
 		if err != nil {
 			return nil, err
 		}
