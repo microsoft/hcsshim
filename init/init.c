@@ -18,6 +18,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#ifdef MODULES
+#include <ftw.h>
+#include <libkmod.h>
+#include <sys/utsname.h>
+#endif
+
 #include "../vsockexec/vsock.h"
 
 #ifdef DEBUG
@@ -52,15 +58,22 @@ static int opentcp(unsigned short port)
 #endif
 
 #define DEFAULT_PATH_ENV "PATH=/sbin:/usr/sbin:/bin:/usr/bin"
+#define OPEN_FDS 15
 
 const char *const default_envp[] = {
     DEFAULT_PATH_ENV,
     NULL,
 };
 
+#ifdef MODULES
+// global kmod k_ctx so we can access it in the file tree traversal 
+struct kmod_ctx *k_ctx;
+#endif
+
 // When nothing is passed, default to the LCOWv1 behavior.
 const char *const default_argv[] = { "/bin/gcs", "-loglevel", "debug", "-logfile=/run/gcs/gcs.log" };
 const char *const default_shell = "/bin/sh";
+const char *const lib_modules = "/lib/modules";
 
 struct Mount {
     const char *source, *target, *type;
@@ -398,6 +411,112 @@ int reap_until(pid_t until_pid) {
     }
 }
 
+#ifdef MODULES
+// load_module gets the module from the absolute path to the module and then 
+// inserts into the kernel. 
+int load_module(struct kmod_ctx *ctx, const char *module_path) {
+    struct kmod_module *mod = NULL; 
+    int err;
+
+    #ifdef DEBUG
+    printf("loading module: %s\n", module_path);
+    #endif
+
+    err = kmod_module_new_from_path(ctx, module_path, &mod);
+    if (err < 0) {
+        return err; 
+    }
+
+    err = kmod_module_probe_insert_module(mod, 0, NULL, NULL, NULL, NULL); 
+    if (err < 0) {
+        kmod_module_unref(mod); 
+        return err;
+    }
+
+    kmod_module_unref(mod); 
+    return 0;
+}
+
+// parse_tree_entry is called by ftw for each directory and file in the file tree.
+// If this entry is a file and has a .ko file extension, attempt to load into kernel.
+int parse_tree_entry(const char *fpath, const struct stat *sb, int typeflag) {
+    int result;
+    const char *ext; 
+
+    if (typeflag != FTW_F) {
+        // do nothing if this isn't a file 
+        return 0; 
+    }
+        
+    ext = strrchr(fpath, '.');
+    if (!ext || ext == fpath) {
+        // no file extension found in the filepath
+        return 0; 
+    }
+
+    if ((result = strcmp(ext, ".ko")) != 0) {
+        // file does not have .ko extension so it is not a kernel module
+        return 0; 
+    }
+
+    // print warning if we fail to load the module, but don't fail fn so 
+    // we keep trying to load the rest of the modules. 
+    result = load_module(k_ctx, fpath);
+    if (result != 0) {
+        warn2("failed to load module", fpath);
+    }
+    return 0;
+}
+
+// load_all_modules finds the modules in the image and loads them using kmod, 
+// which accounts for ordering requirements. 
+void load_all_modules() {
+    int max_path = 256;
+    char modules_dir[max_path];
+    struct utsname uname_data;
+    int ret; 
+
+    // get information on the running kernel 
+    ret = uname(&uname_data);
+    if (ret != 0) {
+        die("failed to get kernel information");
+    }
+    
+    // create the absolute path of the modules directory this looks 
+    // like /lib/modules/<uname.release>
+    ret = snprintf(modules_dir, max_path, "%s/%s", lib_modules, uname_data.release); 
+    if (ret < 0) {
+        die("failed to create the modules directory path");
+    } else if (ret > max_path) {
+        die("modules directory buffer larger than expected"); 
+    }
+
+    if (k_ctx == NULL) {
+        k_ctx = kmod_new(NULL, NULL);
+        if (k_ctx == NULL) {
+            die("failed to create kmod context");
+        }
+    }
+
+    kmod_load_resources(k_ctx);
+    ret = ftw(modules_dir, parse_tree_entry, OPEN_FDS); 
+    if (ret < 0) {
+        kmod_unref(k_ctx);
+        die("failed to load kmod resources");
+    } else if (ret != 0) {
+        // Don't fail on error from walking the file tree and loading modules right now. 
+        // ftw may return an error if the modules directory doesn't exist, which
+        // may be the case for some images. Additionally, we don't currently support
+        // using a denylist when loading modules, so we may try to load modules 
+        // that cannot be loaded until later, such as nvidia modules which fail to 
+        // load if no device is present. 
+        warn("error adding modules");
+    }
+
+    kmod_unref(k_ctx);
+}
+#endif
+
 #ifdef DEBUG
 int debug_main(int argc, char **argv) {
     unsigned int ports[3] = {2056, 2056, 2056};
@@ -527,6 +646,13 @@ int main(int argc, char **argv) {
     if (entropy_port != 0) {
         init_entropy(entropy_port);
     }
+
+    #ifdef MODULES
+    #ifdef DEBUG
+    printf("loading modules\n");
+    #endif
+    load_all_modules();
+    #endif
 
     pid_t pid = launch(child_argc, child_argv);
     if (debug_shell != NULL) {
