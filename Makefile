@@ -7,8 +7,7 @@ CGO_ENABLED:=0
 GOMODVENDOR:=
 
 CFLAGS:=-O2 -Wall
-LDFLAGS:= -s # strip C binaries
-LDLIBS:= -lkmod
+LDFLAGS:=-static -s # strip C binaries
 
 GO_FLAGS_EXTRA:=
 ifeq "$(GOMODVENDOR)" "1"
@@ -182,7 +181,7 @@ bin/vsockexec: vsockexec/vsockexec.o vsockexec/vsock.o
 
 bin/init: init/init.o vsockexec/vsock.o
 	@mkdir -p bin
-	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CC) $(LDFLAGS) -o $@ $^
 
 %.o: %.c
 	@mkdir -p $(dir $@)
