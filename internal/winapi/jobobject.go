@@ -28,7 +28,7 @@ const (
 // https://docs.microsoft.com/en-us/windows/win32/procthread/job-object-security-and-access-rights
 const (
 	JOB_OBJECT_QUERY      = 0x0004
-	JOB_OBJECT_ALL_ACCESS = 0x1F001F
+	JOB_OBJECT_ALL_ACCESS = 0x1F003F
 )
 
 // IO limit flags
@@ -199,7 +199,7 @@ type SILOOBJECT_BASIC_INFORMATION struct {
 //		LPCWSTR lpName
 // );
 //
-//sys OpenJobObject(desiredAccess uint32, inheritHandle int32, lpName *uint16) (handle windows.Handle, err error) = kernel32.OpenJobObjectW
+//sys OpenJobObject(desiredAccess uint32, inheritHandle bool, lpName *uint16) (handle windows.Handle, err error) = kernel32.OpenJobObjectW
 
 // DWORD SetIoRateControlInformationJobObject(
 //		HANDLE                                hJob,
