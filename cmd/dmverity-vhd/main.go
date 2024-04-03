@@ -262,14 +262,14 @@ func processRemoteImageLayers(imageName string, username string, password string
 			return nil, nil, fmt.Errorf("failed to read layer diff: %w", err)
 		}
 
-		layerDigests[layerNumber] = diffID.String()
+		layerDigests[layerNumber] = diffID.Hex
 		layerReader, err := layer.Uncompressed()
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to uncompress layer %s: %w", diffID.String(), err)
+			return nil, nil, fmt.Errorf("failed to uncompress layer %s: %w", diffID.Hex, err)
 		}
 		defer layerReader.Close()
 
-		onLayer(diffID.String(), layerReader)
+		onLayer(diffID.Hex, layerReader)
 	}
 
 	// For the remote case, use digests for both layer ID and layer digest
