@@ -395,7 +395,6 @@ func createVHD(layerId string, layerReader io.Reader, verityHashDev bool, outDir
 	if err := tar2ext4.ConvertToVhd(out); err != nil {
 		return fmt.Errorf("failed to append VHD footer: %w", err)
 	}
-	fmt.Fprintf(os.Stdout, "Layer VHD created at %s\n", vhdPath)
 	return nil
 }
 
@@ -476,7 +475,7 @@ var createVHDCommand = cli.Command{
 					return err
 				}
 
-				fmt.Fprintf(os.Stdout, "Layer VHD moved from %s to %s\n", src, dst)
+				fmt.Fprintf(os.Stdout, "Layer VHD created at %s\n", dst)
 			}
 
 		}
