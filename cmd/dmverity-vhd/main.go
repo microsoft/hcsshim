@@ -87,8 +87,7 @@ func main() {
 type LayerProcessor func(string, io.Reader) error
 
 func fetchImageTarball(tarballPath string) (imageReader io.ReadCloser, err error) {
-	imageReader, err = os.Open(tarballPath)
-	if err != nil {
+	if imageReader, err = os.Open(tarballPath); err != nil {
 		return nil, err
 	}
 
@@ -112,26 +111,25 @@ func fetchImageDocker(imageName string) (imageReader io.ReadCloser, err error) {
 	return imageReader, err
 }
 
-func getLayerPaths(manifestData []byte) (map[int]string, error) {
+func getlayerIds(manifestData []byte) (map[int]string, error) {
 	type Manifest []struct {
 		Layers []string `json:"Layers"`
 	}
 
 	var manifest Manifest
-	err := json.Unmarshal(manifestData, &manifest)
-	if err != nil {
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		return nil, err
 	}
 
-	layerPaths := make(map[int]string)
-	for layerNumber, layerPath := range manifest[0].Layers {
-		layerPathSplit := strings.Split(layerPath, ":")
-		layerPaths[layerNumber] = layerPathSplit[len(layerPathSplit)-1]
+	layerIds := make(map[int]string)
+	for layerNumber, layerId := range manifest[0].Layers {
+		layerIdSplit := strings.Split(layerId, ":")
+		layerIds[layerNumber] = layerIdSplit[len(layerIdSplit)-1]
 	}
-	return layerPaths, nil
+	return layerIds, nil
 }
 
-func getLayerIdsV24(manifestData []byte) (map[int]string, error) {
+func getLayerDigestsV24(manifestData []byte) (map[int]string, error) {
 	type RootFs struct {
 		DiffIDs []string `json:"diff_ids"`
 	}
@@ -140,47 +138,45 @@ func getLayerIdsV24(manifestData []byte) (map[int]string, error) {
 	}
 
 	var manifest manifestLayerV24
-	err := json.Unmarshal(manifestData, &manifest)
-	if err != nil {
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		return nil, err
 	}
 
-	layerIds := make(map[int]string)
-	for layerNumber, layerPath := range manifest.RootFS.DiffIDs {
-		layerPathSplit := strings.Split(layerPath, ":")
-		layerIds[layerNumber] = layerPathSplit[len(layerPathSplit)-1]
+	layerDigests := make(map[int]string)
+	for layerNumber, layerId := range manifest.RootFS.DiffIDs {
+		layerIdSplit := strings.Split(layerId, ":")
+		layerDigests[layerNumber] = layerIdSplit[len(layerIdSplit)-1]
 	}
-	return layerIds, nil
+	return layerDigests, nil
 }
 
-func getLayerIdsV25(manifestData []byte) (map[int]string, error) {
+func getLayerDigestsV25(manifestData []byte) (map[int]string, error) {
 	type manifestLayerV25 []struct {
 		Layers []string `json:"Layers"`
 	}
 
 	var manifest manifestLayerV25
-	err := json.Unmarshal(manifestData, &manifest)
-	if err != nil {
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		return nil, err
 	}
 
-	layerIds := make(map[int]string)
-	for layerNumber, layerPath := range manifest[0].Layers {
+	layerDigests := make(map[int]string)
+	for layerNumber, layerId := range manifest[0].Layers {
 
-		if !strings.HasPrefix(layerPath, "blobs") {
+		if !strings.HasPrefix(layerId, "blobs") {
 			return nil, errors.New("layer path isn't v25")
 		}
 
-		layerPathSplit := strings.Split(layerPath, "/")
-		layerIds[layerNumber] = layerPathSplit[len(layerPathSplit)-1]
+		layerIdSplit := strings.Split(layerId, "/")
+		layerDigests[layerNumber] = layerIdSplit[len(layerIdSplit)-1]
 	}
-	return layerIds, nil
+	return layerDigests, nil
 }
 
-func processLocalImageLayers(imageReader io.ReadCloser, onLayer LayerProcessor) (layerIds map[int]string, layerPaths map[int]string, err error) {
+func processLocalImageLayers(imageReader io.ReadCloser, onLayer LayerProcessor) (layerDigests map[int]string, layerIds map[int]string, err error) {
 
 	imageFileReader := tar.NewReader(imageReader)
-	layerIds = make(map[int]string)
+	layerDigests = make(map[int]string)
 	for {
 		hdr, err := imageFileReader.Next()
 		if errors.Is(err, io.EOF) {
@@ -203,29 +199,29 @@ func processLocalImageLayers(imageReader io.ReadCloser, onLayer LayerProcessor) 
 				return nil, nil, err
 			}
 
-			layerPaths, _ = getLayerPaths(manifestData)
+			layerIds, _ = getlayerIds(manifestData)
 
-			layerIdsV25, err := getLayerIdsV25(manifestData)
+			layerDigestsV25, err := getLayerDigestsV25(manifestData)
 			if err == nil {
-				layerIds = layerIdsV25
+				layerDigests = layerDigestsV25
 				continue
 			}
 
-			layerIdsV24, err := getLayerIdsV24(manifestData)
+			layerDigestsV24, err := getLayerDigestsV24(manifestData)
 			if err == nil {
-				layerIds = layerIdsV24
+				layerDigests = layerDigestsV24
 				continue
 			}
 
 		}
 	}
 
-	return layerIds, layerPaths, nil
+	return layerDigests, layerIds, nil
 }
 
-func processRemoteImageLayers(imageName string, username string, password string, onLayer LayerProcessor) (layerIds map[int]string, layerPaths map[int]string, err error) {
+func processRemoteImageLayers(imageName string, username string, password string, onLayer LayerProcessor) (layerDigests map[int]string, layerIds map[int]string, err error) {
 
-	layerIds = make(map[int]string)
+	layerDigests = make(map[int]string)
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
@@ -266,7 +262,7 @@ func processRemoteImageLayers(imageName string, username string, password string
 			return nil, nil, fmt.Errorf("failed to read layer diff: %w", err)
 		}
 
-		layerIds[layerNumber] = diffID.String()
+		layerDigests[layerNumber] = diffID.String()
 		layerReader, err := layer.Uncompressed()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to uncompress layer %s: %w", diffID.String(), err)
@@ -276,10 +272,11 @@ func processRemoteImageLayers(imageName string, username string, password string
 		onLayer(diffID.String(), layerReader)
 	}
 
-	return layerIds, nil, nil
+	// For the remote case, use digests for both layer ID and layer digest
+	return layerDigests, layerDigests, nil
 }
 
-func processImageLayers(ctx *cli.Context, onLayer LayerProcessor) (layerIds map[int]string, layerPaths map[int]string, err error) {
+func processImageLayers(ctx *cli.Context, onLayer LayerProcessor) (layerDigests map[int]string, layerIds map[int]string, err error) {
 	imageName := ctx.String(imageFlag)
 	tarballPath := ctx.GlobalString(tarballFlag)
 	useDocker := ctx.GlobalBool(dockerFlag)
@@ -309,6 +306,97 @@ func processImageLayers(ctx *cli.Context, onLayer LayerProcessor) (layerIds map[
 			onLayer,
 		)
 	}
+}
+
+func moveFile(src string, dst string) error {
+	err := os.Rename(src, dst)
+
+	// If a simple rename didn't work, for example moving to or from a mount,
+	// then copy and delete the file
+	if err != nil {
+		sourceFile, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		defer sourceFile.Close()
+
+		destFile, err := os.Create(dst)
+		if err != nil {
+			return err
+		}
+		defer destFile.Close()
+
+		if _, err = io.Copy(destFile, sourceFile); err != nil {
+			return err
+		}
+		sourceFile.Close()
+
+		if err = os.Remove(src); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func sanitiseVHDFilename(vhdFilename string) string {
+	return strings.TrimSuffix(
+		strings.ReplaceAll(vhdFilename, "/", "_"),
+		".tar",
+	)
+}
+
+func createVHD(layerId string, layerReader io.Reader, verityHashDev bool, outDir string) error {
+	sanitisedFileName := sanitiseVHDFilename(layerId)
+
+	// Create this file in a temp directory because at this point we don't have
+	// the layer digest to properly name the file, it will be moved later
+	vhdPath := filepath.Join(os.TempDir(), sanitisedFileName+".vhd")
+
+	out, err := os.Create(vhdPath)
+	if err != nil {
+		return fmt.Errorf("failed to create layer vhd file %s: %w", vhdPath, err)
+	}
+	defer out.Close()
+
+	opts := []tar2ext4.Option{
+		tar2ext4.ConvertWhiteout,
+		tar2ext4.MaximumDiskSize(maxVHDSize),
+	}
+
+	if !verityHashDev {
+		opts = append(opts, tar2ext4.AppendDMVerity)
+	}
+
+	if err := tar2ext4.Convert(layerReader, out, opts...); err != nil {
+		return fmt.Errorf("failed to convert tar to ext4: %w", err)
+	}
+
+	if verityHashDev {
+
+		hashDevPath := filepath.Join(outDir, sanitisedFileName+".hash-dev.vhd")
+
+		hashDev, err := os.Create(hashDevPath)
+		if err != nil {
+			return fmt.Errorf("failed to create hash device VHD file: %w", err)
+		}
+		defer hashDev.Close()
+
+		if err := dmverity.ComputeAndWriteHashDevice(out, hashDev); err != nil {
+			return err
+		}
+
+		if err := tar2ext4.ConvertToVhd(hashDev); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(os.Stdout, "hash device created at %s\n", hashDevPath)
+	}
+	if err := tar2ext4.ConvertToVhd(out); err != nil {
+		return fmt.Errorf("failed to append VHD footer: %w", err)
+	}
+	fmt.Fprintf(os.Stdout, "Layer VHD created at %s\n", vhdPath)
+	return nil
 }
 
 var createVHDCommand = cli.Command{
@@ -353,86 +441,41 @@ var createVHDCommand = cli.Command{
 			}
 		}
 
-		createVHDLayer := func(layerPath string, layerReader io.Reader) error {
-			sanitisedFileName := strings.TrimSuffix(strings.ReplaceAll(layerPath, "/", "_"), ".tar")
-			vhdPath := filepath.Join(os.TempDir(), sanitisedFileName+".vhd")
-			out, err := os.Create(vhdPath)
-			if err != nil {
-				return fmt.Errorf("failed to create layer vhd file %s: %w", vhdPath, err)
-			}
-			defer out.Close()
-
-			opts := []tar2ext4.Option{
-				tar2ext4.ConvertWhiteout,
-				tar2ext4.MaximumDiskSize(maxVHDSize),
-			}
-			if !verityHashDev {
-				opts = append(opts, tar2ext4.AppendDMVerity)
-			}
-			if err := tar2ext4.Convert(layerReader, out, opts...); err != nil {
-				return fmt.Errorf("failed to convert tar to ext4: %w", err)
-			}
-			if verityHashDev {
-				hashDevPath := filepath.Join(outDir, sanitisedFileName+".hash-dev.vhd")
-				hashDev, err := os.Create(hashDevPath)
-				if err != nil {
-					return fmt.Errorf("failed to create hash device VHD file: %w", err)
-				}
-				defer hashDev.Close()
-
-				if err := dmverity.ComputeAndWriteHashDevice(out, hashDev); err != nil {
-					return err
-				}
-				if err := tar2ext4.ConvertToVhd(hashDev); err != nil {
-					return err
-				}
-				fmt.Fprintf(os.Stdout, "hash device created at %s\n", hashDevPath)
-			}
-			if err := tar2ext4.ConvertToVhd(out); err != nil {
-				return fmt.Errorf("failed to append VHD footer: %w", err)
-			}
-			fmt.Fprintf(os.Stdout, "Layer VHD created at %s\n", vhdPath)
-			return nil
+		createVHDLayer := func(layerId string, layerReader io.Reader) error {
+			return createVHD(layerId, layerReader, verityHashDev, outDir)
 		}
 
 		log.Debug("creating layer VHDs with dm-verity")
-		layerIds, layerPaths, err := processImageLayers(ctx, createVHDLayer)
+		layerDigests, layerIds, err := processImageLayers(ctx, createVHDLayer)
 		if err != nil {
 			return err
 		}
 
-		for layerNumber := 0; layerNumber < len(layerIds); layerNumber++ {
+		// Move the VHDs to the output directory
+		// They can't immediately be in the output directory because they have
+		// temporary file names based on the layer id which isn't necessarily
+		// the layer digest
+		for layerNumber := 0; layerNumber < len(layerDigests); layerNumber++ {
+			layerDigest := layerDigests[layerNumber]
 			layerId := layerIds[layerNumber]
-			layerPath := layerPaths[layerNumber]
-			sanitisedFileName := strings.TrimSuffix(strings.ReplaceAll(layerPath, "/", "_"), ".tar")
-			for _, src_suffix := range []string{".hash-dev.vhd", ".vhd"} {
+			sanitisedFileName := sanitiseVHDFilename(layerId)
+
+			suffixes := []string{".vhd"}
+			if verityHashDev {
+				suffixes = append(suffixes, ".hash-dev.vhd")
+			}
+
+			for _, src_suffix := range suffixes {
 				src := filepath.Join(os.TempDir(), sanitisedFileName+src_suffix)
 				if _, err := os.Stat(src); os.IsNotExist(err) {
-					continue
+					return fmt.Errorf("layer VHD %s does not exist", src)
 				}
-				dst := filepath.Join(outDir, layerId+".vhd")
-				err = os.Rename(src, dst)
-				if err != nil {
-					sourceFile, err := os.Open(src)
-					if err != nil {
-						return err
-					}
-					defer sourceFile.Close()
-					destFile, err := os.Create(dst)
-					if err != nil {
-						return err
-					}
-					defer destFile.Close()
-					_, err = io.Copy(destFile, sourceFile)
-					if err != nil {
-						return err
-					}
-					sourceFile.Close()
-					err = os.Remove(src)
-					if err != nil {
-						return err
-					}
+
+				dst := filepath.Join(outDir, layerDigest+src_suffix)
+				if err := moveFile(src, dst); err != nil {
+					return err
 				}
+
 				fmt.Fprintf(os.Stdout, "Layer VHD moved from %s to %s\n", src, dst)
 			}
 
@@ -467,23 +510,23 @@ var rootHashVHDCommand = cli.Command{
 		}
 
 		layerHashes := make(map[string]string)
-		getLayerHash := func(layerId string, layerReader io.Reader) error {
+		getLayerHash := func(layerDigest string, layerReader io.Reader) error {
 			hash, err := tar2ext4.ConvertAndComputeRootDigest(layerReader)
 			if err != nil {
 				return err
 			}
-			layerHashes[layerId] = hash
+			layerHashes[layerDigest] = hash
 			return nil
 		}
 
-		_, layerPaths, err := processImageLayers(ctx, getLayerHash)
+		_, layerIds, err := processImageLayers(ctx, getLayerHash)
 		if err != nil {
 			return err
 		}
 
 		// Print the layer number to layer hash
-		for layerNumber := 0; layerNumber < len(layerPaths); layerNumber++ {
-			fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, layerHashes[layerPaths[layerNumber]])
+		for layerNumber := 0; layerNumber < len(layerIds); layerNumber++ {
+			fmt.Fprintf(os.Stdout, "Layer %d root hash: %s\n", layerNumber, layerHashes[layerIds[layerNumber]])
 		}
 
 		return nil
