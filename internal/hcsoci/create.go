@@ -45,6 +45,7 @@ type CreateOptions struct {
 	HostingSystem    *uvm.UtilityVM     // Utility or service VM in which the container is to be created.
 	NetworkNamespace string             // Host network namespace to use (overrides anything in the spec)
 	LCOWLayers       *layers.LCOWLayers
+	WCOWLayers       layers.WCOWLayers
 
 	// This is an advanced debugging parameter. It allows for diagnosability by leaving a containers
 	// resources allocated in case of a failure. Thus you would be able to use tools such as hcsdiag
@@ -70,6 +71,8 @@ type createOptionsInternal struct {
 	ccgState               *hcsschema.ContainerCredentialGuardState // Container Credential Guard information to be attached to HCS container document
 
 	windowsAdditionalMounts []hcsschema.MappedDirectory // Holds additional mounts based on added devices (such as SCSI). Only used for Windows v2 schema containers.
+
+	mountedWCOWLayers *layers.MountedWCOWLayers
 }
 
 func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) error {

@@ -4,7 +4,6 @@ package container
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -37,9 +36,20 @@ func Create(
 		tb.Fatalf("improperly configured windows spec for container %q: %#+v", name, spec.Windows)
 	}
 
+	var wcowLayers layers.WCOWLayers
+	var lcowLayers *layers.LCOWLayers
 	var err error
+	if spec.Linux != nil {
+		lcowLayers, err = layers.ParseLCOWLayers(nil, spec.Windows.LayerFolders)
+	} else {
+		wcowLayers, err = layers.ParseWCOWLayers(nil, spec.Windows.LayerFolders)
+	}
+	if err != nil {
+		tb.Fatalf("layer parsing failed: %s", err)
+	}
+
 	if oci.IsJobContainer(spec) {
-		c, r, err = jobcontainers.Create(ctx, name, spec)
+		c, r, err = jobcontainers.Create(ctx, name, spec, jobcontainers.CreateOptions{WCOWLayers: wcowLayers})
 	} else {
 		co := &hcsoci.CreateOptions{
 			ID:            name,
@@ -51,34 +61,9 @@ func Create(
 			// Additionally, these are "standalone" containers, and not CRI pod/workload containers,
 			// so leave end-to-end testing with namespaces for CRI tests
 			NetworkNamespace: "",
+			WCOWLayers:       wcowLayers,
+			LCOWLayers:       lcowLayers,
 		}
-
-		if co.Spec.Linux != nil {
-			if vm == nil {
-				tb.Fatalf("LCOW requires a uVM")
-			}
-
-			var layerFolders []string
-			if co.Spec.Windows != nil {
-				layerFolders = co.Spec.Windows.LayerFolders
-			}
-			if len(layerFolders) <= 1 {
-				tb.Fatalf("LCOW requires at least 2 layers (including scratch): %v", layerFolders)
-			}
-			scratch := layerFolders[len(layerFolders)-1]
-			parents := layerFolders[:len(layerFolders)-1]
-
-			// todo: support partitioned layers
-			co.LCOWLayers = &layers.LCOWLayers{
-				Layers:         make([]*layers.LCOWLayer, 0, len(parents)),
-				ScratchVHDPath: filepath.Join(scratch, "sandbox.vhdx"),
-			}
-
-			for _, p := range parents {
-				co.LCOWLayers.Layers = append(co.LCOWLayers.Layers, &layers.LCOWLayer{VHDPath: filepath.Join(p, "layer.vhd")})
-			}
-		}
-
 		c, r, err = hcsoci.CreateContainer(ctx, co)
 	}
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	shimlayers "github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 
 	"github.com/Microsoft/hcsshim/test/internal/layers"
@@ -36,8 +37,8 @@ func CreateWCOWUVM(ctx context.Context, tb testing.TB, id, image string) (*uvm.U
 func CreateWCOW(ctx context.Context, tb testing.TB, opts *uvm.OptionsWCOW) (*uvm.UtilityVM, CleanupFn) {
 	tb.Helper()
 
-	if opts == nil || len(opts.LayerFolders) < 2 {
-		tb.Fatalf("opts must bet set with LayerFolders")
+	if opts == nil || opts.BootFiles == nil {
+		tb.Fatalf("opts must bet set with BootFiles")
 	}
 
 	vm, err := uvm.CreateWCOW(ctx, opts)
@@ -75,8 +76,11 @@ func CreateWCOWUVMFromOptsWithImage(
 
 	uvmLayers := img.Layers(ctx, tb)
 	scratchDir := tb.TempDir()
-	opts.LayerFolders = append(opts.LayerFolders, uvmLayers...)
-	opts.LayerFolders = append(opts.LayerFolders, scratchDir)
+	bootFiles, err := shimlayers.GetWCOWUVMBootFilesFromLayers(ctx, nil, append(uvmLayers, scratchDir))
+	if err != nil {
+		tb.Fatalf("failed to parse UVM boot layers: %s", err)
+	}
+	opts.BootFiles = bootFiles
 
 	vm, cleanup := CreateWCOW(ctx, tb, opts)
 	tb.Cleanup(func() { cleanup(ctx) })

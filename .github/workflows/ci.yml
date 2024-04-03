@@ -686,11 +686,6 @@ jobs:
             go.sum
             test/go.sum
 
-      - name: Install kmod
-        shell: bash
-        run: | 
-          sudo apt-get install -y libkmod-dev
-
       - name: Set version info
         shell: pwsh
         run: |

@@ -29,7 +29,7 @@ jobs:
             dmverity-vhd.exe
             dmverity-vhd
 
-  create_release:
+  draft_release:
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -40,10 +40,12 @@ jobs:
         with:
           name: binaries
           
-      - name: Publish release
+      - name: Publish draft release
         uses: softprops/action-gh-release@v2.0.4
         with:
-          prerelease: ${{ contains(github.ref, 'rc') }}
+          # This is to make sure that the release is not created if a non-rc tag is pushed
+          draft: true
+          generate_release_notes: true
           files: |
             dmverity-vhd.exe
             dmverity-vhd

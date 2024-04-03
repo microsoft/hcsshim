@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -122,22 +123,15 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 				return nil, err
 			}
 		case *uvm.OptionsWCOW:
+			var layerFolders []string
+			if s.Windows != nil {
+				layerFolders = s.Windows.LayerFolders
+			}
 			wopts := (opts).(*uvm.OptionsWCOW)
-
-			// In order for the UVM sandbox.vhdx not to collide with the actual
-			// nested Argon sandbox.vhdx we append the \vm folder to the last
-			// entry in the list.
-			layersLen := len(s.Windows.LayerFolders)
-			layers := make([]string, layersLen)
-			copy(layers, s.Windows.LayerFolders)
-
-			vmPath := filepath.Join(layers[layersLen-1], "vm")
-			err := os.MkdirAll(vmPath, 0)
+			wopts.BootFiles, err = layers.GetWCOWUVMBootFilesFromLayers(ctx, req.Rootfs, layerFolders)
 			if err != nil {
 				return nil, err
 			}
-			layers[layersLen-1] = vmPath
-			wopts.LayerFolders = layers
 
 			parent, err = uvm.CreateWCOW(ctx, wopts)
 			if err != nil {

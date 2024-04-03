@@ -5,15 +5,11 @@ package jobcontainers
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/resources"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 // fallbackRootfsFormat is the fallback location for the rootfs if file binding support isn't available.
@@ -26,39 +22,46 @@ const fallbackRootfsFormat = `C:\hpc\%s\`
 // C:\hpc\<containerID>
 const defaultSiloRootfsLocation = `C:\hpc\`
 
-func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) (_ resources.ResourceCloser, err error) {
-	if s == nil || s.Windows == nil || s.Windows.LayerFolders == nil {
-		return nil, errors.New("field 'Spec.Windows.Layerfolders' is not populated")
-	}
-
-	// Last layer always contains the sandbox.vhdx, or 'scratch' space for the container.
-	scratchFolder := s.Windows.LayerFolders[len(s.Windows.LayerFolders)-1]
-	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
-			return nil, fmt.Errorf("failed to auto-create container scratch folder %s: %w", scratchFolder, err)
-		}
-	}
-
-	// Create sandbox.vhdx if it doesn't exist in the scratch folder.
-	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
-		if err := wclayer.CreateScratchLayer(ctx, scratchFolder, s.Windows.LayerFolders[:len(s.Windows.LayerFolders)-1]); err != nil {
-			return nil, fmt.Errorf("failed to CreateSandboxLayer: %w", err)
-		}
-	}
-
+func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, wl layers.WCOWLayers, volumeMountPath string) (_ resources.ResourceCloser, err error) {
 	if s.Root == nil {
 		s.Root = &specs.Root{}
+	}
+	if wl == nil {
+		return nil, fmt.Errorf("layers can not be nil")
 	}
 
 	var closer resources.ResourceCloser
 	if s.Root.Path == "" {
+		var mountedLayers *layers.MountedWCOWLayers
 		log.G(ctx).Debug("mounting job container storage")
-		var rootPath string
-		rootPath, closer, err = layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, volumeMountPath, nil)
+		mountedLayers, closer, err = layers.MountWCOWLayers(ctx, containerID, nil, wl)
 		if err != nil {
 			return nil, fmt.Errorf("failed to mount job container storage: %w", err)
 		}
-		s.Root.Path = rootPath + "\\"
+		defer func() {
+			if err != nil {
+				closeErr := closer.Release(ctx)
+				if closeErr != nil {
+					log.G(ctx).WithError(closeErr).Errorf("failed to cleanup mounted layers during another failure(%s)", err)
+				}
+			}
+		}()
+
+		s.Root.Path = mountedLayers.RootFS + "\\"
+	}
+
+	if volumeMountPath != "" {
+		if err = layers.MountSandboxVolume(ctx, volumeMountPath, s.Root.Path); err != nil {
+			return nil, err
+		}
+		layerCloser := closer
+		closer = resources.ResourceCloserFunc(func(ctx context.Context) error {
+			unmountErr := layers.RemoveSandboxMountPoint(ctx, volumeMountPath)
+			if unmountErr != nil {
+				return unmountErr
+			}
+			return layerCloser.Release(ctx)
+		})
 	}
 
 	return closer, nil
