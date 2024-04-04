@@ -189,7 +189,9 @@ func processLocalImageLayers(imageReader io.ReadCloser, onLayer LayerProcessor) 
 		// If the file is a layer, call the callback
 		if (strings.HasPrefix(hdr.Name, "blobs/sha256/") && hdr.Name != "blobs/sha256/") || strings.HasSuffix(hdr.Name, ".tar") {
 			if err = onLayer(hdr.Name, imageFileReader); err != nil {
-				return nil, nil, err
+				// Some image tars have json files named identically to layer
+				// tars, so errors should be non-fatal
+				continue
 			}
 		}
 
