@@ -177,8 +177,6 @@ func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]str
 		options.FullyPhysicallyBacked = ParseAnnotationsBool(ctx, a, annotations.FullyPhysicallyBacked, options.FullyPhysicallyBacked)
 		if options.FullyPhysicallyBacked {
 			options.AllowOvercommit = false
-			options.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
-			options.RootFSFile = uvm.InitrdFile
 			options.VPMemDeviceCount = 0
 		}
 	case *uvm.OptionsWCOW:
@@ -282,9 +280,6 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
-
-		// parsing of FullyPhysicallyBacked needs to go after handling kernel direct boot and
-		// preferred rootfs type since it may overwrite settings created by those
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
 
 		// SecurityPolicy is very sensitive to other settings and will silently change those that are incompatible.
