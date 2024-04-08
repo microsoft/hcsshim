@@ -21,7 +21,7 @@ require (
 	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 	github.com/mattn/go-shellwords v1.0.12
-	github.com/open-policy-agent/opa v0.62.1
+	github.com/open-policy-agent/opa v0.63.0
 	github.com/opencontainers/runc v1.1.12
 	github.com/opencontainers/runtime-spec v1.2.0
 	github.com/pelletier/go-toml v1.9.5
@@ -85,6 +85,7 @@ require (
 	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc6 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.19.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
