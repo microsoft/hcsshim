@@ -93,8 +93,8 @@ type UtilityVM struct {
 	scsiControllerCount uint32 // Number of SCSI controllers in the utility VM
 	reservedSCSISlots   []scsi.Slot
 
-	encryptScratch bool                          // Enable scratch encryption
-	vpciDevices    map[VPCIDeviceKey]*VPCIDevice // map of device instance id to vpci device
+	encryptScratch bool                         // Enable scratch encryption
+	vpciDevices    map[VPCIDeviceID]*VPCIDevice // map of device instance id to vpci device
 
 	// Plan9 are directories mapped into a Linux utility VM
 	plan9Counter uint64 // Each newly-added plan9 share has a counter used as its ID in the ResourceURI and for the name

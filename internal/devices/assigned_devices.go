@@ -6,6 +6,8 @@ package devices
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -13,10 +15,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// AddDevice is the api exposed to hcsoci to handle assigning a device on a UVM
+// AddDevice is the api exposed to oci/hcsoci to handle assigning a device on a WCOW UVM
 //
-// `idType` refers to the specified device's type, supported types here are `VPCIDeviceIDType`
-// and `VPCIDeviceIDTypeLegacy`.
+// `idType` refers to the specified device's type.
 //
 // `deviceID` refers to the specified device's identifier. This must refer to a device instance id
 // for hyper-v isolated device assignment.
@@ -38,7 +39,8 @@ func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID string, 
 			vpci = nil
 		}
 	}()
-	if idType == uvm.VPCIDeviceIDType || idType == uvm.VPCIDeviceIDTypeLegacy {
+
+	if uvm.IsValidDeviceType(idType) {
 		vpci, err = vm.AssignDevice(ctx, deviceID, index, "")
 		if err != nil {
 			return vpci, nil, errors.Wrapf(err, "failed to assign device %s of type %s to pod %s", deviceID, idType, vm.ID())
@@ -104,4 +106,17 @@ func createDeviceUtilChildrenCommand(deviceUtilPath string, vmBusInstanceID stri
 	parentIDsFlag := fmt.Sprintf("--parentID=%s", vmBusInstanceID)
 	args := []string{deviceUtilPath, "children", parentIDsFlag, "--property=location"}
 	return args
+}
+
+// GetDeviceInfoFromPath takes a device path and parses it into the PCI ID and
+// virtual function index if one is specified.
+func GetDeviceInfoFromPath(rawDevicePath string) (string, uint16) {
+	indexString := filepath.Base(rawDevicePath)
+	index, err := strconv.ParseUint(indexString, 10, 16)
+	if err == nil {
+		// we have a vf index
+		return filepath.Dir(rawDevicePath), uint16(index)
+	}
+	// otherwise, just use default index and full device ID given
+	return rawDevicePath, 0
 }

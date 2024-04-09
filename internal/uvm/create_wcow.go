@@ -263,7 +263,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		scsiControllerCount:     opts.SCSIControllerCount,
 		vsmbDirShares:           make(map[string]*VSMBShare),
 		vsmbFileShares:          make(map[string]*VSMBShare),
-		vpciDevices:             make(map[VPCIDeviceKey]*VPCIDevice),
+		vpciDevices:             make(map[VPCIDeviceID]*VPCIDevice),
 		noInheritHostTimezone:   opts.NoInheritHostTimezone,
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
