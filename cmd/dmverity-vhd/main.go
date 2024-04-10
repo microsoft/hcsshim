@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -120,8 +121,8 @@ func getLayerDigestsV24(configData []byte) (map[int]string, error) {
 	}
 
 	var config configLayerV24
-	if err := json.Unmarshal(configData, &config); err != nil {
-		return nil, err
+	if err := json.Unmarshal(configData, &config); err != nil || len(config.RootFS.DiffIDs) == 0 {
+		return nil, errors.New("could not unmarshall json file for v24 config format")
 	}
 
 	layerDigests := make(map[int]string)
@@ -155,6 +156,24 @@ func getLayerDigestsV25(configData []byte) (map[int]string, error) {
 	return layerDigests, nil
 }
 
+func isTar(reader io.Reader) (io.Reader, bool) {
+
+	// Wraps reader in :
+	//   A TeeReader which copies read bytes into a separate buffer.
+	//   A TarReader to read the header of the tar file.
+	var header bytes.Buffer
+	teeReader := io.TeeReader(reader, &header)
+	tarReader := tar.NewReader(teeReader)
+
+	_, err := tarReader.Next()
+
+	if err == nil {
+		return io.MultiReader(&header, reader), true
+	}
+
+	return io.MultiReader(&header, reader), false
+}
+
 func processLocalImage(imageReader io.Reader, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
 
 	imageFileReader := tar.NewReader(imageReader)
@@ -170,16 +189,13 @@ func processLocalImage(imageReader io.Reader, onLayer LayerProcessor) (layerDige
 			return nil, nil, err
 		}
 
-		// If the file is a layer, call the callback
-		if (strings.HasPrefix(hdr.Name, "blobs/sha256/") && hdr.Name != "blobs/sha256/") || strings.HasSuffix(hdr.Name, ".tar") {
-			if err = onLayer(hdr.Name, imageFileReader); err != nil {
-				// Some image tars have json files named identically to layer
-				// tars, so errors should be non-fatal
-				continue
+		// If the file is a tar, assume it's a layer, and call the callback
+		imageFileReader, isTar := isTar(imageFileReader)
+		if isTar {
+			if err := onLayer(hdr.Name, imageFileReader); err != nil {
+				return nil, nil, err
 			}
-		}
-
-		if hdr.Name == "manifest.json" {
+		} else if hdr.Name == "manifest.json" {
 
 			type Manifest []struct {
 				Config string   `json:"Config"`
@@ -203,7 +219,7 @@ func processLocalImage(imageReader io.Reader, onLayer LayerProcessor) (layerDige
 				layerIDs[layerNumber] = layerIDSplit[len(layerIDSplit)-1]
 			}
 
-		} else if strings.HasSuffix(hdr.Name, ".json") {
+		} else { // Attempt to parse as a config file
 
 			configData, err := io.ReadAll(imageFileReader)
 			if err != nil {
