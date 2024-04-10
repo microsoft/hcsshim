@@ -232,9 +232,9 @@ func processLocalImage(imageReader io.Reader, onLayer LayerProcessor) (layerDige
 				getLayerDigestsV24,
 			}
 			for _, parseFunc := range parsingFunctions {
-				layerDigests, err := parseFunc(configData)
+				layerDigestCandidate, err := parseFunc(configData)
 				if err == nil {
-					layerDigestCandidates[hdr.Name] = layerDigests
+					layerDigestCandidates[hdr.Name] = layerDigestCandidate
 					break
 				}
 			}
