@@ -14,93 +14,110 @@ import (
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
-func BenchmarkLCOW_UVM(b *testing.B) {
-	requireFeatures(b, featureLCOW, featureUVM)
+func BenchmarkUVM(b *testing.B) {
+	requireFeatures(b, featureUVM)
+	requireAnyFeature(b, featureLCOW, featureWCOW)
 	require.Build(b, osversion.RS5)
 
 	pCtx := util.Context(context.Background(), b)
 
-	b.Run("Create", func(b *testing.B) {
-		b.StopTimer()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
+	for _, tt := range []struct {
+		feature    string
+		createOpts func(context.Context, testing.TB) any
+	}{
+		{
+			feature: featureLCOW,
+			//nolint: thelper
+			createOpts: func(ctx context.Context, tb testing.TB) any { return defaultLCOWOptions(ctx, tb) },
+		},
+		{
+			feature: featureWCOW,
+			//nolint: thelper
+			createOpts: func(ctx context.Context, tb testing.TB) any { return defaultWCOWOptions(ctx, tb) },
+		},
+	} {
+		b.Run(tt.feature, func(b *testing.B) {
+			requireFeatures(b, tt.feature)
 
-			opts := defaultLCOWOptions(ctx, b)
-			opts.ID += util.RandNameSuffix(i)
+			b.Run("Create", func(b *testing.B) {
+				b.StopTimer()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			b.StartTimer()
-			_, cleanup := testuvm.CreateLCOW(ctx, b, opts)
-			b.StopTimer()
+					opts := tt.createOpts(ctx, b)
 
-			cleanup(ctx)
-			cancel()
-		}
-	})
+					b.StartTimer()
+					_, cleanup := testuvm.Create(ctx, b, opts)
+					b.StopTimer()
 
-	b.Run("Start", func(b *testing.B) {
-		b.StopTimer()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
+					cleanup(ctx)
+					cancel()
+				}
+			})
 
-			opts := defaultLCOWOptions(ctx, b)
-			opts.ID += util.RandNameSuffix(i)
-			vm, cleanup := testuvm.CreateLCOW(ctx, b, opts)
+			b.Run("Start", func(b *testing.B) {
+				b.StopTimer()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			b.StartTimer()
-			if err := vm.Start(ctx); err != nil {
-				b.Fatalf("could not start UVM: %v", err)
-			}
-			b.StopTimer()
+					opts := tt.createOpts(ctx, b)
+					vm, cleanup := testuvm.Create(ctx, b, opts)
 
-			cleanup(ctx)
-			cancel()
-		}
-	})
+					b.StartTimer()
+					if err := vm.Start(ctx); err != nil {
+						b.Fatalf("could not start UVM: %v", err)
+					}
+					b.StopTimer()
 
-	b.Run("Kill", func(b *testing.B) {
-		b.StopTimer()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
+					cleanup(ctx)
+					cancel()
+				}
+			})
 
-			opts := defaultLCOWOptions(ctx, b)
-			opts.ID += util.RandNameSuffix(i)
-			vm, cleanup := testuvm.CreateLCOW(ctx, b, opts)
-			testuvm.Start(ctx, b, vm)
+			b.Run("Kill", func(b *testing.B) {
+				b.StopTimer()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			b.StartTimer()
-			testuvm.Kill(ctx, b, vm)
-			if err := vm.WaitCtx(ctx); err != nil {
-				b.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
-			}
-			b.StopTimer()
+					opts := tt.createOpts(ctx, b)
+					vm, cleanup := testuvm.Create(ctx, b, opts)
+					testuvm.Start(ctx, b, vm)
 
-			cleanup(ctx)
-			cancel()
-		}
-	})
+					b.StartTimer()
+					testuvm.Kill(ctx, b, vm)
+					if err := vm.WaitCtx(ctx); err != nil {
+						b.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
+					}
+					b.StopTimer()
 
-	b.Run("Close", func(b *testing.B) {
-		b.StopTimer()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
+					cleanup(ctx)
+					cancel()
+				}
+			})
 
-			opts := defaultLCOWOptions(ctx, b)
-			opts.ID += util.RandNameSuffix(i)
-			vm, cleanup := testuvm.CreateLCOW(ctx, b, opts)
-			testuvm.Start(ctx, b, vm)
+			b.Run("Close", func(b *testing.B) {
+				b.StopTimer()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-			b.StartTimer()
-			if err := vm.CloseCtx(ctx); err != nil {
-				b.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
-			}
-			b.StopTimer()
+					opts := tt.createOpts(ctx, b)
+					vm, cleanup := testuvm.Create(ctx, b, opts)
+					testuvm.Start(ctx, b, vm)
 
-			cleanup(ctx)
-			cancel()
-		}
-	})
+					b.StartTimer()
+					if err := vm.CloseCtx(ctx); err != nil {
+						b.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
+					}
+					b.StopTimer()
+
+					cleanup(ctx)
+					cancel()
+				}
+			})
+		})
+	}
 }

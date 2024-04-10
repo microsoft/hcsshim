@@ -325,6 +325,30 @@ jobs:
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
 
+      # Download PsExec so we can run (functional) tests as 'NT Authority\System'.
+      # Needed for hostprocess tests, as well ensuring backup and restore privileges for
+      # unpacking WCOW images.
+      - name: Install PsExec.exe
+        run: |
+          New-Item -ItemType Directory -Force '${{ github.workspace }}\bin' > $null
+          '${{ github.workspace }}\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          curl.exe -L --no-progress-meter --fail-with-body -o 'C:\PSTools.zip' `
+            'https://download.sysinternals.com/files/PSTools.zip' 2>&1
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not download PSTools.zip'
+            exit $LASTEXITCODE
+          }
+
+          tar.exe xf 'C:\PSTools.zip' -C '${{ github.workspace }}\bin' 'PsExec*' 2>&1
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not extract PsExec.exe'
+            exit $LASTEXITCODE
+          }
+
+          # accept the eula
+          & '${{ github.workspace }}/bin/psexec' -accepteula -nobanner cmd /c "exit 0" 2>$null
+
       # run tests
       - name: Test repo
         run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr -tags admin -timeout=20m ./...
@@ -354,12 +378,41 @@ jobs:
           ${{ env.GOTESTSUM_CMD_RAW }} ./containerd-shim-runhcs-v1.test.exe '-test.v'
         working-directory: test
 
+      - name: Build and run functional testing binary
+        run: |
+          ${{ env.GO_BUILD_TEST_CMD }} ./functional
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not build functional.test.exe'
+            exit $LASTEXITCODE
+          }
+
+          # PsExec doesn't load GOBIN into path, so resolve gotestsum path
+          $gotestsum = Get-Command -Name 'gotestsum' -CommandType Application -ErrorAction 'Stop' |
+            Select-Object -First 1 -ExpandProperty Source
+          if ( [string]::IsNullOrEmpty($gotestsum) ) {
+            Write-Output '::error::could not find 'gotestsum.exe' path'
+            exit $LASTEXITCODE
+          }
+
+          # Don't run uVM (ie, nested virt) or LCOW integrity tests
+          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity,uVM -test.timeout=1h -test.v -log-level=info'
+          $cmd = $cmd -replace 'gotestsum', $gotestsum
+          Write-Host "gotestsum command: $cmd"
+
+          # Apparently, in a GH runner, PsExec always runs noninteractively (even with `-i`)
+          # and doesn't capture or redirect std IO.
+          # So redirect stdout/stderr to a file.
+          psexec -nobanner -w (Get-Location) -s cmd /c "$cmd > out.txt 2>&1"
+          $ec = $LASTEXITCODE
+
+          Get-Content out.txt
+
+          exit $ec
+        working-directory: test
+
       # build testing binaries
       - name: Build cri-containerd Testing Binary
         run: ${{ env.GO_BUILD_TEST_CMD }} ./cri-containerd
-        working-directory: test
-      - name: Build functional Testing Binary
-        run: ${{ env.GO_BUILD_TEST_CMD }} ./functional
         working-directory: test
       - name: Build runhcs Testing Binary
         run: ${{ env.GO_BUILD_TEST_CMD }} ./runhcs

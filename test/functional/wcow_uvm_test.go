@@ -179,7 +179,7 @@ import (
 
 // Helper to stop a container.
 // Ones created through hcsoci methods will be of type cow.Container.
-// Ones created through hcsshim methods will be of type hcsshim.Container
+// Ones created through hcsshim methods will be of type hcsshim.Container.
 func stopContainer(t *testing.T, c interface{}) {
 	t.Helper()
 	switch c := c.(type) {

@@ -5,7 +5,10 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 )
@@ -38,12 +41,45 @@ func (b *BufferedIO) Output() (_ string, err error) {
 func (b *BufferedIO) TestOutput(tb testing.TB, out string, err error) {
 	tb.Helper()
 
-	outGive, errGive := b.Output()
-	if !errors.Is(errGive, err) {
-		tb.Fatalf("got stderr: %v; wanted: %v", errGive, err)
+	outGot, errGot := b.Output()
+	if !errors.Is(errGot, err) {
+		tb.Fatalf("got stderr: %v; wanted: %v", errGot, err)
 	}
-	if outGive != out {
-		tb.Fatalf("got stdout %q; wanted %q", outGive, out)
+
+	out = strings.ToLower(strings.TrimSpace(out))
+	outGot = strings.ToLower(strings.TrimSpace(outGot))
+	if diff := cmp.Diff(out, outGot); diff != "" {
+		tb.Fatalf("stdout mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func (b *BufferedIO) TestStdOutContains(tb testing.TB, want, notWant []string) {
+	tb.Helper()
+
+	outGot, err := b.Output()
+	if err != nil {
+		tb.Fatalf("got stderr: %v", err)
+	}
+
+	tb.Logf("searching stdout for substrings\nstdout:\n%s\nwanted substrings:\n%q\nunwanted substrings:\n%q", outGot, want, notWant)
+
+	outGot = strings.ToLower(outGot)
+
+	for _, s := range want {
+		if !strings.Contains(outGot, strings.ToLower(s)) {
+			tb.Errorf("stdout does not contain substring:\n%s", s)
+		}
+	}
+
+	for _, s := range notWant {
+		if strings.Contains(outGot, strings.ToLower(s)) {
+			tb.Errorf("stdout contains substring:\n%s", s)
+		}
+	}
+
+	// FailNow() to match behavior of [TestOutput]
+	if tb.Failed() {
+		tb.FailNow()
 	}
 }
 

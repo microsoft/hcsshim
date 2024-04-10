@@ -10,6 +10,7 @@ require (
 	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/ttrpc v1.2.3
+	github.com/google/go-cmp v0.6.0
 	github.com/google/go-containerregistry v0.19.1
 	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/opencontainers/go-digest v1.0.0
@@ -64,7 +65,6 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
