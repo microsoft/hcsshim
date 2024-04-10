@@ -7,13 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/sync"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
-var lcowOSBootFilesOnce = sync.OnceValue(func() (string, error) {
+var lcowOSBootFilesOnce = sync.OnceValues(func() (string, error) {
 	// since the tests can be run from directories outside of where containerd and the
 	// LinuxBootFiles are, search through potential locations for the boot files
 	// first start with where containerd is, since there may be a leftover C:\ContainerPlat

@@ -6,7 +6,7 @@ on:
 env:
   GO_VERSION: "oldstable"
 
-  GO_BUILD_CMD: "go build \"-ldflags=-s -w\" -trimpath"
+  GO_BUILD_CMD: 'go build "-ldflags=-s -w" -trimpath'
   GO_BUILD_TEST_CMD: "go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional"
 
   GOTESTSUM_VERSION: "latest"

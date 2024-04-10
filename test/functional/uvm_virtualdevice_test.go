@@ -17,7 +17,7 @@ import (
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
-// findTestDevices returns the first pcip device on the host
+// findTestDevices returns the first pcip device on the host.
 func findTestVirtualDevice() (string, error) {
 	out, err := exec.Command(
 		"powershell",

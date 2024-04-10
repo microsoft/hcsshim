@@ -339,7 +339,7 @@ func runHcsCommand(t *testing.T,
 	}
 }
 
-// Creates two temp folders used for the mounts/mapped directories
+// Creates two temp folders used for the mounts/mapped directories.
 func createTestMounts(t *testing.T) (string, string) {
 	t.Helper()
 	// Create two temp folders for mapped directories.
@@ -352,7 +352,7 @@ func createTestMounts(t *testing.T) (string, string) {
 	return hostRWSharedDirectory, hostROSharedDirectory
 }
 
-// For calling hcsshim interface, need hcsshim.Layer built from an images layer folders
+// For calling hcsshim interface, need hcsshim.Layer built from an images layer folders.
 func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Layer {
 	t.Helper()
 	var layers []hcsshim.Layer
@@ -363,7 +363,7 @@ func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Laye
 	return layers
 }
 
-// Argon through HCSShim interface (v1)
+// Argon through HCSShim interface (v1).
 func TestWCOWArgonShim(t *testing.T) {
 	t.Skip("not yet updated")
 
@@ -429,7 +429,7 @@ func TestWCOWArgonShim(t *testing.T) {
 	closer = nil
 }
 
-// Xenon through HCSShim interface (v1)
+// Xenon through HCSShim interface (v1).
 func TestWCOWXenonShim(t *testing.T) {
 	t.Skip("not yet updated")
 
@@ -500,7 +500,7 @@ func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, ho
 	}
 }
 
-// Argon through HCSOCI interface (v1)
+// Argon through HCSOCI interface (v1).
 func TestWCOWArgonOciV1(t *testing.T) {
 	t.Skip("not yet updated")
 
@@ -548,7 +548,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 	argonOci1Mounted = false
 }
 
-// Xenon through HCSOCI interface (v1)
+// Xenon through HCSOCI interface (v1).
 func TestWCOWXenonOciV1(t *testing.T) {
 	t.Skip("not yet updated")
 
@@ -604,7 +604,7 @@ func TestWCOWXenonOciV1(t *testing.T) {
 	xenonOci1Mounted = false
 }
 
-// Argon through HCSOCI interface (v2)
+// Argon through HCSOCI interface (v2).
 func TestWCOWArgonOciV2(t *testing.T) {
 	t.Skip("not yet updated")
 
@@ -654,7 +654,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	argonOci2Mounted = false
 }
 
-// Xenon through HCSOCI interface (v2)
+// Xenon through HCSOCI interface (v2).
 func TestWCOWXenonOciV2(t *testing.T) {
 	t.Skip("not yet updated")
 
