@@ -111,57 +111,39 @@ func fetchImageDocker(imageName string) (imageReader io.ReadCloser, err error) {
 	return imageReader, err
 }
 
-func getlayerIDs(manifestData []byte) (map[int]string, error) {
-	type Manifest []struct {
-		Layers []string `json:"Layers"`
-	}
-
-	var manifest Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		return nil, err
-	}
-
-	layerIDs := make(map[int]string)
-	for layerNumber, layerID := range manifest[0].Layers {
-		layerIDSplit := strings.Split(layerID, ":")
-		layerIDs[layerNumber] = layerIDSplit[len(layerIDSplit)-1]
-	}
-	return layerIDs, nil
-}
-
-func getLayerDigestsV24(manifestData []byte) (map[int]string, error) {
+func getLayerDigestsV24(configData []byte) (map[int]string, error) {
 	type RootFs struct {
 		DiffIDs []string `json:"diff_ids"`
 	}
-	type manifestLayerV24 struct {
+	type configLayerV24 struct {
 		RootFS RootFs `json:"rootfs"`
 	}
 
-	var manifest manifestLayerV24
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+	var config configLayerV24
+	if err := json.Unmarshal(configData, &config); err != nil {
 		return nil, err
 	}
 
 	layerDigests := make(map[int]string)
-	for layerNumber, layerID := range manifest.RootFS.DiffIDs {
+	for layerNumber, layerID := range config.RootFS.DiffIDs {
 		layerIDSplit := strings.Split(layerID, ":")
 		layerDigests[layerNumber] = layerIDSplit[len(layerIDSplit)-1]
 	}
 	return layerDigests, nil
 }
 
-func getLayerDigestsV25(manifestData []byte) (map[int]string, error) {
-	type manifestLayerV25 []struct {
+func getLayerDigestsV25(configData []byte) (map[int]string, error) {
+	type configLayerV25 []struct {
 		Layers []string `json:"Layers"`
 	}
 
-	var manifest manifestLayerV25
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+	var config configLayerV25
+	if err := json.Unmarshal(configData, &config); err != nil {
 		return nil, err
 	}
 
 	layerDigests := make(map[int]string)
-	for layerNumber, layerID := range manifest[0].Layers {
+	for layerNumber, layerID := range config[0].Layers {
 
 		if !strings.HasPrefix(layerID, "blobs") {
 			return nil, errors.New("layer path isn't v25")
@@ -173,10 +155,12 @@ func getLayerDigestsV25(manifestData []byte) (map[int]string, error) {
 	return layerDigests, nil
 }
 
-func processLocalImageLayers(imageReader io.Reader, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
+func processLocalImage(imageReader io.Reader, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
 
 	imageFileReader := tar.NewReader(imageReader)
-	layerDigests = make(map[int]string)
+	layerIDs = make(map[int]string)
+	layerDigestCandidates := make(map[string]map[int]string)
+	var configPath string
 	for {
 		hdr, err := imageFileReader.Next()
 		if errors.Is(err, io.EOF) {
@@ -195,35 +179,61 @@ func processLocalImageLayers(imageReader io.Reader, onLayer LayerProcessor) (lay
 			}
 		}
 
-		// If the file is the manifest, link layer numbers to layer paths
-		if strings.HasSuffix(hdr.Name, ".json") {
+		if hdr.Name == "manifest.json" {
+
+			type Manifest []struct {
+				Config string   `json:"Config"`
+				Layers []string `json:"Layers"`
+			}
+			var manifest Manifest
 
 			manifestData, err := io.ReadAll(imageFileReader)
 			if err != nil {
 				return nil, nil, err
 			}
 
-			layerIDs, _ = getlayerIDs(manifestData)
-
-			layerDigestsV25, err := getLayerDigestsV25(manifestData)
-			if err == nil {
-				layerDigests = layerDigestsV25
-				continue
+			if err := json.Unmarshal(manifestData, &manifest); err != nil {
+				return nil, nil, err
 			}
 
-			layerDigestsV24, err := getLayerDigestsV24(manifestData)
-			if err == nil {
-				layerDigests = layerDigestsV24
-				continue
+			configPath = manifest[0].Config
+
+			for layerNumber, layerID := range manifest[0].Layers {
+				layerIDSplit := strings.Split(layerID, ":")
+				layerIDs[layerNumber] = layerIDSplit[len(layerIDSplit)-1]
 			}
 
+		} else if strings.HasSuffix(hdr.Name, ".json") {
+
+			configData, err := io.ReadAll(imageFileReader)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// Attempt to parse as if it's an image config file, trying each version until one works
+			parsingFunctions := []func([]byte) (map[int]string, error){
+				getLayerDigestsV25,
+				getLayerDigestsV24,
+			}
+			for _, parseFunc := range parsingFunctions {
+				layerDigests, err := parseFunc(configData)
+				if err == nil {
+					layerDigestCandidates[hdr.Name] = layerDigests
+					break
+				}
+			}
 		}
+	}
+
+	layerDigests, ok := layerDigestCandidates[configPath]
+	if !ok {
+		return nil, nil, errors.New("config file either not found, or failed to parse")
 	}
 
 	return layerDigests, layerIDs, nil
 }
 
-func processRemoteImageLayers(imageName string, username string, password string, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
+func processRemoteImage(imageName string, username string, password string, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
 
 	layerDigests = make(map[int]string)
 
@@ -297,7 +307,7 @@ func processImageLayers(ctx *cli.Context, onLayer LayerProcessor) (layerDigests 
 			return nil, nil, err
 		}
 		defer imageReader.Close()
-		return processLocalImageLayers(imageReader, onLayer)
+		return processLocalImage(imageReader, onLayer)
 	}
 
 	if tarballPath != "" {
@@ -305,7 +315,7 @@ func processImageLayers(ctx *cli.Context, onLayer LayerProcessor) (layerDigests 
 	} else if useDocker {
 		return processLocal(fetchImageDocker, imageName)
 	} else {
-		return processRemoteImageLayers(
+		return processRemoteImage(
 			imageName,
 			ctx.String(usernameFlag),
 			ctx.String(passwordFlag),
