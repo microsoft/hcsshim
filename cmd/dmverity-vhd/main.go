@@ -173,7 +173,7 @@ func getLayerDigestsV25(manifestData []byte) (map[int]string, error) {
 	return layerDigests, nil
 }
 
-func processLocalImageLayers(imageReader io.ReadCloser, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
+func processLocalImageLayers(imageReader io.Reader, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
 
 	imageFileReader := tar.NewReader(imageReader)
 	layerDigests = make(map[int]string)
