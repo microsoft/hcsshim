@@ -62,7 +62,7 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec, ociBundlePath stri
 	}
 
 	// add template for pid argument to be injected later by the generic hook binary
-	args = append(args, "--no-cgroups", "--pid={{pid}}", spec.Root.Path)
+	args = append(args, "--pid={{pid}}", spec.Root.Path)
 
 	// setup environment variables for the hook to run in
 	hookLogDebugFileEnvOpt := fmt.Sprintf("%s=%s", generichook.LogDebugFileEnvKey, toolDebugPath)
