@@ -290,6 +290,23 @@ func HcnCreateTestLoadBalancer(endpoint *HostComputeEndpoint) (*HostComputeLoadB
 	return loadBalancer.Create()
 }
 
+func HcnLoadBalancerTestAddBackend(loadBalancer *HostComputeLoadBalancer, endpointId string) {
+	endpointIds := loadBalancer.HostComputeEndpoints
+	endpointIds = append(endpointIds, endpointId)
+	loadBalancer.HostComputeEndpoints = endpointIds
+}
+
+func HcnLoadBalancerTestRemoveBackend(loadBalancer *HostComputeLoadBalancer, endpointId string) {
+	endpointIds := loadBalancer.HostComputeEndpoints
+	for i, v := range endpointIds {
+		if v == endpointId {
+			endpointIds = append(endpointIds[:i], endpointIds[i+1:]...)
+			break
+		}
+	}
+	loadBalancer.HostComputeEndpoints = endpointIds
+}
+
 func HcnCreateTestRemoteSubnetRoute() (*PolicyNetworkRequest, error) {
 	rsr := RemoteSubnetRoutePolicySetting{
 		DestinationPrefix:           "192.168.2.0/24",
