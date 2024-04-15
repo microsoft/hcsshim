@@ -217,6 +217,7 @@ func unmountRequest(controller, lun uint, path string, config *mountConfig, osTy
 	case "linux":
 		req.Settings = guestresource.LCOWMappedVirtualDisk{
 			MountPath:  path,
+			ReadOnly:   config.readOnly,
 			Lun:        uint8(lun),
 			Partition:  config.partition,
 			Controller: uint8(controller),
