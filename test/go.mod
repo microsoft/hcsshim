@@ -3,7 +3,7 @@ module github.com/Microsoft/hcsshim/test
 go 1.21
 
 require (
-	github.com/Microsoft/go-winio v0.6.1
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/Microsoft/hcsshim v0.11.4
 	github.com/containerd/cgroups/v3 v3.0.3
 	github.com/containerd/containerd v1.7.14
@@ -114,7 +114,6 @@ require (
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.22.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.15.0 // indirect
 	google.golang.org/genproto v0.0.0-20240123012728-ef4313101c80 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240123012728-ef4313101c80 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
