@@ -466,10 +466,16 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	if uvm.scsiControllerCount > 0 {
 		logrus.Debug("makeLCOWVMGSDoc configuring scsi devices")
 		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+		for i := 0; i < int(uvm.scsiControllerCount); i++ {
+			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
+				Attachments: make(map[string]hcsschema.Attachment),
+			}
+		}
 		if opts.DmVerityMode {
 			logrus.Debug("makeLCOWVMGSDoc DmVerityMode true")
+			scsiController0 := guestrequest.ScsiControllerGuids[0]
 			doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
-				"RootFileSystemVirtualDisk": {
+				scsiController0: {
 					Attachments: map[string]hcsschema.Attachment{
 						"0": {
 							Type_:    "VirtualDisk",
@@ -486,11 +492,6 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 			}
 			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
 			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 1})
-		}
-		for i := 0; i < int(uvm.scsiControllerCount); i++ {
-			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
-				Attachments: make(map[string]hcsschema.Attachment),
-			}
 		}
 	}
 
