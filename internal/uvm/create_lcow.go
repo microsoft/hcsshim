@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"maps"
 	"net"
 	"os"
@@ -15,13 +14,12 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/internal/security"
-	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -30,6 +28,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/internal/security"
+	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -375,7 +375,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	vmgsFileFullPath := filepath.Join(opts.BundleDirectory, opts.GuestStateFile)
-	if err := createCopy(vmgsFileFullPath, vmgsTemplatePath); err != nil {
+	if err := copyfile.CopyFile(ctx, vmgsFileFullPath, vmgsTemplatePath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy VMGS template file: %w", err)
 	}
 	defer func() {
@@ -385,7 +385,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}()
 
 	dmVerityRootFsFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityRootfsVhd)
-	if err := createCopy(dmVerityRootFsFullPath, dmVerityRootfsTemplatePath); err != nil {
+	if err := copyfile.CopyFile(ctx, dmVerityRootFsFullPath, dmVerityRootfsTemplatePath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy DM Verity rootfs template file: %w", err)
 	}
 	defer func() {
@@ -395,7 +395,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}()
 
 	dmVerityHashFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityHashVhd)
-	if err := createCopy(dmVerityHashFullPath, dmVerityHashTemplatePath); err != nil {
+	if err := copyfile.CopyFile(ctx, dmVerityHashFullPath, dmVerityHashTemplatePath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy DM Verity hash template file: %w", err)
 	}
 	defer func() {
@@ -519,23 +519,6 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	return doc, nil
-}
-
-func createCopy(dst, src string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	return err
 }
 
 // Programatically make the hcsschema.ComputeSystem document for the SNP case.
