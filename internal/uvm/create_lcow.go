@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"maps"
 	"net"
 	"os"
@@ -15,13 +14,12 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/internal/security"
-	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -30,6 +28,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/internal/security"
+	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -357,15 +357,15 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	// The root file system comes from the dmverity vhd file which is mounted by the initrd in the vmgs file.
-	dmVerityRootFsFullPath := filepath.Join(opts.BootFilesPath, opts.DmVerityRootFsVhd)
-	if _, err := os.Stat(dmVerityRootFsFullPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("the DM Verity VHD file '%s' was not found", dmVerityRootFsFullPath)
+	dmVerityRootfsTemplatePath := filepath.Join(opts.BootFilesPath, opts.DmVerityRootFsVhd)
+	if _, err := os.Stat(dmVerityRootfsTemplatePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("the DM Verity VHD file '%s' was not found", dmVerityRootfsTemplatePath)
 	}
 
 	// The root file system comes from the dmverity vhd file which is mounted by the initrd in the vmgs file.
-	dmVerityHashFullPath := filepath.Join(opts.BootFilesPath, opts.DmVerityHashVhd)
-	if _, err := os.Stat(dmVerityHashFullPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("the DM Verity Hash file '%s' was not found", dmVerityHashFullPath)
+	dmVerityHashTemplatePath := filepath.Join(opts.BootFilesPath, opts.DmVerityHashVhd)
+	if _, err := os.Stat(dmVerityHashTemplatePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("the DM Verity Hash file '%s' was not found", dmVerityHashTemplatePath)
 	}
 
 	var processor *hcsschema.Processor2
@@ -374,31 +374,40 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		return nil, err
 	}
 
-	vmgsFile, err := os.Create(filepath.Join(opts.BundleDirectory, opts.GuestStateFile))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary VMGS file: %w", err)
+	vmgsFileFullPath := filepath.Join(opts.BundleDirectory, opts.GuestStateFile)
+	if err := copyfile.CopyFile(ctx, vmgsFileFullPath, vmgsTemplatePath, true); err != nil {
+		return nil, fmt.Errorf("failed to copy VMGS template file: %w", err)
 	}
 	defer func() {
-		_ = vmgsFile.Close()
 		if err != nil {
-			if rmErr := os.RemoveAll(vmgsFile.Name()); rmErr != nil {
-				log.G(ctx).WithError(rmErr).Error("failed to remove temporary VMGS file")
-			}
+			os.Remove(vmgsFileFullPath)
 		}
 	}()
 
-	templateFile, err := os.Open(vmgsTemplatePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open template VMGS file for copy: %w", err)
+	dmVerityRootFsFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityRootfsVhd)
+	if err := copyfile.CopyFile(ctx, dmVerityRootFsFullPath, dmVerityRootfsTemplatePath, true); err != nil {
+		return nil, fmt.Errorf("failed to copy DM Verity rootfs template file: %w", err)
 	}
-	defer templateFile.Close()
+	defer func() {
+		if err != nil {
+			os.Remove(dmVerityRootFsFullPath)
+		}
+	}()
 
-	if _, err := io.Copy(vmgsFile, templateFile); err != nil {
-		return nil, fmt.Errorf("failed to copy template VMGS file: %w", err)
+	dmVerityHashFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityHashVhd)
+	if err := copyfile.CopyFile(ctx, dmVerityHashFullPath, dmVerityHashTemplatePath, true); err != nil {
+		return nil, fmt.Errorf("failed to copy DM Verity hash template file: %w", err)
 	}
+	defer func() {
+		if err != nil {
+			os.Remove(dmVerityHashFullPath)
+		}
+	}()
 
-	if err := security.GrantVmGroupAccessWithMask(vmgsFile.Name(), security.AccessMaskAll); err != nil {
-		return nil, fmt.Errorf("failed to grant VM group access ALL: %w", err)
+	for _, filename := range []string{vmgsFileFullPath, dmVerityRootFsFullPath, dmVerityHashFullPath} {
+		if err := security.GrantVmGroupAccessWithMask(filename, security.AccessMaskAll); err != nil {
+			return nil, fmt.Errorf("failed to grant VM group access ALL: %w", err)
+		}
 	}
 
 	// Align the requested memory size.
@@ -505,7 +514,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 
 	// Point at the file that contains the linux kernel and initrd images.
 	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
-		GuestStateFilePath:  vmgsFile.Name(),
+		GuestStateFilePath:  vmgsFileFullPath,
 		GuestStateFileType:  "FileMode",
 		ForceTransientState: true, // tell HCS that this is just the source of the images, not ongoing state
 	}
