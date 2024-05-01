@@ -375,7 +375,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	vmgsFileFullPath := filepath.Join(opts.BundleDirectory, opts.GuestStateFile)
-	if err := copyfile.CopyFile(ctx, vmgsFileFullPath, vmgsTemplatePath, true); err != nil {
+	if err := copyfile.CopyFile(ctx, vmgsTemplatePath, vmgsFileFullPath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy VMGS template file: %w", err)
 	}
 	defer func() {
@@ -385,7 +385,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}()
 
 	dmVerityRootFsFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityRootfsVhd)
-	if err := copyfile.CopyFile(ctx, dmVerityRootFsFullPath, dmVerityRootfsTemplatePath, true); err != nil {
+	if err := copyfile.CopyFile(ctx, dmVerityRootfsTemplatePath, dmVerityRootFsFullPath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy DM Verity rootfs template file: %w", err)
 	}
 	defer func() {
@@ -395,7 +395,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}()
 
 	dmVerityHashFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityHashVhd)
-	if err := copyfile.CopyFile(ctx, dmVerityHashFullPath, dmVerityHashTemplatePath, true); err != nil {
+	if err := copyfile.CopyFile(ctx, dmVerityHashTemplatePath, dmVerityHashFullPath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy DM Verity hash template file: %w", err)
 	}
 	defer func() {
