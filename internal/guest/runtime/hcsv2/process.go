@@ -286,7 +286,7 @@ func (ep *externalProcess) ResizeConsole(_ context.Context, height, width uint16
 }
 
 func (ep *externalProcess) Wait() (<-chan int, chan<- bool) {
-	otelutil.StartSpan(context.Background(), "opengcs::externalProcess::Wait", trace.WithAttributes(
+	_, span := otelutil.StartSpan(context.Background(), "opengcs::externalProcess::Wait", trace.WithAttributes(
 		attribute.Int64("pid", int64(ep.cmd.Process.Pid))))
 
 	exitCodeChan := make(chan int, 1)
@@ -305,8 +305,10 @@ func (ep *externalProcess) Wait() (<-chan int, chan<- bool) {
 			ep.removeOnce.Do(func() {
 				ep.remove(ep.cmd.Process.Pid)
 			})
+			span.End()
 		case <-doneChan:
 			// Caller closed early, do nothing.
+			span.End()
 		}
 	}()
 	return exitCodeChan, doneChan
