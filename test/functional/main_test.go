@@ -23,11 +23,12 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/sync"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -161,8 +162,10 @@ func runTests(m *testing.M) error {
 		return fmt.Errorf("tests must be run in an elevated context")
 	}
 
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(otelutil.DefaultSampler),
+		sdktrace.WithBatcher(&otelutil.LogrusExporter{}),
+	))
 
 	// default is stderr, but test2json does not consume stderr, so logs would be out of sync
 	// and powershell considers output on stderr as an error when execing

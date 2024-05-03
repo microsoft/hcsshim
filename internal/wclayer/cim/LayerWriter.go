@@ -10,10 +10,11 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // A CimLayerWriter implements the wclayer.LayerWriter interface to allow writing container
@@ -22,7 +23,7 @@ import (
 // some other files which are stored in the directory of that layer (i.e the `path` directory).
 type CimLayerWriter struct {
 	ctx context.Context
-	s   *trace.Span
+	s   trace.Span
 	// path to the layer (i.e layer's directory) as provided by the caller.
 	// Even if a layer is stored as a cim in the cim directory, some files associated
 	// with a layer are still stored in this path.
@@ -196,18 +197,17 @@ func NewCimLayerWriter(ctx context.Context, layerPath, cimPath string, parentLay
 		return nil, fmt.Errorf("CimFs not supported on this build")
 	}
 
-	ctx, span := trace.StartSpan(ctx, "hcsshim::NewCimLayerWriter")
+	ctx, span := otelutil.StartSpan(ctx, "hcsshim::NewCimLayerWriter", trace.WithAttributes(
+		attribute.String("path", layerPath),
+		attribute.String("cimPath", cimPath),
+		attribute.String("parentLayerPaths", strings.Join(parentLayerCimPaths, ", ")),
+		attribute.String("parentLayerPaths", strings.Join(parentLayerPaths, ", "))))
 	defer func() {
 		if err != nil {
-			oc.SetSpanStatus(span, err)
+			otelutil.SetSpanStatus(span, err)
 			span.End()
 		}
 	}()
-	span.AddAttributes(
-		trace.StringAttribute("path", layerPath),
-		trace.StringAttribute("cimPath", cimPath),
-		trace.StringAttribute("parentLayerPaths", strings.Join(parentLayerCimPaths, ", ")),
-		trace.StringAttribute("parentLayerPaths", strings.Join(parentLayerPaths, ", ")))
 
 	parentCim := ""
 	if len(parentLayerPaths) > 0 {

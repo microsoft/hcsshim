@@ -10,9 +10,10 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/unix"
 )
 
@@ -30,15 +31,13 @@ var (
 // `target` will be created. On mount failure the created `target` will be
 // automatically cleaned up.
 func Mount(ctx context.Context, vsock transport.Transport, target, share string, port uint32, readonly bool) (err error) {
-	_, span := oc.StartSpan(ctx, "plan9::Mount")
+	_, span := otelutil.StartSpan(ctx, "plan9::Mount", trace.WithAttributes(
+		attribute.String("target", target),
+		attribute.String("share", share),
+		attribute.Int64("port", int64(port)),
+		attribute.Bool("readonly", readonly)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("target", target),
-		trace.StringAttribute("share", share),
-		trace.Int64Attribute("port", int64(port)),
-		trace.BoolAttribute("readonly", readonly))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if err := osMkdirAll(target, 0700); err != nil {
 		return err

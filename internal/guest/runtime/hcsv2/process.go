@@ -15,11 +15,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Process interface {
@@ -87,11 +88,10 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 	p.exitWg.Add(1)
 	p.writersWg.Add(1)
 	go func() {
-		ctx, span := oc.StartSpan(context.Background(), "newProcess::waitBackground")
+		ctx, span := otelutil.StartSpan(context.Background(), "newProcess::waitBackground", trace.WithAttributes(
+			attribute.String(logfields.ContainerID, p.cid),
+			attribute.Int64(logfields.ProcessID, int64(p.pid))))
 		defer span.End()
-		span.AddAttributes(
-			trace.StringAttribute(logfields.ContainerID, p.cid),
-			trace.Int64Attribute(logfields.ProcessID, int64(p.pid)))
 
 		// Wait for the process to exit
 		exitCode, err := p.process.Wait()
@@ -117,11 +117,10 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 			}
 			c.processesMutex.Lock()
 
-			_, span := oc.StartSpan(context.Background(), "newProcess::waitBackground::waitAllWaiters")
+			_, span := otelutil.StartSpan(context.Background(), "newProcess::waitBackground::waitAllWaiters", trace.WithAttributes(
+				attribute.String("cid", p.cid),
+				attribute.Int64("pid", int64(p.pid))))
 			defer span.End()
-			span.AddAttributes(
-				trace.StringAttribute("cid", p.cid),
-				trace.Int64Attribute("pid", int64(p.pid)))
 
 			delete(c.processes, p.pid)
 			c.processesMutex.Unlock()
@@ -165,10 +164,9 @@ func (p *containerProcess) ResizeConsole(_ context.Context, height, width uint16
 // gather the exit code. The second channel must be signaled from the caller
 // when the caller has completed its use of this call to Wait.
 func (p *containerProcess) Wait() (<-chan int, chan<- bool) {
-	ctx, span := oc.StartSpan(context.Background(), "opengcs::containerProcess::Wait")
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.pid)))
+	ctx, span := otelutil.StartSpan(context.Background(), "opengcs::containerProcess::Wait", trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.pid))))
 
 	exitCodeChan := make(chan int, 1)
 	doneChan := make(chan bool)
@@ -288,8 +286,8 @@ func (ep *externalProcess) ResizeConsole(_ context.Context, height, width uint16
 }
 
 func (ep *externalProcess) Wait() (<-chan int, chan<- bool) {
-	_, span := oc.StartSpan(context.Background(), "opengcs::externalProcess::Wait")
-	span.AddAttributes(trace.Int64Attribute("pid", int64(ep.cmd.Process.Pid)))
+	otelutil.StartSpan(context.Background(), "opengcs::externalProcess::Wait", trace.WithAttributes(
+		attribute.Int64("pid", int64(ep.cmd.Process.Pid))))
 
 	exitCodeChan := make(chan int, 1)
 	doneChan := make(chan bool)

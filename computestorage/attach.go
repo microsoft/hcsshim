@@ -6,9 +6,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // AttachLayerStorageFilter sets up the layer storage filter on a writable
@@ -20,12 +21,10 @@ import (
 // `layerData` is the parent read-only layer data.
 func AttachLayerStorageFilter(ctx context.Context, layerPath string, layerData LayerData) (err error) {
 	title := "hcsshim::AttachLayerStorageFilter"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("layerPath", layerPath))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("layerPath", layerPath),
-	)
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	bytes, err := json.Marshal(layerData)
 	if err != nil {
@@ -48,12 +47,10 @@ func AttachLayerStorageFilter(ctx context.Context, layerPath string, layerData L
 // `layerData` is the parent read-only layer data.
 func AttachOverlayFilter(ctx context.Context, volumePath string, layerData LayerData) (err error) {
 	title := "hcsshim::AttachOverlayFilter"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("volumePath", volumePath))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("volumePath", volumePath),
-	)
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	bytes, err := json.Marshal(layerData)
 	if err != nil {

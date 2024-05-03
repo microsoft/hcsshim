@@ -14,12 +14,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	ncproxygrpcv0 "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v0"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
-	"github.com/Microsoft/hcsshim/pkg/octtrpc"
+	"github.com/Microsoft/hcsshim/pkg/otelttrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
-	"go.opencensus.io/plugin/ocgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -48,13 +48,13 @@ func newServer(ctx context.Context, conf *config, dbPath string) (*server, error
 	agentCache := newComputeAgentCache()
 	reconnectComputeAgents(ctx, agentStore, agentCache)
 
-	ttrpcServer, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
+	ttrpcServer, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(otelttrpc.ServerInterceptor()))
 	if err != nil {
 		log.G(ctx).WithError(err).Error("failed to create ttrpc server")
 		return nil, err
 	}
 	return &server{
-		grpc:              grpc.NewServer(grpc.StatsHandler(&ocgrpc.ServerHandler{})),
+		grpc:              grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler())),
 		ttrpc:             ttrpcServer,
 		conf:              conf,
 		agentStore:        agentStore,

@@ -6,8 +6,9 @@ import (
 	"context"
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ActivateLayer will find the layer with the given id and mount it's filesystem.
@@ -16,10 +17,10 @@ import (
 // An activated layer must later be deactivated via DeactivateLayer.
 func ActivateLayer(ctx context.Context, path string) (err error) {
 	title := "hcsshim::ActivateLayer"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("path", path))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("path", path))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	err = activateLayer(&stdDriverInfo, path)
 	if err != nil {

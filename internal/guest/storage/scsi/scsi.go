@@ -15,7 +15,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
@@ -25,7 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/ext4"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/xfs"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
@@ -131,15 +132,12 @@ func Mount(
 	readonly bool,
 	options []string,
 	config *Config) (err error) {
-	spnCtx, span := oc.StartSpan(ctx, "scsi::Mount")
+	spnCtx, span := otelutil.StartSpan(ctx, "scsi::Mount", trace.WithAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun)),
+		attribute.Int64("partition", int64(partition))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)),
-		trace.Int64Attribute("partition", int64(partition)),
-	)
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	source, err := getDevicePath(spnCtx, controller, lun, partition)
 	if err != nil {
@@ -270,15 +268,13 @@ func Unmount(
 	target string,
 	config *Config,
 ) (err error) {
-	ctx, span := oc.StartSpan(ctx, "scsi::Unmount")
+	ctx, span := otelutil.StartSpan(ctx, "scsi::Unmount", trace.WithAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun)),
+		attribute.Int64("partition", int64(partition)),
+		attribute.String("target", target)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)),
-		trace.Int64Attribute("partition", int64(partition)),
-		trace.StringAttribute("target", target))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	// unmount target
 	if err := storageUnmountPath(ctx, target, true); err != nil {
@@ -307,15 +303,12 @@ func Unmount(
 // index `lun` with partition index `partition` and also ensures that the device
 // is available under that path or context is canceled.
 func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64) (_ string, err error) {
-	ctx, span := oc.StartSpan(ctx, "scsi::GetDevicePath")
+	ctx, span := otelutil.StartSpan(ctx, "scsi::GetDevicePath", trace.WithAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun)),
+		attribute.Int64("partition", int64(partition))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)),
-		trace.Int64Attribute("partition", int64(partition)),
-	)
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 	// Devices matching the given SCSI code should each have a subdirectory
@@ -403,13 +396,11 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 //
 // If the device is not attached returns no error.
 func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
-	_, span := oc.StartSpan(ctx, "scsi::UnplugDevice")
+	_, span := otelutil.StartSpan(ctx, "scsi::UnplugDevice", trace.WithAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 	f, err := os.OpenFile(filepath.Join(scsiDevicesPath, scsiID, "delete"), os.O_WRONLY, 0644)

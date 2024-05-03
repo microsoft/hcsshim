@@ -11,12 +11,13 @@ import (
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/unix"
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
@@ -94,12 +95,11 @@ func specHasGPUDevice(spec *oci.Spec) bool {
 }
 
 func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec, ociBundlePath string) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
+	ctx, span := otelutil.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec", trace.WithAttributes(
+		attribute.String("sandboxID", sbid),
+		attribute.String("cid", id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("sandboxID", sbid),
-		trace.StringAttribute("cid", id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	// Verify no hostname
 	if spec.Hostname != "" {

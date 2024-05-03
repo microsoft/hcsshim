@@ -7,8 +7,9 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // NameToGuid converts the given string into a GUID using the algorithm in the
@@ -16,16 +17,16 @@ import (
 // across all clients.
 func NameToGuid(ctx context.Context, name string) (_ guid.GUID, err error) {
 	title := "hcsshim::NameToGuid"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("objectName", name))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("objectName", name))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var id guid.GUID
 	err = nameToGuid(name, &id)
 	if err != nil {
 		return guid.GUID{}, hcserror.New(err, title, "")
 	}
-	span.AddAttributes(trace.StringAttribute("guid", id.String()))
+	span.SetAttributes(attribute.String("guid", id.String()))
 	return id, nil
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/octtrpc"
+	"github.com/Microsoft/hcsshim/pkg/otelttrpc"
 )
 
 func init() {
@@ -234,7 +234,7 @@ func setupAndServe(ctx context.Context, caAddr string, vm *UtilityVM) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to listen on %s", caAddr)
 	}
-	s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
+	s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(otelttrpc.ServerInterceptor()))
 	if err != nil {
 		return err
 	}

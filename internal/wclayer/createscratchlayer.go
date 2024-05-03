@@ -7,20 +7,20 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // CreateScratchLayer creates and populates new read-write layer for use by a container.
 // This requires the full list of paths to all parent layers up to the base
 func CreateScratchLayer(ctx context.Context, path string, parentLayerPaths []string) (err error) {
 	title := "hcsshim::CreateScratchLayer"
-	ctx, span := oc.StartSpan(ctx, title)
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("path", path),
+		attribute.String("parentLayerPaths", strings.Join(parentLayerPaths, ", "))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("path", path),
-		trace.StringAttribute("parentLayerPaths", strings.Join(parentLayerPaths, ", ")))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	// Generate layer descriptors
 	layers, err := layerPathsToDescriptors(ctx, parentLayerPaths)

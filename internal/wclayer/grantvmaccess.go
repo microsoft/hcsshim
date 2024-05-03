@@ -6,19 +6,19 @@ import (
 	"context"
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // GrantVmAccess adds access to a file for a given VM
 func GrantVmAccess(ctx context.Context, vmid string, filepath string) (err error) {
 	title := "hcsshim::GrantVmAccess"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("vm-id", vmid),
+		attribute.String("path", filepath))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("vm-id", vmid),
-		trace.StringAttribute("path", filepath))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	err = grantVmAccess(vmid, filepath)
 	if err != nil {

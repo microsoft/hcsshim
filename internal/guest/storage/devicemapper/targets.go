@@ -7,11 +7,12 @@ import (
 	"context"
 	"fmt"
 
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
@@ -29,19 +30,17 @@ var retryErrors = []error{
 // CreateZeroSectorLinearTarget creates dm-linear target for a device at `devPath` and `mappingInfo`, returns
 // virtual block device path.
 func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, mappingInfo *guestresource.LCOWVPMemMappingInfo) (_ string, err error) {
-	_, span := oc.StartSpan(ctx, "devicemapper::CreateZeroSectorLinearTarget")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
 	size := int64(mappingInfo.DeviceSizeInBytes)
 	offset := int64(mappingInfo.DeviceOffsetInBytes)
 	linearTarget := zeroSectorLinearTarget(size, devPath, offset)
 
-	span.AddAttributes(
-		trace.StringAttribute("devicePath", devPath),
-		trace.Int64Attribute("deviceStart", offset),
-		trace.Int64Attribute("sectorSize", size),
-		trace.StringAttribute("linearTable", fmt.Sprintf("%s: '%d %d %s'", devName, linearTarget.SectorStart, linearTarget.LengthInBlocks, linearTarget.Params)))
+	_, span := otelutil.StartSpan(ctx, "devicemapper::CreateZeroSectorLinearTarget", trace.WithAttributes(
+		attribute.String("devicePath", devPath),
+		attribute.Int64("deviceStart", offset),
+		attribute.Int64("sectorSize", size),
+		attribute.String("linearTable", fmt.Sprintf("%s: '%d %d %s'", devName, linearTarget.SectorStart, linearTarget.LengthInBlocks, linearTarget.Params))))
+	defer span.End()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	devMapperPath, err := CreateDeviceWithRetryErrors(
 		ctx,
@@ -72,9 +71,9 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 //
 // [dm-verity]: https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html#construction-parameters
 func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo *guestresource.DeviceVerityInfo) (_ string, err error) {
-	_, span := oc.StartSpan(ctx, "devicemapper::CreateVerityTarget")
+	_, span := otelutil.StartSpan(ctx, "devicemapper::CreateVerityTarget")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	dmBlocks := verityInfo.Ext4SizeInBytes / blockSize
 	dataBlocks := verityInfo.Ext4SizeInBytes / int64(verityInfo.BlockSize)
@@ -93,10 +92,10 @@ func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo
 		Params:         fmt.Sprintf("%d %s %s %s", verityInfo.Version, devices, blkInfo, hashes),
 	}
 
-	span.AddAttributes(
-		trace.StringAttribute("devicePath", devPath),
-		trace.Int64Attribute("sectorSize", dmBlocks),
-		trace.StringAttribute("verityTable", verityTarget.Params))
+	span.SetAttributes(
+		attribute.String("devicePath", devPath),
+		attribute.Int64("sectorSize", dmBlocks),
+		attribute.String("verityTable", verityTarget.Params))
 
 	devMapperPath, err := CreateDeviceWithRetryErrors(
 		ctx,

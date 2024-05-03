@@ -16,9 +16,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/vmbus"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // mock out calls for testing
@@ -34,9 +35,9 @@ const maxDNSSearches = 6
 
 // GenerateEtcHostsContent generates a /etc/hosts file based on `hostname`.
 func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
-	_, span := oc.StartSpan(ctx, "network::GenerateEtcHostsContent")
+	_, span := otelutil.StartSpan(ctx, "network::GenerateEtcHostsContent", trace.WithAttributes(
+		attribute.String("hostname", hostname)))
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("hostname", hostname))
 
 	nameParts := strings.Split(hostname, ".")
 	buf := bytes.Buffer{}
@@ -59,14 +60,12 @@ func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
 // GenerateResolvConfContent generates the resolv.conf file content based on
 // `searches`, `servers`, and `options`.
 func GenerateResolvConfContent(ctx context.Context, searches, servers, options []string) (_ string, err error) {
-	_, span := oc.StartSpan(ctx, "network::GenerateResolvConfContent")
+	_, span := otelutil.StartSpan(ctx, "network::GenerateResolvConfContent", trace.WithAttributes(
+		attribute.String("searches", strings.Join(searches, ", ")),
+		attribute.String("servers", strings.Join(servers, ", ")),
+		attribute.String("options", strings.Join(options, ", "))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("searches", strings.Join(searches, ", ")),
-		trace.StringAttribute("servers", strings.Join(servers, ", ")),
-		trace.StringAttribute("options", strings.Join(options, ", ")))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if len(searches) > maxDNSSearches {
 		return "", errors.Errorf("searches has more than %d domains", maxDNSSearches)
@@ -115,12 +114,12 @@ func MergeValues(first, second []string) []string {
 //
 // Will retry the operation until `ctx` is exceeded or canceled.
 func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ string, err error) {
-	ctx, span := oc.StartSpan(ctx, "network::InstanceIDToName")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
 	vmBusID := strings.ToLower(id)
-	span.AddAttributes(trace.StringAttribute("adapterInstanceID", vmBusID))
+
+	ctx, span := otelutil.StartSpan(ctx, "network::InstanceIDToName", trace.WithAttributes(
+		attribute.String("adapterInstanceID", vmBusID)))
+	defer span.End()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var netDevicePath string
 	if vpciAssigned {

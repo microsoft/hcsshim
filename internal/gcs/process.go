@@ -14,9 +14,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -124,11 +125,10 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 // Close releases resources associated with the process and closes the
 // associated standard IO streams.
 func (p *Process) Close() error {
-	ctx, span := oc.StartSpan(context.Background(), "gcs::Process::Close")
+	ctx, span := otelutil.StartSpan(context.Background(), "gcs::Process::Close", trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id))))
 	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
 
 	if err := p.stdin.Close(); err != nil {
 		log.G(ctx).WithError(err).Warn("close stdin failed")
@@ -144,12 +144,11 @@ func (p *Process) Close() error {
 
 // CloseStdin causes the process to read EOF on its stdin stream.
 func (p *Process) CloseStdin(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::CloseStdin") //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Process::CloseStdin", trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id)))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	p.stdinCloseWriteOnce.Do(func() {
 		p.stdinCloseWriteErr = p.stdin.CloseWrite()
@@ -158,23 +157,21 @@ func (p *Process) CloseStdin(ctx context.Context) (err error) {
 }
 
 func (p *Process) CloseStdout(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Process::CloseStdout", trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id)))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	return p.stdout.Close()
 }
 
 func (p *Process) CloseStderr(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Process::CloseStderr", trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id)))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	return p.stderr.Close()
 }
@@ -195,12 +192,11 @@ func (p *Process) ExitCode() (_ int, err error) {
 // signal was delivered. The process might not be terminated by the time this
 // returns.
 func (p *Process) Kill(ctx context.Context) (_ bool, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::Kill")
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Process::Kill", trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	return p.Signal(ctx, nil)
 }
@@ -213,12 +209,11 @@ func (p *Process) Pid() int {
 // ResizeConsole requests that the pty associated with the process resize its
 // window.
 func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::ResizeConsole", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Process::ResizeConsole", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := containerResizeConsole{
 		requestBase: makeRequest(ctx, p.cid),
@@ -232,12 +227,11 @@ func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err 
 
 // Signal sends a signal to the process, returning whether it was delivered.
 func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::Signal", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Process::Signal", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := containerSignalProcess{
 		requestBase: makeRequest(ctx, p.cid),
@@ -277,11 +271,10 @@ func (p *Process) Wait() error {
 }
 
 func (p *Process) waitBackground() {
-	ctx, span := oc.StartSpan(context.Background(), "gcs::Process::waitBackground")
+	ctx, span := otelutil.StartSpan(context.Background(), "gcs::Process::waitBackground", trace.WithAttributes(
+		attribute.String("cid", p.cid),
+		attribute.Int64("pid", int64(p.id))))
 	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.id)))
 
 	p.waitCall.Wait()
 	ec, err := p.ExitCode()
@@ -289,5 +282,5 @@ func (p *Process) waitBackground() {
 		log.G(ctx).WithError(err).Error("failed wait")
 	}
 	log.G(ctx).WithField("exitCode", ec).Debug("process exited")
-	oc.SetSpanStatus(span, err)
+	otelutil.SetSpanStatus(span, err)
 }

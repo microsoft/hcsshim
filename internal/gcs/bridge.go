@@ -16,11 +16,12 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 )
 
 const (
@@ -260,7 +261,7 @@ func (brdg *bridge) recvLoopRoutine() {
 }
 
 func readMessage(r io.Reader) (int64, msgType, []byte, error) {
-	_, span := oc.StartSpan(context.Background(), "bridge receive read message", oc.WithClientSpanKind)
+	_, span := otelutil.StartSpan(context.Background(), "bridge receive read message", otelutil.WithClientSpanKind)
 	defer span.End()
 
 	var h [hdrSize]byte
@@ -271,9 +272,9 @@ func readMessage(r io.Reader) (int64, msgType, []byte, error) {
 	typ := msgType(binary.LittleEndian.Uint32(h[hdrOffType:]))
 	n := binary.LittleEndian.Uint32(h[hdrOffSize:])
 	id := int64(binary.LittleEndian.Uint64(h[hdrOffID:]))
-	span.AddAttributes(
-		trace.StringAttribute("type", typ.String()),
-		trace.Int64Attribute("message-id", id))
+	span.SetAttributes(
+		attribute.String("type", typ.String()),
+		attribute.Int64("message-id", id))
 
 	if n < hdrSize || n > maxMsgSize {
 		return 0, 0, nil, fmt.Errorf("invalid message size %d", n)
@@ -383,12 +384,11 @@ func (brdg *bridge) sendLoop() {
 
 func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgType, id int64, req interface{}) error {
 	var err error
-	_, span := oc.StartSpan(context.Background(), "bridge send", oc.WithClientSpanKind)
+	_, span := otelutil.StartSpan(context.Background(), "bridge send", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("type", typ.String()),
+		attribute.Int64("message-id", id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("type", typ.String()),
-		trace.Int64Attribute("message-id", id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	// Prepare the buffer with the message.
 	var h [hdrSize]byte

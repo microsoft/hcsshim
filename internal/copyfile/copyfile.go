@@ -7,21 +7,21 @@ import (
 	"fmt"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // CopyFile is a utility for copying a file using CopyFileW win32 API for
 // performance.
 func CopyFile(ctx context.Context, srcFile, destFile string, overwrite bool) (err error) {
-	ctx, span := oc.StartSpan(ctx, "copyfile::CopyFile") //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, "copyfile::CopyFile", trace.WithAttributes(
+		attribute.String("srcFile", srcFile),
+		attribute.String("destFile", destFile),
+		attribute.Bool("overwrite", overwrite))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("srcFile", srcFile),
-		trace.StringAttribute("destFile", destFile),
-		trace.BoolAttribute("overwrite", overwrite))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var bFailIfExists int32 = 1
 	if overwrite {

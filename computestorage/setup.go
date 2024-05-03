@@ -6,10 +6,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/windows"
 )
 
@@ -24,12 +25,10 @@ import (
 // `options` are the options applied while processing the layer.
 func SetupBaseOSLayer(ctx context.Context, layerPath string, vhdHandle windows.Handle, options OsLayerOptions) (err error) {
 	title := "hcsshim::SetupBaseOSLayer"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("layerPath", layerPath))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("layerPath", layerPath),
-	)
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	bytes, err := json.Marshal(options)
 	if err != nil {
@@ -59,13 +58,11 @@ func SetupBaseOSVolume(ctx context.Context, layerPath, volumePath string, option
 		return errors.New("SetupBaseOSVolume is not present on builds older than 19645")
 	}
 	title := "hcsshim::SetupBaseOSVolume"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("layerPath", layerPath),
+		attribute.String("volumePath", volumePath))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("layerPath", layerPath),
-		trace.StringAttribute("volumePath", volumePath),
-	)
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	bytes, err := json.Marshal(options)
 	if err != nil {
