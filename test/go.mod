@@ -21,7 +21,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.1
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.19.0
+	golang.org/x/sys v0.20.0
 	google.golang.org/grpc v1.63.2
 	google.golang.org/protobuf v1.33.0
 	k8s.io/cri-api v0.27.1
