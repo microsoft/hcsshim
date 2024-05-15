@@ -33,9 +33,6 @@ func errnoErr(e syscall.Errno) error {
 	case errnoERROR_IO_PENDING:
 		return errERROR_IO_PENDING
 	}
-	// TODO: add more here, after collecting data on the common
-	// error values see on Windows. (perhaps when running
-	// all.bat?)
 	return e
 }
 
@@ -66,7 +63,7 @@ func _hcsAddResourceToOperation(operation HCSOperation, rtype uint32, uri *uint1
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall6(procHcsAddResourceToOperation.Addr(), 4, uintptr(operation), uintptr(rtype), uintptr(unsafe.Pointer(uri)), uintptr(handle), 0, 0)
+	r0, _, _ := syscall.SyscallN(procHcsAddResourceToOperation.Addr(), uintptr(operation), uintptr(rtype), uintptr(unsafe.Pointer(uri)), uintptr(handle))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -81,7 +78,7 @@ func hcsCloseOperation(operation HCSOperation) (hr error) {
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsCloseOperation.Addr(), 1, uintptr(operation), 0, 0)
+	r0, _, _ := syscall.SyscallN(procHcsCloseOperation.Addr(), uintptr(operation))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -110,7 +107,7 @@ func _hcsCreateComputeSystem(id *uint16, configuration *uint16, operation HCSOpe
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall6(procHcsCreateComputeSystem.Addr(), 5, uintptr(unsafe.Pointer(id)), uintptr(unsafe.Pointer(configuration)), uintptr(operation), uintptr(unsafe.Pointer(security_descriptor)), uintptr(unsafe.Pointer(computeSystem)), 0)
+	r0, _, _ := syscall.SyscallN(procHcsCreateComputeSystem.Addr(), uintptr(unsafe.Pointer(id)), uintptr(unsafe.Pointer(configuration)), uintptr(operation), uintptr(unsafe.Pointer(security_descriptor)), uintptr(unsafe.Pointer(computeSystem)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -125,7 +122,7 @@ func hcsCreateOperation(context uintptr, callback hcsOperationCompletionUintptr)
 	if err != nil {
 		return
 	}
-	r0, _, e1 := syscall.Syscall(procHcsCreateOperation.Addr(), 2, uintptr(context), uintptr(callback), 0)
+	r0, _, e1 := syscall.SyscallN(procHcsCreateOperation.Addr(), uintptr(context), uintptr(callback))
 	op = HCSOperation(r0)
 	if op == 0 {
 		err = errnoErr(e1)
@@ -138,7 +135,7 @@ func hcsGetOperationId(operation HCSOperation) (id uint64, err error) {
 	if err != nil {
 		return
 	}
-	r0, _, e1 := syscall.Syscall(procHcsGetOperationId.Addr(), 1, uintptr(operation), 0, 0)
+	r0, _, e1 := syscall.SyscallN(procHcsGetOperationId.Addr(), uintptr(operation))
 	id = uint64(r0)
 	if id == 0 {
 		err = errnoErr(e1)
@@ -151,7 +148,7 @@ func hcsGetOperationResult(operation HCSOperation, resultDocument **uint16) (hr 
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsGetOperationResult.Addr(), 2, uintptr(operation), uintptr(unsafe.Pointer(resultDocument)), 0)
+	r0, _, _ := syscall.SyscallN(procHcsGetOperationResult.Addr(), uintptr(operation), uintptr(unsafe.Pointer(resultDocument)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -166,7 +163,7 @@ func hcsGetOperationType(operation HCSOperation) (t HCSOperationType, err error)
 	if err != nil {
 		return
 	}
-	r0, _, e1 := syscall.Syscall(procHcsGetOperationType.Addr(), 1, uintptr(operation), 0, 0)
+	r0, _, e1 := syscall.SyscallN(procHcsGetOperationType.Addr(), uintptr(operation))
 	t = HCSOperationType(r0)
 	if t == 0 {
 		err = errnoErr(e1)
@@ -179,7 +176,7 @@ func hcsWaitForOperationResult(operation HCSOperation, timeoutMs uint32, resultD
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsWaitForOperationResult.Addr(), 3, uintptr(operation), uintptr(timeoutMs), uintptr(unsafe.Pointer(resultDocument)))
+	r0, _, _ := syscall.SyscallN(procHcsWaitForOperationResult.Addr(), uintptr(operation), uintptr(timeoutMs), uintptr(unsafe.Pointer(resultDocument)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
