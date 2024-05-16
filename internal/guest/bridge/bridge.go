@@ -311,14 +311,19 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 
 				entry := log.G(ctx)
 				if entry.Logger.GetLevel() > logrus.DebugLevel {
-					s := string(message)
+					var err error
+					var msgBytes []byte
 					switch header.Type {
 					case prot.ComputeSystemCreateV1:
-						b, err := log.ScrubBridgeCreate(message)
-						s = string(b)
-						if err != nil {
-							entry.WithError(err).Warning("could not scrub bridge payload")
-						}
+						msgBytes, err = log.ScrubBridgeCreate(message)
+					case prot.ComputeSystemExecuteProcessV1:
+						msgBytes, err = log.ScrubBridgeExecProcess(message)
+					default:
+						msgBytes = message
+					}
+					s := string(msgBytes)
+					if err != nil {
+						entry.WithError(err).Warning("could not scrub bridge payload")
 					}
 					entry.WithField("message", s).Trace("request read message")
 				}
