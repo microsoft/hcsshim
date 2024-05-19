@@ -14,7 +14,7 @@ require (
 	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/protobuild v0.3.0
-	github.com/containerd/ttrpc v1.2.3
+	github.com/containerd/ttrpc v1.2.4
 	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/docker/docker v26.1.1+incompatible
 	github.com/google/go-cmp v0.6.0
