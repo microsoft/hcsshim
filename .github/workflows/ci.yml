@@ -30,9 +30,9 @@ jobs:
 
       # lint issues in Windows code
       # linter does not work for GOOS=linux since not Windows-specific code is gated with `//go:build windows`
-      - uses: golangci/golangci-lint-action@v3
+      - uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.52
+          version: v1.58
           args: >-
             --verbose
             --max-issues-per-linter=0
