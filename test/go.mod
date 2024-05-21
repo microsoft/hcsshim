@@ -3,7 +3,7 @@ module github.com/Microsoft/hcsshim/test
 go 1.18
 
 require (
-	github.com/Microsoft/go-winio v0.4.17
+	github.com/Microsoft/go-winio v0.4.21
 	github.com/Microsoft/hcsshim v0.8.21
 	github.com/containerd/containerd v1.5.7
 	github.com/containerd/go-runc v1.0.0
