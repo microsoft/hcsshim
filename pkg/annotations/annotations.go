@@ -274,6 +274,8 @@ const (
 	// in which case the UVM boots with dm-verity.
 	DmVerityMode = "io.microsoft.virtualmachine.lcow.dmverity-mode"
 
+	// DmVerityCreateArgs specifies the `dm-mod.create` parameters to kernel and enables integrity protection of
+	// the rootfs.
 	DmVerityCreateArgs = "io.microsoft.virtualmachine.lcow.dmverity-create-args"
 
 	// UVMSecurityPolicyEnv specifies if confidential containers' related information

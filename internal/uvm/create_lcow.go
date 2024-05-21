@@ -80,7 +80,7 @@ const (
 	// kernel used to boot LCOW with KernelDirect.
 	UncompressedKernelFile = "vmlinux"
 	// GuestStateFile is the default file name for a vmgs (VM Guest State) file
-	// which combines kernel and initrd and is used to mount DmVerityVhdFile
+	// which contains the kernel and kernel command which mounts DmVerityVhdFile
 	// when booting in the SNP case.
 	GuestStateFile = "kernel.vmgs"
 	// UVMReferenceInfoFile is the default file name for a COSE_Sign1
@@ -721,7 +721,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 			kernelArgs = "root=/dev/sda ro rootwait init=/init"
 			if opts.DmVerityMode {
 				if len(opts.DmVerityCreateArgs) == 0 {
-					return nil, errors.New("DmVerityCreateArgs must be set when DmVerityMode is true")
+					return nil, errors.New("DmVerityCreateArgs must be set when DmVerityMode is true and not booting from a vmgs file.")
 				}
 				kernelArgs = fmt.Sprintf("root=/dev/dm-0 dm-mod.create=%q init=/init", opts.DmVerityCreateArgs)
 			}

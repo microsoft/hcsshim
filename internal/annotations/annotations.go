@@ -45,6 +45,7 @@ const (
 	// ExtraVSockPorts adds additional ports to the list of ports that the UVM is allowed to use.
 	ExtraVSockPorts = "io.microsoft.virtualmachine.lcow.extra-vsock-ports"
 
-	// UVMConsolePipe is the name of the named pipe that the UVM console is connected to.
+	// UVMConsolePipe is the name of the named pipe that the UVM console is connected to. This works only for non-SNP
+	// scenario, for SNP use a debugger.
 	UVMConsolePipe = "io.microsoft.virtualmachine.console.pipe"
 )
