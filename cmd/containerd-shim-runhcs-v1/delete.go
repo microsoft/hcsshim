@@ -18,7 +18,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
@@ -57,9 +57,9 @@ The delete command will be executed in the container's bundle as its cwd.
 		// task.DeleteResponse by protocol. We can write to stderr which will be
 		// logged as a warning in containerd.
 
-		ctx, span := oc.StartSpan(context.Background(), "delete")
+		ctx, span := otelutil.StartSpan(context.Background(), "delete")
 		defer span.End()
-		defer func() { oc.SetSpanStatus(span, err) }()
+		defer func() { otelutil.SetSpanStatus(span, err) }()
 
 		bundleFlag := cCtx.GlobalString("bundle")
 		if bundleFlag == "" {

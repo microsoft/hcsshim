@@ -8,8 +8,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // GetLayerMountPath will look for a mounted layer with the given path and return
@@ -18,10 +19,10 @@ import (
 // folder path at which the layer is stored.
 func GetLayerMountPath(ctx context.Context, path string) (_ string, err error) {
 	title := "hcsshim::GetLayerMountPath"
-	ctx, span := oc.StartSpan(ctx, title)
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("path", path)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("path", path))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var mountPathLength uintptr = 0
 
@@ -47,6 +48,6 @@ func GetLayerMountPath(ctx context.Context, path string) (_ string, err error) {
 	}
 
 	mountPath := syscall.UTF16ToString(mountPathp[0:])
-	span.AddAttributes(trace.StringAttribute("mountPath", mountPath))
+	span.SetAttributes(attribute.String("mountPath", mountPath))
 	return mountPath, nil
 }

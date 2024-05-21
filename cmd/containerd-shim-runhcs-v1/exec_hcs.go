@@ -15,14 +15,15 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -448,12 +449,11 @@ func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 // `Create`/`Wait`/`Start` which is a valid pattern.
 func (he *hcsExec) waitForExit() {
 	var err error // this will only save the last error, since we dont return early on error
-	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForExit")
+	ctx, span := otelutil.StartSpan(context.Background(), "hcsExec::waitForExit", trace.WithAttributes(
+		attribute.String("tid", he.tid),
+		attribute.String("eid", he.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	err = he.p.Process.Wait()
 	if err != nil {
@@ -511,11 +511,10 @@ func (he *hcsExec) waitForExit() {
 //
 // This MUST be called via a goroutine at exec create.
 func (he *hcsExec) waitForContainerExit() {
-	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForContainerExit")
+	ctx, span := otelutil.StartSpan(context.Background(), "hcsExec::waitForContainerExit", trace.WithAttributes(
+		attribute.String("tid", he.tid),
+		attribute.String("eid", he.id)))
 	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id))
 
 	// wait for container or process to exit and ckean up resrources
 	select {

@@ -12,7 +12,8 @@ import (
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -22,11 +23,11 @@ import (
 	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	ncproxystore "github.com/Microsoft/hcsshim/internal/ncproxy/store"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
-	"github.com/Microsoft/hcsshim/pkg/octtrpc"
+	"github.com/Microsoft/hcsshim/pkg/otelttrpc"
 )
 
 func init() {
@@ -66,14 +67,12 @@ func newGRPCService(agentCache *computeAgentCache, ncproxyNetworking *ncproxysto
 var _ ncproxygrpc.NetworkConfigProxyServer = &grpcService{}
 
 func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest) (_ *ncproxygrpc.AddNICResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "AddNIC")
+	ctx, span := otelutil.StartSpan(ctx, "AddNIC", trace.WithAttributes(
+		attribute.String("containerID", req.ContainerID),
+		attribute.String("endpointName", req.EndpointName),
+		attribute.String("nicID", req.NicID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("containerID", req.ContainerID),
-		trace.StringAttribute("endpointName", req.EndpointName),
-		trace.StringAttribute("nicID", req.NicID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.ContainerID == "" || req.EndpointName == "" || req.NicID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -161,14 +160,12 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 }
 
 func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICRequest) (_ *ncproxygrpc.ModifyNICResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "ModifyNIC")
+	ctx, span := otelutil.StartSpan(ctx, "ModifyNIC", trace.WithAttributes(
+		attribute.String("containerID", req.ContainerID),
+		attribute.String("endpointName", req.EndpointName),
+		attribute.String("nicID", req.NicID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("containerID", req.ContainerID),
-		trace.StringAttribute("endpointName", req.EndpointName),
-		trace.StringAttribute("nicID", req.NicID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.ContainerID == "" || req.EndpointName == "" || req.NicID == "" || req.EndpointSettings == nil {
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
@@ -255,14 +252,12 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 }
 
 func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICRequest) (_ *ncproxygrpc.DeleteNICResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DeleteNIC")
+	ctx, span := otelutil.StartSpan(ctx, "DeleteNIC", trace.WithAttributes(
+		attribute.String("containerID", req.ContainerID),
+		attribute.String("endpointName", req.EndpointName),
+		attribute.String("nicID", req.NicID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("containerID", req.ContainerID),
-		trace.StringAttribute("endpointName", req.EndpointName),
-		trace.StringAttribute("nicID", req.NicID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.ContainerID == "" || req.EndpointName == "" || req.NicID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -310,9 +305,9 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 }
 
 func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.CreateNetworkRequest) (_ *ncproxygrpc.CreateNetworkResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "CreateNetwork")
+	ctx, span := otelutil.StartSpan(ctx, "CreateNetwork")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.Network == nil || req.Network.GetSettings() == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -324,10 +319,10 @@ func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.Create
 		if networkReq.Name == "" {
 			return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 		}
-		span.AddAttributes(
-			trace.StringAttribute("networkName", networkReq.Name),
-			trace.StringAttribute("type", networkReq.Mode.String()),
-			trace.StringAttribute("ipamType", networkReq.IpamType.String()))
+		span.SetAttributes(
+			attribute.String("networkName", networkReq.Name),
+			attribute.String("type", networkReq.Mode.String()),
+			attribute.String("ipamType", networkReq.IpamType.String()))
 
 		network, err := createHCNNetwork(ctx, networkReq)
 		if err != nil {
@@ -360,9 +355,9 @@ func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.Create
 }
 
 func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.CreateEndpointRequest) (_ *ncproxygrpc.CreateEndpointResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "CreateEndpoint")
+	ctx, span := otelutil.StartSpan(ctx, "CreateEndpoint")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.EndpointSettings == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -372,11 +367,11 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 	case *ncproxygrpc.EndpointSettings_HcnEndpoint:
 		reqEndpoint := req.EndpointSettings.GetHcnEndpoint()
 
-		span.AddAttributes(
-			trace.StringAttribute("macAddr", reqEndpoint.Macaddress),
-			trace.StringAttribute("endpointName", reqEndpoint.Name),
-			trace.StringAttribute("ipAddr", reqEndpoint.Ipaddress),
-			trace.StringAttribute("networkName", reqEndpoint.NetworkName))
+		span.SetAttributes(
+			attribute.String("macAddr", reqEndpoint.Macaddress),
+			attribute.String("endpointName", reqEndpoint.Name),
+			attribute.String("ipAddr", reqEndpoint.Ipaddress),
+			attribute.String("networkName", reqEndpoint.NetworkName))
 
 		if reqEndpoint.Name == "" || reqEndpoint.Ipaddress == "" || reqEndpoint.Macaddress == "" || reqEndpoint.NetworkName == "" {
 			return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -437,13 +432,11 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 }
 
 func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpointRequest) (_ *ncproxygrpc.AddEndpointResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "AddEndpoint")
+	ctx, span := otelutil.StartSpan(ctx, "AddEndpoint", trace.WithAttributes(
+		attribute.String("endpointName", req.Name),
+		attribute.String("namespaceID", req.NamespaceID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("endpointName", req.Name),
-		trace.StringAttribute("namespaceID", req.NamespaceID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.Name == "" || (!req.AttachToHost && req.NamespaceID == "") {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -480,7 +473,7 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 			req.NamespaceID = nsID
 			log.G(ctx).WithField("namespaceID", req.NamespaceID).Debug("Attaching endpoint to default host namespace")
 			// replace current span namespaceID attribute
-			span.AddAttributes(trace.StringAttribute("namespaceID", req.NamespaceID))
+			span.SetAttributes(attribute.String("namespaceID", req.NamespaceID))
 		}
 		if err := hcn.AddNamespaceEndpoint(req.NamespaceID, ep.Id); err != nil {
 			return nil, errors.Wrapf(err, "failed to add endpoint with name %q to namespace", req.Name)
@@ -491,12 +484,10 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 }
 
 func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.DeleteEndpointRequest) (_ *ncproxygrpc.DeleteEndpointResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DeleteEndpoint")
+	ctx, span := otelutil.StartSpan(ctx, "DeleteEndpoint", trace.WithAttributes(
+		attribute.String("endpointName", req.Name)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("endpointName", req.Name))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.Name == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -527,12 +518,10 @@ func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.Delet
 }
 
 func (s *grpcService) DeleteNetwork(ctx context.Context, req *ncproxygrpc.DeleteNetworkRequest) (_ *ncproxygrpc.DeleteNetworkResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DeleteNetwork")
+	ctx, span := otelutil.StartSpan(ctx, "DeleteNetwork", trace.WithAttributes(
+		attribute.String("networkName", req.Name)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("networkName", req.Name))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.Name == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -596,12 +585,10 @@ func ncpNetworkingEndpointToEndpointResponse(ep *ncproxynetworking.Endpoint) (_ 
 }
 
 func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpointRequest) (_ *ncproxygrpc.GetEndpointResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "GetEndpoint")
+	ctx, span := otelutil.StartSpan(ctx, "GetEndpoint", trace.WithAttributes(
+		attribute.String("endpointName", req.Name)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("endpointName", req.Name))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.Name == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -624,9 +611,9 @@ func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpo
 }
 
 func (s *grpcService) GetEndpoints(ctx context.Context, req *ncproxygrpc.GetEndpointsRequest) (_ *ncproxygrpc.GetEndpointsResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "GetEndpoints")
+	ctx, span := otelutil.StartSpan(ctx, "GetEndpoints")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	endpoints := []*ncproxygrpc.GetEndpointResponse{}
 
@@ -675,12 +662,10 @@ func ncpNetworkingNetworkToNetworkResponse(network *ncproxynetworking.Network) (
 }
 
 func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetworkRequest) (_ *ncproxygrpc.GetNetworkResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "GetNetwork")
+	ctx, span := otelutil.StartSpan(ctx, "GetNetwork", trace.WithAttributes(
+		attribute.String("networkName", req.Name)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("networkName", req.Name))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.Name == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
@@ -704,9 +689,9 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 }
 
 func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetworksRequest) (_ *ncproxygrpc.GetNetworksResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "GetNetworks")
+	ctx, span := otelutil.StartSpan(ctx, "GetNetworks")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	networks := []*ncproxygrpc.GetNetworkResponse{}
 
@@ -767,20 +752,18 @@ func getComputeAgentClient(agentAddr string) (*computeAgentClient, error) {
 	}
 	raw := ttrpcNewClient(
 		conn,
-		ttrpc.WithUnaryClientInterceptor(octtrpc.ClientInterceptor()),
+		ttrpc.WithUnaryClientInterceptor(otelttrpc.ClientInterceptor()),
 		ttrpc.WithOnClose(func() { conn.Close() }),
 	)
 	return &computeAgentClient{raw, computeagent.NewComputeAgentClient(raw)}, nil
 }
 
 func (s *ttrpcService) RegisterComputeAgent(ctx context.Context, req *ncproxyttrpc.RegisterComputeAgentRequest) (_ *ncproxyttrpc.RegisterComputeAgentResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "RegisterComputeAgent")
+	ctx, span := otelutil.StartSpan(ctx, "RegisterComputeAgent", trace.WithAttributes(
+		attribute.String("containerID", req.ContainerID),
+		attribute.String("agentAddress", req.AgentAddress)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("containerID", req.ContainerID),
-		trace.StringAttribute("agentAddress", req.AgentAddress))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	agent, err := getComputeAgentClient(req.AgentAddress)
 	if err != nil {
@@ -801,12 +784,10 @@ func (s *ttrpcService) RegisterComputeAgent(ctx context.Context, req *ncproxyttr
 }
 
 func (s *ttrpcService) UnregisterComputeAgent(ctx context.Context, req *ncproxyttrpc.UnregisterComputeAgentRequest) (_ *ncproxyttrpc.UnregisterComputeAgentResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "UnregisterComputeAgent")
+	ctx, span := otelutil.StartSpan(ctx, "UnregisterComputeAgent", trace.WithAttributes(
+		attribute.String("containerID", req.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("containerID", req.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	err = s.agentStore.DeleteComputeAgent(ctx, req.ContainerID)
 	if err != nil {
@@ -828,13 +809,11 @@ func (s *ttrpcService) UnregisterComputeAgent(ctx context.Context, req *ncproxyt
 }
 
 func (s *ttrpcService) ConfigureNetworking(ctx context.Context, req *ncproxyttrpc.ConfigureNetworkingInternalRequest) (_ *ncproxyttrpc.ConfigureNetworkingInternalResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "ConfigureNetworking")
+	ctx, span := otelutil.StartSpan(ctx, "ConfigureNetworking", trace.WithAttributes(
+		attribute.String("containerID", req.ContainerID),
+		attribute.String("agentAddress", req.RequestType.String())))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("containerID", req.ContainerID),
-		trace.StringAttribute("agentAddress", req.RequestType.String()))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	if req.ContainerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "ContainerID is empty")

@@ -20,7 +20,8 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/Microsoft/go-winio/pkg/fs"
@@ -38,8 +39,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -605,9 +606,9 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 }
 
 func (ht *hcsTask) waitInitExit() {
-	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitInitExit")
+	ctx, span := otelutil.StartSpan(context.Background(), "hcsTask::waitInitExit", trace.WithAttributes(
+		attribute.String("tid", ht.id)))
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()
@@ -624,9 +625,9 @@ func (ht *hcsTask) waitInitExit() {
 // Note: For Windows process isolated containers there is no host virtual
 // machine so this should not be called.
 func (ht *hcsTask) waitForHostExit() {
-	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitForHostExit")
+	ctx, span := otelutil.StartSpan(context.Background(), "hcsTask::waitForHostExit", trace.WithAttributes(
+		attribute.String("tid", ht.id)))
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
 	err := ht.host.WaitCtx(ctx)
 	if err != nil {

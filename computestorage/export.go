@@ -6,9 +6,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ExportLayer exports a container layer.
@@ -22,13 +23,11 @@ import (
 // `options` are the export options applied to the exported layer.
 func ExportLayer(ctx context.Context, layerPath, exportFolderPath string, layerData LayerData, options ExportLayerOptions) (err error) {
 	title := "hcsshim::ExportLayer"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("layerPath", layerPath),
+		attribute.String("exportFolderPath", exportFolderPath))) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("layerPath", layerPath),
-		trace.StringAttribute("exportFolderPath", exportFolderPath),
-	)
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	ldBytes, err := json.Marshal(layerData)
 	if err != nil {

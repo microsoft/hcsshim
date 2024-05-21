@@ -14,9 +14,10 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/windows"
 )
 
@@ -154,11 +155,10 @@ func GetScratchVhdPartitionInfo(ctx context.Context, vhdxPath string) (_ Scratch
 	)
 
 	title := "hcsshim::GetScratchVhdPartitionInfo"
-	ctx, span := trace.StartSpan(ctx, title)
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("path", vhdxPath)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("path", vhdxPath))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	diskHandle, err = vhd.OpenVirtualDisk(vhdxPath, vhd.VirtualDiskAccessNone, vhd.OpenVirtualDiskFlagNone)
 	if err != nil {

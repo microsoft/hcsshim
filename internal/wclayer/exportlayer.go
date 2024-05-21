@@ -9,8 +9,9 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ExportLayer will create a folder at exportFolderPath and fill that folder with
@@ -20,13 +21,12 @@ import (
 // perform the export.
 func ExportLayer(ctx context.Context, path string, exportFolderPath string, parentLayerPaths []string) (err error) {
 	title := "hcsshim::ExportLayer"
-	ctx, span := oc.StartSpan(ctx, title)
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("path", path),
+		attribute.String("exportFolderPath", exportFolderPath),
+		attribute.String("parentLayerPaths", strings.Join(parentLayerPaths, ", "))))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("path", path),
-		trace.StringAttribute("exportFolderPath", exportFolderPath),
-		trace.StringAttribute("parentLayerPaths", strings.Join(parentLayerPaths, ", ")))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	// Generate layer descriptors
 	layers, err := layerPathsToDescriptors(ctx, parentLayerPaths)
@@ -58,16 +58,15 @@ type LayerReader interface {
 // The caller must have taken the SeBackupPrivilege privilege
 // to call this and any methods on the resulting LayerReader.
 func NewLayerReader(ctx context.Context, path string, parentLayerPaths []string) (_ LayerReader, err error) {
-	ctx, span := oc.StartSpan(ctx, "hcsshim::NewLayerReader")
+	ctx, span := otelutil.StartSpan(ctx, "hcsshim::NewLayerReader", trace.WithAttributes(
+		attribute.String("path", path),
+		attribute.String("parentLayerPaths", strings.Join(parentLayerPaths, ", "))))
 	defer func() {
 		if err != nil {
-			oc.SetSpanStatus(span, err)
+			otelutil.SetSpanStatus(span, err)
 			span.End()
 		}
 	}()
-	span.AddAttributes(
-		trace.StringAttribute("path", path),
-		trace.StringAttribute("parentLayerPaths", strings.Join(parentLayerPaths, ", ")))
 
 	if len(parentLayerPaths) == 0 {
 		// This is a base layer. It gets exported differently.
@@ -92,14 +91,14 @@ func NewLayerReader(ctx context.Context, path string, parentLayerPaths []string)
 
 type legacyLayerReaderWrapper struct {
 	ctx context.Context
-	s   *trace.Span
+	s   trace.Span
 
 	*legacyLayerReader
 }
 
 func (r *legacyLayerReaderWrapper) Close() (err error) {
 	defer r.s.End()
-	defer func() { oc.SetSpanStatus(r.s, err) }()
+	defer func() { otelutil.SetSpanStatus(r.s, err) }()
 
 	err = r.legacyLayerReader.Close()
 	os.RemoveAll(r.root)

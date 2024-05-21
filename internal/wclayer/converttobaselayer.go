@@ -10,11 +10,12 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/longpath"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/safefile"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/windows"
 )
 
@@ -137,10 +138,10 @@ func convertToBaseLayer(ctx context.Context, root *os.File) error {
 // desired file content for a UtilityVM under UtilityVM/Files/
 func ConvertToBaseLayer(ctx context.Context, path string) (err error) {
 	title := "hcsshim::ConvertToBaseLayer"
-	ctx, span := trace.StartSpan(ctx, title)
+	ctx, span := otelutil.StartSpan(ctx, title, trace.WithAttributes(
+		attribute.String("path", path)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("path", path))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	root, err := safefile.OpenRoot(path)
 	if err != nil {

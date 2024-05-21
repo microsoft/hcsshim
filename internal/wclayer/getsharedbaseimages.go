@@ -7,8 +7,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/interop"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // GetSharedBaseImages will enumerate the images stored in the common central
@@ -16,9 +16,9 @@ import (
 // of registering them with the graphdriver, graph, and tagstore.
 func GetSharedBaseImages(ctx context.Context) (_ string, err error) {
 	title := "hcsshim::GetSharedBaseImages"
-	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	ctx, span := otelutil.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var buffer *uint16
 	err = getBaseImages(&buffer)
@@ -26,6 +26,6 @@ func GetSharedBaseImages(ctx context.Context) (_ string, err error) {
 		return "", hcserror.New(err, title, "")
 	}
 	imageData := interop.ConvertAndFreeCoTaskMemString(buffer)
-	span.AddAttributes(trace.StringAttribute("imageData", imageData))
+	span.SetAttributes(attribute.String("imageData", imageData))
 	return imageData, nil
 }

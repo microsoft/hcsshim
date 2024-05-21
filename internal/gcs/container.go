@@ -12,8 +12,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const hrComputeSystemDoesNotExist = 0xc037010e
@@ -37,10 +38,10 @@ var _ cow.Container = &Container{}
 // CreateContainer creates a container using ID `cid` and `cfg`. The request
 // will likely not be cancellable even if `ctx` becomes done.
 func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, config interface{}) (_ *Container, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::CreateContainer", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::GuestConnection::CreateContainer", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", cid)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", cid))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	c := &Container{
 		gc:        gc,
@@ -98,9 +99,9 @@ func (c *Container) IsOCI() bool {
 // Close releases associated with the container.
 func (c *Container) Close() error {
 	c.closeOnce.Do(func() {
-		_, span := oc.StartSpan(context.Background(), "gcs::Container::Close")
+		_, span := otelutil.StartSpan(context.Background(), "gcs::Container::Close", trace.WithAttributes(
+			attribute.String("cid", c.id)))
 		defer span.End()
-		span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 		close(c.closeCh)
 	})
@@ -109,10 +110,10 @@ func (c *Container) Close() error {
 
 // CreateProcess creates a process in the container.
 func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ cow.Process, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::CreateProcess", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Container::CreateProcess", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	return c.gc.exec(ctx, c.id, config)
 }
@@ -124,10 +125,10 @@ func (c *Container) ID() string {
 
 // Modify sends a modify request to the container.
 func (c *Container) Modify(ctx context.Context, config interface{}) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Modify", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Container::Modify", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := containerModifySettings{
 		requestBase: makeRequest(ctx, c.id),
@@ -139,10 +140,10 @@ func (c *Container) Modify(ctx context.Context, config interface{}) (err error) 
 
 // Properties returns the requested container properties targeting a V1 schema container.
 func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Properties", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Container::Properties", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := containerGetProperties{
 		requestBase: makeRequest(ctx, c.id),
@@ -158,10 +159,10 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 
 // PropertiesV2 returns the requested container properties targeting a V2 schema container.
 func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::PropertiesV2", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Container::PropertiesV2", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := containerGetPropertiesV2{
 		requestBase: makeRequest(ctx, c.id),
@@ -177,10 +178,10 @@ func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.Propert
 
 // Start starts the container.
 func (c *Container) Start(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Start", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Container::Start", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := makeRequest(ctx, c.id)
 	var resp responseBase
@@ -208,10 +209,10 @@ func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
 // might not be terminated by the time the request completes (and might never
 // terminate).
 func (c *Container) Shutdown(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Shutdown", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Container::Shutdown", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -222,10 +223,10 @@ func (c *Container) Shutdown(ctx context.Context) (err error) {
 // might not be terminated by the time the request completes (and might never
 // terminate).
 func (c *Container) Terminate(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Terminate", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::Container::Terminate", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -248,9 +249,9 @@ func (c *Container) Wait() error {
 }
 
 func (c *Container) waitBackground() {
-	ctx, span := oc.StartSpan(context.Background(), "gcs::Container::waitBackground")
+	ctx, span := otelutil.StartSpan(context.Background(), "gcs::Container::waitBackground", trace.WithAttributes(
+		attribute.String("cid", c.id)))
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	select {
 	case <-c.notifyCh:
@@ -260,5 +261,5 @@ func (c *Container) waitBackground() {
 	close(c.waitBlock)
 
 	log.G(ctx).Debug("container exited")
-	oc.SetSpanStatus(span, c.waitError)
+	otelutil.SetSpanStatus(span, c.waitError)
 }

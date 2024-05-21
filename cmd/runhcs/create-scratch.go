@@ -7,7 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/pkg/errors"
@@ -35,9 +35,9 @@ var createScratchCommand = cli.Command{
 	},
 	Before: appargs.Validate(),
 	Action: func(context *cli.Context) (err error) {
-		ctx, span := oc.StartSpan(gcontext.Background(), "create-scratch")
+		ctx, span := otelutil.StartSpan(gcontext.Background(), "create-scratch")
 		defer span.End()
-		defer func() { oc.SetSpanStatus(span, err) }()
+		defer func() { otelutil.SetSpanStatus(span, err) }()
 
 		dest := context.String("destpath")
 		if dest == "" {

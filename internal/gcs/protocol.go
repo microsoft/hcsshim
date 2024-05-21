@@ -10,6 +10,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LinuxGcsVsockPort is the vsock port number that the Linux GCS will
@@ -162,13 +163,13 @@ type requestBase struct {
 	ContainerID string    `json:"ContainerId"`
 	ActivityID  guid.GUID `json:"ActivityId"`
 
-	// OpenCensusSpanContext is the encoded OpenCensus `trace.SpanContext` if
+	// SpanContext is the encoded OTel `trace.SpanContext` if
 	// set when making the request.
 	//
 	// NOTE: This is not a part of the protocol but because its a JSON protocol
 	// adding fields is a non-breaking change. If the guest supports it this is
 	// just additive context.
-	OpenCensusSpanContext *ocspancontext `json:"ocsc,omitempty"`
+	SpanContext trace.SpanContext `json:"otelsc,omitempty"`
 }
 
 func (req *requestBase) Base() *requestBase {

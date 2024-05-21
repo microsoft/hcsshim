@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
@@ -19,7 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
@@ -46,10 +47,10 @@ var capabilities = prot.GcsCapabilities{
 // negotiateProtocolV2 was introduced in v4 so will not be called with a minimum
 // lower than that.
 func (b *Bridge) negotiateProtocolV2(r *Request) (_ RequestResponse, err error) {
-	_, span := oc.StartSpan(r.Context, "opengcs::bridge::negotiateProtocolV2")
+	_, span := otelutil.StartSpan(r.Context, "opengcs::bridge::negotiateProtocolV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.NegotiateProtocol
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
@@ -82,10 +83,10 @@ func (b *Bridge) negotiateProtocolV2(r *Request) (_ RequestResponse, err error) 
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) createContainerV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::createContainerV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::createContainerV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.ContainerCreate
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
@@ -135,10 +136,10 @@ func (b *Bridge) createContainerV2(r *Request) (_ RequestResponse, err error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) startContainerV2(r *Request) (_ RequestResponse, err error) {
-	_, span := oc.StartSpan(r.Context, "opengcs::bridge::startContainerV2")
+	_, span := otelutil.StartSpan(r.Context, "opengcs::bridge::startContainerV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	// This is just a noop, but needs to be handled so that an error isn't
 	// returned to the HCS.
@@ -166,10 +167,10 @@ func (b *Bridge) startContainerV2(r *Request) (_ RequestResponse, err error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::execProcessV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::execProcessV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.ContainerExecuteProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
@@ -211,9 +212,9 @@ func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) killContainerV2(r *Request) (RequestResponse, error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::killContainerV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::killContainerV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
 
 	return b.signalContainerShutdownV2(ctx, span, r, false)
 }
@@ -224,9 +225,9 @@ func (b *Bridge) killContainerV2(r *Request) (RequestResponse, error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) shutdownContainerV2(r *Request) (RequestResponse, error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::shutdownContainerV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::shutdownContainerV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
 
 	return b.signalContainerShutdownV2(ctx, span, r, true)
 }
@@ -234,11 +235,11 @@ func (b *Bridge) shutdownContainerV2(r *Request) (RequestResponse, error) {
 // signalContainerV2 is not a handler func. It is called from either
 // `killContainerV2` or `shutdownContainerV2` to deliver a SIGTERM or SIGKILL
 // respectively
-func (b *Bridge) signalContainerShutdownV2(ctx context.Context, span *trace.Span, r *Request, graceful bool) (_ RequestResponse, err error) {
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", r.ContainerID),
-		trace.BoolAttribute("graceful", graceful),
+func (b *Bridge) signalContainerShutdownV2(ctx context.Context, span trace.Span, r *Request, graceful bool) (_ RequestResponse, err error) {
+	defer func() { otelutil.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("cid", r.ContainerID),
+		attribute.Bool("graceful", graceful),
 	)
 
 	var request prot.MessageBase
@@ -263,19 +264,19 @@ func (b *Bridge) signalContainerShutdownV2(ctx context.Context, span *trace.Span
 }
 
 func (b *Bridge) signalProcessV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::signalProcessV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::signalProcessV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.ContainerSignalProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	span.AddAttributes(
-		trace.Int64Attribute("pid", int64(request.ProcessID)),
-		trace.Int64Attribute("signal", int64(request.Options.Signal)))
+	span.SetAttributes(
+		attribute.Int64("pid", int64(request.ProcessID)),
+		attribute.Int64("signal", int64(request.Options.Signal)))
 
 	var signal syscall.Signal
 	if request.Options.Signal == 0 {
@@ -292,10 +293,10 @@ func (b *Bridge) signalProcessV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::getPropertiesV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::getPropertiesV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.ContainerGetProperties
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
@@ -334,19 +335,19 @@ func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
-	_, span := oc.StartSpan(r.Context, "opengcs::bridge::waitOnProcessV2")
+	_, span := otelutil.StartSpan(r.Context, "opengcs::bridge::waitOnProcessV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	span.AddAttributes(
-		trace.Int64Attribute("pid", int64(request.ProcessID)),
-		trace.Int64Attribute("timeout-ms", int64(request.TimeoutInMs)))
+	span.SetAttributes(
+		attribute.Int64("pid", int64(request.ProcessID)),
+		attribute.Int64("timeout-ms", int64(request.TimeoutInMs)))
 
 	var exitCodeChan <-chan int
 	var doneChan chan<- bool
@@ -389,20 +390,20 @@ func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) resizeConsoleV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::resizeConsoleV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::resizeConsoleV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	span.AddAttributes(
-		trace.Int64Attribute("pid", int64(request.ProcessID)),
-		trace.Int64Attribute("height", int64(request.Height)),
-		trace.Int64Attribute("width", int64(request.Width)))
+	span.SetAttributes(
+		attribute.Int64("pid", int64(request.ProcessID)),
+		attribute.Int64("height", int64(request.Height)),
+		attribute.Int64("width", int64(request.Width)))
 
 	c, err := b.hostState.GetCreatedContainer(request.ContainerID)
 	if err != nil {
@@ -423,10 +424,10 @@ func (b *Bridge) resizeConsoleV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::modifySettingsV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::modifySettingsV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	request, err := prot.UnmarshalContainerModifySettings(r.Message)
 	if err != nil {
@@ -442,9 +443,9 @@ func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::dumpStacksV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::dumpStacksV2")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	stacks, err := b.hostState.GetStacks(ctx)
 	if err != nil {
@@ -456,11 +457,10 @@ func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) deleteContainerStateV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::deleteContainerStateV2")
+	ctx, span := otelutil.StartSpan(r.Context, "opengcs::bridge::deleteContainerStateV2", trace.WithAttributes(
+		attribute.String("cid", r.ContainerID)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {

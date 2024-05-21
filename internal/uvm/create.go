@@ -11,7 +11,8 @@ import (
 	"runtime"
 
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
@@ -19,7 +20,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
 )
@@ -216,10 +217,10 @@ func (uvm *UtilityVM) Close() error { return uvm.CloseCtx(context.Background()) 
 // The context is used for all operations, including waits, so timeouts/cancellations may prevent
 // proper uVM cleanup.
 func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "uvm::Close")
+	ctx, span := otelutil.StartSpan(ctx, "uvm::Close", trace.WithAttributes(
+		attribute.String(logfields.UVMID, uvm.id)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	// TODO: check if uVM already closed
 

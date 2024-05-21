@@ -19,7 +19,8 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/bridge"
 	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
@@ -28,7 +29,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/version"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
@@ -210,10 +211,12 @@ func main() {
 
 	flag.Parse()
 
-	// If v4 enable opencensus
+	// If v4 enable OTel
 	if *v4 {
-		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-		trace.RegisterExporter(&oc.LogrusExporter{})
+		otel.SetTracerProvider(sdktrace.NewTracerProvider(
+			sdktrace.WithSampler(otelutil.DefaultSampler),
+			sdktrace.WithBatcher(&otelutil.LogrusExporter{}),
+		))
 	}
 
 	logrus.AddHook(log.NewHook())

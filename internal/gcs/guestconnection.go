@@ -4,9 +4,6 @@ package gcs
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -18,12 +15,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -68,9 +65,9 @@ type GuestConnectionConfig struct {
 
 // Connect establishes a GCS connection. `gcc.Conn` will be closed by this function.
 func (gcc *GuestConnectionConfig) Connect(ctx context.Context, isColdStart bool) (_ *GuestConnection, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnectionConfig::Connect", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::GuestConnectionConfig::Connect", otelutil.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	gc := &GuestConnection{
 		nextPort:   firstIoChannelVsockPort,
@@ -166,9 +163,9 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 // Modify sends a modify settings request to the null container. This is
 // generally used to prepare virtual hardware that has been added to the guest.
 func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::Modify", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::GuestConnection::Modify", otelutil.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := containerModifySettings{
 		requestBase: makeRequest(ctx, nullContainerID),
@@ -179,9 +176,9 @@ func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (er
 }
 
 func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::DumpStacks", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::GuestConnection::DumpStacks", otelutil.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := dumpStacksRequest{
 		requestBase: makeRequest(ctx, nullContainerID),
@@ -192,10 +189,10 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 }
 
 func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::DeleteContainerState", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::GuestConnection::DeleteContainerState", otelutil.WithClientSpanKind, trace.WithAttributes(
+		attribute.String("cid", cid)))
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", cid))
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	req := deleteContainerStateRequest{
 		requestBase: makeRequest(ctx, cid),
@@ -215,9 +212,9 @@ func (gc *GuestConnection) Close() error {
 
 // CreateProcess creates a process in the container host.
 func (gc *GuestConnection) CreateProcess(ctx context.Context, settings interface{}) (_ cow.Process, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::CreateProcess", oc.WithClientSpanKind)
+	ctx, span := otelutil.StartSpan(ctx, "gcs::GuestConnection::CreateProcess", otelutil.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { otelutil.SetSpanStatus(span, err) }()
 
 	return gc.exec(ctx, nullContainerID, settings)
 }
@@ -286,24 +283,8 @@ func makeRequest(ctx context.Context, cid string) requestBase {
 	r := requestBase{
 		ContainerID: cid,
 	}
-	span := trace.FromContext(ctx)
-	if span != nil {
-		sc := span.SpanContext()
-		r.OpenCensusSpanContext = &ocspancontext{
-			TraceID:      hex.EncodeToString(sc.TraceID[:]),
-			SpanID:       hex.EncodeToString(sc.SpanID[:]),
-			TraceOptions: uint32(sc.TraceOptions),
-		}
-		if sc.Tracestate != nil {
-			entries := sc.Tracestate.Entries()
-			if len(entries) > 0 {
-				if bytes, err := json.Marshal(sc.Tracestate.Entries()); err == nil {
-					r.OpenCensusSpanContext.Tracestate = base64.StdEncoding.EncodeToString(bytes)
-				} else {
-					log.G(ctx).WithError(err).Warn("failed to encode OpenCensus Tracestate")
-				}
-			}
-		}
+	if span := trace.SpanFromContext(ctx); span != nil {
+		r.SpanContext = span.SpanContext()
 	}
 	return r
 }

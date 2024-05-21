@@ -16,10 +16,11 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/otelutil"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 
@@ -102,9 +103,11 @@ func main() {
 		),
 	)
 
-	// Register our OpenCensus logrus exporter
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	// Register our OTel logrus exporter
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(otelutil.DefaultSampler),
+		sdktrace.WithBatcher(&otelutil.LogrusExporter{}),
+	))
 
 	app := cli.NewApp()
 	app.Name = "containerd-shim-runhcs-v1"
