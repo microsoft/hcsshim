@@ -32,6 +32,10 @@ var createScratchCommand = cli.Command{
 			Name:  "cache-path",
 			Usage: "optional: The path to an existing scratch.vhdx to copy instead of create.",
 		},
+		cli.BoolFlag{
+			Name:  "use-virtual-memory",
+			Usage: "optional: Whether the UVM should be backed with virtual memory.",
+		},
 	},
 	Before: appargs.Validate(),
 	Action: func(context *cli.Context) (err error) {
@@ -52,10 +56,16 @@ var createScratchCommand = cli.Command{
 
 		// 256MB with boot from vhd supported.
 		opts.MemorySizeInMB = 256
-		opts.VPMemDeviceCount = 1
 		// Default SCSI controller count is 4, we don't need that for this UVM,
 		// bring it back to 1 to avoid any confusion with SCSI controller numbers.
 		opts.SCSIControllerCount = 1
+
+		if context.Bool("use-virtual-memory") {
+			opts.VPMemDeviceCount = 1
+		} else {
+			opts.AllowOvercommit = false
+			opts.VPMemDeviceCount = 0
+		}
 
 		sizeGB := uint32(context.Uint("sizeGB"))
 		if sizeGB == 0 {
