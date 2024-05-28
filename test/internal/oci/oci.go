@@ -12,6 +12,8 @@ import (
 	criopts "github.com/containerd/containerd/pkg/cri/opts"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+
 	"github.com/Microsoft/hcsshim/test/pkg/images"
 )
 
@@ -21,6 +23,7 @@ import (
 
 const (
 	TailNullArgs = "tail -f /dev/null"
+	PingSelfCmd  = "cmd.exe /c ping -t 127.0.0.1"
 
 	DefaultNamespace = namespaces.Default
 	CRINamespace     = criconstants.K8sContainerdNamespace
@@ -37,6 +40,22 @@ func DefaultLinuxSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecO
 		criopts.WithDisabledCgroups, // we set our own cgroups
 		ctrdoci.WithDefaultUnixDevices,
 		ctrdoci.WithDefaultPathEnv,
+		ctrdoci.WithWindowsNetworkNamespace(nns),
+	}
+	return append(opts, extra...)
+}
+
+func DefaultWindowsSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecOpts {
+	opts := []ctrdoci.SpecOpts{
+		// make sure we set the Windows field
+		func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
+			if s.Windows == nil {
+				s.Windows = &specs.Windows{}
+			}
+			return nil
+		},
+		criopts.WithoutRoot,
+		ctrdoci.WithProcessCwd(`C:\`),
 		ctrdoci.WithWindowsNetworkNamespace(nns),
 	}
 	return append(opts, extra...)
@@ -92,6 +111,29 @@ func WithWindowsLayerFolders(layers []string) ctrdoci.SpecOpts {
 		}
 		s.Windows.LayerFolders = layers
 
+		return nil
+	}
+}
+
+// AsHostProcessContainer updates the spec to create a HostProcess container.
+func AsHostProcessContainer() ctrdoci.SpecOpts {
+	return func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Annotations == nil {
+			s.Annotations = make(map[string]string)
+		}
+		s.Annotations[annotations.HostProcessContainer] = "true"
+		return nil
+	}
+}
+
+// HostProcessInheritUser updates the spec to allow the HostProcess container to inherit the current
+// user's token.
+func HostProcessInheritUser() ctrdoci.SpecOpts {
+	return func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Annotations == nil {
+			s.Annotations = make(map[string]string)
+		}
+		s.Annotations[annotations.HostProcessInheritUser] = "true"
 		return nil
 	}
 }

@@ -84,8 +84,7 @@ func testRemoveAllSCSI(mounts []*scsi.Mount) error {
 	return nil
 }
 
-// TODO this test is only needed until WCOW supports adding the same scsi device to
-// multiple containers
+// TODO this test is only needed until WCOW supports adding the same scsi device to multiple containers.
 func testSCSIAddRemoveSingle(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
 	t.Helper()
 	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0

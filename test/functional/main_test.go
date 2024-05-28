@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/internal/sync"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -67,7 +67,7 @@ type wcowImages struct {
 	servercore *testlayers.LazyImageLayers
 }
 
-var wcowImagePathsOnce = sync.OnceValue(func() (*wcowImages, error) {
+var wcowImagePathsOnce = sync.OnceValues(func() (*wcowImages, error) {
 	build := osversion.Build()
 	tag, err := testimages.ImageFromBuild(build)
 	if err != nil || tag == "" {
@@ -224,6 +224,8 @@ func runTests(m *testing.M) error {
 	// interfering with benchmarking output
 	if util.RunningBenchmarks() {
 		util.PrintAdditionalBenchmarkConfig()
+		// also print out the features used as part of the benchmarking config
+		fmt.Printf("features: %s\n", flagFeatures.Strings())
 
 		provider, err := etw.NewProviderWithOptions("Microsoft.Virtualization.RunHCS")
 		if err != nil {
@@ -247,6 +249,8 @@ func runTests(m *testing.M) error {
 		}()
 	}
 
+	log.G(ctx).WithField("features", flagFeatures.String()).Info("provided features")
+
 	if e := m.Run(); e != 0 {
 		return cli.Exit("", e)
 	}
@@ -258,6 +262,11 @@ func runTests(m *testing.M) error {
 func requireFeatures(tb testing.TB, features ...string) {
 	tb.Helper()
 	require.Features(tb, flagFeatures, features...)
+}
+
+func requireAnyFeature(tb testing.TB, features ...string) {
+	tb.Helper()
+	require.AnyFeature(tb, flagFeatures, features...)
 }
 
 func defaultLCOWOptions(ctx context.Context, tb testing.TB) *uvm.OptionsLCOW {

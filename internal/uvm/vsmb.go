@@ -133,7 +133,12 @@ func forceNoDirectMap(path string) (bool, error) {
 	var info winapi.FILE_ID_INFO
 	// We check for any error, rather than just ERROR_INVALID_PARAMETER. It seems better to also
 	// fall back if e.g. some other backing filesystem is used which returns a different error.
-	if err := windows.GetFileInformationByHandleEx(h, winapi.FileIdInfo, (*byte)(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+	if err := windows.GetFileInformationByHandleEx(
+		h,
+		winapi.FileIdInfo,
+		(*byte)(unsafe.Pointer(&info)),
+		uint32(unsafe.Sizeof(info)),
+	); err != nil {
 		return true, nil
 	}
 	return false, nil
@@ -279,6 +284,24 @@ func (uvm *UtilityVM) removeVSMB(ctx context.Context, hostPath string, readOnly,
 
 	share.refCount--
 	if share.refCount > 0 {
+		return nil
+	}
+
+	// Cannot remove a directmapped vSMB share without first closing all open handles to the
+	// share files from inside the the uVM (otherwise, the removal would un-map the files from
+	// the uVM's memory and subsequent access's would fail).
+	// Rather than forgetting about the share on the host side, keep it (with refCount == 0)
+	// in case that directory is re-added back for some reason.
+	//
+	// Note: HCS (vmcompute.exe) issues a remove vSMB request to the guest GCS iff:
+	//  - vmwp.exe direct mapped the vSMB share; and
+	//  - the GCS (on its internal bridge) has the PurgeVSmbCachedHandlesSupported capability.
+	// We do not (currently) have the ability to check for either.
+	if !share.options.NoDirectmap {
+		log.G(ctx).WithFields(logrus.Fields{
+			"name": share.name,
+			"path": hostPath,
+		}).Debug("skipping remove of directmapped vSMB share")
 		return nil
 	}
 

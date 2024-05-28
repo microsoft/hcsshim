@@ -71,7 +71,7 @@ func WCOWScratchDir(ctx context.Context, tb testing.TB, dir string) string {
 
 func newTestTempDir(ctx context.Context, tb testing.TB, name string) string {
 	tb.Helper()
-	dir, err := tempDirOnce(ctx)
+	dir, err := tempDirOnce()
 	if err != nil {
 		tb.Fatal(err)
 	}
