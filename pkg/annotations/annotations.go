@@ -266,13 +266,17 @@ const (
 	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
 	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
 
-	// DmVerityVhdFile specifies the path of the VHD (with embedded dmverity data) file to use if required. Only applies in SNP mode.
-
+	// DmVerityRootFsVhd specifies the path of the VHD (with embedded dmverity data) file to use if required.
+	// Only applies in SNP mode.
 	DmVerityRootFsVhd = "io.microsoft.virtualmachine.lcow.dmverity-rootfs-vhd"
-	DmVerityHashVhd   = "io.microsoft.virtualmachine.lcow.dmverity-hash-vhd"
 
-	// DmVerityMode
+	// DmVerityMode specifies whether the rootfs is expected to be presented as a standalone SCSI attachment,
+	// in which case the UVM boots with dm-verity.
 	DmVerityMode = "io.microsoft.virtualmachine.lcow.dmverity-mode"
+
+	// DmVerityCreateArgs specifies the `dm-mod.create` parameters to kernel and enables integrity protection of
+	// the rootfs.
+	DmVerityCreateArgs = "io.microsoft.virtualmachine.lcow.dmverity-create-args"
 
 	// UVMSecurityPolicyEnv specifies if confidential containers' related information
 	// should be written to containers' rootfs. The filenames and location are defined

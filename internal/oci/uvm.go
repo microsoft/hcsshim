@@ -209,13 +209,14 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 		lopts.SecurityPolicyEnabled = true
 
 		// There are two possible ways to boot SNP mode. Either kernelinitrd.vmgs which consists of kernel plus initrd.cpio.gz
-		// Or a kernel vmgs file (without an initrd) plus a separate vhd file which is dmverity protected via a hash vhd file.
+		// Or a kernel.vmgs file (without an initrd) plus a separate vhd file which is dmverity protected via a hash tree
+		// appended to rootfs ext4 filesystem.
 		// We only currently support using the dmverity scheme. Note that the dmverity file name may be explicitly specified via
 		// an annotation this is deliberately not the same annotation as the non-SNP rootfs vhd file.
+		// The default behavior is to use kernel.vmgs and a rootfs-verity.vhd file with Merkle tree appended to ext4 filesystem.
 		lopts.PreferredRootFSType = uvm.PreferredRootFSTypeNA
 		lopts.RootFSFile = ""
 		lopts.DmVerityRootFsVhd = uvm.DefaultDmVerityRootfsVhd
-		lopts.DmVerityHashVhd = uvm.DefaultDmVerityHashVhd
 		lopts.DmVerityMode = true
 	}
 
@@ -278,6 +279,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.UVMReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.UVMReferenceInfoFile, lopts.UVMReferenceInfoFile)
 		lopts.KernelBootOptions = ParseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
+		lopts.ConsolePipe = ParseAnnotationsString(s.Annotations, iannotations.UVMConsolePipe, lopts.ConsolePipe)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
@@ -286,11 +288,11 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		// Eg VMPem device count, overridden kernel option cannot be respected.
 		handleSecurityPolicy(ctx, s.Annotations, lopts)
 
-		// override the default GuestState and DmVerityRootFs/HashVhd filenames if specified
+		// override the default GuestState and DmVerityRootFs filenames if specified
 		lopts.GuestStateFile = ParseAnnotationsString(s.Annotations, annotations.GuestStateFile, lopts.GuestStateFile)
 		lopts.DmVerityRootFsVhd = ParseAnnotationsString(s.Annotations, annotations.DmVerityRootFsVhd, lopts.DmVerityRootFsVhd)
-		lopts.DmVerityHashVhd = ParseAnnotationsString(s.Annotations, annotations.DmVerityHashVhd, lopts.DmVerityHashVhd)
 		lopts.DmVerityMode = ParseAnnotationsBool(ctx, s.Annotations, annotations.DmVerityMode, lopts.DmVerityMode)
+		lopts.DmVerityCreateArgs = ParseAnnotationsString(s.Annotations, annotations.DmVerityCreateArgs, lopts.DmVerityCreateArgs)
 		// Set HclEnabled if specified. Else default to a null pointer, which is omitted from the resulting JSON.
 		lopts.HclEnabled = ParseAnnotationsNullableBool(ctx, s.Annotations, annotations.HclEnabled)
 		return lopts, nil

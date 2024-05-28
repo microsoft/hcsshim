@@ -69,20 +69,20 @@ const (
 	InitrdFile = "initrd.img"
 	// VhdFile is the default file name for a rootfs.vhd used to boot LCOW.
 	VhdFile = "rootfs.vhd"
-	// DmVerityVhdFile is the default file name for a dmverity_rootfs.vhd which
-	// is mounted by the GuestStateFile during boot and used as the root file
-	// system when booting in the SNP case.
+	// DefaultDmVerityRootfsVhd is the default file name for a dmverity_rootfs.vhd,
+	// which is mounted by the GuestStateFile during boot and used as the root file
+	// system when booting in the SNP case. Similar to layer VHDs, the Merkle tree
+	// is appended after ext4 filesystem ends.
 	DefaultDmVerityRootfsVhd = "rootfs.vhd"
-	DefaultDmVerityHashVhd   = "rootfs.hash.vhd"
 	// KernelFile is the default file name for a kernel used to boot LCOW.
 	KernelFile = "kernel"
 	// UncompressedKernelFile is the default file name for an uncompressed
 	// kernel used to boot LCOW with KernelDirect.
 	UncompressedKernelFile = "vmlinux"
 	// GuestStateFile is the default file name for a vmgs (VM Guest State) file
-	// which combines kernel and initrd and is used to mount DmVerityVhdFile
+	// which contains the kernel and kernel command which mounts DmVerityVhdFile
 	// when booting in the SNP case.
-	GuestStateFile = "kernelinitrd.vmgs"
+	GuestStateFile = "kernel.vmgs"
 	// UVMReferenceInfoFile is the default file name for a COSE_Sign1
 	// reference UVM info, which can be made available to workload containers
 	// and can be used for validation purposes.
@@ -98,8 +98,8 @@ type ConfidentialOptions struct {
 	UVMReferenceInfoFile   string // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
 	BundleDirectory        string // pod bundle directory
 	DmVerityRootFsVhd      string // The VHD file (bound to the vmgs file via embedded dmverity hash data file) to load.
-	DmVerityHashVhd        string // The VHD file containing the hash tree
 	DmVerityMode           bool   // override to be able to turn off dmverity for debugging
+	DmVerityCreateArgs     string // set dm-verity args when booting with verity in non-SNP mode
 }
 
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
@@ -362,12 +362,6 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		return nil, fmt.Errorf("the DM Verity VHD file '%s' was not found", dmVerityRootfsTemplatePath)
 	}
 
-	// The root file system comes from the dmverity vhd file which is mounted by the initrd in the vmgs file.
-	dmVerityHashTemplatePath := filepath.Join(opts.BootFilesPath, opts.DmVerityHashVhd)
-	if _, err := os.Stat(dmVerityHashTemplatePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("the DM Verity Hash file '%s' was not found", dmVerityHashTemplatePath)
-	}
-
 	var processor *hcsschema.Processor2
 	processor, err = fetchProcessor(ctx, opts, uvm)
 	if err != nil {
@@ -394,17 +388,10 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		}
 	}()
 
-	dmVerityHashFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityHashVhd)
-	if err := copyfile.CopyFile(ctx, dmVerityHashTemplatePath, dmVerityHashFullPath, true); err != nil {
-		return nil, fmt.Errorf("failed to copy DM Verity hash template file: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			os.Remove(dmVerityHashFullPath)
-		}
-	}()
-
-	for _, filename := range []string{vmgsFileFullPath, dmVerityRootFsFullPath, dmVerityHashFullPath} {
+	for _, filename := range []string{
+		vmgsFileFullPath,
+		dmVerityRootFsFullPath,
+	} {
 		if err := security.GrantVmGroupAccessWithMask(filename, security.AccessMaskAll); err != nil {
 			return nil, fmt.Errorf("failed to grant VM group access ALL: %w", err)
 		}
@@ -491,16 +478,10 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 							Path:     dmVerityRootFsFullPath,
 							ReadOnly: true,
 						},
-						"1": {
-							Type_:    "VirtualDisk",
-							Path:     dmVerityHashFullPath,
-							ReadOnly: true,
-						},
 					},
 				},
 			}
 			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
-			uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 1})
 		}
 	}
 
@@ -738,6 +719,12 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 			}
 		} else {
 			kernelArgs = "root=/dev/sda ro rootwait init=/init"
+			if opts.DmVerityMode {
+				if len(opts.DmVerityCreateArgs) == 0 {
+					return nil, errors.New("DmVerityCreateArgs must be set when DmVerityMode is true and not booting from a vmgs file.")
+				}
+				kernelArgs = fmt.Sprintf("root=/dev/dm-0 dm-mod.create=%q init=/init", opts.DmVerityCreateArgs)
+			}
 			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
 				Type_:    "VirtualDisk",
 				Path:     rootfsFullPath,
