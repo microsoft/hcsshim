@@ -41,6 +41,7 @@ type mountConfig struct {
 	partition        uint64
 	readOnly         bool
 	encrypted        bool
+	blockDev         bool
 	options          []string
 	ensureFilesystem bool
 	filesystem       string

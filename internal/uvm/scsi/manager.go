@@ -83,6 +83,9 @@ type MountConfig struct {
 	// mounted as.
 	// This is only supported for LCOW.
 	Filesystem string
+	// BlockDev indicates if the device should be mounted as a block device.
+	// This is only supported for LCOW.
+	BlockDev bool
 }
 
 // Mount represents a SCSI device that has been attached to a VM, and potentially
@@ -157,6 +160,7 @@ func (m *Manager) AddVirtualDisk(
 			options:          mc.Options,
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
+			blockDev:         mc.BlockDev,
 		}
 	}
 	return m.add(ctx,
@@ -202,6 +206,7 @@ func (m *Manager) AddPhysicalDisk(
 			options:          mc.Options,
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
+			blockDev:         mc.BlockDev,
 		}
 	}
 	return m.add(ctx,

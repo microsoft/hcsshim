@@ -1005,6 +1005,7 @@ func modifyMappedVirtualDisk(
 				VerityInfo:       verityInfo,
 				EnsureFilesystem: mvd.EnsureFilesystem,
 				Filesystem:       mvd.Filesystem,
+				BlockDev:         mvd.BlockDev,
 			}
 			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
 				mvd.ReadOnly, mvd.Options, config)
@@ -1022,6 +1023,7 @@ func modifyMappedVirtualDisk(
 				VerityInfo:       verityInfo,
 				EnsureFilesystem: mvd.EnsureFilesystem,
 				Filesystem:       mvd.Filesystem,
+				BlockDev:         mvd.BlockDev,
 			}
 			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition,
 				mvd.MountPath, config); err != nil {

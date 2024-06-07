@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
@@ -34,6 +35,7 @@ import (
 var (
 	osMkdirAll  = os.MkdirAll
 	osRemoveAll = os.RemoveAll
+	osSymlink   = os.Symlink
 	unixMount   = unix.Mount
 
 	// mock functions for testing getDevicePath
@@ -112,6 +114,7 @@ type Config struct {
 	VerityInfo       *guestresource.DeviceVerityInfo
 	EnsureFilesystem bool
 	Filesystem       string
+	BlockDev         bool
 }
 
 // Mount creates a mount from the SCSI device on `controller` index `lun` to
@@ -161,6 +164,19 @@ func Mount(
 				}
 			}()
 		}
+	}
+
+	// create and symlink block device mount target
+	if config.BlockDev {
+		parent := filepath.Dir(target)
+		if err := osMkdirAll(parent, 0700); err != nil {
+			return err
+		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"source": source,
+			"target": target,
+		}).Trace("creating block device symlink")
+		return osSymlink(source, target)
 	}
 
 	if err := osMkdirAll(target, 0700); err != nil {
@@ -279,6 +295,15 @@ func Unmount(
 		trace.Int64Attribute("lun", int64(lun)),
 		trace.Int64Attribute("partition", int64(partition)),
 		trace.StringAttribute("target", target))
+
+	// skip unmount logic for block devices, since they are just symlinks
+	if config.BlockDev {
+		log.G(ctx).WithField("target", target).Trace("removing block device symlink")
+		if err := osRemoveAll(target); err != nil {
+			return fmt.Errorf("failed to remove symlink: %w", err)
+		}
+		return nil
+	}
 
 	// unmount target
 	if err := storageUnmountPath(ctx, target, true); err != nil {
