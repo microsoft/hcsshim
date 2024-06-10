@@ -96,6 +96,9 @@ const (
 	// HostProcessContainer indicates to launch a host process container (job container in this repository).
 	HostProcessContainer = "microsoft.com/hostprocess-container"
 
+	// DisableHostProcessContainer disables the ability to start a host process container (job container in this repository).
+	DisableHostProcessContainer = "microsoft.com/disable-hostprocess-container"
+
 	// HostProcessRootfsLocation indicates where the rootfs for a host process container should be located. If file binding support is
 	// available (Windows versions 20H1 and up) this will be the absolute path where the rootfs for a container will be located on the host
 	// and will be unique per container. On < 20H1 hosts, the location will be C:\<path-supplied>\<containerID>. So for example, if the value
@@ -322,5 +325,6 @@ var AnnotationExpansions = map[string][]string{
 		WCOWDisableGMSA,
 		DisableWritableFileShares,
 		VSMBNoDirectMap,
+		DisableHostProcessContainer,
 	},
 }
