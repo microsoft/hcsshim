@@ -10,6 +10,7 @@ import (
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	iannotations "github.com/Microsoft/hcsshim/internal/annotations"
+	"github.com/Microsoft/hcsshim/internal/devices"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -226,6 +227,28 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 	}
 }
 
+func parseDevices(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDeviceID {
+	if specWindows == nil || specWindows.Devices == nil {
+		return nil
+	}
+	extraDevices := make([]uvm.VPCIDeviceID, len(specWindows.Devices))
+	for i, d := range specWindows.Devices {
+		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
+		if uvm.IsValidDeviceType(d.IDType) {
+			key := uvm.NewVPCIDeviceID(pciID, index)
+			extraDevices[i] = key
+		} else {
+			log.G(ctx).WithFields(logrus.Fields{
+				"device": d,
+			}).Warnf("device type %s invalid, skipping", d.IDType)
+		}
+	}
+	// nil out the devices on the spec so that they aren't re-added to the
+	// pause container.
+	specWindows.Devices = nil
+	return extraDevices
+}
+
 // sets options common to both WCOW and LCOW from annotations.
 func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) {
 	opts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, opts.MemorySizeInMB)
@@ -295,6 +318,10 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.DmVerityCreateArgs = ParseAnnotationsString(s.Annotations, annotations.DmVerityCreateArgs, lopts.DmVerityCreateArgs)
 		// Set HclEnabled if specified. Else default to a null pointer, which is omitted from the resulting JSON.
 		lopts.HclEnabled = ParseAnnotationsNullableBool(ctx, s.Annotations, annotations.HclEnabled)
+
+		// Add devices on the spec to the UVM's options
+		lopts.AssignedDevices = parseDevices(ctx, s.Windows)
+
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
