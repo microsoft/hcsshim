@@ -34,6 +34,7 @@ type HNSEndpoint struct {
 	Namespace          *Namespace        `json:",omitempty"`
 	EncapOverhead      uint16            `json:",omitempty"`
 	SharedContainers   []string          `json:",omitempty"`
+	State              uint16            `json:",omitempty"`
 }
 
 // SystemType represents the type of the system on which actions are done
