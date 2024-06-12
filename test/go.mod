@@ -23,7 +23,7 @@ require (
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.21.0
-	google.golang.org/grpc v1.63.2
+	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.34.1
 	k8s.io/cri-api v0.27.1
 )
