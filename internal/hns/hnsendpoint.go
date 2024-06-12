@@ -14,16 +14,16 @@ import (
 type EndpointState uint16
 
 // EndpointState const
-// The lifecycle of an Endpoint goes through created, attached, being shared with other containers, 
+// The lifecycle of an Endpoint goes through created, attached, being shared with other containers,
 // detached, after being attached, degraded and finally destroyed.
 const (
 	Uninitialized   EndpointState = iota
 	Created         EndpointState = 1
-    Attached	    EndpointState = 2
-    AttachedSharing EndpointState = 3
-    Detached        EndpointState = 4
-    Degraded        EndpointState = 5
-    Destroyed       EndpointState = 6
+	Attached        EndpointState = 2
+	AttachedSharing EndpointState = 3
+	Detached        EndpointState = 4
+	Degraded        EndpointState = 5
+	Destroyed       EndpointState = 6
 )
 
 func (es EndpointState) String() string {
