@@ -477,6 +477,8 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
 
+	// TODO: replace with grpc.NewClient
+	//nolint:staticcheck // SA1019: grpc.Dial is deprecated, replace with grpc.NewClient
 	grpcClient, err := grpc.Dial(
 		conf.GRPCAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

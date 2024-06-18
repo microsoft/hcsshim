@@ -86,7 +86,7 @@ jobs:
       - name: Install protoc
         shell: powershell
         run: |
-          gh release download -R protocolbuffers/protobuf -p 'protoc-*-win32.zip' -O protoc.zip 'v23.2'
+          gh release download -R protocolbuffers/protobuf -p 'protoc-*-win32.zip' -O protoc.zip 'v26.0'
           if ( $LASTEXITCODE ) {
             Write-Output '::error::Could not download protoc.'
             exit $LASTEXITCODE
