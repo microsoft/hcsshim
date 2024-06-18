@@ -15,6 +15,9 @@ updates:
       # only do patch updates for containerd and co: don't bump anything else
       - dependency-name: "github.com/containerd/*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # ignore patch version increment updates to avoid churn
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
     # allow more PRs to clear queue faster
     open-pull-requests-limit: 10
 
@@ -30,7 +33,6 @@ updates:
     ignore:
       # keep containerd and related dependencies in sync with the shim/the root repo
       - dependency-name: "github.com/containerd/*"
-      # ignore patch version increment updates in test; they shouldn't be critical
       - dependency-name: "*"
         update-types: ["version-update:semver-patch"]
     open-pull-requests-limit: 5
