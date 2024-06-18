@@ -132,6 +132,7 @@ type OptionsLCOW struct {
 	DisableTimeSyncService  bool                 // Disables the time synchronization service
 	HclEnabled              *bool                // Whether to enable the host compatibility layer
 	ExtraVSockPorts         []uint32             // Extra vsock ports to allow
+	AssignedDevices         []VPCIDeviceID       // AssignedDevices are devices to add on pod boot
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -640,6 +641,44 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		},
 	}
 
+	// Add optional devices that were specified on the UVM spec
+	if len(opts.AssignedDevices) > 0 {
+		if doc.VirtualMachine.Devices.VirtualPci == nil {
+			doc.VirtualMachine.Devices.VirtualPci = make(map[string]hcsschema.VirtualPciDevice)
+		}
+		for _, d := range opts.AssignedDevices {
+			// we don't need to hold the modify lock here because the UVM has
+			// not yet been created.
+			existingDevice := uvm.vpciDevices[d]
+			if existingDevice != nil {
+				return nil, fmt.Errorf("device %s with index %d is specified multiple times", d.deviceInstanceID, d.virtualFunctionIndex)
+			}
+
+			vmbusGUID, err := guid.NewV4()
+			if err != nil {
+				return nil, err
+			}
+
+			doc.VirtualMachine.Devices.VirtualPci[vmbusGUID.String()] = hcsschema.VirtualPciDevice{
+				Functions: []hcsschema.VirtualPciFunction{
+					{
+						DeviceInstancePath: d.deviceInstanceID,
+						VirtualFunction:    d.virtualFunctionIndex,
+					},
+				},
+			}
+
+			device := &VPCIDevice{
+				vm:                   uvm,
+				VMBusGUID:            vmbusGUID.String(),
+				deviceInstanceID:     d.deviceInstanceID,
+				virtualFunctionIndex: d.virtualFunctionIndex,
+				refCount:             1,
+			}
+			uvm.vpciDevices[d] = device
+		}
+	}
+
 	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)
 
 	// Handle StorageQoS if set
@@ -859,7 +898,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		scsiControllerCount:     opts.SCSIControllerCount,
 		vpmemMaxCount:           opts.VPMemDeviceCount,
 		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
-		vpciDevices:             make(map[VPCIDeviceKey]*VPCIDevice),
+		vpciDevices:             make(map[VPCIDeviceID]*VPCIDevice),
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		createOpts:              opts,

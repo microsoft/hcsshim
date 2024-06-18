@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -131,7 +130,7 @@ func handleAssignedDevicesWindows(
 
 	// assign device into UVM and create corresponding spec windows devices
 	for _, d := range specDevs {
-		pciID, index := getDeviceInfoFromPath(d.ID)
+		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
 		vpciCloser, locationPaths, err := devices.AddDevice(ctx, vm, d.IDType, pciID, index, deviceUtilPath)
 		if err != nil {
 			return nil, nil, err
@@ -175,9 +174,8 @@ func handleAssignedDevicesLCOW(
 
 	// assign device into UVM and create corresponding spec windows devices
 	for _, d := range specDevs {
-		switch d.IDType {
-		case uvm.VPCIDeviceIDType, uvm.VPCIDeviceIDTypeLegacy, uvm.GPUDeviceIDType:
-			pciID, index := getDeviceInfoFromPath(d.ID)
+		if uvm.IsValidDeviceType(d.IDType) {
+			pciID, index := devices.GetDeviceInfoFromPath(d.ID)
 			vpci, err := vm.AssignDevice(ctx, pciID, index, "")
 			if err != nil {
 				return resultDevs, closers, errors.Wrapf(err, "failed to assign device %s, function %d to pod %s", pciID, index, vm.ID())
@@ -188,7 +186,7 @@ func handleAssignedDevicesLCOW(
 			// map into the container
 			d.ID = vpci.VMBusGUID
 			resultDevs = append(resultDevs, d)
-		default:
+		} else {
 			return resultDevs, closers, errors.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
 	}
@@ -224,15 +222,4 @@ func addSpecGuestDrivers(ctx context.Context, vm *uvm.UtilityVM, annotations map
 		}
 	}
 	return closers, err
-}
-
-func getDeviceInfoFromPath(rawDevicePath string) (string, uint16) {
-	indexString := filepath.Base(rawDevicePath)
-	index, err := strconv.ParseUint(indexString, 10, 16)
-	if err == nil {
-		// we have a vf index
-		return filepath.Dir(rawDevicePath), uint16(index)
-	}
-	// otherwise, just use default index and full device ID given
-	return rawDevicePath, 0
 }
