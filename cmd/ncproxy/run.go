@@ -232,8 +232,12 @@ func run(clicontext *cli.Context) error {
 			var cancel context.CancelFunc
 			dialCtx, cancel = context.WithTimeout(ctx, time.Duration(conf.Timeout)*time.Second)
 			defer cancel()
+			//nolint:staticcheck // SA1019: grpc.WithBlock is deprecated
 			opts = append(opts, grpc.WithBlock())
 		}
+
+		// TODO: use grpc.NewClient here instead
+		//nolint:staticcheck // SA1019: grpc.DialContext is deprecated, replace with grpc.NewClient
 		client, err := grpc.DialContext(dialCtx, conf.NodeNetSvcAddr, opts...)
 		if err != nil {
 			return fmt.Errorf("failed to connect to NodeNetworkService at address %s", conf.NodeNetSvcAddr)

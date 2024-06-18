@@ -34,6 +34,9 @@ func createGRPCConn(ctx context.Context, address string) (*grpc.ClientConn, erro
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: use grpc.NewClient here instead
+	//nolint:staticcheck // SA1019: grpc.DialContext is deprecated
 	return grpc.DialContext(ctx, addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(dialer))
