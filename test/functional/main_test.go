@@ -98,12 +98,11 @@ const (
 
 	// resources and misc functionality.
 
-	featureScratch  = "Scratch"  // validate scratch layer mounting
-	featurePlan9    = "Plan9"    // Plan9 file shares
-	featureSCSI     = "SCSI"     // SCSI disk (virtuall and physical) mounts
-	featureVSMB     = "vSMB"     // virtual SMB file shares
-	featureVPMEM    = "vPMEM"    // virtual PMEM mounts
-	featureHVSocket = "HVSocket" // Hyper-V socket functionality
+	featureScratch = "Scratch" // validate scratch layer mounting
+	featurePlan9   = "Plan9"   // Plan9 file shares
+	featureSCSI    = "SCSI"    // SCSI disk (virtuall and physical) mounts
+	featureVSMB    = "vSMB"    // virtual SMB file shares
+	featureVPMEM   = "vPMEM"   // virtual PMEM mounts
 )
 
 var allFeatures = []string{
@@ -118,7 +117,6 @@ var allFeatures = []string{
 	featureSCSI,
 	featureVSMB,
 	featureVPMEM,
-	featureHVSocket,
 }
 
 var (

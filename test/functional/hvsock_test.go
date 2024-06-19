@@ -59,7 +59,7 @@ const (
 
 func TestHVSock_UVM_HostBind(t *testing.T) {
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureWCOW, featureUVM, featureHVSocket)
+	requireFeatures(t, featureWCOW, featureUVM)
 
 	ctx := util.Context(context.Background(), t)
 
@@ -196,7 +196,7 @@ func TestHVSock_UVM_HostBind(t *testing.T) {
 
 func TestHVSock_UVM_GuestBind(t *testing.T) {
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureWCOW, featureUVM, featureHVSocket)
+	requireFeatures(t, featureWCOW, featureUVM)
 
 	ctx := util.Context(context.Background(), t)
 
@@ -322,7 +322,7 @@ func TestHVSock_UVM_GuestBind(t *testing.T) {
 
 func TestHVSock_Container_HostBind(t *testing.T) {
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureWCOW, featureUVM, featureContainer, featureHVSocket)
+	requireFeatures(t, featureWCOW, featureUVM, featureContainer)
 
 	ctx := util.Context(context.Background(), t)
 
@@ -470,7 +470,7 @@ func TestHVSock_Container_HostBind(t *testing.T) {
 
 func TestHVSock_Container_GuestBind(t *testing.T) {
 	require.Build(t, osversion.RS5)
-	requireFeatures(t, featureWCOW, featureUVM, featureContainer, featureHVSocket)
+	requireFeatures(t, featureWCOW, featureUVM, featureContainer)
 
 	ctx := util.Context(context.Background(), t)
 
