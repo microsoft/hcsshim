@@ -103,7 +103,6 @@ const (
 	featureSCSI     = "SCSI"     // SCSI disk (virtuall and physical) mounts
 	featureVSMB     = "vSMB"     // virtual SMB file shares
 	featureVPMEM    = "vPMEM"    // virtual PMEM mounts
-	featureHVSocket = "HVSocket" // Hyper-V socket functionality
 )
 
 var allFeatures = []string{
@@ -118,7 +117,6 @@ var allFeatures = []string{
 	featureSCSI,
 	featureVSMB,
 	featureVPMEM,
-	featureHVSocket,
 }
 
 var (
