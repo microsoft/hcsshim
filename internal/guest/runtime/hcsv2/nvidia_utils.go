@@ -38,7 +38,6 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec, ociBundlePath stri
 		genericHookPath,
 		nvidiaToolBinary,
 		debugOption,
-		"--load-kmods",
 		"--no-pivot",
 		"configure",
 		"--ldconfig=@/sbin/ldconfig",
