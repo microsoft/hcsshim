@@ -19,6 +19,111 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
+func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
+	// suppress warnings raised by process annotation
+	defer func(l logrus.Level) {
+		logrus.SetLevel(l)
+	}(logrus.GetLevel())
+	logrus.SetLevel(logrus.ErrorLevel)
+	ctx := context.Background()
+
+	testAnnotations := []struct {
+		name            string
+		an              map[string]string
+		expectedSuccess bool
+	}{
+		{
+			name: "DisableUnsafeOperations-DisableHostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "true",
+				annotations.DisableHostProcessContainer: "true",
+				annotations.HostProcessContainer:        "false",
+			},
+			expectedSuccess: true,
+		},
+		{
+			name: "DisableUnsafeOperations-DisableHostProcessContainer-HostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "true",
+				annotations.DisableHostProcessContainer: "true",
+				annotations.HostProcessContainer:        "true",
+			},
+			expectedSuccess: false,
+		},
+		{
+			name: "DisableUnsafeOperations-HostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "true",
+				annotations.DisableHostProcessContainer: "false",
+				annotations.HostProcessContainer:        "true",
+			},
+			expectedSuccess: false,
+		},
+		{
+			name: "DisableUnsafeOperations",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "true",
+				annotations.DisableHostProcessContainer: "false",
+				annotations.HostProcessContainer:        "false",
+			},
+			expectedSuccess: false,
+		},
+		{
+			name: "HostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "false",
+				annotations.DisableHostProcessContainer: "false",
+				annotations.HostProcessContainer:        "true",
+			},
+			expectedSuccess: true,
+		},
+		{
+			name: "DisableHostProcessContainer-HostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "false",
+				annotations.DisableHostProcessContainer: "true",
+				annotations.HostProcessContainer:        "true",
+			},
+			expectedSuccess: false,
+		},
+		{
+			name: "DisableHostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "false",
+				annotations.DisableHostProcessContainer: "true",
+				annotations.HostProcessContainer:        "false",
+			},
+			expectedSuccess: false,
+		},
+		{
+			name: "All false",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "false",
+				annotations.DisableHostProcessContainer: "false",
+				annotations.HostProcessContainer:        "false",
+			},
+			expectedSuccess: true,
+		},
+	}
+
+	for _, tt := range testAnnotations {
+		t.Run(tt.name, func(subtest *testing.T) {
+			spec := specs.Spec{
+				Windows:     &specs.Windows{},
+				Annotations: tt.an,
+			}
+
+			err := ProcessAnnotations(ctx, &spec)
+			if err != nil && tt.expectedSuccess {
+				t.Fatalf("ProcessAnnotations should have succeeded, instead got %v", err)
+			}
+			if err == nil && !tt.expectedSuccess {
+				t.Fatal("ProcessAnnotations should have failed due to conflicting annotations, instead returned success")
+			}
+		})
+	}
+}
+
 func TestProccessAnnotations_Expansion(t *testing.T) {
 	// suppress warnings raised by process annotation
 	defer func(l logrus.Level) {

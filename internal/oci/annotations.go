@@ -21,6 +21,7 @@ import (
 )
 
 var ErrAnnotationExpansionConflict = errors.New("annotation expansion conflict")
+var ErrGenericAnnotationConflict = errors.New("specified annotations conflict")
 
 // ProcessAnnotations expands annotations into their corresponding annotation groups.
 func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
@@ -53,6 +54,19 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
 				s.Annotations[k] = val
 			}
 		}
+	}
+
+	// validate host process containers annotations are not conflicting
+	disableHPC := ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableHostProcessContainer, false)
+	enableHPC := ParseAnnotationsBool(ctx, s.Annotations, annotations.HostProcessContainer, false)
+	if disableHPC && enableHPC {
+		err = ErrGenericAnnotationConflict
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.OCIAnnotation:               annotations.DisableHostProcessContainer,
+			logfields.Value:                       s.Annotations[annotations.DisableHostProcessContainer],
+			logfields.OCIAnnotation + "-conflict": annotations.HostProcessContainer,
+			logfields.Value + "-conflict":         s.Annotations[annotations.HostProcessContainer],
+		}).WithError(err).Warning("Host process container and disable host process container cannot both be true")
 	}
 
 	return err
