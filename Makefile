@@ -4,9 +4,17 @@ GO:=go
 GO_FLAGS:=-ldflags "-s -w" # strip Go binaries
 CGO_ENABLED:=0
 GOMODVENDOR:=
+KMOD:=0
 
 CFLAGS:=-O2 -Wall
-LDFLAGS:=-static -s # strip C binaries
+LDFLAGS:=-static -s #strip C binaries
+LDLIBS:=
+PREPROCESSORFLAGS:=
+ifeq "$(KMOD)" "1"
+LDFLAGS:= -s
+LDLIBS:= -lkmod
+PREPROCESSORFLAGS:=-DMODULES=1
+endif
 
 GO_FLAGS_EXTRA:=
 ifeq "$(GOMODVENDOR)" "1"
@@ -83,8 +91,8 @@ bin/vsockexec: vsockexec/vsockexec.o vsockexec/vsock.o
 
 bin/init: init/init.o vsockexec/vsock.o
 	@mkdir -p bin
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+	$(CC) $(PREPROCESSORFLAGS) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
