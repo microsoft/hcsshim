@@ -357,6 +357,38 @@ void init_entropy(int port) {
     close(e);
 }
 
+// dmesg is a helper function for printing to dmesg. We cannot assume that the 
+// image has syslogd or similar running for now, so we cannot just use syslog(3).
+//
+// /dev/kmsg exports the structured data in the following line format:
+// "<level>,<sequnum>,<timestamp>,<contflag>[,additional_values, ... ];<message text>\n"
+void dmesg(const unsigned int level, const char *msg)
+{
+    int fd_kmsg = open("/dev/kmsg", O_WRONLY);
+    if (fd_kmsg == -1) {
+        // failed to open the kmsg device 
+        warn("error opening /dev/kmsg");
+        return;
+    }
+    FILE * f_kmsg = fdopen(fd_kmsg, "w");
+    if (f_kmsg == NULL) {
+        warn("error getting /dev/kmsg file");
+        close(fd_kmsg);
+        return;
+    }
+    fprintf(f_kmsg,  "<%u>%s", level, msg);
+    fflush(f_kmsg);
+    int close_ret = fclose(f_kmsg); // closes the underlying fd_kmsg as well
+    if (close_ret != 0) {
+        warn("error closing /dev/kmsg");
+    }
+}
+
+// see https://man7.org/linux/man-pages/man2/syslog.2.html for definitions of levels 
+void dmesgErr(const char *msg) { dmesg(3, msg); }
+void dmesgWarn(const char *msg) { dmesg(4, msg); }
+void dmesgInfo(const char *msg) { dmesg(6, msg); }
+
 pid_t launch(int argc, char **argv) {
     int pid = fork();
     if (pid != 0) {
@@ -566,6 +598,45 @@ int debug_main(int argc, char **argv) {
 }
 #endif
 
+// start_services is a helper function to start different services that are 
+// expected to be running in the guest on boot. These processes run as 
+// linux daemons. 
+//
+// Future work: Support collecting logs for these services and handle 
+// log rotation as needed.
+void start_services() {
+    // While execvpe will already search the path for the executable, it does
+    // so after forking. We can avoid that unnecessary fork by stating the 
+    // binary beforehand. 
+    char *persistenced_name = "/bin/nvidia-persistenced";
+    struct stat persistenced_stat; 
+    if (stat(persistenced_name, &persistenced_stat) == -1) {
+        dmesgWarn("nvidia-persistenced not present, skipping ");
+    } else {
+        dmesgInfo("start nvidia-persistenced daemon");
+        pid_t persistenced_pid = launch(1, &persistenced_name);
+        if (persistenced_pid < 0) {
+            // do not return early if we fail to start this, since it's possible that 
+            // this service doesn't exist on the system, which is a valid scenario
+            dmesgWarn("failed to start nvidia-persistenced daemon");
+        }
+    }
+
+    char *fm_name = "/bin/nv-fabricmanager";
+    struct stat fabric_stat; 
+    if (stat(fm_name, &fabric_stat) == -1) {
+        dmesgWarn("nv-fabricmanager not present, skipping ");
+    } else {
+        dmesgInfo("start nv-fabricmanager daemon");
+        pid_t fm_pid = launch(1, &fm_name);
+        if (fm_pid < 0) {
+            // do not return early if we fail to start this, since it's possible that 
+            // this service doesn't exist on the system, which is a valid scenario
+            dmesgWarn("failed to start nv-fabricmanager daemon");
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     #ifdef DEBUG
     debug_main(argc, argv);
@@ -654,10 +725,16 @@ int main(int argc, char **argv) {
     load_all_modules();
     #endif
 
+    start_services();
+
     pid_t pid = launch(child_argc, child_argv);
     if (debug_shell != NULL) {
         // The debug shell takes over as the primary child.
         pid = launch(1, &debug_shell);
+    }
+
+    if (pid < 0) {
+        die("failed launching process");
     }
 
     // Reap until the initial child process dies.
