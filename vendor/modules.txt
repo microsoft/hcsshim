@@ -107,7 +107,7 @@ github.com/containerd/protobuild/cmd/go-fix-acronym
 ## explicit; go 1.19
 github.com/containerd/stargz-snapshotter/estargz
 github.com/containerd/stargz-snapshotter/estargz/errorutil
-# github.com/containerd/ttrpc v1.2.4
+# github.com/containerd/ttrpc v1.2.5
 ## explicit; go 1.19
 github.com/containerd/ttrpc
 github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc
