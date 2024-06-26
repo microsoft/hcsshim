@@ -126,7 +126,7 @@ github.com/decred/dcrd/dcrec/secp256k1/v4
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
 github.com/distribution/reference
-# github.com/docker/cli v24.0.0+incompatible
+# github.com/docker/cli v27.0.1+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
@@ -135,7 +135,7 @@ github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.8.3+incompatible
 ## explicit
 github.com/docker/distribution/registry/client/auth/challenge
-# github.com/docker/docker v27.0.0+incompatible
+# github.com/docker/docker v27.0.1+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -158,7 +158,6 @@ github.com/docker/docker/api/types/volume
 github.com/docker/docker/client
 github.com/docker/docker/errdefs
 github.com/docker/docker/internal/multierror
-github.com/docker/docker/pkg/homedir
 # github.com/docker/docker-credential-helpers v0.8.2
 ## explicit; go 1.19
 github.com/docker/docker-credential-helpers/client
@@ -568,7 +567,6 @@ golang.org/x/net/trace
 golang.org/x/sync/errgroup
 # golang.org/x/sys v0.21.0
 ## explicit; go 1.18
-golang.org/x/sys/execabs
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry

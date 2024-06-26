@@ -16,7 +16,7 @@ require (
 	github.com/containerd/protobuild v0.3.0
 	github.com/containerd/ttrpc v1.2.5
 	github.com/containerd/typeurl/v2 v2.1.1
-	github.com/docker/docker v27.0.0+incompatible
+	github.com/docker/docker v27.0.1+incompatible
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-containerregistry v0.19.2
 	github.com/josephspurrier/goversioninfo v1.4.0
@@ -56,7 +56,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/cli v24.0.0+incompatible // indirect
+	github.com/docker/cli v27.0.1+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.8.2 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
