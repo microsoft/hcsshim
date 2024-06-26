@@ -83,6 +83,8 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 			}
 
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
+
+			isBlockDev := strings.HasPrefix(mount.Destination, guestpath.BlockDevMountPrefix)
 			if mount.Type == MountTypePhysicalDisk {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI physical disk for OCI mount")
 				scsiMount, err := coi.HostingSystem.SCSIManager.AddPhysicalDisk(
@@ -90,15 +92,18 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					hostPath,
 					readOnly,
 					coi.HostingSystem.ID(),
-					&scsi.MountConfig{Options: mount.Options},
+					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
 				)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
 				}
-
 				uvmPathForFile = scsiMount.GuestPath()
 				r.Add(scsiMount)
-				coi.Spec.Mounts[i].Type = "none"
+				mt := "none"
+				if isBlockDev {
+					mt = "bind"
+				}
+				coi.Spec.Mounts[i].Type = mt
 			} else if mount.Type == MountTypeVirtualDisk {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI virtual disk for OCI mount")
 
@@ -109,7 +114,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					hostPath,
 					readOnly,
 					coi.HostingSystem.ID(),
-					&scsi.MountConfig{Options: mount.Options},
+					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
 				)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
@@ -117,7 +122,11 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				uvmPathForFile = scsiMount.GuestPath()
 				r.Add(scsiMount)
-				coi.Spec.Mounts[i].Type = "none"
+				mt := "none"
+				if isBlockDev {
+					mt = "bind"
+				}
+				coi.Spec.Mounts[i].Type = mt
 			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 				// Mounts that map to a path in UVM are specified with 'sandbox://' prefix.
 				// example: sandbox:///a/dirInUvm destination:/b/dirInContainer

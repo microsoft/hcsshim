@@ -5,10 +5,12 @@ package hcsv2
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
@@ -84,6 +86,45 @@ func updateHugePageMounts(sbid string, spec *oci.Spec) error {
 	return nil
 }
 
+func updateBlockDeviceMounts(spec *oci.Spec) error {
+	for i, m := range spec.Mounts {
+		if !strings.HasPrefix(m.Destination, guestpath.BlockDevMountPrefix) {
+			continue
+		}
+		permissions := "rwm"
+		for _, o := range m.Options {
+			if o == "ro" {
+				permissions = "r"
+				break
+			}
+		}
+
+		// For block device mounts, the source will be a symlink. Resolve it first
+		// before passing to `DeviceFromPath`, which expects a real device path.
+		rPath, err := os.Readlink(m.Source)
+		if err != nil {
+			return fmt.Errorf("failed to readlink %s: %w", m.Source, err)
+		}
+
+		sourceDevice, err := devices.DeviceFromPath(rPath, permissions)
+		if err != nil {
+			return fmt.Errorf("failed to get device from path: %w", err)
+		}
+
+		deviceCgroup := oci.LinuxDeviceCgroup{
+			Allow:  true,
+			Type:   string(sourceDevice.Type),
+			Major:  &sourceDevice.Major,
+			Minor:  &sourceDevice.Minor,
+			Access: string(sourceDevice.Permissions),
+		}
+
+		spec.Linux.Resources.Devices = append(spec.Linux.Resources.Devices, deviceCgroup)
+		spec.Mounts[i].Destination = strings.TrimPrefix(m.Destination, guestpath.BlockDevMountPrefix)
+	}
+	return nil
+}
+
 func specHasGPUDevice(spec *oci.Spec) bool {
 	for _, d := range spec.Windows.Devices {
 		if d.IDType == "gpu" {
@@ -113,6 +154,10 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 
 	if err = updateHugePageMounts(sbid, spec); err != nil {
 		return errors.Wrapf(err, "failed to update hugepages mounts for container %v in sandbox %v", id, sbid)
+	}
+
+	if err = updateBlockDeviceMounts(spec); err != nil {
+		return fmt.Errorf("failed to update block device mounts for container %v in sandbox %v: %w", id, sbid, err)
 	}
 
 	// Add default mounts for container networking (e.g. /etc/hostname, /etc/hosts),
