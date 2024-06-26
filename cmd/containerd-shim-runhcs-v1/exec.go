@@ -5,8 +5,8 @@ package main
 import (
 	"context"
 
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/errdefs"
 	"github.com/pkg/errors"
 )
 

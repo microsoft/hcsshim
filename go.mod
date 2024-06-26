@@ -8,13 +8,14 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/containerd/cgroups v1.1.0
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.23
+	github.com/containerd/containerd v1.6.33
+	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.2
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/google/go-containerregistry v0.14.0
 	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/lestrrat-go/jwx v1.2.25
@@ -33,8 +34,8 @@ require (
 	go.etcd.io/bbolt v1.3.7
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.10.0
-	google.golang.org/grpc v1.50.1
+	golang.org/x/sys v0.18.0
+	google.golang.org/grpc v1.59.0
 )
 
 require (
@@ -42,6 +43,7 @@ require (
 	github.com/agnivade/levenshtein v1.0.1 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
+	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
@@ -59,7 +61,7 @@ require (
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/godbus/dbus/v5 v5.0.6 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/klauspost/compress v1.16.0 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.0 // indirect
@@ -69,7 +71,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moby/sys/mountinfo v0.6.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.0-rc2.0.20221005185240-3a7f492d3f1b // indirect
+	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
@@ -78,13 +80,13 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/yashtewari/glob-intersection v0.1.0 // indirect
-	golang.org/x/crypto v0.11.0 // indirect
+	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/net v0.12.0 // indirect
-	golang.org/x/text v0.11.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.11.0 // indirect
-	google.golang.org/genproto v0.0.0-20220502173005-c8bf987b8c21 // indirect
-	google.golang.org/protobuf v1.29.1 // indirect
+	google.golang.org/genproto v0.0.0-20230822172742-b8732ec3820d // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
