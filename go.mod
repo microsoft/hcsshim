@@ -95,7 +95,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
-	github.com/vbatts/tar-split v0.11.3 // indirect
+	github.com/vbatts/tar-split v0.11.5 // indirect
 	github.com/veraison/go-cose v1.2.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
