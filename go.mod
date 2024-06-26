@@ -12,7 +12,7 @@ require (
 	github.com/containerd/console v1.0.4
 	github.com/containerd/containerd v1.7.18
 	github.com/containerd/errdefs v0.1.0
-	github.com/containerd/go-runc v1.0.0
+	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/protobuild v0.3.0
 	github.com/containerd/ttrpc v1.2.5
 	github.com/containerd/typeurl/v2 v2.1.1
