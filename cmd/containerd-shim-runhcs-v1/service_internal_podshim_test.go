@@ -20,7 +20,9 @@ import (
 
 func setupPodServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimTask, *testShimExec) {
 	t.Helper()
-	tid := strconv.Itoa(rand.Int())
+	seed := time.Now().UnixNano()
+	source := rand.New(rand.NewSource(seed))
+	tid := strconv.FormatInt((int64)(source.Uint64()), 10)
 
 	s, err := NewService(WithTID(tid), WithIsSandbox(true))
 	if err != nil {
@@ -47,8 +49,9 @@ func setupPodServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimT
 	}
 
 	// create a 2nd fake container
-	secondTaskID := strconv.Itoa(rand.Int())
-	secondTaskSecondExecID := strconv.Itoa(rand.Int())
+	secondTaskID := strconv.FormatInt((int64)(source.Uint64()), 10)
+	secondTaskSecondExecID := strconv.FormatInt((int64)(source.Uint64()), 10)
+
 	task2 := &testShimTask{
 		id:    secondTaskID,
 		exec:  newTestShimExec(secondTaskID, secondTaskID, 101),
