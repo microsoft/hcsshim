@@ -8,8 +8,8 @@ import (
 	"time"
 
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/errdefs"
 	"github.com/pkg/errors"
 )
 

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/errdefs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 

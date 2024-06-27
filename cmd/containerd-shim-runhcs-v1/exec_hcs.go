@@ -9,9 +9,9 @@ import (
 
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

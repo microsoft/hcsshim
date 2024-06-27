@@ -14,8 +14,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/errdefs"
 	google_protobuf1 "github.com/gogo/protobuf/types"
 	"go.opencensus.io/trace"
 )

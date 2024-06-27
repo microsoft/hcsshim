@@ -12,9 +12,9 @@ import (
 	"time"
 
 	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
