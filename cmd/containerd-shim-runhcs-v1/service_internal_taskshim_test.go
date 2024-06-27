@@ -24,7 +24,9 @@ import (
 
 func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimExec) {
 	t.Helper()
-	tid := strconv.Itoa(rand.Int())
+	seed := time.Now().UnixNano()
+	source := rand.New(rand.NewSource(seed))
+	tid := strconv.FormatInt((int64)(source.Uint64()), 10)
 
 	s, err := NewService(WithTID(tid), WithIsSandbox(false))
 	if err != nil {
@@ -46,7 +48,7 @@ func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShim
 		exec:  newTestShimExec(tid, tid, 10),
 		execs: make(map[string]*testShimExec),
 	}
-	secondExecID := strconv.Itoa(rand.Int())
+	secondExecID := strconv.FormatInt((int64)(source.Uint64()), 10)
 	secondExec := newTestShimExec(tid, secondExecID, 101)
 	task.execs[secondExecID] = secondExec
 	s.taskOrPod.Store(task)

@@ -2,9 +2,9 @@ package dmverity
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"io"
-	"math/rand"
 	"os"
 	"strings"
 	"testing"
