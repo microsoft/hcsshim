@@ -84,6 +84,15 @@ func Kill(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 func Close(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
 	if err := vm.CloseCtx(ctx); err != nil {
-		tb.Fatalf("could not close uvm %q: %s", vm.ID(), err)
+		tb.Fatalf("could not close uvm %q: %v", vm.ID(), err)
+	}
+}
+
+func Share(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM, hostPath, guestPath string, readOnly bool) {
+	tb.Helper()
+	tb.Logf("sharing %q to %q inside uvm %s", hostPath, guestPath, vm.ID())
+
+	if err := vm.Share(ctx, hostPath, guestPath, readOnly); err != nil {
+		tb.Fatalf("could not share %q into uvm %s as %q: %v", hostPath, vm.ID(), guestPath, err)
 	}
 }
