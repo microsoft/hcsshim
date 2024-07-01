@@ -324,16 +324,16 @@ func NestedIpSetSupported() error {
 	return platformDoesNotSupportError("NestedIpSet")
 }
 
-// DisableHostPortSupported returns an error if the HCN version does not support DisableHostPort flag
-func DisableHostPortSupported() error {
+// L1VHSupported returns an error if the HCN version does not support EnableL1VH flag
+func L1VHSupported() error {
 	supported, err := GetCachedSupportedFeatures()
 	if err != nil {
 		return err
 	}
-	if supported.DisableHostPort {
+	if supported.EnableL1VH {
 		return nil
 	}
-	return platformDoesNotSupportError("DisableHostPort")
+	return platformDoesNotSupportError("EnableL1VH")
 }
 
 // AccelnetSupported returns an error if the HCN version does not support Accelnet Feature.

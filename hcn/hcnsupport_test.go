@@ -128,13 +128,13 @@ func TestNestedIpSetSupport(t *testing.T) {
 	}
 }
 
-func TestDisableHostPortSupport(t *testing.T) {
+func TestL1VHSupport(t *testing.T) {
 	supportedFeatures := GetSupportedFeatures()
-	err := DisableHostPortSupported()
-	if supportedFeatures.DisableHostPort && err != nil {
+	err := L1VHSupported()
+	if supportedFeatures.EnableL1VH && err != nil {
 		t.Fatal(err)
 	}
-	if !supportedFeatures.DisableHostPort && err == nil {
+	if !supportedFeatures.EnableL1VH && err == nil {
 		t.Fatal(err)
 	}
 }
