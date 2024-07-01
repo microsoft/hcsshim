@@ -37,7 +37,7 @@ type SupportedFeatures struct {
 	TierAcl                  bool        `json:"TierAcl"`
 	NetworkACL               bool        `json:"NetworkACL"`
 	NestedIpSet              bool        `json:"NestedIpSet"`
-	DisableHostPort          bool        `json:"DisableHostPort"`
+	EnableL1VH               bool        `json:"EnableL1VH"`
 	ModifyLoadbalancer       bool        `json:"ModifyLoadbalancer"`
 	Accelnet                 bool        `json:"Accelnet"`
 }
@@ -117,7 +117,7 @@ func getSupportedFeatures() (SupportedFeatures, error) {
 	features.TierAcl = isFeatureSupported(globals.Version, TierAclPolicyVersion)
 	features.NetworkACL = isFeatureSupported(globals.Version, NetworkACLPolicyVersion)
 	features.NestedIpSet = isFeatureSupported(globals.Version, NestedIpSetVersion)
-	features.DisableHostPort = isFeatureSupported(globals.Version, DisableHostPortVersion)
+	features.EnableL1VH = isFeatureSupported(globals.Version, EnableL1VHVersion)
 	features.ModifyLoadbalancer = isFeatureSupported(globals.Version, ModifyLoadbalancerVersion)
 	features.Accelnet = isFeatureSupported(globals.Version, AccelnetVersion)
 
