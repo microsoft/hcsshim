@@ -73,6 +73,7 @@ const (
 	None                NetworkFlags = 0
 	EnableNonPersistent NetworkFlags = 8
 	DisableHostPort     NetworkFlags = 1024
+	EnableIov           NetworkFlags = 9216
 )
 
 // HostComputeNetwork represents a network
