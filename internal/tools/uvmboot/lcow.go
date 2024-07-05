@@ -296,7 +296,7 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 }
 
 func execViaGCS(ctx context.Context, vm *uvm.UtilityVM, cCtx *cli.Context) error {
-	c := cmd.CommandContext(ctx, vm, "/bin/sh", "-c", cCtx.String(execCommandLineArgName))
+	c := cmd.CommandContext(ctx, vm, "sh", "-c", cCtx.String(execCommandLineArgName))
 	c.Log = log.L.Dup()
 	if lcowUseTerminal {
 		c.Spec.Terminal = true
