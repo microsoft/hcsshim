@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/errdefs"
@@ -96,8 +97,10 @@ func setupTestPodWithFakes(t *testing.T) (*pod, *testShimTask) {
 		execs: make(map[string]*testShimExec),
 	}
 	// Add a 2nd exec
-	seid := strconv.Itoa(rand.Int())
-	st.execs[seid] = newTestShimExec(t.Name(), seid, int(rand.Int31()))
+	seed := time.Now().UnixNano()
+	source := rand.New(rand.NewSource(seed))
+	seid := strconv.FormatInt((int64)(source.Uint64()), 10)
+	st.execs[seid] = newTestShimExec(t.Name(), seid, int(source.Uint64()))
 	p := &pod{
 		id:          t.Name(),
 		sandboxTask: st,
@@ -107,10 +110,13 @@ func setupTestPodWithFakes(t *testing.T) (*pod, *testShimTask) {
 
 func setupTestTaskInPod(t *testing.T, p *pod) *testShimTask {
 	t.Helper()
-	tid := strconv.Itoa(rand.Int())
+	seed := time.Now().UnixNano()
+	source := rand.New(rand.NewSource(seed))
+	tid := strconv.FormatInt((int64)(source.Uint64()), 10)
+
 	wt := &testShimTask{
 		id:   tid,
-		exec: newTestShimExec(tid, tid, int(rand.Int31())),
+		exec: newTestShimExec(tid, tid, int(source.Uint64())),
 	}
 	p.workloadTasks.Store(wt.id, wt)
 	return wt
@@ -385,6 +391,9 @@ func Test_pod_DeleteTask_TaskID_Not_Created(t *testing.T) {
 	setupTestTaskInPod(t, p)
 	setupTestTaskInPod(t, p)
 
-	err := p.KillTask(context.Background(), strconv.Itoa(rand.Int()), "", 0xf, true)
+	seed := time.Now().UnixNano()
+	source := rand.New(rand.NewSource(seed))
+
+	err := p.KillTask(context.Background(), strconv.Itoa((int)(source.Uint64())), "", 0xf, true)
 	verifyExpectedError(t, nil, err, errdefs.ErrNotFound)
 }

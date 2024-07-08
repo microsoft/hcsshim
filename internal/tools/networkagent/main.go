@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+
 	"flag"
 	"fmt"
 	"math/rand"
@@ -13,6 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
+
+	cryptorand "crypto/rand"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
@@ -37,7 +41,7 @@ const (
 func generateMAC() (string, error) {
 	buf := make([]byte, 6)
 
-	_, err := rand.Read(buf)
+	_, err := cryptorand.Read(buf)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +69,9 @@ func generateIPs(prefixLength string) (string, string, string) {
 	ipGatewayString := ipGateway.String()
 
 	// set last byte for IP address in range
-	last := byte(rand.Intn(255-2) + 2)
+	seed := time.Now().UnixNano()
+	source := rand.New(rand.NewSource(seed))
+	last := byte(source.Uint64())
 	ipBytes := append(buf, last)
 	ip := net.IP(ipBytes)
 	ipString := ip.String()
