@@ -13,9 +13,7 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
+type MigrationCompressionSettings struct {
+	// [De]compression thread count. If the value is higher than what the physical host's and VM's configuration can support, the value will be adjusted. The value should be non-zero.
+	ThrottleWorkerCount uint32 `json:"ThrottleWorkerCount,omitempty"`
 }

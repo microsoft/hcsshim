@@ -13,9 +13,11 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
-}
+// MigrationOrigin : Where migration is initiated from
+type MigrationOrigin string
+
+// List of MigrationOrigin
+const (
+	MigrationOrigin_SOURCE      MigrationOrigin = "Source"
+	MigrationOrigin_DESTINATION MigrationOrigin = "Destination"
+)

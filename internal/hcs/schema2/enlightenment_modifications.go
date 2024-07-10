@@ -13,9 +13,11 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
-}
+// EnlightenmentModifications : Enum for enlightenment modifications
+type EnlightenmentModifications string
+
+// List of EnlightenmentModifications
+const (
+	EnlightenmentModifications_FAVOR_AUTO_EOI           EnlightenmentModifications = "FavorAutoEoi"
+	EnlightenmentModifications_FAVOR_AUTO_EOI_LEGACY_OS EnlightenmentModifications = "FavorAutoEoiLegacyOs"
+)

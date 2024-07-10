@@ -13,9 +13,11 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
-}
+// ProcessorFeatureSetMode : Enum for setting Strict/Flexible configuration mode
+type ProcessorFeatureSetMode string
+
+// List of ProcessorFeatureSetMode
+const (
+	ProcessorFeatureSetMode_STRICT     ProcessorFeatureSetMode = "Strict"
+	ProcessorFeatureSetMode_PERMISSIVE ProcessorFeatureSetMode = "Permissive"
+)

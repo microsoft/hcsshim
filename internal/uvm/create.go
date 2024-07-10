@@ -106,6 +106,22 @@ type Options struct {
 
 	// 	AdditionalHyperVConfig are extra Hyper-V socket configurations to provide.
 	AdditionalHyperVConfig map[string]hcsschema.HvSocketServiceConfig
+
+		// The following options are for implicit vNUMA topology settings.
+	// MaxSizePerNode is the maximum size of memory per vNUMA node.
+	MaxSizePerNode uint64
+	// MaxProcessorsPerNumaNode is the maximum number of processors per vNUMA node.
+	MaxProcessorsPerNumaNode uint32
+	// PhysicalNumaNodes are the preferred physical NUMA nodes to map to vNUMA nodes.
+	PreferredPhysicalNumaNodes []uint32
+
+	// The following options are for explicit vNUMA topology settings.
+	// NumaMappedPhysicalNodes are the physical NUMA nodes mapped to vNUMA nodes.
+	NumaMappedPhysicalNodes []uint32
+	// NumaProcessorCounts are the number of processors per vNUMA node.
+	NumaProcessorCounts []uint32
+	// NumaMemoryBlocksCounts are the number of memory blocks per vNUMA node.
+	NumaMemoryBlocksCounts []uint64
 }
 
 // Verifies that the final UVM options are correct and supported.

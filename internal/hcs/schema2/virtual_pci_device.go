@@ -13,4 +13,5 @@ package hcsschema
 // docs when a public build with this is out.
 type VirtualPciDevice struct {
 	Functions []VirtualPciFunction `json:",omitempty"`
+	PropagateNumaAffinity bool	`json:"PropagateNumaAffinity,omitempty"`
 }

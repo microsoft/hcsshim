@@ -314,6 +314,35 @@ const (
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
 	// case the UVM crashes.
 	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
+
+	// NumaMaximumProcessorsPerNode is the maximum number of processors per vNUMA node.
+	// This should be used for implicit vNUMA topology.
+	NumaMaximumProcessorsPerNode = "io.microsoft.virtualmachine.computetopology.processor.numa.max-processors-per-node"
+
+	// NumaMaximumSizePerNode is the maximum size per vNUMA node.
+	// This should be used for implicit vNUMA topology.
+	NumaMaximumSizePerNode = "io.microsoft.virtualmachine.computetopology.processor.numa.max-size-per-node"
+
+	// NumaPreferredPhysicalNodes is an integer slice representing the preferred physical NUMA nodes.
+	// This should be used for implicit vNUMA topology.
+	NumaPreferredPhysicalNodes = "io.microsoft.virtualmachine.computetopology.numa.preferred-physical-nodes"
+
+	// NumaMappedPhysicalNodes is an integer slice representing pNUMA to vNUMA mapping. pNUMA at index `i` will
+	// be mapped to vNUMA number `i`. This should be used for explicit vNUMA topology.
+	NumaMappedPhysicalNodes = "io.microsoft.virtualmachine.computetopology.numa.mapped-physical-nodes"
+
+	// NumaCountOfProcessors is an integer slice representing the processor count for vNUMA.
+	// The assumption is that vNUMA at index 0 will get the number of processors specified
+	// at slice index 0, vNUMA at index 1 will get the number of processors at slice index 1 etc.
+	// This should be used for explicit vNUMA topology.
+	NumaCountOfProcessors = "io.microsoft.virtualmachine.computetopology.numa.count-of-processors"
+
+	// NumaCountOfMemoryBlocks is an integer slice representing the number of memory blocks
+	// assigned to vNUMA nodes. Similar to processor count, vNUMA at index 0 will be assigned
+	// the number of memory blocks at slice index 0, vNUMA at index 1 will be assigned the
+	// number of memory blocks at slice index 1, etc.
+	// This should be used for explicit vNUMA topology.
+	NumaCountOfMemoryBlocks = "io.microsoft.virtualmachine.computetopology.numa.count-of-memory-blocks"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of

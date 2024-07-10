@@ -13,9 +13,10 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
-}
+// MigrationMemoryTransport : Transport protocol used for memory transfer during migration
+type MigrationMemoryTransport string
+
+// List of MigrationMemoryTransport
+const (
+	MigrationMemoryTransport_TCP MigrationMemoryTransport = "TCP"
+)

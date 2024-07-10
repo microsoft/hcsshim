@@ -13,9 +13,11 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
-}
+type StateOverride string
+
+// List of StateOverride
+const (
+	StateOverride_DEFAULT_ StateOverride = "Default"
+	StateOverride_DISABLED StateOverride = "Disabled"
+	StateOverride_ENABLED  StateOverride = "Enabled"
+)

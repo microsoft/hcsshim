@@ -13,9 +13,7 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
+type BatchedBinding struct {
+	FilePath     string   `json:"FilePath,omitempty"`
+	BindingRoots []string `json:"BindingRoots,omitempty"`
 }

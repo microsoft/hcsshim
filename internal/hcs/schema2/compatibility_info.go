@@ -13,9 +13,8 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory        *VirtualMachineMemory                `json:"Memory,omitempty"`
-	Processor     *VirtualMachineProcessor             `json:"Processor,omitempty"`
-	Compatibility *VirtualMachineCompatibilitySettings `json:"Compatibility,omitempty"`
-	Numa          *Numa                                `json:"Numa,omitempty"`
+// An opaque VM compatibility data, which is primarily used in migration. This should be provided in MigrationInitializeOptions::CompatibilityData
+type CompatibilityInfo struct {
+	// Pattern: /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$/
+	Data string `json:"Data,omitempty"`
 }
