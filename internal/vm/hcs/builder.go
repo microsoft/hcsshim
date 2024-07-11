@@ -29,10 +29,10 @@ func NewUVMBuilder(id string, owner string, guestOS vm.GuestOS) (vm.UVMBuilder, 
 			StopOnReset: true,
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					AllowOvercommit: true,
 				},
-				Processor: &hcsschema.Processor2{},
+				Processor: &hcsschema.VirtualMachineProcessor{},
 			},
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{

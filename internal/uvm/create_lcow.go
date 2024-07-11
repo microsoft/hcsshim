@@ -687,18 +687,25 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				return nil, err
 			}
 
-			doc.VirtualMachine.Devices.VirtualPci[vmbusGUID.String()] = hcsschema.VirtualPciDevice{
-				Functions: []hcsschema.VirtualPciFunction{
-					{
-						DeviceInstancePath: d.deviceInstanceID,
-						VirtualFunction:    d.virtualFunctionIndex,
-					},
-				},
-			}
-
 			if numa != nil || numaProcessors != nil {
-				temp := doc.VirtualMachine.Devices.VirtualPci[vmbusGUID.String()]
-				temp.PropagateNumaAffinity = true
+				doc.VirtualMachine.Devices.VirtualPci[vmbusGUID.String()] = hcsschema.VirtualPciDevice{
+					Functions: []hcsschema.VirtualPciFunction{
+						{
+							DeviceInstancePath: d.deviceInstanceID,
+							VirtualFunction:    d.virtualFunctionIndex,
+						},
+					},
+					PropagateNumaAffinity: true,
+				}
+			} else {
+				doc.VirtualMachine.Devices.VirtualPci[vmbusGUID.String()] = hcsschema.VirtualPciDevice{
+					Functions: []hcsschema.VirtualPciFunction{
+						{
+							DeviceInstancePath: d.deviceInstanceID,
+							VirtualFunction:    d.virtualFunctionIndex,
+						},
+					},
+				}
 			}
 
 			device := &VPCIDevice{
