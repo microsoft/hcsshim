@@ -168,7 +168,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 	}
 
 	if numa != nil {
-		if err := ValidateNumaForVM(numa, vmMemoryBackingType, processor.Count, memorySizeInMB); err != nil {
+		if err := validateNumaForVM(numa, vmMemoryBackingType, processor.Count, memorySizeInMB); err != nil {
 			return nil, fmt.Errorf("failed to validate vNUMA settings: %w", err)
 		}
 	}

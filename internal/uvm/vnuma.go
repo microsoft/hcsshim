@@ -75,7 +75,7 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 		}
 		numa.Settings = append(numa.Settings, nodeTopology)
 	}
-	return numa, nil, Validate(numa)
+	return numa, nil, validate(numa)
 }
 
 const (
@@ -87,7 +87,7 @@ const (
 // Validate validates self-contained fields within the given NUMA settings.
 //
 // TODO (maksiman): Check if we need to add compute-less node validation. For now, assume that it's supported.
-func Validate(n *hcsschema.Numa) error {
+func validate(n *hcsschema.Numa) error {
 	if len(n.Settings) == 0 {
 		// Nothing to validate
 		return nil
@@ -125,7 +125,7 @@ func Validate(n *hcsschema.Numa) error {
 		}
 		virtualNodeSet[topology.VirtualNodeNumber] = struct{}{}
 
-		if topology.MemoryBackingType != hcsschema.MemoryBackingType_PHYSICAL && topology.MemoryBackingType != hcsschema.MemoryBackingType_VIRTUAL {
+		if topology.MemoryBackingType != hcsschema.MemoryBackingType_PHYSICAL {
 			return fmt.Errorf("vNUMA memory backing type %s is invalid", topology.MemoryBackingType)
 		}
 
@@ -161,29 +161,16 @@ func Validate(n *hcsschema.Numa) error {
 
 // ValidateNumaForVM validates the NUMA settings for a VM with the given memory settings `memorySettings`,
 // processor count `procCount`, and total memory in MB `memInMb`.
-func ValidateNumaForVM(numa *hcsschema.Numa, vmMemoryBackingType hcsschema.MemoryBackingType, procCount uint32, memInMb uint64) error {
-	var hasVirtuallyBackedNode, hasPhysicallyBackedNode bool
+func validateNumaForVM(numa *hcsschema.Numa, vmMemoryBackingType hcsschema.MemoryBackingType, procCount uint32, memInMb uint64) error {
 	var totalMemoryInMb uint64
 	var totalProcessorCount uint32
 
 	for _, topology := range numa.Settings {
-		if topology.MemoryBackingType != vmMemoryBackingType && topology.MemoryBackingType != hcsschema.MemoryBackingType_HYBRID {
+		if topology.MemoryBackingType != vmMemoryBackingType {
 			return fmt.Errorf("vNUMA memory backing type %s does not match UVM memory backing type %s", topology.MemoryBackingType, vmMemoryBackingType)
-		}
-		if topology.MemoryBackingType == hcsschema.MemoryBackingType_PHYSICAL {
-			hasPhysicallyBackedNode = true
-		}
-		if topology.MemoryBackingType == hcsschema.MemoryBackingType_VIRTUAL {
-			hasVirtuallyBackedNode = true
 		}
 		totalProcessorCount += topology.CountOfProcessors
 		totalMemoryInMb += topology.CountOfMemoryBlocks
-	}
-
-	if vmMemoryBackingType == hcsschema.MemoryBackingType_HYBRID {
-		if !hasVirtuallyBackedNode || !hasPhysicallyBackedNode {
-			return fmt.Errorf("vNUMA must have both physically and virtually backed nodes for UVM with hybrid memory")
-		}
 	}
 
 	if (totalProcessorCount != 0) && ((totalProcessorCount) != procCount) {

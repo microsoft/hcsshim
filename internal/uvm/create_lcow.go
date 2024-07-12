@@ -613,14 +613,13 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
-	// APURV: Where is the memory backing type set as Hybrid?
 	vmMemoryBackingType := hcsschema.MemoryBackingType_PHYSICAL
 	if opts.AllowOvercommit {
 		vmMemoryBackingType = hcsschema.MemoryBackingType_VIRTUAL
 	}
 
 	if numa != nil {
-		if err := ValidateNumaForVM(numa, vmMemoryBackingType, processor.Count, memorySizeInMB); err != nil {
+		if err := validateNumaForVM(numa, vmMemoryBackingType, processor.Count, memorySizeInMB); err != nil {
 			return nil, fmt.Errorf("failed to validate vNUMA settings: %w", err)
 		}
 	}
