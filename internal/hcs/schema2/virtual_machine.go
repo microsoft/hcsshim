@@ -19,14 +19,11 @@ type VirtualMachine struct {
 	Chipset         *Chipset         `json:"Chipset,omitempty"`
 	ComputeTopology *Topology        `json:"ComputeTopology,omitempty"`
 	Devices         *Devices         `json:"Devices,omitempty"`
-	Services        *Services        `json:"Services,omitempty"`
 	GuestState      *GuestState      `json:"GuestState,omitempty"`
 	RestoreState    *RestoreState    `json:"RestoreState,omitempty"`
 	RegistryChanges *RegistryChanges `json:"RegistryChanges,omitempty"`
 	StorageQoS      *StorageQoS      `json:"StorageQoS,omitempty"`
-	RunInSilo       *SiloSettings    `json:"RunInSilo,omitempty"`
 	DebugOptions    *DebugOptions    `json:"DebugOptions,omitempty"`
-	LaunchOptions   *LaunchOptions   `json:"LaunchOptions,omitempty"`
 	GuestConnection *GuestConnection `json:"GuestConnection,omitempty"`
 	// Reserved field for VMMS configuration schema (embedded XML).
 	LegacySettings string `json:"LegacySettings,omitempty"`
@@ -41,6 +38,4 @@ type VirtualMachine struct {
 	UseLegacyUARTEmulator bool `json:"UseLegacyUARTEmulator,omitempty"`
 	// Only used for VMMS VM
 	VmmsVm                     bool                        `json:"VmmsVm,omitempty"`
-	MigrationOptions           *MigrationInitializeOptions `json:"MigrationOptions,omitempty"`
-	HierarchicalVirtualization *HierarchicalVirtualization `json:"HierarchicalVirtualization,omitempty"`
 }

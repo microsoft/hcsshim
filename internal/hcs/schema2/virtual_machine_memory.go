@@ -16,7 +16,6 @@ type VirtualMachineMemory struct {
 	Backing  *MemoryBackingType `json:"Backing,omitempty"`
 	// If enabled, then the VM's memory is backed by the Windows pagefile rather than physically backed, statically allocated memory.
 	AllowOvercommit bool                   `json:"AllowOvercommit,omitempty"`
-	BackingPageSize *MemoryBackingPageSize `json:"BackingPageSize,omitempty"`
 	// Fault clustering size for primary RAM. Backported to windows 10 version 2004
 	FaultClusterSizeShift uint32 `json:"FaultClusterSizeShift,omitempty"`
 	// Fault clustering size for direct mapped memory. Backported to windows 10 version 2004
@@ -48,17 +47,13 @@ type VirtualMachineMemory struct {
 	Vtl2AddressRangeBase     uint64                 `json:"Vtl2AddressRangeBase,omitempty"`
 	Vtl2AddressRangeSize     uint64                 `json:"Vtl2AddressRangeSize,omitempty"`
 	Vtl2MMIOAddressRangeSize uint64                 `json:"Vtl2MmioAddressRangeSize,omitempty"`
-	SgxMemory                *SgxMemory             `json:"SgxMemory,omitempty"`
 	Priority                 uint32                 `json:"Priority,omitempty"`
 	LimitInMB                uint64                 `json:"LimitInMB,omitempty"`
 	ReservationInMB          uint64                 `json:"ReservationInMB,omitempty"`
 	TargetBuffer             uint32                 `json:"TargetBuffer,omitempty"`
-	MappingPageSize          *MemoryBackingPageSize `json:"MappingPageSize,omitempty"`
 	// HCS currently doesn't support DM enable, will only have value for VMMS VM
 	EnableDynamicMemory        bool                               `json:"EnableDynamicMemory,omitempty"`
 	SlitType                   *VirtualSlitType                   `json:"SlitType,omitempty"`
-	Vtl2AddressSpaceConfigMode *Vtl2AddressSpaceConfigurationMode `json:"Vtl2AddressSpaceConfigMode,omitempty"`
 	// Appends the suffix to the image name prefix defined in vidinternal.h for any hosting process
 	HostingProcessNameSuffix          string           `json:"HostingProcessNameSuffix,omitempty"`
-	GuestMemoryAccessTrackingFromBoot *PageGranularity `json:"GuestMemoryAccessTrackingFromBoot,omitempty"`
 }

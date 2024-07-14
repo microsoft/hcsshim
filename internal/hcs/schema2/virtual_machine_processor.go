@@ -44,10 +44,8 @@ type VirtualMachineProcessor struct {
 	EnablePageShattering bool `json:"EnablePageShattering,omitempty"`
 	// Hides the presence of speculation controls commonly used by guest operating systems as part of side channel vulnerability mitigations. Additionally, these mitigations are often detrimental to guest operating system performance
 	DisableSpeculationControls bool                 `json:"DisableSpeculationControls,omitempty"`
-	ProcessorFeatureSet        *ProcessorFeatureSet `json:"ProcessorFeatureSet,omitempty"`
 	CpuGroup                   *CpuGroup            `json:"CpuGroup,omitempty"`
 	PhysicalAddressWidth       uint32               `json:"PhysicalAddressWidth,omitempty"`
-	EnlightenmentSet           *EnlightenmentSet    `json:"EnlightenmentSet,omitempty"`
 	ThreadsPerCore             uint32               `json:"ThreadsPerCore,omitempty"`
 	HideHypervisorPresent      bool                 `json:"HideHypervisorPresent,omitempty"`
 	AllowACountMCount          bool                 `json:"AllowACountMCount,omitempty"`

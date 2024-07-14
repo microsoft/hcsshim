@@ -18,5 +18,4 @@ type NumaSetting struct {
 	CountOfProcessors        uint32            `json:"CountOfProcessors,omitempty"`
 	CountOfMemoryBlocks      uint64            `json:"CountOfMemoryBlocks,omitempty"`
 	MemoryBackingType        MemoryBackingType `json:"MemoryBackingType,omitempty"`
-	AccessTracingGranularity PageGranularity   `json:"AccessTracingGranularity,omitempty"`
 }
