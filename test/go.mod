@@ -11,7 +11,7 @@ require (
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/ttrpc v1.2.4
 	github.com/google/go-cmp v0.6.0
-	github.com/google/go-containerregistry v0.19.2
+	github.com/google/go-containerregistry v0.20.0
 	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0
