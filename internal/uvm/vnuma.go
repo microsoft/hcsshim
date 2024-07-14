@@ -79,14 +79,12 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 }
 
 const (
-	WildcardPhysicalNodeNumber = 0xFF
-	NumaTopologyNodeCountMax   = 64
-	NumaChildNodeCountMax      = 64
+	wildcardPhysicalNodeNumber = 0xFF
+	numaTopologyNodeCountMax   = 64
+	numaChildNodeCountMax      = 64
 )
 
-// Validate validates self-contained fields within the given NUMA settings.
-//
-// TODO (maksiman): Check if we need to add compute-less node validation. For now, assume that it's supported.
+// validate validates self-contained fields within the given NUMA settings.
 func validate(n *hcsschema.Numa) error {
 	if len(n.Settings) == 0 {
 		// Nothing to validate
@@ -100,17 +98,17 @@ func validate(n *hcsschema.Numa) error {
 	var highestVNodeNumber uint32
 	var highestVSocketNumber uint32
 
-	hasWildcardPhysicalNode := n.Settings[0].PhysicalNodeNumber == WildcardPhysicalNodeNumber
+	hasWildcardPhysicalNode := n.Settings[0].PhysicalNodeNumber == wildcardPhysicalNodeNumber
 
 	for _, topology := range n.Settings {
-		if topology.VirtualNodeNumber > NumaChildNodeCountMax {
-			return fmt.Errorf("vNUMA virtual node number %d exceeds maximum allowed value %d", topology.VirtualNodeNumber, NumaChildNodeCountMax)
+		if topology.VirtualNodeNumber > numaChildNodeCountMax {
+			return fmt.Errorf("vNUMA virtual node number %d exceeds maximum allowed value %d", topology.VirtualNodeNumber, numaChildNodeCountMax)
 		}
-		if topology.PhysicalNodeNumber != WildcardPhysicalNodeNumber && topology.PhysicalNodeNumber >= NumaTopologyNodeCountMax {
-			return fmt.Errorf("vNUMA physical node number %d exceeds maximum allowed value %d", topology.PhysicalNodeNumber, NumaTopologyNodeCountMax)
+		if topology.PhysicalNodeNumber != wildcardPhysicalNodeNumber && topology.PhysicalNodeNumber >= numaTopologyNodeCountMax {
+			return fmt.Errorf("vNUMA physical node number %d exceeds maximum allowed value %d", topology.PhysicalNodeNumber, numaTopologyNodeCountMax)
 		}
-		if hasWildcardPhysicalNode != (topology.PhysicalNodeNumber == WildcardPhysicalNodeNumber) {
-			return fmt.Errorf("vNUMA has a mix of wildcard (%d) and non-wildcard (%d) physical node numbers", WildcardPhysicalNodeNumber, topology.PhysicalNodeNumber)
+		if hasWildcardPhysicalNode != (topology.PhysicalNodeNumber == wildcardPhysicalNodeNumber) {
+			return fmt.Errorf("vNUMA has a mix of wildcard (%d) and non-wildcard (%d) physical node numbers", wildcardPhysicalNodeNumber, topology.PhysicalNodeNumber)
 		}
 
 		if topology.CountOfMemoryBlocks == 0 {
@@ -124,10 +122,6 @@ func validate(n *hcsschema.Numa) error {
 			return fmt.Errorf("vNUMA virtual node number %d is duplicated", topology.VirtualNodeNumber)
 		}
 		virtualNodeSet[topology.VirtualNodeNumber] = struct{}{}
-
-		if topology.MemoryBackingType != hcsschema.MemoryBackingType_PHYSICAL {
-			return fmt.Errorf("vNUMA memory backing type %s is invalid", topology.MemoryBackingType)
-		}
 
 		if highestVNodeNumber < topology.VirtualNodeNumber {
 			highestVNodeNumber = topology.VirtualNodeNumber
@@ -159,16 +153,13 @@ func validate(n *hcsschema.Numa) error {
 	return nil
 }
 
-// ValidateNumaForVM validates the NUMA settings for a VM with the given memory settings `memorySettings`,
+// validateNumaForVM validates the NUMA settings for a VM with the given memory settings `memorySettings`,
 // processor count `procCount`, and total memory in MB `memInMb`.
-func validateNumaForVM(numa *hcsschema.Numa, vmMemoryBackingType hcsschema.MemoryBackingType, procCount uint32, memInMb uint64) error {
+func validateNumaForVM(numa *hcsschema.Numa, procCount uint32, memInMb uint64) error {
 	var totalMemoryInMb uint64
 	var totalProcessorCount uint32
 
 	for _, topology := range numa.Settings {
-		if topology.MemoryBackingType != vmMemoryBackingType {
-			return fmt.Errorf("vNUMA memory backing type %s does not match UVM memory backing type %s", topology.MemoryBackingType, vmMemoryBackingType)
-		}
 		totalProcessorCount += topology.CountOfProcessors
 		totalMemoryInMb += topology.CountOfMemoryBlocks
 	}

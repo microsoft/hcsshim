@@ -85,11 +85,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
-	vmMemoryBackingType := hcsschema.MemoryBackingType_PHYSICAL
-	if opts.AllowOvercommit {
-		vmMemoryBackingType = hcsschema.MemoryBackingType_VIRTUAL
-	}
-
 	// UVM rootfs share is readonly.
 	vsmbOpts := uvm.DefaultVSMBOptions(true)
 	vsmbOpts.TakeBackupPrivilege = true
@@ -168,7 +163,10 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 	}
 
 	if numa != nil {
-		if err := validateNumaForVM(numa, vmMemoryBackingType, processor.Count, memorySizeInMB); err != nil {
+		if opts.AllowOvercommit {
+			return nil, fmt.Errorf("vNUMA supports only Physical memory backing type")
+		}
+		if err := validateNumaForVM(numa, processor.Count, memorySizeInMB); err != nil {
 			return nil, fmt.Errorf("failed to validate vNUMA settings: %w", err)
 		}
 	}
