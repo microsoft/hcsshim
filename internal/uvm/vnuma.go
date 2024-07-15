@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 // prepareVNumaTopology creates vNUMA settings for implicit (platform) or explicit (user-defined) topology.
@@ -35,8 +36,13 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 		preferredNumaNodes = append(preferredNumaNodes, int64(pn))
 	}
 
+	build := osversion.Get().Build
+
 	// Implicit vNUMA topology.
 	if opts.MaxProcessorsPerNumaNode > 0 {
+		if build < osversion.V25H1Server {
+			return nil, nil, fmt.Errorf("implicit vNUMA topology is not supported on %d version of Windows", build)
+		}
 		if opts.MaxSizePerNode == 0 {
 			return nil, nil, fmt.Errorf("max size per node must be set when max processors per numa node is set")
 		}
@@ -57,6 +63,10 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 	numaNodeCount := len(opts.NumaMappedPhysicalNodes)
 	if numaNodeCount != len(opts.NumaProcessorCounts) || numaNodeCount != len(opts.NumaMemoryBlocksCounts) {
 		return nil, nil, fmt.Errorf("mismatch in number of physical numa nodes and the corresponding processor and memory blocks count")
+	}
+
+	if build < osversion.V25H1Server {
+		return nil, nil, fmt.Errorf("explicit vNUMA topology is not supported on %d version of Windows", build)
 	}
 
 	numa := &hcsschema.Numa{
