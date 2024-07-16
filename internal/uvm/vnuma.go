@@ -22,9 +22,6 @@ import (
 // - only hcsschema.MemoryBackingType_PHYSICAL is supported
 // - `PhysicalNumaNodes` values at index `i` will be mapped to virtual node number `i`
 // - client is responsible for setting wildcard physical node numbers
-//
-// TODO: We also assume that `hcsschema.Numa.PreferredPhysicalNodes` can be used for implicit placement as well as
-// for explicit placement in the case when all wildcard physical nodes are present.
 func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProcessors, error) {
 	if opts.MaxProcessorsPerNumaNode == 0 && len(opts.NumaMappedPhysicalNodes) == 0 {
 		// vNUMA settings are missing, return empty topology
