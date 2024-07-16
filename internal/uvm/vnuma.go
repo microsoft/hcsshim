@@ -22,6 +22,7 @@ import (
 // - only hcsschema.MemoryBackingType_PHYSICAL is supported
 // - `PhysicalNumaNodes` values at index `i` will be mapped to virtual node number `i`
 // - client is responsible for setting wildcard physical node numbers
+// TODO: Add exact OS build version for vNUMA support.
 func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProcessors, error) {
 	if opts.MaxProcessorsPerNumaNode == 0 && len(opts.NumaMappedPhysicalNodes) == 0 {
 		// vNUMA settings are missing, return empty topology
@@ -34,12 +35,12 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 	}
 
 	build := osversion.Get().Build
+	if build < osversion.V25H1Server {
+		return nil, nil, fmt.Errorf("vNUMA topology is not supported on %d version of Windows", build)
+	}
 
 	// Implicit vNUMA topology.
 	if opts.MaxProcessorsPerNumaNode > 0 {
-		if build < osversion.V25H1Server {
-			return nil, nil, fmt.Errorf("implicit vNUMA topology is not supported on %d version of Windows", build)
-		}
 		if opts.MaxSizePerNode == 0 {
 			return nil, nil, fmt.Errorf("max size per node must be set when max processors per numa node is set")
 		}
@@ -60,10 +61,6 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 	numaNodeCount := len(opts.NumaMappedPhysicalNodes)
 	if numaNodeCount != len(opts.NumaProcessorCounts) || numaNodeCount != len(opts.NumaMemoryBlocksCounts) {
 		return nil, nil, fmt.Errorf("mismatch in number of physical numa nodes and the corresponding processor and memory blocks count")
-	}
-
-	if build < osversion.V25H1Server {
-		return nil, nil, fmt.Errorf("explicit vNUMA topology is not supported on %d version of Windows", build)
 	}
 
 	numa := &hcsschema.Numa{

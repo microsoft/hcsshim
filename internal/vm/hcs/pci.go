@@ -9,9 +9,14 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID string) error {
+	var propagationEnabled *bool = nil
+	if osversion.Get().Build >= osversion.V25H1Server {
+		*propagationEnabled = true
+	}
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmbusGUID),
 		RequestType:  guestrequest.RequestTypeAdd,
@@ -21,7 +26,7 @@ func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID strin
 					DeviceInstancePath: instanceID,
 				},
 			},
-			PropagateNumaAffinity: true,
+			PropagateNumaAffinity: propagationEnabled,
 		},
 	}
 	return uvm.cs.Modify(ctx, request)

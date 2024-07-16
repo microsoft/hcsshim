@@ -684,7 +684,10 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				return nil, err
 			}
 
-			propagateAffinity := numa != nil || numaProcessors != nil
+			var propagateAffinity *bool = nil
+			if osversion.Get().Build >= osversion.V25H1Server && (numa != nil || numaProcessors != nil) {
+				*propagateAffinity = true
+			}
 			doc.VirtualMachine.Devices.VirtualPci[vmbusGUID.String()] = hcsschema.VirtualPciDevice{
 				Functions: []hcsschema.VirtualPciFunction{
 					{
