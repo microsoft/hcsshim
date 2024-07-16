@@ -116,9 +116,10 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		return existingVPCIDevice, nil
 	}
 
-	var propagationEnabled *bool = nil
+	var propagateAffinity *bool = nil
+	T := true
 	if osversion.Get().Build >= osversion.V25H1Server {
-		*propagationEnabled = true
+		propagateAffinity = &T
 	}
 
 	targetDevice := hcsschema.VirtualPciDevice{
@@ -128,7 +129,7 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 				VirtualFunction:    index,
 			},
 		},
-		PropagateNumaAffinity: propagationEnabled,
+		PropagateNumaAffinity: propagateAffinity,
 	}
 
 	request := &hcsschema.ModifySettingRequest{

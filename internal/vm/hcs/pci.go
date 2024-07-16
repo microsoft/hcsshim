@@ -13,9 +13,10 @@ import (
 )
 
 func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID string) error {
-	var propagationEnabled *bool = nil
+	var propagateAffinity *bool = nil
+	T := true
 	if osversion.Get().Build >= osversion.V25H1Server {
-		*propagationEnabled = true
+		propagateAffinity = &T
 	}
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmbusGUID),
@@ -26,7 +27,7 @@ func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID strin
 					DeviceInstancePath: instanceID,
 				},
 			},
-			PropagateNumaAffinity: propagationEnabled,
+			PropagateNumaAffinity: propagateAffinity,
 		},
 	}
 	return uvm.cs.Modify(ctx, request)
