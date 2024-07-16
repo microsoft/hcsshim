@@ -25,17 +25,5 @@ type VirtualMachine struct {
 	StorageQoS      *StorageQoS      `json:"StorageQoS,omitempty"`
 	DebugOptions    *DebugOptions    `json:"DebugOptions,omitempty"`
 	GuestConnection *GuestConnection `json:"GuestConnection,omitempty"`
-	// Reserved field for VMMS configuration schema (embedded XML).
-	LegacySettings string `json:"LegacySettings,omitempty"`
-	// Reserved field for VMMS (VM display name).
-	DisplayName string `json:"DisplayName,omitempty"`
-	// Reserved field for VMMS (VM configuration type).
-	ConfigurationType string            `json:"ConfigurationType,omitempty"`
 	SecuritySettings  *SecuritySettings `json:"SecuritySettings,omitempty"`
-	// An option to allow guest to control the cache types
-	EnableGuestControlledCacheTypes bool `json:"EnableGuestControlledCacheTypes,omitempty"`
-	// Only used in VMMS VM, to decide UART Emulator type
-	UseLegacyUARTEmulator bool `json:"UseLegacyUARTEmulator,omitempty"`
-	// Only used for VMMS VM
-	VmmsVm                     bool                        `json:"VmmsVm,omitempty"`
 }

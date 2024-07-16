@@ -122,6 +122,7 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 				VirtualFunction:    index,
 			},
 		},
+		PropagateNumaAffinity: true,
 	}
 
 	request := &hcsschema.ModifySettingRequest{

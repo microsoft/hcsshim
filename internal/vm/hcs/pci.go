@@ -21,6 +21,7 @@ func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID strin
 					DeviceInstancePath: instanceID,
 				},
 			},
+			PropagateNumaAffinity: true,
 		},
 	}
 	return uvm.cs.Modify(ctx, request)

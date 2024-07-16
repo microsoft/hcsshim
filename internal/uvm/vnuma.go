@@ -105,8 +105,6 @@ func validate(n *hcsschema.Numa) error {
 	var virtualSocketSet = make(map[uint32]struct{})
 	var totalVPCount uint32
 	var totalMemInMb uint64
-	var highestVNodeNumber uint32
-	var highestVSocketNumber uint32
 
 	hasWildcardPhysicalNode := n.Settings[0].PhysicalNodeNumber == wildcardPhysicalNodeNumber
 
@@ -133,13 +131,6 @@ func validate(n *hcsschema.Numa) error {
 		}
 		virtualNodeSet[topology.VirtualNodeNumber] = struct{}{}
 
-		if highestVNodeNumber < topology.VirtualNodeNumber {
-			highestVNodeNumber = topology.VirtualNodeNumber
-		}
-		if highestVSocketNumber < topology.VirtualSocketNumber {
-			highestVSocketNumber = topology.VirtualSocketNumber
-		}
-
 		virtualSocketSet[topology.VirtualSocketNumber] = struct{}{}
 	}
 
@@ -153,13 +144,6 @@ func validate(n *hcsschema.Numa) error {
 		return fmt.Errorf("completely empty topology is not allowed")
 	}
 
-	if len(virtualNodeSet) != int(highestVNodeNumber+1) {
-		return fmt.Errorf("holes in vNUMA node numbers are not allowed")
-	}
-
-	if len(virtualSocketSet) != int(highestVSocketNumber+1) {
-		return fmt.Errorf("holes in vNUMA socket numbers are not allowed")
-	}
 	return nil
 }
 
