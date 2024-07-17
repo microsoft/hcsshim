@@ -12,6 +12,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 const (
@@ -115,6 +116,12 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		return existingVPCIDevice, nil
 	}
 
+	var propagateAffinity *bool
+	T := true
+	if osversion.Get().Build >= osversion.V25H1Server {
+		propagateAffinity = &T
+	}
+
 	targetDevice := hcsschema.VirtualPciDevice{
 		Functions: []hcsschema.VirtualPciFunction{
 			{
@@ -122,6 +129,7 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 				VirtualFunction:    index,
 			},
 		},
+		PropagateNumaAffinity: propagateAffinity,
 	}
 
 	request := &hcsschema.ModifySettingRequest{

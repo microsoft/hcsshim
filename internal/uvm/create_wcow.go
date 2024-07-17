@@ -151,11 +151,30 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 
 	registryChanges.AddValues = append(registryChanges.AddValues, opts.AdditionalRegistryKeys...)
 
-	processor := &hcsschema.Processor2{
-		Count:  uvm.processorCount,
-		Limit:  opts.ProcessorLimit,
-		Weight: opts.ProcessorWeight,
+	processor := &hcsschema.VirtualMachineProcessor{
+		Count:  uint32(uvm.processorCount),
+		Limit:  uint64(opts.ProcessorLimit),
+		Weight: uint64(opts.ProcessorWeight),
 	}
+
+	numa, numaProcessors, err := prepareVNumaTopology(opts.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	if numa != nil {
+		if opts.AllowOvercommit {
+			return nil, fmt.Errorf("vNUMA supports only Physical memory backing type")
+		}
+		if err := validateNumaForVM(numa, processor.Count, memorySizeInMB); err != nil {
+			return nil, fmt.Errorf("failed to validate vNUMA settings: %w", err)
+		}
+	}
+
+	if numaProcessors != nil {
+		processor.NumaProcessorsSettings = numaProcessors
+	}
+
 	// We can set a cpu group for the VM at creation time in recent builds.
 	if opts.CPUGroupID != "" {
 		if osversion.Build() < osversion.V21H1 {
@@ -180,7 +199,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 			},
 			RegistryChanges: &registryChanges,
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					SizeInMB:        memorySizeInMB,
 					AllowOvercommit: opts.AllowOvercommit,
 					// EnableHotHint is not compatible with physical.
@@ -191,6 +210,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 					HighMMIOGapInMB:      opts.HighMMIOGapInMB,
 				},
 				Processor: processor,
+				Numa:      numa,
 			},
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{
@@ -204,6 +224,12 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 				VirtualSmb: virtualSMB,
 			},
 		},
+	}
+
+	// Expose ACPI information into UVM
+	if numa != nil || numaProcessors != nil {
+		firmwareFallbackMeasured := hcsschema.VirtualSlitType_FIRMWARE_FALLBACK_MEASURED
+		doc.VirtualMachine.ComputeTopology.Memory.SlitType = &firmwareFallbackMeasured
 	}
 
 	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)

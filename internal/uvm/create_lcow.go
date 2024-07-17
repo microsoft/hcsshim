@@ -240,7 +240,7 @@ func (opts *OptionsLCOW) UpdateBootFilesPath(ctx context.Context, path string) {
 }
 
 // Get an acceptable number of processors given option and actual constraints.
-func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hcsschema.Processor2, error) {
+func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hcsschema.VirtualMachineProcessor, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %w", err)
@@ -250,10 +250,10 @@ func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hc
 	// a user CPU count if the setting is not possible.
 	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
 
-	processor := &hcsschema.Processor2{
-		Count:  uvm.processorCount,
-		Limit:  opts.ProcessorLimit,
-		Weight: opts.ProcessorWeight,
+	processor := &hcsschema.VirtualMachineProcessor{
+		Count:  uint32(uvm.processorCount),
+		Limit:  uint64(opts.ProcessorLimit),
+		Weight: uint64(opts.ProcessorWeight),
 	}
 	// We can set a cpu group for the VM at creation time in recent builds.
 	if opts.CPUGroupID != "" {
@@ -363,7 +363,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		return nil, fmt.Errorf("the DM Verity VHD file '%s' was not found", dmVerityRootfsTemplatePath)
 	}
 
-	var processor *hcsschema.Processor2
+	var processor *hcsschema.VirtualMachineProcessor
 	processor, err = fetchProcessor(ctx, opts, uvm)
 	if err != nil {
 		return nil, err
@@ -409,7 +409,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 			StopOnReset: true,
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					SizeInMB:              memorySizeInMB,
 					AllowOvercommit:       opts.AllowOvercommit,
 					EnableDeferredCommit:  opts.EnableDeferredCommit,
@@ -599,14 +599,32 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
 	}
 
-	var processor *hcsschema.Processor2
+	var processor *hcsschema.VirtualMachineProcessor
 	processor, err = fetchProcessor(ctx, opts, uvm) // must happen after the file existence tests above.
+	if err != nil {
+		return nil, err
+	}
+
+	numa, numaProcessors, err := prepareVNumaTopology(opts.Options)
 	if err != nil {
 		return nil, err
 	}
 
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+
+	if numa != nil {
+		if opts.AllowOvercommit {
+			return nil, fmt.Errorf("vNUMA supports only Physical memory backing type")
+		}
+		if err := validateNumaForVM(numa, processor.Count, memorySizeInMB); err != nil {
+			return nil, fmt.Errorf("failed to validate vNUMA settings: %w", err)
+		}
+	}
+
+	if numaProcessors != nil {
+		processor.NumaProcessorsSettings = numaProcessors
+	}
 
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
@@ -616,7 +634,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 			StopOnReset: true,
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
-				Memory: &hcsschema.Memory2{
+				Memory: &hcsschema.VirtualMachineMemory{
 					SizeInMB:              memorySizeInMB,
 					AllowOvercommit:       opts.AllowOvercommit,
 					EnableDeferredCommit:  opts.EnableDeferredCommit,
@@ -626,6 +644,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 					HighMMIOGapInMB:       opts.HighMMIOGapInMB,
 				},
 				Processor: processor,
+				Numa:      numa,
 			},
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{
@@ -639,6 +658,12 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				Plan9: &hcsschema.Plan9{},
 			},
 		},
+	}
+
+	// Expose ACPI information into UVM
+	if numa != nil || numaProcessors != nil {
+		firmwareFallbackMeasured := hcsschema.VirtualSlitType_FIRMWARE_FALLBACK_MEASURED
+		doc.VirtualMachine.ComputeTopology.Memory.SlitType = &firmwareFallbackMeasured
 	}
 
 	// Add optional devices that were specified on the UVM spec
@@ -659,6 +684,11 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				return nil, err
 			}
 
+			var propagateAffinity *bool
+			T := true
+			if osversion.Get().Build >= osversion.V25H1Server && (numa != nil || numaProcessors != nil) {
+				propagateAffinity = &T
+			}
 			doc.VirtualMachine.Devices.VirtualPci[vmbusGUID.String()] = hcsschema.VirtualPciDevice{
 				Functions: []hcsschema.VirtualPciFunction{
 					{
@@ -666,6 +696,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 						VirtualFunction:    d.virtualFunctionIndex,
 					},
 				},
+				PropagateNumaAffinity: propagateAffinity,
 			}
 
 			device := &VPCIDevice{

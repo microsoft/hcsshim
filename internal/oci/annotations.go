@@ -335,6 +335,24 @@ func ParseAnnotationCommaSeparatedUint32(_ context.Context, a map[string]string,
 	return ints
 }
 
+func ParseAnnotationCommaSeparatedUint64(ctx context.Context, a map[string]string, key string, def []uint64) []uint64 {
+	cs, ok := a[key]
+	if !ok || cs == "" {
+		return def
+	}
+	sints := strings.Split(cs, ",")
+	ints := make([]uint64, len(sints))
+	for i := range sints {
+		x, err := strconv.ParseUint(sints[i], 10, 64)
+		ints[i] = x
+		if err != nil {
+			logAnnotationValueParseError(ctx, key, cs, logfields.Uint64, err)
+			return def
+		}
+	}
+	return ints
+}
+
 // ParseAnnotationsString searches `a` for `key`. If `key` is not found returns `def`.
 func ParseAnnotationsString(a map[string]string, key string, def string) string {
 	if v, ok := a[key]; ok {
