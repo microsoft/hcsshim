@@ -116,7 +116,7 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		return existingVPCIDevice, nil
 	}
 
-	var propagateAffinity *bool = nil
+	var propagateAffinity *bool
 	T := true
 	if osversion.Get().Build >= osversion.V25H1Server {
 		propagateAffinity = &T

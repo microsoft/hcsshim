@@ -11,7 +11,7 @@ import (
 
 // prepareVNumaTopology creates vNUMA settings for implicit (platform) or explicit (user-defined) topology.
 //
-// For implicit topology we look for `MaxProcessorsPerNumaNode` and `MaxSizePerNode` create options. Setting them
+// For implicit topology we look for `MaxProcessorsPerNumaNode`, `MaxSizePerNode` and `preferredNumaNodes` create options. Setting them
 // in HCS doc, will trigger platform to create vNUMA topology based on the given values. Based on experiments, the
 // platform will create an evenly distributed topology based on requested memory and processor count for the HCS VM.
 //

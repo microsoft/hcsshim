@@ -684,7 +684,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 				return nil, err
 			}
 
-			var propagateAffinity *bool = nil
+			var propagateAffinity *bool
 			T := true
 			if osversion.Get().Build >= osversion.V25H1Server && (numa != nil || numaProcessors != nil) {
 				propagateAffinity = &T

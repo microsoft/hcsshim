@@ -13,7 +13,7 @@ import (
 )
 
 func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID string) error {
-	var propagateAffinity *bool = nil
+	var propagateAffinity *bool
 	T := true
 	if osversion.Get().Build >= osversion.V25H1Server {
 		propagateAffinity = &T
