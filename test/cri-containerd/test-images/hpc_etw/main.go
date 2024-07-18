@@ -17,7 +17,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	path := filepath.Join(filepath.Dir(os.Args[0]), "Test.wprp")
+	path := filepath.Join(filepath.Dir(os.Args[0]), "test.wprp")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		log.Fatalf("failed to find wprp file %v: %s", path, err)
+	}
+
 	if err := exec.Command("wpr", "-start", path).Run(); err != nil {
 		log.Fatalf("failed to wpr start: %s", err)
 	}
