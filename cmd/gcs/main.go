@@ -20,7 +20,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
-
+    
+	"github.com/Microsoft/hcsshim/global"
 	"github.com/Microsoft/hcsshim/internal/guest/bridge"
 	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
@@ -195,6 +196,9 @@ func main() {
 	disableTimeSync := flag.Bool("disable-time-sync",
 		false,
 		"If true do not run chronyd time synchronization service inside the UVM")
+	crun := flag.Bool("crun",
+		false,
+		"setting global runtime")
 	scrubLogs := flag.Bool("scrub-logs", false, "If true, scrub potentially sensitive information from logging")
 	initialPolicyStance := flag.String("initial-policy-stance",
 		"allow",
@@ -293,6 +297,11 @@ func main() {
 
 	// Continuously log /dev/kmsg
 	go kmsg.ReadForever(kmsg.LogLevel(*kmsgLogLevel))
+
+	
+	if *crun {
+		global.SetGlobalRuntime("crun")
+	}
 
 	tport := &transport.VsockTransport{}
 	rtime, err := runc.NewRuntime(baseLogPath)
