@@ -525,12 +525,13 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	type config struct {
-		name           string
-		containerName  string
-		sandboxImage   string
-		containerImage string
-		env            []*runtime.KeyValue
-		exec           []string
+		name               string
+		containerName      string
+		sandboxImage       string
+		containerImage     string
+		env                []*runtime.KeyValue
+		exec               []string
+		expectedExecResult string
 	}
 
 	tests := []config{
@@ -544,7 +545,8 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 					Key: "PATH", Value: "C:\\Windows\\system32;C:\\Windows",
 				},
 			},
-			exec: []string{"cmd", "/c", "IF", "%PATH%", "==", "C:\\Windows\\system32;C:\\Windows", "( exit 0 )", "ELSE", "(exit -1)"},
+			exec:               []string{"cmd", "/c", "echo %PATH%"},
+			expectedExecResult: "C:\\Windows\\system32;C:\\Windows;C:\\hpc\\;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\Wbem",
 		},
 		{
 			name:           "JobContainer_VolumeMount_WithMountPoint",
@@ -556,7 +558,8 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 					Key: "PATH", Value: "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows",
 				},
 			},
-			exec: []string{"cmd", "/c", "IF", "%PATH%", "==", "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows", "( exit -1 )", "ELSE", "(exit 0)"},
+			exec:               []string{"cmd", "/c", "echo %PATH%"},
+			expectedExecResult: `C:\hpc\apps\vim\;C:\Windows\system32;C:\Windows;C:\hpc\;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\Wbem`,
 		},
 	}
 
@@ -588,6 +591,10 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 			})
 			if r.ExitCode != 0 {
 				t.Fatalf("failed with exit code %d checking for job container mount: %s", r.ExitCode, string(r.Stderr))
+			}
+			stdout := strings.TrimSpace(string(r.Stdout))
+			if stdout != test.expectedExecResult {
+				t.Fatalf("PATH does not match. Expected: %v Actual: %v", test.expectedExecResult, stdout)
 			}
 		})
 	}
