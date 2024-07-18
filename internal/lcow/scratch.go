@@ -8,15 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/Microsoft/go-winio/vhd"
+	"github.com/sirupsen/logrus"
+
 	cmdpkg "github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/sirupsen/logrus"
+	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
 const (
@@ -68,12 +69,15 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 		return fmt.Errorf("failed to create VHDx %s: %w", destFile, err)
 	}
 
-	scsi, err := lcowUVM.SCSIManager.AddVirtualDisk(
+	// Attach VHDX as SCSI and mount as block device
+	scsiMount, err := lcowUVM.SCSIManager.AddVirtualDisk(
 		ctx,
 		destFile,
 		false,
 		lcowUVM.ID(),
-		nil, // Attach without mounting.
+		&scsi.MountConfig{
+			BlockDev: true,
+		},
 	)
 	if err != nil {
 		return err
@@ -81,50 +85,20 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 	removeSCSI := true
 	defer func() {
 		if removeSCSI {
-			_ = scsi.Release(ctx)
+			_ = scsiMount.Release(ctx)
 		}
 	}()
 
 	log.G(ctx).WithFields(logrus.Fields{
 		"dest":       destFile,
-		"controller": scsi.Controller(),
-		"lun":        scsi.LUN(),
+		"controller": scsiMount.Controller(),
+		"lun":        scsiMount.LUN(),
+		"blockdev":   scsiMount.GuestPath(),
 	}).Debug("lcow::CreateScratch device attached")
 
-	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
-	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", scsi.Controller(), scsi.LUN())
-	testdCtx, cancel := context.WithTimeout(ctx, timeout.TestDRetryLoop)
-	defer cancel()
-	for {
-		cmd := cmdpkg.CommandContext(testdCtx, lcowUVM, "test", "-d", devicePath)
-		err := cmd.Run()
-		if err == nil {
-			break
-		}
-		if e := (&cmdpkg.ExitError{}); !errors.As(err, &e) {
-			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %w", cmd.Spec.Args, destFile, err)
-		}
-		time.Sleep(time.Millisecond * 10)
-	}
-	cancel()
-
-	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`
-	lsCtx, cancel := context.WithTimeout(ctx, timeout.ExternalCommandToStart)
-	cmd := cmdpkg.CommandContext(lsCtx, lcowUVM, "ls", devicePath)
-	lsOutput, err := cmd.Output()
-	cancel()
-	if err != nil {
-		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %w", cmd.Spec.Args, destFile, err)
-	}
-	device := fmt.Sprintf(`/dev/%s`, bytes.TrimSpace(lsOutput))
-	log.G(ctx).WithFields(logrus.Fields{
-		"dest":   destFile,
-		"device": device,
-	}).Debug("lcow::CreateScratch device guest location")
-
-	// Format it ext4
+	// Format block device mount as ext4
 	mkfsCtx, cancel := context.WithTimeout(ctx, timeout.ExternalCommandToStart)
-	cmd = cmdpkg.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=0,nodiscard", "-O", `^has_journal,sparse_super2,^resize_inode`, device)
+	cmd := cmdpkg.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=0,nodiscard", "-O", `^has_journal,sparse_super2,^resize_inode`, scsiMount.GuestPath())
 	var mkfsStderr bytes.Buffer
 	cmd.Stderr = &mkfsStderr
 	err = cmd.Run()
@@ -135,7 +109,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 
 	// Hot-Remove before we copy it
 	removeSCSI = false
-	if err := scsi.Release(ctx); err != nil {
+	if err := scsiMount.Release(ctx); err != nil {
 		return fmt.Errorf("failed to hot-remove: %w", err)
 	}
 
