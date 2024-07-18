@@ -1,5 +1,3 @@
-//+build !windows
-
 /*
    Copyright The containerd Authors.
 
@@ -16,23 +14,40 @@
    limitations under the License.
 */
 
-package runc
+package fs
 
 import (
-	"golang.org/x/sys/unix"
+	"io"
+	"os"
 )
 
-// Runc is the client to the runc cli
-type Runc struct {
-	//If command is empty, DefaultCommand is used
-	Command       string
-	Root          string
-	Debug         bool
-	Log           string
-	LogFormat     Format
-	PdeathSignal  unix.Signal
-	Setpgid       bool
-	Criu          string
-	SystemdCgroup bool
-	Rootless      *bool // nil stands for "auto"
+type dirReader struct {
+	buf []os.DirEntry
+	f   *os.File
+	err error
+}
+
+func (r *dirReader) Next() os.DirEntry {
+	if len(r.buf) == 0 {
+		infos, err := r.f.ReadDir(32)
+		if err != nil {
+			if err != io.EOF {
+				r.err = err
+			}
+			return nil
+		}
+		r.buf = infos
+	}
+
+	if len(r.buf) == 0 {
+		return nil
+	}
+	out := r.buf[0]
+	r.buf[0] = nil
+	r.buf = r.buf[1:]
+	return out
+}
+
+func (r *dirReader) Err() error {
+	return r.err
 }
