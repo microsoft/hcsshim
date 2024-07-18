@@ -543,7 +543,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	return c, nil
 }
 
-func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) (err error) {
+func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) (retErr error) {
 	switch req.ResourceType {
 	case guestresource.ResourceTypeSCSIDevice:
 		return modifySCSIDevice(ctx, req.RequestType, req.Settings.(*guestresource.SCSIDevice))
@@ -551,7 +551,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
 		// find the actual controller number on the bus and update the incoming request.
 		var cNum uint8
-		cNum, err = scsi.ActualControllerNumber(ctx, mvd.Controller)
+		cNum, err := scsi.ActualControllerNumber(ctx, mvd.Controller)
 		if err != nil {
 			return err
 		}
@@ -569,7 +569,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 					return err
 				}
 				defer func() {
-					if err != nil {
+					if retErr != nil {
 						_ = h.hostMounts.RemoveRWDevice(mvd.MountPath, source)
 					}
 				}()
@@ -578,7 +578,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 					return err
 				}
 				defer func() {
-					if err != nil {
+					if retErr != nil {
 						_ = h.hostMounts.AddRWDevice(mvd.MountPath, source, mvd.Encrypted)
 					}
 				}()
