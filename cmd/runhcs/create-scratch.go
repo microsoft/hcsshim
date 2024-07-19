@@ -54,8 +54,8 @@ var createScratchCommand = cli.Command{
 
 		opts := uvm.NewDefaultOptionsLCOW("createscratch-uvm", context.GlobalString("owner"))
 
-		// 256MB with boot from vhd supported.
-		opts.MemorySizeInMB = 256
+		// 512MB with boot from vhd supported.
+		opts.MemorySizeInMB = 512
 		// Default SCSI controller count is 4, we don't need that for this UVM,
 		// bring it back to 1 to avoid any confusion with SCSI controller numbers.
 		opts.SCSIControllerCount = 1
