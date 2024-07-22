@@ -250,15 +250,6 @@ func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
 	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
-		for key, dev := range uvm.vpciDevices {
-			// Try to remove any devices that are still on the UVM, but do not
-			// fail the close if there is an error.
-			// This would be devices that were added on pod creation.
-			if err := dev.Release(ctx); err != nil {
-				log.G(ctx).Errorf("graceful removal of vpci device %v failed: %s", key, err)
-			}
-		}
-
 		_ = uvm.hcsSystem.Terminate(ctx)
 		// uvm.Wait() waits on <-uvm.outputProcessingDone, which may not be closed until below
 		// (for a Create -> Stop without a Start), or uvm.outputHandler may be blocked on IO and
