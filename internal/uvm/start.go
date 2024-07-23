@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -156,7 +157,7 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	// save parent context, without timeout to use in terminate
 	pCtx := ctx
-	ctx, cancel := context.WithTimeout(pCtx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(pCtx, 3*time.Minute)
 	g, gctx := errgroup.WithContext(ctx)
 	defer func() {
 		_ = g.Wait()
@@ -299,6 +300,43 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		uvm.protocol = properties.GuestConnectionInfo.ProtocolVersion
 	}
 
+	if uvm.scListener != nil {
+		// Accept the sidecar GCS connection.
+		log.G(ctx).WithField("scListener", uvm.scListener).Info("Waiting for sidecar GCS connection")
+		conn, err := uvm.acceptAndClose(ctx, uvm.scListener)
+		uvm.scListener = nil
+		if err != nil {
+			log.G(ctx).WithField("err", err.Error()).Info("Failed to connect to sidecar GCS")
+			return fmt.Errorf("failed to connect to sidecar GCS: %w", err)
+		}
+
+		log.G(ctx).WithField("scListener", uvm.scListener).Info("Successful sidecar GCS connection")
+
+		//Read from the sidecar GCS connection
+		go func() {
+			file, err := os.OpenFile("C:\\ContainerPlat\\conn_log.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+			if err != nil {
+				log.G(ctx).WithField("err", err.Error()).Info("Error opening file")
+			}
+			defer file.Close()
+
+			buffer := make([]byte, 1024)
+			for {
+				_, err := conn.Read(buffer)
+				if err != nil {
+					log.G(ctx).WithField("err", err.Error()).Info("Failed to read from sidecar GCS connection")
+					return
+				}
+				time.Sleep(5 * time.Second)
+
+				if _, err := file.Write(buffer); err != nil {
+					log.G(ctx).WithField("err", err.Error()).Info("Failed to write to log file")
+					return
+				}
+			}
+		}()
+	}
+
 	// Initialize the SCSIManager.
 	var gb scsi.GuestBackend
 	if uvm.gc != nil {
@@ -306,6 +344,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	} else {
 		gb = scsi.NewHCSGuestBackend(uvm.hcsSystem, uvm.OS())
 	}
+
 	guestMountFmt := `c:\mounts\scsi\m%d`
 	if uvm.OS() == "linux" {
 		guestMountFmt = "/run/mounts/scsi/m%d"

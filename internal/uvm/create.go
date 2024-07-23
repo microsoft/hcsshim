@@ -398,8 +398,14 @@ func (uvm *UtilityVM) CloseGCSConnection() (err error) {
 	if uvm.gc != nil {
 		err = uvm.gc.Close()
 	}
+	if uvm.sc != nil {
+		err = uvm.sc.Close()
+	}
 	if uvm.gcListener != nil {
 		err = uvm.gcListener.Close()
+	}
+	if uvm.scListener != nil {
+		err = uvm.scListener.Close()
 	}
 	return err
 }
