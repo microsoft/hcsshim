@@ -16,7 +16,7 @@ require (
 	github.com/containerd/protobuild v0.3.0
 	github.com/containerd/ttrpc v1.2.4
 	github.com/containerd/typeurl/v2 v2.1.1
-	github.com/docker/docker v27.0.0+incompatible
+	github.com/docker/docker v27.1.1+incompatible
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-containerregistry v0.19.2
 	github.com/josephspurrier/goversioninfo v1.4.0
