@@ -314,10 +314,22 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 
 		log.G(ctx).WithField("scListener", uvm.scListener).Info("Successful sidecar GCS connection")
 
-		policy := specs.Mount{
-			Destination: "/dest/mount/path",
+		denyPolicy1 := specs.Mount{
+			Destination: "C:\\dest\\mount\\path",
 			Type:        "bind",
-			Source:      "/src/mount/path",
+			Source:      "C:\\src\\mount\\path",
+		}
+
+		denyPolicy2 := specs.Mount{
+			Destination: "C:\\dest\\mount\\path",
+			Type:        "physical-disk",
+			Source:      "C:\\wrong\\mount\\path",
+		}
+
+		acceptPolicy := specs.Mount{
+			Destination: "C:\\dest\\mount\\path",
+			Type:        "physical-disk",
+			Source:      "C:\\src\\mount\\path",
 		}
 
 		//Read from the sidecar GCS connection
@@ -344,7 +356,27 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			// }
 
 			enc := gob.NewEncoder(conn)
-			err = enc.Encode(policy)
+			err = enc.Encode(denyPolicy1)
+			if err != nil {
+				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
+				if err != nil {
+					fmt.Printf("Error writing to file: %v", err)
+					return
+				}
+				return
+			}
+
+			err = enc.Encode(denyPolicy2)
+			if err != nil {
+				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
+				if err != nil {
+					fmt.Printf("Error writing to file: %v", err)
+					return
+				}
+				return
+			}
+
+			err = enc.Encode(acceptPolicy)
 			if err != nil {
 				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
 				if err != nil {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -22,6 +23,33 @@ func acceptAndClose(l net.Listener) (conn net.Conn, err error) {
 	l.Close()
 
 	return conn, err
+}
+
+func validatePolicy(mountPolicy specs.Mount, checkPolicy specs.Mount, file os.File) bool {
+	if mountPolicy.Destination != checkPolicy.Destination {
+		_, err := file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Mount policy denied: expected: " + mountPolicy.Destination + ", got: " + checkPolicy.Destination + "\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return false
+		}
+		return false
+	} else if mountPolicy.Type != checkPolicy.Type {
+		_, err := file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Mount policy denied: expected: " + mountPolicy.Type + ", got: " + checkPolicy.Type + "\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return false
+		}
+		return false
+	} else if mountPolicy.Source != checkPolicy.Source {
+		_, err := file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Mount policy denied: expected: " + mountPolicy.Source + ", got: " + checkPolicy.Source + "\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return false
+		}
+		return false
+	}
+
+	return true
 }
 
 func main() {
@@ -68,7 +96,7 @@ func main() {
 	}
 
 	go func() {
-		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Connection established\n")
+		_, err := file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Connection established\n")
 		if err != nil {
 			fmt.Printf("Error writing to file: %v", err)
 			return
@@ -87,9 +115,17 @@ func main() {
 		// 	time.Sleep(5 * time.Second)
 		// }
 
-		var policy specs.Mount
+		mountPolicy := specs.Mount{
+			Destination: "C:\\dest\\mount\\path",
+			Type:        "physical-disk",
+			Source:      "C:\\src\\mount\\path",
+		}
+
+		var denyPolicy1 specs.Mount
+		var denyPolicy2 specs.Mount
+		var acceptPolicy specs.Mount
 		dec := gob.NewDecoder(conn)
-		err := dec.Decode(&policy)
+		err = dec.Decode(&denyPolicy1)
 		if err != nil {
 			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error decoding mount policy\n")
 			if err != nil {
@@ -99,13 +135,65 @@ func main() {
 			return
 		}
 
-		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - " + policy.Destination + ", " + policy.Type + ", " + policy.Source + " read successfully\n")
+		err = dec.Decode(&denyPolicy2)
+		if err != nil {
+			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error decoding mount policy\n")
+			if err != nil {
+				fmt.Printf("Error writing to file: %v", err)
+				return
+			}
+			return
+		}
+
+		err = dec.Decode(&acceptPolicy)
+		if err != nil {
+			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error decoding mount policy\n")
+			if err != nil {
+				fmt.Printf("Error writing to file: %v", err)
+				return
+			}
+			return
+		}
+
+		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Deny Policy - " + denyPolicy1.Destination + ", " + denyPolicy1.Type + ", " + denyPolicy1.Source + " read successfully\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return
+		}
+
+		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Accept Policy - " + acceptPolicy.Destination + ", " + acceptPolicy.Type + ", " + acceptPolicy.Source + " read successfully\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return
+		}
+
+		//Check against the mount policy
+		deny1IsValid := validatePolicy(mountPolicy, denyPolicy1, *file)
+		deny1IsValidStr := strconv.FormatBool(deny1IsValid)
+		deny2IsValid := validatePolicy(mountPolicy, denyPolicy2, *file)
+		deny2IsValidStr := strconv.FormatBool(deny2IsValid)
+		acceptIsValid := validatePolicy(mountPolicy, acceptPolicy, *file)
+		acceptIsValidStr := strconv.FormatBool(acceptIsValid)
+		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Deny 1 Policy: expected: false; actual: " + deny1IsValidStr + "\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return
+		}
+
+		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Deny 2 Policy: expected: false; actual: " + deny2IsValidStr + "\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return
+		}
+
+		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Accept Policy: expected: true; actual: " + acceptIsValidStr + "\n")
 		if err != nil {
 			fmt.Printf("Error writing to file: %v", err)
 			return
 		}
 	}()
 
+	///////////////////////////////////////////////
 	// GCS connection
 	///////////////////////////////////////////////
 
