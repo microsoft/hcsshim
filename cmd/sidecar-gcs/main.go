@@ -4,14 +4,16 @@ package main
 
 import (
 	"context"
+	"encoding/gob"
 	"fmt"
 	"net"
 	"os"
 	"time"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-
 	"github.com/Microsoft/hcsshim/internal/gcs"
 )
 
@@ -24,7 +26,7 @@ func acceptAndClose(l net.Listener) (conn net.Conn, err error) {
 
 func main() {
 	ctx := context.Background()
-	file, err := os.OpenFile("hello.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	file, err := os.OpenFile("sidecar.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Printf("Error opening file: %v", err)
 		return
@@ -71,26 +73,41 @@ func main() {
 			fmt.Printf("Error writing to file: %v", err)
 			return
 		}
-		for {
-			_, err := conn.Write([]byte(time.Now().Format("2006-01-02 15:04:05") + " - Hello, world!\n"))
+		// for {
+		// 	_, err := conn.Write([]byte(time.Now().Format("2006-01-02 15:04:05") + " - Message from sidecar\n"))
+		// 	if err != nil {
+		// 		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error writing to connection: " + err.Error() + "\n")
+		// 		if err != nil {
+		// 			fmt.Printf("Error writing to file: %v", err)
+		// 			return
+		// 		}
+		// 		return
+		// 	}
+
+		// 	time.Sleep(5 * time.Second)
+		// }
+
+		var policy specs.Mount
+		dec := gob.NewDecoder(conn)
+		err := dec.Decode(&policy)
+		if err != nil {
+			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error decoding mount policy\n")
 			if err != nil {
-				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error writing to connection: " + err.Error() + "\n")
-				if err != nil {
-					fmt.Printf("Error writing to file: %v", err)
-					return
-				}
+				fmt.Printf("Error writing to file: %v", err)
 				return
 			}
+			return
+		}
 
-			time.Sleep(5 * time.Second)
+		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - " + policy.Destination + ", " + policy.Type + ", " + policy.Source + " read successfully\n")
+		if err != nil {
+			fmt.Printf("Error writing to file: %v", err)
+			return
 		}
 	}()
 
-	// _, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Started listening for the GCS\n")
-	// if err != nil {
-	// 	fmt.Printf("Error writing to file: %v", err)
-	// 	return
-	// }
+	// GCS connection
+	///////////////////////////////////////////////
 
 	// start GCS listener
 	// 0xe0e16197, 0xdd56, 0x4a10, 0x91, 0x95, 0x5e, 0xe7, 0xa1, 0x55, 0xa8, 0x38
@@ -176,11 +193,5 @@ func main() {
 		}
 	}
 }
-
-/*
-Next steps:
-1) run sidecar as a service, inbox component cannot start outbox componenet
-2) Sidecar will be a container layer in the image
-*/
 
 //sidecar is client for shim, gcs is client for sidecar

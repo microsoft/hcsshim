@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"time"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows"
@@ -312,27 +314,50 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 
 		log.G(ctx).WithField("scListener", uvm.scListener).Info("Successful sidecar GCS connection")
 
+		policy := specs.Mount{
+			Destination: "/dest/mount/path",
+			Type:        "bind",
+			Source:      "/src/mount/path",
+		}
+
 		//Read from the sidecar GCS connection
 		go func() {
-			file, err := os.OpenFile("C:\\ContainerPlat\\conn_log.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+			file, err := os.OpenFile("C:\\ContainerPlat\\conn_log.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
 				log.G(ctx).WithField("err", err.Error()).Info("Error opening file")
 			}
 			defer file.Close()
 
-			buffer := make([]byte, 1024)
-			for {
-				_, err := conn.Read(buffer)
-				if err != nil {
-					log.G(ctx).WithField("err", err.Error()).Info("Failed to read from sidecar GCS connection")
-					return
-				}
-				time.Sleep(5 * time.Second)
+			// buffer := make([]byte, 1024)
+			// for {
+			// 	_, err := conn.Read(buffer)
+			// 	if err != nil {
+			// 		log.G(ctx).WithField("err", err.Error()).Info("Failed to read from sidecar GCS connection")
+			// 		return
+			// 	}
+			// 	time.Sleep(5 * time.Second)
 
-				if _, err := file.Write(buffer); err != nil {
-					log.G(ctx).WithField("err", err.Error()).Info("Failed to write to log file")
+			// 	if _, err := file.Write(buffer); err != nil {
+			// 		log.G(ctx).WithField("err", err.Error()).Info("Failed to write to log file")
+			// 		return
+			// 	}
+			// }
+
+			enc := gob.NewEncoder(conn)
+			err = enc.Encode(policy)
+			if err != nil {
+				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
+				if err != nil {
+					fmt.Printf("Error writing to file: %v", err)
 					return
 				}
+				return
+			}
+
+			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Mount policy encoded successfully\n")
+			if err != nil {
+				fmt.Printf("Error writing to file: %v", err)
+				return
 			}
 		}()
 	}
