@@ -223,6 +223,22 @@ type GuestDefinedCapabilities struct {
 	UpdateContainerSupported      bool `json:",omitempty"`
 }
 
+func (g *GuestDefinedCapabilities) IsNamespaceAddRequestSupported() bool {
+	return g.NamespaceAddRequestSupported
+}
+
+func (g *GuestDefinedCapabilities) IsSignalProcessSupported() bool {
+	return g.SignalProcessSupported
+}
+
+func (g *GuestDefinedCapabilities) IsDumpStacksSupported() bool {
+	return g.DumpStacksSupported
+}
+
+func (g *GuestDefinedCapabilities) IsDeleteContainerStateSupported() bool {
+	return g.DeleteContainerStateSupported
+}
+
 // GuestConnectionInfo is the structure of an iterm return by a GuestConnection call on a utility VM
 type GuestConnectionInfo struct {
 	SupportedSchemaVersions  []hcsschema.Version      `json:",omitempty"`

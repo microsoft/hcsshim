@@ -323,7 +323,7 @@ type gcsCapabilities struct {
 	SendLifecycleNotifications bool
 	SupportedSchemaVersions    []hcsschema.Version
 	RuntimeOsType              string
-	GuestDefinedCapabilities   interface{}
+	GuestDefinedCapabilities   json.RawMessage
 }
 
 type containerCreateResponse struct {
