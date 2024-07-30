@@ -333,65 +333,69 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		}
 
 		//Read from the sidecar GCS connection
-		go func() {
-			file, err := os.OpenFile("C:\\ContainerPlat\\conn_log.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
-			if err != nil {
-				log.G(ctx).WithField("err", err.Error()).Info("Error opening file")
-			}
-			defer file.Close()
+		//go func() {
+		file, err := os.OpenFile("C:\\ContainerPlat\\conn_log.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+		if err != nil {
+			log.G(ctx).WithField("err", err.Error()).Info("Error opening file")
+			return fmt.Errorf("failed to open file: %w", err)
+		}
+		defer file.Close()
 
-			// buffer := make([]byte, 1024)
-			// for {
-			// 	_, err := conn.Read(buffer)
-			// 	if err != nil {
-			// 		log.G(ctx).WithField("err", err.Error()).Info("Failed to read from sidecar GCS connection")
-			// 		return
-			// 	}
-			// 	time.Sleep(5 * time.Second)
+		// buffer := make([]byte, 1024)
+		// for {
+		// 	_, err := conn.Read(buffer)
+		// 	if err != nil {
+		// 		log.G(ctx).WithField("err", err.Error()).Info("Failed to read from sidecar GCS connection")
+		// 		return
+		// 	}
+		// 	time.Sleep(5 * time.Second)
 
-			// 	if _, err := file.Write(buffer); err != nil {
-			// 		log.G(ctx).WithField("err", err.Error()).Info("Failed to write to log file")
-			// 		return
-			// 	}
-			// }
+		// 	if _, err := file.Write(buffer); err != nil {
+		// 		log.G(ctx).WithField("err", err.Error()).Info("Failed to write to log file")
+		// 		return
+		// 	}
+		// }
 
-			enc := gob.NewEncoder(conn)
-			err = enc.Encode(denyPolicy1)
-			if err != nil {
-				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
-				if err != nil {
-					fmt.Printf("Error writing to file: %v", err)
-					return
-				}
-				return
-			}
+		enc := gob.NewEncoder(conn)
+		err = enc.Encode(denyPolicy1)
+		if err != nil {
+			return fmt.Errorf("failed to encode mount policy: %w", err)
+		}
 
-			err = enc.Encode(denyPolicy2)
-			if err != nil {
-				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
-				if err != nil {
-					fmt.Printf("Error writing to file: %v", err)
-					return
-				}
-				return
-			}
+		err = enc.Encode(denyPolicy2)
+		if err != nil {
+			return fmt.Errorf("failed to encode mount policy: %w", err)
+		}
 
-			err = enc.Encode(acceptPolicy)
-			if err != nil {
-				_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
-				if err != nil {
-					fmt.Printf("Error writing to file: %v", err)
-					return
-				}
-				return
-			}
+		err = enc.Encode(acceptPolicy)
+		if err != nil {
+			return fmt.Errorf("failed to encode mount policy: %w", err)
+		}
 
-			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Mount policy encoded successfully\n")
-			if err != nil {
-				fmt.Printf("Error writing to file: %v", err)
-				return
-			}
-		}()
+		_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Mount policy encoded successfully\n")
+		if err != nil {
+			return fmt.Errorf("failed to write to file: %w", err)
+		}
+
+		var denyPolicy1Bool bool
+		var denyPolicy2Bool bool
+		var acceptPolicyBool bool
+		dec := gob.NewDecoder(conn)
+		err = dec.Decode(&denyPolicy1Bool)
+		if err != nil {
+			return fmt.Errorf("failed to decode mount policy: %w", err)
+		}
+
+		err = dec.Decode(&denyPolicy2Bool)
+		if err != nil {
+			return fmt.Errorf("failed to decode mount policy: %w", err)
+		}
+
+		err = dec.Decode(&acceptPolicyBool)
+		if err != nil {
+			return fmt.Errorf("failed to decode mount policy: %w", err)
+		}
+		//}()
 	}
 
 	// Initialize the SCSIManager.

@@ -191,6 +191,38 @@ func main() {
 			fmt.Printf("Error writing to file: %v", err)
 			return
 		}
+
+		enc := gob.NewEncoder(conn)
+		err = enc.Encode(deny1IsValid)
+		if err != nil {
+			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
+			if err != nil {
+				fmt.Printf("Error writing to file: %v", err)
+				return
+			}
+			return
+		}
+
+		err = enc.Encode(deny2IsValid)
+		if err != nil {
+			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
+			if err != nil {
+				fmt.Printf("Error writing to file: %v", err)
+				return
+			}
+			return
+		}
+
+		err = enc.Encode(acceptIsValid)
+		if err != nil {
+			_, err = file.WriteString(time.Now().Format("2006-01-02 15:04:05") + " - Error encoding mount policy\n")
+			if err != nil {
+				fmt.Printf("Error writing to file: %v", err)
+				return
+			}
+			return
+		}
+
 	}()
 
 	///////////////////////////////////////////////
