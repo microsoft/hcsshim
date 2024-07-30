@@ -16,7 +16,6 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -98,15 +97,15 @@ type GuestConnection struct {
 	mu         sync.Mutex
 	nextPort   uint32
 	notifyChs  map[string]chan struct{}
-	caps       schema1.GuestDefinedCapabilities
+	caps       GuestDefinedCapabilities
 	os         string
 }
 
 var _ cow.ProcessHost = &GuestConnection{}
 
 // Capabilities returns the guest's declared capabilities.
-func (gc *GuestConnection) Capabilities() *schema1.GuestDefinedCapabilities {
-	return &gc.caps
+func (gc *GuestConnection) Capabilities() GuestDefinedCapabilities {
+	return gc.caps
 }
 
 // Protocol returns the protocol version that is in use.
@@ -123,7 +122,6 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 		MaximumVersion: protocolVersion,
 	}
 	var resp negotiateProtocolResponse
-	resp.Capabilities.GuestDefinedCapabilities = &gc.caps
 	err = gc.brdg.RPC(ctx, rpcNegotiateProtocol, &req, &resp, true)
 	if err != nil {
 		return err
@@ -131,10 +129,17 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 	if resp.Version != protocolVersion {
 		return fmt.Errorf("unexpected version %d returned", resp.Version)
 	}
+
 	gc.os = strings.ToLower(resp.Capabilities.RuntimeOsType)
 	if gc.os == "" {
 		gc.os = "windows"
 	}
+
+	gc.caps, err = unmarshalGuestCapabilities(gc.os, resp.Capabilities.GuestDefinedCapabilities)
+	if err != nil {
+		return fmt.Errorf("unmarshalGuestCapabilities: %w", err)
+	}
+
 	if isColdStart && resp.Capabilities.SendHostCreateMessage {
 		conf := &uvmConfig{
 			SystemType: "Container",

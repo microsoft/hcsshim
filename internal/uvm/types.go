@@ -12,7 +12,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
@@ -54,7 +53,7 @@ type UtilityVM struct {
 
 	// GCS bridge protocol and capabilities
 	protocol  uint32
-	guestCaps schema1.GuestDefinedCapabilities
+	guestCaps gcs.GuestDefinedCapabilities
 
 	// containerCounter is the current number of containers that have been
 	// created. This is never decremented in the life of the UVM.
