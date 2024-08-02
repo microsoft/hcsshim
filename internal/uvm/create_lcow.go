@@ -133,6 +133,7 @@ type OptionsLCOW struct {
 	HclEnabled              *bool                // Whether to enable the host compatibility layer
 	ExtraVSockPorts         []uint32             // Extra vsock ports to allow
 	AssignedDevices         []VPCIDeviceID       // AssignedDevices are devices to add on pod boot
+	Runtime                 string               // runtime
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -182,6 +183,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 			SecurityPolicyEnabled: false,
 			UVMReferenceInfoFile:  UVMReferenceInfoFile,
 		},
+		Runtime: "",
 	}
 
 	opts.UpdateBootFilesPath(context.TODO(), defaultLCOWOSBootFilesPath())
@@ -833,6 +835,10 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	// Add Kernel Boot options
 	if opts.KernelBootOptions != "" {
 		kernelArgs += " " + opts.KernelBootOptions
+	}
+
+	if opts.Runtime == "runhcs-lcow-crun" {
+		opts.ExecCommandLine = fmt.Sprintf("%s -crun", opts.ExecCommandLine)
 	}
 
 	if !opts.VPCIEnabled {
