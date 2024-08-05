@@ -41,7 +41,7 @@ jobs:
           name: binaries
           
       - name: Publish draft release
-        uses: softprops/action-gh-release@v2.0.7
+        uses: softprops/action-gh-release@v2.0.8
         with:
           # This is to make sure that the release is not created if a non-rc tag is pushed
           draft: true
