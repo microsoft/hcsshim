@@ -276,6 +276,22 @@ type GcsGuestCapabilities struct {
 	DeleteContainerStateSupported bool `json:",omitempty"`
 }
 
+func (g *GcsGuestCapabilities) IsNamespaceAddRequestSupported() bool {
+	return g.NamespaceAddRequestSupported
+}
+
+func (g *GcsGuestCapabilities) IsSignalProcessSupported() bool {
+	return g.SignalProcessSupported
+}
+
+func (g *GcsGuestCapabilities) IsDumpStacksSupported() bool {
+	return g.DumpStacksSupported
+}
+
+func (g *GcsGuestCapabilities) IsDeleteContainerStateSupported() bool {
+	return g.DeleteContainerStateSupported
+}
+
 // ocspancontext is the internal JSON representation of the OpenCensus
 // `trace.SpanContext` for fowarding to a GCS that supports it.
 type ocspancontext struct {
