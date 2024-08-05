@@ -11,7 +11,7 @@ require (
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/ttrpc v1.2.4
 	github.com/google/go-cmp v0.6.0
-	github.com/google/go-containerregistry v0.19.2
+	github.com/google/go-containerregistry v0.20.1
 	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0
@@ -22,7 +22,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.1
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.21.0
+	golang.org/x/sys v0.23.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.2
 	k8s.io/cri-api v0.27.1
@@ -50,7 +50,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/docker/cli v24.0.0+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
-	github.com/docker/docker v27.1.0+incompatible // indirect
+	github.com/docker/docker v27.1.1+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -109,13 +109,12 @@ require (
 	go.opentelemetry.io/otel/metric v1.21.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.21.0 // indirect
 	go.opentelemetry.io/otel/trace v1.21.0 // indirect
-	golang.org/x/crypto v0.23.0 // indirect
+	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
-	golang.org/x/text v0.15.0 // indirect
-	golang.org/x/tools v0.20.0 // indirect
+	golang.org/x/net v0.26.0 // indirect
+	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240604185151-ef581f913117 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 	tags.cncf.io/container-device-interface v0.7.2 // indirect
