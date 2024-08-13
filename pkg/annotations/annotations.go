@@ -349,6 +349,8 @@ const (
 
 	// HRMMemoryJobName specifies the job name of the HRM memory job object that the underlying HCS system should be bound to.
 	HRMMemoryJobName = "io.microsoft.virtualmachine.hrm.memory-job-name"
+
+	MemoryForbidSmallBackingPages = "io.microsoft.virtualmachine.computetopology.memory.forbidsmallbackingpages"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of
