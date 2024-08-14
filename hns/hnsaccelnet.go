@@ -1,20 +1,19 @@
 //go:build windows
 
-package hcsshim
+package hns
 
 import (
 	"errors"
-
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/hns/internal"
 )
 
 // HNSNnvManagementMacAddress represents management mac address
 // which needs to be excluded from VF reassignment
-type HNSNnvManagementMacAddress = hns.HNSNnvManagementMacAddress
+type HNSNnvManagementMacAddress = internal.HNSNnvManagementMacAddress
 
 // HNSNnvManagementMacList represents a list of management
 // mac addresses for exclusion from VF reassignment
-type HNSNnvManagementMacList = hns.HNSNnvManagementMacList
+type HNSNnvManagementMacList = internal.HNSNnvManagementMacList
 
 var (
 	ErrorEmptyMacAddressList = errors.New("management mac_address list is empty")
@@ -36,11 +35,11 @@ func SetNnvManagementMacAddresses(managementMacAddresses []string) (*HNSNnvManag
 // GetNnvManagementMacAddresses retrieves a list of
 // management mac addresses in hns for exclusion from VF reassignment.
 func GetNnvManagementMacAddresses() (*HNSNnvManagementMacList, error) {
-	return hns.GetNnvManagementMacAddressList()
+	return internal.GetNnvManagementMacAddressList()
 }
 
 // DeleteNnvManagementMacAddresses delete list of
 // management mac addresses in hns which are excluded from VF reassignment.
 func DeleteNnvManagementMacAddresses() (*HNSNnvManagementMacList, error) {
-	return hns.DeleteNnvManagementMacAddressList()
+	return internal.DeleteNnvManagementMacAddressList()
 }

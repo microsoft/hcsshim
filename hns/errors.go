@@ -1,7 +1,9 @@
 package hns
 
-import "github.com/Microsoft/hcsshim/internal/hns"
+import (
+	"github.com/Microsoft/hcsshim/hns/internal"
+)
 
-type EndpointNotFoundError = hns.EndpointNotFoundError
-type NetworkNotFoundError = hns.NetworkNotFoundError
+type EndpointNotFoundError = internal.EndpointNotFoundError
+type NetworkNotFoundError = internal.NetworkNotFoundError
 

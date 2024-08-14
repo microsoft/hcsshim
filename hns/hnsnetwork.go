@@ -3,36 +3,36 @@
 package hns
 
 import (
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/hns/internal"
 )
 
 // Subnet is associated with a network and represents a list
 // of subnets available to the network
-type Subnet = hns.Subnet
+type Subnet = internal.Subnet
 
 // MacPool is associated with a network and represents a list
 // of macaddresses available to the network
-type MacPool = hns.MacPool
+type MacPool = internal.MacPool
 
 // HNSNetwork represents a network in HNS
-type HNSNetwork = hns.HNSNetwork
+type HNSNetwork = internal.HNSNetwork
 
 // HNSNetworkRequest makes a call into HNS to update/query a single network
 func HNSNetworkRequest(method, path, request string) (*HNSNetwork, error) {
-	return hns.HNSNetworkRequest(method, path, request)
+	return internal.HNSNetworkRequest(method, path, request)
 }
 
 // HNSListNetworkRequest makes a HNS call to query the list of available networks
 func HNSListNetworkRequest(method, path, request string) ([]HNSNetwork, error) {
-	return hns.HNSListNetworkRequest(method, path, request)
+	return internal.HNSListNetworkRequest(method, path, request)
 }
 
 // GetHNSNetworkByID
 func GetHNSNetworkByID(networkID string) (*HNSNetwork, error) {
-	return hns.GetHNSNetworkByID(networkID)
+	return internal.GetHNSNetworkByID(networkID)
 }
 
 // GetHNSNetworkName filtered by Name
 func GetHNSNetworkByName(networkName string) (*HNSNetwork, error) {
-	return hns.GetHNSNetworkByName(networkName)
+	return internal.GetHNSNetworkByName(networkName)
 }

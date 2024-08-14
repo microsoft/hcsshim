@@ -4,17 +4,17 @@ package hns
 
 import (
 	"github.com/Microsoft/hcsshim"
-	"github.com/Microsoft/hcsshim/internal/hns"
+	hns2 "github.com/Microsoft/hcsshim/hns/internal"
 )
 
 // HNSEndpoint represents a network endpoint in HNS
-type HNSEndpoint = hns.HNSEndpoint
+type HNSEndpoint = hns2.HNSEndpoint
 
 // HNSEndpointStats represent the stats for an networkendpoint in HNS
-type HNSEndpointStats = hns.EndpointStats
+type HNSEndpointStats = hns2.EndpointStats
 
 // Namespace represents a Compartment.
-type Namespace = hns.Namespace
+type Namespace = hns2.Namespace
 
 // SystemType represents the type of the system on which actions are done
 type SystemType string
@@ -28,94 +28,32 @@ const (
 
 // EndpointAttachDetachRequest is the structure used to send request to the container to modify the system
 // Supported resource types are Network and Request Types are Add/Remove
-type EndpointAttachDetachRequest = hns.EndpointAttachDetachRequest
+type EndpointAttachDetachRequest = hns2.EndpointAttachDetachRequest
 
 // EndpointResquestResponse is object to get the endpoint request response
-type EndpointResquestResponse = hns.EndpointResquestResponse
+type EndpointResquestResponse = hns2.EndpointResquestResponse
 
 // HNSEndpointRequest makes a HNS call to modify/query a network endpoint
 func HNSEndpointRequest(method, path, request string) (*HNSEndpoint, error) {
-	return hns.HNSEndpointRequest(method, path, request)
+	return hns2.HNSEndpointRequest(method, path, request)
 }
 
 // HNSListEndpointRequest makes a HNS call to query the list of available endpoints
 func HNSListEndpointRequest() ([]HNSEndpoint, error) {
-	return hns.HNSListEndpointRequest()
-}
-
-// HotAttachEndpoint makes a HCS Call to attach the endpoint to the container
-func HotAttachEndpoint(containerID string, endpointID string) error {
-	endpoint, err := GetHNSEndpointByID(endpointID)
-	if err != nil {
-		return err
-	}
-	isAttached, err := endpoint.IsAttached(containerID)
-	if isAttached {
-		return err
-	}
-	return modifyNetworkEndpoint(containerID, endpointID, hcsshim.Add)
-}
-
-// HotDetachEndpoint makes a HCS Call to detach the endpoint from the container
-func HotDetachEndpoint(containerID string, endpointID string) error {
-	endpoint, err := GetHNSEndpointByID(endpointID)
-	if err != nil {
-		return err
-	}
-	isAttached, err := endpoint.IsAttached(containerID)
-	if !isAttached {
-		return err
-	}
-	return modifyNetworkEndpoint(containerID, endpointID, hcsshim.Remove)
-}
-
-// ModifyContainer corresponding to the container id, by sending a request
-func modifyContainer(id string, request *hcsshim.ResourceModificationRequestResponse) error {
-	container, err := hcsshim.OpenContainer(id)
-	if err != nil {
-		if hcsshim.IsNotExist(err) {
-			return hcsshim.ErrComputeSystemDoesNotExist
-		}
-		return hcsshim.getInnerError(err)
-	}
-	defer container.Close()
-	err = container.Modify(request)
-	if err != nil {
-		if hcsshim.IsNotSupported(err) {
-			return hcsshim.ErrPlatformNotSupported
-		}
-		return hcsshim.getInnerError(err)
-	}
-
-	return nil
-}
-
-func modifyNetworkEndpoint(containerID string, endpointID string, request hcsshim.RequestType) error {
-	requestMessage := &hcsshim.ResourceModificationRequestResponse{
-		Resource: hcsshim.Network,
-		Request:  request,
-		Data:     endpointID,
-	}
-	err := modifyContainer(containerID, requestMessage)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return hns2.HNSListEndpointRequest()
 }
 
 // GetHNSEndpointByID get the Endpoint by ID
 func GetHNSEndpointByID(endpointID string) (*HNSEndpoint, error) {
-	return hns.GetHNSEndpointByID(endpointID)
+	return hns2.GetHNSEndpointByID(endpointID)
 }
 
 // GetHNSEndpointByName gets the endpoint filtered by Name
 func GetHNSEndpointByName(endpointName string) (*HNSEndpoint, error) {
-	return hns.GetHNSEndpointByName(endpointName)
+	return hns2.GetHNSEndpointByName(endpointName)
 }
 
 // GetHNSEndpointStats gets the endpoint stats by ID
 func GetHNSEndpointStats(endpointName string) (*HNSEndpointStats, error) {
-	return hns.GetHNSEndpointStats(endpointName)
+	return hns2.GetHNSEndpointStats(endpointName)
 }

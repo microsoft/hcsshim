@@ -1,4 +1,4 @@
-package hns
+package internal
 
 import "fmt"
 

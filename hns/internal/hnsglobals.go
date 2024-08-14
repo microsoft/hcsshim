@@ -1,6 +1,6 @@
 //go:build windows
 
-package hns
+package internal
 
 type HNSGlobals struct {
 	Version HNSVersion `json:"Version"`

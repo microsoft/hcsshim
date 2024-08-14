@@ -3,16 +3,16 @@
 package hns
 
 import (
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/hns/internal"
 )
 
-type HNSGlobals = hns.HNSGlobals
-type HNSVersion = hns.HNSVersion
+type HNSGlobals = internal.HNSGlobals
+type HNSVersion = internal.HNSVersion
 
 var (
-	HNSVersion1803 = hns.HNSVersion1803
+	HNSVersion1803 = internal.HNSVersion1803
 )
 
 func GetHNSGlobals() (*HNSGlobals, error) {
-	return hns.GetHNSGlobals()
+	return internal.GetHNSGlobals()
 }

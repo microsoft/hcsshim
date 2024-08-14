@@ -1,4 +1,4 @@
-package hns
+package internal
 
 // Type of Request Support in ModifySystem
 type PolicyType string
@@ -21,8 +21,8 @@ const (
 )
 
 type NatPolicy struct {
-	Type                 PolicyType `json:"Type"`
-	Protocol             string     `json:",omitempty"`
+	Type     PolicyType `json:"Type"`
+	Protocol string     `json:",omitempty"`
 	InternalPort         uint16     `json:",omitempty"`
 	ExternalPort         uint16     `json:",omitempty"`
 	ExternalPortReserved bool       `json:",omitempty"`
@@ -34,8 +34,8 @@ type QosPolicy struct {
 }
 
 type IsolationPolicy struct {
-	Type               PolicyType `json:"Type"`
-	VLAN               uint
+	Type PolicyType `json:"Type"`
+	VLAN uint
 	VSID               uint
 	InDefaultIsolation bool
 }
@@ -64,8 +64,8 @@ type OutboundNatPolicy struct {
 }
 
 type ProxyPolicy struct {
-	Type          PolicyType `json:"Type"`
-	IP            string     `json:",omitempty"`
+	Type PolicyType `json:"Type"`
+	IP   string     `json:",omitempty"`
 	Port          string     `json:",omitempty"`
 	ExceptionList []string   `json:",omitempty"`
 	Destination   string     `json:",omitempty"`
@@ -88,21 +88,21 @@ const (
 )
 
 type ACLPolicy struct {
-	Type            PolicyType `json:"Type"`
-	Id              string     `json:"Id,omitempty"`
+	Type           PolicyType `json:"Type"`
+	Id             string     `json:"Id,omitempty"`
 	Protocol        uint16     `json:",omitempty"`
 	Protocols       string     `json:"Protocols,omitempty"`
-	InternalPort    uint16     `json:",omitempty"`
-	Action          ActionType
-	Direction       DirectionType
-	LocalAddresses  string   `json:",omitempty"`
+	InternalPort   uint16     `json:",omitempty"`
+	Action         ActionType
+	Direction      DirectionType
+	LocalAddresses string   `json:",omitempty"`
 	RemoteAddresses string   `json:",omitempty"`
 	LocalPorts      string   `json:"LocalPorts,omitempty"`
 	LocalPort       uint16   `json:",omitempty"`
 	RemotePorts     string   `json:"RemotePorts,omitempty"`
-	RemotePort      uint16   `json:",omitempty"`
-	RuleType        RuleType `json:"RuleType,omitempty"`
-	Priority        uint16   `json:",omitempty"`
+	RemotePort     uint16   `json:",omitempty"`
+	RuleType       RuleType `json:"RuleType,omitempty"`
+	Priority       uint16   `json:",omitempty"`
 	ServiceName     string   `json:",omitempty"`
 }
 

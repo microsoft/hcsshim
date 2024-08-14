@@ -1,6 +1,6 @@
 //go:build windows
 
-package hns
+package internal
 
 import (
 	"encoding/json"

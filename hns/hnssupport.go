@@ -3,13 +3,13 @@
 package hns
 
 import (
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/hns/internal"
 )
 
-type HNSSupportedFeatures = hns.HNSSupportedFeatures
+type HNSSupportedFeatures = internal.HNSSupportedFeatures
 
-type HNSAclFeatures = hns.HNSAclFeatures
+type HNSAclFeatures = internal.HNSAclFeatures
 
 func GetHNSSupportedFeatures() HNSSupportedFeatures {
-	return hns.GetHNSSupportedFeatures()
+	return internal.GetHNSSupportedFeatures()
 }

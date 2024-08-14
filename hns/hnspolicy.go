@@ -1,60 +1,60 @@
 package hns
 
 import (
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/hns/internal"
 )
 
 // Type of Request Support in ModifySystem
-type PolicyType = hns.PolicyType
+type PolicyType = internal.PolicyType
 
 // RequestType const
 const (
-	Nat                  = hns.Nat
-	ACL                  = hns.ACL
-	PA                   = hns.PA
-	VLAN                 = hns.VLAN
-	VSID                 = hns.VSID
-	VNet                 = hns.VNet
-	L2Driver             = hns.L2Driver
-	Isolation            = hns.Isolation
-	QOS                  = hns.QOS
-	OutboundNat          = hns.OutboundNat
-	ExternalLoadBalancer = hns.ExternalLoadBalancer
-	Route                = hns.Route
-	Proxy                = hns.Proxy
+	Nat                  = internal.Nat
+	ACL                  = internal.ACL
+	PA                   = internal.PA
+	VLAN                 = internal.VLAN
+	VSID                 = internal.VSID
+	VNet                 = internal.VNet
+	L2Driver             = internal.L2Driver
+	Isolation            = internal.Isolation
+	QOS                  = internal.QOS
+	OutboundNat          = internal.OutboundNat
+	ExternalLoadBalancer = internal.ExternalLoadBalancer
+	Route                = internal.Route
+	Proxy                = internal.Proxy
 )
 
-type ProxyPolicy = hns.ProxyPolicy
+type ProxyPolicy = internal.ProxyPolicy
 
-type NatPolicy = hns.NatPolicy
+type NatPolicy = internal.NatPolicy
 
-type QosPolicy = hns.QosPolicy
+type QosPolicy = internal.QosPolicy
 
-type IsolationPolicy = hns.IsolationPolicy
+type IsolationPolicy = internal.IsolationPolicy
 
-type VlanPolicy = hns.VlanPolicy
+type VlanPolicy = internal.VlanPolicy
 
-type VsidPolicy = hns.VsidPolicy
+type VsidPolicy = internal.VsidPolicy
 
-type PaPolicy = hns.PaPolicy
+type PaPolicy = internal.PaPolicy
 
-type OutboundNatPolicy = hns.OutboundNatPolicy
+type OutboundNatPolicy = internal.OutboundNatPolicy
 
-type ActionType = hns.ActionType
-type DirectionType = hns.DirectionType
-type RuleType = hns.RuleType
+type ActionType = internal.ActionType
+type DirectionType = internal.DirectionType
+type RuleType = internal.RuleType
 
 const (
-	Allow = hns.Allow
-	Block = hns.Block
+	Allow = internal.Allow
+	Block = internal.Block
 
-	In  = hns.In
-	Out = hns.Out
+	In  = internal.In
+	Out = internal.Out
 
-	Host   = hns.Host
-	Switch = hns.Switch
+	Host   = internal.Host
+	Switch = internal.Switch
 )
 
-type ACLPolicy = hns.ACLPolicy
+type ACLPolicy = internal.ACLPolicy
 
-type Policy = hns.Policy
+type Policy = internal.Policy
