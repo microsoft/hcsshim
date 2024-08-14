@@ -1,3 +1,5 @@
+//go:build windows
+
 package hcsshim
 
 import "github.com/Microsoft/hcsshim/hns"
@@ -63,4 +65,3 @@ func modifyNetworkEndpoint(containerID string, endpointID string, request Reques
 
 	return nil
 }
-
