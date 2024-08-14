@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.21
+go 1.22.5
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
@@ -22,7 +22,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.1
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.23.0
+	golang.org/x/sys v0.24.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.2
 	k8s.io/cri-api v0.27.1
@@ -33,6 +33,7 @@ require (
 	github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20231105174938-2b5cbb29f3e2 // indirect
 	github.com/Microsoft/cosesign1go v1.1.0 // indirect
 	github.com/Microsoft/didx509go v0.0.3 // indirect
+	github.com/Microsoft/hcsshim/hns v0.0.0 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
@@ -122,3 +123,5 @@ require (
 )
 
 replace github.com/Microsoft/hcsshim => ../
+
+replace github.com/Microsoft/hcsshim/hns => ../hns

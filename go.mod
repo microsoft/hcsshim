@@ -1,11 +1,12 @@
 module github.com/Microsoft/hcsshim
 
-go 1.21
+go 1.22.5
 
 require (
 	github.com/Microsoft/cosesign1go v1.1.0
 	github.com/Microsoft/didx509go v0.0.3
 	github.com/Microsoft/go-winio v0.6.2
+	github.com/Microsoft/hcsshim/hns v0.0.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/containerd/cgroups/v3 v3.0.3
@@ -35,7 +36,7 @@ require (
 	go.opencensus.io v0.24.0
 	go.uber.org/mock v0.4.0
 	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.23.0
+	golang.org/x/sys v0.24.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
 	google.golang.org/protobuf v1.34.2
@@ -116,3 +117,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/Microsoft/hcsshim/hns => ./hns
