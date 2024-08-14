@@ -3,7 +3,6 @@
 package hns
 
 import (
-	"github.com/Microsoft/hcsshim"
 	hns2 "github.com/Microsoft/hcsshim/hns/internal"
 )
 
@@ -56,4 +55,20 @@ func GetHNSEndpointByName(endpointName string) (*HNSEndpoint, error) {
 // GetHNSEndpointStats gets the endpoint stats by ID
 func GetHNSEndpointStats(endpointName string) (*HNSEndpointStats, error) {
 	return hns2.GetHNSEndpointStats(endpointName)
+}
+
+func CreateNamespace() (string, error) {
+	return hns2.CreateNamespace()
+}
+
+func GetNamespaceEndpoints(id string) ([]string, error) {
+	return hns2.GetNamespaceEndpoints(id)
+}
+
+func RemoveNamespaceEndpoint(id string, endpointID string) error {
+	return hns2.RemoveNamespaceEndpoint(id, endpointID)
+}
+
+func RemoveNamespace(id string) error {
+	return hns2.RemoveNamespace(id)
 }
