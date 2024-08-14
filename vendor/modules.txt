@@ -22,7 +22,7 @@ github.com/Microsoft/go-winio/pkg/process
 github.com/Microsoft/go-winio/tools/mkwinsyscall
 github.com/Microsoft/go-winio/vhd
 # github.com/Microsoft/hcsshim/hns v0.0.0 => ./hns
-## explicit; go 1.22.5
+## explicit; go 1.21
 github.com/Microsoft/hcsshim/hns
 github.com/Microsoft/hcsshim/hns/internal
 github.com/Microsoft/hcsshim/hns/internal/hnserror
