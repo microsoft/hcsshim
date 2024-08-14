@@ -52,11 +52,11 @@ type HNSEndpoint struct {
 	PrefixLength       uint8             `json:",omitempty"`
 	IPv6PrefixLength   uint8             `json:",omitempty"`
 	IsRemoteEndpoint   bool              `json:",omitempty"`
-	EnableLowMetric  bool          `json:",omitempty"`
-	Namespace        *Namespace    `json:",omitempty"`
-	EncapOverhead    uint16        `json:",omitempty"`
-	SharedContainers []string      `json:",omitempty"`
-	State            EndpointState `json:",omitempty"`
+	EnableLowMetric    bool              `json:",omitempty"`
+	Namespace          *Namespace        `json:",omitempty"`
+	EncapOverhead      uint16            `json:",omitempty"`
+	SharedContainers   []string          `json:",omitempty"`
+	State              EndpointState     `json:",omitempty"`
 }
 
 // SystemType represents the type of the system on which actions are done
@@ -72,9 +72,9 @@ const (
 // EndpointAttachDetachRequest is the structure used to send request to the container to modify the system
 // Supported resource types are Network and Request Types are Add/Remove
 type EndpointAttachDetachRequest struct {
-	ContainerID   string     `json:"ContainerId,omitempty"`
-	SystemType    SystemType `json:"SystemType"`
-	CompartmentID uint16     `json:"CompartmentId,omitempty"`
+	ContainerID    string     `json:"ContainerId,omitempty"`
+	SystemType     SystemType `json:"SystemType"`
+	CompartmentID  uint16     `json:"CompartmentId,omitempty"`
 	VirtualNICName string     `json:"VirtualNicName,omitempty"`
 }
 

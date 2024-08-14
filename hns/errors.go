@@ -6,4 +6,3 @@ import (
 
 type EndpointNotFoundError = internal.EndpointNotFoundError
 type NetworkNotFoundError = internal.NetworkNotFoundError
-
