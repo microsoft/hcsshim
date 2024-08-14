@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -36,6 +38,20 @@ var (
 	ErrNICNotFound = errors.New("NIC not found in network namespace")
 )
 
+func sortEndpoints(endpoints []*hns.HNSEndpoint) {
+	cmp := func(a, b *hns.HNSEndpoint) int {
+		if strings.HasSuffix(a.Name, "eth0") {
+			return -1
+		}
+		if strings.HasSuffix(b.Name, "eth0") {
+			return 1
+		}
+		return 0
+	}
+
+	slices.SortStableFunc(endpoints, cmp)
+}
+
 // In this function we take the namespace ID of the namespace that was created for this
 // UVM. We hot add the namespace. We get the endpoints associated with this namespace
 // and then hot add those endpoints.
@@ -58,6 +74,13 @@ func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) er
 	if err = uvm.AddNetNS(ctx, hcnNamespace); err != nil {
 		return err
 	}
+
+	// Sort the endpoints.
+	// In some scenarios, multiple endpoints may be added to a pod. When this happens
+	// we need to know which endpoint to add first as the eth0 interface in the guest.
+	// Since we don't have CNI results here, instead look if any endpoints have the
+	// name eth0 at the end. If so, add that endpoint first. Otherwise this is a noop.
+	sortEndpoints(endpoints)
 
 	if err = uvm.AddEndpointsToNS(ctx, nsidInsideUVM, endpoints); err != nil {
 		// Best effort clean up the NS
