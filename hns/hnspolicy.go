@@ -1,4 +1,4 @@
-package hcsshim
+package hns
 
 import (
 	"github.com/Microsoft/hcsshim/internal/hns"

@@ -10,9 +10,9 @@ import (
 	typeurl "github.com/containerd/typeurl/v2"
 
 	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/Microsoft/hcsshim/hns"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 

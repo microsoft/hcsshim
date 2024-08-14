@@ -5,24 +5,23 @@ package hcn
 
 import (
 	"encoding/json"
+	"github.com/Microsoft/hcsshim/hns"
 	"testing"
-
-	"github.com/Microsoft/hcsshim"
 )
 
 func TestV1Network(t *testing.T) {
 	cleanup(NatTestNetworkName)
 
-	v1network := hcsshim.HNSNetwork{
+	v1network := hns.HNSNetwork{
 		Type: "NAT",
 		Name: NatTestNetworkName,
-		MacPools: []hcsshim.MacPool{
+		MacPools: []hns.MacPool{
 			{
 				StartMacAddress: "00-15-5D-52-C0-00",
 				EndMacAddress:   "00-15-5D-52-CF-FF",
 			},
 		},
-		Subnets: []hcsshim.Subnet{
+		Subnets: []hns.Subnet{
 			{
 				AddressPrefix:  "192.168.100.0/24",
 				GatewayAddress: "192.168.100.1",
@@ -52,16 +51,16 @@ func TestV1Network(t *testing.T) {
 func TestV1Endpoint(t *testing.T) {
 	cleanup(NatTestNetworkName)
 
-	v1network := hcsshim.HNSNetwork{
+	v1network := hns.HNSNetwork{
 		Type: "NAT",
 		Name: NatTestNetworkName,
-		MacPools: []hcsshim.MacPool{
+		MacPools: []hns.MacPool{
 			{
 				StartMacAddress: "00-15-5D-52-C0-00",
 				EndMacAddress:   "00-15-5D-52-CF-FF",
 			},
 		},
-		Subnets: []hcsshim.Subnet{
+		Subnets: []hns.Subnet{
 			{
 				AddressPrefix:  "192.168.100.0/24",
 				GatewayAddress: "192.168.100.1",
@@ -81,7 +80,7 @@ func TestV1Endpoint(t *testing.T) {
 		t.Fail()
 	}
 
-	v1endpoint := hcsshim.HNSEndpoint{
+	v1endpoint := hns.HNSEndpoint{
 		Name:           NatTestEndpointName,
 		VirtualNetwork: network.Id,
 	}

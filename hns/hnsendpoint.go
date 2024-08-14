@@ -1,8 +1,9 @@
 //go:build windows
 
-package hcsshim
+package hns
 
 import (
+	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/internal/hns"
 )
 
@@ -52,7 +53,7 @@ func HotAttachEndpoint(containerID string, endpointID string) error {
 	if isAttached {
 		return err
 	}
-	return modifyNetworkEndpoint(containerID, endpointID, Add)
+	return modifyNetworkEndpoint(containerID, endpointID, hcsshim.Add)
 }
 
 // HotDetachEndpoint makes a HCS Call to detach the endpoint from the container
@@ -65,33 +66,33 @@ func HotDetachEndpoint(containerID string, endpointID string) error {
 	if !isAttached {
 		return err
 	}
-	return modifyNetworkEndpoint(containerID, endpointID, Remove)
+	return modifyNetworkEndpoint(containerID, endpointID, hcsshim.Remove)
 }
 
 // ModifyContainer corresponding to the container id, by sending a request
-func modifyContainer(id string, request *ResourceModificationRequestResponse) error {
-	container, err := OpenContainer(id)
+func modifyContainer(id string, request *hcsshim.ResourceModificationRequestResponse) error {
+	container, err := hcsshim.OpenContainer(id)
 	if err != nil {
-		if IsNotExist(err) {
-			return ErrComputeSystemDoesNotExist
+		if hcsshim.IsNotExist(err) {
+			return hcsshim.ErrComputeSystemDoesNotExist
 		}
-		return getInnerError(err)
+		return hcsshim.getInnerError(err)
 	}
 	defer container.Close()
 	err = container.Modify(request)
 	if err != nil {
-		if IsNotSupported(err) {
-			return ErrPlatformNotSupported
+		if hcsshim.IsNotSupported(err) {
+			return hcsshim.ErrPlatformNotSupported
 		}
-		return getInnerError(err)
+		return hcsshim.getInnerError(err)
 	}
 
 	return nil
 }
 
-func modifyNetworkEndpoint(containerID string, endpointID string, request RequestType) error {
-	requestMessage := &ResourceModificationRequestResponse{
-		Resource: Network,
+func modifyNetworkEndpoint(containerID string, endpointID string, request hcsshim.RequestType) error {
+	requestMessage := &hcsshim.ResourceModificationRequestResponse{
+		Resource: hcsshim.Network,
 		Request:  request,
 		Data:     endpointID,
 	}

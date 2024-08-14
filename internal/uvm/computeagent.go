@@ -15,9 +15,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/Microsoft/hcsshim/hns"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
