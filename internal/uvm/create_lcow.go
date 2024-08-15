@@ -21,6 +21,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -410,13 +411,14 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.VirtualMachineMemory{
-					SizeInMB:              memorySizeInMB,
-					AllowOvercommit:       opts.AllowOvercommit,
-					EnableDeferredCommit:  opts.EnableDeferredCommit,
-					EnableColdDiscardHint: opts.EnableColdDiscardHint,
-					LowMMIOGapInMB:        opts.LowMMIOGapInMB,
-					HighMMIOBaseInMB:      opts.HighMMIOBaseInMB,
-					HighMMIOGapInMB:       opts.HighMMIOGapInMB,
+					SizeInMB:                memorySizeInMB,
+					AllowOvercommit:         opts.AllowOvercommit,
+					EnableDeferredCommit:    opts.EnableDeferredCommit,
+					EnableColdDiscardHint:   opts.EnableColdDiscardHint,
+					LowMMIOGapInMB:          opts.LowMMIOGapInMB,
+					HighMMIOBaseInMB:        opts.HighMMIOBaseInMB,
+					HighMMIOGapInMB:         opts.HighMMIOGapInMB,
+					ForbidSmallBackingPages: opts.ForbidSmallBackingPages,
 				},
 				Processor: processor,
 			},
@@ -635,13 +637,14 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.VirtualMachineMemory{
-					SizeInMB:              memorySizeInMB,
-					AllowOvercommit:       opts.AllowOvercommit,
-					EnableDeferredCommit:  opts.EnableDeferredCommit,
-					EnableColdDiscardHint: opts.EnableColdDiscardHint,
-					LowMMIOGapInMB:        opts.LowMMIOGapInMB,
-					HighMMIOBaseInMB:      opts.HighMMIOBaseInMB,
-					HighMMIOGapInMB:       opts.HighMMIOGapInMB,
+					SizeInMB:                memorySizeInMB,
+					AllowOvercommit:         opts.AllowOvercommit,
+					EnableDeferredCommit:    opts.EnableDeferredCommit,
+					EnableColdDiscardHint:   opts.EnableColdDiscardHint,
+					LowMMIOGapInMB:          opts.LowMMIOGapInMB,
+					HighMMIOBaseInMB:        opts.HighMMIOBaseInMB,
+					HighMMIOGapInMB:         opts.HighMMIOGapInMB,
+					ForbidSmallBackingPages: opts.ForbidSmallBackingPages,
 				},
 				Processor: processor,
 				Numa:      numa,
@@ -968,7 +971,12 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, err
 	}
 
-	if err = uvm.create(ctx, doc); err != nil {
+	rpOptions := &hcs.ResourcePoolOptions{
+		MemoryPoolJobName: opts.HRMMemoryJobName,
+		CPUPoolJobName:    opts.HRMCPUJobName,
+	}
+
+	if err = uvm.create(ctx, doc, rpOptions); err != nil {
 		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
 	log.G(ctx).WithField("uvm", uvm).Trace("create_lcow::CreateLCOW uvm.create result")
