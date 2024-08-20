@@ -532,10 +532,7 @@ void load_all_modules() {
 
     kmod_load_resources(k_ctx);
     ret = ftw(modules_dir, parse_tree_entry, OPEN_FDS); 
-    if (ret < 0) {
-        kmod_unref(k_ctx);
-        die("failed to load kmod resources");
-    } else if (ret != 0) {
+    if (ret != 0) {
         // Don't fail on error from walking the file tree and loading modules right now. 
         // ftw may return an error if the modules directory doesn't exist, which
         // may be the case for some images. Additionally, we don't currently support
