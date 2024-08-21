@@ -8,13 +8,13 @@
 # Additionally, see example CodeQL pipeline (in CodeQL repo):
 # https://github.com/github/codeql/blob/0342b3eba242476cea815e601942021092d0bc10/.github/workflows/codeql-analysis.yml
 
-name: "Code Scanning - CodeQL"
+name: "CodeQL"
 
 on:
   push:
-    branches: [main]
+    branches: ["main", "release/*"]
   pull_request:
-    branches: [main]
+    branches: ["main", "release/*"]
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
@@ -31,14 +31,22 @@ on:
 env:
   GO_VERSION: "1.21.x"
 
-permissions:
-  contents: read
-  packages: read
-  security-events: write
-
 jobs:
-  CodeQL-Build:
+  analyze:
+    name: Analyze (${{ matrix.language }} - ${{ matrix.goos }})
     runs-on: ubuntu-latest
+
+    permissions:
+      # required for all workflows
+      security-events: write
+
+      # required to fetch internal or private CodeQL packs
+      packages: read
+
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
+
     strategy:
       fail-fast: false
       matrix:
@@ -64,7 +72,7 @@ jobs:
               internal/tools/zapdir,
 
           - goos: linux
-            language: go, cpp
+            language: go, c-cpp
             targets: >-
               cmd/gcs,
               cmd/gcstools,
@@ -90,7 +98,9 @@ jobs:
       - name: CodeQL Initialize
         uses: github/codeql-action/init@v3
         with:
+          build-mode: manual
           languages: ${{matrix.language}}
+          config-file: ./.github/codeql/codeql-config.yml
 
       # build binaries
       - name: Build go binaries
