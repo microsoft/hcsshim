@@ -68,6 +68,10 @@ const char *const default_envp[] = {
 #ifdef MODULES
 // global kmod k_ctx so we can access it in the file tree traversal 
 struct kmod_ctx *k_ctx;
+
+// possible extensions for the kernel modules files
+const char *kmod_ext = ".ko";
+const char *kmod_xz_ext = ".ko.xz";
 #endif
 
 // When nothing is passed, default to the LCOWv1 behavior.
@@ -469,25 +473,32 @@ int load_module(struct kmod_ctx *ctx, const char *module_path) {
     return 0;
 }
 
+// has_extension is a helper function for checking if string `fpath` has extension `ext`
+bool has_extension(const char* fpath, const char* ext) {
+    size_t fpath_length = strlen(fpath);
+    size_t ext_length = strlen(ext);
+
+    if (fpath_length < ext_length) {
+        return false; 
+    }
+
+    return (strncmp(fpath + (fpath_length - ext_length), ext, ext_length) == 0);
+}
+
 // parse_tree_entry is called by ftw for each directory and file in the file tree.
 // If this entry is a file and has a .ko file extension, attempt to load into kernel.
 int parse_tree_entry(const char *fpath, const struct stat *sb, int typeflag) {
     int result;
-    const char *ext; 
 
     if (typeflag != FTW_F) {
         // do nothing if this isn't a file 
         return 0; 
     }
-        
-    ext = strrchr(fpath, '.');
-    if (!ext || ext == fpath) {
-        // no file extension found in the filepath
-        return 0; 
-    }
 
-    if ((result = strcmp(ext, ".ko")) != 0) {
-        // file does not have .ko extension so it is not a kernel module
+    // Kernel module files either end with a .ko extension or a .ko.xz extension.
+    // Files ending in .ko.xz are compressed kernel modules while .ko files are
+    // uncompressed kernel modules.
+    if (!has_extension(fpath, kmod_ext) && !has_extension(fpath, kmod_xz_ext)) {
         return 0; 
     }
 
@@ -497,6 +508,7 @@ int parse_tree_entry(const char *fpath, const struct stat *sb, int typeflag) {
     if (result != 0) {
         warn2("failed to load module", fpath);
     }
+    dmesgInfo(fpath);
     return 0;
 }
 
