@@ -186,8 +186,8 @@ type Bridge struct {
 	hostState *hcsv2.Host
 
 	quitChan chan bool
-	// hasQuitPending when != 0 will cause no more requests to be Read.
-	hasQuitPending uint32
+	// hasQuitPending indicates the bridge is shutting down and cause no more requests to be Read.
+	hasQuitPending atomic.Bool
 
 	protVer prot.ProtocolVersion
 }
@@ -243,7 +243,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	go func() {
 		var recverr error
 		for {
-			if atomic.LoadUint32(&b.hasQuitPending) == 0 {
+			if !b.hasQuitPending.Load() {
 				header := &prot.MessageHeader{}
 				if err := binary.Read(bridgeIn, binary.LittleEndian, header); err != nil {
 					if err == io.ErrUnexpectedEOF || err == os.ErrClosed { //nolint:errorlint
@@ -405,7 +405,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	case <-b.quitChan:
 		// The request loop needs to exit so that the teardown process begins.
 		// Set the request loop to stop processing new messages
-		atomic.StoreUint32(&b.hasQuitPending, 1)
+		b.hasQuitPending.Store(true)
 		// Wait for the request loop to process its last message. Its possible
 		// that if it lost the race with the hasQuitPending it could be stuck in
 		// a pending read from bridgeIn. Wait 2 seconds and kill the connection.

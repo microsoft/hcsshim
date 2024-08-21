@@ -61,8 +61,13 @@ type Container struct {
 	processesMutex sync.Mutex
 	processes      map[uint32]*containerProcess
 
-	// Only access atomically through getStatus/setStatus.
-	status containerStatus
+	// current container (creation) status.
+	// Only access through [getStatus] and [setStatus].
+	//
+	// Note: its more ergonomic to store the uint32 and convert to/from [containerStatus]
+	// then use [atomic.Value] and deal with unsafe conversions to/from [any], or use [atomic.Pointer]
+	// and deal with the extra pointer dereferencing overhead.
+	status atomic.Uint32
 
 	// scratchDirPath represents the path inside the UVM where the scratch directory
 	// of this container is located. Usually, this is either `/run/gcs/c/<containerID>` or
@@ -268,17 +273,16 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	return cg.Stat(cgroups.IgnoreNotExist)
 }
 
-func (c *Container) modifyContainerConstraints(ctx context.Context, rt guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {
+func (c *Container) modifyContainerConstraints(ctx context.Context, _ guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {
 	return c.Update(ctx, cc.Linux)
 }
 
 func (c *Container) getStatus() containerStatus {
-	val := atomic.LoadUint32((*uint32)(&c.status))
-	return containerStatus(val)
+	return containerStatus(c.status.Load())
 }
 
 func (c *Container) setStatus(st containerStatus) {
-	atomic.StoreUint32((*uint32)(&c.status), uint32(st))
+	c.status.Store(uint32(st))
 }
 
 func (c *Container) ID() string {

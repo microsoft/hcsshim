@@ -308,9 +308,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		isSandbox:      criType == "sandbox",
 		exitType:       prot.NtUnexpectedExit,
 		processes:      make(map[uint32]*containerProcess),
-		status:         containerCreating,
 		scratchDirPath: settings.ScratchDirPath,
 	}
+	c.setStatus(containerCreating)
 
 	if err := h.AddContainer(id, c); err != nil {
 		return nil, err
