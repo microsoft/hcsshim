@@ -68,12 +68,14 @@ jobs:
               internal/tools/extendedtask,
               internal/tools/grantvmgroupaccess,
               internal/tools/networkagent,
+              internal/tools/securitypolicy
               internal/tools/uvmboot,
               internal/tools/zapdir,
 
           - goos: linux
             language: go, c-cpp
             targets: >-
+              cmd/dmverity-vhd,
               cmd/gcs,
               cmd/gcstools,
               cmd/hooks/wait-paths,
@@ -100,7 +102,6 @@ jobs:
         with:
           build-mode: manual
           languages: ${{matrix.language}}
-          config-file: ./.github/codeql/codeql-config.yml
 
       # build binaries
       - name: Build go binaries
@@ -122,7 +123,44 @@ jobs:
         if: ${{ matrix.goos == 'linux' }}
         run: make bin/vsockexec bin/init
 
+      # only upload results if the analysis fails
+      # otherwise, save the output and use `advanced-security/filter-sarif` to filter paths
       - name: CodeQL Analyze
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
+          output: sarif-results
+          upload: failure-only
+
+      - name: Filter Go SARIF Results
+        uses: advanced-security/filter-sarif@v1
+        with:
+          patterns: |
+            +**/*.go
+            -**/*_test.go
+            -test/**/*.go
+            -vendor/**/*.go
+          input: sarif-results/go.sarif
+          output: sarif-results/go.sarif
+
+      - name: Filter C/C++ SARIF Results
+        uses: advanced-security/filter-sarif@v1
+        if: ${{ matrix.goos == 'linux' }}
+        with:
+          patterns: |
+            +**/*
+            -vendor/**/*
+          input: sarif-results/cpp.sarif
+          output: sarif-results/cpp.sarif
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif-results
+
+      - name: Upload SARIF Results as Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sarif-results-${{ matrix.goos }}
+          path: sarif-results
+          retention-days: 1
