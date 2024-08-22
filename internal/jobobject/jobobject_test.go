@@ -60,7 +60,7 @@ func TestSiloCreateAndOpen(t *testing.T) {
 	}
 	defer jobOpen.Close()
 
-	if !jobOpen.isSilo() {
+	if !jobOpen.silo.Load() {
 		t.Fatal("job is supposed to be a silo")
 	}
 }
