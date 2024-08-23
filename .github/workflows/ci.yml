@@ -4,8 +4,6 @@ on:
   - pull_request
 
 env:
-  GO_VERSION: "oldstable"
-
   GO_BUILD_CMD: 'go build "-ldflags=-s -w" -trimpath'
   GO_BUILD_TEST_CMD: "go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional"
 
@@ -29,10 +27,9 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
           # sometimes go cache causes issues when linting
           cache: false
 
@@ -67,21 +64,11 @@ jobs:
           path: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./go/src/github.com/Microsoft/hcsshim/.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/go.sum
-            ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/test/go.sum
-
-      - name: Pre-fill Module Cache
-        shell: powershell
-        run: |
-          go mod download
-          cd test
-          go mod download
-        working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
+          repo-path: ${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim
+          fill-module-cache: true
 
       - name: Install protoc
         shell: powershell
@@ -134,20 +121,10 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            go.sum
-            test/go.sum
-
-      - name: Pre-fill Module Cache
-        shell: powershell
-        run: |
-          go mod download
-          cd test
-          go mod download
+          fill-module-cache: true
 
       - name: Validate go.mod and vendoring
         shell: powershell
@@ -209,20 +186,10 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            go.sum
-            test/go.sum
-
-      - name: Pre-fill Module Cache
-        shell: powershell
-        run: |
-          go mod download
-          cd test
-          go mod download
+          fill-module-cache: true
 
       - name: Validate go generate
         shell: powershell
@@ -274,13 +241,10 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            go.sum
-            test/go.sum
+          fill-module-cache: true
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
@@ -314,13 +278,8 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            go.sum
-            test/go.sum
+      - name: Install Go
+        uses: ./.github/actions/setup-go
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
@@ -447,14 +406,10 @@ jobs:
           path: src/github.com/Microsoft/hcsshim
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./src/github.com/Microsoft/hcsshim/.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
-          check-latest: true
-          cache-dependency-path: |
-            src/github.com/Microsoft/hcsshim/go.sum
-            src/github.com/Microsoft/hcsshim/test/go.sum
+          repo-path: src/github.com/Microsoft/hcsshim
 
       - name: Set env
         shell: bash
@@ -653,13 +608,8 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            go.sum
-            test/go.sum
+      - name: Install Go
+        uses: ./.github/actions/setup-go
 
       - name: Set version info
         shell: pwsh
@@ -737,13 +687,8 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            go.sum
-            test/go.sum
+      - name: Install Go
+        uses: ./.github/actions/setup-go
 
       - name: Set version info
         shell: pwsh
