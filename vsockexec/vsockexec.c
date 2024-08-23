@@ -102,6 +102,7 @@ int main(int argc, char **argv)
         }
     }
 
+    // CodeQL [SM01925] designed to forward stdio over VSOCK and then exec the command-line arguments (always ./cmd/gcs)
     execvp(argv[optind], argv + optind);
     fprintf(stderr, "execvp: %s: %s\n", argv[optind], strerror(errno));
     return 1;
