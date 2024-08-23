@@ -1,14 +1,14 @@
 // vsockexec opens vsock connections for the specified stdio descriptors and
 // then execs the specified process.
 
+#include "vsock.h"
 #include <errno.h>
-#include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
-#include "vsock.h"
 
 #ifdef USE_TCP
 static const int tcpmode = 1;
@@ -16,8 +16,7 @@ static const int tcpmode = 1;
 static const int tcpmode;
 #endif
 
-static int opentcp(unsigned short port)
-{
+static int opentcp(unsigned short port) {
     int s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0) {
         return -1;
@@ -27,21 +26,19 @@ static int opentcp(unsigned short port)
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (connect(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (connect(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         return -1;
     }
 
     return s;
 }
 
-_Noreturn static void usage(const char *argv0)
-{
+_Noreturn static void usage(const char* argv0) {
     fprintf(stderr, "%s [-i port] [-o port] [-e port] -- program [args...]\n", argv0);
     exit(1);
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char** argv) {
     unsigned int ports[3] = {0};
     int sockets[3] = {-1, -1, -1};
     int c;
