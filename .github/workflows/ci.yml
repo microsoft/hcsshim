@@ -698,6 +698,11 @@ jobs:
         name: Build networkagent.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
         name: Build securitypolicy.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
+        name: Build securitypolicy
+        env:
+          GOOS: linux
+          GOARCH: amd64
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/uvmboot
         name: Build uvmboot.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
@@ -719,6 +724,7 @@ jobs:
             grantvmgroupaccess.exe
             networkagent.exe
             securitypolicy.exe
+            securitypolicy
             uvmboot.exe
             zapdir.exe
 
