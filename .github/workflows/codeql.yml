@@ -27,10 +27,6 @@ on:
     # minute, hour, day of month, month, day of week
     - cron: "0 0 * * 0"
 
-# TODO: consolidate this with ci.yml so they both use the same Go version
-env:
-  GO_VERSION: "1.21.x"
-
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }} - ${{ matrix.goos }})
@@ -92,10 +88,10 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
+          fill-module-cache: true
 
       - name: CodeQL Initialize
         uses: github/codeql-action/init@v3
