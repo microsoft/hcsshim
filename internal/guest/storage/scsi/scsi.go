@@ -41,6 +41,7 @@ var (
 	// mock functions for testing getDevicePath
 	osReadDir = os.ReadDir
 	osStat    = os.Stat
+	osOpen    = os.Open
 
 	// getDevicePath is stubbed to make testing `Mount` easier.
 	getDevicePath = GetDevicePath
@@ -218,7 +219,7 @@ func Mount(
 			// TODO (ambarve): add better retry logic, SCSI mounts sometimes return ENONENT or
 			// ENXIO error if we try to open those devices immediately after mount. retry after a
 			// few milliseconds.
-			log.G(ctx).WithError(err).Trace("get device filesystem failed, retrying in 500ms")
+			log.G(ctx).WithError(err).Debug("get device filesystem failed, retrying in 500ms")
 			time.Sleep(500 * time.Millisecond)
 			if deviceFS, err = _getDeviceFsType(source); err != nil {
 				if config.Filesystem == "" || !errors.Is(err, ErrUnknownFilesystem) {
@@ -404,7 +405,8 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 	// devicePath can take some time before its actually available under
 	// `/dev/sd*`. Retry while we wait for it to show up.
 	for {
-		if _, err := osStat(devicePath); err != nil {
+		f, err := osOpen(devicePath)
+		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ENXIO) {
 				select {
 				case <-ctx.Done():
@@ -416,6 +418,9 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 				}
 			}
 			return "", err
+		}
+		if err := f.Close(); err != nil {
+			log.G(ctx).WithError(err).Warnf("failed to close file: %s", devicePath)
 		}
 		break
 	}

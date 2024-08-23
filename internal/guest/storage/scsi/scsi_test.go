@@ -20,6 +20,7 @@ import (
 func clearTestDependencies() {
 	osReadDir = nil
 	osStat = nil
+	osOpen = nil
 	osMkdirAll = nil
 	osRemoveAll = nil
 	unixMount = nil
@@ -94,6 +95,10 @@ func (d *fakeDirEntry) Info() (os.FileInfo, error) {
 	return &fakeFileInfo{name: d.name}, nil
 }
 
+func osOpenNoop(_ string) (*os.File, error) {
+	return &os.File{}, nil
+}
+
 func osStatNoop(source string) (os.FileInfo, error) {
 	return &fakeFileInfo{
 		name: source,
@@ -120,6 +125,7 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		return "", nil
 	}
 	osStat = osStatNoop
+	osOpen = osOpenNoop
 
 	config := &Config{
 		Encrypted:        false,
@@ -164,6 +170,7 @@ func Test_Mount_Mkdir_ExpectedPath(t *testing.T) {
 		return nil
 	}
 	osStat = osStatNoop
+	osOpen = osOpenNoop
 
 	config := &Config{
 		Encrypted:        false,
@@ -1132,6 +1139,8 @@ func Test_GetDevicePath_Device_With_Partition(t *testing.T) {
 		}, nil
 	}
 
+	osOpen = osOpenNoop
+
 	getDevicePath = GetDevicePath
 
 	actualPath, err := getDevicePath(context.Background(), 0, 0, partition)
@@ -1157,6 +1166,8 @@ func Test_GetDevicePath_Device_With_Partition_Error(t *testing.T) {
 	osStat = func(_ string) (os.FileInfo, error) {
 		return nil, nil
 	}
+
+	osOpen = osOpenNoop
 
 	getDevicePath = GetDevicePath
 
@@ -1192,6 +1203,47 @@ func Test_GetDevicePath_Device_No_Partition_Retries_Stat(t *testing.T) {
 		return nil, nil
 	}
 
+	osOpen = osOpenNoop
+
+	getDevicePath = GetDevicePath
+
+	actualPath, err := getDevicePath(context.Background(), 0, 0, 0)
+	if err != nil {
+		t.Fatalf("expected to get no error, instead got %v", err)
+	}
+	if actualPath != expectedDevicePath {
+		t.Fatalf("expected to get %v, instead got %v", expectedDevicePath, actualPath)
+	}
+}
+
+func Test_GetDevicePath_Device_No_Partition_Retries_Open(t *testing.T) {
+	clearTestDependencies()
+
+	deviceName := "sdd"
+	expectedDevicePath := filepath.Join("/dev", deviceName)
+
+	osReadDir = func(_ string) ([]os.DirEntry, error) {
+		entry := &fakeDirEntry{name: deviceName}
+		return []os.DirEntry{entry}, nil
+	}
+
+	osStat = func(_ string) (os.FileInfo, error) {
+		return nil, nil
+	}
+
+	callNum := 0
+	osOpen = func(name string) (*os.File, error) {
+		if callNum == 0 {
+			callNum += 1
+			return nil, fs.ErrNotExist
+		}
+		if callNum == 1 {
+			callNum += 1
+			return nil, unix.ENXIO
+		}
+		return &os.File{}, nil
+	}
+
 	getDevicePath = GetDevicePath
 
 	actualPath, err := getDevicePath(context.Background(), 0, 0, 0)
@@ -1213,6 +1265,8 @@ func Test_GetDevicePath_Device_No_Partition_Error(t *testing.T) {
 	osStat = func(name string) (os.FileInfo, error) {
 		return nil, fmt.Errorf("should not make this call: %v", name)
 	}
+
+	osOpen = osOpenNoop
 
 	getDevicePath = GetDevicePath
 
