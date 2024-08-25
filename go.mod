@@ -30,7 +30,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli v1.22.15
-	github.com/vishvananda/netlink v1.2.1-beta.2
+	github.com/vishvananda/netlink v1.3.0
 	github.com/vishvananda/netns v0.0.4
 	go.etcd.io/bbolt v1.3.10
 	go.opencensus.io v0.24.0
