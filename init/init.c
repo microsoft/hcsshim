@@ -625,7 +625,8 @@ void start_services() {
         dmesgWarn("nv-fabricmanager not present, skipping ");
     } else {
         dmesgInfo("start nv-fabricmanager daemon");
-        pid_t fm_pid = launch(1, &fm_name);
+        char* command[] = {fm_name, "-c", "/usr/share/nvidia/nvswitch/fabricmanager.cfg"};
+        pid_t fm_pid = launch(3, command);
         if (fm_pid < 0) {
             // do not return early if we fail to start this, since it's possible that
             // this service doesn't exist on the system, which is a valid scenario
