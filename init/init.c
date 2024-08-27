@@ -66,7 +66,7 @@ const char *const default_envp[] = {
 };
 
 #ifdef MODULES
-// global kmod k_ctx so we can access it in the file tree traversal 
+// global kmod k_ctx so we can access it in the file tree traversal
 struct kmod_ctx *k_ctx;
 
 // possible extensions for the kernel modules files
@@ -361,7 +361,7 @@ void init_entropy(int port) {
     close(e);
 }
 
-// dmesg is a helper function for printing to dmesg. We cannot assume that the 
+// dmesg is a helper function for printing to dmesg. We cannot assume that the
 // image has syslogd or similar running for now, so we cannot just use syslog(3).
 //
 // /dev/kmsg exports the structured data in the following line format:
@@ -370,7 +370,7 @@ void dmesg(const unsigned int level, const char *msg)
 {
     int fd_kmsg = open("/dev/kmsg", O_WRONLY);
     if (fd_kmsg == -1) {
-        // failed to open the kmsg device 
+        // failed to open the kmsg device
         warn("error opening /dev/kmsg");
         return;
     }
@@ -388,7 +388,7 @@ void dmesg(const unsigned int level, const char *msg)
     }
 }
 
-// see https://man7.org/linux/man-pages/man2/syslog.2.html for definitions of levels 
+// see https://man7.org/linux/man-pages/man2/syslog.2.html for definitions of levels
 void dmesgErr(const char *msg) { dmesg(3, msg); }
 void dmesgWarn(const char *msg) { dmesg(4, msg); }
 void dmesgInfo(const char *msg) { dmesg(6, msg); }
@@ -419,6 +419,7 @@ pid_t launch(int argc, char **argv) {
     if (putenv(DEFAULT_PATH_ENV)) { // Specify the PATH used for execvpe
         die("putenv");
     }
+    // CodeQL [SM01925] designed to initialize Linux guest and then exec the command-line arguments (either ./vsockexec or ./cmd/gcs)
     execvpe(argvn[0], argvn, (char**)default_envp);
     die2("execvpe", argvn[0]);
 }
@@ -448,10 +449,10 @@ int reap_until(pid_t until_pid) {
 }
 
 #ifdef MODULES
-// load_module gets the module from the absolute path to the module and then 
-// inserts into the kernel. 
+// load_module gets the module from the absolute path to the module and then
+// inserts into the kernel.
 int load_module(struct kmod_ctx *ctx, const char *module_path) {
-    struct kmod_module *mod = NULL; 
+    struct kmod_module *mod = NULL;
     int err;
 
     #ifdef DEBUG
@@ -460,16 +461,16 @@ int load_module(struct kmod_ctx *ctx, const char *module_path) {
 
     err = kmod_module_new_from_path(ctx, module_path, &mod);
     if (err < 0) {
-        return err; 
-    }
-
-    err = kmod_module_probe_insert_module(mod, 0, NULL, NULL, NULL, NULL); 
-    if (err < 0) {
-        kmod_module_unref(mod); 
         return err;
     }
 
-    kmod_module_unref(mod); 
+    err = kmod_module_probe_insert_module(mod, 0, NULL, NULL, NULL, NULL);
+    if (err < 0) {
+        kmod_module_unref(mod);
+        return err;
+    }
+
+    kmod_module_unref(mod);
     return 0;
 }
 
@@ -479,7 +480,7 @@ bool has_extension(const char* fpath, const char* ext) {
     size_t ext_length = strlen(ext);
 
     if (fpath_length < ext_length) {
-        return false; 
+        return false;
     }
 
     return (strncmp(fpath + (fpath_length - ext_length), ext, ext_length) == 0);
@@ -491,19 +492,19 @@ int parse_tree_entry(const char *fpath, const struct stat *sb, int typeflag) {
     int result;
 
     if (typeflag != FTW_F) {
-        // do nothing if this isn't a file 
-        return 0; 
+        // do nothing if this isn't a file
+        return 0;
     }
 
     // Kernel module files either end with a .ko extension or a .ko.xz extension.
     // Files ending in .ko.xz are compressed kernel modules while .ko files are
     // uncompressed kernel modules.
     if (!has_extension(fpath, kmod_ext) && !has_extension(fpath, kmod_xz_ext)) {
-        return 0; 
+        return 0;
     }
 
-    // print warning if we fail to load the module, but don't fail fn so 
-    // we keep trying to load the rest of the modules. 
+    // print warning if we fail to load the module, but don't fail fn so
+    // we keep trying to load the rest of the modules.
     result = load_module(k_ctx, fpath);
     if (result != 0) {
         warn2("failed to load module", fpath);
@@ -512,27 +513,27 @@ int parse_tree_entry(const char *fpath, const struct stat *sb, int typeflag) {
     return 0;
 }
 
-// load_all_modules finds the modules in the image and loads them using kmod, 
-// which accounts for ordering requirements. 
+// load_all_modules finds the modules in the image and loads them using kmod,
+// which accounts for ordering requirements.
 void load_all_modules() {
     int max_path = 256;
     char modules_dir[max_path];
     struct utsname uname_data;
-    int ret; 
+    int ret;
 
-    // get information on the running kernel 
+    // get information on the running kernel
     ret = uname(&uname_data);
     if (ret != 0) {
         die("failed to get kernel information");
     }
-    
-    // create the absolute path of the modules directory this looks 
+
+    // create the absolute path of the modules directory this looks
     // like /lib/modules/<uname.release>
-    ret = snprintf(modules_dir, max_path, "%s/%s", lib_modules, uname_data.release); 
+    ret = snprintf(modules_dir, max_path, "%s/%s", lib_modules, uname_data.release);
     if (ret < 0) {
         die("failed to create the modules directory path");
     } else if (ret > max_path) {
-        die("modules directory buffer larger than expected"); 
+        die("modules directory buffer larger than expected");
     }
 
     if (k_ctx == NULL) {
@@ -543,14 +544,14 @@ void load_all_modules() {
     }
 
     kmod_load_resources(k_ctx);
-    ret = ftw(modules_dir, parse_tree_entry, OPEN_FDS); 
+    ret = ftw(modules_dir, parse_tree_entry, OPEN_FDS);
     if (ret != 0) {
-        // Don't fail on error from walking the file tree and loading modules right now. 
+        // Don't fail on error from walking the file tree and loading modules right now.
         // ftw may return an error if the modules directory doesn't exist, which
         // may be the case for some images. Additionally, we don't currently support
-        // using a denylist when loading modules, so we may try to load modules 
-        // that cannot be loaded until later, such as nvidia modules which fail to 
-        // load if no device is present. 
+        // using a denylist when loading modules, so we may try to load modules
+        // that cannot be loaded until later, such as nvidia modules which fail to
+        // load if no device is present.
         warn("error adding modules");
     }
 
@@ -607,39 +608,39 @@ int debug_main(int argc, char **argv) {
 }
 #endif
 
-// start_services is a helper function to start different services that are 
-// expected to be running in the guest on boot. These processes run as 
-// linux daemons. 
+// start_services is a helper function to start different services that are
+// expected to be running in the guest on boot. These processes run as
+// linux daemons.
 //
-// Future work: Support collecting logs for these services and handle 
+// Future work: Support collecting logs for these services and handle
 // log rotation as needed.
 void start_services() {
     // While execvpe will already search the path for the executable, it does
-    // so after forking. We can avoid that unnecessary fork by stating the 
-    // binary beforehand. 
+    // so after forking. We can avoid that unnecessary fork by stating the
+    // binary beforehand.
     char *persistenced_name = "/bin/nvidia-persistenced";
-    struct stat persistenced_stat; 
+    struct stat persistenced_stat;
     if (stat(persistenced_name, &persistenced_stat) == -1) {
         dmesgWarn("nvidia-persistenced not present, skipping ");
     } else {
         dmesgInfo("start nvidia-persistenced daemon");
         pid_t persistenced_pid = launch(1, &persistenced_name);
         if (persistenced_pid < 0) {
-            // do not return early if we fail to start this, since it's possible that 
+            // do not return early if we fail to start this, since it's possible that
             // this service doesn't exist on the system, which is a valid scenario
             dmesgWarn("failed to start nvidia-persistenced daemon");
         }
     }
 
     char *fm_name = "/bin/nv-fabricmanager";
-    struct stat fabric_stat; 
+    struct stat fabric_stat;
     if (stat(fm_name, &fabric_stat) == -1) {
         dmesgWarn("nv-fabricmanager not present, skipping ");
     } else {
         dmesgInfo("start nv-fabricmanager daemon");
         pid_t fm_pid = launch(1, &fm_name);
         if (fm_pid < 0) {
-            // do not return early if we fail to start this, since it's possible that 
+            // do not return early if we fail to start this, since it's possible that
             // this service doesn't exist on the system, which is a valid scenario
             dmesgWarn("failed to start nv-fabricmanager daemon");
         }
