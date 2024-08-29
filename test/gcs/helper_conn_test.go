@@ -27,8 +27,12 @@ const (
 // port numbers to assign to connections.
 var (
 	_pipes      sync.Map
-	_portNumber uint32 = 1
+	_portNumber atomic.Uint32
 )
+
+func init() {
+	_portNumber.Store(1) // start at port 1
+}
 
 type PipeTransport struct{}
 
@@ -250,9 +254,7 @@ func newConnectionSettings(in, out, err bool) stdio.ConnectionSettings {
 	return c
 }
 
-func nextPortNumber() uint32 {
-	return atomic.AddUint32(&_portNumber, 2)
-}
+func nextPortNumber() uint32 { return _portNumber.Add(2) }
 
 func TestFakeSocket(t *testing.T) {
 	ctx := context.Background()

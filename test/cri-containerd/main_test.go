@@ -57,11 +57,11 @@ const (
 	imageWindowsArgsEscaped = "cplatpublic.azurecr.io/argsescaped:latest"
 	imageWindowsTimezone    = "cplatpublic.azurecr.io/timezone:latest"
 
-	imageJobContainerHNS     = "cplatpublic.azurecr.io/jobcontainer_hns:latest"
-	imageJobContainerETW     = "cplatpublic.azurecr.io/jobcontainer_etw:latest"
-	imageJobContainerVHD     = "cplatpublic.azurecr.io/jobcontainer_vhd:latest"
-	imageJobContainerCmdline = "cplatpublic.azurecr.io/jobcontainer_cmdline:latest"
-	imageJobContainerWorkDir = "cplatpublic.azurecr.io/jobcontainer_workdir:latest"
+	imageJobContainerHNS     = "cplatpublic.azurecr.io/hpc_hns:latest"
+	imageJobContainerETW     = "cplatpublic.azurecr.io/hpc_etw:latest"
+	imageJobContainerVHD     = "cplatpublic.azurecr.io/hpc_vhd:latest"
+	imageJobContainerCmdline = "cplatpublic.azurecr.io/hpc_cmdline:latest"
+	imageJobContainerWorkDir = "cplatpublic.azurecr.io/hpc_workdir:latest"
 
 	gracefulTerminationServercore = "cplatpublic.azurecr.io/servercore-gracefultermination-repro:latest"
 	gracefulTerminationNanoserver = "cplatpublic.azurecr.io/nanoserver-gracefultermination-repro:latest"

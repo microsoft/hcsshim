@@ -2,14 +2,12 @@
 #include <sys/socket.h>
 
 struct sockaddr_vm {
-	unsigned short svm_family;
-	unsigned short svm_reserved1;
-	unsigned int svm_port;
-	unsigned int svm_cid;
-	unsigned char svm_zero[sizeof(struct sockaddr) -
-			       sizeof(sa_family_t) -
-			       sizeof(unsigned short) -
-			       sizeof(unsigned int) - sizeof(unsigned int)];
+    unsigned short svm_family;
+    unsigned short svm_reserved1;
+    unsigned int svm_port;
+    unsigned int svm_cid;
+    unsigned char svm_zero[sizeof(struct sockaddr) - sizeof(sa_family_t) - sizeof(unsigned short) -
+                           sizeof(unsigned int) - sizeof(unsigned int)];
 };
 
 int openvsock(unsigned int cid, unsigned int port) {
@@ -22,7 +20,7 @@ int openvsock(unsigned int cid, unsigned int port) {
     addr.svm_family = AF_VSOCK;
     addr.svm_port = port;
     addr.svm_cid = cid;
-    if (connect(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (connect(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         return -1;
     }
 

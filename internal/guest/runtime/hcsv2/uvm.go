@@ -308,9 +308,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		isSandbox:      criType == "sandbox",
 		exitType:       prot.NtUnexpectedExit,
 		processes:      make(map[uint32]*containerProcess),
-		status:         containerCreating,
 		scratchDirPath: settings.ScratchDirPath,
 	}
+	c.setStatus(containerCreating)
 
 	if err := h.AddContainer(id, c); err != nil {
 		return nil, err
@@ -824,6 +824,9 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 			}
 			properties.ProcessList = make([]prot.ProcessDetails, len(pids))
 			for i, pid := range pids {
+				if outOfUint32Bounds(pid) {
+					return nil, errors.Errorf("PID (%d) exceeds uint32 bounds", pid)
+				}
 				properties.ProcessList[i].ProcessID = uint32(pid)
 			}
 		} else if requestedProperty == prot.PtStatistics {

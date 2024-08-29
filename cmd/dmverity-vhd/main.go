@@ -488,9 +488,6 @@ var createVHDCommand = cli.Command{
 			sanitisedFileName := sanitiseVHDFilename(layerID)
 
 			suffixes := []string{".vhd"}
-			if verityHashDev {
-				suffixes = append(suffixes, ".hash-dev.vhd")
-			}
 
 			for _, srcSuffix := range suffixes {
 				src := filepath.Join(os.TempDir(), sanitisedFileName+srcSuffix)

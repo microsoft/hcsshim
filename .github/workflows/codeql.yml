@@ -8,13 +8,13 @@
 # Additionally, see example CodeQL pipeline (in CodeQL repo):
 # https://github.com/github/codeql/blob/0342b3eba242476cea815e601942021092d0bc10/.github/workflows/codeql-analysis.yml
 
-name: "Code Scanning - CodeQL"
+name: "CodeQL"
 
 on:
   push:
-    branches: [main]
+    branches: ["main", "release/*"]
   pull_request:
-    branches: [main]
+    branches: ["main", "release/*"]
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
@@ -27,18 +27,22 @@ on:
     # minute, hour, day of month, month, day of week
     - cron: "0 0 * * 0"
 
-# TODO: consolidate this with ci.yml so they both use the same Go version
-env:
-  GO_VERSION: "1.21.x"
-
-permissions:
-  contents: read
-  packages: read
-  security-events: write
-
 jobs:
-  CodeQL-Build:
+  analyze:
+    name: Analyze (${{ matrix.language }} - ${{ matrix.goos }})
     runs-on: ubuntu-latest
+
+    permissions:
+      # required for all workflows
+      security-events: write
+
+      # required to fetch internal or private CodeQL packs
+      packages: read
+
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
+
     strategy:
       fail-fast: false
       matrix:
@@ -60,12 +64,14 @@ jobs:
               internal/tools/extendedtask,
               internal/tools/grantvmgroupaccess,
               internal/tools/networkagent,
+              internal/tools/securitypolicy
               internal/tools/uvmboot,
               internal/tools/zapdir,
 
           - goos: linux
-            language: go, cpp
+            language: go, c-cpp
             targets: >-
+              cmd/dmverity-vhd,
               cmd/gcs,
               cmd/gcstools,
               cmd/hooks/wait-paths,
@@ -82,14 +88,15 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install go
-        uses: actions/setup-go@v5
+      - name: Install Go
+        uses: ./.github/actions/setup-go
         with:
-          go-version: ${{ env.GO_VERSION }}
+          fill-module-cache: true
 
       - name: CodeQL Initialize
         uses: github/codeql-action/init@v3
         with:
+          build-mode: manual
           languages: ${{matrix.language}}
 
       # build binaries
@@ -112,7 +119,44 @@ jobs:
         if: ${{ matrix.goos == 'linux' }}
         run: make bin/vsockexec bin/init
 
+      # only upload results if the analysis fails
+      # otherwise, save the output and use `advanced-security/filter-sarif` to filter paths
       - name: CodeQL Analyze
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
+          output: sarif-results
+          upload: failure-only
+
+      - name: Filter Go SARIF Results
+        uses: advanced-security/filter-sarif@v1
+        with:
+          patterns: |
+            +**/*.go
+            -**/*_test.go
+            -test/**/*.go
+            -vendor/**/*.go
+          input: sarif-results/go.sarif
+          output: sarif-results/go.sarif
+
+      - name: Filter C/C++ SARIF Results
+        uses: advanced-security/filter-sarif@v1
+        if: ${{ matrix.goos == 'linux' }}
+        with:
+          patterns: |
+            +**/*
+            -vendor/**/*
+          input: sarif-results/cpp.sarif
+          output: sarif-results/cpp.sarif
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif-results
+
+      - name: Upload SARIF Results as Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sarif-results-${{ matrix.goos }}
+          path: sarif-results
+          retention-days: 1

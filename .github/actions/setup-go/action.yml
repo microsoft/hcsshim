@@ -1,0 +1,51 @@
+name: Setup Go
+description: Wraps actions/setup-go with default values.
+
+branding:
+  icon: package
+  color: gray-dark
+
+inputs:
+  go-version:
+    description: The Go version to download.
+    default: oldstable
+  cache:
+    description: Enable caching Go modules and build outputs,
+    default: "true"
+  repo-path:
+    description: Location this repo is checked out to.
+    default: ${{ github.workspace }}
+  fill-module-cache:
+    description: Pre-fill the Go module cache.
+    default: "false"
+
+outputs:
+  go-version:
+    description: The installed Go version.
+    value: ${{ steps.setup-go.outputs.go-version }}
+  cache-hit:
+    description: A boolean value to indicate if there was a cache hit.
+    value: ${{ steps.setup-go.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Go
+      id: setup-go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        check-latest: true
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: |
+          ${{ inputs.repo-path }}/go.sum
+          ${{ inputs.repo-path }}/test/go.sum
+
+    - name: Pre-Fill Module Cache
+      if: ${{ fromJSON(inputs.fill-module-cache) }}
+      shell: pwsh # a shell value is required; pwsh is available on all GH runners
+      run: |
+        go mod download
+        cd test
+        go mod download
+      working-directory: ${{ inputs.repo-path }}

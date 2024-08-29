@@ -2,7 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include <linux/random.h>  // RNDADDENTROPY
+#include <linux/random.h> // RNDADDENTROPY
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <signal.h>
@@ -35,12 +35,9 @@ static const int tcpmode;
 // vsockexec opens vsock connections for the specified stdio descriptors and
 // then execs the specified process.
 
-
-static int opentcp(unsigned short port)
-{
+static int opentcp(unsigned short port) {
     int s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0)
-    {
+    if (s < 0) {
         return -1;
     }
 
@@ -48,8 +45,7 @@ static int opentcp(unsigned short port)
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (connect(s, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
+    if (connect(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         return -1;
     }
 
@@ -60,34 +56,38 @@ static int opentcp(unsigned short port)
 #define DEFAULT_PATH_ENV "PATH=/sbin:/usr/sbin:/bin:/usr/bin"
 #define OPEN_FDS 15
 
-const char *const default_envp[] = {
+const char* const default_envp[] = {
     DEFAULT_PATH_ENV,
     NULL,
 };
 
 #ifdef MODULES
-// global kmod k_ctx so we can access it in the file tree traversal 
-struct kmod_ctx *k_ctx;
+// global kmod k_ctx so we can access it in the file tree traversal
+struct kmod_ctx* k_ctx;
+
+// possible extensions for the kernel modules files
+const char* kmod_ext = ".ko";
+const char* kmod_xz_ext = ".ko.xz";
 #endif
 
 // When nothing is passed, default to the LCOWv1 behavior.
-const char *const default_argv[] = { "/bin/gcs", "-loglevel", "debug", "-logfile=/run/gcs/gcs.log" };
-const char *const default_shell = "/bin/sh";
-const char *const lib_modules = "/lib/modules";
+const char* const default_argv[] = {"/bin/gcs", "-loglevel", "debug", "-logfile=/run/gcs/gcs.log"};
+const char* const default_shell = "/bin/sh";
+const char* const lib_modules = "/lib/modules";
 
 struct Mount {
     const char *source, *target, *type;
     unsigned long flags;
-    const void *data;
+    const void* data;
 };
 
 struct Mkdir {
-    const char *path;
+    const char* path;
     mode_t mode;
 };
 
 struct Mknod {
-    const char *path;
+    const char* path;
     mode_t mode;
     int major, minor;
 };
@@ -115,36 +115,36 @@ struct InitOp {
 
 const struct InitOp ops[] = {
     // mount /proc (which should already exist)
-    { OpMount, .mount = { "proc", "/proc", "proc", MS_NODEV | MS_NOSUID | MS_NOEXEC } },
+    {OpMount, .mount = {"proc", "/proc", "proc", MS_NODEV | MS_NOSUID | MS_NOEXEC}},
 
     // add symlinks in /dev (which is already mounted)
-    { OpSymlink, .symlink = { "/dev/fd", "/proc/self/fd" } },
-    { OpSymlink, .symlink = { "/dev/stdin", "/proc/self/fd/0" } },
-    { OpSymlink, .symlink = { "/dev/stdout", "/proc/self/fd/1" } },
-    { OpSymlink, .symlink = { "/dev/stderr", "/proc/self/fd/2" } },
+    {OpSymlink, .symlink = {"/dev/fd", "/proc/self/fd"}},
+    {OpSymlink, .symlink = {"/dev/stdin", "/proc/self/fd/0"}},
+    {OpSymlink, .symlink = {"/dev/stdout", "/proc/self/fd/1"}},
+    {OpSymlink, .symlink = {"/dev/stderr", "/proc/self/fd/2"}},
 
     // mount tmpfs on /run and /tmp (which should already exist)
-    { OpMount, .mount = { "tmpfs", "/run", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "mode=0755" } },
-    { OpMount, .mount = { "tmpfs", "/tmp", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC } },
+    {OpMount, .mount = {"tmpfs", "/run", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "mode=0755"}},
+    {OpMount, .mount = {"tmpfs", "/tmp", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC}},
 
     // mount shm and devpts
-    { OpMkdir, .mkdir = { "/dev/shm", 0755 } },
-    { OpMount, .mount = { "shm", "/dev/shm", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC } },
-    { OpMkdir, .mkdir = { "/dev/pts", 0755 } },
-    { OpMount, .mount = { "devpts", "/dev/pts", "devpts", MS_NOSUID | MS_NOEXEC } },
+    {OpMkdir, .mkdir = {"/dev/shm", 0755}},
+    {OpMount, .mount = {"shm", "/dev/shm", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC}},
+    {OpMkdir, .mkdir = {"/dev/pts", 0755}},
+    {OpMount, .mount = {"devpts", "/dev/pts", "devpts", MS_NOSUID | MS_NOEXEC}},
 
     // mount /sys (which should already exist)
-    { OpMount, .mount = { "sysfs", "/sys", "sysfs", MS_NODEV | MS_NOSUID | MS_NOEXEC } },
-    { OpMount, .mount = { "cgroup_root", "/sys/fs/cgroup", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "mode=0755" } },
+    {OpMount, .mount = {"sysfs", "/sys", "sysfs", MS_NODEV | MS_NOSUID | MS_NOEXEC}},
+    {OpMount, .mount = {"cgroup_root", "/sys/fs/cgroup", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "mode=0755"}},
 };
 
-void warn(const char *msg) {
+void warn(const char* msg) {
     int error = errno;
     perror(msg);
     errno = error;
 }
 
-void warn2(const char *msg1, const char *msg2) {
+void warn2(const char* msg1, const char* msg2) {
     int error = errno;
     fputs(msg1, stderr);
     fputs(": ", stderr);
@@ -153,18 +153,18 @@ void warn2(const char *msg1, const char *msg2) {
 }
 
 _Noreturn void dien() {
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("dien errno = %d", errno);
-    #endif
+#endif
     exit(errno);
 }
 
-_Noreturn void die(const char *msg) {
+_Noreturn void die(const char* msg) {
     warn(msg);
     dien();
 }
 
-_Noreturn void die2(const char *msg1, const char *msg2) {
+_Noreturn void die2(const char* msg1, const char* msg2) {
     warn2(msg1, msg2);
     dien();
 }
@@ -187,9 +187,9 @@ void init_rlimit() {
 
 void init_dev() {
     if (mount("dev", "/dev", "devtmpfs", MS_NOSUID | MS_NOEXEC, NULL) < 0) {
-        #ifdef DEBUG
+#ifdef DEBUG
         printf("mount - errno %d\n", errno);
-        #endif
+#endif
         warn2("mount", "/dev");
         // /dev will be already mounted if devtmpfs.mount = 1 on the kernel
         // command line or CONFIG_DEVTMPFS_MOUNT is set. Do not consider this
@@ -200,24 +200,25 @@ void init_dev() {
     }
 }
 
-void init_fs(const struct InitOp *ops, size_t count) {
+void init_fs(const struct InitOp* ops, size_t count) {
     for (size_t i = 0; i < count; i++) {
         switch (ops[i].op) {
         case OpMount: {
-            const struct Mount *m = &ops[i].mount;
-            #ifdef DEBUG
-            printf("OpMount src %s target %s type %s flags %lu data %p\n", m->source, m->target, m->type, m->flags, m->data);
-            #endif
+            const struct Mount* m = &ops[i].mount;
+#ifdef DEBUG
+            printf("OpMount src %s target %s type %s flags %lu data %p\n", m->source, m->target, m->type, m->flags,
+                   m->data);
+#endif
             if (mount(m->source, m->target, m->type, m->flags, m->data) < 0) {
                 die2("mount", m->target);
             }
             break;
         }
         case OpMkdir: {
-            const struct Mkdir *m = &ops[i].mkdir;
-            #ifdef DEBUG
+            const struct Mkdir* m = &ops[i].mkdir;
+#ifdef DEBUG
             printf("OpMkdir path %s mode %d\n", m->path, m->mode);
-            #endif
+#endif
             if (mkdir(m->path, m->mode) < 0) {
                 warn2("mkdir", m->path);
                 if (errno != EEXIST) {
@@ -227,10 +228,10 @@ void init_fs(const struct InitOp *ops, size_t count) {
             break;
         }
         case OpMknod: {
-            const struct Mknod *n = &ops[i].mknod;
-            #ifdef DEBUG
+            const struct Mknod* n = &ops[i].mknod;
+#ifdef DEBUG
             printf("OpMknod path %s mode %d major %d minor %d\n", n->path, n->mode, n->major, n->minor);
-            #endif
+#endif
             if (mknod(n->path, n->mode, makedev(n->major, n->minor)) < 0) {
                 warn2("mknod", n->path);
                 if (errno != EEXIST) {
@@ -240,10 +241,10 @@ void init_fs(const struct InitOp *ops, size_t count) {
             break;
         }
         case OpSymlink: {
-            const struct Symlink *sl = &ops[i].symlink;
-            #ifdef DEBUG
+            const struct Symlink* sl = &ops[i].symlink;
+#ifdef DEBUG
             printf("OpSymlink targeg %s link %s\n", sl->target, sl->linkpath);
-            #endif
+#endif
             if (symlink(sl->target, sl->linkpath) < 0) {
                 warn2("symlink", sl->linkpath);
                 if (errno != EEXIST) {
@@ -257,8 +258,8 @@ void init_fs(const struct InitOp *ops, size_t count) {
 }
 
 void init_cgroups() {
-    const char *fpath = "/proc/cgroups";
-    FILE *f = fopen(fpath, "r");
+    const char* fpath = "/proc/cgroups";
+    FILE* f = fopen(fpath, "r");
     if (f == NULL) {
         die2("fopen", fpath);
     }
@@ -279,7 +280,7 @@ void init_cgroups() {
             break;
         }
         if (r != 4) {
-            errno = errno ? : EINVAL;
+            errno = errno ?: EINVAL;
             die2("fscanf", fpath);
         }
         if (enabled) {
@@ -295,7 +296,7 @@ void init_cgroups() {
     fclose(f);
 }
 
-void init_network(const char *iface, int domain) {
+void init_network(const char* iface, int domain) {
     int s = socket(domain, SOCK_DGRAM, IPPROTO_IP);
     if (s < 0) {
         if (errno == EAFNOSUPPORT) {
@@ -347,7 +348,7 @@ void init_entropy(int port) {
         }
 
         buf.entropy_count = n * 8; // in bits
-        buf.buf_size = n; // in bytes
+        buf.buf_size = n;          // in bytes
         if (ioctl(e, RNDADDENTROPY, &buf) < 0) {
             die("ioctl(RNDADDENTROPY)");
         }
@@ -357,7 +358,38 @@ void init_entropy(int port) {
     close(e);
 }
 
-pid_t launch(int argc, char **argv) {
+// dmesg is a helper function for printing to dmesg. We cannot assume that the
+// image has syslogd or similar running for now, so we cannot just use syslog(3).
+//
+// /dev/kmsg exports the structured data in the following line format:
+// "<level>,<sequnum>,<timestamp>,<contflag>[,additional_values, ... ];<message text>\n"
+void dmesg(const unsigned int level, const char* msg) {
+    int fd_kmsg = open("/dev/kmsg", O_WRONLY);
+    if (fd_kmsg == -1) {
+        // failed to open the kmsg device
+        warn("error opening /dev/kmsg");
+        return;
+    }
+    FILE* f_kmsg = fdopen(fd_kmsg, "w");
+    if (f_kmsg == NULL) {
+        warn("error getting /dev/kmsg file");
+        close(fd_kmsg);
+        return;
+    }
+    fprintf(f_kmsg, "<%u>%s", level, msg);
+    fflush(f_kmsg);
+    int close_ret = fclose(f_kmsg); // closes the underlying fd_kmsg as well
+    if (close_ret != 0) {
+        warn("error closing /dev/kmsg");
+    }
+}
+
+// see https://man7.org/linux/man-pages/man2/syslog.2.html for definitions of levels
+void dmesgErr(const char* msg) { dmesg(3, msg); }
+void dmesgWarn(const char* msg) { dmesg(4, msg); }
+void dmesgInfo(const char* msg) { dmesg(6, msg); }
+
+pid_t launch(int argc, char** argv) {
     int pid = fork();
     if (pid != 0) {
         if (pid < 0) {
@@ -377,12 +409,13 @@ pid_t launch(int argc, char **argv) {
     setpgid(0, 0);
 
     // Terminate the arguments and exec.
-    char **argvn = alloca(sizeof(argv[0]) * (argc + 1));
+    char** argvn = alloca(sizeof(argv[0]) * (argc + 1));
     memcpy(argvn, argv, sizeof(argv[0]) * argc);
     argvn[argc] = NULL;
     if (putenv(DEFAULT_PATH_ENV)) { // Specify the PATH used for execvpe
         die("putenv");
     }
+    // CodeQL [SM01925] designed to initialize Linux guest and then exec the command-line arguments (either ./vsockexec or ./cmd/gcs)
     execvpe(argvn[0], argvn, (char**)default_envp);
     die2("execvpe", argvn[0]);
 }
@@ -412,83 +445,91 @@ int reap_until(pid_t until_pid) {
 }
 
 #ifdef MODULES
-// load_module gets the module from the absolute path to the module and then 
-// inserts into the kernel. 
-int load_module(struct kmod_ctx *ctx, const char *module_path) {
-    struct kmod_module *mod = NULL; 
+// load_module gets the module from the absolute path to the module and then
+// inserts into the kernel.
+int load_module(struct kmod_ctx* ctx, const char* module_path) {
+    struct kmod_module* mod = NULL;
     int err;
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("loading module: %s\n", module_path);
-    #endif
+#endif
 
     err = kmod_module_new_from_path(ctx, module_path, &mod);
     if (err < 0) {
-        return err; 
-    }
-
-    err = kmod_module_probe_insert_module(mod, 0, NULL, NULL, NULL, NULL); 
-    if (err < 0) {
-        kmod_module_unref(mod); 
         return err;
     }
 
-    kmod_module_unref(mod); 
+    err = kmod_module_probe_insert_module(mod, 0, NULL, NULL, NULL, NULL);
+    if (err < 0) {
+        kmod_module_unref(mod);
+        return err;
+    }
+
+    kmod_module_unref(mod);
     return 0;
+}
+
+// has_extension is a helper function for checking if string `fpath` has extension `ext`
+bool has_extension(const char* fpath, const char* ext) {
+    size_t fpath_length = strlen(fpath);
+    size_t ext_length = strlen(ext);
+
+    if (fpath_length < ext_length) {
+        return false;
+    }
+
+    return (strncmp(fpath + (fpath_length - ext_length), ext, ext_length) == 0);
 }
 
 // parse_tree_entry is called by ftw for each directory and file in the file tree.
 // If this entry is a file and has a .ko file extension, attempt to load into kernel.
-int parse_tree_entry(const char *fpath, const struct stat *sb, int typeflag) {
+int parse_tree_entry(const char* fpath, const struct stat* sb, int typeflag) {
     int result;
-    const char *ext; 
 
     if (typeflag != FTW_F) {
-        // do nothing if this isn't a file 
-        return 0; 
-    }
-        
-    ext = strrchr(fpath, '.');
-    if (!ext || ext == fpath) {
-        // no file extension found in the filepath
-        return 0; 
+        // do nothing if this isn't a file
+        return 0;
     }
 
-    if ((result = strcmp(ext, ".ko")) != 0) {
-        // file does not have .ko extension so it is not a kernel module
-        return 0; 
+    // Kernel module files either end with a .ko extension or a .ko.xz extension.
+    // Files ending in .ko.xz are compressed kernel modules while .ko files are
+    // uncompressed kernel modules.
+    if (!has_extension(fpath, kmod_ext) && !has_extension(fpath, kmod_xz_ext)) {
+        return 0;
     }
 
-    // print warning if we fail to load the module, but don't fail fn so 
-    // we keep trying to load the rest of the modules. 
+    // print warning if we fail to load the module, but don't fail fn so
+    // we keep trying to load the rest of the modules.
     result = load_module(k_ctx, fpath);
     if (result != 0) {
         warn2("failed to load module", fpath);
     }
+    dmesgInfo(fpath);
     return 0;
 }
 
-// load_all_modules finds the modules in the image and loads them using kmod, 
-// which accounts for ordering requirements. 
+// load_all_modules finds the modules in the image and loads them using kmod,
+// which accounts for ordering requirements.
 void load_all_modules() {
     int max_path = 256;
     char modules_dir[max_path];
     struct utsname uname_data;
-    int ret; 
+    int ret;
 
-    // get information on the running kernel 
+    // get information on the running kernel
     ret = uname(&uname_data);
     if (ret != 0) {
         die("failed to get kernel information");
     }
-    
-    // create the absolute path of the modules directory this looks 
+
+    // create the absolute path of the modules directory this looks
     // like /lib/modules/<uname.release>
-    ret = snprintf(modules_dir, max_path, "%s/%s", lib_modules, uname_data.release); 
+    ret = snprintf(modules_dir, max_path, "%s/%s", lib_modules, uname_data.release);
     if (ret < 0) {
         die("failed to create the modules directory path");
     } else if (ret > max_path) {
-        die("modules directory buffer larger than expected"); 
+        die("modules directory buffer larger than expected");
     }
 
     if (k_ctx == NULL) {
@@ -499,17 +540,14 @@ void load_all_modules() {
     }
 
     kmod_load_resources(k_ctx);
-    ret = ftw(modules_dir, parse_tree_entry, OPEN_FDS); 
-    if (ret < 0) {
-        kmod_unref(k_ctx);
-        die("failed to load kmod resources");
-    } else if (ret != 0) {
-        // Don't fail on error from walking the file tree and loading modules right now. 
+    ret = ftw(modules_dir, parse_tree_entry, OPEN_FDS);
+    if (ret != 0) {
+        // Don't fail on error from walking the file tree and loading modules right now.
         // ftw may return an error if the modules directory doesn't exist, which
         // may be the case for some images. Additionally, we don't currently support
-        // using a denylist when loading modules, so we may try to load modules 
-        // that cannot be loaded until later, such as nvidia modules which fail to 
-        // load if no device is present. 
+        // using a denylist when loading modules, so we may try to load modules
+        // that cannot be loaded until later, such as nvidia modules which fail to
+        // load if no device is present.
         warn("error adding modules");
     }
 
@@ -518,22 +556,17 @@ void load_all_modules() {
 #endif
 
 #ifdef DEBUG
-int debug_main(int argc, char **argv) {
+int debug_main(int argc, char** argv) {
     unsigned int ports[3] = {2056, 2056, 2056};
     int sockets[3] = {-1, -1, -1};
 
-    for (int i = 0; i < 3; i++)
-    {
-        if (ports[i] != 0)
-        {
+    for (int i = 0; i < 3; i++) {
+        if (ports[i] != 0) {
             int j;
-            for (j = 0; j < i; j++)
-            {
-                if (ports[i] == ports[j])
-                {
+            for (j = 0; j < i; j++) {
+                if (ports[i] == ports[j]) {
                     int s = dup(sockets[j]);
-                    if (s < 0)
-                    {
+                    if (s < 0) {
                         perror("dup");
                         return 1;
                     }
@@ -542,11 +575,9 @@ int debug_main(int argc, char **argv) {
                 }
             }
 
-            if (j == i)
-            {
+            if (j == i) {
                 int s = tcpmode ? opentcp(ports[i]) : openvsock(VMADDR_CID_HOST, ports[i]);
-                if (s < 0)
-                {
+                if (s < 0) {
                     fprintf(stderr, "connect: port %u: %s", ports[i], strerror(errno));
                     return 1;
                 }
@@ -555,10 +586,8 @@ int debug_main(int argc, char **argv) {
         }
     }
 
-    for (int i = 0; i < 3; i++)
-    {
-        if (sockets[i] >= 0)
-        {
+    for (int i = 0; i < 3; i++) {
+        if (sockets[i] >= 0) {
             dup2(sockets[i], i);
             close(sockets[i]);
         }
@@ -566,20 +595,59 @@ int debug_main(int argc, char **argv) {
 }
 #endif
 
-int main(int argc, char **argv) {
-    #ifdef DEBUG
+// start_services is a helper function to start different services that are
+// expected to be running in the guest on boot. These processes run as
+// linux daemons.
+//
+// Future work: Support collecting logs for these services and handle
+// log rotation as needed.
+void start_services() {
+    // While execvpe will already search the path for the executable, it does
+    // so after forking. We can avoid that unnecessary fork by stating the
+    // binary beforehand.
+    char* persistenced_name = "/bin/nvidia-persistenced";
+    struct stat persistenced_stat;
+    if (stat(persistenced_name, &persistenced_stat) == -1) {
+        dmesgWarn("nvidia-persistenced not present, skipping ");
+    } else {
+        dmesgInfo("start nvidia-persistenced daemon");
+        pid_t persistenced_pid = launch(1, &persistenced_name);
+        if (persistenced_pid < 0) {
+            // do not return early if we fail to start this, since it's possible that
+            // this service doesn't exist on the system, which is a valid scenario
+            dmesgWarn("failed to start nvidia-persistenced daemon");
+        }
+    }
+
+    char* fm_name = "/bin/nv-fabricmanager";
+    struct stat fabric_stat;
+    if (stat(fm_name, &fabric_stat) == -1) {
+        dmesgWarn("nv-fabricmanager not present, skipping ");
+    } else {
+        dmesgInfo("start nv-fabricmanager daemon");
+        pid_t fm_pid = launch(1, &fm_name);
+        if (fm_pid < 0) {
+            // do not return early if we fail to start this, since it's possible that
+            // this service doesn't exist on the system, which is a valid scenario
+            dmesgWarn("failed to start nv-fabricmanager daemon");
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+#ifdef DEBUG
     debug_main(argc, argv);
     printf("Running init\n");
-    #endif
-    char *debug_shell = NULL;
+#endif
+    char* debug_shell = NULL;
     int entropy_port = 0;
     if (argc <= 1) {
-        argv = (char **)default_argv;
+        argv = (char**)default_argv;
         argc = sizeof(default_argv) / sizeof(default_argv[0]);
         optind = 0;
         debug_shell = (char*)default_shell;
     } else {
-        for (int opt; (opt = getopt(argc, argv, "+d:e:")) >= 0; ) {
+        for (int opt; (opt = getopt(argc, argv, "+d:e:")) >= 0;) {
             switch (opt) {
             case 'd':
                 debug_shell = optarg;
@@ -587,9 +655,9 @@ int main(int argc, char **argv) {
 
             case 'e':
                 entropy_port = atoi(optarg);
-                #ifdef DEBUG
+#ifdef DEBUG
                 printf("entropy port %d\n", entropy_port);
-                #endif
+#endif
                 if (entropy_port == 0) {
                     fputs("invalid entropy port\n", stderr);
                     exit(1);
@@ -603,61 +671,67 @@ int main(int argc, char **argv) {
         }
     }
 
-    char **child_argv = argv + optind;
+    char** child_argv = argv + optind;
     int child_argc = argc - optind;
 
     // Block all signals in init. SIGCHLD will still cause wait() to return.
     sigset_t set;
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("sigfillset(&set)\n");
-    #endif
+#endif
     sigfillset(&set);
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("sigfillset\n");
-    #endif
+#endif
     sigprocmask(SIG_BLOCK, &set, 0);
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("init_rlimit\n");
-    #endif
+#endif
     init_rlimit();
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("init_dev\n");
-    #endif
+#endif
     init_dev();
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("init_fs\n");
-    #endif
+#endif
     init_fs(ops, sizeof(ops) / sizeof(ops[0]));
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("init_cgroups\n");
-    #endif
+#endif
     init_cgroups();
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("init_network\n");
-    #endif
+#endif
     init_network("lo", AF_INET);
     init_network("lo", AF_INET6);
     if (entropy_port != 0) {
         init_entropy(entropy_port);
     }
 
-    #ifdef MODULES
-    #ifdef DEBUG
+#ifdef MODULES
+#ifdef DEBUG
     printf("loading modules\n");
-    #endif
+#endif
     load_all_modules();
-    #endif
+#endif
+
+    start_services();
 
     pid_t pid = launch(child_argc, child_argv);
     if (debug_shell != NULL) {
         // The debug shell takes over as the primary child.
         pid = launch(1, &debug_shell);
+    }
+
+    if (pid < 0) {
+        die("failed launching process");
     }
 
     // Reap until the initial child process dies.
