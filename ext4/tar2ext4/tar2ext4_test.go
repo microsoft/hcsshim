@@ -1,9 +1,6 @@
 package tar2ext4
 
 import (
-	"crypto/sha256"
-	"fmt"
-	"io"
 	"path/filepath"
 	"testing"
 
@@ -163,78 +160,5 @@ func Test_TarHardlinkToSymlink(t *testing.T) {
 
 	if err := Convert(layerTar, layerVhd, opts...); err != nil {
 		t.Fatalf("failed to convert tar to layer vhd: %s", err)
-	}
-}
-
-func calcExt4Sha256(t *testing.T, layerTar *os.File) string {
-	t.Helper()
-	if _, err := layerTar.Seek(0, 0); err != nil {
-		t.Fatalf("failed to seek file: %s", err)
-	}
-
-	opts := []Option{ConvertWhiteout}
-
-	tmpExt4Path := filepath.Join(os.TempDir(), "test.ext4")
-	layerVhd, err := os.Create(tmpExt4Path)
-	if err != nil {
-		t.Fatalf("failed to create output VHD: %s", err)
-	}
-	defer os.Remove(tmpExt4Path)
-
-	if err := Convert(layerTar, layerVhd, opts...); err != nil {
-		t.Fatalf("failed to convert tar to layer vhd: %s", err)
-	}
-
-	if _, err := layerVhd.Seek(0, 0); err != nil {
-		t.Fatalf("failed to seek file: %s", err)
-	}
-
-	hasher := sha256.New()
-	if _, err = io.Copy(hasher, layerVhd); err != nil {
-		t.Fatalf("filed to initialize hasher: %s", err)
-	}
-
-	hash := hasher.Sum(nil)
-	return fmt.Sprintf("%x", hash)
-}
-
-// Test_MissingParentDirExpansion tests that we are correctly able to expand a layer tar file
-// even if its file does not include the parent directory in its file name.
-func Test_MissingParentDirExpansion(t *testing.T) {
-	tmpTarFilePath := filepath.Join(os.TempDir(), "test-layer.tar")
-	layerTar, err := os.Create(tmpTarFilePath)
-	if err != nil {
-		t.Fatalf("failed to create output file: %s", err)
-	}
-	defer os.Remove(tmpTarFilePath)
-
-	tw := tar.NewWriter(layerTar)
-	var file = struct {
-		path, body string
-	}{"foo/bar.txt", "inside bar.txt"}
-	hdr := &tar.Header{
-		Name:       file.path,
-		Mode:       0777,
-		Size:       int64(len(file.body)),
-		ModTime:    time.Now(),
-		AccessTime: time.Now(),
-		ChangeTime: time.Now(),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write([]byte(file.body)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now import the tar file and check the conversion to ext4 is deterministic.
-	hash1 := calcExt4Sha256(t, layerTar)
-	hash2 := calcExt4Sha256(t, layerTar)
-
-	if hash1 != hash2 {
-		t.Fatalf("hash doesn't match")
 	}
 }

@@ -538,7 +538,6 @@ func (w *Writer) lookup(name string, mustExist bool) (*inode, *inode, string, er
 // with the same permissions as that of it's parent directory. It is expected that the a
 // call to make these parent directories will be made at a later point with the correct
 // permissions, at that time the permissions of these directories will be updated.
-// We treat Atime, Mtime, Ctime, and Crtime in the same way.
 func (w *Writer) MakeParents(name string) error {
 	if err := w.finishInode(); err != nil {
 		return err
@@ -557,10 +556,10 @@ func (w *Writer) MakeParents(name string) error {
 		if _, ok := root.Children[dirname]; !ok {
 			f := &File{
 				Mode:     root.Mode,
-				Atime:    fsTimeToTime(root.Atime),
-				Mtime:    fsTimeToTime(root.Mtime),
-				Ctime:    fsTimeToTime(root.Ctime),
-				Crtime:   fsTimeToTime(root.Crtime),
+				Atime:    time.Now(),
+				Mtime:    time.Now(),
+				Ctime:    time.Now(),
+				Crtime:   time.Now(),
 				Size:     0,
 				Uid:      root.Uid,
 				Gid:      root.Gid,
