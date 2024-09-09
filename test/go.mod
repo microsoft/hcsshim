@@ -33,7 +33,7 @@ require (
 require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20231105174938-2b5cbb29f3e2 // indirect
-	github.com/Microsoft/cosesign1go v1.1.0 // indirect
+	github.com/Microsoft/cosesign1go v0.0.1 // indirect
 	github.com/Microsoft/didx509go v0.0.3 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.1.1 // indirect
@@ -99,7 +99,7 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/vbatts/tar-split v0.11.5 // indirect
-	github.com/veraison/go-cose v1.2.0 // indirect
+	github.com/veraison/go-cose v1.1.0 // indirect
 	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect

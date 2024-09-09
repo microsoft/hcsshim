@@ -3,7 +3,7 @@ module github.com/Microsoft/hcsshim
 go 1.21
 
 require (
-	github.com/Microsoft/cosesign1go v1.1.0
+	github.com/Microsoft/cosesign1go v0.0.1
 	github.com/Microsoft/didx509go v0.0.3
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/blang/semver/v4 v4.0.0

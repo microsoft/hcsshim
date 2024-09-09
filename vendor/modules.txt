@@ -467,7 +467,7 @@ github.com/urfave/cli
 # github.com/vbatts/tar-split v0.11.3
 ## explicit; go 1.15
 github.com/vbatts/tar-split/archive/tar
-# github.com/veraison/go-cose v1.2.0
+# github.com/veraison/go-cose v1.1.0
 ## explicit; go 1.18
 github.com/veraison/go-cose
 # github.com/vishvananda/netlink v1.2.1-beta.2

@@ -4,8 +4,8 @@ github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161/go.mod h1:xomTg6
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/toml v1.2.1/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
 github.com/BurntSushi/toml v1.3.2/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
-github.com/Microsoft/cosesign1go v1.1.0 h1:JnHY2wQkIK4HmstaK5rMdM4S83nIC7fJmD1phOLj9qo=
-github.com/Microsoft/cosesign1go v1.1.0/go.mod h1:o+sw7nhlGE6twhfjXQDWmBJO8zmfQXEmCcXEi3zha8I=
+github.com/Microsoft/cosesign1go v0.0.1 h1:Iqc4BHfK4z/kgyW3VFr1eWBMDfqwQ5lAiUfbdLn1M00=
+github.com/Microsoft/cosesign1go v0.0.1/go.mod h1:fj1svfAxQeQNJ2SLaQu8mHx2rtPIsloZl065GqLF3io=
 github.com/Microsoft/didx509go v0.0.3 h1:n/owuFOXVzCEzSyzivMEolKEouBm9G0NrEDgoTekM8A=
 github.com/Microsoft/didx509go v0.0.3/go.mod h1:wWt+iQsLzn3011+VfESzznLIp/Owhuj7rLF7yLglYbk=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
@@ -268,8 +268,6 @@ github.com/vbatts/tar-split v0.11.3 h1:hLFqsOLQ1SsppQNTMpkpPXClLDfC2A3Zgy9OUU+RV
 github.com/vbatts/tar-split v0.11.3/go.mod h1:9QlHN18E+fEH7RdG+QAJJcuya3rqT7eXSTY7wGrAokY=
 github.com/veraison/go-cose v1.1.0 h1:AalPS4VGiKavpAzIlBjrn7bhqXiXi4jbMYY/2+UC+4o=
 github.com/veraison/go-cose v1.1.0/go.mod h1:7ziE85vSq4ScFTg6wyoMXjucIGOf4JkFEZi/an96Ct4=
-github.com/veraison/go-cose v1.2.0 h1:Ok0Hr3GMAf8K/1NB4sV65QGgCiukG1w1QD+H5tmt0Ow=
-github.com/veraison/go-cose v1.2.0/go.mod h1:7ziE85vSq4ScFTg6wyoMXjucIGOf4JkFEZi/an96Ct4=
 github.com/vishvananda/netlink v1.2.1-beta.2 h1:Llsql0lnQEbHj0I1OuKyp8otXp0r3q0mPkuhwHfStVs=
 github.com/vishvananda/netlink v1.2.1-beta.2/go.mod h1:twkDnbuQxJYemMlGd4JFIcuhgX83tXhKS2B/PRMpOho=
 github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae/go.mod h1:DD4vA1DwXk04H54A1oHXtwZmA0grkVMdPxx/VGLCah0=
