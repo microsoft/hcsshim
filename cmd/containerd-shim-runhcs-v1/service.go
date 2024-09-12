@@ -12,7 +12,7 @@ import (
 	"time"
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/errdefs"
+	"github.com/containerd/errdefs/errgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -120,7 +120,7 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task
 	}
 
 	r, e := s.stateInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp *task.CreateTaskResponse, err error) {
@@ -150,7 +150,7 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp
 	}
 
 	r, e := s.createInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task.StartResponse, err error) {
@@ -172,7 +172,7 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task
 	}
 
 	r, e := s.startInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *task.DeleteResponse, err error) {
@@ -197,7 +197,7 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 	}
 
 	r, e := s.deleteInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.PidsResponse, err error) {
@@ -212,7 +212,7 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 	}
 
 	r, e := s.pidsInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *emptypb.Empty, err error) {
@@ -227,7 +227,7 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *emptypb
 	}
 
 	r, e := s.pauseInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *emptypb.Empty, err error) {
@@ -242,7 +242,7 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *empty
 	}
 
 	r, e := s.resumeInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *emptypb.Empty, err error) {
@@ -259,7 +259,7 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 	}
 
 	r, e := s.checkpointInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *emptypb.Empty, err error) {
@@ -278,7 +278,7 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *emptypb.E
 	}
 
 	r, e := s.killInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *emptypb.Empty, err error) {
@@ -299,7 +299,7 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *em
 	}
 
 	r, e := s.execInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (_ *shimdiag.ExecProcessResponse, err error) {
@@ -320,7 +320,7 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 	}
 
 	r, e := s.diagExecInHostInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ *shimdiag.ShareResponse, err error) {
@@ -338,7 +338,7 @@ func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ 
 	}
 
 	r, e := s.diagShareInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) DiagTasks(ctx context.Context, req *shimdiag.TasksRequest) (_ *shimdiag.TasksResponse, err error) {
@@ -354,7 +354,7 @@ func (s *service) DiagTasks(ctx context.Context, req *shimdiag.TasksRequest) (_ 
 	}
 
 	r, e := s.diagTasksInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *emptypb.Empty, err error) {
@@ -373,7 +373,7 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 	}
 
 	r, e := s.resizePtyInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *emptypb.Empty, err error) {
@@ -391,7 +391,7 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *emp
 	}
 
 	r, e := s.closeIOInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *emptypb.Empty, err error) {
@@ -406,7 +406,7 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *e
 	}
 
 	r, e := s.updateInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.WaitResponse, err error) {
@@ -430,7 +430,7 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 	}
 
 	r, e := s.waitInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
@@ -445,7 +445,7 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 	}
 
 	r, e := s.statsInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
@@ -468,7 +468,7 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *
 	}
 
 	r, e := s.connectInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *emptypb.Empty, err error) {
@@ -483,7 +483,7 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *e
 	}
 
 	r, e := s.shutdownInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (*shimdiag.StacksResponse, error) {
@@ -539,7 +539,7 @@ func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.Co
 	span.AddAttributes(trace.StringAttribute("tid", s.tid))
 
 	r, e := s.computeProcessorInfoInternal(ctx, req)
-	return r, errdefs.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 func (s *service) Done() <-chan struct{} {
