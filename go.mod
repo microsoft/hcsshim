@@ -6,6 +6,7 @@ require (
 	github.com/Microsoft/cosesign1go v1.2.0
 	github.com/Microsoft/didx509go v0.0.3
 	github.com/Microsoft/go-winio v0.6.2
+	github.com/Microsoft/hcsshim/hcs v0.0.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/containerd/cgroups/v3 v3.0.3
@@ -120,3 +121,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/Microsoft/hcsshim/hcs => ./hcs

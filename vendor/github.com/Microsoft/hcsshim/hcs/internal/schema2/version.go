@@ -9,12 +9,8 @@
 
 package hcsschema
 
-import (
-	hcstypes "github.com/Microsoft/hcsshim/hcs"
-)
+type Version struct {
+	Major int32 `json:"Major,omitempty"`
 
-type HostedSystem struct {
-	SchemaVersion *hcstypes.Version `json:"SchemaVersion,omitempty"`
-
-	Container *Container `json:"Container,omitempty"`
+	Minor int32 `json:"Minor,omitempty"`
 }

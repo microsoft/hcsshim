@@ -4,6 +4,7 @@
 package computestorage
 
 import (
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
@@ -22,7 +23,7 @@ import (
 //sys hcsAttachOverlayFilter(volumePath string, layerData string) (hr error) = computestorage.HcsAttachOverlayFilter?
 //sys hcsDetachOverlayFilter(volumePath string, layerData string) (hr error) = computestorage.HcsDetachOverlayFilter?
 
-type Version = hcsschema.Version
+type Version = hcstypes.Version
 type Layer = hcsschema.Layer
 
 // LayerData is the data used to describe parent layer information.

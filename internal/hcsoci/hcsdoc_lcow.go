@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -77,7 +77,7 @@ func setWindowsDevices(coi *createOptionsInternal, spec *specs.Spec) {
 }
 
 type linuxHostedSystem struct {
-	SchemaVersion    *hcsschema.Version
+	SchemaVersion    *hcstypes.Version
 	OciBundlePath    string
 	OciSpecification *specs.Spec
 

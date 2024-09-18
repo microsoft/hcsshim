@@ -9,11 +9,15 @@
 
 package hcsschema
 
-//  Information about the guest.
+import (
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
+)
+
+// Information about the guest.
 type GuestConnectionInfo struct {
 
 	//  Each schema version x.y stands for the range of versions a.b where a==x  and b<=y. This list comes from the SupportedSchemaVersions field in  GcsCapabilities.
-	SupportedSchemaVersions []Version `json:"SupportedSchemaVersions,omitempty"`
+	SupportedSchemaVersions []hcstypes.Version `json:"SupportedSchemaVersions,omitempty"`
 
 	ProtocolVersion int32 `json:"ProtocolVersion,omitempty"`
 

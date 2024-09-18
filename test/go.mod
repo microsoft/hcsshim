@@ -1,10 +1,13 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.21
+go 1.21.0
+
+toolchain go1.21.5
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/Microsoft/hcsshim v0.12.2
+	github.com/Microsoft/hcsshim/hcs v0.0.0
 	github.com/containerd/cgroups/v3 v3.0.3
 	github.com/containerd/containerd v1.7.21
 	github.com/containerd/containerd/api v1.7.19
@@ -126,4 +129,7 @@ require (
 	tags.cncf.io/container-device-interface/specs-go v0.7.0 // indirect
 )
 
-replace github.com/Microsoft/hcsshim => ../
+replace (
+	github.com/Microsoft/hcsshim => ../
+	github.com/Microsoft/hcsshim/hcs => ../hcs
+)

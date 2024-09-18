@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
-	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 )
 
 // GuestDefinedCapabilities is an interface for different guest defined capabilities.
@@ -82,7 +82,7 @@ func (l *LCOWGuestDefinedCapabilities) IsDeleteContainerStateSupported() bool {
 var _ GuestDefinedCapabilities = &WCOWGuestDefinedCapabilities{}
 
 type WCOWGuestDefinedCapabilities struct {
-	schema1.GuestDefinedCapabilities
+	hcstypes.GuestDefinedCapabilities
 }
 
 func (w *WCOWGuestDefinedCapabilities) IsNamespaceAddRequestSupported() bool {

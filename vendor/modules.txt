@@ -21,6 +21,11 @@ github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
 github.com/Microsoft/go-winio/tools/mkwinsyscall
 github.com/Microsoft/go-winio/vhd
+# github.com/Microsoft/hcsshim/hcs v0.0.0 => ./hcs
+## explicit; go 1.21
+github.com/Microsoft/hcsshim/hcs
+github.com/Microsoft/hcsshim/hcs/internal/schema1
+github.com/Microsoft/hcsshim/hcs/internal/schema2
 # github.com/OneOfOne/xxhash v1.2.8
 ## explicit; go 1.11
 github.com/OneOfOne/xxhash
@@ -726,3 +731,4 @@ gopkg.in/yaml.v2
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
+# github.com/Microsoft/hcsshim/hcs => ./hcs

@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
@@ -32,7 +32,7 @@ func TestDetermineSchemaVersion(t *testing.T) {
 		if sv := schemaversion.DetermineSchemaVersion(schemaversion.SchemaV10()); !schemaversion.IsV10(sv) {
 			t.Fatalf("expected requested v1")
 		}
-		if sv := schemaversion.DetermineSchemaVersion(&hcsschema.Version{}); !schemaversion.IsV21(sv) {
+		if sv := schemaversion.DetermineSchemaVersion(&hcstypes.Version{}); !schemaversion.IsV21(sv) {
 			t.Fatalf("expected requested v2")
 		}
 
@@ -53,7 +53,7 @@ func TestDetermineSchemaVersion(t *testing.T) {
 		if sv := schemaversion.DetermineSchemaVersion(schemaversion.SchemaV10()); !schemaversion.IsV10(sv) {
 			t.Fatalf("expected requested v1")
 		}
-		if sv := schemaversion.DetermineSchemaVersion(&hcsschema.Version{}); !schemaversion.IsV10(sv) {
+		if sv := schemaversion.DetermineSchemaVersion(&hcstypes.Version{}); !schemaversion.IsV10(sv) {
 			t.Fatalf("expected requested v1")
 		}
 

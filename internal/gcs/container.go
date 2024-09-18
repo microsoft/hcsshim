@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -138,7 +139,7 @@ func (c *Container) Modify(ctx context.Context, config interface{}) (err error) 
 }
 
 // Properties returns the requested container properties targeting a V1 schema container.
-func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
+func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyType) (_ *hcstypes.ContainerProperties, err error) {
 	ctx, span := oc.StartSpan(ctx, "gcs::Container::Properties", oc.WithClientSpanKind)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -153,7 +154,7 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 	if err != nil {
 		return nil, err
 	}
-	return (*schema1.ContainerProperties)(&resp.Properties), nil
+	return (*hcstypes.ContainerProperties)(&resp.Properties), nil
 }
 
 // PropertiesV2 returns the requested container properties targeting a V2 schema container.

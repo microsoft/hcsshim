@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -38,12 +39,12 @@ var (
 // layer, and scratch is the RW layer. This is for historical reasons only.
 type CreateOptions struct {
 	// Common parameters
-	ID               string             // Identifier for the container
-	Owner            string             // Specifies the owner. Defaults to executable name.
-	Spec             *specs.Spec        // Definition of the container or utility VM being created
-	SchemaVersion    *hcsschema.Version // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
-	HostingSystem    *uvm.UtilityVM     // Utility or service VM in which the container is to be created.
-	NetworkNamespace string             // Host network namespace to use (overrides anything in the spec)
+	ID               string            // Identifier for the container
+	Owner            string            // Specifies the owner. Defaults to executable name.
+	Spec             *specs.Spec       // Definition of the container or utility VM being created
+	SchemaVersion    *hcstypes.Version // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
+	HostingSystem    *uvm.UtilityVM    // Utility or service VM in which the container is to be created.
+	NetworkNamespace string            // Host network namespace to use (overrides anything in the spec)
 	LCOWLayers       *layers.LCOWLayers
 	WCOWLayers       layers.WCOWLayers
 
@@ -64,9 +65,9 @@ type CreateOptions struct {
 type createOptionsInternal struct {
 	*CreateOptions
 
-	actualSchemaVersion    *hcsschema.Version // Calculated based on Windows build and optional caller-supplied override
-	actualID               string             // Identifier for the container
-	actualOwner            string             // Owner for the container
+	actualSchemaVersion    *hcstypes.Version // Calculated based on Windows build and optional caller-supplied override
+	actualID               string            // Identifier for the container
+	actualOwner            string            // Owner for the container
 	actualNetworkNamespace string
 	ccgState               *hcsschema.ContainerCredentialGuardState // Container Credential Guard information to be attached to HCS container document
 

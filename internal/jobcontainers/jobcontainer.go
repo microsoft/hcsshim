@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/exec"
@@ -570,7 +571,7 @@ func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.Prop
 // Properties returns properties relating to the job container. This is an HCS construct but
 // to adhere to the interface for containers on Windows it is partially implemented. The only
 // supported property is schema1.PropertyTypeProcessList.
-func (c *JobContainer) Properties(ctx context.Context, types ...schema1.PropertyType) (*schema1.ContainerProperties, error) {
+func (c *JobContainer) Properties(ctx context.Context, types ...schema1.PropertyType) (*hcstypes.ContainerProperties, error) {
 	if len(types) == 0 {
 		return nil, errors.New("no property types supplied for Properties call")
 	}
@@ -578,9 +579,9 @@ func (c *JobContainer) Properties(ctx context.Context, types ...schema1.Property
 		return nil, errors.New("ProcessList is the only supported property type for job containers")
 	}
 
-	var processList []schema1.ProcessListItem
+	var processList []hcstypes.ProcessListItem
 	err := forEachProcessInfo(c.job, func(procInfo *winapi.SYSTEM_PROCESS_INFORMATION) {
-		proc := schema1.ProcessListItem{
+		proc := hcstypes.ProcessListItem{
 			CreateTimestamp:              time.Unix(0, procInfo.CreateTime),
 			ProcessId:                    uint32(procInfo.UniqueProcessID),
 			ImageName:                    procInfo.ImageName.String(),
@@ -596,7 +597,7 @@ func (c *JobContainer) Properties(ctx context.Context, types ...schema1.Property
 		return nil, errors.Wrap(err, "failed to get process ")
 	}
 
-	return &schema1.ContainerProperties{ProcessList: processList}, nil
+	return &hcstypes.ContainerProperties{ProcessList: processList}, nil
 }
 
 // Terminate terminates the job object (kills every process in the job).

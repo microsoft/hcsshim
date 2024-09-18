@@ -9,10 +9,14 @@
 
 package hcsschema
 
+import (
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
+)
+
 type ComputeSystem struct {
 	Owner string `json:"Owner,omitempty"`
 
-	SchemaVersion *Version `json:"SchemaVersion,omitempty"`
+	SchemaVersion *hcstypes.Version `json:"SchemaVersion,omitempty"`
 
 	HostingSystemId string `json:"HostingSystemId,omitempty"`
 

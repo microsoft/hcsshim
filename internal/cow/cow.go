@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 
+	hcstypes "github.com/Microsoft/hcsshim/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
@@ -73,7 +74,7 @@ type Container interface {
 	// ID returns the container ID.
 	ID() string
 	// Properties returns the requested container properties targeting a V1 schema container.
-	Properties(ctx context.Context, types ...schema1.PropertyType) (*schema1.ContainerProperties, error)
+	Properties(ctx context.Context, types ...schema1.PropertyType) (*hcstypes.ContainerProperties, error)
 	// PropertiesV2 returns the requested container properties targeting a V2 schema container.
 	PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error)
 	// Start starts a container.
