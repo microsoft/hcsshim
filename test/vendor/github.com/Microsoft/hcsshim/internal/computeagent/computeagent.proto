@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/internal/computeagent;computeagent";
+
+import "google/protobuf/any.proto";
+
+service ComputeAgent{
+    rpc AddNIC(AddNICInternalRequest) returns (AddNICInternalResponse) {}
+    rpc ModifyNIC(ModifyNICInternalRequest) returns (ModifyNICInternalResponse) {}
+    rpc DeleteNIC(DeleteNICInternalRequest) returns (DeleteNICInternalResponse) {}
+    rpc AssignPCI(AssignPCIInternalRequest) returns (AssignPCIInternalResponse) {}
+    rpc RemovePCI(RemovePCIInternalRequest) returns (RemovePCIInternalResponse) {}
+}
+
+message AssignPCIInternalRequest {
+    string container_id = 1;
+    string device_id = 2;
+    uint32 virtual_function_index = 3;
+    string nic_id = 4;
+}
+
+message AssignPCIInternalResponse {
+    string id = 1;
+}
+
+message RemovePCIInternalRequest {
+    string container_id = 1;
+    string device_id = 2;
+    uint32 virtual_function_index = 3;
+}
+
+message RemovePCIInternalResponse {}
+
+message AddNICInternalRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    google.protobuf.Any endpoint = 3;
+}
+
+message AddNICInternalResponse {}
+
+message ModifyNICInternalRequest {
+    string nic_id = 1;
+    google.protobuf.Any endpoint = 2;
+    IovSettings iov_policy_settings = 3;
+}
+
+message ModifyNICInternalResponse {}
+
+message DeleteNICInternalRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    google.protobuf.Any endpoint = 3;
+}
+
+message DeleteNICInternalResponse {}
+
+message IovSettings {
+    uint32 IovOffloadWeight = 1;
+    uint32 QueuePairsRequested = 2;
+    uint32 InterruptModeration = 3;
+}

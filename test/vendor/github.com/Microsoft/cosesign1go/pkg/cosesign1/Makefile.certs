@@ -1,0 +1,29 @@
+all: chain.pem
+
+%.private.pem:
+	openssl ecparam -name secp384r1 -genkey -noout -out $@
+
+%.public.pem: %.private.pem
+	openssl ec -in $< -pubout -out $@
+
+root.cert.pem: root.private.pem
+	openssl req -new -key $< -out $@.tmp.csr -subj "/CN=Test Root CA (DO NOT TRUST)" -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=digitalSignature,keyCertSign' 
+	openssl x509 -req -days 365 -in $@.tmp.csr -signkey $< -out $@ -CAcreateserial -extfile cert.extensions.cfg
+	rm -rf $@.tmp.csr
+
+intermediate.cert.pem: intermediate.private.pem | root.private.pem
+	openssl req -new -key $< -out $@.tmp.csr -subj "/CN=Test Intermediate CA (DO NOT TRUST)" -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=digitalSignature,keyCertSign' 
+	openssl x509 -req -days 365 -in $@.tmp.csr -CA ${subst private,cert,$|} -CAkey $| -out $@ -CAcreateserial -extfile cert.extensions.cfg
+	rm $@.tmp.csr
+
+leaf.cert.pem: leaf.private.pem | intermediate.private.pem
+	openssl req -new -key $< -out $@.tmp.csr -subj "/CN=Test Leaf (DO NOT TRUST)"
+	openssl x509 -req -days 365 -in $@.tmp.csr -CA ${subst private,cert,$|} -CAkey $| -out $@ -CAcreateserial
+	rm -rf $@.tmp.csr
+
+chain.pem: root.cert.pem intermediate.cert.pem leaf.cert.pem | root.public.pem intermediate.public.pem leaf.public.pem
+	rm -rf $@
+	cat `(for d in $^; do echo $$d; done) | tac` >> $@
+
+clean:
+	rm -f chain.pem root.*.pem intermediate.*.pem leaf.*.pem *.tmp.csr *.cert.srl

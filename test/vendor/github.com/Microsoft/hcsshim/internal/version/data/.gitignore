@@ -1,0 +1,4 @@
+# DO NOT MOVE: this file prevents `//go:embed data/*` from failing at build time
+BRANCH
+COMMIT
+VERSION

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/internal/extendedtask;extendedtask";
+
+service ExtendedTask {
+    rpc ComputeProcessorInfo(ComputeProcessorInfoRequest) returns (ComputeProcessorInfoResponse);
+}
+
+message ComputeProcessorInfoRequest {
+    string id = 1;
+}
+
+message ComputeProcessorInfoResponse {
+    int32 count = 1;
+}
