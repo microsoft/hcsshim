@@ -25,7 +25,7 @@ require (
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.25.0
-	google.golang.org/grpc v1.66.0
+	google.golang.org/grpc v1.67.0
 	google.golang.org/protobuf v1.34.2
 	k8s.io/cri-api v0.27.1
 )
@@ -119,7 +119,7 @@ require (
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240701130421-f6361c86f094 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 	tags.cncf.io/container-device-interface v0.7.2 // indirect
