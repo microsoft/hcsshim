@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/errdefs"
+	"github.com/containerd/containerd/errdefs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 

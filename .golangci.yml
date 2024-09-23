@@ -168,6 +168,11 @@ issues:
         - staticcheck
       text: "^SA1019: .*nodenetsvc[/]?v0"
 
+    # the `github.com/containerd/containerd/errdefs` is compatibility with containerd v1.7
+    - linters:
+        - staticcheck
+      text: "^SA1019: .*github.com/containerd/containerd/errdefs"
+
     - path: internal\\vhdx\\info
       linters:
         - stylecheck

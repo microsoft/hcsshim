@@ -13,7 +13,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/containerd/containerd/api/types"
-	"github.com/containerd/errdefs"
+	"github.com/containerd/containerd/errdefs"
 )
 
 // validateRootfsAndLayers checks to ensure we have appropriate information
