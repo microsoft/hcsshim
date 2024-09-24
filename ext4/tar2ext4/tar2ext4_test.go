@@ -167,6 +167,7 @@ func Test_TarHardlinkToSymlink(t *testing.T) {
 }
 
 func calcExt4Sha256(t *testing.T, layerTar *os.File) string {
+	t.Helper()
 	if _, err := layerTar.Seek(0, 0); err != nil {
 		t.Fatalf("failed to seek file: %s", err)
 	}
