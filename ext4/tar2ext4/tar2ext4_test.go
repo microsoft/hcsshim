@@ -166,6 +166,37 @@ func Test_TarHardlinkToSymlink(t *testing.T) {
 	}
 }
 
+func calcExt4Sha256(t *testing.T, layerTar *os.File) string {
+	if _, err := layerTar.Seek(0, 0); err != nil {
+		t.Fatalf("failed to seek file: %s", err)
+	}
+
+	opts := []Option{ConvertWhiteout}
+
+	tmpVhdPath := filepath.Join(os.TempDir(), "test-vhd.ext4")
+	layerVhd, err := os.Create(tmpVhdPath)
+	if err != nil {
+		t.Fatalf("failed to create output VHD: %s", err)
+	}
+	defer os.Remove(tmpVhdPath)
+
+	if err := Convert(layerTar, layerVhd, opts...); err != nil {
+		t.Fatalf("failed to convert tar to layer vhd: %s", err)
+	}
+
+	if _, err := layerVhd.Seek(0, 0); err != nil {
+		t.Fatalf("failed to seek file: %s", err)
+	}
+
+	hasher := sha256.New()
+	if _, err = io.Copy(hasher, layerVhd); err != nil {
+		t.Fatalf("filed to initialize hasher: %s", err)
+	}
+
+	hash := hasher.Sum(nil)
+	return fmt.Sprintf("%x", hash)
+}
+
 // Test_MissingParentDirExpansion tests that we are correctly able to expand a layer tar file
 // even if its file does not include the parent directory in its file name.
 func Test_MissingParentDirExpansion(t *testing.T) {
@@ -177,103 +208,32 @@ func Test_MissingParentDirExpansion(t *testing.T) {
 	defer os.Remove(tmpTarFilePath)
 
 	tw := tar.NewWriter(layerTar)
-	var files = []struct {
+	var file = struct {
 		path, body string
-	}{
-		{"foo/bar.txt", "inside bar.txt"},
+	}{"foo/bar.txt", "inside bar.txt"}
+	hdr := &tar.Header{
+		Name:       file.path,
+		Mode:       0777,
+		Size:       int64(len(file.body)),
+		ModTime:    time.Now(),
+		AccessTime: time.Now(),
+		ChangeTime: time.Now(),
 	}
-	for _, file := range files {
-		var hdr *tar.Header
-		if strings.HasSuffix(file.path, "/") {
-			hdr = &tar.Header{
-				Name:       file.path,
-				Mode:       0777,
-				Size:       0,
-				ModTime:    time.Now(),
-				AccessTime: time.Now(),
-				ChangeTime: time.Now(),
-			}
-		} else {
-			hdr = &tar.Header{
-				Name:       file.path,
-				Mode:       0777,
-				Size:       int64(len(file.body)),
-				ModTime:    time.Now(),
-				AccessTime: time.Now(),
-				ChangeTime: time.Now(),
-			}
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			t.Fatal(err)
-		}
-		if !strings.HasSuffix(file.path, "/") {
-			if _, err := tw.Write([]byte(file.body)); err != nil {
-				t.Fatal(err)
-			}
-		}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte(file.body)); err != nil {
+		t.Fatal(err)
 	}
 	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now import the tar file and check the conversion to ext4 is deterministic.
-	if _, err := layerTar.Seek(0, 0); err != nil {
-		t.Fatalf("failed to seek file: %s", err)
-	}
+	hash1 := calcExt4Sha256(t, layerTar)
+	hash2 := calcExt4Sha256(t, layerTar)
 
-	opts := []Option{ConvertWhiteout}
-
-	tmpVhdPath1 := filepath.Join(os.TempDir(), "test-vhd1.ext4")
-	layerVhd1, err := os.Create(tmpVhdPath1)
-	if err != nil {
-		t.Fatalf("failed to create output VHD: %s", err)
-	}
-	defer os.Remove(tmpVhdPath1)
-
-	if err := Convert(layerTar, layerVhd1, opts...); err != nil {
-		t.Fatalf("failed to convert tar to layer vhd: %s", err)
-	}
-
-	// Check the conversion is deterministic.
-	tmpVhdPath2 := filepath.Join(os.TempDir(), "test-vhd2.ext4")
-	layerVhd2, err := os.Create(tmpVhdPath2)
-	if err != nil {
-		t.Fatalf("failed to create output VHD: %s", err)
-	}
-	defer os.Remove(tmpVhdPath2)
-
-	if _, err := layerTar.Seek(0, 0); err != nil {
-		t.Fatalf("failed to seek file: %s", err)
-	}
-
-	if err := Convert(layerTar, layerVhd2, opts...); err != nil {
-		t.Fatalf("failed to convert tar to layer vhd: %s", err)
-	}
-
-	if _, err := layerVhd1.Seek(0, 0); err != nil {
-		t.Fatalf("failed to seek file: %s", err)
-	}
-
-	if _, err := layerVhd2.Seek(0, 0); err != nil {
-		t.Fatalf("failed to seek file: %s", err)
-	}
-
-	hasher1 := sha256.New()
-	if _, err = io.Copy(hasher1, layerVhd1); err != nil {
-		t.Fatalf("filed to initialize hasher: %s", err)
-	}
-
-	hash1 := hasher1.Sum(nil)
-	hash1hex := fmt.Sprintf("%x", hash1)
-
-	hasher2 := sha256.New()
-	if _, err = io.Copy(hasher2, layerVhd2); err != nil {
-		t.Fatalf("filed to initialize hasher: %s", err)
-	}
-	hash2 := hasher2.Sum(nil)
-	hash2hex := fmt.Sprintf("%x", hash2)
-
-	if hash1hex != hash2hex {
+	if hash1 != hash2 {
 		t.Fatalf("hash doesn't match")
 	}
 }
