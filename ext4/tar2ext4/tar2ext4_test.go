@@ -174,12 +174,12 @@ func calcExt4Sha256(t *testing.T, layerTar *os.File) string {
 
 	opts := []Option{ConvertWhiteout}
 
-	tmpVhdPath := filepath.Join(os.TempDir(), "test-vhd.ext4")
-	layerVhd, err := os.Create(tmpVhdPath)
+	tmpExt4Path := filepath.Join(os.TempDir(), "test.ext4")
+	layerVhd, err := os.Create(tmpExt4Path)
 	if err != nil {
 		t.Fatalf("failed to create output VHD: %s", err)
 	}
-	defer os.Remove(tmpVhdPath)
+	defer os.Remove(tmpExt4Path)
 
 	if err := Convert(layerTar, layerVhd, opts...); err != nil {
 		t.Fatalf("failed to convert tar to layer vhd: %s", err)
