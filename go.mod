@@ -23,7 +23,7 @@ require (
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/open-policy-agent/opa v0.68.0
-	github.com/opencontainers/runc v1.1.12
+	github.com/opencontainers/runc v1.1.14
 	github.com/opencontainers/runtime-spec v1.2.0
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
