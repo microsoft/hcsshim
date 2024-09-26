@@ -417,7 +417,7 @@ func (a *Annotations) Copy(node Node) *Annotations {
 	return &cpy
 }
 
-// toObject constructs an AST Object from the annotation.
+// toObject constructs an AST Object from a.
 func (a *Annotations) toObject() (*Object, *Error) {
 	obj := NewObject()
 
@@ -556,11 +556,7 @@ func attachAnnotationsNodes(mod *Module) Errors {
 		if a.Scope == "" {
 			switch a.node.(type) {
 			case *Rule:
-				if a.Entrypoint {
-					a.Scope = annotationScopeDocument
-				} else {
-					a.Scope = annotationScopeRule
-				}
+				a.Scope = annotationScopeRule
 			case *Package:
 				a.Scope = annotationScopePackage
 			case *Import:
@@ -600,9 +596,8 @@ func validateAnnotationScopeAttachment(a *Annotations) *Error {
 }
 
 func validateAnnotationEntrypointAttachment(a *Annotations) *Error {
-	if a.Entrypoint && !(a.Scope == annotationScopeDocument || a.Scope == annotationScopePackage) {
-		return NewError(
-			ParseErr, a.Loc(), "annotation entrypoint applied to non-document or package scope '%v'", a.Scope)
+	if a.Entrypoint && !(a.Scope == annotationScopeRule || a.Scope == annotationScopePackage) {
+		return NewError(ParseErr, a.Loc(), "annotation entrypoint applied to non-rule or package scope '%v'", a.Scope)
 	}
 	return nil
 }

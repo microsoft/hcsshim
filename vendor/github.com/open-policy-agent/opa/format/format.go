@@ -28,9 +28,6 @@ type Opts struct {
 
 	// RegoVersion is the version of Rego to format code for.
 	RegoVersion ast.RegoVersion
-
-	// ParserOptions is the parser options used when parsing the module to be formatted.
-	ParserOptions *ast.ParserOptions
 }
 
 // defaultLocationFile is the file name used in `Ast()` for terms
@@ -46,15 +43,11 @@ func Source(filename string, src []byte) ([]byte, error) {
 }
 
 func SourceWithOpts(filename string, src []byte, opts Opts) ([]byte, error) {
-	var parserOpts ast.ParserOptions
-	if opts.ParserOptions != nil {
-		parserOpts = *opts.ParserOptions
-	} else {
-		if opts.RegoVersion == ast.RegoV1 {
-			// If the rego version is V1, we need to parse it as such, to allow for future keywords not being imported.
-			// Otherwise, we'll default to RegoV0
-			parserOpts.RegoVersion = ast.RegoV1
-		}
+	parserOpts := ast.ParserOptions{}
+	if opts.RegoVersion == ast.RegoV1 {
+		// If the rego version is V1, wee need to parse it as such, to allow for future keywords not being imported.
+		// Otherwise, we'll default to RegoV0
+		parserOpts.RegoVersion = ast.RegoV1
 	}
 
 	module, err := ast.ParseModuleWithOpts(filename, string(src), parserOpts)

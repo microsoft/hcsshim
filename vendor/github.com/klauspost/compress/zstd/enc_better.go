@@ -102,20 +102,9 @@ func (e *betterFastEncoder) Encode(blk *blockEnc, src []byte) {
 		e.cur = e.maxMatchOff
 		break
 	}
-	// Add block to history
+
 	s := e.addBlock(src)
 	blk.size = len(src)
-
-	// Check RLE first
-	if len(src) > zstdMinMatch {
-		ml := matchLen(src[1:], src)
-		if ml == len(src)-1 {
-			blk.literals = append(blk.literals, src[0])
-			blk.sequences = append(blk.sequences, seq{litLen: 1, matchLen: uint32(len(src)-1) - zstdMinMatch, offset: 1 + 3})
-			return
-		}
-	}
-
 	if len(src) < minNonLiteralBlockSize {
 		blk.extraLits = len(src)
 		blk.literals = blk.literals[:len(src)]
@@ -156,7 +145,7 @@ encodeLoop:
 		var t int32
 		// We allow the encoder to optionally turn off repeat offsets across blocks
 		canRepeat := len(blk.sequences) > 2
-		var matched, index0 int32
+		var matched int32
 
 		for {
 			if debugAsserts && canRepeat && offset1 == 0 {
@@ -173,7 +162,6 @@ encodeLoop:
 			off := s + e.cur
 			e.longTable[nextHashL] = prevEntry{offset: off, prev: candidateL.offset}
 			e.table[nextHashS] = tableEntry{offset: off, val: uint32(cv)}
-			index0 = s + 1
 
 			if canRepeat {
 				if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>(repOff*8)) {
@@ -270,6 +258,7 @@ encodeLoop:
 					}
 					blk.sequences = append(blk.sequences, seq)
 
+					index0 := s + repOff2
 					s += lenght + repOff2
 					nextEmit = s
 					if s >= sLimit {
@@ -509,15 +498,15 @@ encodeLoop:
 		}
 
 		// Index match start+1 (long) -> s - 1
-		off := index0 + e.cur
+		index0 := s - l + 1
 		for index0 < s-1 {
 			cv0 := load6432(src, index0)
 			cv1 := cv0 >> 8
 			h0 := hashLen(cv0, betterLongTableBits, betterLongLen)
+			off := index0 + e.cur
 			e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
 			e.table[hashLen(cv1, betterShortTableBits, betterShortLen)] = tableEntry{offset: off + 1, val: uint32(cv1)}
 			index0 += 2
-			off += 2
 		}
 
 		cv = load6432(src, s)
@@ -683,7 +672,7 @@ encodeLoop:
 		var t int32
 		// We allow the encoder to optionally turn off repeat offsets across blocks
 		canRepeat := len(blk.sequences) > 2
-		var matched, index0 int32
+		var matched int32
 
 		for {
 			if debugAsserts && canRepeat && offset1 == 0 {
@@ -702,7 +691,6 @@ encodeLoop:
 			e.markLongShardDirty(nextHashL)
 			e.table[nextHashS] = tableEntry{offset: off, val: uint32(cv)}
 			e.markShortShardDirty(nextHashS)
-			index0 = s + 1
 
 			if canRepeat {
 				if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>(repOff*8)) {
@@ -738,6 +726,7 @@ encodeLoop:
 					blk.sequences = append(blk.sequences, seq)
 
 					// Index match start+1 (long) -> s - 1
+					index0 := s + repOff
 					s += lenght + repOff
 
 					nextEmit = s
@@ -801,6 +790,7 @@ encodeLoop:
 					}
 					blk.sequences = append(blk.sequences, seq)
 
+					index0 := s + repOff2
 					s += lenght + repOff2
 					nextEmit = s
 					if s >= sLimit {
@@ -1034,18 +1024,18 @@ encodeLoop:
 		}
 
 		// Index match start+1 (long) -> s - 1
-		off := index0 + e.cur
+		index0 := s - l + 1
 		for index0 < s-1 {
 			cv0 := load6432(src, index0)
 			cv1 := cv0 >> 8
 			h0 := hashLen(cv0, betterLongTableBits, betterLongLen)
+			off := index0 + e.cur
 			e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
 			e.markLongShardDirty(h0)
 			h1 := hashLen(cv1, betterShortTableBits, betterShortLen)
 			e.table[h1] = tableEntry{offset: off + 1, val: uint32(cv1)}
 			e.markShortShardDirty(h1)
 			index0 += 2
-			off += 2
 		}
 
 		cv = load6432(src, s)
