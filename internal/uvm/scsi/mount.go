@@ -87,7 +87,7 @@ func (mm *mountManager) mount(ctx context.Context, controller, lun uint, path st
 	return mount.path, nil
 }
 
-func (mm *mountManager) unmount(ctx context.Context, path string) (bool, error) {
+func (mm *mountManager) unmount(ctx context.Context, path string) error {
 	mm.m.Lock()
 	defer mm.m.Unlock()
 
@@ -100,15 +100,15 @@ func (mm *mountManager) unmount(ctx context.Context, path string) (bool, error) 
 
 	mount.refCount--
 	if mount.refCount > 0 {
-		return false, nil
+		return nil
 	}
 
 	if err := mm.mounter.unmount(ctx, mount.controller, mount.lun, mount.path, mount.config); err != nil {
-		return false, fmt.Errorf("unmount scsi controller %d lun %d at path %s: %w", mount.controller, mount.lun, mount.path, err)
+		return fmt.Errorf("unmount scsi controller %d lun %d at path %s: %w", mount.controller, mount.lun, mount.path, err)
 	}
 	mm.untrackMount(mount)
 
-	return true, nil
+	return nil
 }
 
 func (mm *mountManager) trackMount(controller, lun uint, path string, c *mountConfig) (*mount, bool, error) {

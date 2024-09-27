@@ -292,13 +292,8 @@ func (m *Manager) add(ctx context.Context, attachConfig *attachConfig, guestPath
 
 func (m *Manager) remove(ctx context.Context, controller, lun uint, guestPath string) error {
 	if guestPath != "" {
-		removed, err := m.mountManager.unmount(ctx, guestPath)
-		if err != nil {
+		if err := m.mountManager.unmount(ctx, guestPath); err != nil {
 			return err
-		}
-
-		if !removed {
-			return nil
 		}
 	}
 
