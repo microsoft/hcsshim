@@ -144,6 +144,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						mount.Source,
 						readOnly,
 						coi.HostingSystem.ID(),
+						"",
 						&scsi.MountConfig{},
 					)
 				case MountTypeVirtualDisk:
@@ -153,6 +154,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						mount.Source,
 						readOnly,
 						coi.HostingSystem.ID(),
+						"",
 						&scsi.MountConfig{},
 					)
 				case MountTypeExtensibleVirtualDisk:
@@ -161,6 +163,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						ctx,
 						mount.Source,
 						readOnly,
+						"",
 						&scsi.MountConfig{},
 					)
 				}

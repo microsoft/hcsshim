@@ -25,6 +25,7 @@ func mountSCSI(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
 			m.host,
 			!m.writable,
 			vm.ID(),
+			"",
 			&scsi.MountConfig{},
 		)
 		if err != nil {
