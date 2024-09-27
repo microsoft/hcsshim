@@ -92,6 +92,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					hostPath,
 					readOnly,
 					coi.HostingSystem.ID(),
+					"",
 					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
 				)
 				if err != nil {
@@ -114,6 +115,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					hostPath,
 					readOnly,
 					coi.HostingSystem.ID(),
+					"",
 					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
 				)
 				if err != nil {

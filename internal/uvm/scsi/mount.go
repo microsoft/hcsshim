@@ -47,14 +47,17 @@ type mountConfig struct {
 	filesystem       string
 }
 
-func (mm *mountManager) mount(ctx context.Context, controller, lun uint, c *mountConfig) (_ string, err error) {
+func (mm *mountManager) mount(ctx context.Context, controller, lun uint, path string, c *mountConfig) (_ string, err error) {
 	// Normalize the mount config for comparison.
 	// Config equality relies on the options slices being compared element-wise. Sort the options
 	// slice first so that two slices with different ordering compare as equal. We assume that
 	// order will never matter for mount options.
 	sort.Strings(c.options)
 
-	mount, existed := mm.trackMount(controller, lun, c)
+	mount, existed, err := mm.trackMount(controller, lun, path, c)
+	if err != nil {
+		return "", err
+	}
 	if existed {
 		select {
 		case <-ctx.Done():
@@ -84,7 +87,7 @@ func (mm *mountManager) mount(ctx context.Context, controller, lun uint, c *moun
 	return mount.path, nil
 }
 
-func (mm *mountManager) unmount(ctx context.Context, path string) (bool, error) {
+func (mm *mountManager) unmount(ctx context.Context, path string) error {
 	mm.m.Lock()
 	defer mm.m.Unlock()
 
@@ -97,18 +100,18 @@ func (mm *mountManager) unmount(ctx context.Context, path string) (bool, error) 
 
 	mount.refCount--
 	if mount.refCount > 0 {
-		return false, nil
+		return nil
 	}
 
 	if err := mm.mounter.unmount(ctx, mount.controller, mount.lun, mount.path, mount.config); err != nil {
-		return false, fmt.Errorf("unmount scsi controller %d lun %d at path %s: %w", mount.controller, mount.lun, mount.path, err)
+		return fmt.Errorf("unmount scsi controller %d lun %d at path %s: %w", mount.controller, mount.lun, mount.path, err)
 	}
 	mm.untrackMount(mount)
 
-	return true, nil
+	return nil
 }
 
-func (mm *mountManager) trackMount(controller, lun uint, c *mountConfig) (*mount, bool) {
+func (mm *mountManager) trackMount(controller, lun uint, path string, c *mountConfig) (*mount, bool, error) {
 	mm.m.Lock()
 	defer mm.m.Unlock()
 
@@ -120,15 +123,19 @@ func (mm *mountManager) trackMount(controller, lun uint, c *mountConfig) (*mount
 			}
 		} else if controller == mount.controller &&
 			lun == mount.lun &&
+			(path == "" || path == mount.path) &&
 			reflect.DeepEqual(c, mount.config) {
 
 			mount.refCount++
-			return mount, true
+			return mount, true, nil
+		} else if path != "" && path == mount.path {
+			return nil, false, fmt.Errorf("cannot mount over an existing mountpoint: %s", path)
 		}
 	}
 
 	// New mount.
 	mount := &mount{
+		path:       path, // If path is empty, this will be replaced with a generated path below.
 		controller: controller,
 		lun:        lun,
 		config:     c,
@@ -142,9 +149,11 @@ func (mm *mountManager) trackMount(controller, lun uint, c *mountConfig) (*mount
 		mount.index = freeIndex
 		mm.mounts[freeIndex] = mount
 	}
-	// Use the mount index to produce a unique guest path.
-	mount.path = fmt.Sprintf(mm.mountFmt, mount.index)
-	return mount, false
+	if mount.path == "" {
+		// Use the mount index to produce a unique guest path.
+		mount.path = fmt.Sprintf(mm.mountFmt, mount.index)
+	}
+	return mount, false, nil
 }
 
 // Caller must be holding mm.m.

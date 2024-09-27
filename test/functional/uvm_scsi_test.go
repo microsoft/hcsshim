@@ -66,7 +66,7 @@ func testAddSCSI(u *uvm.UtilityVM, disks []string, attachOnly bool) ([]*scsi.Mou
 		if !attachOnly {
 			mc = &scsi.MountConfig{}
 		}
-		scsiMount, err := u.SCSIManager.AddVirtualDisk(context.Background(), disks[i], false, u.ID(), mc)
+		scsiMount, err := u.SCSIManager.AddVirtualDisk(context.Background(), disks[i], false, u.ID(), "", mc)
 		if err != nil {
 			return nil, err
 		}
@@ -280,7 +280,7 @@ func TestParallelScsiOps(t *testing.T) {
 					continue
 				}
 
-				mount, err := u.SCSIManager.AddVirtualDisk(context.Background(), path, false, u.ID(), nil)
+				mount, err := u.SCSIManager.AddVirtualDisk(context.Background(), path, false, u.ID(), "", nil)
 				if err != nil {
 					os.Remove(path)
 					t.Errorf("failed to add SCSI disk for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
@@ -293,7 +293,7 @@ func TestParallelScsiOps(t *testing.T) {
 					break
 				}
 
-				mount, err = u.SCSIManager.AddVirtualDisk(context.Background(), path, false, u.ID(), &scsi.MountConfig{})
+				mount, err = u.SCSIManager.AddVirtualDisk(context.Background(), path, false, u.ID(), "", &scsi.MountConfig{})
 				if err != nil {
 					os.Remove(path)
 					t.Errorf("failed to add SCSI disk for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)

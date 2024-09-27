@@ -60,6 +60,7 @@ func InstallDrivers(ctx context.Context, vm *uvm.UtilityVM, share string) (close
 		share,
 		true,
 		vm.ID(),
+		"",
 		&scsi.MountConfig{},
 	)
 	if err != nil {
