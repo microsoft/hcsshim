@@ -191,11 +191,11 @@ func TestGuestPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// m3 should get the guest path it asked for.
-	if m3.GuestPath() != "/mnt2" {
+	// m3 asked for a guest path, but it is already mounted, so it should get that one instead.
+	if m3.GuestPath() != "/mnt1" {
 		t.Errorf("wrong guest path for m3: %s", m2.GuestPath())
 	}
-	if !reflect.DeepEqual(gb.mountPaths(), []string{"/mnt1", "/mnt2"}) {
+	if !reflect.DeepEqual(gb.mountPaths(), []string{"/mnt1"}) {
 		t.Errorf("wrong mount paths after adding m3: %v", gb.mountPaths())
 	}
 
