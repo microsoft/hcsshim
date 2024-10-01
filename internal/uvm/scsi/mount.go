@@ -123,7 +123,6 @@ func (mm *mountManager) trackMount(controller, lun uint, path string, c *mountCo
 			}
 		} else if controller == mount.controller &&
 			lun == mount.lun &&
-			(path == "" || path == mount.path) &&
 			reflect.DeepEqual(c, mount.config) {
 
 			mount.refCount++
