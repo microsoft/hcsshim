@@ -23,11 +23,29 @@
 # will print the new fingerprint of the intermediate cert as part of the did:x509 generated
 #
 
+
+# note test-fail is expected to fail
+
+AUTOPARSE_CHAIN:=0
+ISSUER_DID:="TestIssuer"
+FEED:="TestFeed"
+DID_FINGERPRINT:=""
+
+all: chain.pem cose test-fail test-pass
+
 cose: infra.rego.cose
+
+%.pem:
+	 $(MAKE) -f Makefile.certs chain.pem
+
+ifeq "$(AUTOPARSE_CHAIN)" "1"
+ISSUER_DID = $(shell ./sign1util did-x509 -chain chain.pem -policy cn)
+DID_FINGERPRINT = $(shell ./sign1util did-x509 -chain chain.pem -policy cn | cut -d: -f5)
+endif
 
 # from these media types have to match containerd. The also need to change and the security policy one ought to be x-ms-ccepolicy-frag
 #     fragment atrifact type = application/x-ms-ccepolicy-frag
-#     fragment media type = application/cose_x509+rego
+#     fragment media type = application/cose-x509+rego
 
 # Use a local linux build of the tool for the purposes of this Makefile - ie assume using in wsl.
 # Usually sign1util.exe is a windows exe in /mnt/c/ContainerPlat aka c:\ContainerPlat but that is not certain.
@@ -35,9 +53,14 @@ cose: infra.rego.cose
 sign1util: ../../cmd/sign1util/main.go *.go
 	go build ../../cmd/sign1util
 
-infra.rego.cose: infra.rego.base64 chain.pem leaf.private.pem sign1util
-	./sign1util create -algo ES384 -chain chain.pem -claims infra.rego.base64 -key leaf.private.pem -out $@ -issuer TestIssuer -feed TestFeed -salt zero
-	./sign1util check -in $@
+#infra.rego.cose: infra.rego chain.pem leaf.private.pem sign1util
+#	./sign1util create -algo ES384 -chain chain.pem -claims infra.rego -key leaf.private.pem -out $@ -issuer TestIssuer -feed TestFeed -salt zero
+#	./sign1util check -in $@
+
+%.rego.cose: %.rego chain.pem leaf.private.pem sign1util
+	./sign1util create -algo ES384 -chain chain.pem -claims $< -key leaf.private.pem -out $@ -salt zero \
+	-feed $(FEED) -content-type application/unknown+rego \
+ 	-issuer $(ISSUER_DID)
 
 print: infra.rego.cose sign1util
 	./sign1util chain -in $< > tmp.chain.pem
@@ -51,9 +74,13 @@ show: sign1util
 didx509: chain.pem sign1util
 	./sign1util did-x509 -chain chain.pem -i 1 -policy "subject:CN:Test Leaf (DO NOT TRUST)" -verbose
 
+info: chain.pem sign1util
+	@echo "ISSUER_DID: $(ISSUER_DID)"
+	@echo "DID_FINGERPRINT: $(DID_FINGERPRINT)"
+
 # for this to pass the did:x509 fingerprint (RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U here) needs to be the one output from make print
-did-check: chain.pem infra.rego.cose sign1util
-	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U::subject:CN:Test%20Leaf%20%28DO%20NOT%20TRUST%29
+did-check: chain.pem infra.rego.cose sign1util info
+	./sign1util check -in infra.rego.cose -did $(ISSUER_DID)
 
 # For normal workflow start from the chain.pem, here we'd take the chain from inside the cose sign1 doc, eg to manually confirm it is
 # as otherwise expected (ie that the issuer DID matches the chain) or to shortcut getting a DID from a cose document.
@@ -61,13 +88,29 @@ did-check: chain.pem infra.rego.cose sign1util
 did-from-cose: sign1util infra.rego.cose
 	./sign1util did-x509 -in infra.rego.cose -policy cn
 
-did-fail-fingerprint: chain.pem sign1util
-	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:XXXi_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
+# these test changing the fingerprint/sublect to prove failure when the DID is checked against the chain
+# note that since the infra.rego.cose is actually good the first part of the check will report a pass "checkCoseSign1 passed"
 
-did-fail-subject: chain.pem sign1util
-	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U::subject:CN:Test+XXXX+%28DO+NOT+TRUST%29
+# expect "DID resolvers failed: err: DID verification failed: unexpected certificate fingerprint"
+did-fail-fingerprint: chain.pem sign1util infra.rego.cose
+	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:XXXi_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
 
-did-fail: did-fail-subject did-fail-fingerprint
+# expect "DID resolvers failed: err: DID verification failed: invalid subject value: CN=Test XXXX (DO NOT TRUST)"
+did-fail-subject: chain.pem sign1util infra.rego.cose
+	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:$(DID_FINGERPRINT)::subject:CN:Test+XXXX+%28DO+NOT+TRUST%29
+
+did-fail: did-fail-subject did-fail-fingerprint 
+
+# can be confusing
+test: test-pass test-fail
+
+test-all: test
+
+# positive tests
+test-pass: print show didx509 did-check did-from-cose
+
+# negative tests
+test-fail: did-fail
 
 
 # beyond the scope of this repo
@@ -80,17 +123,10 @@ did-fail: did-fail-subject did-fail-fingerprint
 #	--artifact-type application/x-ms-ccepolicy-frag \
 #	--manifest-config /dev/null:application/vnd.unknown.config.v1+json \
 #	--subject ${INFRA_IMAGE} \
-#	./infra.rego.cose:application/cose_x509+rego
-
-%.pem:
-	 $(MAKE) -f Makefile.certs chain.pem
+#	./infra.rego.cose:application/cose-x509+rego
 
 
-infra.rego.base64: infra.rego
-	base64 infra.rego > infra.rego.base64
-
-test-all: print show didx509 did-check did-from-cose did-fail
 
 clean:
 	$(MAKE) -f Makefile.certs $@
-	rm -f infra.rego.base64 infra.rego.cose sign1util
+	rm -f infra.rego.cose sign1util
