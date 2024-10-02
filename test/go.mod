@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.18
+go 1.21
 
 require (
 	github.com/Microsoft/go-winio v0.4.21
@@ -16,7 +16,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.12.0
+	golang.org/x/sys v0.25.0
 	google.golang.org/grpc v1.40.0
 	k8s.io/cri-api v0.20.6
 )
