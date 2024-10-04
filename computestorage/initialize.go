@@ -5,9 +5,10 @@ package computestorage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 )
 
@@ -34,7 +35,7 @@ func InitializeWritableLayer(ctx context.Context, layerPath string, layerData La
 	// Options are not used in the platform as of RS5
 	err = hcsInitializeWritableLayer(layerPath, string(bytes), "")
 	if err != nil {
-		return errors.Wrap(err, "failed to intitialize container layer")
+		return fmt.Errorf("failed to intitialize container layer: %w", err)
 	}
 	return nil
 }

@@ -4,12 +4,12 @@ package hcs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/vm"
-	"github.com/pkg/errors"
 )
 
 var _ vm.UVMBuilder = &utilityVMBuilder{}
@@ -65,7 +65,7 @@ func NewUVMBuilder(id string, owner string, guestOS vm.GuestOS) (vm.UVMBuilder, 
 func (uvmb *utilityVMBuilder) Create(ctx context.Context) (_ vm.UVM, err error) {
 	cs, err := hcs.CreateComputeSystem(ctx, uvmb.id, uvmb.doc)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create hcs compute system")
+		return nil, fmt.Errorf("failed to create hcs compute system: %w", err)
 	}
 
 	defer func() {

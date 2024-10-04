@@ -4,9 +4,10 @@ package computestorage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -26,7 +27,7 @@ func FormatWritableLayerVhd(ctx context.Context, vhdHandle windows.Handle) (err 
 
 	err = hcsFormatWritableLayerVhd(vhdHandle)
 	if err != nil {
-		return errors.Wrap(err, "failed to format writable layer vhd")
+		return fmt.Errorf("failed to format writable layer vhd: %w", err)
 	}
 	return nil
 }

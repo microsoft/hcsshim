@@ -13,13 +13,12 @@ import (
 
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 func createBlob(blobsDirPath string, blobContents io.Reader) (int64, digest.Digest, error) {
 	tempFile, err := os.CreateTemp(blobsDirPath, "")
 	if err != nil {
-		return 0, "", errors.Wrapf(err, "failed to create file")
+		return 0, "", fmt.Errorf("failed to create file: %w", err)
 	}
 	defer tempFile.Close()
 
@@ -27,14 +26,14 @@ func createBlob(blobsDirPath string, blobContents io.Reader) (int64, digest.Dige
 	multiWriter := io.MultiWriter(tempFile, hasher)
 	written, err := io.Copy(multiWriter, blobContents)
 	if err != nil {
-		return 0, "", errors.Wrap(err, "failed to copy content")
+		return 0, "", fmt.Errorf("failed to copy content: %w", err)
 	}
 	dgst := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
 	tempFile.Close()
 
 	// name the blob file with its digest (excluding the first `sha256:` part)
 	if err = os.Rename(tempFile.Name(), filepath.Join(blobsDirPath, dgst[7:])); err != nil {
-		return 0, "", errors.Wrap(err, "renaming content file failed")
+		return 0, "", fmt.Errorf("renaming content file failed: %w", err)
 	}
 	return written, digest.Digest(dgst), nil
 }
@@ -42,7 +41,7 @@ func createBlob(blobsDirPath string, blobContents io.Reader) (int64, digest.Dige
 func createBlobFromTar(tarPath, blobsDirPath string) (int64, digest.Digest, error) {
 	srcFile, err := os.Open(tarPath)
 	if err != nil {
-		return 0, "", errors.Wrap(err, "failed to open content source file")
+		return 0, "", fmt.Errorf("failed to open content source file: %w", err)
 	}
 	defer srcFile.Close()
 
@@ -53,14 +52,14 @@ func createBlobFromTar(tarPath, blobsDirPath string) (int64, digest.Digest, erro
 func createBlobFromStruct(blobsDirPath string, data interface{}) (int64, digest.Digest, error) {
 	dataJson, err := json.Marshal(data)
 	if err != nil {
-		return 0, "", errors.Wrap(err, "failed to marshal struct")
+		return 0, "", fmt.Errorf("failed to marshal struct: %w", err)
 	}
 
 	// copy config
 	buf := bytes.NewBuffer(dataJson)
 	clen, dgst, err := createBlob(blobsDirPath, buf)
 	if err != nil {
-		return 0, "", errors.Wrap(err, "config content write failed")
+		return 0, "", fmt.Errorf("config content write failed: %w", err)
 	}
 	return clen, dgst, nil
 }
@@ -83,11 +82,11 @@ func createOciLayoutFile(dirPath string) error {
 	// create oci layout file
 	flayout, err := os.Create(filepath.Join(dirPath, "oci-layout"))
 	if err != nil {
-		return errors.Wrap(err, "failed to create oci layout")
+		return fmt.Errorf("failed to create oci layout: %w", err)
 	}
 	_, err = flayout.Write([]byte(`{"imageLayoutVersion":"1.0.0"}`))
 	if err != nil {
-		return errors.Wrap(err, "failed to write layout file")
+		return fmt.Errorf("failed to write layout file: %w", err)
 	}
 	return nil
 }
@@ -127,14 +126,14 @@ func createImageFromLayerTars(layerTars []string) error {
 	// converted into the image tar at the end.
 	tempDirPath, err := os.MkdirTemp("", "imagecreator-imagedir")
 	if err != nil {
-		return errors.Wrap(err, "failed to create temporary directory")
+		return fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	defer os.RemoveAll(tempDirPath)
 
 	sha256dirPath := filepath.Join(tempDirPath, "blobs", "sha256")
 	err = os.MkdirAll(sha256dirPath, 0777)
 	if err != nil {
-		return errors.Wrap(err, "failed to create blobs dir")
+		return fmt.Errorf("failed to create blobs dir: %w", err)
 	}
 
 	// copy all layer tar as blobs
@@ -142,7 +141,7 @@ func createImageFromLayerTars(layerTars []string) error {
 	for _, layerTar := range layerTars {
 		llen, dgst, err := createBlobFromTar(layerTar, sha256dirPath)
 		if err != nil {
-			return errors.Wrap(err, "layer content write failed")
+			return fmt.Errorf("layer content write failed: %w", err)
 		}
 		layerBlobs = append(layerBlobs, ocispec.Descriptor{
 			MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
@@ -154,7 +153,7 @@ func createImageFromLayerTars(layerTars []string) error {
 	// create image config blob
 	clen, cdgst, err := createBlobFromStruct(sha256dirPath, createMinimalConfig(layerBlobs))
 	if err != nil {
-		return errors.Wrap(err, "failed to create config blob")
+		return fmt.Errorf("failed to create config blob: %w", err)
 	}
 
 	// create manifest blob
@@ -166,7 +165,7 @@ func createImageFromLayerTars(layerTars []string) error {
 	manifest.Layers = layerBlobs
 	mlen, mdgst, err := createBlobFromStruct(sha256dirPath, manifest)
 	if err != nil {
-		return errors.Wrap(err, "failed to crate blob for manifest")
+		return fmt.Errorf("failed to crate blob for manifest: %w", err)
 	}
 
 	// create index file
@@ -180,16 +179,16 @@ func createImageFromLayerTars(layerTars []string) error {
 
 	indexJson, err := json.Marshal(index)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal index json")
+		return fmt.Errorf("failed to marshal index json: %w", err)
 	}
 
 	findex, err := os.Create(filepath.Join(tempDirPath, "index.json"))
 	if err != nil {
-		return errors.Wrap(err, "failed to create index file")
+		return fmt.Errorf("failed to create index file: %w", err)
 	}
 	_, err = findex.Write(indexJson)
 	if err != nil {
-		return errors.Wrap(err, "failed to write index.json")
+		return fmt.Errorf("failed to write index.json: %w", err)
 	}
 
 	// create oci layout file
@@ -200,7 +199,7 @@ func createImageFromLayerTars(layerTars []string) error {
 	// create tar from the image
 	tarCmd := exec.Command("tar", "-C", tempDirPath, "-cf", "testimage.tar", ".")
 	if err = tarCmd.Run(); err != nil {
-		return errors.Wrap(err, "image tar creation failed")
+		return fmt.Errorf("image tar creation failed: %w", err)
 	}
 	return nil
 }

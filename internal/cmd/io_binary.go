@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -101,7 +101,7 @@ func NewBinaryIO(ctx context.Context, id string, uri *url.URL) (_ UpstreamIO, er
 	select {
 	case err = <-errCh:
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to start binary logger")
+			return nil, fmt.Errorf("failed to start binary logger: %w", err)
 		}
 	case <-time.After(binaryCmdStartTimeout):
 		return nil, errors.New("failed to start binary logger: timeout")
@@ -275,7 +275,7 @@ func openNPipe(path string) (io.ReadWriteCloser, error) {
 func (p *pipe) Write(b []byte) (int, error) {
 	p.conWg.Wait()
 	if p.conErr != nil {
-		return 0, errors.Wrap(p.conErr, "connection error")
+		return 0, fmt.Errorf("connection error: %w", p.conErr)
 	}
 	return p.con.Write(b)
 }
@@ -283,7 +283,7 @@ func (p *pipe) Write(b []byte) (int, error) {
 func (p *pipe) Read(b []byte) (int, error) {
 	p.conWg.Wait()
 	if p.conErr != nil {
-		return 0, errors.Wrap(p.conErr, "connection error")
+		return 0, fmt.Errorf("connection error: %w", p.conErr)
 	}
 	return p.con.Read(b)
 }

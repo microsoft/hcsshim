@@ -4,12 +4,14 @@ package uvm
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -126,7 +128,7 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 	case *hcn.HostComputeEndpoint:
 		hnsEndpoint, err := hnsGetHNSEndpointByName(endpt.Name)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get endpoint with name %q", endpt.Name)
+			return nil, fmt.Errorf("failed to get endpoint with name %q: %w", endpt.Name, err)
 		}
 		if err := ca.uvm.AddEndpointToNSWithID(ctx, hnsEndpoint.Namespace.ID, req.NicID, hnsEndpoint); err != nil {
 			return nil, err
@@ -160,7 +162,7 @@ func (ca *computeAgent) ModifyNIC(ctx context.Context, req *computeagent.ModifyN
 	case *hcn.HostComputeEndpoint:
 		hnsEndpoint, err := hnsGetHNSEndpointByName(endpt.Name)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", endpt.Name)
+			return nil, fmt.Errorf("failed to get endpoint with name `%s`: %w", endpt.Name, err)
 		}
 
 		moderationValue := hcsschema.InterruptModerationValue(req.IovPolicySettings.InterruptModeration)
@@ -179,7 +181,7 @@ func (ca *computeAgent) ModifyNIC(ctx context.Context, req *computeagent.ModifyN
 		}
 
 		if err := ca.uvm.UpdateNIC(ctx, req.NicID, nic); err != nil {
-			return nil, errors.Wrap(err, "failed to update UVM's network adapter")
+			return nil, fmt.Errorf("failed to update UVM's network adapter: %w", err)
 		}
 	default:
 		return nil, status.Error(codes.InvalidArgument, "invalid request endpoint type")
@@ -216,7 +218,7 @@ func (ca *computeAgent) DeleteNIC(ctx context.Context, req *computeagent.DeleteN
 	case *hcn.HostComputeEndpoint:
 		hnsEndpoint, err := hnsGetHNSEndpointByName(endpt.Name)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get endpoint with name %q", endpt.Name)
+			return nil, fmt.Errorf("failed to get endpoint with name %q: %w", endpt.Name, err)
 		}
 		if err := ca.uvm.RemoveEndpointFromNS(ctx, hnsEndpoint.Namespace.ID, hnsEndpoint); err != nil {
 			return nil, err
@@ -232,7 +234,7 @@ func setupAndServe(ctx context.Context, caAddr string, vm *UtilityVM) error {
 	// Setup compute agent service
 	l, err := winio.ListenPipe(caAddr, nil)
 	if err != nil {
-		return errors.Wrapf(err, "failed to listen on %s", caAddr)
+		return fmt.Errorf("failed to listen on %s: %w", caAddr, err)
 	}
 	s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
 	if err != nil {

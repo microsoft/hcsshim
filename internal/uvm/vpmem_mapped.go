@@ -4,10 +4,10 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
@@ -112,7 +112,7 @@ func newMappedVPMemModifyRequest(
 		}
 	case guestrequest.RequestTypeRemove:
 		if pmem == nil {
-			return nil, errors.Errorf("no device found at location %d", deviceNumber)
+			return nil, fmt.Errorf("no device found at location %d", deviceNumber)
 		}
 		request.ResourcePath = fmt.Sprintf(resourcepaths.VPMemDeviceResourceFormat, deviceNumber, md.mappedRegion.Offset())
 	default:
@@ -255,7 +255,7 @@ func (uvm *UtilityVM) addVPMemMappedDevice(ctx context.Context, hostPath string)
 	md := newVPMemMappedDevice(hostPath, uvmPath, devSize, memReg)
 	modification, err := newMappedVPMemModifyRequest(ctx, guestrequest.RequestTypeAdd, deviceNumber, md, uvm)
 	if err := uvm.modify(ctx, modification); err != nil {
-		return "", errors.Errorf("uvm::addVPMemMappedDevice: failed to modify utility VM configuration: %s", err)
+		return "", fmt.Errorf("uvm::addVPMemMappedDevice: failed to modify utility VM configuration: %s", err)
 	}
 	defer func() {
 		if err != nil {
@@ -268,7 +268,7 @@ func (uvm *UtilityVM) addVPMemMappedDevice(ctx context.Context, hostPath string)
 
 	pmem := uvm.vpmemDevicesMultiMapped[deviceNumber]
 	if err := pmem.mapVHDLayer(ctx, md); err != nil {
-		return "", errors.Wrapf(err, "failed to update internal state")
+		return "", fmt.Errorf("failed to update internal state: %w", err)
 	}
 	return uvmPath, nil
 }
@@ -303,7 +303,7 @@ func (uvm *UtilityVM) removeVPMemMappedDevice(ctx context.Context, hostPath stri
 	}
 
 	if err := uvm.modify(ctx, modification); err != nil {
-		return errors.Errorf("failed to remove packed VPMem %s from UVM %s: %s", md.hostPath, uvm.id, err)
+		return fmt.Errorf("failed to remove packed VPMem %s from UVM %s: %s", md.hostPath, uvm.id, err)
 	}
 
 	pmem := uvm.vpmemDevicesMultiMapped[devNum]

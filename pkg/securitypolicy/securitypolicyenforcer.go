@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -18,7 +19,6 @@ import (
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/pkg/errors"
 )
 
 type createEnforcerFunc func(base64EncodedPolicy string, criMounts, criPrivilegedMounts []oci.Mount, maxErrorMessageLength int) (SecurityPolicyEnforcer, error)
@@ -107,14 +107,14 @@ func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolic
 	// we want to store a complex json object so.... base64 it is
 	jsonPolicy, err := base64.StdEncoding.DecodeString(base64EncodedPolicy)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to decode policy from Base64 format")
+		return nil, fmt.Errorf("unable to decode policy from Base64 format: %w", err)
 	}
 
 	// json unmarshall the decoded to a SecurityPolicy
 	securityPolicy := new(SecurityPolicy)
 	err = json.Unmarshal(jsonPolicy, securityPolicy)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to unmarshal JSON policy")
+		return nil, fmt.Errorf("unable to unmarshal JSON policy: %w", err)
 	}
 
 	return securityPolicy, nil

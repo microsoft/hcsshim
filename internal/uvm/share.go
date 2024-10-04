@@ -11,14 +11,13 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/pkg/errors"
 )
 
 func (uvm *UtilityVM) AddVsmbAndGetSharePath(ctx context.Context, reqHostPath, reqUVMPath string, readOnly bool) (*VSMBShare, string, error) {
 	options := uvm.DefaultVSMBOptions(readOnly)
 	vsmbShare, err := uvm.AddVSMB(ctx, reqHostPath, options)
 	if err != nil {
-		return nil, "", errors.Wrapf(err, "failed to add mount as vSMB share to UVM")
+		return nil, "", fmt.Errorf("failed to add mount as vSMB share to UVM: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -28,7 +27,7 @@ func (uvm *UtilityVM) AddVsmbAndGetSharePath(ctx context.Context, reqHostPath, r
 
 	sharePath, err := uvm.GetVSMBUvmPath(ctx, reqHostPath, readOnly)
 	if err != nil {
-		return nil, "", errors.Wrapf(err, "failed to get vsmb path")
+		return nil, "", fmt.Errorf("failed to get vsmb path: %w", err)
 	}
 
 	return vsmbShare, sharePath, nil

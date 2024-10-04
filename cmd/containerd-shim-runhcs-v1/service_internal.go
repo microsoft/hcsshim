@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"github.com/containerd/errdefs"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -35,7 +35,7 @@ var empty = &emptypb.Empty{}
 func (s *service) getPod() (shimPod, error) {
 	raw := s.taskOrPod.Load()
 	if raw == nil {
-		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "task with id: '%s' must be created first", s.tid)
+		return nil, fmt.Errorf("task with id: %q must be created first: %w", s.tid, errdefs.ErrFailedPrecondition)
 	}
 	return raw.(shimPod), nil
 }
@@ -47,7 +47,7 @@ func (s *service) getPod() (shimPod, error) {
 func (s *service) getTask(tid string) (shimTask, error) {
 	raw := s.taskOrPod.Load()
 	if raw == nil {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", tid)
+		return nil, fmt.Errorf("task with id: %q: %w", tid, errdefs.ErrNotFound)
 	}
 	if s.isSandbox {
 		p := raw.(shimPod)
@@ -55,7 +55,7 @@ func (s *service) getTask(tid string) (shimTask, error) {
 	}
 	// When its not a sandbox only the init task is a valid id.
 	if s.tid != tid {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", tid)
+		return nil, fmt.Errorf("task with id: %q: %w", tid, errdefs.ErrNotFound)
 	}
 	return raw.(shimTask), nil
 }
@@ -96,12 +96,12 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	f.Close()
 
 	spec = oci.UpdateSpecFromOptions(spec, shimOpts)
-	//expand annotations after defaults have been loaded in from options
+	// expand annotations after defaults have been loaded in from options
 	err = oci.ProcessAnnotations(ctx, &spec)
 	// since annotation expansion is used to toggle security features
 	// raise it rather than suppress and move on
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to process OCI Spec annotations")
+		return nil, fmt.Errorf("unable to process OCI Spec annotations: %w", err)
 	}
 
 	// If sandbox isolation is set to hypervisor, make sure the HyperV option
@@ -124,7 +124,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	}
 
 	if req.Terminal && req.Stderr != "" {
-		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
+		return nil, fmt.Errorf("if using terminal, stderr must be empty: %w", errdefs.ErrFailedPrecondition)
 	}
 
 	resp := &task.CreateTaskResponse{}
@@ -198,7 +198,7 @@ func (s *service) deleteInternal(ctx context.Context, req *task.DeleteRequest) (
 	if s.isSandbox && req.ExecID == "" {
 		p, err := s.getPod()
 		if err != nil {
-			return nil, errors.Wrapf(err, "could not get pod %q to delete task %q", s.tid, req.ID)
+			return nil, fmt.Errorf("could not get pod %q to delete task %q: %w", s.tid, req.ID, err)
 		}
 		err = p.DeleteTask(ctx, req.ID)
 		if err != nil {
@@ -227,7 +227,7 @@ func (s *service) pidsInternal(ctx context.Context, req *task.PidsRequest) (*tas
 	for i, p := range pids {
 		a, err := typeurl.MarshalAny(p)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to marshal ProcessDetails for process: %s, task: %s", p.ExecID, req.ID)
+			return nil, fmt.Errorf("failed to marshal ProcessDetails for process: %s, task: %s: %w", p.ExecID, req.ID, err)
 		}
 		proc := &containerd_v1_types.ProcessInfo{
 			Pid:  p.ProcessID,
@@ -272,7 +272,7 @@ func (s *service) killInternal(ctx context.Context, req *task.KillRequest) (*emp
 	if s.isSandbox {
 		pod, err := s.getPod()
 		if err != nil {
-			return nil, errors.Wrapf(errdefs.ErrNotFound, "%v: task with id: '%s' not found", err, req.ID)
+			return nil, fmt.Errorf("%v: task with id: %q: %w", err, req.ID, errdefs.ErrNotFound)
 		}
 		// Send it to the POD and let it cascade on its own through all tasks.
 		err = pod.KillTask(ctx, req.ID, req.ExecID, req.Signal, req.All)
@@ -299,11 +299,11 @@ func (s *service) execInternal(ctx context.Context, req *task.ExecProcessRequest
 		return nil, err
 	}
 	if req.Terminal && req.Stderr != "" {
-		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
+		return nil, fmt.Errorf("if using terminal, stderr must be empty: %w", errdefs.ErrFailedPrecondition)
 	}
 	var spec specs.Process
 	if err := json.Unmarshal(req.Spec.Value, &spec); err != nil {
-		return nil, errors.Wrap(err, "request.Spec was not oci process")
+		return nil, fmt.Errorf("request.Spec was not oci process: %w", err)
 	}
 	err = t.CreateExec(ctx, req, &spec)
 	if err != nil {
@@ -314,7 +314,7 @@ func (s *service) execInternal(ctx context.Context, req *task.ExecProcessRequest
 
 func (s *service) diagExecInHostInternal(ctx context.Context, req *shimdiag.ExecProcessRequest) (*shimdiag.ExecProcessResponse, error) {
 	if req.Terminal && req.Stderr != "" {
-		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
+		return nil, fmt.Errorf("if using terminal, stderr must be empty: %w", errdefs.ErrFailedPrecondition)
 	}
 	t, err := s.getTask(s.tid)
 	if err != nil {
@@ -353,7 +353,7 @@ func (s *service) diagListExecs(task shimTask) ([]*shimdiag.Exec, error) {
 func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequest) (_ *shimdiag.TasksResponse, err error) {
 	raw := s.taskOrPod.Load()
 	if raw == nil {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", s.tid)
+		return nil, fmt.Errorf("task with id: %q: %w", s.tid, errdefs.ErrNotFound)
 	}
 
 	resp := &shimdiag.TasksResponse{}
@@ -432,7 +432,7 @@ func (s *service) closeIOInternal(ctx context.Context, req *task.CloseIORequest)
 
 func (s *service) updateInternal(ctx context.Context, req *task.UpdateTaskRequest) (*emptypb.Empty, error) {
 	if req.Resources == nil {
-		return nil, errors.Wrapf(errdefs.ErrInvalidArgument, "resources cannot be empty, updating container %s resources failed", req.ID)
+		return nil, fmt.Errorf("resources cannot be empty, updating container %s resources failed: %w", req.ID, errdefs.ErrInvalidArgument)
 	}
 	t, err := s.getTask(req.ID)
 	if err != nil {
@@ -476,7 +476,7 @@ func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*t
 	}
 	any, err := typeurl.MarshalAny(stats)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to marshal Statistics for task: %s", req.ID)
+		return nil, fmt.Errorf("failed to marshal Statistics for task: %q: %w", req.ID, err)
 	}
 	return &task.StatsResponse{Stats: protobuf.FromAny(any)}, nil
 }

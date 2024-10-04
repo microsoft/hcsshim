@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/devices"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -30,7 +29,7 @@ func getSpecKernelDrivers(annots map[string]string) ([]string, error) {
 	drivers := oci.ParseAnnotationCommaSeparated(annotations.VirtualMachineKernelDrivers, annots)
 	for _, driver := range drivers {
 		if _, err := os.Stat(driver); err != nil {
-			return nil, errors.Wrapf(err, "failed to find path to drivers at %s", driver)
+			return nil, fmt.Errorf("failed to find path to drivers at %s: %w", driver, err)
 		}
 	}
 	return drivers, nil
@@ -42,7 +41,7 @@ func getDeviceExtensionPaths(annots map[string]string) ([]string, error) {
 	extensions := oci.ParseAnnotationCommaSeparated(annotations.DeviceExtensions, annots)
 	for _, ext := range extensions {
 		if _, err := os.Stat(ext); err != nil {
-			return nil, errors.Wrapf(err, "failed to find path to driver extensions at %s", ext)
+			return nil, fmt.Errorf("failed to find path to driver extensions at %s: %w", ext, err)
 		}
 	}
 	return extensions, nil
@@ -80,11 +79,11 @@ func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDef
 	for _, extensionPath := range extensionPaths {
 		data, err := os.ReadFile(extensionPath)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read extension file at %s", extensionPath)
+			return nil, fmt.Errorf("failed to read extension file at %s: %w", extensionPath, err)
 		}
 		extension := hcsschema.DeviceExtension{}
 		if err := json.Unmarshal(data, &extension); err != nil {
-			return nil, errors.Wrapf(err, "failed to unmarshal extension file at %s", extensionPath)
+			return nil, fmt.Errorf("failed to unmarshal extension file at %s: %w", extensionPath, err)
 		}
 		results.DeviceExtension = append(results.DeviceExtension, extension)
 	}
@@ -178,7 +177,7 @@ func handleAssignedDevicesLCOW(
 			pciID, index := devices.GetDeviceInfoFromPath(d.ID)
 			vpci, err := vm.AssignDevice(ctx, pciID, index, "")
 			if err != nil {
-				return resultDevs, closers, errors.Wrapf(err, "failed to assign device %s, function %d to pod %s", pciID, index, vm.ID())
+				return resultDevs, closers, fmt.Errorf("failed to assign device %s, function %d to pod %s: %w", pciID, index, vm.ID(), err)
 			}
 			closers = append(closers, vpci)
 
@@ -187,7 +186,7 @@ func handleAssignedDevicesLCOW(
 			d.ID = vpci.VMBusGUID
 			resultDevs = append(resultDevs, d)
 		} else {
-			return resultDevs, closers, errors.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
+			return resultDevs, closers, fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
 	}
 

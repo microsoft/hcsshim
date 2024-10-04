@@ -3,13 +3,13 @@
 package windevice
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf16"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -48,7 +48,7 @@ func GetDeviceLocationPathsFromIDs(ids []string) ([]string, error) {
 		var devNodeInst uint32
 		err = winapi.CMLocateDevNode(&devNodeInst, id, _CM_LOCATE_DEVNODE_NORMAL)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to locate device node for %s", id)
+			return nil, fmt.Errorf("failed to locate device node for %s: %w", id, err)
 		}
 		propertyType := uint32(0)
 		propertyBufferSize := uint32(0)
@@ -56,14 +56,14 @@ func GetDeviceLocationPathsFromIDs(ids []string) ([]string, error) {
 		// get the size of the property buffer by querying with a nil buffer and zeroed propertyBufferSize
 		err = winapi.CMGetDevNodeProperty(devNodeInst, devPKeyDeviceLocationPaths, &propertyType, nil, &propertyBufferSize, 0)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get property buffer size of devnode query for %s with", id)
+			return nil, fmt.Errorf("failed to get property buffer size of devnode query for %s with: %w", id, err)
 		}
 
 		// get the property with the resulting propertyBufferSize
 		propertyBuffer := make([]uint16, propertyBufferSize/2)
 		err = winapi.CMGetDevNodeProperty(devNodeInst, devPKeyDeviceLocationPaths, &propertyType, &propertyBuffer[0], &propertyBufferSize, 0)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get location path property from device node for %s with", id)
+			return nil, fmt.Errorf("failed to get location path property from device node for %s with: %w", id, err)
 		}
 		if propertyType != _DEVPROP_TYPE_STRING_LIST {
 			return nil, fmt.Errorf("expected to return property type DEVPROP_TYPE_STRING_LIST %d, instead got %d", _DEVPROP_TYPE_STRING_LIST, propertyType)

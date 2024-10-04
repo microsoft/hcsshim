@@ -10,7 +10,6 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
 )
 
 type MountError struct {
@@ -46,7 +45,7 @@ func Unmount(volumePath string) error {
 	}
 
 	if !(strings.HasPrefix(volumePath, "\\\\?\\Volume{") && strings.HasSuffix(volumePath, "}\\")) {
-		return errors.Errorf("volume path %s is not in the expected format", volumePath)
+		return fmt.Errorf("volume path %s is not in the expected format", volumePath)
 	}
 
 	trimmedStr := strings.TrimPrefix(volumePath, "\\\\?\\Volume{")
@@ -54,7 +53,7 @@ func Unmount(volumePath string) error {
 
 	volGUID, err := guid.FromString(trimmedStr)
 	if err != nil {
-		return errors.Wrapf(err, "guid parsing failed for %s", trimmedStr)
+		return fmt.Errorf("guid parsing failed for %s: %w", trimmedStr, err)
 	}
 
 	if err := winapi.CimDismountImage(&volGUID); err != nil {

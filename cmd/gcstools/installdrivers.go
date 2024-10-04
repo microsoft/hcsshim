@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage/overlay"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/pkg/errors"
 )
 
 const moduleExtension = ".ko"
@@ -51,7 +51,7 @@ func install(ctx context.Context) error {
 	modules := []string{}
 	if walkErr := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return errors.Wrap(err, "failed to read directory while walking dir")
+			return fmt.Errorf("failed to read directory while walking dir: %w", err)
 		}
 		if !info.IsDir() && filepath.Ext(info.Name()) == moduleExtension {
 			moduleName := strings.TrimSuffix(info.Name(), moduleExtension)
@@ -67,7 +67,7 @@ func install(ctx context.Context) error {
 	cmd := exec.Command("depmod", depmodArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to run depmod with args %v: %s", depmodArgs, out)
+		return fmt.Errorf("failed to run depmod with args %v: %w (output: %s)", depmodArgs, err, out)
 	}
 
 	// run modprobe for every module name found
@@ -79,7 +79,7 @@ func install(ctx context.Context) error {
 
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to run modprobe with args %v: %s", modprobeArgs, out)
+		return fmt.Errorf("failed to run modprobe with args %v: %w (output: %s)", modprobeArgs, err, out)
 	}
 
 	return nil

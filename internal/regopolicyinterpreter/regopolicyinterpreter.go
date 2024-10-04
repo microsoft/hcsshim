@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
-	"github.com/pkg/errors"
 )
 
 type LogLevel int
@@ -312,7 +312,7 @@ func (r *RegoPolicyInterpreter) EnableLogging(path string, level LogLevel) error
 	r.compiledModules = nil
 	r.logLevel = level
 
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o666)
 	if err != nil {
 		return err
 	}
@@ -561,7 +561,6 @@ func (r *RegoPolicyInterpreter) RawQuery(rule string, input map[string]interface
 	}
 
 	resultSet, err := r.query(rule, input)
-
 	if err != nil {
 		return nil, err
 	}
@@ -585,7 +584,6 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 	}
 
 	rawResult, err := r.query(rule, input)
-
 	if err != nil {
 		return nil, err
 	}

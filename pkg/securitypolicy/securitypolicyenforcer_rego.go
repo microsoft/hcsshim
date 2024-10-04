@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +22,6 @@ import (
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 const regoEnforcerName = "rego"
@@ -997,7 +997,7 @@ func getUser(passwdPath string, filter func(user.User) bool) (user.User, error) 
 		return user.User{}, err
 	}
 	if len(users) != 1 {
-		return user.User{}, errors.Errorf("expected exactly 1 user matched '%d'", len(users))
+		return user.User{}, fmt.Errorf("expected exactly 1 user matched '%d'", len(users))
 	}
 	return users[0], nil
 }
@@ -1008,7 +1008,7 @@ func getGroup(groupPath string, filter func(user.Group) bool) (user.Group, error
 		return user.Group{}, err
 	}
 	if len(groups) != 1 {
-		return user.Group{}, errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
+		return user.Group{}, fmt.Errorf("expected exactly 1 group matched '%d'", len(groups))
 	}
 	return groups[0], nil
 }

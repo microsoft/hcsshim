@@ -4,13 +4,12 @@
 package transport
 
 import (
-	gerrors "errors"
+	"errors"
 	"fmt"
 	"syscall"
 	"time"
 
 	"github.com/linuxkit/virtsock/pkg/vsock"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,12 +35,11 @@ func (t *VsockTransport) Dial(port uint32) (Connection, error) {
 			return conn, nil
 		}
 		// If the error was ETIMEDOUT retry, otherwise fail.
-		var errno syscall.Errno
-		if gerrors.As(err, &errno) && errno == syscall.ETIMEDOUT {
+		if errors.Is(err, syscall.ETIMEDOUT) {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		} else {
-			return nil, errors.Wrapf(err, "vsock Dial port (%d) failed", port)
+			return nil, fmt.Errorf("vsock Dial port (%d) failed: %w", port, err)
 		}
 	}
 	return nil, fmt.Errorf("failed connecting the VsockConnection: can't connect after 10 attempts")

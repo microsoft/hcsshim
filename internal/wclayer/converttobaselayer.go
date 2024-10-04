@@ -13,7 +13,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/safefile"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 )
@@ -85,7 +85,7 @@ func ensureBaseLayer(root *os.File) (hasUtilityVM bool, err error) {
 
 	if !stat.Mode().IsDir() {
 		fullPath := filepath.Join(root.Name(), UtilityVMFilesPath)
-		return false, errors.Errorf("%s has unexpected file mode %s", fullPath, stat.Mode().String())
+		return false, fmt.Errorf("%s has unexpected file mode %s", fullPath, stat.Mode().String())
 	}
 
 	const bcdRelativePath = "EFI\\Microsoft\\Boot\\BCD"
@@ -97,12 +97,12 @@ func ensureBaseLayer(root *os.File) (hasUtilityVM bool, err error) {
 
 	stat, err = safefile.LstatRelative(bcdPath, root)
 	if err != nil {
-		return false, errors.Wrapf(err, "UtilityVM must contain '%s'", bcdRelativePath)
+		return false, fmt.Errorf("UtilityVM must contain %q: %w", bcdRelativePath, err)
 	}
 
 	if !stat.Mode().IsRegular() {
 		fullPath := filepath.Join(root.Name(), bcdPath)
-		return false, errors.Errorf("%s has unexpected file mode %s", fullPath, stat.Mode().String())
+		return false, fmt.Errorf("%s has unexpected file mode %s", fullPath, stat.Mode().String())
 	}
 
 	return true, nil
@@ -110,7 +110,6 @@ func ensureBaseLayer(root *os.File) (hasUtilityVM bool, err error) {
 
 func convertToBaseLayer(ctx context.Context, root *os.File) error {
 	hasUtilityVM, err := ensureBaseLayer(root)
-
 	if err != nil {
 		return err
 	}

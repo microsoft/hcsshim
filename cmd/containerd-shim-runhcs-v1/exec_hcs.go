@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -42,7 +42,8 @@ func newHcsExec(
 	id, bundle string,
 	isWCOW bool,
 	spec *specs.Process,
-	io cmd.UpstreamIO) shimExec {
+	io cmd.UpstreamIO,
+) shimExec {
 	log.G(ctx).WithFields(logrus.Fields{
 		"tid":    tid,
 		"eid":    id, // Init exec ID is always same as Task ID
@@ -287,7 +288,7 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 			}
 		}
 		if err != nil {
-			return errors.Wrapf(errdefs.ErrFailedPrecondition, "signal %d: %v", signal, err)
+			return fmt.Errorf("signal %d: %w: %w", signal, err, errdefs.ErrFailedPrecondition)
 		}
 		var delivered bool
 		if supported && options != nil {
@@ -331,11 +332,11 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 			return err
 		}
 		if !delivered {
-			return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
+			return fmt.Errorf("exec: %q in task: %q: %w", he.id, he.tid, errdefs.ErrNotFound)
 		}
 		return nil
 	case shimExecStateExited:
-		return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
+		return fmt.Errorf("exec: %q in task: %q: %w", he.id, he.tid, errdefs.ErrNotFound)
 	default:
 		return newExecInvalidStateError(he.tid, he.id, he.state, "kill")
 	}
@@ -345,7 +346,7 @@ func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if !he.io.Terminal() {
-		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", he.id, he.tid)
+		return fmt.Errorf("exec: %q in task: %q is not a tty: %w", he.id, he.tid, errdefs.ErrFailedPrecondition)
 	}
 
 	if he.state == shimExecStateRunning {

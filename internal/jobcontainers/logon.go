@@ -4,6 +4,7 @@ package jobcontainers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unsafe"
@@ -11,7 +12,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -162,7 +163,7 @@ func (c *JobContainer) processToken(ctx context.Context, userOrGroup string) (wi
 func openCurrentProcessToken() (windows.Token, error) {
 	var token windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ALL_ACCESS, &token); err != nil {
-		return 0, errors.Wrap(err, "failed to open current process token")
+		return 0, fmt.Errorf("failed to open current process token: %w", err)
 	}
 	return token, nil
 }

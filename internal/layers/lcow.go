@@ -6,12 +6,13 @@ package layers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/containerd/containerd/api/types"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"

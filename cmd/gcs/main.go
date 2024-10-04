@@ -17,7 +17,6 @@ import (
 	cgroups "github.com/containerd/cgroups/v3/cgroup1"
 	cgroupstats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
@@ -121,12 +120,12 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 func startTimeSyncService() error {
 	ptpClassDir, err := os.Open("/sys/class/ptp")
 	if err != nil {
-		return errors.Wrap(err, "failed to open PTP class directory")
+		return fmt.Errorf("failed to open PTP class directory: %w", err)
 	}
 
 	ptpDirList, err := ptpClassDir.Readdirnames(-1)
 	if err != nil {
-		return errors.Wrap(err, "failed to list PTP class directory")
+		return fmt.Errorf("failed to list PTP class directory: %w", err)
 	}
 
 	var ptpDirPath string
@@ -137,7 +136,7 @@ func startTimeSyncService() error {
 		clockNameFilePath := filepath.Join(ptpClassDir.Name(), ptpDirPath, "clock_name")
 		buf, err := os.ReadFile(clockNameFilePath)
 		if err != nil && !os.IsNotExist(err) {
-			return errors.Wrapf(err, "failed to read clock name file at %s", clockNameFilePath)
+			return fmt.Errorf("failed to read clock name: %w", err)
 		}
 
 		if string(buf) == expectedClockName {
@@ -147,7 +146,7 @@ func startTimeSyncService() error {
 	}
 
 	if !found {
-		return errors.Errorf("no PTP device found with name \"%s\"", expectedClockName)
+		return fmt.Errorf("no PTP device found with name %q", expectedClockName)
 	}
 
 	// create chronyd config file
@@ -155,9 +154,9 @@ func startTimeSyncService() error {
 	// chronyd config file take from: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/time-sync
 	chronydConfigString := fmt.Sprintf("refclock PHC %s poll 3 dpoll -2 offset 0 stratum 2\nmakestep 0.1 -1\n", ptpDevPath)
 	chronydConfPath := "/tmp/chronyd.conf"
-	err = os.WriteFile(chronydConfPath, []byte(chronydConfigString), 0644)
+	err = os.WriteFile(chronydConfPath, []byte(chronydConfigString), 0o644)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create chronyd conf file %s", chronydConfPath)
+		return fmt.Errorf("failed to create chronyd conf file: %w", err)
 	}
 
 	// start chronyd. Do NOT start chronyd as daemon because creating a daemon
@@ -220,7 +219,7 @@ func main() {
 
 	var logWriter *os.File
 	if *logFile != "" {
-		logFileHandle, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		logFileHandle, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"path":          *logFile,
@@ -285,7 +284,7 @@ func main() {
 		if err := os.WriteFile(
 			"/proc/sys/kernel/core_pattern",
 			[]byte(*coreDumpLoc),
-			0644,
+			0o644,
 		); err != nil {
 			logrus.WithError(err).Fatal("failed to set core dump location")
 		}
@@ -333,7 +332,7 @@ func main() {
 	// Write 1 to memory.use_hierarchy on the root cgroup to enable hierarchy
 	// support. This needs to be set before we create any cgroups as the write
 	// will fail otherwise.
-	if err := os.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0644); err != nil {
+	if err := os.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0o644); err != nil {
 		logrus.WithError(err).Fatal("failed to enable hierarchy support for root cgroup")
 	}
 

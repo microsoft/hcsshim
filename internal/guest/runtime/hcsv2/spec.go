@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"github.com/opencontainers/runc/libcontainer/devices"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -71,11 +71,11 @@ func setCoreRLimit(spec *oci.Spec, value string) error {
 
 	soft, err := strconv.ParseUint(vals[0], 10, 64)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse soft core rlimit")
+		return fmt.Errorf("failed to parse soft core rlimit: %w", err)
 	}
 	hard, err := strconv.ParseUint(vals[1], 10, 64)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse hard core rlimit")
+		return fmt.Errorf("failed to parse hard core rlimit: %w", err)
 	}
 
 	spec.Process.Rlimits = append(spec.Process.Rlimits, oci.POSIXRlimit{
@@ -117,7 +117,7 @@ func setUserStr(spec *oci.Spec, userstr string) error {
 			return setUsername(spec, userstr)
 		}
 		if outOfUint32Bounds(v) {
-			return errors.Errorf("UID (%d) exceeds uint32 bounds", v)
+			return fmt.Errorf("UID (%d) exceeds uint32 bounds", v)
 		}
 		return setUserID(spec, uint32(v))
 	case 2:
@@ -131,7 +131,7 @@ func setUserStr(spec *oci.Spec, userstr string) error {
 			username = parts[0]
 		} else {
 			if outOfUint32Bounds(v) {
-				return errors.Errorf("UID (%d) exceeds uint32 bounds", v)
+				return fmt.Errorf("UID (%d) exceeds uint32 bounds", v)
 			}
 			uid = uint32(v)
 		}
@@ -141,7 +141,7 @@ func setUserStr(spec *oci.Spec, userstr string) error {
 			groupname = parts[1]
 		} else {
 			if outOfUint32Bounds(v) {
-				return errors.Errorf("GID (%d) for user %q exceeds uint32 bounds", v, parts[0])
+				return fmt.Errorf("GID (%d) for user %q exceeds uint32 bounds", v, parts[0])
 			}
 			gid = uint32(v)
 		}
@@ -151,11 +151,11 @@ func setUserStr(spec *oci.Spec, userstr string) error {
 				return u.Name == username
 			})
 			if err != nil {
-				return errors.Wrapf(err, "failed to find user by username: %s", username)
+				return fmt.Errorf("failed to find user by username: %s: %w", username, err)
 			}
 
 			if outOfUint32Bounds(u.Uid) {
-				return errors.Errorf("UID (%d) for username %q exceeds uint32 bounds", u.Uid, username)
+				return fmt.Errorf("UID (%d) for username %q exceeds uint32 bounds", u.Uid, username)
 			}
 			uid = uint32(u.Uid)
 		}
@@ -164,11 +164,11 @@ func setUserStr(spec *oci.Spec, userstr string) error {
 				return g.Name == groupname
 			})
 			if err != nil {
-				return errors.Wrapf(err, "failed to find group by groupname: %s", groupname)
+				return fmt.Errorf("failed to find group by groupname: %s: %w", groupname, err)
 			}
 
 			if outOfUint32Bounds(g.Gid) {
-				return errors.Errorf("GID (%d) for groupname %q exceeds uint32 bounds", g.Gid, groupname)
+				return fmt.Errorf("GID (%d) for groupname %q exceeds uint32 bounds", g.Gid, groupname)
 			}
 			gid = uint32(g.Gid)
 		}
@@ -185,13 +185,13 @@ func setUsername(spec *oci.Spec, username string) error {
 		return u.Name == username
 	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to find user by username: %s", username)
+		return fmt.Errorf("failed to find user by username: %s: %w", username, err)
 	}
 	if outOfUint32Bounds(u.Uid) {
-		return errors.Errorf("UID (%d) for username %q exceeds uint32 bounds", u.Uid, username)
+		return fmt.Errorf("UID (%d) for username %q exceeds uint32 bounds", u.Uid, username)
 	}
 	if outOfUint32Bounds(u.Gid) {
-		return errors.Errorf("GID (%d) for username %q exceeds uint32 bounds", u.Gid, username)
+		return fmt.Errorf("GID (%d) for username %q exceeds uint32 bounds", u.Gid, username)
 	}
 	spec.Process.User.UID, spec.Process.User.GID = uint32(u.Uid), uint32(u.Gid)
 	return nil
@@ -207,7 +207,7 @@ func setUserID(spec *oci.Spec, uid uint32) error {
 	}
 
 	if outOfUint32Bounds(u.Gid) {
-		return errors.Errorf("GID (%d) for UID %d exceeds uint32 bounds", u.Gid, uid)
+		return fmt.Errorf("GID (%d) for UID %d exceeds uint32 bounds", u.Gid, uid)
 	}
 	spec.Process.User.UID, spec.Process.User.GID = uid, uint32(u.Gid)
 	return nil
@@ -219,7 +219,7 @@ func getUser(spec *oci.Spec, filter func(user.User) bool) (user.User, error) {
 		return user.User{}, err
 	}
 	if len(users) != 1 {
-		return user.User{}, errors.Errorf("expected exactly 1 user matched '%d'", len(users))
+		return user.User{}, fmt.Errorf("expected exactly 1 user matched '%d'", len(users))
 	}
 	return users[0], nil
 }
@@ -230,7 +230,7 @@ func getGroup(spec *oci.Spec, filter func(user.Group) bool) (user.Group, error) 
 		return user.Group{}, err
 	}
 	if len(groups) != 1 {
-		return user.Group{}, errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
+		return user.Group{}, fmt.Errorf("expected exactly 1 group matched '%d'", len(groups))
 	}
 	return groups[0], nil
 }
