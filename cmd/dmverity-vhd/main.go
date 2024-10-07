@@ -432,7 +432,7 @@ var createVHDCommand = cli.Command{
 	Usage: "creates LCOW layer VHDs inside the output directory with dm-verity super block and merkle tree appended at the end",
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:     inputFlag + ",i",
+			Name:     inputFlag + ",image,i",
 			Usage:    "Required: container image reference or path directory tarfile to create a VHD from",
 			Required: true,
 		},
