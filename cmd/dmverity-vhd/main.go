@@ -35,7 +35,7 @@ const (
 	bufferedReaderFlag = "buffered-reader"
 	tarballFlag        = "tarball"
 	hashDeviceVhdFlag  = "hash-dev-vhd"
-	directoryVhdFlag   = "directory-vhd"
+	dataVhdFlag        = "data-vhd"
 	maxVHDSize         = dmverity.RecommendedVHDSizeGB
 )
 
@@ -454,7 +454,7 @@ var createVHDCommand = cli.Command{
 			Usage: "Optional: save hash-device as a VHD",
 		},
 		cli.BoolFlag{
-			Name:  directoryVhdFlag + ",dir",
+			Name:  dataVhdFlag + ",dir",
 			Usage: "Optional: save directory tarfile as a VHD",
 		},
 	},
@@ -464,7 +464,7 @@ var createVHDCommand = cli.Command{
 			log.SetLevel(log.DebugLevel)
 		}
 		verityHashDev := ctx.Bool(hashDeviceVhdFlag)
-		verityDir := ctx.Bool(directoryVhdFlag)
+		verityDir := ctx.Bool(dataVhdFlag)
 
 		outDir := ctx.String(outputDirFlag)
 		if _, err := os.Stat(outDir); os.IsNotExist(err) {
@@ -496,6 +496,7 @@ var createVHDCommand = cli.Command{
 			}
 
 			fmt.Fprintf(os.Stdout, "Directory VHD created at %s\n", dst)
+			return nil
 		} else {
 			createVHDLayer := func(layerID string, layerReader io.Reader) error {
 				return createVHD(layerID, layerReader, verityHashDev, outDir)
