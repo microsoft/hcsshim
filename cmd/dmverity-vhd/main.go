@@ -464,7 +464,7 @@ var createVHDCommand = cli.Command{
 			log.SetLevel(log.DebugLevel)
 		}
 		verityHashDev := ctx.Bool(hashDeviceVhdFlag)
-		verityDir := ctx.Bool(dataVhdFlag)
+		verityData := ctx.Bool(dataVhdFlag)
 
 		outDir := ctx.String(outputDirFlag)
 		if _, err := os.Stat(outDir); os.IsNotExist(err) {
@@ -474,7 +474,7 @@ var createVHDCommand = cli.Command{
 			}
 		}
 
-		if verityDir {
+		if verityData {
 			dirName := ctx.String(inputFlag)
 			log.Debugf("creating VHD from directory tarball at: %q", dirName)
 			dirReader, err := fetchImageTarball(dirName)
@@ -497,45 +497,44 @@ var createVHDCommand = cli.Command{
 
 			fmt.Fprintf(os.Stdout, "Directory VHD created at %s\n", dst)
 			return nil
-		} else {
-			createVHDLayer := func(layerID string, layerReader io.Reader) error {
-				return createVHD(layerID, layerReader, verityHashDev, outDir)
-			}
-
-			log.Debug("creating layer VHDs with dm-verity")
-			layerDigests, layerIDs, err := processImageLayers(ctx, createVHDLayer)
-			if err != nil {
-				return err
-			}
-
-			// Move the VHDs to the output directory
-			// They can't immediately be in the output directory because they have
-			// temporary file names based on the layer id which isn't necessarily
-			// the layer digest
-			for layerNumber := 0; layerNumber < len(layerDigests); layerNumber++ {
-				layerDigest := layerDigests[layerNumber]
-				layerID := layerIDs[layerNumber]
-				sanitisedFileName := sanitiseVHDFilename(layerID)
-
-				suffixes := []string{".vhd"}
-
-				for _, srcSuffix := range suffixes {
-					src := filepath.Join(os.TempDir(), sanitisedFileName+srcSuffix)
-					if _, err := os.Stat(src); os.IsNotExist(err) {
-						return fmt.Errorf("layer VHD %s does not exist", src)
-					}
-
-					dst := filepath.Join(outDir, layerDigest+srcSuffix)
-					if err := moveFile(src, dst); err != nil {
-						return err
-					}
-
-					fmt.Fprintf(os.Stdout, "Layer VHD created at %s\n", dst)
-				}
-
-			}
 		}
 
+		createVHDLayer := func(layerID string, layerReader io.Reader) error {
+			return createVHD(layerID, layerReader, verityHashDev, outDir)
+		}
+
+		log.Debug("creating layer VHDs with dm-verity")
+		layerDigests, layerIDs, err := processImageLayers(ctx, createVHDLayer)
+		if err != nil {
+			return err
+		}
+
+		// Move the VHDs to the output directory
+		// They can't immediately be in the output directory because they have
+		// temporary file names based on the layer id which isn't necessarily
+		// the layer digest
+		for layerNumber := 0; layerNumber < len(layerDigests); layerNumber++ {
+			layerDigest := layerDigests[layerNumber]
+			layerID := layerIDs[layerNumber]
+			sanitisedFileName := sanitiseVHDFilename(layerID)
+
+			suffixes := []string{".vhd"}
+
+			for _, srcSuffix := range suffixes {
+				src := filepath.Join(os.TempDir(), sanitisedFileName+srcSuffix)
+				if _, err := os.Stat(src); os.IsNotExist(err) {
+					return fmt.Errorf("layer VHD %s does not exist", src)
+				}
+
+				dst := filepath.Join(outDir, layerDigest+srcSuffix)
+				if err := moveFile(src, dst); err != nil {
+					return err
+				}
+
+				fmt.Fprintf(os.Stdout, "Layer VHD created at %s\n", dst)
+			}
+
+		}
 		return nil
 	},
 }
@@ -545,7 +544,7 @@ var rootHashVHDCommand = cli.Command{
 	Usage: "compute root hashes for each LCOW layer VHD",
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:     inputFlag + ",i",
+			Name:     inputFlag + ",image,i",
 			Usage:    "Required: container image reference",
 			Required: true,
 		},
