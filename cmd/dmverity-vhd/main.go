@@ -28,13 +28,14 @@ const usage = `dmverity-vhd is a command line tool for creating LCOW layer VHDs 
 const (
 	usernameFlag       = "username"
 	passwordFlag       = "password"
-	imageFlag          = "image"
+	inputFlag          = "input"
 	verboseFlag        = "verbose"
 	outputDirFlag      = "out-dir"
 	dockerFlag         = "docker"
 	bufferedReaderFlag = "buffered-reader"
 	tarballFlag        = "tarball"
 	hashDeviceVhdFlag  = "hash-dev-vhd"
+	dataVhdFlag        = "data-vhd"
 	maxVHDSize         = dmverity.RecommendedVHDSizeGB
 )
 
@@ -305,7 +306,7 @@ func processRemoteImage(imageName string, username string, password string, onLa
 }
 
 func processImageLayers(ctx *cli.Context, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
-	imageName := ctx.String(imageFlag)
+	imageName := ctx.String(inputFlag)
 	tarballPath := ctx.GlobalString(tarballFlag)
 	useDocker := ctx.GlobalBool(dockerFlag)
 
@@ -431,8 +432,8 @@ var createVHDCommand = cli.Command{
 	Usage: "creates LCOW layer VHDs inside the output directory with dm-verity super block and merkle tree appended at the end",
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:     imageFlag + ",i",
-			Usage:    "Required: container image reference",
+			Name:     inputFlag + ",image,i",
+			Usage:    "Required: container image reference or path directory tarfile to create a VHD from",
 			Required: true,
 		},
 		cli.StringFlag{
@@ -452,6 +453,10 @@ var createVHDCommand = cli.Command{
 			Name:  hashDeviceVhdFlag + ",hdv",
 			Usage: "Optional: save hash-device as a VHD",
 		},
+		cli.BoolFlag{
+			Name:  dataVhdFlag + ",dir",
+			Usage: "Optional: save directory tarfile as a VHD",
+		},
 	},
 	Action: func(ctx *cli.Context) error {
 		verbose := ctx.GlobalBool(verboseFlag)
@@ -459,6 +464,7 @@ var createVHDCommand = cli.Command{
 			log.SetLevel(log.DebugLevel)
 		}
 		verityHashDev := ctx.Bool(hashDeviceVhdFlag)
+		verityData := ctx.Bool(dataVhdFlag)
 
 		outDir := ctx.String(outputDirFlag)
 		if _, err := os.Stat(outDir); os.IsNotExist(err) {
@@ -466,6 +472,31 @@ var createVHDCommand = cli.Command{
 			if err := os.MkdirAll(outDir, 0755); err != nil {
 				return fmt.Errorf("failed to create output directory %s: %w", outDir, err)
 			}
+		}
+
+		if verityData {
+			dirName := ctx.String(inputFlag)
+			log.Debugf("creating VHD from directory tarball at: %q", dirName)
+			dirReader, err := fetchImageTarball(dirName)
+			if err != nil {
+				return fmt.Errorf("failed to get tar file reader from tarball %s: %w", dirName, err)
+			}
+			if err := createVHD(dirName, dirReader, verityHashDev, outDir); err != nil {
+				return fmt.Errorf("failed to create VHD from directory %s: %w", dirName, err)
+			}
+			sanitisedDirName := sanitiseVHDFilename(dirName)
+			src := filepath.Join(os.TempDir(), sanitisedDirName+".vhd")
+			if _, err := os.Stat(src); os.IsNotExist(err) {
+				return fmt.Errorf("directory VHD %s does not exist", src)
+			}
+
+			dst := filepath.Join(outDir, sanitisedDirName+".vhd")
+			if err := moveFile(src, dst); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stdout, "Directory VHD created at %s\n", dst)
+			return nil
 		}
 
 		createVHDLayer := func(layerID string, layerReader io.Reader) error {
@@ -504,7 +535,6 @@ var createVHDCommand = cli.Command{
 			}
 
 		}
-
 		return nil
 	},
 }
@@ -514,7 +544,7 @@ var rootHashVHDCommand = cli.Command{
 	Usage: "compute root hashes for each LCOW layer VHD",
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:     imageFlag + ",i",
+			Name:     inputFlag + ",image,i",
 			Usage:    "Required: container image reference",
 			Required: true,
 		},

@@ -28,10 +28,34 @@ Create VHDs:
 dmverity-vhd create -i alpine:3.12 -o alpine_3_12_layers
 ```
 
+Output:
+
+```text
+Layer VHD created at alpine_3_12_layers\1ad27bdd166b922492031b1938a4fb2f775e3d98c8f1b72051dad0570a4dd1b5.vhd
+```
+
+Create VHDs from a directory tarball:
+
+```bash
+dmverity-vhd create -i data.tar -o data_vhd -dir
+```
+
+Output:
+
+```text
+Directory VHD created at data_vhd\data.vhd
+```
+
 Compute root hashes:
 
 ```bash
 dmverity-vhd --docker roothash -i alpine:3.12
+```
+
+Output:
+
+```text
+Layer 0 root hash: 71702a459fa5e6574337e014d9d3936bcf7cb448aaffe3814883caa01fbb4827
 ```
 
 Compute root hashes with tarball:
