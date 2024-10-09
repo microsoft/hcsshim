@@ -3,7 +3,7 @@ package images
 import (
 	"fmt"
 
-	"github.com/containerd/errdefs"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/platforms"
 )
 
