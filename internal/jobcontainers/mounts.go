@@ -4,6 +4,7 @@ package jobcontainers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -52,11 +53,11 @@ func fallbackMountSetup(spec *specs.Spec, sandboxVolumePath string) error {
 		// Make sure all of the dirs leading up to the full path exist.
 		strippedCtrPath := filepath.Dir(fullCtrPath)
 		if err := os.MkdirAll(strippedCtrPath, 0777); err != nil {
-			return errors.Wrap(err, "failed to make directory for job container mount")
+			return fmt.Errorf("failed to make directory for job container mount: %w", err)
 		}
 
 		if err := os.Symlink(mount.Source, fullCtrPath); err != nil {
-			return errors.Wrap(err, "failed to setup mount for job container")
+			return fmt.Errorf("failed to setup mount for job container: %w", err)
 		}
 	}
 	return nil

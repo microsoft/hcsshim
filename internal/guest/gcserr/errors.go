@@ -1,10 +1,8 @@
 package gcserr
 
 import (
+	"errors"
 	"fmt"
-	"io"
-
-	"github.com/pkg/errors"
 )
 
 // Hresult is a type corresponding to the HRESULT error type used on Windows.
@@ -56,39 +54,6 @@ const (
 
 // TODO: update implementation to use go1.13 style errors with `errors.As` and co.
 
-// StackTracer is an interface originating (but not exported) from the
-// github.com/pkg/errors package. It defines something which can return a stack
-// trace.
-type StackTracer interface {
-	StackTrace() errors.StackTrace
-}
-
-// BaseStackTrace gets the earliest errors.StackTrace in the given error's cause
-// stack. This will be the stack trace which reaches closest to the error's
-// actual origin. It returns nil if no stack trace is found in the cause stack.
-func BaseStackTrace(e error) errors.StackTrace {
-	type causer interface {
-		Cause() error
-	}
-	cause := e
-	var tracer StackTracer
-	for cause != nil {
-		serr, ok := cause.(StackTracer) //nolint:errorlint
-		if ok {
-			tracer = serr
-		}
-		cerr, ok := cause.(causer) //nolint:errorlint
-		if !ok {
-			break
-		}
-		cause = cerr.Cause()
-	}
-	if tracer == nil {
-		return nil
-	}
-	return tracer.StackTrace()
-}
-
 type baseHresultError struct {
 	hresult Hresult
 }
@@ -96,6 +61,7 @@ type baseHresultError struct {
 func (e *baseHresultError) Error() string {
 	return fmt.Sprintf("HRESULT: 0x%x", uint32(e.Hresult()))
 }
+
 func (e *baseHresultError) Hresult() Hresult {
 	return e.hresult
 }
@@ -106,37 +72,15 @@ type wrappingHresultError struct {
 }
 
 func (e *wrappingHresultError) Error() string {
-	return fmt.Sprintf("HRESULT 0x%x", uint32(e.Hresult())) + ": " + e.Cause().Error()
+	return fmt.Sprintf("HRESULT 0x%x", uint32(e.Hresult())) + ": " + e.Unwrap().Error()
 }
+
 func (e *wrappingHresultError) Hresult() Hresult {
 	return e.hresult
 }
-func (e *wrappingHresultError) Cause() error {
+
+func (e *wrappingHresultError) Unwrap() error {
 	return e.cause
-}
-func (e *wrappingHresultError) Format(s fmt.State, verb rune) {
-	switch verb {
-	case 'v':
-		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v\n", e.Cause())
-			return
-		}
-		fallthrough
-	case 's':
-		_, _ = io.WriteString(s, e.Error())
-	case 'q':
-		fmt.Fprintf(s, "%q", e.Error())
-	}
-}
-func (e *wrappingHresultError) StackTrace() errors.StackTrace {
-	type stackTracer interface {
-		StackTrace() errors.StackTrace
-	}
-	serr, ok := e.Cause().(stackTracer) //nolint:errorlint
-	if !ok {
-		return nil
-	}
-	return serr.StackTrace()
 }
 
 // NewHresultError produces a new error with the given HRESULT.
@@ -146,6 +90,8 @@ func NewHresultError(hresult Hresult) error {
 
 // WrapHresult produces a new error with the given HRESULT and wrapping the
 // given error.
+//
+// Deprecated: use [fmt.Errorf] with %w and [NewHresultError] instead.
 func WrapHresult(e error, hresult Hresult) error {
 	return &wrappingHresultError{
 		cause:   e,
@@ -153,29 +99,14 @@ func WrapHresult(e error, hresult Hresult) error {
 	}
 }
 
-// GetHresult iterates through the error's cause stack (similar to how the
-// Cause function in github.com/pkg/errors operates). At the first error it
-// encounters which implements the Hresult() method, it return's that error's
-// HRESULT. This allows errors higher up in the cause stack to shadow the
-// HRESULTs of errors lower down.
+// GetHresult returns the topmost HRESULT of an error, if possible, or an error.
 func GetHresult(e error) (Hresult, error) {
 	type hresulter interface {
 		Hresult() Hresult
 	}
-	type causer interface {
-		Cause() error
+	var herr hresulter
+	if errors.As(e, &herr) {
+		return herr.Hresult(), nil
 	}
-	cause := e
-	for cause != nil {
-		herr, ok := cause.(hresulter) //nolint:errorlint
-		if ok {
-			return herr.Hresult(), nil
-		}
-		cerr, ok := cause.(causer) //nolint:errorlint
-		if !ok {
-			break
-		}
-		cause = cerr.Cause()
-	}
-	return -1, errors.Errorf("no HRESULT found in cause stack for error %s", e)
+	return -1, fmt.Errorf("no HRESULT found in stack for error %s", e)
 }

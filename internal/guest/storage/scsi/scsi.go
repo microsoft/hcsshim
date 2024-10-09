@@ -5,6 +5,7 @@ package scsi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
@@ -134,7 +134,8 @@ func Mount(
 	target string,
 	readonly bool,
 	options []string,
-	config *Config) (err error) {
+	config *Config,
+) (err error) {
 	spnCtx, span := oc.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -170,7 +171,7 @@ func Mount(
 	// create and symlink block device mount target
 	if config.BlockDev {
 		parent := filepath.Dir(target)
-		if err := osMkdirAll(parent, 0700); err != nil {
+		if err := osMkdirAll(parent, 0o700); err != nil {
 			return err
 		}
 		log.G(ctx).WithFields(logrus.Fields{
@@ -180,7 +181,7 @@ func Mount(
 		return osSymlink(source, target)
 	}
 
-	if err := osMkdirAll(target, 0700); err != nil {
+	if err := osMkdirAll(target, 0o700); err != nil {
 		return err
 	}
 	defer func() {
@@ -308,7 +309,7 @@ func Unmount(
 
 	// unmount target
 	if err := storageUnmountPath(ctx, target, true); err != nil {
-		return errors.Wrapf(err, "unmount failed: %s", target)
+		return fmt.Errorf("unmount %q failed: %w", target, err)
 	}
 
 	if config.VerityInfo != nil {
@@ -366,7 +367,7 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 	}
 
 	if len(deviceNames) > 1 {
-		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
+		return "", fmt.Errorf("more than one block device could match SCSI ID %q", scsiID)
 	}
 	deviceName := deviceNames[0].Name()
 
@@ -442,7 +443,7 @@ func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 		trace.Int64Attribute("lun", int64(lun)))
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
-	f, err := os.OpenFile(filepath.Join(scsiDevicesPath, scsiID, "delete"), os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filepath.Join(scsiDevicesPath, scsiID, "delete"), os.O_WRONLY, 0o644)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

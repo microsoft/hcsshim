@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -18,7 +17,7 @@ import (
 func NewConsole() (*os.File, string, error) {
 	master, err := os.OpenFile("/dev/ptmx", syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_CLOEXEC, 0)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "failed to open master pseudoterminal file")
+		return nil, "", fmt.Errorf("failed to open master pseudoterminal file: %w", err)
 	}
 	console, err := ptsname(master)
 	if err != nil {
@@ -29,10 +28,10 @@ func NewConsole() (*os.File, string, error) {
 	}
 	// TODO: Do we need to keep this chmod call?
 	if err := os.Chmod(console, 0600); err != nil {
-		return nil, "", errors.Wrap(err, "failed to change permissions on the slave pseudoterminal file")
+		return nil, "", fmt.Errorf("failed to change permissions on the slave pseudoterminal file: %w", err)
 	}
 	if err := os.Chown(console, 0, 0); err != nil {
-		return nil, "", errors.Wrap(err, "failed to change ownership on the slave pseudoterminal file")
+		return nil, "", fmt.Errorf("failed to change ownership on the slave pseudoterminal file: %w", err)
 	}
 	return master, console, nil
 }
@@ -62,7 +61,7 @@ func ioctl(fd uintptr, flag, data uintptr) error {
 func ptsname(f *os.File) (string, error) {
 	var n int32
 	if err := ioctl(f.Fd(), syscall.TIOCGPTN, uintptr(unsafe.Pointer(&n))); err != nil {
-		return "", errors.Wrap(err, "ioctl TIOCGPTN failed for ptsname")
+		return "", fmt.Errorf("ioctl TIOCGPTN failed for ptsname: %w", err)
 	}
 	return fmt.Sprintf("/dev/pts/%d", n), nil
 }
@@ -72,7 +71,7 @@ func ptsname(f *os.File) (string, error) {
 func unlockpt(f *os.File) error {
 	var u int32
 	if err := ioctl(f.Fd(), syscall.TIOCSPTLCK, uintptr(unsafe.Pointer(&u))); err != nil {
-		return errors.Wrap(err, "ioctl TIOCSPTLCK failed for unlockpt")
+		return fmt.Errorf("ioctl TIOCSPTLCK failed for unlockpt: %w", err)
 	}
 	return nil
 }

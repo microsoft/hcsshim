@@ -3,10 +3,10 @@
 package jobcontainers
 
 import (
+	"errors"
 	"unicode/utf16"
 	"unsafe"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 

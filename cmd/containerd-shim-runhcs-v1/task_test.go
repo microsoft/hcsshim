@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -15,7 +17,6 @@ import (
 	"github.com/containerd/errdefs"
 	typeurl "github.com/containerd/typeurl/v2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 var _ = (shimTask)(&testShimTask{})
@@ -106,7 +107,7 @@ func (tst *testShimTask) DumpGuestStacks(ctx context.Context) string {
 func (tst *testShimTask) Update(ctx context.Context, req *task.UpdateTaskRequest) error {
 	data, err := typeurl.UnmarshalAny(req.Resources)
 	if err != nil {
-		return errors.Wrapf(err, "failed to unmarshal resources for container %s update request", req.ID)
+		return fmt.Errorf("failed to unmarshal resources for container %q update request: %w", req.ID, err)
 	}
 	if err := verifyTaskUpdateResourcesType(data); err != nil {
 		return err

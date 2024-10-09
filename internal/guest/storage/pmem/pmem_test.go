@@ -5,11 +5,11 @@ package pmem
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -33,7 +33,7 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		return expectedErr
 	}
 	err := Mount(context.Background(), 0, "", nil, nil)
-	if errors.Cause(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 }
@@ -70,8 +70,8 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 
 	target := "/fake/path"
 	osMkdirAll = func(path string, perm os.FileMode) error {
-		if perm != os.FileMode(0700) {
-			t.Errorf("expected perm: %v, got: %v", os.FileMode(0700), perm)
+		if perm != os.FileMode(0o700) {
+			t.Errorf("expected perm: %v, got: %v", os.FileMode(0o700), perm)
 			return errors.New("unexpected perm")
 		}
 		return nil
@@ -108,7 +108,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		return expectedErr
 	}
 	err := Mount(context.Background(), 0, target, nil, nil)
-	if errors.Cause(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 	if !removeAllCalled {

@@ -17,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/vmbus"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 )
 
@@ -69,7 +69,7 @@ func GenerateResolvConfContent(ctx context.Context, searches, servers, options [
 		trace.StringAttribute("options", strings.Join(options, ", ")))
 
 	if len(searches) > maxDNSSearches {
-		return "", errors.Errorf("searches has more than %d domains", maxDNSSearches)
+		return "", fmt.Errorf("searches has more than %d domains", maxDNSSearches)
 	}
 
 	content := ""
@@ -136,7 +136,7 @@ func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ stri
 		netDevicePath, err = vmbusWaitForDevicePath(ctx, vmBusNetSubPath)
 	}
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to find adapter %v sysfs path", vmBusID)
+		return "", fmt.Errorf("failed to find adapter %v sysfs path: %w", vmBusID, err)
 	}
 
 	var deviceDirs []os.DirEntry
@@ -146,22 +146,22 @@ func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ stri
 			if os.IsNotExist(err) {
 				select {
 				case <-ctx.Done():
-					return "", errors.Wrap(ctx.Err(), "timed out waiting for net adapter")
+					return "", fmt.Errorf("timed out waiting for net adapter: %w", ctx.Err())
 				default:
 					time.Sleep(10 * time.Millisecond)
 					continue
 				}
 			} else {
-				return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", vmBusID)
+				return "", fmt.Errorf("failed to read vmbus network device from /sys filesystem for adapter %s: %w", vmBusID, err)
 			}
 		}
 		break
 	}
 	if len(deviceDirs) == 0 {
-		return "", errors.Errorf("no interface name found for adapter %s", vmBusID)
+		return "", fmt.Errorf("no interface name found for adapter %s", vmBusID)
 	}
 	if len(deviceDirs) > 1 {
-		return "", errors.Errorf("multiple interface names found for adapter %s", vmBusID)
+		return "", fmt.Errorf("multiple interface names found for adapter %s", vmBusID)
 	}
 	ifname := deviceDirs[0].Name()
 	log.G(ctx).WithField("ifname", ifname).Debug("resolved ifname")

@@ -4,10 +4,11 @@
 package stdio
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -75,7 +76,7 @@ func Connect(tport transport.Transport, settings ConnectionSettings) (_ *Connect
 	if settings.StdIn != nil {
 		c, err := tport.Dial(*settings.StdIn)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed creating stdin Connection")
+			return nil, fmt.Errorf("failed creating stdin Connection: %w", err)
 		}
 		connSet.In = &logConnection{
 			con:  c,
@@ -85,7 +86,7 @@ func Connect(tport transport.Transport, settings ConnectionSettings) (_ *Connect
 	if settings.StdOut != nil {
 		c, err := tport.Dial(*settings.StdOut)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed creating stdout Connection")
+			return nil, fmt.Errorf("failed creating stdout Connection: %w", err)
 		}
 		connSet.Out = &logConnection{
 			con:  c,
@@ -95,7 +96,7 @@ func Connect(tport transport.Transport, settings ConnectionSettings) (_ *Connect
 	if settings.StdErr != nil {
 		c, err := tport.Dial(*settings.StdErr)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed creating stderr Connection")
+			return nil, fmt.Errorf("failed creating stderr Connection: %w", err)
 		}
 		connSet.Err = &logConnection{
 			con:  c,

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,7 @@ import (
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 	nodenetsvcMock "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1/mock"
 	"github.com/containerd/ttrpc"
-	"github.com/pkg/errors"
+
 	bolt "go.etcd.io/bbolt"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
