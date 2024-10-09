@@ -231,12 +231,12 @@ func parseDevices(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDev
 	if specWindows == nil || specWindows.Devices == nil {
 		return nil
 	}
-	extraDevices := make([]uvm.VPCIDeviceID, len(specWindows.Devices))
-	for i, d := range specWindows.Devices {
+	extraDevices := []uvm.VPCIDeviceID{}
+	for _, d := range specWindows.Devices {
 		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
 		if uvm.IsValidDeviceType(d.IDType) {
 			key := uvm.NewVPCIDeviceID(pciID, index)
-			extraDevices[i] = key
+			extraDevices = append(extraDevices, key)
 		} else {
 			log.G(ctx).WithFields(logrus.Fields{
 				"device": d,
