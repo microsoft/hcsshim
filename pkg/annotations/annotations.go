@@ -181,6 +181,9 @@ const (
 	// VPMemNoMultiMapping indicates that we should disable LCOW vpmem layer multi mapping.
 	VPMemNoMultiMapping = "io.microsoft.virtualmachine.lcow.vpmem.nomultimapping"
 
+    // runtime is used to specify low-level runtime option.
+	Runtime = "runtime"
+
 	// KernelBootOptions is used to specify kernel options used while booting a linux kernel.
 	KernelBootOptions = "io.microsoft.virtualmachine.lcow.kernelbootoptions"
 
