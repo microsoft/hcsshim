@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/errdefs"
+	"github.com/containerd/containerd/errdefs"
 )
 
 func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
