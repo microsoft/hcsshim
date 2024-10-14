@@ -4,11 +4,13 @@ package uvm
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/go-winio/pkg/process"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 
@@ -79,7 +81,7 @@ func lookupVMMEM(ctx context.Context, vmID guid.GUID) (proc windows.Handle, err 
 
 	pids, err := process.EnumProcesses()
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to enumerate processes")
+		return 0, fmt.Errorf("failed to enumerate processes: %w", err)
 	}
 	for _, pid := range pids {
 		p, err := checkProcess(ctx, pid, "vmmem", "NT VIRTUAL MACHINE", vmIDStr)

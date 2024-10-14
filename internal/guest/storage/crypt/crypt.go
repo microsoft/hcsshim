@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -96,7 +95,8 @@ func cryptsetupFormat(ctx context.Context, source string, keyFilePath string) er
 		// supposed to derive a strong key from it. In our case, we already pass
 		// a strong key to cryptsetup, so we don't need a strong KDF. Ideally,
 		// it would be bypassed completely, but this isn't possible.
-		"--pbkdf", "pbkdf2", "--pbkdf-force-iterations", "1000"}
+		"--pbkdf", "pbkdf2", "--pbkdf-force-iterations", "1000",
+	}
 
 	return cryptsetupCommand(ctx, formatArgs)
 }
@@ -107,7 +107,8 @@ func cryptsetupOpen(ctx context.Context, source string, deviceName string, keyFi
 		// Open device with the key passed to luksFormat
 		"luksOpen", source, deviceName, "--key-file", keyFilePath,
 		// Don't use a journal to increase performance
-		"--integrity-no-journal", "--persistent"}
+		"--integrity-no-journal", "--persistent",
+	}
 
 	return cryptsetupCommand(ctx, openArgs)
 }
@@ -148,7 +149,7 @@ func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path
 	// Create temporary directory to store the keyfile and xfs image
 	tempDir, err := _osMkdirTemp("", "dm-crypt")
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to create temporary folder: %s", source)
+		return "", fmt.Errorf("failed to create temporary folder: %w", err)
 	}
 
 	defer func() {

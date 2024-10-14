@@ -5,6 +5,7 @@ package runc
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 	"syscall"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
@@ -57,7 +58,7 @@ func (r *runcRuntime) initialize() error {
 				return err
 			}
 			if err := os.MkdirAll(p, 0700); err != nil {
-				return errors.Wrapf(err, "failed making runC container files directory %s", p)
+				return fmt.Errorf("failed making runC container files directory %s: %w", p, err)
 			}
 		}
 	}
@@ -84,11 +85,11 @@ func (*runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return nil, errors.Wrapf(runcErr, "runc list failed with %v: %s", err, string(out))
+		return nil, fmt.Errorf("runc list failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	var states []runtime.ContainerState
 	if err := json.Unmarshal(out, &states); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal the states for the container list")
+		return nil, fmt.Errorf("failed to unmarshal the states for the container list: %w", err)
 	}
 	return states, nil
 }
@@ -100,11 +101,11 @@ func (*runcRuntime) getRunningPids(id string) ([]int, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return nil, errors.Wrapf(runcErr, "runc ps failed with %v: %s", err, string(out))
+		return nil, fmt.Errorf("runc ps failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	var pids []int
 	if err := json.Unmarshal(out, &pids); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal pids for container %s", id)
+		return nil, fmt.Errorf("failed to unmarshal pids for container %s: %w", id, err)
 	}
 	return pids, nil
 }
@@ -116,7 +117,7 @@ func (*runcRuntime) getProcessCommand(pid int) ([]string, error) {
 	// with a null character after every argument. e.g. "ping google.com "
 	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read cmdline file for process %d", pid)
+		return nil, fmt.Errorf("failed to read cmdline file for process %d: %w", pid, err)
 	}
 	// Get rid of the \0 character at end.
 	cmdString := strings.TrimSuffix(string(data), "\x00")
@@ -139,11 +140,11 @@ func (*runcRuntime) pidMapToProcessStates(pidMap map[int]*runtime.ContainerProce
 func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		return -1, errors.Wrapf(err, "failed to find process %d", pid)
+		return -1, fmt.Errorf("failed to find process %d: %w", pid, err)
 	}
 	state, err := process.Wait()
 	if err != nil {
-		return -1, errors.Wrapf(err, "failed waiting on process %d", pid)
+		return -1, fmt.Errorf("failed waiting on process %d: %w", pid, err)
 	}
 
 	status := state.Sys().(syscall.WaitStatus)
@@ -212,12 +213,12 @@ func ociSpecFromBundle(bundlePath string) (*oci.Spec, error) {
 	configPath := filepath.Join(bundlePath, "config.json")
 	configFile, err := os.Open(configPath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open bundle config at %s", configPath)
+		return nil, fmt.Errorf("failed to open bundle config at %s: %w", configPath, err)
 	}
 	defer configFile.Close()
 	var spec *oci.Spec
 	if err := commonutils.DecodeJSONWithHresult(configFile, &spec); err != nil {
-		return nil, errors.Wrap(err, "failed to parse OCI spec")
+		return nil, fmt.Errorf("failed to parse OCI spec: %w", err)
 	}
 	return spec, nil
 }

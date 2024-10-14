@@ -4,10 +4,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/errdefs"
-	"github.com/pkg/errors"
 )
 
 type shimExecState string
@@ -86,11 +86,6 @@ type shimExec interface {
 }
 
 func newExecInvalidStateError(tid, eid string, state shimExecState, op string) error {
-	return errors.Wrapf(
-		errdefs.ErrFailedPrecondition,
-		"exec: '%s' in task: '%s' is in invalid state: '%s' for %s",
-		eid,
-		tid,
-		state,
-		op)
+	return fmt.Errorf("exec: %q in task: %q is in invalid state: %q for %s: %w",
+		eid, tid, state, op, errdefs.ErrFailedPrecondition)
 }

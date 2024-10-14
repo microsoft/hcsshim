@@ -5,12 +5,12 @@ package cpugroup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/pkg/errors"
 )
 
 const NullGroupID = "00000000-0000-0000-0000-000000000000"
@@ -50,7 +50,7 @@ func Create(ctx context.Context, id string, logicalProcessors []uint32) error {
 		LogicalProcessorCount: uint32(len(logicalProcessors)),
 	}
 	if err := modifyCPUGroupRequest(ctx, operation, details); err != nil {
-		return errors.Wrapf(err, "failed to make cpugroups CreateGroup request for details %+v", details)
+		return fmt.Errorf("failed to make cpugroups CreateGroup request for details %+v: %w", details, err)
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func GetCPUGroupConfig(ctx context.Context, id string) (*hcsschema.CpuGroupConfi
 	}
 	groupConfigs := &hcsschema.CpuGroupConfigurations{}
 	if err := json.Unmarshal(cpuGroupsPresent.Properties[0], groupConfigs); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal host cpugroups")
+		return nil, fmt.Errorf("failed to unmarshal host cpugroups: %w", err)
 	}
 
 	for _, c := range groupConfigs.CpuGroups {

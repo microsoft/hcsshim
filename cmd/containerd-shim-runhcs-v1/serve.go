@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,7 +17,6 @@ import (
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
@@ -79,7 +79,7 @@ var serveCommand = cli.Command{
 		// containerd passes the shim options protobuf via stdin.
 		newShimOpts, err := readOptions(os.Stdin)
 		if err != nil {
-			return errors.Wrap(err, "failed to read shim options from stdin")
+			return fmt.Errorf("failed to read shim options from stdin: %w", err)
 		} else if newShimOpts != nil {
 			// We received a valid shim options struct.
 			shimOpts = newShimOpts
@@ -100,7 +100,7 @@ var serveCommand = cli.Command{
 		if shimOpts.LogLevel != "" {
 			lvl, err := logrus.ParseLevel(shimOpts.LogLevel)
 			if err != nil {
-				return errors.Wrapf(err, "failed to parse shim log level %q", shimOpts.LogLevel)
+				return fmt.Errorf("failed to parse shim log level %q: %w", shimOpts.LogLevel, err)
 			}
 			logrus.SetLevel(lvl)
 		}
@@ -274,16 +274,16 @@ func trapClosedConnErr(err error) error {
 func readOptions(r io.Reader) (*runhcsopts.Options, error) {
 	d, err := io.ReadAll(r)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read input")
+		return nil, fmt.Errorf("failed to read input: %w", err)
 	}
 	if len(d) > 0 {
 		var a anypb.Any
 		if err := proto.Unmarshal(d, &a); err != nil {
-			return nil, errors.Wrap(err, "failed unmarshalling into Any")
+			return nil, fmt.Errorf("failed unmarshalling into Any: %w", err)
 		}
 		v, err := typeurl.UnmarshalAny(&a)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed unmarshalling by typeurl")
+			return nil, fmt.Errorf("failed unmarshalling by typeurl: %w", err)
 		}
 		return v.(*runhcsopts.Options), nil
 	}
@@ -296,7 +296,7 @@ func createEvent(event string) (windows.Handle, error) {
 	ev, _ := windows.UTF16PtrFromString(event)
 	sd, err := windows.SecurityDescriptorFromString("D:P(A;;GA;;;BA)(A;;GA;;;SY)")
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to get security descriptor for event '%s'", event)
+		return 0, fmt.Errorf("failed to get security descriptor for event %q: %w", event, err)
 	}
 	var sa windows.SecurityAttributes
 	sa.Length = uint32(unsafe.Sizeof(sa))
@@ -304,7 +304,7 @@ func createEvent(event string) (windows.Handle, error) {
 	sa.SecurityDescriptor = sd
 	h, err := windows.CreateEvent(&sa, 0, 0, ev)
 	if h == 0 || err != nil {
-		return 0, errors.Wrapf(err, "failed to create event '%s'", event)
+		return 0, fmt.Errorf("failed to create event %q: %w", event, err)
 	}
 	return h, nil
 }

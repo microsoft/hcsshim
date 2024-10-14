@@ -5,10 +5,10 @@ package main
 // Simple wrappers around SetVolumeMountPoint and DeleteVolumeMountPoint
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 
@@ -16,7 +16,7 @@ import (
 // https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setvolumemountpointw
 func setVolumeMountPoint(targetPath string, volumePath string) error {
 	if !strings.HasPrefix(volumePath, "\\\\?\\Volume{") {
-		return errors.Errorf("unable to mount non-volume path %s", volumePath)
+		return fmt.Errorf("unable to mount non-volume path %s", volumePath)
 	}
 
 	// Both must end in a backslash
@@ -25,16 +25,16 @@ func setVolumeMountPoint(targetPath string, volumePath string) error {
 
 	targetP, err := windows.UTF16PtrFromString(slashedTarget)
 	if err != nil {
-		return errors.Wrapf(err, "unable to utf16-ise %s", slashedTarget)
+		return fmt.Errorf("unable to utf16-ise %s: %w", slashedTarget, err)
 	}
 
 	volumeP, err := windows.UTF16PtrFromString(slashedVolume)
 	if err != nil {
-		return errors.Wrapf(err, "unable to utf16-ise %s", slashedVolume)
+		return fmt.Errorf("unable to utf16-ise %s: %w", slashedVolume, err)
 	}
 
 	if err := windows.SetVolumeMountPoint(targetP, volumeP); err != nil {
-		return errors.Wrapf(err, "failed calling SetVolumeMount('%s', '%s')", slashedTarget, slashedVolume)
+		return fmt.Errorf("failed calling SetVolumeMount(%q, %q): %w", slashedTarget, slashedVolume, err)
 	}
 
 	return nil
@@ -48,11 +48,11 @@ func deleteVolumeMountPoint(targetPath string) error {
 
 	targetP, err := windows.UTF16PtrFromString(slashedTarget)
 	if err != nil {
-		return errors.Wrapf(err, "unable to utf16-ise %s", slashedTarget)
+		return fmt.Errorf("unable to utf16-ise %s: %w", slashedTarget, err)
 	}
 
 	if err := windows.DeleteVolumeMountPoint(targetP); err != nil {
-		return errors.Wrapf(err, "failed calling DeleteVolumeMountPoint('%s')", slashedTarget)
+		return fmt.Errorf("failed calling DeleteVolumeMountPoint(%q): %w", slashedTarget, err)
 	}
 
 	return nil

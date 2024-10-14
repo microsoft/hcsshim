@@ -3,9 +3,8 @@
 package main
 
 import (
+	"errors"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 var errNilCache = errors.New("cannot access a nil cache")

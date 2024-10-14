@@ -4,13 +4,15 @@
 package stdio
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,19 +27,19 @@ func (s *ConnectionSet) Close() error {
 	var err error
 	if s.In != nil {
 		if cerr := s.In.Close(); cerr != nil {
-			err = errors.Wrap(cerr, "failed Close on stdin")
+			err = fmt.Errorf("failed Close on stdin: %w", cerr)
 		}
 		s.In = nil
 	}
 	if s.Out != nil {
 		if cerr := s.Out.Close(); cerr != nil && err == nil {
-			err = errors.Wrap(cerr, "failed Close on stdout")
+			err = fmt.Errorf("failed Close on stdout: %w", cerr)
 		}
 		s.Out = nil
 	}
 	if s.Err != nil {
 		if cerr := s.Err.Close(); cerr != nil && err == nil {
-			err = errors.Wrap(cerr, "failed Close on stderr")
+			err = fmt.Errorf("failed Close on stderr: %w", cerr)
 		}
 		s.Err = nil
 	}
@@ -55,19 +57,19 @@ func (fs *FileSet) Close() error {
 	var err error
 	if fs.In != nil {
 		if cerr := fs.In.Close(); cerr != nil {
-			err = errors.Wrap(cerr, "failed Close on stdin")
+			err = fmt.Errorf("failed Close on stdin: %w", cerr)
 		}
 		fs.In = nil
 	}
 	if fs.Out != nil {
 		if cerr := fs.Out.Close(); cerr != nil && err == nil {
-			err = errors.Wrap(cerr, "failed Close on stdout")
+			err = fmt.Errorf("failed Close on stdout: %w", cerr)
 		}
 		fs.Out = nil
 	}
 	if fs.Err != nil {
 		if cerr := fs.Err.Close(); cerr != nil && err == nil {
-			err = errors.Wrap(cerr, "failed Close on stderr")
+			err = fmt.Errorf("failed Close on stderr: %w", cerr)
 		}
 		fs.Err = nil
 	}
@@ -86,19 +88,19 @@ func (s *ConnectionSet) Files() (_ *FileSet, err error) {
 	if s.In != nil {
 		fs.In, err = s.In.File()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to dup stdin socket for command")
+			return nil, fmt.Errorf("failed to dup stdin socket for command: %w", err)
 		}
 	}
 	if s.Out != nil {
 		fs.Out, err = s.Out.File()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to dup stdout socket for command")
+			return nil, fmt.Errorf("failed to dup stdout socket for command: %w", err)
 		}
 	}
 	if s.Err != nil {
 		fs.Err, err = s.Err.File()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to dup stderr socket for command")
+			return nil, fmt.Errorf("failed to dup stderr socket for command: %w", err)
 		}
 	}
 	return fs, nil
@@ -117,19 +119,19 @@ func NewPipeRelay(s *ConnectionSet) (_ *PipeRelay, err error) {
 	if s == nil || s.In != nil {
 		pr.pipes[0], pr.pipes[1], err = os.Pipe()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create stdin pipe relay")
+			return nil, fmt.Errorf("failed to create stdin pipe relay: %w", err)
 		}
 	}
 	if s == nil || s.Out != nil {
 		pr.pipes[2], pr.pipes[3], err = os.Pipe()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create stdout pipe relay")
+			return nil, fmt.Errorf("failed to create stdout pipe relay: %w", err)
 		}
 	}
 	if s == nil || s.Err != nil {
 		pr.pipes[4], pr.pipes[5], err = os.Pipe()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create stderr pipe relay")
+			return nil, fmt.Errorf("failed to create stderr pipe relay: %w", err)
 		}
 	}
 	return pr, nil

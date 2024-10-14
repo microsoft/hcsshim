@@ -4,12 +4,12 @@ package hcs
 
 import (
 	"context"
+	"errors"
 	"net"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/vm"
-	"github.com/pkg/errors"
 )
 
 func (uvm *utilityVM) VMSocketListen(ctx context.Context, listenType vm.VMSocketType, connID interface{}) (net.Listener, error) {

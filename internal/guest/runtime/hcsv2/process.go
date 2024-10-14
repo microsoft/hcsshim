@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sync"
@@ -17,7 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -233,7 +234,7 @@ func newExternalProcess(ctx context.Context, cmd *exec.Cmd, tty *stdio.TtyRelay,
 		remove:    onRemove,
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, errors.Wrap(err, "failed to call Start for external process")
+		return nil, fmt.Errorf("failed to call Start for external process: %w", err)
 	}
 	if tty != nil {
 		tty.Start()

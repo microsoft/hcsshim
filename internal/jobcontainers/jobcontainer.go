@@ -4,6 +4,7 @@ package jobcontainers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -277,7 +278,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	env, err := defaultEnvBlock(c.token)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get default environment block")
+		return nil, fmt.Errorf("failed to get default environment block: %w", err)
 	}
 
 	// Convert environment map to a slice of environment variables in the form [Key1=val1, key2=val2]
@@ -336,7 +337,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
 	absPath, commandLine, err := getApplicationName(commandLine, workDir, strings.Trim(path, "PATH="))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
+		return nil, fmt.Errorf("failed to get application name from commandline %q: %w", conf.CommandLine, err)
 	}
 
 	// exec.Cmd internally does its own path resolution and as part of this checks some well known file extensions on the file given (e.g. if
@@ -346,7 +347,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	// This is mostly to handle a common Kubernetes test image named agnhost that has the main entrypoint as a binary named agnhost with no extension.
 	// https://github.com/kubernetes/kubernetes/blob/d64e91878517b1208a0bce7e2b7944645ace8ede/test/images/agnhost/Dockerfile_windows
 	if err := os.Setenv("PATHEXT", ".COM;.EXE;.BAT;.CMD; "); err != nil {
-		return nil, errors.Wrap(err, "failed to set PATHEXT")
+		return nil, fmt.Errorf("failed to set PATHEXT: %w", err)
 	}
 
 	var cpty *conpty.Pty
@@ -406,7 +407,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	}()
 
 	if err = process.Start(); err != nil {
-		return nil, errors.Wrap(err, "failed to start host process")
+		return nil, fmt.Errorf("failed to start host process: %w", err)
 	}
 
 	// Assign the first process made as the init process of the container.
@@ -486,7 +487,7 @@ func (c *JobContainer) Shutdown(ctx context.Context) error {
 func (c *JobContainer) shutdown(ctx context.Context) error {
 	pids, err := c.job.Pids()
 	if err != nil {
-		return errors.Wrap(err, "failed to get pids in container")
+		return fmt.Errorf("failed to get pids in container: %w", err)
 	}
 
 	if len(pids) == 0 {
@@ -524,17 +525,17 @@ func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.Prop
 
 	memInfo, err := c.job.QueryMemoryStats()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to query for job containers memory information")
+		return nil, fmt.Errorf("failed to query for job containers memory information: %w", err)
 	}
 
 	processorInfo, err := c.job.QueryProcessorStats()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to query for job containers processor information")
+		return nil, fmt.Errorf("failed to query for job containers processor information: %w", err)
 	}
 
 	storageInfo, err := c.job.QueryStorageStats()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to query for job containers storage information")
+		return nil, fmt.Errorf("failed to query for job containers storage information: %w", err)
 	}
 
 	privateWorkingSet, err := c.job.QueryPrivateWorkingSet()
@@ -593,7 +594,7 @@ func (c *JobContainer) Properties(ctx context.Context, types ...schema1.Property
 		processList = append(processList, proc)
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get process ")
+		return nil, fmt.Errorf("failed to get process : %w", err)
 	}
 
 	return &schema1.ContainerProperties{ProcessList: processList}, nil
@@ -604,7 +605,7 @@ func (c *JobContainer) Terminate(ctx context.Context) error {
 	log.G(ctx).WithField("id", c.id).Debug("terminating job container")
 
 	if err := c.job.Terminate(1); err != nil {
-		return errors.Wrap(err, "failed to terminate job container")
+		return fmt.Errorf("failed to terminate job container: %w", err)
 	}
 	return nil
 }

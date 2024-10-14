@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/pkg/errors"
 )
 
 type tarContents struct {
@@ -32,11 +30,11 @@ func writeContentsToTar(tw *tar.Writer, contents []tarContents) error {
 			}
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
-			return errors.Wrapf(err, "failed to write tar header for file: %s", file.path)
+			return fmt.Errorf("failed to write tar header for file: %s: %w", file.path, err)
 		}
 		if !isDir {
 			if _, err := tw.Write(file.body); err != nil {
-				return errors.Wrapf(err, "failed to write contents of file: %s", file.path)
+				return fmt.Errorf("failed to write contents of file: %s: %w", file.path, err)
 			}
 		}
 	}
@@ -75,14 +73,14 @@ func createUnorderedTars(dirPath string) ([]string, error) {
 		layerPath := filepath.Join(dirPath, fmt.Sprintf("tar%d.tar", i+1))
 		layerTar, err := os.Create(layerPath)
 		if err != nil {
-			return []string{}, errors.Wrapf(err, "failed to create tar at path: %s", layerPath)
+			return []string{}, fmt.Errorf("failed to create tar at path: %s: %w", layerPath, err)
 		}
 		defer layerTar.Close()
 
 		tw := tar.NewWriter(layerTar)
 		defer tw.Close()
 		if err = writeContentsToTar(tw, layer); err != nil {
-			return []string{}, errors.Wrapf(err, "failed to write tar contents for tar : %s", layerPath)
+			return []string{}, fmt.Errorf("failed to write tar contents for tar : %s: %w", layerPath, err)
 		}
 
 		generatedTars = append(generatedTars, layerPath)

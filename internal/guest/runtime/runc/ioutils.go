@@ -4,11 +4,12 @@
 package runc
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -19,11 +20,11 @@ func (*runcRuntime) createConsoleSocket(processDir string) (listener *net.UnixLi
 	socketPath = filepath.Join(processDir, "master.sock")
 	addr, err := net.ResolveUnixAddr("unix", socketPath)
 	if err != nil {
-		return nil, "", errors.Wrapf(err, "failed to resolve unix socket at address %s", socketPath)
+		return nil, "", fmt.Errorf("failed to resolve unix socket at address %s: %w", socketPath, err)
 	}
 	listener, err = net.ListenUnix("unix", addr)
 	if err != nil {
-		return nil, "", errors.Wrapf(err, "failed to listen on unix socket at address %s", socketPath)
+		return nil, "", fmt.Errorf("failed to listen on unix socket at address %s: %w", socketPath, err)
 	}
 	return listener, socketPath, nil
 }
@@ -35,7 +36,7 @@ func (*runcRuntime) getMasterFromSocket(listener *net.UnixListener) (master *os.
 	// Accept the listener's connection.
 	conn, err := listener.Accept()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get terminal master file descriptor from socket")
+		return nil, fmt.Errorf("failed to get terminal master file descriptor from socket: %w", err)
 	}
 	defer conn.Close()
 	unixConn, ok := conn.(*net.UnixConn)
@@ -53,10 +54,10 @@ func (*runcRuntime) getMasterFromSocket(listener *net.UnixListener) (master *os.
 	// sent.
 	n, oobn, _, _, err := unixConn.ReadMsgUnix(name, oob)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read message from unix socket")
+		return nil, fmt.Errorf("failed to read message from unix socket: %w", err)
 	}
 	if n >= maxNameLen || oobn != oobSpace {
-		return nil, errors.Errorf("read an invalid number of bytes (n=%d oobn=%d)", n, oobn)
+		return nil, fmt.Errorf("read an invalid number of bytes (n=%d oobn=%d)", n, oobn)
 	}
 
 	// Truncate the data returned from the message.
@@ -66,26 +67,26 @@ func (*runcRuntime) getMasterFromSocket(listener *net.UnixListener) (master *os.
 	// Parse the out-of-band data in the message.
 	messages, err := unix.ParseSocketControlMessage(oob)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse socket control message for oob %v", oob)
+		return nil, fmt.Errorf("failed to parse socket control message for oob %v: %w", oob, err)
 	}
 	if len(messages) == 0 {
 		return nil, errors.New("did not receive any socket control messages")
 	}
 	if len(messages) > 1 {
-		return nil, errors.Errorf("received more than one socket control message: received %d", len(messages))
+		return nil, fmt.Errorf("received more than one socket control message: received %d", len(messages))
 	}
 	message := messages[0]
 
 	// Parse the file descriptor out of the out-of-band data in the message.
 	fds, err := unix.ParseUnixRights(&message)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse file descriptors out of message %v", message)
+		return nil, fmt.Errorf("failed to parse file descriptors out of message %v: %w", message, err)
 	}
 	if len(fds) == 0 {
 		return nil, errors.New("did not receive any file descriptors")
 	}
 	if len(fds) > 1 {
-		return nil, errors.Errorf("received more than one file descriptor: received %d", len(fds))
+		return nil, fmt.Errorf("received more than one file descriptor: received %d", len(fds))
 	}
 	fd := uintptr(fds[0])
 
@@ -101,7 +102,7 @@ func (*runcRuntime) pathExists(pathToCheck string) (bool, error) {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, errors.Wrapf(err, "failed call to Stat for path %s", pathToCheck)
+		return false, fmt.Errorf("failed call to Stat for path %s: %w", pathToCheck, err)
 	}
 	return true, nil
 }

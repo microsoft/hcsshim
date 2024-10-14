@@ -14,7 +14,7 @@ import (
 	cgroups "github.com/containerd/cgroups/v3/cgroup1"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
@@ -267,7 +267,7 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	cgroupPath := c.spec.Linux.CgroupsPath
 	cg, err := cgroups.Load(cgroups.StaticPath(cgroupPath))
 	if err != nil {
-		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
+		return nil, fmt.Errorf("failed to get container stats for %v: %v", c.id, err)
 	}
 
 	return cg.Stat(cgroups.IgnoreNotExist)

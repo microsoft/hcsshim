@@ -7,6 +7,7 @@ package hcsoci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -14,7 +15,6 @@ import (
 	"strings"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/layers"
@@ -32,7 +32,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		log.G(ctx).Debug("hcsshim::allocateLinuxResources mounting storage")
 		rootPath, scratchPath, closer, err := layers.MountLCOWLayers(ctx, coi.actualID, coi.LCOWLayers, containerRootInUVM, coi.HostingSystem)
 		if err != nil {
-			return errors.Wrap(err, "failed to mount container storage")
+			return fmt.Errorf("failed to mount container storage: %w", err)
 		}
 		coi.Spec.Root.Path = rootPath
 		// If this is the pause container in a hypervisor-isolated pod, we can skip cleanup of
@@ -48,7 +48,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		uvmPathForContainersFileSystem := path.Join(r.ContainerRootInUVM(), guestpath.RootfsPath)
 		share, err := coi.HostingSystem.AddPlan9(ctx, hostPath, uvmPathForContainersFileSystem, coi.Spec.Root.Readonly, false, nil)
 		if err != nil {
-			return errors.Wrap(err, "adding plan9 root")
+			return fmt.Errorf("adding plan9 root: %w", err)
 		}
 		coi.Spec.Root.Path = uvmPathForContainersFileSystem
 		r.Add(share)
@@ -96,7 +96,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
 				)
 				if err != nil {
-					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
+					return fmt.Errorf("adding SCSI physical disk mount %+v: %w", mount, err)
 				}
 				uvmPathForFile = scsiMount.GuestPath()
 				r.Add(scsiMount)
@@ -119,7 +119,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
 				)
 				if err != nil {
-					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
+					return fmt.Errorf("adding SCSI virtual disk mount %+v: %w", mount, err)
 				}
 
 				uvmPathForFile = scsiMount.GuestPath()
@@ -137,7 +137,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				// currently we only support 2M hugepage size
 				hugePageSubDirs := strings.Split(strings.TrimPrefix(mount.Source, guestpath.HugePagesMountPrefix), "/")
 				if len(hugePageSubDirs) < 2 {
-					return errors.Errorf(
+					return fmt.Errorf(
 						`%s mount path is invalid, expected format: %s<hugepage-size>/<hugepage-src-location>`,
 						mount.Source,
 						guestpath.HugePagesMountPrefix,
@@ -146,14 +146,14 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				// hugepages:// should be followed by pagesize
 				if hugePageSubDirs[0] != "2M" {
-					return errors.Errorf(`only 2M (megabytes) pagesize is supported, got %s`, hugePageSubDirs[0])
+					return fmt.Errorf(`only 2M (megabytes) pagesize is supported, got %s`, hugePageSubDirs[0])
 				}
 				// Hugepages inside a container are backed by a mount created inside a UVM.
 				uvmPathForFile = mount.Source
 			} else {
 				st, err := os.Stat(hostPath)
 				if err != nil {
-					return errors.Wrap(err, "could not open bind mount target")
+					return fmt.Errorf("could not open bind mount target: %w", err)
 				}
 				restrictAccess := false
 				var allowedNames []string
@@ -170,7 +170,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				share, err := coi.HostingSystem.AddPlan9(ctx, hostPath, uvmPathForShare, readOnly, restrictAccess, allowedNames)
 				if err != nil {
-					return errors.Wrapf(err, "adding plan9 mount %+v", mount)
+					return fmt.Errorf("adding plan9 mount %+v: %w", mount, err)
 				}
 				r.Add(share)
 			}
