@@ -8,7 +8,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/vm"
 	"github.com/Microsoft/hcsshim/internal/vmservice"
-	"github.com/pkg/errors"
 )
 
 func getSCSIDiskType(typ vm.SCSIDiskType) (vmservice.DiskType, error) {
@@ -78,7 +77,7 @@ func (uvm *utilityVM) AddSCSIDisk(ctx context.Context, controller, lun uint32, p
 			},
 		},
 	); err != nil {
-		return errors.Wrap(err, "failed to add SCSI disk")
+		return fmt.Errorf("failed to add SCSI disk: %w", err)
 	}
 
 	return nil
@@ -99,7 +98,7 @@ func (uvm *utilityVM) RemoveSCSIDisk(ctx context.Context, controller, lun uint32
 			},
 		},
 	); err != nil {
-		return errors.Wrapf(err, "failed to remove SCSI disk %q", path)
+		return fmt.Errorf("failed to remove SCSI disk %q: %w", path, err)
 	}
 
 	return nil

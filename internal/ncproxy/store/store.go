@@ -3,9 +3,11 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
-	"github.com/pkg/errors"
+
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -33,14 +35,14 @@ func (n *NetworkingStore) GetNetworkByName(ctx context.Context, networkName stri
 	if err := n.db.View(func(tx *bolt.Tx) error {
 		bkt := getNetworkBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "network bucket %v", bucketKeyNetwork)
+			return fmt.Errorf("network bucket %v: %w", bucketKeyNetwork, ErrBucketNotFound)
 		}
 		data := bkt.Get([]byte(networkName))
 		if data == nil {
-			return errors.Wrapf(ErrKeyNotFound, "network %v", networkName)
+			return fmt.Errorf("network %v: %w", networkName, ErrKeyNotFound)
 		}
 		if err := json.Unmarshal(data, internalData); err != nil {
-			return errors.Wrapf(err, "data is %v", string(data))
+			return fmt.Errorf("data is %v: %w", string(data), err)
 		}
 		return nil
 	}); err != nil {
@@ -70,7 +72,7 @@ func (n *NetworkingStore) DeleteNetwork(ctx context.Context, networkName string)
 	if err := n.db.Update(func(tx *bolt.Tx) error {
 		bkt := getNetworkBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyNetwork)
+			return fmt.Errorf("bucket %v: %w", bucketKeyNetwork, ErrBucketNotFound)
 		}
 		return bkt.Delete([]byte(networkName))
 	}); err != nil {
@@ -83,12 +85,12 @@ func (n *NetworkingStore) ListNetworks(ctx context.Context) (results []*ncproxyn
 	if err := n.db.View(func(tx *bolt.Tx) error {
 		bkt := getNetworkBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "network bucket %v", bucketKeyNetwork)
+			return fmt.Errorf("network bucket %v: %w", bucketKeyNetwork, ErrBucketNotFound)
 		}
 		err := bkt.ForEach(func(k, v []byte) error {
 			internalData := &ncproxynetworking.Network{}
 			if err := json.Unmarshal(v, internalData); err != nil {
-				return errors.Wrapf(err, "data is %v", string(v))
+				return fmt.Errorf("data is %v: %w", string(v), err)
 			}
 			results = append(results, internalData)
 			return nil
@@ -106,11 +108,11 @@ func (n *NetworkingStore) GetEndpointByName(ctx context.Context, endpointName st
 	if err := n.db.View(func(tx *bolt.Tx) error {
 		bkt := getEndpointBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "endpoint bucket %v", bucketKeyEndpoint)
+			return fmt.Errorf("endpoint bucket %v: %w", bucketKeyEndpoint, ErrBucketNotFound)
 		}
 		jsonData := bkt.Get([]byte(endpointName))
 		if jsonData == nil {
-			return errors.Wrapf(ErrKeyNotFound, "endpoint %v", endpointName)
+			return fmt.Errorf("endpoint %v: %w", endpointName, ErrKeyNotFound)
 		}
 		if err := json.Unmarshal(jsonData, endpt); err != nil {
 			return err
@@ -152,7 +154,7 @@ func (n *NetworkingStore) DeleteEndpoint(ctx context.Context, endpointName strin
 	if err := n.db.Update(func(tx *bolt.Tx) error {
 		bkt := getEndpointBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyEndpoint)
+			return fmt.Errorf("bucket %v: %w", bucketKeyEndpoint, ErrBucketNotFound)
 		}
 		return bkt.Delete([]byte(endpointName))
 	}); err != nil {
@@ -165,7 +167,7 @@ func (n *NetworkingStore) ListEndpoints(ctx context.Context) (results []*ncproxy
 	if err := n.db.View(func(tx *bolt.Tx) error {
 		bkt := getEndpointBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "endpoint bucket %v", bucketKeyEndpoint)
+			return fmt.Errorf("endpoint bucket %v: %w", bucketKeyEndpoint, ErrBucketNotFound)
 		}
 		err := bkt.ForEach(func(k, v []byte) error {
 			endptInternal := &ncproxynetworking.Endpoint{}
@@ -203,11 +205,11 @@ func (c *ComputeAgentStore) GetComputeAgent(ctx context.Context, containerID str
 	if err := c.db.View(func(tx *bolt.Tx) error {
 		bkt := getComputeAgentBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyComputeAgent)
+			return fmt.Errorf("bucket %v: %w", bucketKeyComputeAgent, ErrBucketNotFound)
 		}
 		data := bkt.Get([]byte(containerID))
 		if data == nil {
-			return errors.Wrapf(ErrKeyNotFound, "key %v", containerID)
+			return fmt.Errorf("key %v: %w", containerID, ErrKeyNotFound)
 		}
 		result = string(data)
 		return nil
@@ -226,7 +228,7 @@ func (c *ComputeAgentStore) GetComputeAgents(ctx context.Context) (map[string]st
 	if err := c.db.View(func(tx *bolt.Tx) error {
 		bkt := getComputeAgentBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyComputeAgent)
+			return fmt.Errorf("bucket %v: %w", bucketKeyComputeAgent, ErrBucketNotFound)
 		}
 		err := bkt.ForEach(func(k, v []byte) error {
 			content[string(k)] = string(v)
@@ -260,7 +262,7 @@ func (c *ComputeAgentStore) DeleteComputeAgent(ctx context.Context, containerID 
 	if err := c.db.Update(func(tx *bolt.Tx) error {
 		bkt := getComputeAgentBucket(tx)
 		if bkt == nil {
-			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyComputeAgent)
+			return fmt.Errorf("bucket %v: %w", bucketKeyComputeAgent, ErrBucketNotFound)
 		}
 		return bkt.Delete([]byte(containerID))
 	}); err != nil {

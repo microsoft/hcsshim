@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/credentials"
@@ -38,7 +37,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
 		mountedLayers, closer, err := layers.MountWCOWLayers(ctx, coi.actualID, coi.HostingSystem, coi.WCOWLayers)
 		if err != nil {
-			return errors.Wrap(err, "failed to mount container storage")
+			return fmt.Errorf("failed to mount container storage: %w", err)
 		}
 		coi.Spec.Root.Path = mountedLayers.RootFS
 		coi.mountedWCOWLayers = mountedLayers
@@ -75,7 +74,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 				// an HvSocket service was not possible.
 				hvSockConfig := ccgInstance.HvSocketConfig
 				if err := coi.HostingSystem.UpdateHvSocketService(ctx, hvSockConfig.ServiceId, hvSockConfig.ServiceConfig); err != nil {
-					return errors.Wrap(err, "failed to update hvsocket service")
+					return fmt.Errorf("failed to update hvsocket service: %w", err)
 				}
 			}
 		}
@@ -202,13 +201,13 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				}
 				exitCode, err := cmd.ExecInUvm(ctx, coi.HostingSystem, req)
 				if err != nil {
-					return errors.Wrapf(err, "failed to create sandbox mount directory in utility VM with exit code %d %q", exitCode, b.String())
+					return fmt.Errorf("failed to create sandbox mount directory in utility VM with exit code %d %q: %w", exitCode, b.String(), err)
 				}
 			} else {
 				if uvm.IsPipe(mount.Source) {
 					pipe, err := coi.HostingSystem.AddPipe(ctx, mount.Source)
 					if err != nil {
-						return errors.Wrap(err, "failed to add named pipe to UVM")
+						return fmt.Errorf("failed to add named pipe to UVM: %w", err)
 					}
 					r.Add(pipe)
 				} else {
@@ -216,7 +215,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 					options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
 					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, options)
 					if err != nil {
-						return errors.Wrapf(err, "failed to add VSMB share to utility VM for mount %+v", mount)
+						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %w", mount, err)
 					}
 					r.Add(share)
 				}

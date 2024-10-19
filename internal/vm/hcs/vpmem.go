@@ -4,10 +4,9 @@ package hcs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
-
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"

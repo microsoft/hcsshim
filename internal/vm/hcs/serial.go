@@ -3,11 +3,11 @@
 package hcs
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/pkg/errors"
 )
 
 func (uvmb *utilityVMBuilder) SetSerialConsole(port uint32, listenerPath string) error {

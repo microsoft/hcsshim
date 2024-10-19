@@ -11,7 +11,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 )
@@ -40,7 +39,7 @@ func Mount(ctx context.Context, vsock transport.Transport, target, share string,
 		trace.Int64Attribute("port", int64(port)),
 		trace.BoolAttribute("readonly", readonly))
 
-	if err := osMkdirAll(target, 0700); err != nil {
+	if err := osMkdirAll(target, 0o700); err != nil {
 		return err
 	}
 	defer func() {
@@ -50,12 +49,12 @@ func Mount(ctx context.Context, vsock transport.Transport, target, share string,
 	}()
 	conn, err := vsock.Dial(port)
 	if err != nil {
-		return errors.Wrapf(err, "could not connect to plan9 server for %s", target)
+		return fmt.Errorf("could not connect to plan9 server for %s: %w", target, err)
 	}
 	f, err := conn.File()
 	conn.Close()
 	if err != nil {
-		return errors.Wrapf(err, "could not get file for plan9 connection for %s", target)
+		return fmt.Errorf("could not get file for plan9 connection for %s: %w", target, err)
 	}
 	defer f.Close()
 
@@ -72,14 +71,14 @@ func Mount(ctx context.Context, vsock transport.Transport, target, share string,
 	// set socket options to maximize bandwidth
 	err = syscall.SetsockoptInt(int(f.Fd()), syscall.SOL_SOCKET, syscall.SO_RCVBUF, packetPayloadBytes)
 	if err != nil {
-		return errors.Wrapf(err, "failed to set sock option syscall.SO_RCVBUF to %v on fd %v", packetPayloadBytes, f.Fd())
+		return fmt.Errorf("failed to set sock option syscall.SO_RCVBUF to %v on fd %v: %w", packetPayloadBytes, f.Fd(), err)
 	}
 	err = syscall.SetsockoptInt(int(f.Fd()), syscall.SOL_SOCKET, syscall.SO_SNDBUF, packetPayloadBytes)
 	if err != nil {
-		return errors.Wrapf(err, "failed to set sock option syscall.SO_SNDBUF to %v on fd %v", packetPayloadBytes, f.Fd())
+		return fmt.Errorf("failed to set sock option syscall.SO_SNDBUF to %v on fd %v: %w", packetPayloadBytes, f.Fd(), err)
 	}
 	if err := unixMount(target, target, "9p", mountOptions, data); err != nil {
-		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", target)
+		return fmt.Errorf("failed to mount directory for mapped directory %s: %w", target, err)
 	}
 	return nil
 }

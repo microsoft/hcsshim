@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -42,12 +42,12 @@ func addAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 			// validate that the device is available
 			fullPCIPath, err := pci.FindDeviceFullPath(ctx, d.ID)
 			if err != nil {
-				return errors.Wrapf(err, "failed to find device pci path for device %v", d)
+				return fmt.Errorf("failed to find device pci path for device %v: %w", d, err)
 			}
 			// find the device nodes that link to the pci path we just got
 			devs, err := devicePathsFromPCIPath(ctx, fullPCIPath)
 			if err != nil {
-				return errors.Wrapf(err, "failed to find dev node for device %v", d)
+				return fmt.Errorf("failed to find dev node for device %v: %w", d, err)
 			}
 			for _, dev := range devs {
 				addLinuxDeviceToSpec(ctx, dev, spec, true)

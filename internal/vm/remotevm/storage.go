@@ -3,7 +3,7 @@
 package remotevm
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
 )
 
 func (uvmb *utilityVMBuilder) SetStorageQos(iopsMaximum int64, bandwidthMaximum int64) error {
@@ -12,7 +12,7 @@ func (uvmb *utilityVMBuilder) SetStorageQos(iopsMaximum int64, bandwidthMaximum 
 	// in HCS we can do the same here as we launch the server process in a job object.
 	if uvmb.job != nil {
 		if err := uvmb.job.SetIOLimit(bandwidthMaximum, iopsMaximum); err != nil {
-			return errors.Wrap(err, "failed to set storage qos values on remotevm process")
+			return fmt.Errorf("failed to set storage qos values on remotevm process: %w", err)
 		}
 	}
 

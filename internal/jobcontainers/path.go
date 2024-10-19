@@ -3,12 +3,13 @@
 package jobcontainers
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -224,13 +225,13 @@ func getSystemPaths() (string, error) {
 	var searchPath string
 	systemDir, err := windows.GetSystemDirectory()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get system directory")
+		return "", fmt.Errorf("failed to get system directory: %w", err)
 	}
 	searchPath += systemDir + ";"
 
 	windowsDir, err := windows.GetWindowsDirectory()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get Windows directory")
+		return "", fmt.Errorf("failed to get Windows directory: %w", err)
 	}
 
 	searchPath += windowsDir + "\\System;" + windowsDir + ";"

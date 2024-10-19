@@ -9,7 +9,7 @@ import (
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,7 +36,7 @@ func ReadVeritySuperBlock(ctx context.Context, layerPath string) (*guestresource
 
 	dmvsb, err := dmverity.ReadDMVerityInfo(layerPath, ext4SizeInBytes)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read dm-verity super block")
+		return nil, fmt.Errorf("failed to read dm-verity super block: %w", err)
 	}
 	log.G(ctx).WithFields(logrus.Fields{
 		"layerPath":     layerPath,

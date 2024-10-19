@@ -5,6 +5,8 @@ package runc
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +14,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
@@ -22,11 +23,11 @@ import (
 func (r *runcRuntime) readPidFile(pidFile string) (pid int, err error) {
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
-		return -1, errors.Wrap(err, "failed reading from pid file")
+		return -1, fmt.Errorf("failed reading from pid file: %w", err)
 	}
 	pid, err = strconv.Atoi(string(data))
 	if err != nil {
-		return -1, errors.Wrapf(err, "failed converting pid text %q to integer form", data)
+		return -1, fmt.Errorf("failed converting pid text %q to integer form: %w", data, err)
 	}
 	return pid, nil
 }
@@ -35,7 +36,7 @@ func (r *runcRuntime) readPidFile(pidFile string) (pid int, err error) {
 func (r *runcRuntime) cleanupContainer(id string) error {
 	containerDir := r.getContainerDir(id)
 	if err := os.RemoveAll(containerDir); err != nil {
-		return errors.Wrapf(err, "failed removing the container directory for container %s", id)
+		return fmt.Errorf("failed removing the container directory for container %s: %w", id, err)
 	}
 	return nil
 }
@@ -44,7 +45,7 @@ func (r *runcRuntime) cleanupContainer(id string) error {
 func (r *runcRuntime) cleanupProcess(id string, pid int) error {
 	processDir := r.getProcessDir(id, pid)
 	if err := os.RemoveAll(processDir); err != nil {
-		return errors.Wrapf(err, "failed removing the process directory for process %d in container %s", pid, id)
+		return fmt.Errorf("failed removing the process directory for process %d in container %s: %w", pid, id, err)
 	}
 	return nil
 }
@@ -65,7 +66,7 @@ func (*runcRuntime) getContainerDir(id string) string {
 func (r *runcRuntime) makeContainerDir(id string) error {
 	dir := r.getContainerDir(id)
 	if err := os.MkdirAll(dir, os.ModeDir); err != nil {
-		return errors.Wrapf(err, "failed making container directory for container %s", id)
+		return fmt.Errorf("failed making container directory for container %s: %w", id, err)
 	}
 	return nil
 }
@@ -79,7 +80,7 @@ func (r *runcRuntime) getLogDir(id string) string {
 func (r *runcRuntime) makeLogDir(id string) error {
 	dir := r.getLogDir(id)
 	if err := os.MkdirAll(dir, os.ModeDir); err != nil {
-		return errors.Wrapf(err, "failed making runc log directory for container %s", id)
+		return fmt.Errorf("failed making runc log directory for container %s: %w", id, err)
 	}
 	return nil
 }
@@ -118,7 +119,7 @@ type standardLogEntry struct {
 func (l *standardLogEntry) asError() (err error) {
 	err = parseRuncError(l.Message)
 	if l.Err != nil {
-		err = errors.Wrapf(err, l.Err.Error())
+		err = fmt.Errorf(l.Err.Error()+": %w", err)
 	}
 	return
 }

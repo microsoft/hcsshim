@@ -6,6 +6,8 @@ package bridge
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -15,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -385,7 +387,7 @@ func serverSend(conn io.Writer, messageType prot.MessageIdentifier, messageID pr
 		var err error
 		body, err = json.Marshal(i)
 		if err != nil {
-			return errors.Wrap(err, "failed to json marshal to server.")
+			return fmt.Errorf("failed to json marshal to server.: %w", err)
 		}
 	}
 
@@ -397,11 +399,11 @@ func serverSend(conn io.Writer, messageType prot.MessageIdentifier, messageID pr
 
 	// Send the header.
 	if err := binary.Write(conn, binary.LittleEndian, header); err != nil {
-		return errors.Wrap(err, "bridge_test: failed to write message header")
+		return fmt.Errorf("bridge_test: failed to write message header: %w", err)
 	}
 	// Send the body.
 	if _, err := conn.Write(body); err != nil {
-		return errors.Wrap(err, "bridge_test: failed to write the message body")
+		return fmt.Errorf("bridge_test: failed to write the message body: %w", err)
 	}
 	return nil
 }
@@ -410,12 +412,12 @@ func serverRead(conn io.Reader) (*prot.MessageHeader, []byte, error) {
 	header := &prot.MessageHeader{}
 	// Read the header.
 	if err := binary.Read(conn, binary.LittleEndian, header); err != nil {
-		return nil, nil, errors.Wrap(err, "bridge_test: failed to read message header")
+		return nil, nil, fmt.Errorf("bridge_test: failed to read message header: %w", err)
 	}
 	message := make([]byte, header.Size-prot.MessageHeaderSize)
 	// Read the body.
 	if _, err := io.ReadFull(conn, message); err != nil {
-		return nil, nil, errors.Wrap(err, "bridge_test: failed to read the message body")
+		return nil, nil, fmt.Errorf("bridge_test: failed to read the message body: %w", err)
 	}
 
 	return header, message, nil

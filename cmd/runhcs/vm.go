@@ -5,6 +5,7 @@ package main
 import (
 	gcontext "context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )

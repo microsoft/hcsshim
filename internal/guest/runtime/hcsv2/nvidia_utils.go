@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
@@ -29,7 +28,7 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec, ociBundlePath stri
 	genericHookBinary := "generichook"
 	genericHookPath, err := exec.LookPath(genericHookBinary)
 	if err != nil {
-		return errors.Wrapf(err, "failed to find %s for container device support", genericHookBinary)
+		return fmt.Errorf("failed to find %s for container device support: %w", genericHookBinary, err)
 	}
 
 	toolDebugPath := filepath.Join(ociBundlePath, nvidiaDebugFilePath)
@@ -54,7 +53,7 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec, ociBundlePath stri
 		case "gpu":
 			busLocation, err := pci.FindDeviceBusLocationFromVMBusGUID(ctx, d.ID)
 			if err != nil {
-				return errors.Wrapf(err, "failed to find nvidia gpu bus location")
+				return fmt.Errorf("failed to find nvidia gpu bus location: %w", err)
 			}
 			args = append(args, fmt.Sprintf("--device=%s", busLocation))
 		}

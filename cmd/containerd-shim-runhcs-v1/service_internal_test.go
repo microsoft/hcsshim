@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -12,12 +13,11 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/pkg/errors"
 )
 
 func verifyExpectedError(t *testing.T, resp interface{}, actual, expected error) {
 	t.Helper()
-	if actual == nil || errors.Cause(actual) != expected || !errors.Is(actual, expected) { //nolint:errorlint
+	if actual == nil || !errors.Is(actual, expected) { //nolint:errorlint
 		t.Fatalf("expected error: %v, got: %v", expected, actual)
 	}
 

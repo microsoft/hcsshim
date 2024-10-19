@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
@@ -38,7 +37,7 @@ const (
 
 // mount mounts source to target via unix.Mount
 func mount(ctx context.Context, source, target string) (err error) {
-	if err := osMkdirAll(target, 0700); err != nil {
+	if err := osMkdirAll(target, 0o700); err != nil {
 		return err
 	}
 	defer func() {
@@ -51,7 +50,7 @@ func mount(ctx context.Context, source, target string) (err error) {
 
 	flags := uintptr(unix.MS_RDONLY)
 	if err := unixMount(source, target, "ext4", flags, "noload"); err != nil {
-		return errors.Wrapf(err, "failed to mount %s onto %s", source, target)
+		return fmt.Errorf("failed to mount %s onto %s: %w", source, target, err)
 	}
 	return nil
 }
@@ -141,7 +140,7 @@ func Unmount(
 		trace.StringAttribute("target", target))
 
 	if err := storage.UnmountPath(ctx, target, true); err != nil {
-		return errors.Wrapf(err, "failed to unmount target: %s", target)
+		return fmt.Errorf("failed to unmount target %s: %w", target, err)
 	}
 
 	if verityInfo != nil {

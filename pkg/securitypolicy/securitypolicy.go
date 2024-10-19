@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 //go:embed framework.rego
@@ -143,7 +143,7 @@ func ExtractPolicyDecision(errorMessage string) (string, error) {
 	re := regexp.MustCompile(fmt.Sprintf(policyDecisionPattern, `(.*)`))
 	matches := re.FindStringSubmatch(errorMessage)
 	if len(matches) != 2 {
-		return "", errors.Errorf("unable to extract policy decision from error message: %s", errorMessage)
+		return "", fmt.Errorf("unable to extract policy decision from error message: %s", errorMessage)
 	}
 
 	errorBytes, err := base64.StdEncoding.DecodeString(matches[1])

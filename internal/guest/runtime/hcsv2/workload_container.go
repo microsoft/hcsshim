@@ -12,7 +12,7 @@ import (
 
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
@@ -40,7 +40,7 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
 			// Hence, we need to ensure that the resolved path is still under the correct directory
 			if !strings.HasPrefix(sandboxSource, specInternal.SandboxMountsDir(sbid)) {
-				return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
+				return fmt.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
 			}
 
 			spec.Mounts[i].Source = sandboxSource
@@ -67,7 +67,7 @@ func updateHugePageMounts(sbid string, spec *oci.Spec) error {
 			// filepath.Join cleans the resulting path before returning so it would resolve the relative path if one was given.
 			// Hence, we need to ensure that the resolved path is still under the correct directory
 			if !strings.HasPrefix(hugePageMountSource, mountsDir) {
-				return errors.Errorf("mount path %v for mount %v is not within hugepages's mounts dir", hugePageMountSource, m.Source)
+				return fmt.Errorf("mount path %v for mount %v is not within hugepages's mounts dir", hugePageMountSource, m.Source)
 			}
 
 			spec.Mounts[i].Source = hugePageMountSource
@@ -78,7 +78,7 @@ func updateHugePageMounts(sbid string, spec *oci.Spec) error {
 					return err
 				}
 				if err := unix.Mount("none", hugePageMountSource, "hugetlbfs", 0, "pagesize="+pageSize); err != nil {
-					return errors.Errorf("mount operation failed for %v failed with error %v", hugePageMountSource, err)
+					return fmt.Errorf("mount operation failed for %v failed with error %v", hugePageMountSource, err)
 				}
 			}
 		}
@@ -144,16 +144,16 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 
 	// Verify no hostname
 	if spec.Hostname != "" {
-		return errors.Errorf("workload container must not change hostname: %s", spec.Hostname)
+		return fmt.Errorf("workload container must not change hostname: %s", spec.Hostname)
 	}
 
 	// update any sandbox mounts with the sandboxMounts directory path and create files
 	if err = updateSandboxMounts(sbid, spec); err != nil {
-		return errors.Wrapf(err, "failed to update sandbox mounts for container %v in sandbox %v", id, sbid)
+		return fmt.Errorf("failed to update sandbox mounts for container %v in sandbox %v: %w", id, sbid, err)
 	}
 
 	if err = updateHugePageMounts(sbid, spec); err != nil {
-		return errors.Wrapf(err, "failed to update hugepages mounts for container %v in sandbox %v", id, sbid)
+		return fmt.Errorf("failed to update hugepages mounts for container %v in sandbox %v: %w", id, sbid, err)
 	}
 
 	if err = updateBlockDeviceMounts(spec); err != nil {
@@ -201,7 +201,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		}
 		// add other assigned devices to the spec
 		if err := addAssignedDevice(ctx, spec); err != nil {
-			return errors.Wrap(err, "failed to add assigned device(s) to the container spec")
+			return fmt.Errorf("failed to add assigned device(s) to the container spec: %w", err)
 		}
 	}
 

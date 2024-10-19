@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/ext4/internal/compactext4"
 	"github.com/Microsoft/hcsshim/ext4/internal/format"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/pkg/errors"
 )
 
 type params struct {
@@ -109,7 +109,7 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 		}
 
 		if err = fs.MakeParents(name); err != nil {
-			return errors.Wrapf(err, "failed to ensure parent directories for %s", name)
+			return fmt.Errorf("failed to ensure parent directories for %s: %w", name, err)
 		}
 
 		if p.convertWhiteout {
@@ -119,12 +119,12 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 					// Update the directory with the appropriate xattr.
 					f, err := fs.Stat(dir)
 					if err != nil {
-						return errors.Wrapf(err, "failed to stat parent directory of whiteout %s", file)
+						return fmt.Errorf("failed to stat parent directory of whiteout %s: %w", file, err)
 					}
 					f.Xattrs["trusted.overlay.opaque"] = []byte("y")
 					err = fs.Create(dir, f)
 					if err != nil {
-						return errors.Wrapf(err, "failed to create opaque dir %s", file)
+						return fmt.Errorf("failed to create opaque dir %s: %w", file, err)
 					}
 				} else {
 					// Create an overlay-style whiteout.
@@ -135,7 +135,7 @@ func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) erro
 					}
 					err = fs.Create(path.Join(dir, file[len(whiteoutPrefix):]), f)
 					if err != nil {
-						return errors.Wrapf(err, "failed to create whiteout file for %s", file)
+						return fmt.Errorf("failed to create whiteout file for %s: %w", file, err)
 					}
 				}
 

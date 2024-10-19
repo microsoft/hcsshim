@@ -6,10 +6,11 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"syscall"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
@@ -53,7 +54,7 @@ func (b *Bridge) negotiateProtocolV2(r *Request) (_ RequestResponse, err error) 
 
 	var request prot.NegotiateProtocol
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	if request.MaximumVersion < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion {
@@ -89,18 +90,16 @@ func (b *Bridge) createContainerV2(r *Request) (_ RequestResponse, err error) {
 
 	var request prot.ContainerCreate
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	var settingsV2 prot.VMHostedContainerSettingsV2
 	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settingsV2); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig)
+		return nil, fmt.Errorf("failed to unmarshal JSON for ContainerConfig %q: %w", request.ContainerConfig, err)
 	}
 
 	if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 1}) < 0 {
-		return nil, gcserr.WrapHresult(
-			errors.Errorf("invalid schema version: %v", settingsV2.SchemaVersion),
-			gcserr.HrVmcomputeInvalidJSON)
+		return nil, gcserr.WrapHresult(fmt.Errorf("invalid schema version: %v", settingsV2.SchemaVersion), gcserr.HrVmcomputeInvalidJSON)
 	}
 
 	c, err := b.hostState.CreateContainer(ctx, request.ContainerID, &settingsV2)
@@ -144,7 +143,7 @@ func (b *Bridge) startContainerV2(r *Request) (_ RequestResponse, err error) {
 	// returned to the HCS.
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	return &prot.MessageResponseBase{}, nil
@@ -173,14 +172,14 @@ func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
 
 	var request prot.ContainerExecuteProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	// The request contains a JSON string field which is equivalent to an
 	// ExecuteProcessInfo struct.
 	var params prot.ProcessParameters
 	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
+		return nil, fmt.Errorf("failed to unmarshal JSON for ProcessParameters %q: %w", request.Settings.ProcessParameters, err)
 	}
 
 	var conSettings stdio.ConnectionSettings
@@ -195,7 +194,6 @@ func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
 	}
 
 	pid, err := b.hostState.ExecProcess(ctx, request.ContainerID, params, conSettings)
-
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +241,7 @@ func (b *Bridge) signalContainerShutdownV2(ctx context.Context, span *trace.Span
 
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	// If this is targeting the UVM send the request to the host itself.
@@ -270,7 +268,7 @@ func (b *Bridge) signalProcessV2(r *Request) (_ RequestResponse, err error) {
 
 	var request prot.ContainerSignalProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	span.AddAttributes(
@@ -299,14 +297,14 @@ func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
 
 	var request prot.ContainerGetProperties
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	var query prot.PropertyQuery
 	if len(request.Query) != 0 {
 		if err := json.Unmarshal([]byte(request.Query), &query); err != nil {
 			e := gcserr.WrapHresult(err, gcserr.HrVmcomputeInvalidJSON)
-			return nil, errors.Wrapf(e, "The query could not be unmarshaled: '%s'", query)
+			return nil, fmt.Errorf("The query %q could not be unmarshaled: %w", query, e)
 		}
 	}
 
@@ -324,7 +322,7 @@ func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
 		var err error
 		propertyJSON, err = json.Marshal(properties)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%+v\"", properties)
+			return nil, fmt.Errorf("failed to unmarshal JSON in message \"%+v\": %w", properties, err)
 		}
 	}
 
@@ -341,7 +339,7 @@ func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
 
 	var request prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	span.AddAttributes(
@@ -396,7 +394,7 @@ func (b *Bridge) resizeConsoleV2(r *Request) (_ RequestResponse, err error) {
 
 	var request prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	span.AddAttributes(
@@ -430,7 +428,7 @@ func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
 
 	request, err := prot.UnmarshalContainerModifySettings(r.Message)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	err = b.hostState.ModifySettings(ctx, request.ContainerID, request.Request.(*guestrequest.ModificationRequest))
@@ -464,7 +462,7 @@ func (b *Bridge) deleteContainerStateV2(r *Request) (_ RequestResponse, err erro
 
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+		return nil, fmt.Errorf("failed to unmarshal JSON in message %q: %w", r.Message, err)
 	}
 
 	c, err := b.hostState.GetCreatedContainer(request.ContainerID)
