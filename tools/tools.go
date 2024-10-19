@@ -20,4 +20,7 @@ import (
 
 	// mock gRPC client and servers
 	_ "go.uber.org/mock/mockgen"
+
+	// generate stringer methods
+	_ "golang.org/x/tools/cmd/stringer"
 )
