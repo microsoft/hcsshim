@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
 )
 
 type MountError struct {
@@ -62,4 +63,45 @@ func Unmount(volumePath string) error {
 	}
 
 	return nil
+}
+
+// MountMergedBlockCIMs mounts the given merged BlockCIM (usually created with
+// `MergeBlockCIMs`) at a volume with given GUID. The `sourceCIMs` MUST be identical
+// to the `sourceCIMs` passed to `MergeBlockCIMs` when creating this merged CIM.
+func MountMergedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlags uint32, volumeGUID guid.GUID) (string, error) {
+	switch mergedCIM.Type {
+	case BlockCIMTypeDevice:
+		mountFlags |= CimMountBlockDeviceCim
+	case BlockCIMTypeSingleFile:
+		mountFlags |= CimMountSingleFileCim
+	default:
+		return "", fmt.Errorf("invalid block CIM type `%d`", mergedCIM.Type)
+	}
+
+	// win32 mount merged CIM API expects an array of all CIMs. 0th entry in the array
+	// should be the merged CIM. All remaining entries should be the source CIM paths
+	// in the same order that was used while creating the merged CIM.
+	allcims := append([]*BlockCIM{mergedCIM}, sourceCIMs...)
+	cimsToMerge := []winapi.CimFsImagePath{}
+	for _, bcim := range allcims {
+		// Trailing backslashes cause problems-remove those
+		imageDir, err := windows.UTF16PtrFromString(strings.TrimRight(bcim.BlockPath, `\`))
+		if err != nil {
+			return "", fmt.Errorf("convert string to utf16: %w", err)
+		}
+		cimName, err := windows.UTF16PtrFromString(bcim.CimName)
+		if err != nil {
+			return "", fmt.Errorf("convert string to utf16: %w", err)
+		}
+
+		cimsToMerge = append(cimsToMerge, winapi.CimFsImagePath{
+			ImageDir:  imageDir,
+			ImageName: cimName,
+		})
+	}
+
+	if err := winapi.CimMergeMountImage(uint32(len(cimsToMerge)), &cimsToMerge[0], mountFlags, &volumeGUID); err != nil {
+		return "", &MountError{Cim: filepath.Join(mergedCIM.BlockPath, mergedCIM.CimName), Op: "MountMerged", Err: err}
+	}
+	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
 }
