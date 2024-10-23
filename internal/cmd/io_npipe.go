@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"sync"
 	"syscall"
@@ -19,11 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
-
-func init() {
-	// Need to seed for the rng in backoff.NextBackoff()
-	rand.Seed(time.Now().UnixNano())
-}
 
 // NewNpipeIO creates connected upstream io. It is the callers responsibility to validate that `if terminal == true`, `stderr == ""`. retryTimeout
 // refers to the timeout used to try and reconnect to the server end of the named pipe if the connection is severed. A value of 0 for retryTimeout
