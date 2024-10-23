@@ -4,7 +4,7 @@ on:
   - pull_request
 
 env:
-  GO_VERSION: "1.20.x"
+  GO_VERSION: "1.21.x"
   GOTESTSUM_VERSION: "latest"
 
 jobs:
@@ -38,9 +38,9 @@ jobs:
           # sometimes go cache causes issues with lint
           cache: false
 
-      - uses: golangci/golangci-lint-action@v3
+      - uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.52
+          version: v1.54
           args: >-
             --verbose
             --max-issues-per-linter=0
