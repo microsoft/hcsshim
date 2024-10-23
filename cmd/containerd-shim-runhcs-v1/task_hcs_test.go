@@ -14,18 +14,16 @@ import (
 
 func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
 	t.Helper()
-	seed := time.Now().UnixNano()
-	source := rand.New(rand.NewSource(seed))
 
-	initExec := newTestShimExec(t.Name(), t.Name(), int(source.Uint64()))
+	initExec := newTestShimExec(t.Name(), t.Name(), int(rand.Int31()))
 	lt := &hcsTask{
 		events: newFakePublisher(),
 		id:     t.Name(),
 		init:   initExec,
 		closed: make(chan struct{}),
 	}
-	secondExecID := strconv.FormatInt((int64)(source.Uint64()), 10)
-	secondExec := newTestShimExec(t.Name(), secondExecID, int(source.Int31()))
+	secondExecID := strconv.Itoa(rand.Int())
+	secondExec := newTestShimExec(t.Name(), secondExecID, int(rand.Int31()))
 	lt.execs.Store(secondExecID, secondExec)
 	return lt, initExec, secondExec
 }

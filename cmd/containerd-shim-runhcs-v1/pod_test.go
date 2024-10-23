@@ -391,9 +391,6 @@ func Test_pod_DeleteTask_TaskID_Not_Created(t *testing.T) {
 	setupTestTaskInPod(t, p)
 	setupTestTaskInPod(t, p)
 
-	seed := time.Now().UnixNano()
-	source := rand.New(rand.NewSource(seed))
-
-	err := p.KillTask(context.Background(), strconv.Itoa((int)(source.Uint64())), "", 0xf, true)
+	err := p.KillTask(context.Background(), strconv.Itoa(rand.Int()), "", 0xf, true)
 	verifyExpectedError(t, nil, err, errdefs.ErrNotFound)
 }

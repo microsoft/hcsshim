@@ -8,7 +8,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/containerd/cgroups v1.1.0
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.33
+	github.com/containerd/containerd v1.6.36
 	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.2
