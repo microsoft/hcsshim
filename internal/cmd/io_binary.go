@@ -28,6 +28,8 @@ const (
 	binaryCmdStartTimeout = 10 * time.Second
 )
 
+var ErrUnsafePath = errors.New("path is unsafe")
+
 // NewBinaryIO runs a custom binary process for pluggable shim logging driver.
 //
 // Container's IO will be redirected to the logging driver via named pipes, which are
@@ -122,14 +124,19 @@ func NewBinaryIO(ctx context.Context, id string, uri *url.URL) (_ UpstreamIO, er
 }
 
 // sanitizePath parses the URL object and returns a clean path to the logging driver
-func sanitizePath(uri *url.URL) string {
+func sanitizePath(uri *url.URL) (string, error) {
 	path := filepath.Clean(uri.Path)
 
-	if strings.Contains(path, `:\`) {
-		return strings.TrimPrefix(path, "\\")
+	// avoid UNC paths (e.g. `\\server\share\`)
+	if strings.HasPrefix(path, `\\`) {
+		return "", ErrUnsafePath
 	}
 
-	return path
+	if strings.Contains(path, `:\`) {
+		return strings.TrimPrefix(path, "\\"), nil
+	}
+
+	return path, nil
 }
 
 func newBinaryCmd(ctx context.Context, uri *url.URL, envs []string) (*exec.Cmd, error) {
@@ -145,7 +152,10 @@ func newBinaryCmd(ctx context.Context, uri *url.URL, envs []string) (*exec.Cmd, 
 		}
 	}
 
-	execPath := sanitizePath(uri)
+	execPath, err := sanitizePath(uri)
+	if err != nil {
+		return nil, err
+	}
 
 	cmd := exec.CommandContext(ctx, execPath, args...)
 	cmd.Env = append(cmd.Env, envs...)
