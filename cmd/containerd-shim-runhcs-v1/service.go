@@ -12,7 +12,7 @@ import (
 	"time"
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/errdefs"
+	errdefs "github.com/containerd/errdefs/pkg/errgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
 
