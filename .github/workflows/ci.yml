@@ -4,7 +4,7 @@ on:
   - pull_request
 
 env:
-  GO_VERSION: "1.21.x"
+  GO_VERSION: "1.22.x"
   GOTESTSUM_VERSION: "latest"
   GOTESTCMD: "gotestsum --format standard-verbose --debug --"
 
