@@ -13,10 +13,11 @@ require (
 	github.com/containerd/containerd v1.7.23
 	github.com/containerd/containerd/api v1.7.19
 	github.com/containerd/errdefs v0.3.0
+	github.com/containerd/errdefs/pkg v0.3.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/protobuild v0.3.0
 	github.com/containerd/ttrpc v1.2.5
-	github.com/containerd/typeurl/v2 v2.1.1
+	github.com/containerd/typeurl/v2 v2.2.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-containerregistry v0.20.1
 	github.com/josephspurrier/goversioninfo v1.4.0
@@ -37,7 +38,7 @@ require (
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.25.0
-	google.golang.org/grpc v1.66.0
+	google.golang.org/grpc v1.67.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
 	google.golang.org/protobuf v1.34.2
 )
@@ -116,7 +117,7 @@ require (
 	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	google.golang.org/genproto v0.0.0-20240123012728-ef4313101c80 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240701130421-f6361c86f094 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )

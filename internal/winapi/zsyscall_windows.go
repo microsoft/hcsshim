@@ -475,7 +475,7 @@ func OpenJobObject(desiredAccess uint32, inheritHandle bool, lpName *uint16) (ha
 	if inheritHandle {
 		_p0 = 1
 	}
-	r0, _, e1 := syscall.Syscall(procOpenJobObjectW.Addr(), 3, uintptr(desiredAccess), uintptr(_p0), uintptr(unsafe.Pointer(lpName)))
+	r0, _, e1 := syscall.SyscallN(procOpenJobObjectW.Addr(), uintptr(desiredAccess), uintptr(_p0), uintptr(unsafe.Pointer(lpName)))
 	handle = windows.Handle(r0)
 	if handle == 0 {
 		err = errnoErr(e1)
