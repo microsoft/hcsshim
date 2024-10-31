@@ -20,15 +20,15 @@
     },
     "StringFileInfo": {
         "Comments": "",
-        "CompanyName": "",
+        "CompanyName": "Microsoft",
         "FileDescription": "",
         "FileVersion": "",
         "InternalName": "",
         "LegalCopyright": "",
         "LegalTrademarks": "",
-        "OriginalFilename": "",
+        "OriginalFilename": "containerd-shim-runhcs-v1.exe",
         "PrivateBuild": "",
-        "ProductName": "",
+        "ProductName": "runhcs shim",
         "ProductVersion": "v1.0.0.0",
         "SpecialBuild": ""
     },
