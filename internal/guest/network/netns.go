@@ -237,7 +237,18 @@ func assignIPToLink(ctx context.Context,
 		// unreachable error when adding this out-of-subnet gw route
 		entry.Debugf("gw is outside of the subnet: Configure %s in %d with: %s/%d gw=%s\n",
 			ifStr, nsPid, allocatedIP, prefixLen, gatewayIP)
-		ml := len(gw) * 8
+
+		// net library's ParseIP call always returns an array of length 16, so we
+		// need to first check if the address is IPv4 or IPv6 before calculating
+		// the mask length. See https://pkg.go.dev/net#ParseIP.
+		ml := 8
+		if gw.To4() != nil {
+			ml *= net.IPv4len
+		} else if gw.To16() != nil {
+			ml *= net.IPv6len
+		} else {
+			return fmt.Errorf("gw IP is neither IPv4 nor IPv6: %v", gw)
+		}
 		addr2 := &net.IPNet{
 			IP:   gw,
 			Mask: net.CIDRMask(ml, ml)}
