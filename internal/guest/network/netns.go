@@ -20,6 +20,13 @@ import (
 	"github.com/vishvananda/netns"
 )
 
+var (
+	// function definitions for mocking assignIPToLink
+	netlinkAddrAdd  = netlink.AddrAdd
+	netlinkRuleAdd  = netlink.RuleAdd
+	netlinkRouteAdd = netlink.RouteAdd
+)
+
 // MoveInterfaceToNS moves the adapter with interface name `ifStr` to the network namespace
 // of `pid`.
 func MoveInterfaceToNS(ifStr string, pid int) error {
@@ -219,7 +226,7 @@ func assignIPToLink(ctx context.Context,
 		"IP":          addr,
 	}).Debugf("parsed ip address %s/%d", allocatedIP, prefixLen)
 	ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
-	if err := netlink.AddrAdd(link, ipAddr); err != nil {
+	if err := netlinkAddrAdd(link, ipAddr); err != nil {
 		return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr)
 	}
 	if gatewayIP == "" {
@@ -242,7 +249,7 @@ func assignIPToLink(ctx context.Context,
 			IP:   gw,
 			Mask: net.CIDRMask(ml, ml)}
 		ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
-		if err := netlink.AddrAdd(link, ipAddr2); err != nil {
+		if err := netlinkAddrAdd(link, ipAddr2); err != nil {
 			return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr2)
 		}
 	}
@@ -261,7 +268,7 @@ func assignIPToLink(ctx context.Context,
 		rule.Src = srcNet
 		rule.Priority = 5
 
-		if err := netlink.RuleAdd(rule); err != nil {
+		if err := netlinkRuleAdd(rule); err != nil {
 			return errors.Wrapf(err, "netlink.RuleAdd(%#v) failed", rule)
 		}
 		table = rule.Table
@@ -274,7 +281,7 @@ func assignIPToLink(ctx context.Context,
 		Table:     table,
 		Priority:  metric,
 	}
-	if err := netlink.RouteAdd(&route); err != nil {
+	if err := netlinkRouteAdd(&route); err != nil {
 		return errors.Wrapf(err, "netlink.RouteAdd(%#v) failed", route)
 	}
 	return nil
