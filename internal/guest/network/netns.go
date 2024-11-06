@@ -10,14 +10,30 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+)
+
+var (
+	// function definitions for mocking configureLink
+	netlinkAddrAdd  = netlink.AddrAdd
+	netlinkRouteAdd = netlink.RouteAdd
+)
+
+const (
+	ipv4GwDestination = "0.0.0.0/0"
+	ipv4EmptyGw       = "0.0.0.0"
+	ipv6GwDestination = "::/0"
+	ipv6EmptyGw       = "::"
+
+	unreachableErr = "network is unreachable"
 )
 
 // MoveInterfaceToNS moves the adapter with interface name `ifStr` to the network namespace
@@ -67,7 +83,7 @@ func DoInNetNS(ns netns.NsHandle, run func() error) error {
 //
 // This function MUST be used in tandem with `DoInNetNS` or some other means that ensures that the goroutine
 // executing this code stays on the same thread.
-func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.NetworkAdapter) error {
+func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *guestresource.LCOWNetworkAdapter) error {
 	ctx, entry := log.S(ctx, logrus.Fields{
 		"ifname": ifStr,
 		"pid":    nsPid,
@@ -101,29 +117,14 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 	}
 
 	// Configure the interface
-	if adapter.NatEnabled {
-		entry.Tracef("Configuring interface with NAT: %s/%d gw=%s",
-			adapter.AllocatedIPAddress,
-			adapter.HostIPPrefixLength, adapter.HostIPAddress)
-		metric := 1
-		if adapter.EnableLowMetric {
-			metric = 500
-		}
+	if len(adapter.IPConfigs) != 0 {
+		entry.Debugf("Configuring interface with NAT: %v", adapter)
 
 		// Bring the interface up
 		if err := netlink.LinkSetUp(link); err != nil {
-			return errors.Wrapf(err, "netlink.LinkSetUp(%#v) failed", link)
+			return fmt.Errorf("netlink.LinkSetUp(%#v) failed: %w", link, err)
 		}
-		if err := assignIPToLink(ctx, ifStr, nsPid, link,
-			adapter.AllocatedIPAddress, adapter.HostIPAddress, adapter.HostIPPrefixLength,
-			adapter.EnableLowMetric, metric,
-		); err != nil {
-			return err
-		}
-		if err := assignIPToLink(ctx, ifStr, nsPid, link,
-			adapter.AllocatedIPv6Address, adapter.HostIPv6Address, adapter.HostIPv6PrefixLength,
-			adapter.EnableLowMetric, metric,
-		); err != nil {
+		if err := configureLink(ctx, link, adapter); err != nil {
 			return err
 		}
 	} else {
@@ -186,107 +187,104 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 	return nil
 }
 
-func assignIPToLink(ctx context.Context,
-	ifStr string,
-	nsPid int,
+func configureLink(ctx context.Context,
 	link netlink.Link,
-	allocatedIP string,
-	gatewayIP string,
-	prefixLen uint8,
-	enableLowMetric bool,
-	metric int,
+	adapter *guestresource.LCOWNetworkAdapter,
 ) error {
-	entry := log.G(ctx)
-	entry.WithFields(logrus.Fields{
-		"link":      link.Attrs().Name,
-		"IP":        allocatedIP,
-		"prefixLen": prefixLen,
-		"gateway":   gatewayIP,
-		"metric":    metric,
-	}).Trace("assigning IP address")
-	if allocatedIP == "" {
-		return nil
-	}
-	// Set IP address
-	ip, addr, err := net.ParseCIDR(allocatedIP + "/" + strconv.FormatUint(uint64(prefixLen), 10))
-	if err != nil {
-		return errors.Wrapf(err, "parsing address %s/%d failed", allocatedIP, prefixLen)
-	}
-	// the IP address field in addr is masked, so replace it with the original ip address
-	addr.IP = ip
-	entry.WithFields(logrus.Fields{
-		"allocatedIP": ip,
-		"IP":          addr,
-	}).Debugf("parsed ip address %s/%d", allocatedIP, prefixLen)
-	ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
-	if err := netlink.AddrAdd(link, ipAddr); err != nil {
-		return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr)
-	}
-	if gatewayIP == "" {
-		return nil
-	}
-	// Set gateway
-	gw := net.ParseIP(gatewayIP)
-	if gw == nil {
-		return errors.Wrapf(err, "parsing gateway address %s failed", gatewayIP)
-	}
+	for _, ipConfig := range adapter.IPConfigs {
+		log.G(ctx).WithFields(logrus.Fields{
+			"link":      link.Attrs().Name,
+			"IP":        ipConfig.IPAddress,
+			"prefixLen": ipConfig.PrefixLength,
+		}).Debug("assigning IP address")
 
-	if !addr.Contains(gw) {
-		// In the case that a gw is not part of the subnet we are setting gw for,
-		// a new addr containing this gw address need to be added into the link to avoid getting
-		// unreachable error when adding this out-of-subnet gw route
-		entry.Debugf("gw is outside of the subnet: Configure %s in %d with: %s/%d gw=%s\n",
-			ifStr, nsPid, allocatedIP, prefixLen, gatewayIP)
-
-		// net library's ParseIP call always returns an array of length 16, so we
-		// need to first check if the address is IPv4 or IPv6 before calculating
-		// the mask length. See https://pkg.go.dev/net#ParseIP.
-		ml := 8
-		if gw.To4() != nil {
-			ml *= net.IPv4len
-		} else if gw.To16() != nil {
-			ml *= net.IPv6len
-		} else {
-			return fmt.Errorf("gw IP is neither IPv4 nor IPv6: %v", gw)
+		// Set IP address
+		ip, addr, err := net.ParseCIDR(ipConfig.IPAddress + "/" + strconv.FormatUint(uint64(ipConfig.PrefixLength), 10))
+		if err != nil {
+			return fmt.Errorf("parsing address %s/%d failed: %w", ipConfig.IPAddress, ipConfig.PrefixLength, err)
 		}
-		addr2 := &net.IPNet{
-			IP:   gw,
-			Mask: net.CIDRMask(ml, ml)}
-		ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
-		if err := netlink.AddrAdd(link, ipAddr2); err != nil {
-			return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr2)
+		// the IP address field in addr is masked, so replace it with the original ip address
+		addr.IP = ip
+		log.G(ctx).WithFields(logrus.Fields{
+			"allocatedIP": ip,
+			"IP":          addr,
+		}).Debugf("parsed ip address %s/%d", ipConfig.IPAddress, ipConfig.PrefixLength)
+		ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
+		if err := netlinkAddrAdd(link, ipAddr); err != nil {
+			return fmt.Errorf("netlink.AddrAdd(%#v, %#v) failed: %w", link, ipAddr, err)
 		}
 	}
 
-	var table int
-	if enableLowMetric {
-		// add a route rule for the new interface so packets coming on this interface
-		// always go out the same interface
-		_, ml := addr.Mask.Size()
-		srcNet := &net.IPNet{
-			IP:   net.ParseIP(allocatedIP),
-			Mask: net.CIDRMask(ml, ml),
-		}
-		rule := netlink.NewRule()
-		rule.Table = 101
-		rule.Src = srcNet
-		rule.Priority = 5
+	for _, r := range adapter.Routes {
+		log.G(ctx).WithField("route", r).Debugf("adding a route to interface %s", link.Attrs().Name)
 
-		if err := netlink.RuleAdd(rule); err != nil {
-			return errors.Wrapf(err, "netlink.RuleAdd(%#v) failed", rule)
+		if (r.DestinationPrefix == ipv4GwDestination || r.DestinationPrefix == ipv6GwDestination) &&
+			(r.NextHop == ipv4EmptyGw || r.NextHop == ipv6EmptyGw) {
+			// this indicates no default gateway was added for this interface
+			continue
 		}
-		table = rule.Table
-	}
-	// add the default route in that interface specific table
-	route := netlink.Route{
-		Scope:     netlink.SCOPE_UNIVERSE,
-		LinkIndex: link.Attrs().Index,
-		Gw:        gw,
-		Table:     table,
-		Priority:  metric,
-	}
-	if err := netlink.RouteAdd(&route); err != nil {
-		return errors.Wrapf(err, "netlink.RouteAdd(%#v) failed", route)
+
+		// dst will be nil when setting default gateways
+		var dst *net.IPNet
+		if !(r.DestinationPrefix == ipv4GwDestination || r.DestinationPrefix == ipv6GwDestination) {
+			dstIP, dstAddr, err := net.ParseCIDR(r.DestinationPrefix)
+			if err != nil {
+				return fmt.Errorf("parsing route dst address %s failed: %w", r.DestinationPrefix, err)
+			}
+			dstAddr.IP = dstIP
+			dst = dstAddr
+		}
+
+		// gw can be nil when setting something like
+		// ip route add 10.0.0.0/16 dev eth0
+		gw := net.ParseIP(r.NextHop)
+		if gw == nil && dst == nil {
+			return fmt.Errorf("gw and destination cannot both be nil")
+		}
+
+		route := netlink.Route{
+			Scope:     netlink.SCOPE_UNIVERSE,
+			LinkIndex: link.Attrs().Index,
+			Gw:        gw,
+			Dst:       dst,
+			Priority:  int(r.Metric),
+		}
+		if err := netlinkRouteAdd(&route); err != nil {
+			// unfortunately, netlink library doesn't have great error handling,
+			// so we have to rely on the string error here
+			if strings.Contains(err.Error(), unreachableErr) && gw != nil {
+				// In the case that a gw is not part of the subnet we are setting gw for,
+				// a new addr containing this gw address needs to be added into the link to avoid getting
+				// unreachable error when adding this out-of-subnet gw route
+				log.G(ctx).Infof("gw is outside of the subnet: %v", gw)
+
+				// net library's ParseIP call always returns an array of length 16, so we
+				// need to first check if the address is IPv4 or IPv6 before calculating
+				// the mask length. See https://pkg.go.dev/net#ParseIP.
+				ml := 8
+				if gw.To4() != nil {
+					ml *= net.IPv4len
+				} else if gw.To16() != nil {
+					ml *= net.IPv6len
+				} else {
+					return fmt.Errorf("gw IP is neither IPv4 nor IPv6: %v", gw)
+				}
+				addr2 := &net.IPNet{
+					IP:   gw,
+					Mask: net.CIDRMask(ml, ml)}
+				ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
+				if err := netlinkAddrAdd(link, ipAddr2); err != nil {
+					return fmt.Errorf("netlink.AddrAdd(%#v, %#v) failed: %w", link, ipAddr2, err)
+				}
+
+				// try adding the route again
+				if err := netlinkRouteAdd(&route); err != nil {
+					return fmt.Errorf("netlink.RouteAdd(%#v) failed: %w", route, err)
+				}
+			} else {
+				return fmt.Errorf("netlink.RouteAdd(%#v) failed: %w", route, err)
+			}
+		}
 	}
 	return nil
 }
