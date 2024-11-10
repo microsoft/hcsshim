@@ -23,7 +23,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli/v2 v2.27.1
 	go.opencensus.io v0.24.0
-	golang.org/x/sync v0.8.0
+	golang.org/x/sync v0.9.0
 	golang.org/x/sys v0.25.0
 	google.golang.org/grpc v1.67.0
 	google.golang.org/protobuf v1.34.2
