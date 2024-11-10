@@ -36,7 +36,7 @@ require (
 	go.etcd.io/bbolt v1.3.10
 	go.opencensus.io v0.24.0
 	go.uber.org/mock v0.4.0
-	golang.org/x/sync v0.8.0
+	golang.org/x/sync v0.9.0
 	golang.org/x/sys v0.25.0
 	google.golang.org/grpc v1.67.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
