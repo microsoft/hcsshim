@@ -168,7 +168,7 @@ func isTar(reader io.Reader) (io.Reader, bool) {
 
 	_, err := tarReader.Next()
 
-	return io.MultiReader(&header, reader), err == nil
+	return io.MultiReader(&header, reader), err == nil || err == io.EOF
 }
 
 func processLocalImage(imageReader io.Reader, onLayer LayerProcessor) (layerDigests map[int]string, layerIDs map[int]string, err error) {
