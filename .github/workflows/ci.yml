@@ -635,13 +635,6 @@ jobs:
         name: Build device-util.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/ncproxy
         name: Build ncproxy.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/dmverity-vhd
-        name: Build dmverity-vhd.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/dmverity-vhd
-        name: Build dmverity-vhd
-        env:
-          GOOS: linux
-          GOARCH: amd64
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/grantvmgroupaccess
         name: Build grantvmgroupaccess.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/networkagent
@@ -669,8 +662,6 @@ jobs:
             wclayer.exe
             device-util.exe
             ncproxy.exe
-            dmverity-vhd.exe
-            dmverity-vhd
             grantvmgroupaccess.exe
             networkagent.exe
             securitypolicy.exe

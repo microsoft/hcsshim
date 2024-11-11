@@ -54,7 +54,6 @@ jobs:
             targets: >-
               cmd/containerd-shim-runhcs-v1,
               cmd/device-util,
-              cmd/dmverity-vhd,
               cmd/jobobject-util,
               cmd/ncproxy,
               cmd/runhcs,
@@ -64,14 +63,13 @@ jobs:
               internal/tools/extendedtask,
               internal/tools/grantvmgroupaccess,
               internal/tools/networkagent,
-              internal/tools/securitypolicy
+              internal/tools/securitypolicy,
               internal/tools/uvmboot,
               internal/tools/zapdir,
 
           - goos: linux
             language: go, c-cpp
             targets: >-
-              cmd/dmverity-vhd,
               cmd/gcs,
               cmd/gcstools,
               cmd/hooks/wait-paths,
