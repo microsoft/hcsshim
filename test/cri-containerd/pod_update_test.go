@@ -10,9 +10,11 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/memory"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/cpugroup"
 	"github.com/Microsoft/hcsshim/test/pkg/definitions/processorinfo"
+	"github.com/Microsoft/hcsshim/test/pkg/require"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
@@ -132,6 +134,7 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 
 func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 	requireAnyFeature(t, featureWCOWHypervisor)
+	require.Build(t, osversion.V20H2)
 
 	type config struct {
 		name             string
