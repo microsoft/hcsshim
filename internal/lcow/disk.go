@@ -31,7 +31,7 @@ func FormatDisk(ctx context.Context, lcowUVM *uvm.UtilityVM, destPath string) er
 	}).Debug("lcow::FormatDisk opts")
 
 	// Attach without mounting.
-	scsi, err := lcowUVM.SCSIManager.AddPhysicalDisk(ctx, destPath, false, lcowUVM.ID(), nil)
+	scsi, err := lcowUVM.SCSIManager.AddPhysicalDisk(ctx, destPath, false, lcowUVM.ID(), "", nil)
 	if err != nil {
 		return err
 	}

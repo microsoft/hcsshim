@@ -529,7 +529,7 @@ func (uvm *UtilityVM) RemoveEndpointFromNS(ctx context.Context, id string, endpo
 
 // IsNetworkNamespaceSupported returns bool value specifying if network namespace is supported inside the guest
 func (uvm *UtilityVM) isNetworkNamespaceSupported() bool {
-	return uvm.guestCaps.NamespaceAddRequestSupported
+	return uvm.guestCaps.IsNamespaceAddRequestSupported()
 }
 
 func getNetworkModifyRequest(adapterID string, requestType guestrequest.RequestType, settings interface{}) interface{} {

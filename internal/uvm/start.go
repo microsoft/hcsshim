@@ -282,7 +282,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		uvm.guestCaps = *uvm.gc.Capabilities()
+		uvm.guestCaps = uvm.gc.Capabilities()
 		uvm.protocol = uvm.gc.Protocol()
 
 		// initial setup required for external GCS connection
@@ -295,7 +295,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		uvm.guestCaps = properties.GuestConnectionInfo.GuestDefinedCapabilities
+		uvm.guestCaps = &gcs.WCOWGuestDefinedCapabilities{GuestDefinedCapabilities: properties.GuestConnectionInfo.GuestDefinedCapabilities}
 		uvm.protocol = properties.GuestConnectionInfo.ProtocolVersion
 	}
 

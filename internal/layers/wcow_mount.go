@@ -331,7 +331,7 @@ func mountHypervIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers, vm 
 	hostPath := filepath.Join(l.scratchLayerPath, "sandbox.vhdx")
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
-	scsiMount, err := vm.SCSIManager.AddVirtualDisk(ctx, hostPath, false, vm.ID(), &scsi.MountConfig{})
+	scsiMount, err := vm.SCSIManager.AddVirtualDisk(ctx, hostPath, false, vm.ID(), "", &scsi.MountConfig{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to add SCSI scratch VHD: %w", err)
 	}

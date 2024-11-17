@@ -49,7 +49,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	}
 
 	// Make sure it can be added (verifies it has access correctly)
-	scsiMount, err := targetUVM.SCSIManager.AddVirtualDisk(context.Background(), destTwo, false, targetUVM.ID(), nil)
+	scsiMount, err := targetUVM.SCSIManager.AddVirtualDisk(context.Background(), destTwo, false, targetUVM.ID(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
