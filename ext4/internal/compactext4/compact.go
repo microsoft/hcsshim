@@ -31,6 +31,7 @@ type Writer struct {
 	initialized          bool
 	supportInlineData    bool
 	maxDiskSize          int64
+	freeSpace            uint32
 	readWrite            bool
 	uuid                 [16]byte
 	volumeName           [16]byte
@@ -1145,6 +1146,14 @@ func MaximumDiskSize(size int64) Option {
 	}
 }
 
+// FreeSpace instructs the writer to add additional free space to the disk.
+// If not provided, then 0GB is the default.
+func FreeSpace(size uint32) Option {
+	return func(w *Writer) {
+		w.freeSpace = size
+	}
+}
+
 // ReadWrite instructs the writer to not mark the file system as write-protected.
 func ReadWrite(w *Writer) {
 	w.readWrite = true
@@ -1228,19 +1237,30 @@ func (w *Writer) Close() error {
 		return err
 	}
 
-	// Write the inode table
+	extraBlocks := w.freeSpace / BlockSize
+
+	// Calculate the initial data size
 	inodeTableOffset := w.block()
-	groups, inodesPerGroup := bestGroupCount(inodeTableOffset, uint32(len(w.inodes)))
+	validDataSize := inodeTableOffset
+
+	// Calculate the new disk size by adding extraBlocks (which could be 0)
+	diskSize := validDataSize + extraBlocks
+
+	// Recalculate groups and inodesPerGroup based on the new diskSize
+	groups, inodesPerGroup := bestGroupCount(diskSize, uint32(len(w.inodes)))
+
+	// Write the inode table
 	err := w.writeInodeTable(groups * inodesPerGroup * inodeSize)
 	if err != nil {
 		return err
 	}
 
-	// Write the bitmaps.
+	// Write the bitmaps
 	bitmapOffset := w.block()
 	bitmapSize := groups * 2
-	validDataSize := bitmapOffset + bitmapSize
-	diskSize := validDataSize
+	validDataSize = bitmapOffset + bitmapSize
+	diskSize = validDataSize + extraBlocks
+
 	minSize := (groups-1)*blocksPerGroup + 1
 	if diskSize < minSize {
 		diskSize = minSize
@@ -1256,36 +1276,53 @@ func (w *Writer) Close() error {
 	var totalUsedBlocks, totalUsedInodes uint32
 	for g := uint32(0); g < groups; g++ {
 		var b [BlockSize * 2]byte
-		var dirCount, usedInodeCount, usedBlockCount uint16
+		var dirCount, usedInodeCount uint16
+		var usedBlockCount uint32
+
+		groupFirstBlock := g * blocksPerGroup
+		groupLastBlock := groupFirstBlock + blocksPerGroup
+
+		// Determine the number of blocks in this group
+		groupBlocks := uint32(blocksPerGroup)
+		if groupLastBlock > diskSize {
+			groupBlocks = diskSize - groupFirstBlock
+		}
 
 		// Block bitmap
-		if (g+1)*blocksPerGroup <= validDataSize {
-			// This group is fully allocated.
-			for j := range b[:BlockSize] {
-				b[j] = 0xff
-			}
-			usedBlockCount = blocksPerGroup
-		} else if g*blocksPerGroup < validDataSize {
-			for j := uint32(0); j < validDataSize-g*blocksPerGroup; j++ {
+		for j := uint32(0); j < blocksPerGroup; j++ {
+			globalBlockNumber := groupFirstBlock + j
+
+			if j >= groupBlocks || globalBlockNumber >= diskSize {
+				// Blocks beyond actual blocks in this group or beyond disk size; mark as used
+				b[j/8] |= 1 << (j % 8)
+				// Do not increment usedBlockCount
+			} else if globalBlockNumber < validDataSize {
+				// Used blocks
 				b[j/8] |= 1 << (j % 8)
 				usedBlockCount++
-			}
-		}
-		if g == 0 {
-			// Unused group descriptor blocks should be cleared.
-			for j := 1 + usedGdBlocks; j < 1+w.gdBlocks; j++ {
+			} else {
+				// Free blocks
 				b[j/8] &^= 1 << (j % 8)
-				usedBlockCount--
 			}
 		}
-		if g == groups-1 && diskSize%blocksPerGroup != 0 {
-			// Blocks that aren't present in the disk should be marked as
-			// allocated.
-			for j := diskSize % blocksPerGroup; j < blocksPerGroup; j++ {
-				b[j/8] |= 1 << (j % 8)
-				usedBlockCount++
+
+		// Set padding bits at the end of the block bitmap to 1
+		for j := blocksPerGroup; j < BlockSize*8; j++ {
+			b[j/8] |= 1 << (j % 8)
+		}
+
+		if g == 0 {
+			// Mark superblock and group descriptor blocks as used.
+			for j := uint32(1); j <= 1+usedGdBlocks; j++ {
+				byteIndex := j / 8
+				bitIndex := j % 8
+				if (b[byteIndex] & (1 << bitIndex)) == 0 {
+					b[byteIndex] |= 1 << bitIndex
+					usedBlockCount++
+				}
 			}
 		}
+
 		// Inode bitmap
 		for j := uint32(0); j < inodesPerGroup; j++ {
 			ino := format.InodeNumber(1 + g*inodesPerGroup + j)
@@ -1293,11 +1330,19 @@ func (w *Writer) Close() error {
 			if ino < inodeFirst || inode != nil {
 				b[BlockSize+j/8] |= 1 << (j % 8)
 				usedInodeCount++
+			} else {
+				b[BlockSize+j/8] &^= 1 << (j % 8)
 			}
 			if inode != nil && inode.Mode&format.TypeMask == format.S_IFDIR {
 				dirCount++
 			}
 		}
+
+		// Set padding bits at the end of the inode bitmap to 1
+		for j := inodesPerGroup; j < BlockSize*8; j++ {
+			b[BlockSize+j/8] |= 1 << (j % 8)
+		}
+
 		_, err := w.write(b[:])
 		if err != nil {
 			return err
@@ -1308,15 +1353,15 @@ func (w *Writer) Close() error {
 			InodeTableLow:      inodeTableOffset + g*inodeTableSizePerGroup,
 			UsedDirsCountLow:   dirCount,
 			FreeInodesCountLow: uint16(inodesPerGroup) - usedInodeCount,
-			FreeBlocksCountLow: blocksPerGroup - usedBlockCount,
+			FreeBlocksCountLow: uint16(groupBlocks - usedBlockCount),
 		}
 
-		totalUsedBlocks += uint32(usedBlockCount)
+		totalUsedBlocks += usedBlockCount
 		totalUsedInodes += uint32(usedInodeCount)
 	}
 
 	// Zero up to the disk size.
-	_, err = w.zero(int64(diskSize-bitmapOffset-bitmapSize) * BlockSize)
+	_, err = w.zero(int64(diskSize-w.block()) * BlockSize)
 	if err != nil {
 		return err
 	}
@@ -1326,12 +1371,12 @@ func (w *Writer) Close() error {
 	if w.err != nil {
 		return w.err
 	}
-	err = binary.Write(w.bw, binary.LittleEndian, gds)
+	err = binary.Write(w.bw, binary.LittleEndian, gds[:groups])
 	if err != nil {
 		return err
 	}
 
-	// Write the super block
+	// Write the superblock
 	var blk [BlockSize]byte
 	b := bytes.NewBuffer(blk[:1024])
 	featureRoCompat := format.RoCompatLargeFile | format.RoCompatHugeFile | format.RoCompatExtraIsize
@@ -1341,7 +1386,7 @@ func (w *Writer) Close() error {
 	sb := &format.SuperBlock{
 		InodesCount:        inodesPerGroup * groups,
 		BlocksCountLow:     diskSize,
-		FreeBlocksCountLow: blocksPerGroup*groups - totalUsedBlocks,
+		FreeBlocksCountLow: diskSize - totalUsedBlocks,
 		FreeInodesCount:    inodesPerGroup*groups - totalUsedInodes,
 		FirstDataBlock:     0,
 		LogBlockSize:       2, // 2^(10 + 2)

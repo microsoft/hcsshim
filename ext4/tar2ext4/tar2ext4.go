@@ -75,6 +75,14 @@ func MaximumDiskSize(size int64) Option {
 	}
 }
 
+// FreeSpace instructs the writer to add additional free space to the disk.
+// If not provided, then 0GB is the default.
+func FreeSpace(size uint32) Option {
+	return func(p *params) {
+		p.ext4opts = append(p.ext4opts, compactext4.FreeSpace(size))
+	}
+}
+
 // ReadWrite instructs the writer to not mark the file system as write-protected.
 func ReadWrite() Option {
 	return func(p *params) {
