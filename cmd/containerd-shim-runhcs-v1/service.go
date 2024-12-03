@@ -434,16 +434,6 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 }
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Stats")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
-
 	r, e := s.statsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
