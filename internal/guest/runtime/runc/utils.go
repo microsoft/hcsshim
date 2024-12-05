@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
+	"github.com/Microsoft/hcsshim/global"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 )
 
@@ -171,5 +172,8 @@ func runcCommandLog(logPath string, args ...string) *exec.Cmd {
 }
 
 func runcCommand(args ...string) *exec.Cmd {
+	if global.GetGlobalRuntime() == "crun" {
+		return exec.Command("crun", args...)
+	}
 	return exec.Command("runc", args...)
 }
