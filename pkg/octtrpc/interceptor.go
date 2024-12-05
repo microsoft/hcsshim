@@ -77,7 +77,7 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 			trace.WithSampler(o.sampler),
 			oc.WithClientSpanKind)
 		defer span.End()
-		defer setSpanStatus(span, err)
+		defer func() { setSpanStatus(span, err) }()
 
 		spanContextBinary := propagation.Binary(span.SpanContext())
 		b64 := base64.StdEncoding.EncodeToString(spanContextBinary)
@@ -110,7 +110,7 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 			ctx, span = oc.StartSpan(ctx, name, opts...)
 		}
 		defer span.End()
-		defer setSpanStatus(span, err)
+		defer func() { setSpanStatus(span, err) }()
 
 		return method(ctx, unmarshal)
 	}
