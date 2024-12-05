@@ -5,12 +5,13 @@ package hcsv2
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/network"
@@ -44,7 +45,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 	// Generate the standalone root dir
 	rootDir := getStandaloneRootDir(id)
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create container root directory %q", rootDir)
+		return fmt.Errorf("failed to create container root directory %q: %w", rootDir, err)
 	}
 	defer func() {
 		if err != nil {
@@ -57,7 +58,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 		var err error
 		hostname, err = os.Hostname()
 		if err != nil {
-			return errors.Wrap(err, "failed to get hostname")
+			return fmt.Errorf("failed to get hostname: %w", err)
 		}
 	}
 
@@ -65,7 +66,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 	if !specInternal.MountPresent("/etc/hostname", spec.Mounts) {
 		standaloneHostnamePath := getStandaloneHostnamePath(id)
 		if err := os.WriteFile(standaloneHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
-			return errors.Wrapf(err, "failed to write hostname to %q", standaloneHostnamePath)
+			return fmt.Errorf("failed to write hostname to %q: %w", standaloneHostnamePath, err)
 		}
 
 		mt := oci.Mount{
@@ -85,7 +86,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 		standaloneHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
 		standaloneHostsPath := getStandaloneHostsPath(id)
 		if err := os.WriteFile(standaloneHostsPath, []byte(standaloneHostsContent), 0644); err != nil {
-			return errors.Wrapf(err, "failed to write standalone hosts to %q", standaloneHostsPath)
+			return fmt.Errorf("failed to write standalone hosts to %q: %w", standaloneHostsPath, err)
 		}
 
 		mt := oci.Mount{
@@ -114,11 +115,11 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 		}
 		resolvContent, err := network.GenerateResolvConfContent(ctx, searches, servers, nil)
 		if err != nil {
-			return errors.Wrap(err, "failed to generate standalone resolv.conf content")
+			return fmt.Errorf("failed to generate standalone resolv.conf content: %w", err)
 		}
 		standaloneResolvPath := getStandaloneResolvPath(id)
 		if err := os.WriteFile(standaloneResolvPath, []byte(resolvContent), 0644); err != nil {
-			return errors.Wrap(err, "failed to write standalone resolv.conf")
+			return fmt.Errorf("failed to write standalone resolv.conf: %w", err)
 		}
 
 		mt := oci.Mount{

@@ -5,20 +5,20 @@ package remotevm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/vmservice"
-	"github.com/pkg/errors"
 )
 
 func getSwitchID(endpointID, portID string) (string, error) {
 	// Get updated endpoint with new fields (need switch ID)
 	ep, err := hcn.GetEndpointByID(endpointID)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get endpoint %q", endpointID)
+		return "", fmt.Errorf("failed to get endpoint %q: %w", endpointID, err)
 	}
 
 	type ExtraInfo struct {
@@ -30,7 +30,7 @@ func getSwitchID(endpointID, portID string) (string, error) {
 
 	var exi ExtraInfo
 	if err := json.Unmarshal(ep.Health.Extra.Resources, &exi); err != nil {
-		return "", errors.Wrapf(err, "failed to unmarshal resource data from endpoint %q", endpointID)
+		return "", fmt.Errorf("failed to unmarshal resource data from endpoint %q: %w", endpointID, err)
 	}
 
 	if len(exi.Allocators) == 0 {
@@ -53,7 +53,7 @@ func getSwitchID(endpointID, portID string) (string, error) {
 func (uvm *utilityVM) AddNIC(ctx context.Context, nicID, endpointID, macAddr string) error {
 	portID, err := guid.NewV4()
 	if err != nil {
-		return errors.Wrap(err, "failed to generate guid for port")
+		return fmt.Errorf("failed to generate guid for port: %w", err)
 	}
 
 	vmEndpointRequest := hcn.VmEndpointRequest{
@@ -64,7 +64,7 @@ func (uvm *utilityVM) AddNIC(ctx context.Context, nicID, endpointID, macAddr str
 
 	m, err := json.Marshal(vmEndpointRequest)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal endpoint request json")
+		return fmt.Errorf("failed to marshal endpoint request json: %w", err)
 	}
 
 	if err := hcn.ModifyEndpointSettings(endpointID, &hcn.ModifyEndpointSettingRequest{
@@ -72,7 +72,7 @@ func (uvm *utilityVM) AddNIC(ctx context.Context, nicID, endpointID, macAddr str
 		RequestType:  hcn.RequestTypeAdd,
 		Settings:     json.RawMessage(m),
 	}); err != nil {
-		return errors.Wrap(err, "failed to configure switch port")
+		return fmt.Errorf("failed to configure switch port: %w", err)
 	}
 
 	switchID, err := getSwitchID(endpointID, portID.String())
@@ -95,7 +95,7 @@ func (uvm *utilityVM) AddNIC(ctx context.Context, nicID, endpointID, macAddr str
 			},
 		},
 	); err != nil {
-		return errors.Wrap(err, "failed to add network adapter")
+		return fmt.Errorf("failed to add network adapter: %w", err)
 	}
 
 	return nil
@@ -115,7 +115,7 @@ func (uvm *utilityVM) RemoveNIC(ctx context.Context, nicID, endpointID, macAddr 
 			},
 		},
 	); err != nil {
-		return errors.Wrap(err, "failed to remove network adapter")
+		return fmt.Errorf("failed to remove network adapter: %w", err)
 	}
 
 	return nil

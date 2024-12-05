@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
-	"github.com/pkg/errors"
 )
 
 func hcnEndpointToEndpointResponse(ep *hcn.HostComputeEndpoint) (_ *ncproxygrpc.GetEndpointResponse, err error) {
@@ -36,12 +36,12 @@ func hcnEndpointToEndpointResponse(ep *hcn.HostComputeEndpoint) (_ *ncproxygrpc.
 	ipConfigInfos := ep.IpConfigurations
 	// there may be one ipv4 and/or one ipv6 configuration for an endpoint
 	if len(ipConfigInfos) == 0 || len(ipConfigInfos) > 2 {
-		return nil, errors.Errorf("invalid number (%v) of ip configuration information for endpoint %v", len(ipConfigInfos), ep.Name)
+		return nil, fmt.Errorf("invalid number (%v) of ip configuration information for endpoint %v", len(ipConfigInfos), ep.Name)
 	}
 	for _, ipConfig := range ipConfigInfos {
 		ip := net.ParseIP(ipConfig.IpAddress)
 		if ip == nil {
-			return nil, errors.Errorf("failed to parse IP address %v", ipConfig.IpAddress)
+			return nil, fmt.Errorf("failed to parse IP address %v", ipConfig.IpAddress)
 		}
 		if ip.To4() != nil {
 			// this is an IPv4 address
@@ -121,7 +121,7 @@ func constructEndpointPolicies(req *ncproxygrpc.HcnEndpointPolicies) ([]hcn.Endp
 		}
 		iovJSON, err := json.Marshal(iovSettings)
 		if err != nil {
-			return []hcn.EndpointPolicy{}, errors.Wrap(err, "failed to marshal IovPolicySettings")
+			return []hcn.EndpointPolicy{}, fmt.Errorf("failed to marshal IovPolicySettings: %w", err)
 		}
 		policy := hcn.EndpointPolicy{
 			Type:     hcn.IOV,
@@ -136,7 +136,7 @@ func constructEndpointPolicies(req *ncproxygrpc.HcnEndpointPolicies) ([]hcn.Endp
 		}
 		portPolicyJSON, err := json.Marshal(portPolicy)
 		if err != nil {
-			return []hcn.EndpointPolicy{}, errors.Wrap(err, "failed to marshal portname")
+			return []hcn.EndpointPolicy{}, fmt.Errorf("failed to marshal portname: %w", err)
 		}
 		policy := hcn.EndpointPolicy{
 			Type:     hcn.PortName,
@@ -152,7 +152,7 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 	// Check if the network already exists, and if so return error.
 	_, err := hcn.GetNetworkByName(req.Name)
 	if err == nil {
-		return nil, errors.Errorf("network with name %q already exists", req.Name)
+		return nil, fmt.Errorf("network with name %q already exists", req.Name)
 	}
 
 	policies := []hcn.NetworkPolicy{}
@@ -163,20 +163,20 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 		extSwitch, err := hcn.GetNetworkByName(req.SwitchName)
 		if err != nil {
 			if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
-				return nil, errors.Errorf("no network/switch with name `%s` found", req.SwitchName)
+				return nil, fmt.Errorf("no network/switch with name %q found", req.SwitchName)
 			}
-			return nil, errors.Wrapf(err, "failed to get network/switch with name %q", req.SwitchName)
+			return nil, fmt.Errorf("failed to get network/switch with name %q: %q", req.SwitchName, err)
 		}
 
 		// Get layer ID and use this as the basis for what to layer the new network over.
 		if extSwitch.Health.Extra.LayeredOn == "" {
-			return nil, errors.Errorf("no layer ID found for network %q found", extSwitch.Id)
+			return nil, fmt.Errorf("no layer ID found for network %q found", extSwitch.Id)
 		}
 
 		layerPolicy := hcn.LayerConstraintNetworkPolicySetting{LayerId: extSwitch.Health.Extra.LayeredOn}
 		data, err := json.Marshal(layerPolicy)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal layer policy")
+			return nil, fmt.Errorf("failed to marshal layer policy: %w", err)
 		}
 
 		netPolicy := hcn.NetworkPolicy{
@@ -238,7 +238,7 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 
 	network, err = network.Create()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create HNS network %q", req.Name)
+		return nil, fmt.Errorf("failed to create HNS network %q: %w", req.Name, err)
 	}
 
 	return network, nil
@@ -355,7 +355,7 @@ func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req
 	if req.Policies != nil {
 		policies, err = constructEndpointPolicies(req.Policies)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to construct endpoint policies")
+			return nil, fmt.Errorf("failed to construct endpoint policies: %w", err)
 		}
 	}
 
@@ -380,7 +380,7 @@ func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req
 	}
 	endpoint, err = endpoint.Create()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create HNS endpoint")
+		return nil, fmt.Errorf("failed to create HNS endpoint: %w", err)
 	}
 
 	return endpoint, nil
@@ -391,7 +391,7 @@ func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req
 func getHostDefaultNamespace() (string, error) {
 	namespaces, err := hcn.ListNamespaces()
 	if err != nil {
-		return "", errors.Wrapf(err, "failed list namespaces")
+		return "", fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
 	for _, ns := range namespaces {

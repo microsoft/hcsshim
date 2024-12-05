@@ -4,12 +4,12 @@ package jobcontainers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"sync"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/conpty"
@@ -100,7 +100,7 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 			// The process we are signaling has stopped. Return a proper error that signals this condition.
 			return false, fmt.Errorf("failed to send signal: %w", hcs.ErrProcessAlreadyStopped)
 		}
-		return false, errors.Wrap(err, "failed to send signal")
+		return false, fmt.Errorf("failed to send signal: %w", err)
 	}
 	return true, nil
 }
@@ -111,7 +111,7 @@ func (p *JobProcess) CloseStdin(ctx context.Context) error {
 	defer p.stdioLock.Unlock()
 	if p.stdin != nil {
 		if err := p.stdin.Close(); err != nil {
-			return errors.Wrap(err, "failed to close job container stdin")
+			return fmt.Errorf("failed to close job container stdin: %w", err)
 		}
 		p.stdin = nil
 	}
@@ -124,7 +124,7 @@ func (p *JobProcess) CloseStdout(ctx context.Context) error {
 	defer p.stdioLock.Unlock()
 	if p.stdout != nil {
 		if err := p.stdout.Close(); err != nil {
-			return errors.Wrap(err, "failed to close job container stdout")
+			return fmt.Errorf("failed to close job container stdout: %w", err)
 		}
 		p.stdout = nil
 	}
@@ -137,7 +137,7 @@ func (p *JobProcess) CloseStderr(ctx context.Context) error {
 	defer p.stdioLock.Unlock()
 	if p.stderr != nil {
 		if err := p.stderr.Close(); err != nil {
-			return errors.Wrap(err, "failed to close job container stderr")
+			return fmt.Errorf("failed to close job container stderr: %w", err)
 		}
 		p.stderr = nil
 	}
@@ -251,7 +251,7 @@ func (p *JobProcess) exited() bool {
 func signalProcess(pid uint32, signal int) error {
 	hProc, err := windows.OpenProcess(winapi.PROCESS_ALL_ACCESS, true, pid)
 	if err != nil {
-		return errors.Wrap(err, "failed to open process")
+		return fmt.Errorf("failed to open process: %w", err)
 	}
 	defer func() {
 		_ = windows.Close(hProc)
@@ -267,7 +267,7 @@ func signalProcess(pid uint32, signal int) error {
 	// Note: This is a hack which is not officially supported.
 	k32, err := windows.LoadLibrary("kernel32.dll")
 	if err != nil {
-		return errors.Wrap(err, "failed to load kernel32 library")
+		return fmt.Errorf("failed to load kernel32 library: %w", err)
 	}
 	defer func() {
 		_ = windows.FreeLibrary(k32)
@@ -275,12 +275,12 @@ func signalProcess(pid uint32, signal int) error {
 
 	proc, err := windows.GetProcAddress(k32, "CtrlRoutine")
 	if err != nil {
-		return errors.Wrap(err, "failed to load CtrlRoutine")
+		return fmt.Errorf("failed to load CtrlRoutine: %w", err)
 	}
 
 	threadHandle, err := winapi.CreateRemoteThread(hProc, nil, 0, proc, uintptr(signal), 0, nil)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open remote thread in target process %d", pid)
+		return fmt.Errorf("failed to open remote thread in target process %d: %w", pid, err)
 	}
 	defer func() {
 		_ = windows.Close(threadHandle)

@@ -5,6 +5,7 @@ package uvm
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -15,7 +16,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
@@ -757,12 +758,12 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 
 				st, stErr := os.Stat(rootfsFullPath)
 				if stErr != nil {
-					return nil, errors.Wrapf(stErr, "failed to stat rootfs: %q", rootfsFullPath)
+					return nil, fmt.Errorf("failed to stat rootfs: %q: %w", rootfsFullPath, stErr)
 				}
 				devSize := pageAlign(uint64(st.Size()))
 				memReg, pErr := pmem.Allocate(devSize)
 				if pErr != nil {
-					return nil, errors.Wrap(pErr, "failed to allocate memory for rootfs")
+					return nil, fmt.Errorf("failed to allocate memory for rootfs: %w", pErr)
 				}
 				defer func() {
 					if err != nil {
@@ -774,7 +775,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 
 				dev := newVPMemMappedDevice(opts.RootFSFile, "/", devSize, memReg)
 				if err := pmem.mapVHDLayer(ctx, dev); err != nil {
-					return nil, errors.Wrapf(err, "failed to save internal state for a multi-mapped rootfs device")
+					return nil, fmt.Errorf("failed to save internal state for a multi-mapped rootfs device: %w", err)
 				}
 				uvm.vpmemDevicesMultiMapped[0] = pmem
 			} else {
@@ -946,7 +947,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	if err = verifyOptions(ctx, opts); err != nil {
-		return nil, errors.Wrap(err, errBadUVMOpts.Error())
+		return nil, fmt.Errorf(errBadUVMOpts.Error()+": %w", err)
 	}
 
 	// HCS config for SNP isolated vm is quite different to the usual case

@@ -5,12 +5,13 @@ package hcsv2
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/network"
@@ -40,7 +41,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	// Generate the sandbox root dir
 	rootDir := specInternal.SandboxRootDir(id)
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create sandbox root directory %q", rootDir)
+		return fmt.Errorf("failed to create sandbox root directory %q: %w", rootDir, err)
 	}
 	defer func() {
 		if err != nil {
@@ -54,20 +55,20 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		var err error
 		hostname, err = os.Hostname()
 		if err != nil {
-			return errors.Wrap(err, "failed to get hostname")
+			return fmt.Errorf("failed to get hostname: %w", err)
 		}
 	}
 
 	sandboxHostnamePath := getSandboxHostnamePath(id)
 	if err := os.WriteFile(sandboxHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
-		return errors.Wrapf(err, "failed to write hostname to %q", sandboxHostnamePath)
+		return fmt.Errorf("failed to write hostname to %q: %w", sandboxHostnamePath, err)
 	}
 
 	// Write the hosts
 	sandboxHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
 	sandboxHostsPath := getSandboxHostsPath(id)
 	if err := os.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
-		return errors.Wrapf(err, "failed to write sandbox hosts to %q", sandboxHostsPath)
+		return fmt.Errorf("failed to write sandbox hosts to %q: %w", sandboxHostsPath, err)
 	}
 
 	// Write resolv.conf
@@ -86,11 +87,11 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	}
 	resolvContent, err := network.GenerateResolvConfContent(ctx, searches, servers, nil)
 	if err != nil {
-		return errors.Wrap(err, "failed to generate sandbox resolv.conf content")
+		return fmt.Errorf("failed to generate sandbox resolv.conf content: %w", err)
 	}
 	sandboxResolvPath := getSandboxResolvPath(id)
 	if err := os.WriteFile(sandboxResolvPath, []byte(resolvContent), 0644); err != nil {
-		return errors.Wrap(err, "failed to write sandbox resolv.conf")
+		return fmt.Errorf("failed to write sandbox resolv.conf: %w", err)
 	}
 
 	// User.Username is generally only used on Windows, but as there's no (easy/fast at least) way to grab

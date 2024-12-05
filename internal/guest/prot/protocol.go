@@ -5,11 +5,11 @@ package prot
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -518,14 +518,14 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	var requestRawSettings json.RawMessage
 	request.Request = &requestRawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal ContainerModifySettings")
+		return nil, fmt.Errorf("failed to unmarshal ContainerModifySettings: %w", err)
 	}
 
 	var msr guestrequest.ModificationRequest
 	var msrRawSettings json.RawMessage
 	msr.Settings = &msrRawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(requestRawSettings, &msr); err != nil {
-		return &request, errors.Wrap(err, "failed to unmarshal request.Settings as ModifySettingRequest")
+		return &request, fmt.Errorf("failed to unmarshal request.Settings as ModifySettingRequest: %w", err)
 	}
 
 	if msr.RequestType == "" {
@@ -537,65 +537,65 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	case guestresource.ResourceTypeSCSIDevice:
 		msd := &guestresource.SCSIDevice{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, msd); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as SCSIDevice")
+			return &request, fmt.Errorf("failed to unmarshal settings as SCSIDevice: %w", err)
 		}
 		msr.Settings = msd
 	case guestresource.ResourceTypeMappedVirtualDisk:
 		mvd := &guestresource.LCOWMappedVirtualDisk{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, mvd); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
+			return &request, fmt.Errorf("failed to unmarshal settings as MappedVirtualDiskV2: %w", err)
 		}
 		msr.Settings = mvd
 	case guestresource.ResourceTypeMappedDirectory:
 		md := &guestresource.LCOWMappedDirectory{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, md); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
+			return &request, fmt.Errorf("failed to unmarshal settings as MappedDirectoryV2: %w", err)
 		}
 		msr.Settings = md
 	case guestresource.ResourceTypeVPMemDevice:
 		vpd := &guestresource.LCOWMappedVPMemDevice{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vpd); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
+			return &request, fmt.Errorf("failed to unmarshal hosted settings as MappedVPMemDeviceV2: %w", err)
 		}
 		msr.Settings = vpd
 	case guestresource.ResourceTypeCombinedLayers:
 		cl := &guestresource.LCOWCombinedLayers{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, cl); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
+			return &request, fmt.Errorf("failed to unmarshal settings as CombinedLayersV2: %w", err)
 		}
 		msr.Settings = cl
 	case guestresource.ResourceTypeNetwork:
 		na := &guestresource.LCOWNetworkAdapter{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, na); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as NetworkAdapterV2")
+			return &request, fmt.Errorf("failed to unmarshal settings as NetworkAdapterV2: %w", err)
 		}
 		msr.Settings = na
 	case guestresource.ResourceTypeVPCIDevice:
 		vd := &guestresource.LCOWMappedVPCIDevice{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vd); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVPCIDeviceV2")
+			return &request, fmt.Errorf("failed to unmarshal settings as MappedVPCIDeviceV2: %w", err)
 		}
 		msr.Settings = vd
 	case guestresource.ResourceTypeContainerConstraints:
 		cc := &guestresource.LCOWContainerConstraints{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, cc); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as ContainerConstraintsV2")
+			return &request, fmt.Errorf("failed to unmarshal settings as ContainerConstraintsV2: %w", err)
 		}
 		msr.Settings = cc
 	case guestresource.ResourceTypeSecurityPolicy:
 		enforcer := &guestresource.LCOWConfidentialOptions{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, enforcer); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWConfidentialOptions")
+			return &request, fmt.Errorf("failed to unmarshal settings as LCOWConfidentialOptions: %w", err)
 		}
 		msr.Settings = enforcer
 	case guestresource.ResourceTypePolicyFragment:
 		fragment := &guestresource.LCOWSecurityPolicyFragment{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, fragment); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWSecurityPolicyFragment")
+			return &request, fmt.Errorf("failed to unmarshal settings as LCOWSecurityPolicyFragment: %w", err)
 		}
 		msr.Settings = fragment
 	default:
-		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
+		return &request, fmt.Errorf("invalid ResourceType %q", msr.ResourceType)
 	}
 	request.Request = &msr
 	return &request, nil

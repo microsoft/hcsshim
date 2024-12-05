@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/vishvananda/netns"
 	"go.opencensus.io/trace"
 
@@ -46,7 +45,7 @@ func getNetworkNamespace(id string) (*namespace, error) {
 
 	ns, ok := namespaces[id]
 	if !ok {
-		return nil, gcserr.WrapHresult(errors.Errorf("namespace '%s' not found", id), gcserr.HrErrNotFound)
+		return nil, gcserr.WrapHresult(fmt.Errorf("namespace %q not found", id), gcserr.HrErrNotFound)
 	}
 	return ns, nil
 }
@@ -86,7 +85,7 @@ func RemoveNetworkNamespace(ctx context.Context, id string) (err error) {
 		ns.m.Lock()
 		defer ns.m.Unlock()
 		if len(ns.nics) > 0 {
-			return errors.Errorf("network namespace '%s' contains adapters", id)
+			return fmt.Errorf("network namespace %q contains adapters", id)
 		}
 		delete(namespaces, id)
 	}
@@ -123,7 +122,7 @@ func (n *namespace) AssignContainerPid(ctx context.Context, pid int) (err error)
 	defer n.m.Unlock()
 
 	if n.pid != 0 {
-		return errors.Errorf("previously assigned container pid %d to network namespace %q", n.pid, n.id)
+		return fmt.Errorf("previously assigned container pid %d to network namespace %q", n.pid, n.id)
 	}
 
 	n.pid = pid
@@ -159,7 +158,7 @@ func (n *namespace) AddAdapter(ctx context.Context, adp *guestresource.LCOWNetwo
 
 	for _, nic := range n.nics {
 		if strings.EqualFold(nic.adapter.ID, adp.ID) {
-			return errors.Errorf("adapter with id: '%s' already present in namespace", adp.ID)
+			return fmt.Errorf("adapter with id: %q already present in namespace", adp.ID)
 		}
 	}
 
@@ -265,13 +264,13 @@ func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error)
 	}
 
 	if err := network.MoveInterfaceToNS(nin.ifname, pid); err != nil {
-		return errors.Wrapf(err, "failed to move interface %s to network namespace", nin.ifname)
+		return fmt.Errorf("failed to move interface %s to network namespace: %w", nin.ifname, err)
 	}
 
 	// Get a reference to the new network namespace
 	ns, err := netns.GetFromPid(pid)
 	if err != nil {
-		return errors.Wrapf(err, "netns.GetFromPid(%d) failed", pid)
+		return fmt.Errorf("netns.GetFromPid(%d) failed: %w", pid, err)
 	}
 	defer ns.Close()
 
@@ -280,7 +279,7 @@ func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error)
 	}
 
 	if err := network.DoInNetNS(ns, netNSCfg); err != nil {
-		return errors.Wrapf(err, "failed to configure adapter aid: %s, if id: %s", nin.adapter.ID, nin.ifname)
+		return fmt.Errorf("failed to configure adapter aid: %s, if id: %s: %w", nin.adapter.ID, nin.ifname, err)
 	}
 	nin.assignedPid = pid
 	return nil

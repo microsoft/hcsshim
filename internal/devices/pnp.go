@@ -5,6 +5,7 @@ package devices
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,7 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -53,7 +54,7 @@ func execPnPInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir stri
 	}
 	exitCode, err := cmd.ExecInUvm(ctx, vm, cmdReq)
 	if err != nil && exitCode != winapi.ERROR_NO_MORE_ITEMS {
-		return errors.Wrapf(err, "failed to install driver %s in uvm with exit code %d", driverDir, exitCode)
+		return fmt.Errorf("failed to install driver %s in uvm with exit code %d: %w", driverDir, exitCode, err)
 	} else if exitCode == winapi.ERROR_NO_MORE_ITEMS {
 		// As mentioned in `pnputilNoMoreItemsErrorMessage`, this exit code comes from pnputil
 		// but is not necessarily an error
@@ -76,7 +77,7 @@ func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
 	defer close(errChan)
 	c, err := l.Accept()
 	if err != nil {
-		errChan <- errors.Wrapf(err, "failed to accept named pipe")
+		errChan <- fmt.Errorf("failed to accept named pipe: %w", err)
 		return
 	}
 	bytes, err := io.ReadAll(c)
@@ -105,7 +106,7 @@ func readAllPipeOutput(l net.Listener, errChan chan<- error, result *string) {
 	defer close(errChan)
 	c, err := l.Accept()
 	if err != nil {
-		errChan <- errors.Wrapf(err, "failed to accept named pipe")
+		errChan <- fmt.Errorf("failed to accept named pipe: %w", err)
 		return
 	}
 	bytes, err := io.ReadAll(c)

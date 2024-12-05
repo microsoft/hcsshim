@@ -4,11 +4,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -30,20 +30,20 @@ var configCommand = cli.Command{
 
 				configData, err := json.MarshalIndent(defaultConfig(), "", "  ")
 				if err != nil {
-					return errors.Wrap(err, "failed to marshal ncproxy config to json")
+					return fmt.Errorf("failed to marshal ncproxy config to json: %w", err)
 				}
 
 				if file != "" {
 					// Make the directory if it doesn't exist.
 					if _, err := os.Stat(filepath.Dir(file)); err != nil {
-						if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
-							return errors.Wrap(err, "failed to make path to config file")
+						if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+							return fmt.Errorf("failed to make path to config file: %w", err)
 						}
 					}
 					if err := os.WriteFile(
 						file,
 						[]byte(configData),
-						0700,
+						0o700,
 					); err != nil {
 						return err
 					}
@@ -96,7 +96,7 @@ func loadConfig(path string) (*config, error) {
 func readConfig(path string) (*config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read config file")
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 	conf := &config{}
 	if err := json.Unmarshal(data, conf); err != nil {

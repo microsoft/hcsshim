@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -12,7 +13,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/containerd/ttrpc"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -133,7 +134,7 @@ func (n *ncproxyClient) Close() error {
 func (uvm *UtilityVM) GetNCProxyClient() (*ncproxyClient, error) {
 	conn, err := winio.DialPipe(uvm.ncProxyClientAddress, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to ncproxy service")
+		return nil, fmt.Errorf("failed to connect to ncproxy service: %w", err)
 	}
 	raw := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
 	return &ncproxyClient{raw, ncproxyttrpc.NewNetworkConfigProxyClient(raw)}, nil
@@ -247,7 +248,7 @@ func NewExternalNetworkSetup(ctx context.Context, vm *UtilityVM, caAddr, contain
 func (e *externalNetworkSetup) ConfigureNetworking(ctx context.Context, namespaceID string, configType NetworkConfigType) error {
 	client, err := e.vm.GetNCProxyClient()
 	if err != nil {
-		return errors.Wrapf(err, "no ncproxy client for UVM %q", e.vm.ID())
+		return fmt.Errorf("no ncproxy client for UVM %q: %w", e.vm.ID(), err)
 	}
 	defer client.Close()
 

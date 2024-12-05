@@ -4,13 +4,14 @@ package main
 
 import (
 	gcontext "context"
+	"errors"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -51,14 +52,14 @@ var prepareDiskCommand = cli.Command{
 
 		preparediskUVM, err := uvm.CreateLCOW(ctx, opts)
 		if err != nil {
-			return errors.Wrapf(err, "failed to create '%s'", opts.ID)
+			return fmt.Errorf("failed to create %q: %w", opts.ID, err)
 		}
 		defer preparediskUVM.Close()
 		if err := preparediskUVM.Start(ctx); err != nil {
-			return errors.Wrapf(err, "failed to start '%s'", opts.ID)
+			return fmt.Errorf("failed to start %q: %w", opts.ID, err)
 		}
 		if err := lcow.FormatDisk(ctx, preparediskUVM, dest); err != nil {
-			return errors.Wrapf(err, "failed to format disk '%s' with ext4", opts.ID)
+			return fmt.Errorf("failed to format disk %q with ext4: %w", opts.ID, err)
 		}
 
 		return nil

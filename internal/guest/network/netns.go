@@ -5,6 +5,7 @@ package network
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -26,15 +27,15 @@ func MoveInterfaceToNS(ifStr string, pid int) error {
 	// Get a reference to the interface and make sure it's down
 	link, err := netlink.LinkByName(ifStr)
 	if err != nil {
-		return errors.Wrapf(err, "netlink.LinkByName(%s) failed", ifStr)
+		return fmt.Errorf("netlink.LinkByName(%s) failed: %w", ifStr, err)
 	}
 	if err := netlink.LinkSetDown(link); err != nil {
-		return errors.Wrapf(err, "netlink.LinkSetDown(%#v) failed", link)
+		return fmt.Errorf("netlink.LinkSetDown(%#v) failed: %w", link, err)
 	}
 
 	// Move the interface to the new network namespace
 	if err := netlink.LinkSetNsPid(link, pid); err != nil {
-		return errors.Wrapf(err, "netlink.SetNsPid(%#v, %d) failed", link, pid)
+		return fmt.Errorf("netlink.SetNsPid(%#v, %d) failed: %w", link, pid, err)
 	}
 	return nil
 }
@@ -49,12 +50,12 @@ func DoInNetNS(ns netns.NsHandle, run func() error) error {
 
 	origNs, err := netns.Get()
 	if err != nil {
-		return errors.Wrap(err, "failed to get current network namespace")
+		return fmt.Errorf("failed to get current network namespace: %w", err)
 	}
 	defer origNs.Close()
 
 	if err := netns.Set(ns); err != nil {
-		return errors.Wrapf(err, "failed to set network namespace to %v", ns)
+		return fmt.Errorf("failed to set network namespace to %v: %w", ns, err)
 	}
 	// Defer so we can re-enter the threads original netns on exit.
 	defer netns.Set(origNs) //nolint:errcheck
@@ -79,7 +80,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 	entry.Trace("Obtaining current namespace")
 	ns, err := netns.Get()
 	if err != nil {
-		return errors.Wrap(err, "netns.Get() failed")
+		return fmt.Errorf("netns.Get() failed: %w", err)
 	}
 	defer ns.Close()
 	entry.WithField("namespace", ns).Debug("New network namespace from PID")
@@ -88,7 +89,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 	entry.Trace("Getting reference to interface")
 	link, err := netlink.LinkByName(ifStr)
 	if err != nil {
-		return errors.Wrapf(err, "netlink.LinkByName(%s) failed", ifStr)
+		return fmt.Errorf("netlink.LinkByName(%s) failed: %w", ifStr, err)
 	}
 
 	// User requested non-default MTU size
@@ -96,7 +97,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 		mtu := link.Attrs().MTU - int(adapter.EncapOverhead)
 		entry.WithField("mtu", mtu).Debug("EncapOverhead non-zero, will set MTU")
 		if err = netlink.LinkSetMTU(link, mtu); err != nil {
-			return errors.Wrapf(err, "netlink.LinkSetMTU(%#v, %d) failed", link, mtu)
+			return fmt.Errorf("netlink.LinkSetMTU(%#v, %d) failed: %w", link, mtu, err)
 		}
 	}
 
@@ -112,7 +113,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 
 		// Bring the interface up
 		if err := netlink.LinkSetUp(link); err != nil {
-			return errors.Wrapf(err, "netlink.LinkSetUp(%#v) failed", link)
+			return fmt.Errorf("netlink.LinkSetUp(%#v) failed: %w", link, err)
 		}
 		if err := assignIPToLink(ctx, ifStr, nsPid, link,
 			adapter.AllocatedIPAddress, adapter.HostIPAddress, adapter.HostIPPrefixLength,
@@ -156,7 +157,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 			}
 			if err != nil {
 				entry.WithError(err).Debugf("udhcpc failed [%s]", cos)
-				return errors.Wrapf(err, "process failed (%s)", cos)
+				return fmt.Errorf("process failed (%s): %w", cos, err)
 			}
 		}
 		var cos string
@@ -210,7 +211,7 @@ func assignIPToLink(ctx context.Context,
 	// Set IP address
 	ip, addr, err := net.ParseCIDR(allocatedIP + "/" + strconv.FormatUint(uint64(prefixLen), 10))
 	if err != nil {
-		return errors.Wrapf(err, "parsing address %s/%d failed", allocatedIP, prefixLen)
+		return fmt.Errorf("parsing address %s/%d failed: %w", allocatedIP, prefixLen, err)
 	}
 	// the IP address field in addr is masked, so replace it with the original ip address
 	addr.IP = ip
@@ -220,7 +221,7 @@ func assignIPToLink(ctx context.Context,
 	}).Debugf("parsed ip address %s/%d", allocatedIP, prefixLen)
 	ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
 	if err := netlink.AddrAdd(link, ipAddr); err != nil {
-		return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr)
+		return fmt.Errorf("netlink.AddrAdd(%#v, %#v) failed: %w", link, ipAddr, err)
 	}
 	if gatewayIP == "" {
 		return nil
@@ -228,7 +229,7 @@ func assignIPToLink(ctx context.Context,
 	// Set gateway
 	gw := net.ParseIP(gatewayIP)
 	if gw == nil {
-		return errors.Wrapf(err, "parsing gateway address %s failed", gatewayIP)
+		return fmt.Errorf("parsing gateway address %s failed: %w", gatewayIP, err)
 	}
 
 	if !addr.Contains(gw) {
@@ -254,7 +255,7 @@ func assignIPToLink(ctx context.Context,
 			Mask: net.CIDRMask(ml, ml)}
 		ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
 		if err := netlink.AddrAdd(link, ipAddr2); err != nil {
-			return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr2)
+			return fmt.Errorf("netlink.AddrAdd(%#v, %#v) failed: %w", link, ipAddr2, err)
 		}
 	}
 
@@ -273,7 +274,7 @@ func assignIPToLink(ctx context.Context,
 		rule.Priority = 5
 
 		if err := netlink.RuleAdd(rule); err != nil {
-			return errors.Wrapf(err, "netlink.RuleAdd(%#v) failed", rule)
+			return fmt.Errorf("netlink.RuleAdd(%#v) failed: %w", rule, err)
 		}
 		table = rule.Table
 	}
@@ -286,7 +287,7 @@ func assignIPToLink(ctx context.Context,
 		Priority:  metric,
 	}
 	if err := netlink.RouteAdd(&route); err != nil {
-		return errors.Wrapf(err, "netlink.RouteAdd(%#v) failed", route)
+		return fmt.Errorf("netlink.RouteAdd(%#v) failed: %w", route, err)
 	}
 	return nil
 }

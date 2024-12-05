@@ -3,9 +3,9 @@
 package hcs
 
 import (
+	"errors"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
 )
 
 func (uvmb *utilityVMBuilder) SetUEFIBoot(dir string, path string, args string) error {

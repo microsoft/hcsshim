@@ -5,13 +5,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -113,7 +115,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.EndpointName)
 			}
-			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
+			return nil, fmt.Errorf("failed to get endpoint with name %q: %w", req.EndpointName, err)
 		}
 
 		anyEndpoint, err = typeurl.MarshalAny(ep)
@@ -143,7 +145,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 				}
 				policies := []hcn.EndpointPolicy{iovPolicy}
 				if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeUpdate); err != nil {
-					return nil, errors.Wrap(err, "failed to add policy to endpoint")
+					return nil, fmt.Errorf("failed to add policy to endpoint: %w", err)
 				}
 			}
 		}
@@ -183,7 +185,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 		if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 			return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.EndpointName)
 		}
-		return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
+		return nil, fmt.Errorf("failed to get endpoint with name %q: %w", req.EndpointName, err)
 	}
 
 	anyEndpoint, err := typeurl.MarshalAny(ep)
@@ -237,14 +239,14 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 			return nil, err
 		}
 		if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeUpdate); err != nil {
-			return nil, errors.Wrap(err, "failed to modify network adapter")
+			return nil, fmt.Errorf("failed to modify network adapter: %w", err)
 		}
 		if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeRemove); err != nil {
-			return nil, errors.Wrap(err, "failed to modify network adapter")
+			return nil, fmt.Errorf("failed to modify network adapter: %w", err)
 		}
 	} else {
 		if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeUpdate); err != nil {
-			return nil, errors.Wrap(err, "failed to modify network adapter")
+			return nil, fmt.Errorf("failed to modify network adapter: %w", err)
 		}
 		if _, err := agent.ModifyNIC(ctx, caReq); err != nil {
 			return nil, err
@@ -284,7 +286,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.EndpointName)
 			}
-			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
+			return nil, fmt.Errorf("failed to get endpoint with name %q: %w", req.EndpointName, err)
 		}
 		anyEndpoint, err = typeurl.MarshalAny(ep)
 		if err != nil {
@@ -387,7 +389,7 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 			if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no network with name `%s` found", reqEndpoint.NetworkName)
 			}
-			return nil, errors.Wrapf(err, "failed to get network with name %q", reqEndpoint.NetworkName)
+			return nil, fmt.Errorf("failed to get network with name %q: %w", reqEndpoint.NetworkName, err)
 		}
 		ep, err := createHCNEndpoint(ctx, network, reqEndpoint)
 		if err != nil {
@@ -403,9 +405,9 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 			return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 		}
 
-		network, err := s.ncpNetworkingStore.GetNetworkByName(ctx, reqEndpoint.NetworkName)
-		if err != nil || network == nil {
-			return nil, errors.Wrapf(err, "network %v does not exist", reqEndpoint.NetworkName)
+		_, err := s.ncpNetworkingStore.GetNetworkByName(ctx, reqEndpoint.NetworkName)
+		if err != nil {
+			return nil, fmt.Errorf("network %v does not exist: %w", reqEndpoint.NetworkName, err)
 		}
 		epSettings := &ncproxynetworking.EndpointSettings{
 			Name:                  reqEndpoint.Name,
@@ -452,7 +454,7 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 	if endpt, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.Name); err == nil {
 		endpt.NamespaceID = req.NamespaceID
 		if err := s.ncpNetworkingStore.UpdateEndpoint(ctx, endpt); err != nil {
-			return nil, errors.Wrapf(err, "failed to update endpoint with name `%s`", req.Name)
+			return nil, fmt.Errorf("failed to update endpoint with name %q: %w", req.Name, err)
 		}
 	} else {
 		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
@@ -464,7 +466,7 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 			}
-			return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.Name)
+			return nil, fmt.Errorf("failed to get endpoint with name %q: %w", req.Name, err)
 		}
 		if req.AttachToHost {
 			if req.NamespaceID != "" {
@@ -483,7 +485,7 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 			span.AddAttributes(trace.StringAttribute("namespaceID", req.NamespaceID))
 		}
 		if err := hcn.AddNamespaceEndpoint(req.NamespaceID, ep.Id); err != nil {
-			return nil, errors.Wrapf(err, "failed to add endpoint with name %q to namespace", req.Name)
+			return nil, fmt.Errorf("failed to add endpoint with name %q to namespace: %w", req.Name, err)
 		}
 	}
 
@@ -504,7 +506,7 @@ func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.Delet
 
 	if _, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.Name); err == nil {
 		if err := s.ncpNetworkingStore.DeleteEndpoint(ctx, req.Name); err != nil {
-			return nil, errors.Wrapf(err, "failed to delete endpoint with name %q", req.Name)
+			return nil, fmt.Errorf("failed to delete endpoint with name %q: %w", req.Name, err)
 		}
 	} else {
 		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
@@ -516,11 +518,11 @@ func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.Delet
 			if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 			}
-			return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.Name)
+			return nil, fmt.Errorf("failed to get endpoint with name %q: %w", req.Name, err)
 		}
 
 		if err = ep.Delete(); err != nil {
-			return nil, errors.Wrapf(err, "failed to delete endpoint with name %q", req.Name)
+			return nil, fmt.Errorf("failed to delete endpoint with name %q: %w", req.Name, err)
 		}
 	}
 	return &ncproxygrpc.DeleteEndpointResponse{}, nil
@@ -540,7 +542,7 @@ func (s *grpcService) DeleteNetwork(ctx context.Context, req *ncproxygrpc.Delete
 
 	if _, err := s.ncpNetworkingStore.GetNetworkByName(ctx, req.Name); err == nil {
 		if err := s.ncpNetworkingStore.DeleteNetwork(ctx, req.Name); err != nil {
-			return nil, errors.Wrapf(err, "failed to delete network with name %q", req.Name)
+			return nil, fmt.Errorf("failed to delete network with name %q: %w", req.Name, err)
 		}
 	} else {
 		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
@@ -551,11 +553,11 @@ func (s *grpcService) DeleteNetwork(ctx context.Context, req *ncproxygrpc.Delete
 			if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 				return nil, status.Errorf(codes.NotFound, "no network with name `%s` found", req.Name)
 			}
-			return nil, errors.Wrapf(err, "failed to get network with name %q", req.Name)
+			return nil, fmt.Errorf("failed to get network with name %q: %w", req.Name, err)
 		}
 
 		if err = network.Delete(); err != nil {
-			return nil, errors.Wrapf(err, "failed to delete network with name %q", req.Name)
+			return nil, fmt.Errorf("failed to delete network with name %q: %w", req.Name, err)
 		}
 	}
 
@@ -618,7 +620,7 @@ func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpo
 		if _, ok := err.(hcn.EndpointNotFoundError); ok { //nolint:errorlint
 			return nil, status.Errorf(codes.NotFound, "no endpoint with name `%s` found", req.Name)
 		}
-		return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.Name)
+		return nil, fmt.Errorf("failed to get endpoint with name %q: %w", req.Name, err)
 	}
 	return hcnEndpointToEndpointResponse(ep)
 }
@@ -632,12 +634,12 @@ func (s *grpcService) GetEndpoints(ctx context.Context, req *ncproxygrpc.GetEndp
 
 	rawHCNEndpoints, err := hcn.ListEndpoints()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get HNS endpoints")
+		return nil, fmt.Errorf("failed to get HNS endpoints: %w", err)
 	}
 
 	rawNCProxyEndpoints, err := s.ncpNetworkingStore.ListEndpoints(ctx)
 	if err != nil && !errors.Is(err, ncproxystore.ErrBucketNotFound) {
-		return nil, errors.Wrap(err, "failed to get ncproxy networking endpoints")
+		return nil, fmt.Errorf("failed to get ncproxy networking endpoints: %w", err)
 	}
 
 	for _, endpoint := range rawHCNEndpoints {
@@ -697,7 +699,7 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 		if _, ok := err.(hcn.NetworkNotFoundError); ok { //nolint:errorlint
 			return nil, status.Errorf(codes.NotFound, "no network with name `%s` found", req.Name)
 		}
-		return nil, errors.Wrapf(err, "failed to get network with name %q", req.Name)
+		return nil, fmt.Errorf("failed to get network with name %q: %w", req.Name, err)
 	}
 
 	return hcnNetworkToNetworkResponse(ctx, network)
@@ -712,12 +714,12 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 
 	rawHCNNetworks, err := hcn.ListNetworks()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get HNS networks")
+		return nil, fmt.Errorf("failed to get HNS networks: %w", err)
 	}
 
 	rawNCProxyNetworks, err := s.ncpNetworkingStore.ListNetworks(ctx)
 	if err != nil && !errors.Is(err, ncproxystore.ErrBucketNotFound) {
-		return nil, errors.Wrap(err, "failed to get ncproxy networking networks")
+		return nil, fmt.Errorf("failed to get ncproxy networking networks: %w", err)
 	}
 
 	for _, network := range rawHCNNetworks {
@@ -763,7 +765,7 @@ func newTTRPCService(ctx context.Context, agent *computeAgentCache, agentStore *
 func getComputeAgentClient(agentAddr string) (*computeAgentClient, error) {
 	conn, err := winioDialPipe(agentAddr, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to compute agent service")
+		return nil, fmt.Errorf("failed to connect to compute agent service: %w", err)
 	}
 	raw := ttrpcNewClient(
 		conn,

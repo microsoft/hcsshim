@@ -6,11 +6,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/ext4/internal/compactext4"
 	"github.com/Microsoft/hcsshim/internal/memory"
@@ -93,7 +92,7 @@ func MerkleTree(r io.Reader) ([]byte, error) {
 				if err == io.EOF {
 					break
 				}
-				return nil, errors.Wrap(err, "failed to read data block")
+				return nil, fmt.Errorf("failed to read data block: %w", err)
 			}
 			h := hash2(salt, block)
 			nextLevel.Write(h)
@@ -116,7 +115,7 @@ func MerkleTree(r io.Reader) ([]byte, error) {
 	tree := bytes.NewBuffer(make([]byte, 0))
 	for i := len(layers) - 1; i >= 0; i-- {
 		if _, err := tree.Write(layers[i]); err != nil {
-			return nil, errors.Wrap(err, "failed to write merkle tree")
+			return nil, fmt.Errorf("failed to write merkle tree: %w", err)
 		}
 	}
 
@@ -173,9 +172,9 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	// Skip the ext4 data to get to dm-verity super block
 	if s, err := vhd.Seek(offsetInBytes, io.SeekStart); err != nil || s != offsetInBytes {
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to seek dm-verity super block")
+			return nil, fmt.Errorf("failed to seek dm-verity super block: %w", err)
 		}
-		return nil, errors.Errorf("failed to seek dm-verity super block: expected bytes=%d, actual=%d", offsetInBytes, s)
+		return nil, fmt.Errorf("failed to seek dm-verity super block: expected bytes=%d, actual=%d", offsetInBytes, s)
 	}
 
 	return ReadDMVerityInfoReader(vhd)
@@ -238,7 +237,7 @@ func ComputeAndWriteHashDevice(r io.ReadSeeker, w io.Writer) error {
 
 	tree, err := MerkleTree(r)
 	if err != nil {
-		return errors.Wrap(err, "failed to build merkle tree")
+		return fmt.Errorf("failed to build merkle tree: %w", err)
 	}
 
 	devSize, err := r.Seek(0, io.SeekEnd)
@@ -253,7 +252,7 @@ func ComputeAndWriteHashDevice(r io.ReadSeeker, w io.Writer) error {
 
 	dmVeritySB := NewDMVeritySuperblock(uint64(devSize))
 	if err := binary.Write(w, binary.LittleEndian, dmVeritySB); err != nil {
-		return errors.Wrap(err, "failed to write dm-verity super-block")
+		return fmt.Errorf("failed to write dm-verity super-block: %w", err)
 	}
 	// write super-block padding
 	padding := bytes.Repeat([]byte{0}, blockSize-(sbSize%blockSize))
@@ -262,7 +261,7 @@ func ComputeAndWriteHashDevice(r io.ReadSeeker, w io.Writer) error {
 	}
 	// write tree
 	if _, err := w.Write(tree); err != nil {
-		return errors.Wrap(err, "failed to write merkle tree")
+		return fmt.Errorf("failed to write merkle tree: %w", err)
 	}
 	return nil
 }
