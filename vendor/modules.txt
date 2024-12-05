@@ -1,4 +1,4 @@
-# github.com/Microsoft/cosesign1go v1.2.0
+# github.com/Microsoft/cosesign1go v1.4.0
 ## explicit; go 1.20
 github.com/Microsoft/cosesign1go/pkg/cosesign1
 # github.com/Microsoft/didx509go v0.0.3
