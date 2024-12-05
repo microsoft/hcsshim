@@ -5,7 +5,7 @@
             "feed": "contoso.azurecr.io/infra",
             "issuer": "did:web:contoso.com",
             "namespace": "fragment",
-            "local_path": "relative/path/to/local/fragment.rego"
+            "local_path": "fragment.rego"
         }
     },
     {
