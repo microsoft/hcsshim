@@ -1,6 +1,7 @@
 //go:build windows
+// +build windows
 
-package gcs
+package bridge
 
 import (
 	"encoding/json"
@@ -8,66 +9,62 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
+	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
-// e0e16197-dd56-4a10-9195-5ee7a155a838
-var HV_GUID_LOOPBACK = guid.GUID{
-	Data1: 0xe0e16197,
-	Data2: 0xdd56,
-	Data3: 0x4a10,
-	Data4: [8]uint8{0x91, 0x95, 0x5e, 0xe7, 0xa1, 0x55, 0xa8, 0x38},
+const (
+	hdrSize    = 16
+	hdrOffType = 0
+	hdrOffSize = 4
+	hdrOffID   = 8
+
+	// maxMsgSize is the maximum size of an incoming message. This is not
+	// enforced by the guest today but some maximum must be set to avoid
+	// unbounded allocations.
+	maxMsgSize = 0x10000
+
+	msgTypeRequest  msgType = 0x10100000
+	msgTypeResponse msgType = 0x20100000
+	msgTypeNotify   msgType = 0x30100000
+	msgTypeMask     msgType = 0xfff00000
+
+	notifyContainer = 1<<8 | 1
+)
+
+// SequenceID is used to correlate requests and responses.
+type SequenceID uint64
+
+// MessageHeader is the common header present in all communications messages.
+type MessageHeader struct {
+	Type msgType
+	Size uint32
+	ID   SequenceID
 }
 
-// a42e7cda-d03f-480c-9cc2-a4de20abb878
-var HV_GUID_PARENT = guid.GUID{
-	Data1: 0xa42e7cda,
-	Data2: 0xd03f,
-	Data3: 0x480c,
-	Data4: [8]uint8{0x9c, 0xc2, 0xa4, 0xde, 0x20, 0xab, 0xb8, 0x78},
-}
+type msgType uint32
 
-// WindowsSidecarGcsHvsockServiceID is the hvsock service ID that the Windows GCS
-// sidecar will connect to.
-var WindowsSidecarGcsHvsockServiceID = guid.GUID{
-	Data1: 0xae8da506,
-	Data2: 0xa019,
-	Data3: 0x4553,
-	Data4: [8]uint8{0xa5, 0x2b, 0x90, 0x2b, 0xc0, 0xfa, 0x04, 0x11},
-}
-
-// LinuxGcsVsockPort is the vsock port number that the Linux GCS will
-// connect to.
-const LinuxGcsVsockPort = 0x40000000
-
-// WindowsGcsHvsockServiceID is the hvsock service ID that the Windows GCS
-// will connect to.
-var WindowsGcsHvsockServiceID = guid.GUID{
-	Data1: 0xacef5661,
-	Data2: 0x84a1,
-	Data3: 0x4e44,
-	Data4: [8]uint8{0x85, 0x6b, 0x62, 0x45, 0xe6, 0x9f, 0x46, 0x20},
-}
-
-// WindowsGcsHvHostID is the hvsock address for the parent of the VM running the GCS
-var WindowsGcsHvHostID = guid.GUID{
-	Data1: 0x894cc2d6,
-	Data2: 0x9d79,
-	Data3: 0x424f,
-	Data4: [8]uint8{0x93, 0xfe, 0x42, 0x96, 0x9a, 0xe6, 0xd8, 0xd1},
-}
-
-type anyInString struct {
-	Value interface{}
-}
-
-func (a *anyInString) MarshalText() ([]byte, error) {
-	return json.Marshal(a.Value)
-}
-
-func (a *anyInString) UnmarshalText(b []byte) error {
-	return json.Unmarshal(b, &a.Value)
+func (typ msgType) String() string {
+	var s string
+	switch typ & msgTypeMask {
+	case msgTypeRequest:
+		s = "Request("
+	case msgTypeResponse:
+		s = "Response("
+	case msgTypeNotify:
+		s = "Notify("
+		switch typ - msgTypeNotify {
+		case notifyContainer:
+			s += "Container"
+		default:
+			s += fmt.Sprintf("%#x", uint32(typ))
+		}
+		return s + ")"
+	default:
+		return fmt.Sprintf("%#x", uint32(typ))
+	}
+	s += rpcProc(typ &^ msgTypeMask).String()
+	return s + ")"
 }
 
 type rpcProc uint32
@@ -127,38 +124,16 @@ func (rpc rpcProc) String() string {
 	}
 }
 
-type msgType uint32
+type anyInString struct {
+	Value interface{}
+}
 
-const (
-	msgTypeRequest  msgType = 0x10100000
-	msgTypeResponse msgType = 0x20100000
-	msgTypeNotify   msgType = 0x30100000
-	msgTypeMask     msgType = 0xfff00000
+func (a *anyInString) MarshalText() ([]byte, error) {
+	return json.Marshal(a.Value)
+}
 
-	notifyContainer = 1<<8 | 1
-)
-
-func (typ msgType) String() string {
-	var s string
-	switch typ & msgTypeMask {
-	case msgTypeRequest:
-		s = "Request("
-	case msgTypeResponse:
-		s = "Response("
-	case msgTypeNotify:
-		s = "Notify("
-		switch typ - msgTypeNotify {
-		case notifyContainer:
-			s += "Container"
-		default:
-			s += fmt.Sprintf("%#x", uint32(typ))
-		}
-		return s + ")"
-	default:
-		return fmt.Sprintf("%#x", uint32(typ))
-	}
-	s += rpcProc(typ &^ msgTypeMask).String()
-	return s + ")"
+func (a *anyInString) UnmarshalText(b []byte) error {
+	return json.Unmarshal(b, &a.Value)
 }
 
 // ocspancontext is the internal JSON representation of the OpenCensus
@@ -196,15 +171,19 @@ type requestBase struct {
 	OpenCensusSpanContext *ocspancontext `json:"ocsc,omitempty"`
 }
 
-func (req *requestBase) Base() *requestBase {
-	return req
-}
-
 type responseBase struct {
 	Result       int32         // HResult
 	ErrorMessage string        `json:",omitempty"`
 	ActivityID   guid.GUID     `json:"ActivityId,omitempty"`
 	ErrorRecords []errorRecord `json:",omitempty"`
+}
+
+func (req *requestBase) Base() *requestBase {
+	return req
+}
+
+func (resp *responseBase) Base() *responseBase {
+	return resp
 }
 
 type errorRecord struct {
@@ -217,14 +196,26 @@ type errorRecord struct {
 	FunctionName string `json:",omitempty"`
 }
 
-func (resp *responseBase) Base() *responseBase {
-	return resp
-}
-
 type negotiateProtocolRequest struct {
 	requestBase
 	MinimumVersion uint32
 	MaximumVersion uint32
+}
+
+type hcsschemaVersion struct {
+	Major int32 `json:"Major,omitempty"`
+
+	Minor int32 `json:"Minor,omitempty"`
+}
+
+type gcsCapabilities struct {
+	SendHostCreateMessage      bool
+	SendHostStartMessage       bool
+	HvSocketConfigOnStartup    bool
+	SendLifecycleNotifications bool
+	SupportedSchemaVersions    []hcsschemaVersion
+	RuntimeOsType              string
+	GuestDefinedCapabilities   interface{}
 }
 
 type negotiateProtocolResponse struct {
@@ -294,6 +285,11 @@ type containerResizeConsole struct {
 	Width     uint16
 }
 
+type containerModifySettings struct {
+	requestBase
+	Request interface{}
+}
+
 type containerWaitForProcess struct {
 	requestBase
 	ProcessID   uint32 `json:"ProcessId"`
@@ -316,81 +312,7 @@ func (q *containerPropertiesQuery) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, (*schema1.PropertyQuery)(q))
 }
 
-type containerPropertiesQueryV2 hcsschema.PropertyQuery
-
-func (q *containerPropertiesQueryV2) MarshalText() ([]byte, error) {
-	return json.Marshal((*hcsschema.PropertyQuery)(q))
-}
-
-func (q *containerPropertiesQueryV2) UnmarshalText(b []byte) error {
-	return json.Unmarshal(b, (*hcsschema.PropertyQuery)(q))
-}
-
 type containerGetProperties struct {
 	requestBase
 	Query containerPropertiesQuery
-}
-
-type containerGetPropertiesV2 struct {
-	requestBase
-	Query containerPropertiesQueryV2
-}
-
-type containerModifySettings struct {
-	requestBase
-	Request interface{}
-}
-
-type gcsCapabilities struct {
-	SendHostCreateMessage      bool
-	SendHostStartMessage       bool
-	HvSocketConfigOnStartup    bool
-	SendLifecycleNotifications bool
-	SupportedSchemaVersions    []hcsschema.Version
-	RuntimeOsType              string
-	GuestDefinedCapabilities   json.RawMessage
-}
-
-type containerCreateResponse struct {
-	responseBase
-}
-
-type containerExecuteProcessResponse struct {
-	responseBase
-	ProcessID uint32 `json:"ProcessId"`
-}
-
-type containerWaitForProcessResponse struct {
-	responseBase
-	ExitCode uint32
-}
-
-type containerProperties schema1.ContainerProperties
-
-func (p *containerProperties) MarshalText() ([]byte, error) {
-	return json.Marshal((*schema1.ContainerProperties)(p))
-}
-
-func (p *containerProperties) UnmarshalText(b []byte) error {
-	return json.Unmarshal(b, (*schema1.ContainerProperties)(p))
-}
-
-type containerPropertiesV2 hcsschema.Properties
-
-func (p *containerPropertiesV2) MarshalText() ([]byte, error) {
-	return json.Marshal((*hcsschema.Properties)(p))
-}
-
-func (p *containerPropertiesV2) UnmarshalText(b []byte) error {
-	return json.Unmarshal(b, (*hcsschema.Properties)(p))
-}
-
-type containerGetPropertiesResponse struct {
-	responseBase
-	Properties containerProperties
-}
-
-type containerGetPropertiesResponseV2 struct {
-	responseBase
-	Properties containerPropertiesV2
 }

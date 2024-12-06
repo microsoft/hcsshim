@@ -62,8 +62,21 @@ func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
 	log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
 
 	l, err := winio.ListenHvsock(&winio.HvsockAddr{
-		VMID:      uvm.runtimeID,
-		ServiceID: gcs.WindowsGcsHvsockServiceID,
+		// 1. TODO:
+		// Following line is only temporary for POC and ease of developement.
+		// "VMID: gcs.HV_GUID_LOOPBACK" means that we are trying to start sidecar
+		// outside of the UVM, that is in the host itself. This is only for
+		// easy developement.
+		VMID: gcs.HV_GUID_LOOPBACK,
+		// ORIGINAL: uvm.runtimeID,
+		ServiceID: gcs.WindowsSidecarGcsHvsockServiceID,
+		// 2. TODO:
+		// Following line can be uncommented after POC to ensure that
+		// hcsshim connects to gcs-sidecar.exe GUID and NOT to the windows GCS
+		// directly and this change should ONLY be for C-WCOW cases.
+		// We can base the decision of which GUID the external GCS listener should
+		// connect to based on annotations.WindowsSecurityPolicy annotation in pod.json.
+		// gcs.WindowsGcsHvsockServiceID,
 	})
 	if err != nil {
 		return err
@@ -150,6 +163,75 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 	}
 
 	registryChanges.AddValues = append(registryChanges.AddValues, opts.AdditionalRegistryKeys...)
+
+	// Temporary hack to start up windows sidecar gcs in the uvm
+	isCWCOW := true
+	/* TODO: temp only for POC/demo. Can be removed once we have pipeline work to
+	// consume gcs-sidecar.exe and bring it up as a service during boot time.
+	// Till such time, this start gcs-sidecar.exe as a service for every createPod()
+	// request.
+	if opts.WcowSecurityPolicy != "" {
+		isCWCOW = true
+	}
+	*/
+	if isCWCOW {
+		registryChanges.AddValues = append(registryChanges.AddValues,
+			hcsschema.RegistryValue{
+				Key: &hcsschema.RegistryKey{
+					Hive: "System",
+					Name: "CurrentControlSet\\Services\\gcs-sidecar",
+				},
+				Name:        "DisplayName",
+				StringValue: "gcs-sidecar",
+				Type_:       "String",
+			},
+			hcsschema.RegistryValue{
+				Key: &hcsschema.RegistryKey{
+					Hive: "System",
+					Name: "CurrentControlSet\\Services\\gcs-sidecar",
+				},
+				Name:       "ErrorControl",
+				DWordValue: 1,
+				Type_:      "DWord",
+			},
+			hcsschema.RegistryValue{
+				Key: &hcsschema.RegistryKey{
+					Hive: "System",
+					Name: "CurrentControlSet\\Services\\gcs-sidecar",
+				},
+				Name:        "ImagePath",
+				StringValue: "C:\\Windows\\System32\\gcs-sidecar.exe",
+				Type_:       "String",
+			},
+			hcsschema.RegistryValue{
+				Key: &hcsschema.RegistryKey{
+					Hive: "System",
+					Name: "CurrentControlSet\\Services\\gcs-sidecar",
+				},
+				Name:        "ObjectName",
+				StringValue: "LocalSystem",
+				Type_:       "String",
+			},
+			hcsschema.RegistryValue{
+				Key: &hcsschema.RegistryKey{
+					Hive: "System",
+					Name: "CurrentControlSet\\Services\\gcs-sidecar",
+				},
+				Name:       "Start",
+				DWordValue: 2,
+				Type_:      "DWord",
+			},
+			hcsschema.RegistryValue{
+				Key: &hcsschema.RegistryKey{
+					Hive: "System",
+					Name: "CurrentControlSet\\Services\\gcs-sidecar",
+				},
+				Name:       "Type",
+				DWordValue: 16,
+				Type_:      "DWord",
+			},
+		)
+	}
 
 	processor := &hcsschema.VirtualMachineProcessor{
 		Count:  uint32(uvm.processorCount),
