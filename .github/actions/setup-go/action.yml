@@ -30,6 +30,13 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Clean up existing Go installation
+      shell: pwsh
+      run: |
+        $goPath = "${{ runner.tool_cache }}/go/${{ inputs.go-version }}/x64"
+        if (Test-Path $goPath) {
+          Remove-Item -Recurse -Force $goPath
+        }
     - name: Install Go
       id: setup-go
       uses: actions/setup-go@v5
