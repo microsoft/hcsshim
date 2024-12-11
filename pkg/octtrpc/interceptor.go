@@ -100,6 +100,11 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 	}
 	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (_ interface{}, err error) {
 		name := convertMethodName(info.FullMethod)
+		// Do not create spans for stats calls as they could be called
+		// too frequently and flood logs.
+		if name == "containerd.task.v2.Task.Stats" {
+			return method(ctx, unmarshal)
+		}
 
 		var span *trace.Span
 		opts := []trace.StartOption{trace.WithSampler(o.sampler), oc.WithServerSpanKind}
