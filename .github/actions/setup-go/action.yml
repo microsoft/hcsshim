@@ -33,11 +33,12 @@ runs:
     - name: Clean up existing Go installation
       shell: pwsh
       run: |
-        $goPath = "${{ runner.tool_cache }}/go/${{ inputs.go-version }}/x64"
-        Write-Host "Debug: Checking if path exists: $goPath"
-        if (Test-Path $goPath) {
-          Write-Host "Debug: Path exists. Removing $goPath"
-          Remove-Item -Recurse -Force $goPath
+        # $goPath = "${{ runner.tool_cache }}/go/${{ inputs.go-version }}/x64"
+        $goPath = Get-Command -ErrorAction 'SilentlyContinue' -Type 'Application' 'go' | Select-Object -ExpandProperty 'Source'
+        Write-Host "Debug: Checking if path exists: '$goPath'"
+        if (Test-Path "$goPath") {
+          Write-Host "Debug: Path exists. Removing '$goPath'"
+          Remove-Item -Recurse -Force "$goPath"
           Write-Host "Debug: Path removed."
         } else {
           Write-Host "Debug: Path does not exist. No action needed."
