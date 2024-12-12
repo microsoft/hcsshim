@@ -11,9 +11,9 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
@@ -25,7 +25,7 @@ import (
 
 type nicInfo struct {
 	ID       string
-	Endpoint *hns.HNSEndpoint
+	Endpoint *hcn.HostComputeEndpoint
 }
 
 type namespaceInfo struct {

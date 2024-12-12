@@ -4,6 +4,8 @@ package uvm
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
@@ -112,13 +114,34 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 
 	switch endpt := endpoint.(type) {
 	case *ncproxynetworking.Endpoint:
+		ipConfig := guestresource.LCOWIPConfig{
+			IPAddress:    endpt.Settings.IPAddress,
+			PrefixLength: uint8(endpt.Settings.IPAddressPrefixLength),
+		}
+
 		cfg := &guestresource.LCOWNetworkAdapter{
-			NamespaceID:    endpt.NamespaceID,
-			ID:             req.NicID,
-			IPAddress:      endpt.Settings.IPAddress,
-			PrefixLength:   uint8(endpt.Settings.IPAddressPrefixLength),
-			GatewayAddress: endpt.Settings.DefaultGateway,
-			VPCIAssigned:   true,
+			NamespaceID:  endpt.NamespaceID,
+			ID:           req.NicID,
+			VPCIAssigned: true,
+			IPConfigs:    []guestresource.LCOWIPConfig{ipConfig},
+		}
+
+		if endpt.Settings.DefaultGateway != "" {
+			gw := net.ParseIP(endpt.Settings.DefaultGateway)
+			if gw == nil {
+				return nil, fmt.Errorf("invalid gateway address: %s", endpt.Settings.DefaultGateway)
+			}
+			route := guestresource.LCOWRoute{
+				NextHop: endpt.Settings.DefaultGateway,
+			}
+			if gw.To4() != nil {
+				route.DestinationPrefix = "0.0.0.0/0"
+			} else if gw.To16() != nil {
+				route.DestinationPrefix = "::/0"
+			} else {
+				return nil, fmt.Errorf("gateway address is neither IPv4 nor IPv6: %s", endpt.Settings.DefaultGateway)
+			}
+			cfg.Routes = []guestresource.LCOWRoute{route}
 		}
 		if err := ca.uvm.AddNICInGuest(ctx, cfg); err != nil {
 			return nil, err
