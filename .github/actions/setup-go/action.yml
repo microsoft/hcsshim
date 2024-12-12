@@ -31,10 +31,12 @@ runs:
   using: composite
   steps:
     - name: Clean up existing Go installation
+      with:
+        go-version: ${{ inputs.go-version }}
+        check-latest: true
       shell: pwsh
       run: |
-        # $goPath = "${{ runner.tool_cache }}/go/${{ inputs.go-version }}/x64"
-        $goPath = Get-Command -ErrorAction 'SilentlyContinue' -Type 'Application' 'go' | Select-Object -ExpandProperty 'Source'
+        $goPath = "${{ runner.tool_cache }}/go/${{ inputs.go-version }}/x64"
         Write-Host "Debug: Checking if path exists: '$goPath'"
         if (Test-Path "$goPath") {
           Write-Host "Debug: Path exists. Removing '$goPath'"
