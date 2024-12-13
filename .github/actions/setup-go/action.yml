@@ -30,18 +30,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Clean up existing Go installation
-      shell: pwsh
-      run: |
-        $goPath = "${{ runner.tool_cache }}/go"
-        Write-Host "Debug: Checking if path exists: '$goPath'"
-        if (Test-Path "$goPath") {
-          Write-Host "Debug: Path exists. Removing '$goPath'"
-          Remove-Item -Recurse -Force "$goPath"
-          Write-Host "Debug: Path removed."
-        } else {
-          Write-Host "Debug: Path does not exist. No action needed."
-        }
     - name: Install Go
       id: setup-go
       uses: actions/setup-go@v5
