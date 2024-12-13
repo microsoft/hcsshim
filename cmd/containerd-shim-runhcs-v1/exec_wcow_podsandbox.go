@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/errdefs"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -166,7 +166,7 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 		close(wpse.exited)
 		return nil
 	case shimExecStateExited:
-		return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", wpse.tid, wpse.tid)
+		return fmt.Errorf("exec: %q in task: %q: %w", wpse.tid, wpse.tid, errdefs.ErrNotFound)
 	default:
 		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "kill")
 	}
@@ -177,7 +177,7 @@ func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uin
 	defer wpse.sl.Unlock()
 	// We will never have IO for a sandbox container so we wont have a tty
 	// either.
-	return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", wpse.tid, wpse.tid)
+	return fmt.Errorf("exec: %q in task: %q is not a tty: %w", wpse.tid, wpse.tid, errdefs.ErrFailedPrecondition)
 }
 
 func (wpse *wcowPodSandboxExec) CloseIO(ctx context.Context, stdin bool) error {

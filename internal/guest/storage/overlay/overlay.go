@@ -5,6 +5,7 @@ package overlay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
@@ -108,13 +109,13 @@ func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, t
 	}
 
 	if readonly && (upperdirPath != "" || workdirPath != "") {
-		return errors.Errorf("upperdirPath: %q, and workdirPath: %q must be empty when readonly==true", upperdirPath, workdirPath)
+		return fmt.Errorf("upperdirPath: %q, and workdirPath: %q must be empty when readonly==true", upperdirPath, workdirPath)
 	}
 
 	options := []string{"lowerdir=" + lowerdir}
 	if upperdirPath != "" {
 		if err := osMkdirAll(upperdirPath, 0755); err != nil {
-			return errors.Wrap(err, "failed to create upper directory in scratch space")
+			return fmt.Errorf("failed to create upper directory in scratch space: %w", err)
 		}
 		defer func() {
 			if err != nil {
@@ -125,7 +126,7 @@ func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, t
 	}
 	if workdirPath != "" {
 		if err := osMkdirAll(workdirPath, 0755); err != nil {
-			return errors.Wrap(err, "failed to create workdir in scratch space")
+			return fmt.Errorf("failed to create workdir in scratch space: %w", err)
 		}
 		defer func() {
 			if err != nil {
@@ -135,7 +136,7 @@ func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, t
 		options = append(options, "workdir="+workdirPath)
 	}
 	if err := osMkdirAll(target, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", target)
+		return fmt.Errorf("failed to create directory for container root filesystem %s: %w", target, err)
 	}
 	defer func() {
 		if err != nil {
@@ -147,7 +148,7 @@ func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, t
 		flags |= unix.MS_RDONLY
 	}
 	if err := unixMount("overlay", target, "overlay", flags, strings.Join(options, ",")); err != nil {
-		return errors.Wrapf(err, "failed to mount overlayfs at %s", target)
+		return fmt.Errorf("failed to mount overlayfs at %s: %w", target, err)
 	}
 	return nil
 }

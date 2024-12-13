@@ -7,7 +7,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
 )
 
 // mergeHive merges the hive located at parentHivePath with the hive located at deltaHivePath and stores
@@ -21,7 +20,7 @@ func mergeHive(parentHivePath, deltaHivePath, mergedHivePath string) (err error)
 	defer func() {
 		err2 := winapi.ORCloseHive(baseHive)
 		if err == nil {
-			err = errors.Wrap(err2, "failed to close base hive")
+			err = fmt.Errorf("failed to close base hive: %w", err2)
 		}
 	}()
 	if err := winapi.OROpenHive(deltaHivePath, &deltaHive); err != nil {
@@ -30,7 +29,7 @@ func mergeHive(parentHivePath, deltaHivePath, mergedHivePath string) (err error)
 	defer func() {
 		err2 := winapi.ORCloseHive(deltaHive)
 		if err == nil {
-			err = errors.Wrap(err2, "failed to close delta hive")
+			err = fmt.Errorf("failed to close delta hive: %w", err2)
 		}
 	}()
 	if err := winapi.ORMergeHives([]winapi.ORHKey{baseHive, deltaHive}, &mergedHive); err != nil {
@@ -39,7 +38,7 @@ func mergeHive(parentHivePath, deltaHivePath, mergedHivePath string) (err error)
 	defer func() {
 		err2 := winapi.ORCloseHive(mergedHive)
 		if err == nil {
-			err = errors.Wrap(err2, "failed to close merged hive")
+			err = fmt.Errorf("failed to close merged hive: %w", err2)
 		}
 	}()
 	if err := winapi.ORSaveHive(mergedHive, mergedHivePath, uint32(osversion.Get().MajorVersion), uint32(osversion.Get().MinorVersion)); err != nil {

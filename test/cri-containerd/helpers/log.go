@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/pkg/errors"
 )
 
 func main() {
@@ -31,24 +30,24 @@ func logContainerStdoutToFile() (err error) {
 	waitPipe := os.Getenv("CONTAINER_WAIT")
 
 	if sout, err = winio.DialPipeContext(ctx, soutPipe); err != nil {
-		return errors.Wrap(err, "couldn't open stdout pipe")
+		return fmt.Errorf("couldn't open stdout pipe: %w", err)
 	}
 	defer sout.Close()
 
 	// The only expected argument should be output file path
 	if len(os.Args[1:]) != 1 {
-		return errors.Errorf("Expected exactly 1 argument, got: %d", len(os.Args[1:]))
+		return fmt.Errorf("Expected exactly 1 argument, got: %d", len(os.Args[1:]))
 	}
 
 	var dest *os.File
 	destPath := os.Args[1]
 	if dest, err = os.Create(destPath); err != nil {
-		return errors.Wrap(err, "couldn't open destination file")
+		return fmt.Errorf("couldn't open destination file: %w", err)
 	}
 	defer dest.Close()
 
 	if wait, err = winio.DialPipeContext(ctx, waitPipe); err != nil {
-		return errors.Wrap(err, "couldn't open wait pipe")
+		return fmt.Errorf("couldn't open wait pipe: %w", err)
 	}
 	// Indicate that logging binary is ready to receive output
 	wait.Close()

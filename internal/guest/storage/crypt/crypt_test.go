@@ -5,9 +5,8 @@ package crypt
 
 import (
 	"context"
+	"errors"
 	"testing"
-
-	"github.com/pkg/errors"
 )
 
 const tempDir = "/tmp/dir/"
@@ -47,7 +46,7 @@ func Test_Encrypt_Generate_Key_Error(t *testing.T) {
 	}
 
 	_, err := EncryptDevice(context.Background(), source, "dm-crypt-target")
-	if errors.Unwrap(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
 	}
 }
@@ -80,7 +79,7 @@ func Test_Encrypt_Cryptsetup_Format_Error(t *testing.T) {
 	}
 
 	_, err := EncryptDevice(context.Background(), expectedSource, "dm-crypt-target")
-	if errors.Unwrap(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: '%v' got: '%v", expectedErr, err)
 	}
 }
@@ -120,7 +119,7 @@ func Test_Encrypt_Cryptsetup_Open_Error(t *testing.T) {
 	}
 
 	_, err := EncryptDevice(context.Background(), expectedSource, dmCryptName)
-	if errors.Unwrap(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
 	}
 }
@@ -175,7 +174,7 @@ func Test_Cleanup_Dm_Crypt_Error(t *testing.T) {
 	}
 
 	err := CleanupCryptDevice(context.TODO(), dmCryptName)
-	if errors.Unwrap(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: '%v' got: '%v'", expectedErr, err)
 	}
 }

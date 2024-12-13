@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -23,7 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	runc "github.com/containerd/go-runc"
 	"github.com/opencontainers/runtime-tools/generate"
-	"github.com/pkg/errors"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -157,11 +158,11 @@ func getWindowsImageNameByVersion(t *testing.T, bv int) string {
 func readPidFile(path string) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return -1, errors.Wrap(err, "failed to read pidfile")
+		return -1, fmt.Errorf("failed to read pidfile: %w", err)
 	}
 	p, err := strconv.Atoi(string(data))
 	if err != nil {
-		return -1, errors.Wrap(err, "pidfile failed to parse pid")
+		return -1, fmt.Errorf("pidfile failed to parse pid: %w", err)
 	}
 	return p, nil
 }

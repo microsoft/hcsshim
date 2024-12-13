@@ -4,9 +4,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
-
-	"github.com/pkg/errors"
 
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
@@ -58,7 +58,7 @@ type config struct {
 func readConfig(path string) (*config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read config file")
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 	conf := &config{}
 	if err := json.Unmarshal(data, conf); err != nil {

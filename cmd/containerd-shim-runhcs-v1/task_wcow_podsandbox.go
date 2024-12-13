@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -20,7 +21,6 @@ import (
 	"github.com/containerd/errdefs"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
 
@@ -99,7 +99,7 @@ func (wpst *wcowPodSandboxTask) ID() string {
 }
 
 func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error {
-	return errors.Wrap(errdefs.ErrNotImplemented, "WCOW Pod task should never issue exec")
+	return fmt.Errorf("WCOW Pod task should never issue exec: %w", errdefs.ErrNotImplemented)
 }
 
 func (wpst *wcowPodSandboxTask) GetExec(eid string) (shimExec, error) {
@@ -107,7 +107,7 @@ func (wpst *wcowPodSandboxTask) GetExec(eid string) (shimExec, error) {
 		return wpst.init, nil
 	}
 	// Cannot exec in an a WCOW sandbox container so all non-init calls fail here.
-	return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, wpst.id)
+	return nil, fmt.Errorf("exec: %q in task: %q: %w", eid, wpst.id, errdefs.ErrNotFound)
 }
 
 func (wpst *wcowPodSandboxTask) ListExecs() ([]shimExec, error) {
@@ -120,7 +120,7 @@ func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal
 		return err
 	}
 	if all && eid != "" {
-		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot signal all for non-empty exec: '%s'", eid)
+		return fmt.Errorf("cannot signal all for non-empty exec: %q: %w", eid, errdefs.ErrFailedPrecondition)
 	}
 	err = e.Kill(ctx, signal)
 	if err != nil {
@@ -275,7 +275,7 @@ func (wpst *wcowPodSandboxTask) Update(ctx context.Context, req *task.UpdateTask
 
 	resources, err := typeurl.UnmarshalAny(req.Resources)
 	if err != nil {
-		return errors.Wrapf(err, "failed to unmarshal resources for container %s update request", req.ID)
+		return fmt.Errorf("failed to unmarshal resources for container %q update request: %w", req.ID, err)
 	}
 
 	if err := verifyTaskUpdateResourcesType(resources); err != nil {

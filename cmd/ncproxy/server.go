@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -16,7 +18,7 @@ import (
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 	"go.opencensus.io/plugin/ocgrpc"
@@ -205,7 +207,7 @@ func reconnectComputeAgents(ctx context.Context, agentStore *ncproxystore.Comput
 func disconnectComputeAgents(ctx context.Context, containerIDToComputeAgent *computeAgentCache) error {
 	agents, err := containerIDToComputeAgent.getAllAndClear()
 	if err != nil {
-		return errors.Wrapf(err, "failed to get all cached compute agent clients")
+		return fmt.Errorf("failed to get all cached compute agent clients: %w", err)
 	}
 	for _, agent := range agents {
 		if err := agent.Close(); err != nil {

@@ -4,13 +4,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"google.golang.org/protobuf/proto"
@@ -27,7 +27,7 @@ import (
 func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "limited read failed to open file: %s", filePath)
+		return nil, err
 	}
 	defer f.Close()
 	if fi, err := f.Stat(); err == nil {
@@ -37,11 +37,11 @@ func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
 		buf := make([]byte, readLimitBytes)
 		_, err := f.Read(buf)
 		if err != nil {
-			return []byte{}, errors.Wrapf(err, "limited read failed during file read: %s", filePath)
+			return nil, err
 		}
 		return buf, nil
 	}
-	return []byte{}, errors.Wrapf(err, "limited read failed during file stat: %s", filePath)
+	return nil, err
 }
 
 var deleteCommand = cli.Command{

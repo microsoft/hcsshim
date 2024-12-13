@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // export this variable so it can be mocked to aid in testing for consuming packages
@@ -26,13 +24,16 @@ func WaitForFileMatchingPattern(ctx context.Context, pattern string) (string, er
 		if len(files) == 0 {
 			select {
 			case <-ctx.Done():
-				return "", errors.Wrapf(ctx.Err(), "timed out waiting for file matching pattern %s to exist", pattern)
+				if err := ctx.Err(); err != nil {
+					return "", fmt.Errorf("timed out waiting for file matching pattern %s to exist: %w", pattern, err)
+				}
+				return "", nil
 			default:
 				time.Sleep(time.Millisecond * 10)
 				continue
 			}
 		} else if len(files) > 1 {
-			return "", fmt.Errorf("more than one file could exist for pattern \"%s\"", pattern)
+			return "", fmt.Errorf("more than one file could exist for pattern %q", pattern)
 		}
 		return files[0], nil
 	}

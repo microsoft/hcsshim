@@ -4,10 +4,10 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
@@ -134,7 +134,7 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 	}
 
 	if err := uvm.modify(ctx, modification); err != nil {
-		return "", errors.Errorf("uvm::addVPMemDefault: failed to modify utility VM configuration: %s", err)
+		return "", fmt.Errorf("uvm::addVPMemDefault: failed to modify utility VM configuration: %s", err)
 	}
 
 	uvm.vpmemDevicesDefault[deviceNumber] = newDefaultVPMemInfo(hostPath, uvmPath)
@@ -168,7 +168,7 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 		},
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
-		return errors.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
+		return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 	}
 	log.G(ctx).WithFields(logrus.Fields{
 		"hostPath":     device.hostPath,

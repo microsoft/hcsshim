@@ -4,13 +4,14 @@ package main
 
 import (
 	gcontext "context"
+	"errors"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -74,14 +75,14 @@ var createScratchCommand = cli.Command{
 
 		convertUVM, err := uvm.CreateLCOW(ctx, opts)
 		if err != nil {
-			return errors.Wrapf(err, "failed to create '%s'", opts.ID)
+			return fmt.Errorf("failed to create %q: %w", opts.ID, err)
 		}
 		defer convertUVM.Close()
 		if err := convertUVM.Start(ctx); err != nil {
-			return errors.Wrapf(err, "failed to start '%s'", opts.ID)
+			return fmt.Errorf("failed to start %q: %w", opts.ID, err)
 		}
 		if err := lcow.CreateScratch(ctx, convertUVM, dest, sizeGB, context.String("cache-path")); err != nil {
-			return errors.Wrapf(err, "failed to create ext4vhdx for '%s'", opts.ID)
+			return fmt.Errorf("failed to create ext4vhdx for %q: %w", opts.ID, err)
 		}
 
 		return nil

@@ -17,7 +17,6 @@ import (
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/ttrpc"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -82,7 +81,7 @@ The start command can either start a new shim or return an address to an existin
 			// Connect to the hosting shim and get the pid
 			c, err := winio.DialPipe(address, nil)
 			if err != nil {
-				return errors.Wrap(err, "failed to connect to hosting shim")
+				return fmt.Errorf("failed to connect to hosting shim: %w", err)
 			}
 			cl := ttrpc.NewClient(c, ttrpc.WithOnClose(func() { c.Close() }))
 			t := task.NewTaskClient(cl)
@@ -93,7 +92,7 @@ The start command can either start a new shim or return an address to an existin
 			cl.Close()
 			c.Close()
 			if err != nil {
-				return errors.Wrap(err, "failed to get shim pid from hosting shim")
+				return fmt.Errorf("failed to get shim pid from hosting shim: %w", err)
 			}
 			pid = int(cr.ShimPid)
 		}
@@ -102,7 +101,7 @@ The start command can either start a new shim or return an address to an existin
 		if address == "" {
 			isSandbox := ct == oci.KubernetesContainerTypeSandbox
 			if isSandbox && idFlag != sbid {
-				return errors.Errorf(
+				return fmt.Errorf(
 					"'id' and '%s' must match for '%s=%s'",
 					annotations.KubernetesSandboxID,
 					annotations.KubernetesContainerType,
@@ -197,7 +196,7 @@ func getSpecAnnotations(bundlePath string) (map[string]string, error) {
 	defer f.Close()
 	var spec specAnnotations
 	if err := json.NewDecoder(f).Decode(&spec); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize valid OCI spec")
+		return nil, fmt.Errorf("failed to deserialize valid OCI spec: %w", err)
 	}
 	return spec.Annotations, nil
 }

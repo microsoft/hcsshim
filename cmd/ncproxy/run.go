@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +17,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/containerd/ttrpc"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opencensus.io/plugin/ocgrpc"
@@ -173,7 +174,7 @@ func run(clicontext *cli.Context) error {
 		// If a log dir was provided, make sure it exists.
 		if _, err := os.Stat(logDir); err != nil {
 			if err := os.MkdirAll(logDir, 0); err != nil {
-				return errors.Wrap(err, "failed to make log directory")
+				return fmt.Errorf("failed to make log directory: %w", err)
 			}
 		}
 	}
@@ -208,7 +209,7 @@ func run(clicontext *cli.Context) error {
 	ctx := context.Background()
 	conf, err := loadConfig(configPath)
 	if err != nil {
-		return errors.Wrap(err, "failed getting configuration file")
+		return fmt.Errorf("failed getting configuration file: %w", err)
 	}
 
 	if conf.GRPCAddr == "" {
@@ -269,7 +270,7 @@ func run(clicontext *cli.Context) error {
 		dir := filepath.Dir(dbPath)
 		if _, err := os.Stat(dir); err != nil {
 			if err := os.MkdirAll(dir, 0); err != nil {
-				return errors.Wrap(err, "failed to make database directory")
+				return fmt.Errorf("failed to make database directory: %w", err)
 			}
 		}
 	}
@@ -306,7 +307,7 @@ func run(clicontext *cli.Context) error {
 		log.G(ctx).Info("Received interrupt. Closing")
 	case err := <-serveErr:
 		if err != nil {
-			return errors.Wrap(err, "server failure")
+			return fmt.Errorf("server failure: %w", err)
 		}
 	case <-serviceDone:
 		log.G(ctx).Info("Windows service stopped or shutdown")

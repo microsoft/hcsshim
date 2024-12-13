@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -45,7 +46,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -178,7 +179,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 	sha.Write(blob)
 	timestamp := time.Now()
 	fragmentPath := fmt.Sprintf("fragment-%x-%d.blob", sha.Sum(nil), timestamp.UnixMilli())
-	_ = os.WriteFile(filepath.Join("/tmp", fragmentPath), blob, 0644)
+	_ = os.WriteFile(filepath.Join("/tmp", fragmentPath), blob, 0o644)
 
 	unpacked, err := cosesign1.UnpackAndValidateCOSE1CertChain(raw)
 	if err != nil {
@@ -277,8 +278,8 @@ func (h *Host) AddContainer(id string, c *Container) error {
 
 func setupSandboxMountsPath(id string) (err error) {
 	mountPath := spec.SandboxMountsDir(id)
-	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create sandboxMounts dir in sandbox %v", id)
+	if err := os.MkdirAll(mountPath, 0o755); err != nil {
+		return fmt.Errorf("failed to create sandboxMounts dir in sandbox %v: %w", id, err)
 	}
 	defer func() {
 		if err != nil {
@@ -291,8 +292,8 @@ func setupSandboxMountsPath(id string) (err error) {
 
 func setupSandboxHugePageMountsPath(id string) error {
 	mountPath := spec.HugePagesMountsDir(id)
-	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create hugepage Mounts dir in sandbox %v", id)
+	if err := os.MkdirAll(mountPath, 0o755); err != nil {
+		return fmt.Errorf("failed to create hugepage Mounts dir in sandbox %v: %w", id, err)
 	}
 
 	return storage.MountRShared(mountPath)
@@ -361,7 +362,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 			sandboxID = sid
 			if !ok || sid == "" {
-				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
+				return nil, fmt.Errorf("unsupported %q: %q", annotations.KubernetesSandboxID, sid)
 			}
 			if err := setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification, settings.OCIBundlePath); err != nil {
 				return nil, err
@@ -385,7 +386,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 		default:
-			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
+			return nil, fmt.Errorf("unsupported %q: %q", annotations.KubernetesContainerType, criType)
 		}
 	} else {
 		// Capture namespaceID if any because setupStandaloneContainerSpec clears the Windows section.
@@ -431,7 +432,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		seccomp,
 	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "container creation denied due to policy")
+		return nil, fmt.Errorf("container creation denied due to policy: %w", err)
 	}
 
 	if !allowStdio {
@@ -465,23 +466,23 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, fmt.Errorf("failed to create security context directory: %w", err)
 			}
 			// Make sure that files inside directory are readable
-			if err := os.Chmod(securityContextDir, 0755); err != nil {
+			if err := os.Chmod(securityContextDir, 0o755); err != nil {
 				return nil, fmt.Errorf("failed to chmod security context directory: %w", err)
 			}
 
 			if len(encodedPolicy) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0744); err != nil {
+				if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0o744); err != nil {
 					return nil, fmt.Errorf("failed to write security policy: %w", err)
 				}
 			}
 			if len(h.uvmReferenceInfo) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(h.uvmReferenceInfo), 0744); err != nil {
+				if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(h.uvmReferenceInfo), 0o744); err != nil {
 					return nil, fmt.Errorf("failed to write UVM reference info: %w", err)
 				}
 			}
 
 			if len(hostAMDCert) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0744); err != nil {
+				if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0o744); err != nil {
 					return nil, fmt.Errorf("failed to write host AMD certificate: %w", err)
 				}
 			}
@@ -493,30 +494,30 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	}
 
 	// Create the BundlePath
-	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
-		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)
+	if err := os.MkdirAll(settings.OCIBundlePath, 0o700); err != nil {
+		return nil, fmt.Errorf("failed to create OCIBundlePath: %w", err)
 	}
 	configFile := path.Join(settings.OCIBundlePath, "config.json")
 	f, err := os.Create(configFile)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create config.json at: '%s'", configFile)
+		return nil, fmt.Errorf("failed to create config.json: %w", err)
 	}
 	defer f.Close()
 	writer := bufio.NewWriter(f)
 	if err := json.NewEncoder(writer).Encode(settings.OCISpecification); err != nil {
-		return nil, errors.Wrapf(err, "failed to write OCISpecification to config.json at: '%s'", configFile)
+		return nil, fmt.Errorf("failed to write OCISpecification to config.json at %q: %w", configFile, err)
 	}
 	if err := writer.Flush(); err != nil {
-		return nil, errors.Wrapf(err, "failed to flush writer for config.json at: '%s'", configFile)
+		return nil, fmt.Errorf("failed to flush writer for config.json at %q: %w", configFile, err)
 	}
 
 	con, err := h.rtime.CreateContainer(id, settings.OCIBundlePath, nil)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create container")
+		return nil, fmt.Errorf("failed to create container: %w", err)
 	}
 	init, err := con.GetInitProcess()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get container init process")
+		return nil, fmt.Errorf("failed to get container init process: %w", err)
 	}
 
 	c.container = con
@@ -619,7 +620,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return h.InjectFragment(ctx, r)
 	default:
-		return errors.Errorf("the ResourceType %q is not supported for UVM", req.ResourceType)
+		return fmt.Errorf("the ResourceType %q is not supported for UVM", req.ResourceType)
 	}
 }
 
@@ -633,7 +634,7 @@ func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, 
 	case guestresource.ResourceTypeContainerConstraints:
 		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	default:
-		return errors.Errorf("the ResourceType \"%s\" is not supported for containers", req.ResourceType)
+		return fmt.Errorf("the ResourceType %q is not supported for containers", req.ResourceType)
 	}
 }
 
@@ -716,7 +717,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			params.WorkingDirectory,
 		)
 		if err != nil {
-			return pid, errors.Wrapf(err, "exec is denied due to policy")
+			return pid, fmt.Errorf("exec is denied due to policy: %w", err)
 		}
 
 		// It makes no sense to allow access if stdio access is denied and the
@@ -729,7 +730,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			params.Environment = processOCIEnvToParam(envToKeep)
 		}
 
-		var tport = h.vsock
+		tport := h.vsock
 		if !allowStdioAccess {
 			tport = h.devNullTransport
 		}
@@ -769,7 +770,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 				params.OCIProcess.Capabilities,
 			)
 			if err != nil {
-				return pid, errors.Wrapf(err, "exec in container denied due to policy")
+				return pid, fmt.Errorf("exec in container denied due to policy: %w", err)
 			}
 
 			// It makes no sense to allow access if stdio access is denied and the
@@ -807,7 +808,7 @@ func (h *Host) GetExternalProcess(pid int) (Process, error) {
 func (h *Host) GetProperties(ctx context.Context, containerID string, query prot.PropertyQuery) (*prot.PropertiesV2, error) {
 	err := h.securityPolicyEnforcer.EnforceGetPropertiesPolicy(ctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get properties denied due to policy")
+		return nil, fmt.Errorf("get properties denied due to policy: %w", err)
 	}
 
 	c, err := h.GetCreatedContainer(containerID)
@@ -825,7 +826,7 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 			properties.ProcessList = make([]prot.ProcessDetails, len(pids))
 			for i, pid := range pids {
 				if outOfUint32Bounds(pid) {
-					return nil, errors.Errorf("PID (%d) exceeds uint32 bounds", pid)
+					return nil, fmt.Errorf("PID (%d) exceeds uint32 bounds", pid)
 				}
 				properties.ProcessList[i].ProcessID = uint32(pid)
 			}
@@ -844,7 +845,7 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 func (h *Host) GetStacks(ctx context.Context) (string, error) {
 	err := h.securityPolicyEnforcer.EnforceDumpStacksPolicy(ctx)
 	if err != nil {
-		return "", errors.Wrapf(err, "dump stacks denied due to policy")
+		return "", fmt.Errorf("dump stacks denied due to policy: %w", err)
 	}
 
 	return debug.DumpStacks(), nil
@@ -889,7 +890,7 @@ func (h *Host) runExternalProcess(
 		)
 		master, consolePath, err = stdio.NewConsole()
 		if err != nil {
-			return -1, errors.Wrap(err, "failed to create console for external process")
+			return -1, fmt.Errorf("failed to create console for external process: %w", err)
 		}
 		defer func() {
 			if err != nil {
@@ -898,9 +899,9 @@ func (h *Host) runExternalProcess(
 		}()
 
 		var console *os.File
-		console, err = os.OpenFile(consolePath, os.O_RDWR|syscall.O_NOCTTY, 0777)
+		console, err = os.OpenFile(consolePath, os.O_RDWR|syscall.O_NOCTTY, 0o777)
 		if err != nil {
-			return -1, errors.Wrap(err, "failed to open console file for external process")
+			return -1, fmt.Errorf("failed to open console file for external process: %w", err)
 		}
 		defer console.Close()
 
@@ -919,7 +920,7 @@ func (h *Host) runExternalProcess(
 		var fileSet *stdio.FileSet
 		fileSet, err = stdioSet.Files()
 		if err != nil {
-			return -1, errors.Wrap(err, "failed to set cmd stdio")
+			return -1, fmt.Errorf("failed to set cmd stdio: %w", err)
 		}
 		defer fileSet.Close()
 		defer stdioSet.Close()
@@ -945,7 +946,7 @@ func (h *Host) runExternalProcess(
 }
 
 func newInvalidRequestTypeError(rt guestrequest.RequestType) error {
-	return errors.Errorf("the RequestType %q is not supported", rt)
+	return fmt.Errorf("the RequestType %q is not supported", rt)
 }
 
 func modifySCSIDevice(
@@ -1000,7 +1001,7 @@ func modifyMappedVirtualDisk(
 				}
 				err = securityPolicy.EnforceDeviceMountPolicy(ctx, mvd.MountPath, deviceHash)
 				if err != nil {
-					return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
+					return fmt.Errorf("mounting scsi device controller %d lun %d onto %s denied by policy: %w", mvd.Controller, mvd.Lun, mvd.MountPath, err)
 				}
 			}
 			config := &scsi.Config{
@@ -1050,14 +1051,14 @@ func modifyMappedDirectory(
 	case guestrequest.RequestTypeAdd:
 		err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
 		if err != nil {
-			return errors.Wrapf(err, "mounting plan9 device at %s denied by policy", md.MountPath)
+			return fmt.Errorf("mounting plan9 device at %s denied by policy: %w", md.MountPath, err)
 		}
 
 		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
 	case guestrequest.RequestTypeRemove:
 		err = securityPolicy.EnforcePlan9UnmountPolicy(ctx, md.MountPath)
 		if err != nil {
-			return errors.Wrapf(err, "unmounting plan9 device at %s denied by policy", md.MountPath)
+			return fmt.Errorf("unmounting plan9 device at %s denied by policy: %w", md.MountPath, err)
 		}
 
 		return storage.UnmountPath(ctx, md.MountPath, true)
@@ -1087,13 +1088,13 @@ func modifyMappedVPMemDevice(ctx context.Context,
 	case guestrequest.RequestTypeAdd:
 		err = securityPolicy.EnforceDeviceMountPolicy(ctx, vpd.MountPath, deviceHash)
 		if err != nil {
-			return errors.Wrapf(err, "mounting pmem device %d onto %s denied by policy", vpd.DeviceNumber, vpd.MountPath)
+			return fmt.Errorf("mounting pmem device %d onto %s denied by policy: %w", vpd.DeviceNumber, vpd.MountPath, err)
 		}
 
 		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
 	case guestrequest.RequestTypeRemove:
 		if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, vpd.MountPath); err != nil {
-			return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", vpd.MountPath)
+			return fmt.Errorf("unmounting pmem device from %s denied by policy: %w", vpd.MountPath, err)
 		}
 
 		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
@@ -1147,7 +1148,7 @@ func modifyCombinedLayers(
 		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
 	case guestrequest.RequestTypeRemove:
 		if err := securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath); err != nil {
-			return errors.Wrap(err, "overlay removal denied by policy")
+			return fmt.Errorf("overlay removal denied by policy: %w", err)
 		}
 
 		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
@@ -1183,7 +1184,7 @@ func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestre
 func processParamCommandLineToOCIArgs(commandLine string) ([]string, error) {
 	args, err := shellwords.Parse(commandLine)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse command line string \"%s\"", commandLine)
+		return nil, fmt.Errorf("failed to parse command line string %q: %w", commandLine, err)
 	}
 	return args, nil
 }

@@ -5,12 +5,12 @@ package layers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 
@@ -135,7 +135,7 @@ func mountProcessIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers) (_
 	// If we got unlucky and ran into one of the two errors mentioned five times in a row and left the loop, we need to check
 	// the loop error here and fail also.
 	if lErr != nil {
-		return nil, nil, errors.Wrap(lErr, "layer retry loop failed")
+		return nil, nil, fmt.Errorf("layer retry loop failed: %w", lErr)
 	}
 
 	// If any of the below fails, we want to detach the filter and unmount the disk.
@@ -409,7 +409,7 @@ func MountSandboxVolume(ctx context.Context, hostPath, volumeName string) (err e
 	}
 
 	if err = windows.SetVolumeMountPoint(windows.StringToUTF16Ptr(hostPath), windows.StringToUTF16Ptr(volumeName)); err != nil {
-		return errors.Wrapf(err, "failed to mount sandbox volume to %s on host", hostPath)
+		return fmt.Errorf("failed to mount sandbox volume to %s on host: %w", hostPath, err)
 	}
 	return nil
 }
@@ -421,10 +421,10 @@ func RemoveSandboxMountPoint(ctx context.Context, hostPath string) error {
 	}).Debug("removing volume mount point for container")
 
 	if err := windows.DeleteVolumeMountPoint(windows.StringToUTF16Ptr(hostPath)); err != nil {
-		return errors.Wrap(err, "failed to delete sandbox volume mount point")
+		return fmt.Errorf("failed to delete sandbox volume mount point: %w", err)
 	}
 	if err := os.Remove(hostPath); err != nil {
-		return errors.Wrapf(err, "failed to remove sandbox mounted folder path %q", hostPath)
+		return fmt.Errorf("failed to remove sandbox mounted folder path %q: %w", hostPath, err)
 	}
 	return nil
 }

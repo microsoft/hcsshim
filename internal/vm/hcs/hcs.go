@@ -4,13 +4,14 @@ package hcs
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/vm"
-	"github.com/pkg/errors"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -33,28 +34,28 @@ func (uvm *utilityVM) ID() string {
 
 func (uvm *utilityVM) Start(ctx context.Context) (err error) {
 	if err := uvm.cs.Start(ctx); err != nil {
-		return errors.Wrap(err, "failed to start utility VM")
+		return fmt.Errorf("failed to start utility VM: %w", err)
 	}
 	return nil
 }
 
 func (uvm *utilityVM) Stop(ctx context.Context) error {
 	if err := uvm.cs.Terminate(ctx); err != nil {
-		return errors.Wrap(err, "failed to terminate utility VM")
+		return fmt.Errorf("failed to terminate utility VM: %w", err)
 	}
 	return nil
 }
 
 func (uvm *utilityVM) Pause(ctx context.Context) error {
 	if err := uvm.cs.Pause(ctx); err != nil {
-		return errors.Wrap(err, "failed to pause utility VM")
+		return fmt.Errorf("failed to pause utility VM: %w", err)
 	}
 	return nil
 }
 
 func (uvm *utilityVM) Resume(ctx context.Context) error {
 	if err := uvm.cs.Resume(ctx); err != nil {
-		return errors.Wrap(err, "failed to resume utility VM")
+		return fmt.Errorf("failed to resume utility VM: %w", err)
 	}
 	return nil
 }
@@ -64,7 +65,7 @@ func (uvm *utilityVM) Save(ctx context.Context) error {
 		SaveType: "AsTemplate",
 	}
 	if err := uvm.cs.Save(ctx, saveOptions); err != nil {
-		return errors.Wrap(err, "failed to save utility VM state")
+		return fmt.Errorf("failed to save utility VM state: %w", err)
 	}
 	return nil
 }

@@ -5,6 +5,8 @@ package runc
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,7 +15,7 @@ import (
 	"syscall"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
@@ -59,7 +61,7 @@ func (c *container) Start() error {
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
 		c.r.cleanupContainer(c.id) //nolint:errcheck
-		return errors.Wrapf(runcErr, "runc start failed with %v: %s", err, string(out))
+		return fmt.Errorf("runc start failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	return nil
 }
@@ -86,7 +88,7 @@ func (c *container) Kill(signal syscall.Signal) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return errors.Wrapf(runcErr, "unknown runc error after kill %v: %s", err, string(out))
+		return fmt.Errorf("unknown runc error after kill %v: %s: %w", err, string(out), runcErr)
 	}
 	return nil
 }
@@ -99,7 +101,7 @@ func (c *container) Delete() error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return errors.Wrapf(runcErr, "runc delete failed with %v: %s", err, string(out))
+		return fmt.Errorf("runc delete failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	return c.r.cleanupContainer(c.id)
 }
@@ -110,7 +112,7 @@ func (c *container) Pause() error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return errors.Wrapf(runcErr, "runc pause failed with %v: %s", err, string(out))
+		return fmt.Errorf("runc pause failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	return nil
 }
@@ -123,7 +125,7 @@ func (c *container) Resume() error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return errors.Wrapf(runcErr, "runc resume failed with %v: %s", err, string(out))
+		return fmt.Errorf("runc resume failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	return nil
 }
@@ -134,11 +136,11 @@ func (c *container) GetState() (*runtime.ContainerState, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return nil, errors.Wrapf(runcErr, "runc state failed with %v: %s", err, string(out))
+		return nil, fmt.Errorf("runc state failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	var state runtime.ContainerState
 	if err := json.Unmarshal(out, &state); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal the state for container %s", c.id)
+		return nil, fmt.Errorf("failed to unmarshal the state for container %s: %w", c.id, err)
 	}
 	return &state, nil
 }
@@ -156,7 +158,7 @@ func (c *container) Exists() (bool, error) {
 		if errors.Is(runcErr, runtime.ErrContainerDoesNotExist) {
 			return false, nil
 		}
-		return false, errors.Wrapf(runcErr, "runc state failed with %v: %s", err, string(out))
+		return false, fmt.Errorf("runc state failed with %v: %s: %w", err, string(out), runcErr)
 	}
 	return true, nil
 }
@@ -189,13 +191,13 @@ func (c *container) GetRunningProcesses() ([]runtime.ContainerProcessState, erro
 	// that the process was created by the Runtime.
 	processDirs, err := os.ReadDir(filepath.Join(containerFilesDir, c.id))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read the contents of container directory %s", filepath.Join(containerFilesDir, c.id))
+		return nil, fmt.Errorf("failed to read the contents of container directory %s: %w", filepath.Join(containerFilesDir, c.id), err)
 	}
 	for _, processDir := range processDirs {
 		if processDir.Name() != initPidFilename {
 			pid, err := strconv.Atoi(processDir.Name())
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse string \"%s\" as pid", processDir.Name())
+				return nil, fmt.Errorf("failed to parse pid: %w", err)
 			}
 			if _, ok := pidMap[pid]; ok {
 				pidMap[pid].CreatedByRuntime = true
@@ -236,7 +238,7 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 
 	processDirs, err := os.ReadDir(filepath.Join(containerFilesDir, c.id))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read the contents of container directory %s", filepath.Join(containerFilesDir, c.id))
+		return nil, fmt.Errorf("failed to read the contents of container directory: %w", err)
 	}
 	// Loop over every process state directory. Since these processes have
 	// process state directories, CreatedByRuntime will be true for all of them.
@@ -244,7 +246,7 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 		if processDir.Name() != initPidFilename {
 			pid, err := strconv.Atoi(processDir.Name())
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse string \"%s\" into pid", processDir.Name())
+				return nil, fmt.Errorf("failed to parse pid: %w", err)
 			}
 			if c.r.processExists(pid) {
 				// If the process exists in /proc and is in the pidMap, it must
@@ -317,11 +319,11 @@ func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.Conn
 
 	f, err := os.Create(filepath.Join(tempProcessDir, "process.json"))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create process.json file at %s", filepath.Join(tempProcessDir, "process.json"))
+		return nil, fmt.Errorf("failed to create process.json file at %s: %w", filepath.Join(tempProcessDir, "process.json"), err)
 	}
 	defer f.Close()
 	if err := json.NewEncoder(f).Encode(processDef); err != nil {
-		return nil, errors.Wrap(err, "failed to encode JSON into process.json file")
+		return nil, fmt.Errorf("failed to encode JSON into process.json file: %w", err)
 	}
 
 	args := []string{"exec"}
@@ -342,7 +344,7 @@ func (c *container) startProcess(
 	args := initialArgs
 
 	if err := setSubreaper(1); err != nil {
-		return nil, errors.Wrapf(err, "failed to set process as subreaper for process in container %s", c.id)
+		return nil, fmt.Errorf("failed to set process as subreaper for process in container %s: %w", c.id, err)
 	}
 	if err := c.r.makeLogDir(c.id); err != nil {
 		return nil, err
@@ -356,7 +358,7 @@ func (c *container) startProcess(
 		var consoleSockPath string
 		sockListener, consoleSockPath, err = c.r.createConsoleSocket(tempProcessDir)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create console socket for container %s", c.id)
+			return nil, fmt.Errorf("failed to create console socket for container %s: %w", c.id, err)
 		}
 		defer sockListener.Close()
 		args = append(args, "--console-socket", consoleSockPath)
@@ -369,11 +371,11 @@ func (c *container) startProcess(
 	if !hasTerminal {
 		pipeRelay, err = stdio.NewPipeRelay(stdioSet)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create a pipe relay connection set for container %s", c.id)
+			return nil, fmt.Errorf("failed to create a pipe relay connection set for container %s: %w", c.id, err)
 		}
 		fileSet, err := pipeRelay.Files()
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get files for connection set for container %s", c.id)
+			return nil, fmt.Errorf("failed to get files for connection set for container %s: %w", c.id, err)
 		}
 		// Closing the FileSet here is fine as that end of the pipes will have
 		// already been copied into the child process.
@@ -391,7 +393,7 @@ func (c *container) startProcess(
 
 	if err := cmd.Run(); err != nil {
 		runcErr := getRuncLogError(logPath)
-		return nil, errors.Wrapf(runcErr, "failed to run runc create/exec call for container %s with %v", c.id, err)
+		return nil, fmt.Errorf("failed to run runc create/exec call for container %s with %v: %w", c.id, err, runcErr)
 	}
 
 	var ttyRelay *stdio.TtyRelay
@@ -400,7 +402,7 @@ func (c *container) startProcess(
 		master, err = c.r.getMasterFromSocket(sockListener)
 		if err != nil {
 			_ = cmd.Process.Kill()
-			return nil, errors.Wrapf(err, "failed to get pty master for process in container %s", c.id)
+			return nil, fmt.Errorf("failed to get pty master for process in container %s: %w", c.id, err)
 		}
 		// Keep master open for the relay unless there is an error.
 		defer func() {
@@ -439,7 +441,7 @@ func (c *container) Update(resources interface{}) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return errors.Wrapf(runcErr, "runc update request %s failed with %v: %s", string(jsonResources), err, string(out))
+		return fmt.Errorf("runc update request %s failed with %v: %s: %w", string(jsonResources), err, string(out), runcErr)
 	}
 	return nil
 }

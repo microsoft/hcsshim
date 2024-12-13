@@ -5,10 +5,11 @@ package computestorage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 )
 
@@ -24,7 +25,7 @@ func DetachLayerStorageFilter(ctx context.Context, layerPath string) (err error)
 
 	err = hcsDetachLayerStorageFilter(layerPath)
 	if err != nil {
-		return errors.Wrap(err, "failed to detach layer storage filter")
+		return fmt.Errorf("failed to detach layer storage filter: %w", err)
 	}
 	return nil
 }
@@ -48,7 +49,7 @@ func DetachOverlayFilter(ctx context.Context, volumePath string, filterType hcss
 
 	err = hcsDetachOverlayFilter(volumePath, string(bytes))
 	if err != nil {
-		return errors.Wrap(err, "failed to detach overlay filter")
+		return fmt.Errorf("failed to detach overlay filter: %w", err)
 	}
 	return nil
 }

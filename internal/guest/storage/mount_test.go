@@ -5,10 +5,11 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"testing"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -59,7 +60,7 @@ func Test_Unmount_Stat_OtherError_Error(t *testing.T) {
 		return nil, expectedErr
 	}
 	err := UnmountPath(context.Background(), "/dev/fake", false)
-	if errors.Cause(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 }
@@ -129,7 +130,7 @@ func Test_Unmount_OtherError(t *testing.T) {
 		return expectedErr
 	}
 	err := UnmountPath(context.Background(), "/dev/fake", false)
-	if errors.Cause(err) != expectedErr { //nolint:errorlint
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 }
@@ -195,7 +196,7 @@ func Test_UnmountAllInPath_Unmount_Order(t *testing.T) {
 	timesCalled := 0
 	unixUnmount = func(target string, flags int) error {
 		if timesCalled == 0 && target != child {
-			return errors.Errorf("expected to unmount %v first, got %v", child, target)
+			return fmt.Errorf("expected to unmount %v first, got %v", child, target)
 		}
 		timesCalled += 1
 		return nil
@@ -206,7 +207,6 @@ func Test_UnmountAllInPath_Unmount_Order(t *testing.T) {
 	}
 
 	err := UnmountAllInPath(context.Background(), parent, true)
-
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}

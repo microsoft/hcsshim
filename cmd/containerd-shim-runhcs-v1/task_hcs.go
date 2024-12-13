@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +19,6 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -59,11 +59,11 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 		return nil, err
 	}
 	if ct != oci.KubernetesContainerTypeNone {
-		return nil, errors.Wrapf(
-			errdefs.ErrFailedPrecondition,
-			"cannot create standalone task, expected no annotation: '%s': got '%s'",
+		return nil, fmt.Errorf(
+			"cannot create standalone task, expected no annotation: %q, got %q: %w",
 			annotations.KubernetesContainerType,
-			ct)
+			ct,
+			errdefs.ErrFailedPrecondition)
 	}
 
 	owner := filepath.Base(os.Args[0])
@@ -102,7 +102,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 			parent.Close()
 		}
 	} else if !oci.IsWCOW(s) {
-		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
+		return nil, fmt.Errorf("oci spec does not contain WCOW or LCOW spec: %w", errdefs.ErrFailedPrecondition)
 	}
 
 	shim, err := newHcsTask(ctx, events, parent, true, req, s)
@@ -186,7 +186,8 @@ func newHcsTask(
 	parent *uvm.UtilityVM,
 	ownsParent bool,
 	req *task.CreateTaskRequest,
-	s *specs.Spec) (_ shimTask, err error) {
+	s *specs.Spec,
+) (_ shimTask, err error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"tid":        req.ID,
 		"ownsParent": ownsParent,
@@ -354,11 +355,11 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 	// If the task exists or we got a request for "" which is the init task
 	// fail.
 	if _, loaded := ht.execs.Load(req.ExecID); loaded || req.ExecID == "" {
-		return errors.Wrapf(errdefs.ErrAlreadyExists, "exec: '%s' in task: '%s' already exists", req.ExecID, ht.id)
+		return fmt.Errorf("exec: %q in task: %q: %w", req.ExecID, ht.id, errdefs.ErrAlreadyExists)
 	}
 
 	if ht.init.State() != shimExecStateRunning {
-		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
+		return fmt.Errorf("exec: \"\" in task: %q must be running to create additional execs: %w", ht.id, errdefs.ErrFailedPrecondition)
 	}
 
 	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal, ht.ioRetryTimeout)
@@ -397,7 +398,7 @@ func (ht *hcsTask) GetExec(eid string) (shimExec, error) {
 	}
 	raw, loaded := ht.execs.Load(eid)
 	if !loaded {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, ht.id)
+		return nil, fmt.Errorf("exec: %q in task: %q: %w", eid, ht.id, errdefs.ErrNotFound)
 	}
 	return raw.(shimExec), nil
 }
@@ -425,7 +426,7 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 		return err
 	}
 	if all && eid != "" {
-		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot signal all for non-empty exec: '%s'", eid)
+		return fmt.Errorf("cannot signal all for non-empty exec: %q: %w", eid, errdefs.ErrFailedPrecondition)
 	}
 	if all {
 		// We are in a kill all on the init task. Signal everything.
@@ -508,7 +509,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 		select {
 		case <-time.After(30 * time.Second):
 			log.G(ctx).Error("timed out waiting for resource cleanup")
-			return 0, 0, time.Time{}, errors.Wrap(hcs.ErrTimeout, "waiting for container resource cleanup")
+			return 0, 0, time.Time{}, fmt.Errorf("waiting for container resource cleanup: %w", hcs.ErrTimeout)
 		case <-ht.closed:
 		}
 
@@ -573,7 +574,7 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]*runhcsopts.ProcessDetails, erro
 	props, err := ht.c.Properties(ctx, schema1.PropertyTypeProcessList)
 	if err != nil {
 		if isStatsNotFound(err) {
-			return nil, errors.Wrapf(errdefs.ErrNotFound, "failed to fetch pids: %s", err)
+			return nil, fmt.Errorf("failed to fetch pids: %w: %w", err, errdefs.ErrNotFound)
 		}
 		return nil, err
 	}
@@ -827,7 +828,7 @@ func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
 	if err != nil {
 		if isStatsNotFound(err) {
-			return nil, errors.Wrapf(errdefs.ErrNotFound, "failed to fetch stats: %s", err)
+			return nil, fmt.Errorf("failed to fetch stats: %w: %w", err, errdefs.ErrNotFound)
 		}
 		return nil, err
 	}
@@ -852,7 +853,7 @@ func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) error {
 	resources, err := typeurl.UnmarshalAny(req.Resources)
 	if err != nil {
-		return errors.Wrapf(err, "failed to unmarshal resources for container %s update request", req.ID)
+		return fmt.Errorf("failed to unmarshal resources for container %q update request: %w", req.ID, err)
 	}
 
 	if err := verifyTaskUpdateResourcesType(resources); err != nil {
@@ -1024,7 +1025,7 @@ func (ht *hcsTask) updateWCOWContainerMount(ctx context.Context, resources *ctrd
 		// about the isolated case.
 		hostPath, err := fs.ResolvePath(resources.HostPath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to resolve path for hostPath %s", resources.HostPath)
+			return fmt.Errorf("failed to resolve path for hostPath %q: %w", resources.HostPath, err)
 		}
 
 		// process isolated windows container
@@ -1034,7 +1035,7 @@ func (ht *hcsTask) updateWCOWContainerMount(ctx context.Context, resources *ctrd
 			ReadOnly:      resources.ReadOnly,
 		}
 		if err := ht.requestAddContainerMount(ctx, resourcepaths.SiloMappedDirectoryResourcePath, settings); err != nil {
-			return errors.Wrapf(err, "failed to add mount to process isolated container")
+			return fmt.Errorf("failed to add mount to process isolated container: %w", err)
 		}
 	} else {
 		// if it is a mount request for a running hyperV WCOW container, we should first mount volume to the
@@ -1052,7 +1053,7 @@ func (ht *hcsTask) updateWCOWContainerMount(ctx context.Context, resources *ctrd
 			ReadOnly:      resources.ReadOnly,
 		}
 		if err := ht.requestAddContainerMount(ctx, resourcepaths.SiloMappedDirectoryResourcePath, settings); err != nil {
-			return errors.Wrapf(err, "failed to add mount to hyperV container")
+			return fmt.Errorf("failed to add mount to hyperV container: %w", err)
 		}
 	}
 	return nil

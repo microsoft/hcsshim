@@ -11,7 +11,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
@@ -305,7 +305,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}()
 
 	if err := verifyOptions(ctx, opts); err != nil {
-		return nil, errors.Wrap(err, errBadUVMOpts.Error())
+		return nil, fmt.Errorf(errBadUVMOpts.Error()+": %w", err)
 	}
 
 	doc, err := prepareConfigDoc(ctx, uvm, opts)
@@ -314,7 +314,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.ScratchVHDPath); err != nil {
-		return nil, errors.Wrap(err, "failed to grant vm access to scratch")
+		return nil, fmt.Errorf("failed to grant vm access to scratch: %w", err)
 	}
 
 	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}

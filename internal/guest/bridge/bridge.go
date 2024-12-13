@@ -13,12 +13,10 @@ import (
 	"io"
 	"math"
 	"os"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
@@ -33,7 +31,7 @@ import (
 // UnknownMessage represents the default handler logic for an unmatched request
 // type sent from the bridge.
 func UnknownMessage(r *Request) (RequestResponse, error) {
-	return nil, gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: %v", r.Header.Type), gcserr.HrNotImpl)
+	return nil, gcserr.WrapHresult(fmt.Errorf("bridge: function not supported, header type: %v", r.Header.Type), gcserr.HrNotImpl)
 }
 
 // UnknownMessageHandler creates a default HandlerFunc out of the
@@ -249,7 +247,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					if err == io.ErrUnexpectedEOF || err == os.ErrClosed { //nolint:errorlint
 						break
 					}
-					recverr = errors.Wrap(err, "bridge: failed reading message header")
+					recverr = fmt.Errorf("bridge: failed reading message header: %w", err)
 					break
 				}
 				message := make([]byte, header.Size-prot.MessageHeaderSize)
@@ -257,7 +255,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					if err == io.ErrUnexpectedEOF || err == os.ErrClosed { //nolint:errorlint
 						break
 					}
-					recverr = errors.Wrap(err, "bridge: failed reading message payload")
+					recverr = fmt.Errorf("bridge: failed reading message payload: %w", err)
 					break
 				}
 
@@ -373,17 +371,17 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 		for resp := range b.responseChan {
 			responseBytes, err := json.Marshal(resp.response)
 			if err != nil {
-				resperr = errors.Wrapf(err, "bridge: failed to marshal JSON for response \"%v\"", resp.response)
+				resperr = fmt.Errorf("bridge: failed to marshal JSON for response \"%v\": %w", resp.response, err)
 				break
 			}
 			resp.header.Size = uint32(len(responseBytes) + prot.MessageHeaderSize)
 			if err := binary.Write(bridgeOut, binary.LittleEndian, resp.header); err != nil {
-				resperr = errors.Wrap(err, "bridge: failed writing message header")
+				resperr = fmt.Errorf("bridge: failed writing message header: %w", err)
 				break
 			}
 
 			if _, err := bridgeOut.Write(responseBytes); err != nil {
-				resperr = errors.Wrap(err, "bridge: failed writing message payload")
+				resperr = fmt.Errorf("bridge: failed writing message payload: %w", err)
 				break
 			}
 
@@ -415,7 +413,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 		case <-time.After(time.Second * 5):
 			// Timeout expired first. Close the connection to unblock the read
 			if cerr := bridgeIn.Close(); cerr != nil {
-				err = errors.Wrap(cerr, "bridge: failed to close bridgeIn")
+				err = fmt.Errorf("bridge: failed to close bridgeIn: %w", cerr)
 			}
 			<-requestErrChan
 		}
@@ -455,21 +453,6 @@ func setErrorForResponseBase(response *prot.MessageResponseBase, errForResponse 
 	// (Still keep using -1 for backwards compatibility ...)
 	lineNumber := uint32(math.MaxUint32)
 	functionName := ""
-	if stack := gcserr.BaseStackTrace(errForResponse); stack != nil {
-		bottomFrame := stack[0]
-		stackString = fmt.Sprintf("%+v", stack)
-		fileName = fmt.Sprintf("%s", bottomFrame)
-		lineNumberStr := fmt.Sprintf("%d", bottomFrame)
-		if n, err := strconv.ParseUint(lineNumberStr, 10, 32); err == nil {
-			lineNumber = uint32(n)
-		} else {
-			logrus.WithFields(logrus.Fields{
-				"line-number":   lineNumberStr,
-				logrus.ErrorKey: err,
-			}).Error("opengcs::bridge::setErrorForResponseBase - failed to parse line number, using -1 instead")
-		}
-		functionName = fmt.Sprintf("%n", bottomFrame)
-	}
 	hresult, err := gcserr.GetHresult(errForResponse)
 	if err != nil {
 		// Default to using the generic failure HRESULT.

@@ -4,12 +4,13 @@ package remotevm
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os/exec"
 
 	"github.com/containerd/ttrpc"
-	"github.com/pkg/errors"
+
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -42,25 +43,25 @@ func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS
 		}
 		job, err = jobobject.Create(ctx, opts)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create job object for remotevm process")
+			return nil, fmt.Errorf("failed to create job object for remotevm process: %w", err)
 		}
 
 		cmd := exec.Command(binPath, "--ttrpc", addr)
 		p, err := cmd.StdoutPipe()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create stdout pipe")
+			return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 		}
 
 		if err := cmd.Start(); err != nil {
-			return nil, errors.Wrap(err, "failed to start remotevm server process")
+			return nil, fmt.Errorf("failed to start remotevm server process: %w", err)
 		}
 
 		if err := job.Assign(uint32(cmd.Process.Pid)); err != nil {
-			return nil, errors.Wrap(err, "failed to assign remotevm process to job")
+			return nil, fmt.Errorf("failed to assign remotevm process to job: %w", err)
 		}
 
 		if err := job.SetTerminateOnLastHandleClose(); err != nil {
-			return nil, errors.Wrap(err, "failed to set terminate on last handle closed for remotevm job object")
+			return nil, fmt.Errorf("failed to set terminate on last handle closed for remotevm job object: %w", err)
 		}
 
 		// Wait for stdout to close. This is our signal that the server is successfully up and running.
@@ -69,7 +70,7 @@ func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS
 
 	conn, err := net.Dial("unix", addr)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial remotevm address %q", addr)
+		return nil, fmt.Errorf("failed to dial remotevm address %q: %w", addr, err)
 	}
 
 	c := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
@@ -94,11 +95,11 @@ func (uvmb *utilityVMBuilder) Create(ctx context.Context) (vm.UVM, error) {
 	// Grab what capabilities the virtstack supports up front.
 	capabilities, err := uvmb.client.CapabilitiesVM(ctx, &emptypb.Empty{})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get virtstack capabilities from vmservice")
+		return nil, fmt.Errorf("failed to get virtstack capabilities from vmservice: %w", err)
 	}
 
 	if _, err := uvmb.client.CreateVM(ctx, &vmservice.CreateVMRequest{Config: uvmb.config, LogID: uvmb.id}); err != nil {
-		return nil, errors.Wrap(err, "failed to create remote VM")
+		return nil, fmt.Errorf("failed to create remote VM: %w", err)
 	}
 
 	return &utilityVM{

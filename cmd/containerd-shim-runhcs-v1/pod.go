@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +22,6 @@ import (
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -73,7 +73,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	log.G(ctx).WithField("tid", req.ID).Debug("createPod")
 
 	if osversion.Build() < osversion.RS5 {
-		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "pod support is not available on Windows versions previous to RS5 (%d)", osversion.RS5)
+		return nil, fmt.Errorf("pod support is not available on Windows versions previous to RS5 (%d): %w", osversion.RS5, errdefs.ErrFailedPrecondition)
 	}
 
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
@@ -81,20 +81,20 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		return nil, err
 	}
 	if ct != oci.KubernetesContainerTypeSandbox {
-		return nil, errors.Wrapf(
-			errdefs.ErrFailedPrecondition,
-			"expected annotation: '%s': '%s' got '%s'",
+		return nil, fmt.Errorf(
+			"expected annotation: %q: %q, got %q: %w",
 			annotations.KubernetesContainerType,
 			oci.KubernetesContainerTypeSandbox,
-			ct)
+			ct,
+			errdefs.ErrFailedPrecondition)
 	}
 	if sid != req.ID {
-		return nil, errors.Wrapf(
-			errdefs.ErrFailedPrecondition,
-			"expected annotation '%s': '%s' got '%s'",
+		return nil, fmt.Errorf(
+			"expected annotation %q: %q, got %q: %w",
 			annotations.KubernetesSandboxID,
 			req.ID,
-			sid)
+			sid,
+			errdefs.ErrFailedPrecondition)
 	}
 
 	owner := filepath.Base(os.Args[0])
@@ -168,7 +168,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		p.jobContainer = true
 		return &p, nil
 	} else if !isWCOW {
-		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
+		return nil, fmt.Errorf("oci spec does not contain WCOW or LCOW spec: %w", errdefs.ErrFailedPrecondition)
 	}
 
 	defer func() {
@@ -208,7 +208,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 
 		if nsid != "" {
 			if err := parent.ConfigureNetworking(ctx, nsid); err != nil {
-				return nil, errors.Wrapf(err, "failed to setup networking for pod %q", req.ID)
+				return nil, fmt.Errorf("failed to setup networking for pod %q: %w", req.ID, err)
 			}
 		}
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent, nsid)
@@ -297,16 +297,16 @@ func (p *pod) ID() string {
 
 func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
 	if req.ID == p.id {
-		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists", req.ID)
+		return nil, fmt.Errorf("task with id: %q: %w", req.ID, errdefs.ErrAlreadyExists)
 	}
 	e, _ := p.sandboxTask.GetExec("")
 	if e.State() != shimExecStateRunning {
-		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "task with id: '%s' cannot be created in pod: '%s' which is not running", req.ID, p.id)
+		return nil, fmt.Errorf("task with id: %q cannot be created in pod: %q which is not running: %w", req.ID, p.id, errdefs.ErrFailedPrecondition)
 	}
 
 	_, ok := p.workloadTasks.Load(req.ID)
 	if ok {
-		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists id pod: '%s'", req.ID, p.id)
+		return nil, fmt.Errorf("task with id: %q already exists in pod: %q: %w", req.ID, p.id, errdefs.ErrAlreadyExists)
 	}
 
 	if p.jobContainer {
@@ -334,20 +334,20 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		return nil, err
 	}
 	if ct != oci.KubernetesContainerTypeContainer {
-		return nil, errors.Wrapf(
-			errdefs.ErrFailedPrecondition,
-			"expected annotation: '%s': '%s' got '%s'",
+		return nil, fmt.Errorf(
+			"expected annotation: %q: %q, got %q: %w",
 			annotations.KubernetesContainerType,
 			oci.KubernetesContainerTypeContainer,
-			ct)
+			ct,
+			errdefs.ErrFailedPrecondition)
 	}
 	if sid != p.id {
-		return nil, errors.Wrapf(
-			errdefs.ErrFailedPrecondition,
-			"expected annotation '%s': '%s' got '%s'",
+		return nil, fmt.Errorf(
+			"expected annotation %q: %q, got %q: %w",
 			annotations.KubernetesSandboxID,
 			p.id,
-			sid)
+			sid,
+			errdefs.ErrFailedPrecondition)
 	}
 
 	st, err := newHcsTask(ctx, p.events, p.host, false, req, s)
@@ -365,7 +365,7 @@ func (p *pod) GetTask(tid string) (shimTask, error) {
 	}
 	raw, loaded := p.workloadTasks.Load(tid)
 	if !loaded {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", tid)
+		return nil, fmt.Errorf("task with id: %q: %w", tid, errdefs.ErrNotFound)
 	}
 	return raw.(shimTask), nil
 }
@@ -395,7 +395,7 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 		return err
 	}
 	if all && eid != "" {
-		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot signal all with non empty ExecID: '%s'", eid)
+		return fmt.Errorf("cannot signal all with non empty ExecID: %q: %w", eid, errdefs.ErrFailedPrecondition)
 	}
 	eg := errgroup.Group{}
 	if all && tid == p.id {
@@ -426,15 +426,15 @@ func (p *pod) DeleteTask(ctx context.Context, tid string) error {
 
 	t, err := p.GetTask(tid)
 	if err != nil {
-		return errors.Wrap(err, "could not find task to delete")
+		return fmt.Errorf("could not find task to delete: %w", err)
 	}
 
 	e, err := t.GetExec("")
 	if err != nil {
-		return errors.Wrap(err, "could not get initial exec")
+		return fmt.Errorf("could not get initial exec: %w", err)
 	}
 	if e.State() == shimExecStateRunning {
-		return errors.Wrap(errdefs.ErrFailedPrecondition, "cannot delete task with running exec")
+		return fmt.Errorf("cannot delete task with running exec: %w", errdefs.ErrFailedPrecondition)
 	}
 
 	if p.id != tid {

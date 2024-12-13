@@ -4,9 +4,10 @@ package computestorage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
+
 	"go.opencensus.io/trace"
 )
 
@@ -22,7 +23,7 @@ func DestroyLayer(ctx context.Context, layerPath string) (err error) {
 
 	err = hcsDestroyLayer(layerPath)
 	if err != nil {
-		return errors.Wrap(err, "failed to destroy layer")
+		return fmt.Errorf("failed to destroy layer: %w", err)
 	}
 	return nil
 }

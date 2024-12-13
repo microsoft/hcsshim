@@ -1,6 +1,8 @@
 package memory
 
-import "github.com/pkg/errors"
+import (
+	"errors"
+)
 
 type classType uint32
 

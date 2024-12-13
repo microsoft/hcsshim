@@ -6,21 +6,22 @@ package storage
 import (
 	"bufio"
 	"context"
-	gerrors "errors"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"syscall"
 
-	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
-const procMountFile = "/proc/mounts"
-const numProcMountFields = 6
+const (
+	procMountFile      = "/proc/mounts"
+	numProcMountFields = 6
+)
 
 // Test dependencies
 var (
@@ -128,14 +129,14 @@ func UnmountPath(ctx context.Context, target string, removeTarget bool) (err err
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
+		return fmt.Errorf("failed to determine if path %q exists: %w", target, err)
 	}
 
 	if err := unixUnmount(target, 0); err != nil {
 		// If `Unmount` returns `EINVAL` it's not mounted. Just delete the
 		// folder.
-		if !gerrors.Is(err, unix.EINVAL) {
-			return errors.Wrapf(err, "failed to unmount path '%s'", target)
+		if !errors.Is(err, unix.EINVAL) {
+			return fmt.Errorf("failed to unmount path %q: %w", target, err)
 		}
 	}
 	if removeTarget {
