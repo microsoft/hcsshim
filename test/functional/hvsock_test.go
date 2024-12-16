@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +20,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	testcmd "github.com/Microsoft/hcsshim/test/internal/cmd"
@@ -134,8 +133,7 @@ func TestHVSock_UVM_HostBind(t *testing.T) {
 				return err
 			})
 
-			guestPath := filepath.Join(`C:\`, filepath.Base(os.Args[0]))
-			testuvm.Share(ctx, t, vm, os.Args[0], guestPath, true)
+			guestPath := reExecSelfShareUVM(ctx, t, vm, "")
 
 			reexecCmd := fmt.Sprintf(`%s -test.run=%s`, guestPath, util.TestNameRegex(t))
 			if testing.Verbose() {
@@ -231,8 +229,7 @@ func TestHVSock_UVM_GuestBind(t *testing.T) {
 			ctx, cancel := context.WithTimeout(ctx, hvsockTestTimeout) //nolint:govet // ctx is shadowed
 			t.Cleanup(cancel)
 
-			guestPath := filepath.Join(`C:\`, filepath.Base(os.Args[0]))
-			testuvm.Share(ctx, t, vm, os.Args[0], guestPath, true)
+			guestPath := reExecSelfShareUVM(ctx, t, vm, "")
 
 			reexecCmd := fmt.Sprintf(`%s -test.run=%s`, guestPath, util.TestNameRegex(t))
 			if testing.Verbose() {
@@ -353,11 +350,7 @@ func TestHVSock_Container_HostBind(t *testing.T) {
 
 			vm := testuvm.CreateAndStart(ctx, t, opts)
 
-			guestPath := filepath.Join(`C:\`, filepath.Base(os.Args[0]))
-			reexecCmd := fmt.Sprintf(`%s -test.run=%s`, guestPath, util.TestNameRegex(t))
-			if testing.Verbose() {
-				reexecCmd += " -test.v"
-			}
+			hostPath, guestPath, reExecCmd := reExecSelfCmd(ctx, t, "")
 
 			cID := vm.ID() + "-container"
 			scratch := layers.WCOWScratchDir(ctx, t, "")
@@ -366,9 +359,9 @@ func TestHVSock_Container_HostBind(t *testing.T) {
 					testoci.WithWindowsLayerFolders(append(windowsImageLayers(ctx, t), scratch)),
 					ctrdoci.WithUsername(`NT AUTHORITY\SYSTEM`),
 					ctrdoci.WithEnv([]string{util.ReExecEnv + "=1"}),
-					ctrdoci.WithProcessCommandLine(reexecCmd),
+					ctrdoci.WithProcessCommandLine(reExecCmd),
 					ctrdoci.WithMounts([]specs.Mount{{
-						Source:      os.Args[0],
+						Source:      hostPath,
 						Destination: guestPath,
 						Options:     []string{"ro"},
 					}}),
@@ -501,11 +494,7 @@ func TestHVSock_Container_GuestBind(t *testing.T) {
 
 			vm := testuvm.CreateAndStart(ctx, t, opts)
 
-			guestPath := filepath.Join(`C:\`, filepath.Base(os.Args[0]))
-			reexecCmd := fmt.Sprintf(`%s -test.run=%s`, guestPath, util.TestNameRegex(t))
-			if testing.Verbose() {
-				reexecCmd += " -test.v"
-			}
+			hostPath, guestPath, reExecCmd := reExecSelfCmd(ctx, t, "")
 
 			cID := vm.ID() + "-container"
 			scratch := layers.WCOWScratchDir(ctx, t, "")
@@ -514,9 +503,9 @@ func TestHVSock_Container_GuestBind(t *testing.T) {
 					testoci.WithWindowsLayerFolders(append(windowsImageLayers(ctx, t), scratch)),
 					ctrdoci.WithUsername(`NT AUTHORITY\SYSTEM`),
 					ctrdoci.WithEnv([]string{util.ReExecEnv + "=1"}),
-					ctrdoci.WithProcessCommandLine(reexecCmd),
+					ctrdoci.WithProcessCommandLine(reExecCmd),
 					ctrdoci.WithMounts([]specs.Mount{{
-						Source:      os.Args[0],
+						Source:      hostPath,
 						Destination: guestPath,
 						Options:     []string{"ro"},
 					}}),
@@ -1147,4 +1136,36 @@ func goBlockT[T any](f func() T) <-chan T {
 	}()
 
 	return ch
+}
+
+// reExecSelfShareUVM shares the current testing binary directly into the specified uVM,
+//
+// This assumes that binary will be run directly on a uVM, and not from within a container.
+// For the later case, see [reExecSelfCmd].
+//
+// See [util.ReExecSelfGuestPath] for information on generating the guest path.
+func reExecSelfShareUVM(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM, base string) string {
+	tb.Helper()
+
+	self, guestPath := util.ReExecSelfGuestPath(ctx, tb, base)
+	testuvm.Share(ctx, tb, vm, self, guestPath, true)
+
+	return guestPath
+}
+
+// reExecSelfCmd returns the host and guest path for the current test binary, as well as
+// the appropriate re-exec command to configure the container spec with.
+//
+// See [reExecSelfShareUVM] for more details.
+func reExecSelfCmd(ctx context.Context, tb testing.TB, base string) (string, string, string) {
+	tb.Helper()
+
+	self, guestPath := util.ReExecSelfGuestPath(ctx, tb, base)
+	c := fmt.Sprintf(`%s -test.run=%s`, guestPath, util.TestNameRegex(tb))
+
+	if testing.Verbose() {
+		c += " -test.v"
+	}
+
+	return self, guestPath, c
 }
