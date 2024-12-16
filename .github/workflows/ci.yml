@@ -357,7 +357,7 @@ jobs:
 
           # Don't run uVM (ie, nested virt) or LCOW integrity tests
           # $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity,uVM -test.timeout=1h -test.v -log-level=info'
-          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOWIntegrity,uVM -test.timeout=1h -test.v -log-level=info'
+          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOWIntegrity,LCOW -test.timeout=1h -test.v -log-level=info'
           $cmd = $cmd -replace 'gotestsum', $gotestsum
           Write-Host "gotestsum command: $cmd"
 
