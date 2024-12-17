@@ -209,19 +209,17 @@ func mountProcessIsolatedForkedCimLayers(ctx context.Context, containerID string
 		return nil, nil, err
 	}
 
-	volume, err := cimlayer.MountCimLayer(ctx, l.layers[0].cimPath, containerID)
+	volume, err := cimlayer.MountForkedCimLayer(ctx, l.layers[0].cimPath, containerID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("mount layer cim: %w", err)
 	}
 	defer func() {
 		if err != nil {
-			_ = cimlayer.UnmountCimLayer(ctx, l.layers[0].cimPath, containerID)
+			_ = cimlayer.UnmountCimLayer(ctx, volume)
 		}
 	}()
 
-	// Use the layer path for GUID rather than the mounted volume path, so that the generated layerID
-	// remains same.
-	layerID, err := cimlayer.LayerID(l.layers[0].cimPath, containerID)
+	layerID, err := cimlayer.LayerID(volume)
 	if err != nil {
 		return nil, nil, err
 	}
