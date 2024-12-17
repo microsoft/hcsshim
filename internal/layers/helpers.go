@@ -75,8 +75,11 @@ const (
 	// parent layer CIMs
 	parentLayerCimPathsFlag = "parentCimPaths="
 
-	LegacyMountType string = "windows-layer"
-	CimFSMountType  string = "CimFS"
+	legacyMountType    string = "windows-layer"
+	forkedCIMMountType string = "CimFS"
+	blockCIMMountType  string = "BlockCIM"
+	blockCIMTypeFlag   string = "blockCIMType="
+	mergedCIMPathFlag  string = "mergedCIMPath="
 )
 
 // getOptionAsArray finds if there is an option which has the given prefix and if such an
