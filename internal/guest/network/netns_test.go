@@ -33,6 +33,13 @@ type testAddr struct {
 	maskLength int
 }
 
+type testRule struct {
+	table      int
+	priority   int
+	ip         string
+	maskLength int
+}
+
 type fakeLink struct {
 	attr *netlink.LinkAttrs
 }
@@ -124,6 +131,31 @@ func standardNetlinkAddrAdd(count *int, expected []*testAddr) func(_ netlink.Lin
 	}
 }
 
+func standardNetlinkRuleAdd(count *int, expected []*testRule) func(rule *netlink.Rule) error {
+	return func(rule *netlink.Rule) error {
+		if *count >= len(expected) {
+			return fmt.Errorf("expected to call addr add %d times, instead got %d", len(expected), *count)
+		}
+		exp := expected[*count]
+
+		if exp.table != rule.Table {
+			return fmt.Errorf("expected table to be %d, instead got %d", exp.table, rule.Table)
+		}
+		if exp.priority != rule.Priority {
+			return fmt.Errorf("expected priority to be %d, instead got %d", exp.priority, rule.Priority)
+		}
+		if exp.ip != rule.Src.IP.String() {
+			return fmt.Errorf("expected src IP to be %s, instead got %s", exp.ip, rule.Src.IP.String())
+		}
+		expectedMask := net.CIDRMask(exp.maskLength, exp.maskLength)
+		if !bytes.Equal(expectedMask, rule.Src.Mask) {
+			return fmt.Errorf("expected mask to be %s, instead got %s", expectedMask, rule.Src.Mask)
+		}
+		*count++
+		return nil
+	}
+}
+
 func Test_configureLink_IPv4(t *testing.T) {
 	ctx := context.Background()
 	link1 := newFakeLink("eth0", 0)
@@ -175,6 +207,73 @@ func Test_configureLink_IPv4(t *testing.T) {
 	}
 }
 
+func Test_configureLink_EnableLowMetric_IPv4(t *testing.T) {
+	ctx := context.Background()
+	link1 := newFakeLink("eth0", 0)
+	adapter := &guestresource.LCOWNetworkAdapter{
+		IPConfigs: []guestresource.LCOWIPConfig{
+			{
+				IPAddress:    "192.168.0.5",
+				PrefixLength: 24,
+			},
+		},
+		Routes: []guestresource.LCOWRoute{
+			{
+				NextHop:           "192.168.0.100",
+				DestinationPrefix: "0.0.0.0/0",
+			},
+		},
+		EnableLowMetric: true,
+	}
+	expectedRoutes := []*testRoute{
+		{
+			scope:    netlink.SCOPE_UNIVERSE,
+			gw:       "192.168.0.100",
+			priority: 500, // enable low metric sets the metric to 500
+		},
+	}
+	expectedAddr := []*testAddr{
+		{
+			ip:         "192.168.0.5",
+			prefixLen:  24,
+			maskLength: ipv4TotalMaskLength,
+		},
+	}
+	expectedRule := []*testRule{
+		{
+			table:      101,
+			priority:   5,
+			ip:         "192.168.0.5",
+			maskLength: ipv4TotalMaskLength,
+		},
+	}
+
+	routeAddCount := 0
+	netlinkRouteAdd = standardNetlinkRouteAdd(&routeAddCount, link1, expectedRoutes)
+
+	addrAddCount := 0
+	netlinkAddrAdd = standardNetlinkAddrAdd(&addrAddCount, expectedAddr)
+
+	ruleAddCount := 0
+	netlinkRuleAdd = standardNetlinkRuleAdd(&ruleAddCount, expectedRule)
+
+	if err := configureLink(ctx, link1, adapter); err != nil {
+		t.Fatalf("configureLink: %s", err)
+	}
+
+	if routeAddCount != len(expectedRoutes) {
+		t.Fatalf("expected to call routeAdd %d times, instead called it %d times", len(expectedRoutes), routeAddCount)
+	}
+
+	if addrAddCount != len(expectedAddr) {
+		t.Fatalf("expected to call addrAdd %d times, instead called it %d times", len(expectedAddr), addrAddCount)
+	}
+
+	if ruleAddCount != len(expectedRule) {
+		t.Fatalf("expected to call ruleAdd %d times, instead called it %d times", len(expectedRule), ruleAddCount)
+	}
+}
+
 func Test_configureLink_IPv6(t *testing.T) {
 	ctx := context.Background()
 	link1 := newFakeLink("eth0", 0)
@@ -223,6 +322,73 @@ func Test_configureLink_IPv6(t *testing.T) {
 
 	if addrAddCount != len(expectedAddr) {
 		t.Fatalf("expected to call addrAdd %d times, instead called it %d times", len(expectedAddr), addrAddCount)
+	}
+}
+
+func Test_configureLink_EnableLowMetric_IPv6(t *testing.T) {
+	ctx := context.Background()
+	link1 := newFakeLink("eth0", 0)
+	adapter := &guestresource.LCOWNetworkAdapter{
+		IPConfigs: []guestresource.LCOWIPConfig{
+			{
+				IPAddress:    "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:30a6",
+				PrefixLength: 64,
+			},
+		},
+		Routes: []guestresource.LCOWRoute{
+			{
+				NextHop:           "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:aaaa",
+				DestinationPrefix: "::/0",
+			},
+		},
+		EnableLowMetric: true,
+	}
+	expectedRoutes := []*testRoute{
+		{
+			scope:    netlink.SCOPE_UNIVERSE,
+			gw:       "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:aaaa",
+			priority: 500, // enable low metric sets the metric to 500
+		},
+	}
+	expectedAddr := []*testAddr{
+		{
+			ip:         "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:30a6",
+			prefixLen:  64,
+			maskLength: ipv6TotalMaskLength,
+		},
+	}
+	expectedRule := []*testRule{
+		{
+			table:      101,
+			priority:   5,
+			ip:         "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:30a6",
+			maskLength: ipv6TotalMaskLength,
+		},
+	}
+
+	routeAddCount := 0
+	netlinkRouteAdd = standardNetlinkRouteAdd(&routeAddCount, link1, expectedRoutes)
+
+	addrAddCount := 0
+	netlinkAddrAdd = standardNetlinkAddrAdd(&addrAddCount, expectedAddr)
+
+	ruleAddCount := 0
+	netlinkRuleAdd = standardNetlinkRuleAdd(&ruleAddCount, expectedRule)
+
+	if err := configureLink(ctx, link1, adapter); err != nil {
+		t.Fatalf("configureLink: %s", err)
+	}
+
+	if routeAddCount != len(expectedRoutes) {
+		t.Fatalf("expected to call routeAdd %d times, instead called it %d times", len(expectedRoutes), routeAddCount)
+	}
+
+	if addrAddCount != len(expectedAddr) {
+		t.Fatalf("expected to call addrAdd %d times, instead called it %d times", len(expectedAddr), addrAddCount)
+	}
+
+	if ruleAddCount != len(expectedRule) {
+		t.Fatalf("expected to call ruleAdd %d times, instead called it %d times", len(expectedRule), ruleAddCount)
 	}
 }
 

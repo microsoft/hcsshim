@@ -555,7 +555,7 @@ func getNetworkModifyRequest(adapterID string, requestType guestrequest.RequestT
 
 // convertToLCOWReq converts the HCN endpoint type to the guestresource.LCOWNetworkAdapter type that is
 // passed to the GCS for a request.
-func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint) (*guestresource.LCOWNetworkAdapter, error) {
+func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint, policyBasedRouting bool) (*guestresource.LCOWNetworkAdapter, error) {
 	req := &guestresource.LCOWNetworkAdapter{
 		NamespaceID: endpoint.HostComputeNamespace,
 		ID:          id,
@@ -597,6 +597,8 @@ func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint) (*guestresou
 			req.EncapOverhead = settings.Overhead
 		}
 	}
+
+	req.PolicyBasedRouting = policyBasedRouting
 
 	return req, nil
 }
@@ -640,7 +642,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hcn.HostC
 				nil),
 		}
 	} else {
-		s, err := convertToLCOWReq(id, endpoint)
+		s, err := convertToLCOWReq(id, endpoint, uvm.policyBasedRouting)
 		if err != nil {
 			return err
 		}

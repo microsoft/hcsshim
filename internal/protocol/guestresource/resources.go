@@ -160,6 +160,12 @@ type LCOWNetworkAdapter struct {
 	VPCIAssigned  bool           `json:",omitempty"`
 	IPConfigs     []LCOWIPConfig `json:",omitempty"`
 	Routes        []LCOWRoute    `json:",omitempty"`
+	// PolicyBasedRouting determines if we should use old policy based routing in the
+	// guest when configuring the endpoint.
+	PolicyBasedRouting bool `json:",omitempty"`
+	// EnableLowMetric is ONLY used by the guest when PolicyBasedRouting is set to
+	// indicate which endpoints should be added with a low metric (higher number).
+	EnableLowMetric bool `json:",omitempty"`
 }
 
 type LCOWIPConfig struct {

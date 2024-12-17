@@ -214,7 +214,10 @@ func (n *namespace) Sync(ctx context.Context) (err error) {
 	defer n.m.Unlock()
 
 	if n.pid != 0 {
-		for _, a := range n.nics {
+		for i, a := range n.nics {
+			if a.adapter.PolicyBasedRouting && i > 0 {
+				a.adapter.EnableLowMetric = true
+			}
 			err = a.assignToPid(ctx, n.pid)
 			if err != nil {
 				return err

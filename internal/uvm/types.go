@@ -139,6 +139,9 @@ type UtilityVM struct {
 
 	// confidentialUVMOptions hold confidential UVM specific options
 	confidentialUVMOptions *ConfidentialOptions
+
+	// LCOW only. Indicates whether to use policy based routing when configuring net interfaces in the guest.
+	policyBasedRouting bool
 }
 
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {

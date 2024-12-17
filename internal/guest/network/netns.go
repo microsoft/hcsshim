@@ -25,6 +25,7 @@ var (
 	// function definitions for mocking configureLink
 	netlinkAddrAdd  = netlink.AddrAdd
 	netlinkRouteAdd = netlink.RouteAdd
+	netlinkRuleAdd  = netlink.RuleAdd
 )
 
 const (
@@ -191,6 +192,7 @@ func configureLink(ctx context.Context,
 	link netlink.Link,
 	adapter *guestresource.LCOWNetworkAdapter,
 ) error {
+	var table int
 	for _, ipConfig := range adapter.IPConfigs {
 		log.G(ctx).WithFields(logrus.Fields{
 			"link":      link.Attrs().Name,
@@ -212,6 +214,25 @@ func configureLink(ctx context.Context,
 		ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
 		if err := netlinkAddrAdd(link, ipAddr); err != nil {
 			return fmt.Errorf("netlink.AddrAdd(%#v, %#v) failed: %w", link, ipAddr, err)
+		}
+
+		if adapter.EnableLowMetric {
+			// add a route rule for the new interface so packets coming on this interface
+			// always go out the same interface
+			_, ml := addr.Mask.Size()
+			srcNet := &net.IPNet{
+				IP:   net.ParseIP(ipConfig.IPAddress),
+				Mask: net.CIDRMask(ml, ml),
+			}
+			rule := netlink.NewRule()
+			rule.Table = 101
+			rule.Src = srcNet
+			rule.Priority = 5
+
+			if err := netlinkRuleAdd(rule); err != nil {
+				return errors.Wrapf(err, "netlink.RuleAdd(%#v) failed", rule)
+			}
+			table = rule.Table
 		}
 	}
 
@@ -242,12 +263,20 @@ func configureLink(ctx context.Context,
 			return fmt.Errorf("gw and destination cannot both be nil")
 		}
 
+		metric := int(r.Metric)
+		if adapter.EnableLowMetric && r.Metric == 0 {
+			// set a low metric only if the endpoint didn't already have a metric
+			// configured
+			metric = 500
+		}
 		route := netlink.Route{
 			Scope:     netlink.SCOPE_UNIVERSE,
 			LinkIndex: link.Attrs().Index,
 			Gw:        gw,
 			Dst:       dst,
-			Priority:  int(r.Metric),
+			Priority:  metric,
+			// table will be set to 101 for the legacy policy based routing support
+			Table: table,
 		}
 		if err := netlinkRouteAdd(&route); err != nil {
 			// unfortunately, netlink library doesn't have great error handling,
