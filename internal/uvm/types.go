@@ -11,9 +11,9 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
@@ -25,7 +25,7 @@ import (
 
 type nicInfo struct {
 	ID       string
-	Endpoint *hns.HNSEndpoint
+	Endpoint *hcn.HostComputeEndpoint
 }
 
 type namespaceInfo struct {
@@ -139,6 +139,9 @@ type UtilityVM struct {
 
 	// confidentialUVMOptions hold confidential UVM specific options
 	confidentialUVMOptions *ConfidentialOptions
+
+	// LCOW only. Indicates whether to use policy based routing when configuring net interfaces in the guest.
+	policyBasedRouting bool
 }
 
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {

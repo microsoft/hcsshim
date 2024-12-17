@@ -331,7 +331,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 
 		// Add devices on the spec to the UVM's options
 		lopts.AssignedDevices = parseDevices(ctx, s.Windows)
-
+		lopts.PolicyBasedRouting = ParseAnnotationsBool(ctx, s.Annotations, annotations.NetworkingPolicyBasedRouting, lopts.PolicyBasedRouting)
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)

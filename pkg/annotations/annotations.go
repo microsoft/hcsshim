@@ -343,6 +343,11 @@ const (
 	// number of memory blocks at slice index 1, etc.
 	// This should be used for explicit vNUMA topology.
 	NumaCountOfMemoryBlocks = "io.microsoft.virtualmachine.computetopology.numa.count-of-memory-blocks"
+
+	// NetworkingPolicyBasedRouting toggles on the ability to set naive policy based routing
+	// in the guest for LCOW. This support should either be extended or removed in the near
+	// future based on customer experience.
+	NetworkingPolicyBasedRouting = "io.microsoft.virtualmachine.lcow.network.policybasedrouting"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of
