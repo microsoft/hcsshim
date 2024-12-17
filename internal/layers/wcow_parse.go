@@ -5,15 +5,18 @@ package layers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/containerd/containerd/api/types"
 
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
+	"github.com/Microsoft/hcsshim/pkg/cimfs"
 )
 
 // WCOW image layers is a tagging interface that all WCOW layers MUST implement. This is
@@ -67,6 +70,17 @@ type wcowForkedCIMLayers struct {
 	layers []forkedCIMLayer
 }
 
+// Represents CIM layers where each layer is stored in a block device or in a single file
+// and multiple such layer CIMs are merged before mounting them. Currently can only be
+// used for process isolated containers.
+type wcowBlockCIMLayers struct {
+	scratchLayerData
+	// parent layers in order [layerN (top-most), layerN-1,..layer0 (base)]
+	parentLayers []*cimfs.BlockCIM
+	// a merged layer is prepared by combining all parent layers
+	mergedLayer *cimfs.BlockCIM
+}
+
 func parseForkedCimMount(m *types.Mount) (*wcowForkedCIMLayers, error) {
 	parentLayerPaths, err := getOptionAsArray(m, parentLayerPathsFlag)
 	if err != nil {
@@ -94,8 +108,77 @@ func parseForkedCimMount(m *types.Mount) (*wcowForkedCIMLayers, error) {
 	}, nil
 }
 
-// ParseWCOWLayers parses the layers provided by containerd into the format understood by hcsshim and prepares
-// them for mounting.
+// TODO(ambarve): The code to parse a mount type should be in a separate package/module
+// somewhere and then should be consumed by both hcsshim & containerd from there.
+func parseBlockCIMMount(m *types.Mount) (*wcowBlockCIMLayers, error) {
+	var (
+		parentPaths   []string
+		layerType     cimfs.BlockCIMType
+		mergedCIMPath string
+	)
+
+	for _, option := range m.Options {
+		if val, ok := strings.CutPrefix(option, parentLayerCimPathsFlag); ok {
+			err := json.Unmarshal([]byte(val), &parentPaths)
+			if err != nil {
+				return nil, err
+			}
+		} else if val, ok = strings.CutPrefix(option, blockCIMTypeFlag); ok {
+			if val == "device" {
+				layerType = cimfs.BlockCIMTypeDevice
+			} else if val == "file" {
+				layerType = cimfs.BlockCIMTypeSingleFile
+			} else {
+				return nil, fmt.Errorf("invalid block CIM type `%s`", val)
+			}
+		} else if val, ok = strings.CutPrefix(option, mergedCIMPathFlag); ok {
+			mergedCIMPath = val
+		}
+	}
+
+	if len(parentPaths) == 0 {
+		return nil, fmt.Errorf("need at least 1 parent layer")
+	}
+	if layerType == cimfs.BlockCIMTypeNone {
+		return nil, fmt.Errorf("BlockCIM type not provided")
+	}
+	if mergedCIMPath == "" && len(parentPaths) > 1 {
+		return nil, fmt.Errorf("merged CIM path not provided")
+	}
+
+	var (
+		parentLayers []*cimfs.BlockCIM
+		mergedLayer  *cimfs.BlockCIM
+	)
+
+	if len(parentPaths) > 1 {
+		// for single parent layers merge won't be done
+		mergedLayer = &cimfs.BlockCIM{
+			Type:      layerType,
+			BlockPath: filepath.Dir(mergedCIMPath),
+			CimName:   filepath.Base(mergedCIMPath),
+		}
+	}
+
+	for _, p := range parentPaths {
+		parentLayers = append(parentLayers, &cimfs.BlockCIM{
+			Type:      layerType,
+			BlockPath: filepath.Dir(p),
+			CimName:   filepath.Base(p),
+		})
+	}
+
+	return &wcowBlockCIMLayers{
+		scratchLayerData: scratchLayerData{
+			scratchLayerPath: m.Source,
+		},
+		parentLayers: parentLayers,
+		mergedLayer:  mergedLayer,
+	}, nil
+}
+
+// ParseWCOWLayers parses the layers provided by containerd into the format understood by
+// hcsshim and prepares them for mounting.
 func ParseWCOWLayers(rootfs []*types.Mount, layerFolders []string) (WCOWLayers, error) {
 	if err := validateRootfsAndLayers(rootfs, layerFolders); err != nil {
 		return nil, err
@@ -112,7 +195,7 @@ func ParseWCOWLayers(rootfs []*types.Mount, layerFolders []string) (WCOWLayers, 
 
 	m := rootfs[0]
 	switch m.Type {
-	case LegacyMountType:
+	case legacyMountType:
 		parentLayers, err := getOptionAsArray(m, parentLayerPathsFlag)
 		if err != nil {
 			return nil, err
@@ -123,8 +206,10 @@ func ParseWCOWLayers(rootfs []*types.Mount, layerFolders []string) (WCOWLayers, 
 			},
 			layerPaths: parentLayers,
 		}, nil
-	case CimFSMountType:
+	case forkedCIMMountType:
 		return parseForkedCimMount(m)
+	case blockCIMMountType:
+		return parseBlockCIMMount(m)
 	default:
 		return nil, fmt.Errorf("invalid windows mount type: '%s'", m.Type)
 	}
@@ -146,7 +231,7 @@ func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, l
 	} else {
 		m := rootfs[0]
 		switch m.Type {
-		case LegacyMountType:
+		case legacyMountType:
 			parentLayers, err = getOptionAsArray(m, parentLayerPathsFlag)
 			if err != nil {
 				return nil, err
