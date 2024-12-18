@@ -14,7 +14,7 @@ env:
 
 jobs:
   lint:
-    runs-on: "windows-2022"
+    runs-on: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2022-containers-enabled]
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +49,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
 
   protos:
-    runs-on: "windows-2022"
+    runs-on: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2022-containers-enabled]
 
     env:
       # translating from github.com/Microsoft/hcsshim/<path> (via `go list`) to <path> is easier if hcsshim is in GOPATH/src
@@ -112,7 +112,7 @@ jobs:
         working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
 
   verify-vendor:
-    runs-on: "windows-2022"
+    runs-on: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2022-containers-enabled]
     env:
       GOPROXY: "https://proxy.golang.org,direct"
     steps:
@@ -179,7 +179,7 @@ jobs:
 
   go-gen:
     name: Go Generate
-    runs-on: "windows-2022"
+    runs-on: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2022-containers-enabled]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -234,7 +234,7 @@ jobs:
 
   test-linux:
     needs: [lint, protos, verify-vendor, go-gen]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=ubuntu-22-04-with-pwsh]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -267,11 +267,13 @@ jobs:
 
   test-windows:
     needs: [lint, protos, verify-vendor, go-gen]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2019, windows-2022]
+        runner:
+          - [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2022-containers-enabled]
+          - [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2019-containers-enabled]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -354,7 +356,8 @@ jobs:
           }
 
           # Don't run uVM (ie, nested virt) or LCOW integrity tests
-          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity,uVM -test.timeout=1h -test.v -log-level=info'
+          # $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity,uVM -test.timeout=1h -test.v -log-level=info'
+          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOWIntegrity,LCOW -test.timeout=1h -test.v -log-level=info'
           $cmd = $cmd -replace 'gotestsum', $gotestsum
           Write-Host "gotestsum command: $cmd"
 
@@ -393,12 +396,13 @@ jobs:
 
   integration-tests:
     needs: [lint, protos, verify-vendor, go-gen]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2019, windows-2022]
-
+        runner:
+          - [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2022-containers-enabled]
+          - [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=mms-ws2019-containers-enabled]
     steps:
       - name: Checkout hcsshim
         uses: actions/checkout@v4
