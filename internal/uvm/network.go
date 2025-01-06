@@ -560,6 +560,8 @@ func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint, policyBasedR
 		NamespaceID: endpoint.HostComputeNamespace,
 		ID:          id,
 		MacAddress:  endpoint.MacAddress,
+		IPConfigs:   make([]guestresource.LCOWIPConfig, 0, len(endpoint.IpConfigurations)),
+		Routes:      make([]guestresource.LCOWRoute, 0, len(endpoint.Routes)),
 	}
 
 	for _, i := range endpoint.IpConfigurations {
@@ -567,16 +569,10 @@ func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint, policyBasedR
 			IPAddress:    i.IpAddress,
 			PrefixLength: i.PrefixLength,
 		}
-		if req.IPConfigs == nil {
-			req.IPConfigs = make([]guestresource.LCOWIPConfig, 0)
-		}
 		req.IPConfigs = append(req.IPConfigs, ipConfig)
 	}
 
 	for _, r := range endpoint.Routes {
-		if req.Routes == nil {
-			req.Routes = make([]guestresource.LCOWRoute, 0)
-		}
 		newRoute := guestresource.LCOWRoute{
 			DestinationPrefix: r.DestinationPrefix,
 			NextHop:           r.NextHop,

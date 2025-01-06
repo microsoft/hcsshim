@@ -215,8 +215,8 @@ func (n *namespace) Sync(ctx context.Context) (err error) {
 
 	if n.pid != 0 {
 		for i, a := range n.nics {
-			if a.adapter.PolicyBasedRouting && i > 0 {
-				a.adapter.EnableLowMetric = true
+			if a.adapter.PolicyBasedRouting {
+				a.adapter.EnableLowMetric = (i > 0)
 			}
 			err = a.assignToPid(ctx, n.pid)
 			if err != nil {

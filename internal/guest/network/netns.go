@@ -34,7 +34,7 @@ const (
 	ipv6GwDestination = "::/0"
 	ipv6EmptyGw       = "::"
 
-	unreachableErr = "network is unreachable"
+	unreachableErrStr = "network is unreachable"
 )
 
 // MoveInterfaceToNS moves the adapter with interface name `ifStr` to the network namespace
@@ -281,7 +281,7 @@ func configureLink(ctx context.Context,
 		if err := netlinkRouteAdd(&route); err != nil {
 			// unfortunately, netlink library doesn't have great error handling,
 			// so we have to rely on the string error here
-			if strings.Contains(err.Error(), unreachableErr) && gw != nil {
+			if strings.Contains(err.Error(), unreachableErrStr) && gw != nil {
 				// In the case that a gw is not part of the subnet we are setting gw for,
 				// a new addr containing this gw address needs to be added into the link to avoid getting
 				// unreachable error when adding this out-of-subnet gw route

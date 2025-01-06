@@ -72,7 +72,7 @@ func unreachableNetlinkRouteAdd(count *int, link netlink.Link, expected []*testR
 		if err := f(route); err != nil {
 			return err
 		}
-		return fmt.Errorf(unreachableErr)
+		return fmt.Errorf(unreachableErrStr)
 	}
 }
 
@@ -169,7 +169,7 @@ func Test_configureLink_IPv4(t *testing.T) {
 		Routes: []guestresource.LCOWRoute{
 			{
 				NextHop:           "192.168.0.100",
-				DestinationPrefix: "0.0.0.0/0",
+				DestinationPrefix: ipv4GwDestination,
 			},
 		},
 	}
@@ -220,7 +220,7 @@ func Test_configureLink_EnableLowMetric_IPv4(t *testing.T) {
 		Routes: []guestresource.LCOWRoute{
 			{
 				NextHop:           "192.168.0.100",
-				DestinationPrefix: "0.0.0.0/0",
+				DestinationPrefix: ipv4GwDestination,
 			},
 		},
 		EnableLowMetric: true,
@@ -287,7 +287,7 @@ func Test_configureLink_IPv6(t *testing.T) {
 		Routes: []guestresource.LCOWRoute{
 			{
 				NextHop:           "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:aaaa",
-				DestinationPrefix: "::/0",
+				DestinationPrefix: ipv6GwDestination,
 			},
 		},
 	}
@@ -338,7 +338,7 @@ func Test_configureLink_EnableLowMetric_IPv6(t *testing.T) {
 		Routes: []guestresource.LCOWRoute{
 			{
 				NextHop:           "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:aaaa",
-				DestinationPrefix: "::/0",
+				DestinationPrefix: ipv6GwDestination,
 			},
 		},
 		EnableLowMetric: true,
@@ -411,11 +411,11 @@ func Test_configureLink_IPv4AndIPv6(t *testing.T) {
 		Routes: []guestresource.LCOWRoute{
 			{
 				NextHop:           "192.168.0.100",
-				DestinationPrefix: "0.0.0.0/0",
+				DestinationPrefix: ipv4GwDestination,
 			},
 			{
 				NextHop:           "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:aaaa",
-				DestinationPrefix: "::/0",
+				DestinationPrefix: ipv6GwDestination,
 			},
 		},
 	}
@@ -538,7 +538,7 @@ func Test_configureLink_GatewayOutsideSubnet_IPv4(t *testing.T) {
 		Routes: []guestresource.LCOWRoute{
 			{
 				NextHop:           "10.0.0.2",
-				DestinationPrefix: "0.0.0.0/0",
+				DestinationPrefix: ipv4GwDestination,
 			},
 		},
 	}
@@ -578,7 +578,7 @@ func Test_configureLink_GatewayOutsideSubnet_IPv4(t *testing.T) {
 	netlinkAddrAdd = standardNetlinkAddrAdd(&addrAddCount, expectedAddr)
 
 	err := configureLink(ctx, link1, adapter)
-	if err == nil || !strings.Contains(err.Error(), unreachableErr) {
+	if err == nil || !strings.Contains(err.Error(), unreachableErrStr) {
 		t.Fatalf("expected an error from configureLink: %s", err)
 	}
 
@@ -604,7 +604,7 @@ func Test_configureLink_GatewayOutsideSubnet_IPv6(t *testing.T) {
 		Routes: []guestresource.LCOWRoute{
 			{
 				NextHop:           "9999:a2d4:f0f3:18ff:c868:26ce:e9c4:aaaa",
-				DestinationPrefix: "::/0",
+				DestinationPrefix: ipv6GwDestination,
 			},
 		},
 	}
@@ -644,7 +644,7 @@ func Test_configureLink_GatewayOutsideSubnet_IPv6(t *testing.T) {
 	netlinkAddrAdd = standardNetlinkAddrAdd(&addrAddCount, expectedAddr)
 
 	err := configureLink(ctx, link1, adapter)
-	if err == nil || !strings.Contains(err.Error(), unreachableErr) {
+	if err == nil || !strings.Contains(err.Error(), unreachableErrStr) {
 		t.Fatalf("expected an error from configureLink: %s", err)
 	}
 
@@ -669,12 +669,12 @@ func Test_configureLink_MultiRoute_IPv4(t *testing.T) {
 		},
 		Routes: []guestresource.LCOWRoute{
 			{
-				NextHop:           "0.0.0.0",
-				DestinationPrefix: "0.0.0.0/0",
+				NextHop:           ipv4EmptyGw,
+				DestinationPrefix: ipv4GwDestination,
 			},
 			{
 				NextHop:           "192.168.0.100",
-				DestinationPrefix: "0.0.0.0/0",
+				DestinationPrefix: ipv4GwDestination,
 			},
 			{
 				NextHop:           "192.168.0.5",
@@ -742,12 +742,12 @@ func Test_configureLink_MultiRoute_IPv6(t *testing.T) {
 		},
 		Routes: []guestresource.LCOWRoute{
 			{
-				NextHop:           "::",
-				DestinationPrefix: "::/0",
+				NextHop:           ipv6EmptyGw,
+				DestinationPrefix: ipv6GwDestination,
 			},
 			{
 				NextHop:           "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:aaaa",
-				DestinationPrefix: "::/0",
+				DestinationPrefix: ipv6GwDestination,
 			},
 			{
 				NextHop:           "9541:a2d4:f0f3:18ff:c868:26ce:e9c4:cccc",
