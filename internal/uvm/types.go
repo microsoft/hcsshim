@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
@@ -140,8 +141,7 @@ type UtilityVM struct {
 	// confidentialUVMOptions hold confidential UVM specific options
 	confidentialUVMOptions *ConfidentialOptions
 
-	// WCOWconfidentialUVMOptions hold confidential UVM specific options
-	WCOWconfidentialUVMOptions *WCOWConfidentialOptions
+	WCOWconfidentialUVMOptions *guestresource.WCOWConfidentialOptions
 }
 
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
