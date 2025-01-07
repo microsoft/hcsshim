@@ -62,7 +62,7 @@ func (b *Bridge) createContainer(req *request) error {
 
 	// If we've reached here, means the policy has allowed operation.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return err
 }
@@ -79,7 +79,7 @@ func (b *Bridge) startContainer(req *request) error {
 	// err = call policyEnforcer
 	// return on err
 
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -98,7 +98,7 @@ func (b *Bridge) shutdownGraceful(req *request) error {
 			return fmt.Errorf("rpcShudownGraceful operation not allowed: %v", err)
 		}
 	*/
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -120,7 +120,7 @@ func (b *Bridge) shutdownForced(req *request) error {
 		}
 	*/
 
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -147,7 +147,7 @@ func (b *Bridge) executeProcess(req *request) error {
 	log.Printf("rpcExecProcess: \n containerID: %v, schema1.ProcessParameters{ params: %v, stdioRelaySettings: %v, vsockStdioRelaySettings: %v }", containerID, processParams, stdioRelaySettings, vsockStdioRelaySettings)
 	// err = call policy enforcer
 
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return err
 }
@@ -163,7 +163,7 @@ func (b *Bridge) waitForProcess(req *request) error {
 
 	// waitForProcess does not have enforcer in clcow, why?
 
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -181,7 +181,7 @@ func (b *Bridge) signalProcess(req *request) error {
 
 	var wcowOptions guestresource.SignalProcessOptionsWCOW
 	if rawOpts == nil {
-		b.sendToGCSChan <- *req
+		b.sendToGCSCh <- *req
 		return nil
 	} else if err = json.Unmarshal(rawOpts, &wcowOptions); err != nil {
 		log.Printf("rpcSignalProcess: invalid Options type for request %v", r)
@@ -197,7 +197,7 @@ func (b *Bridge) signalProcess(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -217,7 +217,7 @@ func (b *Bridge) resizeConsole(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -468,7 +468,7 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 
 	// If we are here, there is no error and we want to
 	// forward the message to inbox GCS
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 	//, skipSendToGCS
@@ -548,7 +548,7 @@ func (b *Bridge) negotiateProtocol(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -563,7 +563,7 @@ func (b *Bridge) dumpStacks(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -578,7 +578,7 @@ func (b *Bridge) deleteContainerState(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -588,7 +588,7 @@ func (b *Bridge) updateContainer(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
@@ -598,7 +598,7 @@ func (b *Bridge) lifecycleNotification(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.sendToGCSChan <- *req
+	b.sendToGCSCh <- *req
 
 	return nil
 }
