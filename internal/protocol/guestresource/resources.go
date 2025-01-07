@@ -198,7 +198,15 @@ type LCOWSecurityPolicyFragment struct {
 
 // TODO (Mahati): Move this out later: WCOWConfidentialOptions is used to set various confidential container specific
 // options.
+// TODO(kiashok): ***Copy of this is maintained in cmd/gcs-sidecar/internal/protocol/guestresource/resources.go***
+// for use in cmd/gcs-sidecar package. Please ensure to update the struct there if `WCOWConfidentialOptions`
+// is update here!
 type WCOWConfidentialOptions struct {
 	EnforcerType          string `json:"EnforcerType,omitempty"`
 	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
+
+	WCOWSecurityPolicy         string // Optional security policy
+	WCOWSecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	WCOWSecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
+	//WCOWUVMReferenceInfoFile   string // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
 }

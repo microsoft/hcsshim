@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/security"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
@@ -28,17 +29,10 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
-type WCOWConfidentialOptions struct {
-	WCOWSecurityPolicy         string // Optional security policy
-	WCOWSecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	WCOWSecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
-	//WCOWUVMReferenceInfoFile   string // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
-}
-
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
 type OptionsWCOW struct {
 	*Options
-	*WCOWConfidentialOptions
+	*guestresource.WCOWConfidentialOptions
 
 	BootFiles *WCOWBootFiles
 
@@ -63,7 +57,7 @@ func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 	return &OptionsWCOW{
 		Options:                newDefaultOptions(id, owner),
 		AdditionalRegistryKeys: []hcsschema.RegistryValue{},
-		WCOWConfidentialOptions: &WCOWConfidentialOptions{
+		WCOWConfidentialOptions: &guestresource.WCOWConfidentialOptions{
 			WCOWSecurityPolicyEnabled: false,
 		},
 	}

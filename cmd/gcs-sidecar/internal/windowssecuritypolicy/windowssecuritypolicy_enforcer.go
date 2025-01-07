@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"syscall"
@@ -163,6 +164,7 @@ func CreateSecurityPolicyEnforcer(
 		enforcer = defaultEnforcer
 		if base64EncodedPolicy == "" {
 			enforcer = openDoorEnforcer
+			log.Printf("Setting opendoorEnforcer \n")
 		}
 	}
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
@@ -269,7 +271,6 @@ func stringSlicesEqual(slice1, slice2 []string) bool {
 	}
 	return true
 }
-
 
 type OpenDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string
