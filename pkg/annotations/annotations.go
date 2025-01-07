@@ -328,6 +328,7 @@ const (
 
 // uVM NUMA annotations.
 const (
+	// NumaMaximumProcessorsPerNode is the maximum number of processors per vNUMA node.
 	// This should be used for implicit vNUMA topology.
 	NumaMaximumProcessorsPerNode = "io.microsoft.virtualmachine.computetopology.processor.numa.max-processors-per-node"
 

@@ -90,6 +90,7 @@ func createInterpreter() *rpi.RegoPolicyInterpreter {
 	}
 
 	r, err := rpi.NewRegoPolicyInterpreter(policyCode, data)
+	r.UpdateOSType("linux")
 	if err != nil {
 		log.Fatal(err)
 	}

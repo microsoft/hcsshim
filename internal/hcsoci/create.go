@@ -23,6 +23,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -264,10 +265,25 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			// v1 Argon or Xenon. Pass the document directly to HCS.
 			hcsDocument = v1
 		} else if coi.HostingSystem != nil {
-			// v2 Xenon. Pass the container object to the UVM.
-			gcsDocument = &hcsschema.HostedSystem{
-				SchemaVersion: schemaversion.SchemaV21(),
-				Container:     v2,
+			isCWCOWUVM := false
+			if createOptions.HostingSystem.WCOWconfidentialUVMOptions != nil {
+				isCWCOWUVM = true
+			}
+			if isCWCOWUVM {
+				// confidential wcow uvm
+				gcsDocument = &guestresource.CWCOWHostedSystem{
+					Spec: *createOptions.Spec,
+					CWCOWHostedSystem: hcsschema.HostedSystem{
+						SchemaVersion: schemaversion.SchemaV21(),
+						Container:     v2,
+					},
+				}
+			} else {
+				// v2 Xenon. Pass the container object to the UVM.
+				gcsDocument = &hcsschema.HostedSystem{
+					SchemaVersion: schemaversion.SchemaV21(),
+					Container:     v2,
+				}
 			}
 		} else {
 			// v2 Argon. Pass the container object to the HCS.
