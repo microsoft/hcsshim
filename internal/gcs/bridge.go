@@ -321,7 +321,7 @@ func (brdg *bridge) recvLoop() error {
 			}
 			err := json.Unmarshal(b, call.resp)
 			if err != nil {
-				err = fmt.Errorf("bridge response unmarshal failed: %w", err)
+				err = fmt.Errorf("bridge response unmarshal failed: %w, bytes %v", err, string(b))
 			} else if resp := call.resp.Base(); resp.Result != 0 {
 				for _, rec := range resp.ErrorRecords {
 					brdg.log.WithFields(logrus.Fields{

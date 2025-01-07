@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -246,6 +249,33 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}
 
 	if uvm.gcListener != nil {
+		// Temp: Hack to just kick off the gcs sidecar process as
+		// a simple process on the host to fasten debugging and
+		// development. After dev work, it can be easily tested
+		// by minor tweaks to hvsockAddress to run inside the uvm
+		// + inbox gcs to listen on HV_SOCK_LOOPBACK.
+		sidecarPath := "C:\\gcs-sidecar.exe"
+		//sidecarCmd := fmt.Sprintf("%s %s", sidecarPath, uvm.runtimeID)
+		cmd := exec.Command(sidecarPath, uvm.runtimeID.String())
+
+		// Set the Pdeathsig field to 0 to prevent the subprocess from being terminated
+		// when the parent process exits
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			ParentProcess: 0,
+		}
+		// Redirect stdout to a file
+		outfile, err := os.Create("C:\\gcs-sidecar-logs-redirect.log")
+		if err != nil {
+			return fmt.Errorf("error create sidecar log file")
+		}
+		// defer outfile.Close()
+		cmd.Stdout = outfile
+
+		err = cmd.Start()
+		if err != nil {
+			return fmt.Errorf("failed to do start gcs-sidecar: %w", err)
+		}
+
 		// Accept the GCS connection.
 		conn, err := uvm.acceptAndClose(ctx, uvm.gcListener)
 		uvm.gcListener = nil
