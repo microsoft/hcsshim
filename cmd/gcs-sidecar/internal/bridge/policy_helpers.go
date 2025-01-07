@@ -40,7 +40,7 @@ func (s *SecurityPoliyEnforcer) SetWCOWConfidentialUVMOptions(securityPolicyRequ
 	}
 
 	/*
-			// TODO(kiashok): What should be done for c-wcow?
+			// TODO(kiashok): logging for c-wcow?
 
 			// This is one of two points at which we might change our logging.
 			// At this time, we now have a policy and can determine what the policy
