@@ -5,6 +5,7 @@ version := "@@API_VERSION@@"
 enforcement_points := {
     "mount_device": {"introducedVersion": "0.1.0", "default_results": {"allowed": false}},
     "mount_overlay": {"introducedVersion": "0.1.0", "default_results": {"allowed": false}},
+     "mount_cims": {"introducedVersion": "0.11.0", "default_results": {"allowed": false}},
     "create_container": {"introducedVersion": "0.1.0", "default_results": {"allowed": false, "env_list": null, "allow_stdio_access": false}},
     "unmount_device": {"introducedVersion": "0.2.0", "default_results": {"allowed": true}},
     "unmount_overlay": {"introducedVersion": "0.6.0", "default_results": {"allowed": true}},

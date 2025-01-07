@@ -269,6 +269,20 @@ func (m regoMetadata) getOrCreate(name string) map[string]interface{} {
 	return metadata
 }
 
+func (r *RegoPolicyInterpreter) UpdateOSType(os string) error {
+	r.dataAndModulesMutex.Lock()
+	defer r.dataAndModulesMutex.Unlock()
+	ops := []*regoMetadataOperation{
+		{
+			Action: metadataAdd,
+			Name:   "operatingsystem",
+			Key:    "ostype",
+			Value:  os,
+		},
+	}
+	return r.updateMetadata(ops)
+}
+
 func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) error {
 	// dataAndModulesMutex must be held before calling this
 

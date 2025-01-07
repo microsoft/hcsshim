@@ -34,6 +34,52 @@ func WithSecurityPolicyEnforcer(enforcer string) ConfidentialUVMOpt {
 	}
 }
 
+// TODO (Mahati): Move this block out later
+type WCOWConfidentialUVMOpt func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error
+
+// WithSecurityPolicy sets the desired security policy for the resource.
+func WithWCOWSecurityPolicy(policy string) WCOWConfidentialUVMOpt {
+	return func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error {
+		r.EncodedSecurityPolicy = policy
+		return nil
+	}
+}
+
+// WithSecurityPolicyEnforcer sets the desired enforcer type for the resource.
+func WithWCOWSecurityPolicyEnforcer(enforcer string) WCOWConfidentialUVMOpt {
+	return func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error {
+		r.EnforcerType = enforcer
+		return nil
+	}
+}
+
+// TODO: Separate this out later
+func (uvm *UtilityVM) SetWCOWConfidentialUVMOptions(ctx context.Context, opts ...WCOWConfidentialUVMOpt) error {
+	if uvm.operatingSystem != "windows" {
+		return errNotSupported
+	}
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+	confOpts := &guestresource.WCOWConfidentialOptions{}
+	for _, o := range opts {
+		if err := o(ctx, confOpts); err != nil {
+			return err
+		}
+	}
+	modification := &hcsschema.ModifySettingRequest{
+		RequestType: guestrequest.RequestTypeAdd,
+		GuestRequest: guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeSecurityPolicy,
+			RequestType:  guestrequest.RequestTypeAdd,
+			Settings:     *confOpts,
+		},
+	}
+	if err := uvm.modify(ctx, modification); err != nil {
+		return fmt.Errorf("uvm::Policy: failed to modify utility VM configuration: %w", err)
+	}
+	return nil
+}
+
 func base64EncodeFileContents(filePath string) (string, error) {
 	if filePath == "" {
 		return "", nil
@@ -88,7 +134,7 @@ func (uvm *UtilityVM) SetConfidentialUVMOptions(ctx context.Context, opts ...Con
 		}
 	}
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
+		//RequestType: guestrequest.RequestTypeAdd,
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeSecurityPolicy,
 			RequestType:  guestrequest.RequestTypeAdd,
