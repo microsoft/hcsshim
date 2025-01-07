@@ -26,126 +26,13 @@ import (
 // - cherry pick commit to add annotations for securityPolicy
 // - shimdiag.exe exec uvmID
 // TODO: Do we need to support schema1 request types?
-type requestMessage interface {
-	Base() *requestBase
-}
-
-type responseMessage interface {
-	Base() *responseBase
-}
-
-type messageHeader struct {
-	Type uint32
-	Size uint32
-	ID   int64
-}
-
-type bridgeResponse struct {
-	// ctx is the context created on request read
-	// ctx      context.Context
-	header   *messageHeader
-	response interface{}
-}
-
-/*
-// rpc represents an outstanding rpc request to the guest
-type rpc struct {
-	proc    rpcProc
-	id      int64
-	req     requestMessage
-	resp    responseMessage
-	brdgErr error // error encountered when sending the request or unmarshaling the result
-	ch      chan struct{}
-}
-*/
-// TODO: 'B'ridge to 'b'ridge
-type Bridge struct {
-	shimConn     io.ReadWriteCloser
-	inboxGCSConn io.ReadWriteCloser
-
-	mu sync.Mutex
-	// TODO (confirm): Security policy enforcer is just a library so we do not
-	// need to record messages sent to it.
-
-	// List of handlers for the different type of incoming message requests
-	handlerList map[rpcProc]HandlerFunc
-
-	// brdgErr error
-
-	// responseChan is the response channel used for both request/response
-	// and publish notification workflows.
-	// responseChan chan *rpc
-
-	sendToGCSChan chan request
-
-	sendToShimCh chan request
-
-	// waitCh chan struct{}
-
-	quitChan chan error
-
-	PolicyEnforcer *SecurityPoliyEnforcer
-}
-
-type SecurityPoliyEnforcer struct {
-	// state required for the security policy enforcement
-	policyMutex               sync.Mutex
-	securityPolicyEnforcer    windowssecuritypolicy.SecurityPolicyEnforcer
-	securityPolicyEnforcerSet bool
-	uvmReferenceInfo          string
-}
-
-func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser) *Bridge {
-	return &Bridge{
-		shimConn:      shimConn,
-		inboxGCSConn:  inboxGCSConn,
-		handlerList:   make(map[rpcProc]HandlerFunc),
-		sendToGCSChan: make(chan request),
-		sendToShimCh:  make(chan request),
-		quitChan:      make(chan error),
-	}
-}
-
-func NewPolicyEnforcer(initialEnforcer windowssecuritypolicy.SecurityPolicyEnforcer) *SecurityPoliyEnforcer {
-	return &SecurityPoliyEnforcer{
-		securityPolicyEnforcerSet: false,
-		securityPolicyEnforcer:    initialEnforcer,
-	}
-}
-
-// TODO: rename request to bridgeMessage
-type request struct {
-	// Context is the request context received from the bridge.
-	// Context context.Context
-	// Header is the wire format message header that preceded the message for
-	// this request.
-	header [hdrSize]byte
-
-	// TODO CLEANUP: Maintaining typ and id separately temporarily (debugging).
-	// They can removed for final iteration.
-	// msgType = rpcProcID | msgTypeRequest. In string like Request(rpcCreate)
-	typ msgType
-	id  int64
-
-	// TODO: Populate the following so error messages are sent back to
-	// outstanding requests before bridge is killed for error handling!
-
-	// ContainerID is the id of the container that this message corresponds to.
-	containerID string
-	// ActivityID is the id of the specific activity for this request.
-	activityID string
-
-	// Message is the portion of the request that follows the `Header`. This is
-	// a json encoded string that MUST contain `prot.MessageBase`.
-	message []byte
-}
 
 // UnknownMessage represents the default handler logic for an unmatched request
 // type sent from the bridge.
 func UnknownMessage(r *request) error {
-	rpcType := msgType(r.typ) | msgTypeRequest
-	log.Printf("unknown handler of typ %v, rpcProc(rpcType) %v", r.typ.String(), rpcProc(rpcType))
-	return gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: %v", r.typ), gcserr.HrNotImpl)
+	messageType := getMessageType(r.header)
+	log.Printf("unknown handler with rpcMessage type %v", msgType(messageType).String())
+	return gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: %v", messageType), gcserr.HrNotImpl)
 }
 
 // HandlerFunc is an adapter to use functions as handlers.
@@ -162,8 +49,9 @@ func (b *Bridge) ServeMsg(r *request) error {
 
 	var handler HandlerFunc
 	var ok bool
-	rpcProcID := rpcProc(r.typ &^ msgTypeMask)
-	if handler, ok = b.handlerList[rpcProcID]; !ok {
+	messageType := getMessageType(r.header)
+	rpcProcID := rpcProc(msgType(messageType) &^ msgTypeMask)
+	if handler, ok = b.rpcHandlerList[rpcProcID]; !ok {
 		return UnknownMessage(r)
 	}
 
@@ -179,11 +67,11 @@ func (b *Bridge) Handle(rpcProcID rpcProc, handlerFunc HandlerFunc) {
 		panic("empty function handler")
 	}
 
-	if _, ok := b.handlerList[rpcProcID]; ok {
+	if _, ok := b.rpcHandlerList[rpcProcID]; ok {
 		log.Printf("opengcs::bridge - overwriting bridge handler. message-type: %v", rpcProcID.String())
 	}
 
-	b.handlerList[rpcProcID] = handlerFunc
+	b.rpcHandlerList[rpcProcID] = handlerFunc
 }
 
 func (b *Bridge) HandleFunc(rpcProcID rpcProc, handler func(*request) error) {
@@ -207,12 +95,101 @@ func (b *Bridge) AssignHandlers() {
 	b.HandleFunc(rpcSignalProcess, b.signalProcess)
 	b.HandleFunc(rpcResizeConsole, b.resizeConsole)
 	b.HandleFunc(rpcGetProperties, b.getProperties)
-	b.HandleFunc(rpcModifySettings, b.modifySettings) // TODO: Further dereference request types..To be validated like mounting container layers, data volumes etc
+	b.HandleFunc(rpcModifySettings, b.modifySettings)
 	b.HandleFunc(rpcNegotiateProtocol, b.negotiateProtocol)
 	b.HandleFunc(rpcDumpStacks, b.dumpStacks)
 	b.HandleFunc(rpcDeleteContainerState, b.deleteContainerState)
 	b.HandleFunc(rpcUpdateContainer, b.updateContainer)
-	b.HandleFunc(rpcLifecycleNotification, b.lifecycleNotification) // TODO: Validate this request as well?
+	b.HandleFunc(rpcLifecycleNotification, b.lifecycleNotification)
+}
+
+type Bridge struct {
+	mu sync.Mutex
+
+	// List of handlers for handling different rpc message requests.
+	rpcHandlerList map[rpcProc]HandlerFunc
+	// Security policy enforcer for c-wcow
+	PolicyEnforcer *SecurityPoliyEnforcer
+
+	// hcsshim and inbox GCS connections respectively.
+	shimConn     io.ReadWriteCloser
+	inboxGCSConn io.ReadWriteCloser
+
+	// Response channels to forward incoming requests to inbox GCS
+	// and send responses back to hcsshim respectively.
+	sendToGCSChan chan request
+	sendToShimCh  chan request
+
+	quitChan chan error
+	// brdgErr error
+}
+
+type SecurityPoliyEnforcer struct {
+	// State required for the security policy enforcement
+	policyMutex               sync.Mutex
+	securityPolicyEnforcer    windowssecuritypolicy.SecurityPolicyEnforcer
+	securityPolicyEnforcerSet bool
+	uvmReferenceInfo          string
+}
+
+func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser) *Bridge {
+	return &Bridge{
+		rpcHandlerList: make(map[rpcProc]HandlerFunc),
+		shimConn:       shimConn,
+		inboxGCSConn:   inboxGCSConn,
+		sendToGCSChan:  make(chan request),
+		sendToShimCh:   make(chan request),
+		quitChan:       make(chan error),
+	}
+}
+
+func NewPolicyEnforcer(initialEnforcer windowssecuritypolicy.SecurityPolicyEnforcer) *SecurityPoliyEnforcer {
+	return &SecurityPoliyEnforcer{
+		securityPolicyEnforcerSet: false,
+		securityPolicyEnforcer:    initialEnforcer,
+	}
+}
+
+type messageHeader struct {
+	Type msgType
+	Size uint32
+	ID   int64
+}
+
+type bridgeResponse struct {
+	// ctx is the context created on request read
+	// ctx      context.Context
+	header   *messageHeader
+	response interface{}
+}
+
+type request struct {
+	// Context created once received from the bridge.
+	// context context.Context
+	// header is the wire format message header that preceded the message for
+	// this request.
+	header [hdrSize]byte
+	// TODO: Cleanup. Get the following by unmarshalling when needed?
+	// containerID is the id of the container that this message corresponds to.
+	// containerID string
+	// activityID is the id of the specific activity for this request.
+	// activityID string
+	// message is the portion of the request that follows the `Header`. This is
+	// a json encoded string that MUST contain `prot.MessageBase`.
+	message []byte
+}
+
+// Helper functions to get message header fields
+func getMessageType(header [hdrSize]byte) msgType {
+	return msgType(binary.LittleEndian.Uint32(header[hdrOffType:]))
+}
+
+func getMessageSize(header [hdrSize]byte) uint32 {
+	return binary.LittleEndian.Uint32(header[hdrOffSize:])
+}
+
+func getMessageID(header [hdrSize]byte) int64 {
+	return int64(binary.LittleEndian.Uint64(header[hdrOffID:]))
 }
 
 func readMessage(r io.Reader) (request, error) {
@@ -221,13 +198,10 @@ func readMessage(r io.Reader) (request, error) {
 	if err != nil {
 		return request{}, err
 	}
+
 	//	_, span := oc.StartSpan(context.Background(), "bridge receive read message", oc.WithClientSpanKind)
 	//	defer span.End()
-
-	typ := msgType(binary.LittleEndian.Uint32(h[hdrOffType:]))
-	n := binary.LittleEndian.Uint32(h[hdrOffSize:])
-	id := int64(binary.LittleEndian.Uint64(h[hdrOffID:]))
-
+	n := getMessageSize(h)
 	if n < hdrSize || n > maxMsgSize {
 		log.Printf("invalid message size %d", n)
 		return request{}, fmt.Errorf("invalid message size %d", n)
@@ -242,7 +216,8 @@ func readMessage(r io.Reader) (request, error) {
 		}
 		return request{}, err
 	}
-	return request{header: h, typ: typ, id: id, message: msg}, nil
+
+	return request{header: h, message: msg}, nil
 }
 
 func isLocalDisconnectError(err error) bool {
@@ -272,16 +247,12 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 				if err == io.EOF || isLocalDisconnectError(err) {
 					return
 				}
-				log.Printf("bridge read from shim failed: %s \n", err)
-				recverr = errors.Wrap(err, "bridge read from shim failed:")
+				log.Printf("bridge read from shim connection failed: %s \n", err)
+				recverr = errors.Wrap(err, "bridge read from shim connection failed")
 				break
 			}
-			var header messageHeader
-			messageTyp := msgType(binary.LittleEndian.Uint32(req.header[hdrOffType:]))
-			header.Type = binary.LittleEndian.Uint32(req.header[hdrOffType:])
-			header.Size = binary.LittleEndian.Uint32(req.header[hdrOffSize:])
-			header.ID = int64(binary.LittleEndian.Uint64(req.header[hdrOffID:]))
-			log.Printf("bridge recv from shim: \n Header {Type: %v Size: %v ID: %v }\n msg: %v \n", messageTyp, header.Size, header.ID, string(req.message))
+
+			log.Printf("Request from shim: \n Header {Type: %v Size: %v ID: %v }\n msg: %v \n", getMessageType(req.header), getMessageSize(req.header), getMessageID(req.header), string(req.message))
 			shimRequestChan <- req
 		}
 		shimRequestErrChan <- recverr
@@ -300,12 +271,6 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 					// b.quitCh <- true // give few seconds delay and close connections?
 					return
 				}
-
-				// If we are here, means that the requested operation is allowed.
-				// Forward message to GCS. We handle responses from GCS separately.
-
-				log.Printf("hcsshim receive message redirect")
-				// b.sendToGCSChan <- req
 			}(req)
 		}
 	}()
@@ -315,9 +280,9 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 			// reconstruct message and forward to gcs
 			var buf bytes.Buffer
 			log.Printf("bridge send to gcs, req %v", req)
-			if b.prepareMessageAndSend(req.header, req.message, &buf, b.inboxGCSConn) != nil {
+			if b.prepareMessageAndSend(&req.header, req.message, &buf, b.inboxGCSConn) != nil {
 				// kill bridge?
-				log.Printf("err sending message to ")
+				log.Printf("err sending message to GCS")
 			}
 		}
 	}()
@@ -348,7 +313,7 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 			// reconstruct message and forward to shim
 			var buf bytes.Buffer
 			log.Printf("send to shim, req: \n Header: %v \n msg: %v \n", "", string(req.message))
-			if err := b.prepareMessageAndSend(req.header, req.message, &buf, b.shimConn); err != nil {
+			if err := b.prepareMessageAndSend(&req.header, req.message, &buf, b.shimConn); err != nil {
 				// kill bridge?
 				log.Printf("err sending message to ")
 				b.close(err)
@@ -372,10 +337,6 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 		//	return err
 
 	}
-}
-
-func (b *Bridge) forwardMessageToGCS(req request) {
-	b.sendToGCSChan <- req
 }
 
 func (b *Bridge) close(err error) {
@@ -406,7 +367,7 @@ func (b *Bridge) close(err error) {
 	close(b.quitChan)
 }
 
-func (b *Bridge) prepareMessageAndSend(header [hdrSize]byte, message []byte, buf *bytes.Buffer, conn io.ReadWriteCloser) error {
+func (b *Bridge) prepareMessageAndSend(header *[hdrSize]byte, message []byte, buf *bytes.Buffer, conn io.ReadWriteCloser) error {
 	buf.Write(header[:])
 	buf.Write(message[:])
 	// Write the message.

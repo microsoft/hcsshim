@@ -10,7 +10,6 @@ import (
 	"log"
 	"strings"
 
-	"github.com/Microsoft/go-winio/pkg/guid"
 	hcsschema "github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/hcs/schema2/resourcepaths"
 	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/protocol/guestrequest"
@@ -21,47 +20,48 @@ import (
 // Current intent of these handler functions is to call the security policy
 // enforcement code as needed and return nil if the operation is allowed.
 // Else error is returned.
-// Also, currently, the caller of this function is forwarding the request
-// to inbox GCS if handler returns nil. This is because we want to process
-// response from inbox GCS asynchronously.
+// Also, these handler functions decide if request needs to be forwarded
+// to inbox GCS or not. Request is forwarded asynchronously.
 // TODO: The caller, that is hcsshim, starts a 30 second timer and if response
 // is not got by then, bridge is killed. Should we track responses from gcs by
 // time in sidecar too? Maybe not.
 func (b *Bridge) createContainer(req *request) error {
+	var err error
+	err = nil
 	var r containerCreate
 	var containerConfig json.RawMessage
 	r.ContainerConfig.Value = &containerConfig
-	if err := json.Unmarshal(req.message, &r); err != nil {
+	if err = json.Unmarshal(req.message, &r); err != nil {
 		log.Printf("failed to unmarshal rpcCreate: %v", req)
 		// TODO: Send valid error response back to the sender before closing bridge
 		return fmt.Errorf("failed to unmarshal rpcCreate: %v", req)
 	}
 
-	var err error
-	err = nil
 	var uvmConfig uvmConfig
 	var hostedSystemConfig hcsschema.HostedSystem
 	if err = json.Unmarshal(containerConfig, &uvmConfig); err == nil {
 		systemType := uvmConfig.SystemType
 		timeZoneInformation := uvmConfig.TimeZoneInformation
 		log.Printf("rpcCreate: \n ContainerCreate{ requestBase: %v, uvmConfig: {systemType: %v, timeZoneInformation: %v}}", r.requestBase, systemType, timeZoneInformation)
-		// err =  call policyEnforcer
-		err = nil
+		// TODO: call policy enforcement points once ready
+		// err = call policyEnforcer
+		// return on err
 	} else if err = json.Unmarshal(containerConfig, &hostedSystemConfig); err == nil {
 		schemaVersion := hostedSystemConfig.SchemaVersion
 		container := hostedSystemConfig.Container
 		log.Printf("rpcCreate: \n ContainerCreate{ requestBase: %v, ContainerConfig: {schemaVersion: %v, container: %v}}", r.requestBase, schemaVersion, container)
+		// TODO: call policy enforcement points once ready
 		// err = call policyEnforcer
-		err = nil
+		// return on err
 	} else {
 		log.Printf("createContainer: invalid containerConfig type. Request: %v", req)
 		// TODO: Send valid error response back to the sender before closing bridge
-		err = fmt.Errorf("createContainer: invalid containerConfig type. Request: %v", r)
+		return fmt.Errorf("createContainer: invalid containerConfig type. Request: %v", r)
 	}
 
-	if err == nil {
-		b.forwardMessageToGCS(*req)
-	}
+	// If we've reached here, means the policy has allowed operation.
+	// So forward msg to inbox GCS.
+	b.sendToGCSChan <- *req
 
 	return err
 }
@@ -74,7 +74,11 @@ func (b *Bridge) startContainer(req *request) error {
 	}
 	log.Printf("rpcStart: \n requestBase: %v", r)
 
-	b.forwardMessageToGCS(*req)
+	// TODO: call policy enforcement points once ready
+	// err = call policyEnforcer
+	// return on err
+
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -86,16 +90,14 @@ func (b *Bridge) shutdownGraceful(req *request) error {
 		return fmt.Errorf("failed to unmarshal rpcShutdownGraceful: %v", req)
 	}
 	log.Printf("rpcShutdownGraceful: \n requestBase: %v", r)
-
 	/*
 		containerdID := r.ContainerdID
-		b.securityPolicyEnforcer.EnforceShutdownContainerPolicy(ctx, containerID)
+		b.PolicyEnforcer.EnforceShutdownContainerPolicy(ctx, containerID)
 		if err != nil {
 			return fmt.Errorf("rpcShudownGraceful operation not allowed: %v", err)
 		}
 	*/
-
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -117,7 +119,7 @@ func (b *Bridge) shutdownForced(req *request) error {
 		}
 	*/
 
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -144,7 +146,7 @@ func (b *Bridge) executeProcess(req *request) error {
 	log.Printf("rpcExecProcess: \n containerID: %v, schema1.ProcessParameters{ params: %v, stdioRelaySettings: %v, vsockStdioRelaySettings: %v }", containerID, processParams, stdioRelaySettings, vsockStdioRelaySettings)
 	// err = call policy enforcer
 
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return err
 }
@@ -160,7 +162,7 @@ func (b *Bridge) waitForProcess(req *request) error {
 
 	// waitForProcess does not have enforcer in clcow, why?
 
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -178,7 +180,7 @@ func (b *Bridge) signalProcess(req *request) error {
 
 	var wcowOptions guestresource.SignalProcessOptionsWCOW
 	if rawOpts == nil {
-		b.forwardMessageToGCS(*req)
+		b.sendToGCSChan <- *req
 		return nil
 	} else if err = json.Unmarshal(rawOpts, &wcowOptions); err != nil {
 		log.Printf("rpcSignalProcess: invalid Options type for request %v", r)
@@ -194,7 +196,7 @@ func (b *Bridge) signalProcess(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -214,7 +216,7 @@ func (b *Bridge) resizeConsole(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -284,7 +286,7 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 	var modifySettingsRequest hcsschema.ModifySettingRequest
 	var modifySettingsReqRawSettings json.RawMessage
 
-	modifySettingsRequest.Settings = modifySettingsReqRawSettings
+	modifySettingsRequest.Settings = &modifySettingsReqRawSettings
 	//modifySettingsRequest.GuestRequest = rawGuestRequest
 	if err := json.Unmarshal(requestRawSettings, &modifySettingsRequest); err != nil {
 		log.Printf("invalid rpcModifySettings request %v", r)
@@ -461,7 +463,7 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 
 	// If we are here, there is no error and we want to
 	// forward the message to inbox GCS
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 	//, skipSendToGCS
@@ -470,18 +472,19 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 // TODO: cleanup helper
 func (b *Bridge) sendReplyToShim(rpcProcType rpcProc, req request) error {
 	respType := msgTypeResponse | msgType(rpcProcType)
-	activityID, _ := guid.FromString(req.activityID)
+	var msgBase requestBase
+	_ = json.Unmarshal(req.message, msgBase)
 	resp := &responseBase{
 		Result: 0, // 0 means succes!
 		//	ErrorMessage: "",
 		//fmt.Sprintf("Request %v not allowed", req.typ.String()),
-		ActivityID: activityID,
+		ActivityID: msgBase.ActivityID,
 	}
 	msgb, err := json.Marshal(resp)
 	if err != nil {
 		return err
 	}
-	b.sendMessageToShim(respType, req.id, msgb)
+	b.sendMessageToShim(respType, getMessageID(req.header), msgb)
 
 	return nil
 }
@@ -540,7 +543,7 @@ func (b *Bridge) negotiateProtocol(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -555,7 +558,7 @@ func (b *Bridge) dumpStacks(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -570,7 +573,7 @@ func (b *Bridge) deleteContainerState(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -580,7 +583,7 @@ func (b *Bridge) updateContainer(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
@@ -590,7 +593,7 @@ func (b *Bridge) lifecycleNotification(req *request) error {
 
 	// If we've reached here, means the policy has allowed it.
 	// So forward msg to inbox GCS.
-	b.forwardMessageToGCS(*req)
+	b.sendToGCSChan <- *req
 
 	return nil
 }
