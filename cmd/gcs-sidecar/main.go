@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sys/windows/svc/debug"
 
 	gcsBridge "github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/bridge"
+	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/windowssecuritypolicy"
 )
 
 type handler struct {
@@ -213,8 +214,23 @@ func main() {
 		return
 	}
 
+	// set up our initial stance policy enforcer
+	var initialEnforcer windowssecuritypolicy.SecurityPolicyEnforcer
+	initialPolicyStance := "allow"
+	switch initialPolicyStance {
+	case "allow":
+		initialEnforcer = &windowssecuritypolicy.OpenDoorSecurityPolicyEnforcer{}
+		log.Printf("initial-policy-stance: allow")
+	case "deny":
+		initialEnforcer = &windowssecuritypolicy.ClosedDoorSecurityPolicyEnforcer{}
+		log.Printf("initial-policy-stance: deny")
+	default:
+		log.Printf("unknown initial-policy-stance")
+	}
+
 	// 3. Create bridge and initializa
 	brdg := gcsBridge.NewBridge(shimCon, gcsCon)
+	brdg.PolicyEnforcer = gcsBridge.NewPolicyEnforcer(initialEnforcer)
 	brdg.AssignHandlers()
 
 	// 3. Listen and serve for hcsshim requests.

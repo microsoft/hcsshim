@@ -5,10 +5,72 @@ package bridge
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	hcsschema "github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/windowssecuritypolicy"
 )
+
+func (s *SecurityPoliyEnforcer) SetWCOWConfidentialUVMOptions(securityPolicyRequest *guestresource.WCOWConfidentialOptions) error {
+	s.policyMutex.Lock()
+	defer s.policyMutex.Unlock()
+
+	if s.securityPolicyEnforcerSet {
+		return errors.New("security policy has already been set")
+	}
+
+	// this limit ensures messages are below the character truncation limit that
+	// can be imposed by an orchestrator
+	maxErrorMessageLength := 3 * 1024
+
+	// Initialize security policy enforcer for a given enforcer type and
+	// encoded security policy.
+	p, err := windowssecuritypolicy.CreateSecurityPolicyEnforcer(
+		securityPolicyRequest.EnforcerType,
+		securityPolicyRequest.EncodedSecurityPolicy,
+		DefaultCRIMounts(),
+		DefaultCRIPrivilegedMounts(),
+		maxErrorMessageLength,
+	)
+	if err != nil {
+		return fmt.Errorf("error creating security policy enforcer: %v", err)
+	}
+
+	/*
+			// TODO(kiashok): What should be done for c-wcow?
+
+			// This is one of two points at which we might change our logging.
+			// At this time, we now have a policy and can determine what the policy
+			// author put as policy around runtime logging.
+			// The other point is on startup where we take a flag to set the default
+			// policy enforcer to use before a policy arrives. After that flag is set,
+			// we use the enforcer in question to set up logging as well.
+			if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
+				logrus.SetOutput(h.logWriter)
+			} else {
+				logrus.SetOutput(io.Discard)
+			}
+
+		hostData, err := securitypolicy.NewSecurityPolicyDigest(r.EncodedSecurityPolicy)
+		if err != nil {
+			return err
+		}
+
+		if err := validateHostData(hostData[:]); err != nil {
+			return err
+		}
+	*/
+
+	s.securityPolicyEnforcer = p
+	s.securityPolicyEnforcerSet = true
+	// TODO(kiashok): Update the following
+	// s.uvmReferenceInfo = s.EncodedUVMReference
+
+	return nil
+}
 
 func ExecProcess(ctx context.Context, containerID string, params hcsschema.ProcessParameters) error {
 	/*

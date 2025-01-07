@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/windowssecuritypolicy"
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 )
 
@@ -31,6 +32,19 @@ type requestMessage interface {
 
 type responseMessage interface {
 	Base() *responseBase
+}
+
+type messageHeader struct {
+	Type uint32
+	Size uint32
+	ID   int64
+}
+
+type bridgeResponse struct {
+	// ctx is the context created on request read
+	// ctx      context.Context
+	header   *messageHeader
+	response interface{}
 }
 
 /*
@@ -69,6 +83,34 @@ type Bridge struct {
 	// waitCh chan struct{}
 
 	quitChan chan error
+
+	PolicyEnforcer *SecurityPoliyEnforcer
+}
+
+type SecurityPoliyEnforcer struct {
+	// state required for the security policy enforcement
+	policyMutex               sync.Mutex
+	securityPolicyEnforcer    windowssecuritypolicy.SecurityPolicyEnforcer
+	securityPolicyEnforcerSet bool
+	uvmReferenceInfo          string
+}
+
+func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser) *Bridge {
+	return &Bridge{
+		shimConn:      shimConn,
+		inboxGCSConn:  inboxGCSConn,
+		handlerList:   make(map[rpcProc]HandlerFunc),
+		sendToGCSChan: make(chan request),
+		sendToShimCh:  make(chan request),
+		quitChan:      make(chan error),
+	}
+}
+
+func NewPolicyEnforcer(initialEnforcer windowssecuritypolicy.SecurityPolicyEnforcer) *SecurityPoliyEnforcer {
+	return &SecurityPoliyEnforcer{
+		securityPolicyEnforcerSet: false,
+		securityPolicyEnforcer:    initialEnforcer,
+	}
 }
 
 // TODO: rename request to bridgeMessage
@@ -96,17 +138,6 @@ type request struct {
 	// Message is the portion of the request that follows the `Header`. This is
 	// a json encoded string that MUST contain `prot.MessageBase`.
 	message []byte
-}
-
-func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser) *Bridge {
-	return &Bridge{
-		shimConn:      shimConn,
-		inboxGCSConn:  inboxGCSConn,
-		handlerList:   make(map[rpcProc]HandlerFunc),
-		sendToGCSChan: make(chan request),
-		sendToShimCh:  make(chan request),
-		quitChan:      make(chan error),
-	}
 }
 
 // UnknownMessage represents the default handler logic for an unmatched request
@@ -182,12 +213,6 @@ func (b *Bridge) AssignHandlers() {
 	b.HandleFunc(rpcDeleteContainerState, b.deleteContainerState)
 	b.HandleFunc(rpcUpdateContainer, b.updateContainer)
 	b.HandleFunc(rpcLifecycleNotification, b.lifecycleNotification) // TODO: Validate this request as well?
-}
-
-type messageHeader struct {
-	Type uint32
-	Size uint32
-	ID   int64
 }
 
 func readMessage(r io.Reader) (request, error) {
@@ -273,14 +298,14 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 					// 2. Code cleanup on error
 					// ? b.close(err)
 					// b.quitCh <- true // give few seconds delay and close connections?
-					b.close(err)
 					return
 				}
 
 				// If we are here, means that the requested operation is allowed.
 				// Forward message to GCS. We handle responses from GCS separately.
+
 				log.Printf("hcsshim receive message redirect")
-				b.sendToGCSChan <- req
+				// b.sendToGCSChan <- req
 			}(req)
 		}
 	}()
@@ -289,7 +314,7 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 		for req := range b.sendToGCSChan {
 			// reconstruct message and forward to gcs
 			var buf bytes.Buffer
-			log.Printf("bridge send to gcs")
+			log.Printf("bridge send to gcs, req %v", req)
 			if b.prepareMessageAndSend(req.header, req.message, &buf, b.inboxGCSConn) != nil {
 				// kill bridge?
 				log.Printf("err sending message to ")
@@ -347,6 +372,10 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 		//	return err
 
 	}
+}
+
+func (b *Bridge) forwardMessageToGCS(req request) {
+	b.sendToGCSChan <- req
 }
 
 func (b *Bridge) close(err error) {
