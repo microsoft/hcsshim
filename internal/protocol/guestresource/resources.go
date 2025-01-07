@@ -195,3 +195,10 @@ type LCOWConfidentialOptions struct {
 type LCOWSecurityPolicyFragment struct {
 	Fragment string `json:"Fragment,omitempty"`
 }
+
+// TODO (Mahati): Move this out later: WCOWConfidentialOptions is used to set various confidential container specific
+// options.
+type WCOWConfidentialOptions struct {
+	EnforcerType          string `json:"EnforcerType,omitempty"`
+	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
+}

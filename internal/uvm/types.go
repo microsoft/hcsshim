@@ -139,6 +139,9 @@ type UtilityVM struct {
 
 	// confidentialUVMOptions hold confidential UVM specific options
 	confidentialUVMOptions *ConfidentialOptions
+
+	// WCOWconfidentialUVMOptions hold confidential UVM specific options
+	WCOWconfidentialUVMOptions *WCOWConfidentialOptions
 }
 
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {

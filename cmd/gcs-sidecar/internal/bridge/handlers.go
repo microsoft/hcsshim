@@ -295,7 +295,8 @@ func unMarshalAndModifySettings(modifySettingsRequest *hcsschema.ModifySettingRe
 			wcowMappedVirtualDisk := guestModificationRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.Printf(", wcowMappedVirtualDisk { %v} \n", wcowMappedVirtualDisk)
 		// TODO need a case similar to guestresource.ResourceTypeSecurityPolicy of lcow?
-		// case guestresource.ResourceTypeSecurityPolicy:
+		case guestresource.ResourceTypeSecurityPolicy:
+			log.Printf("This is the C-WCOW security policy invocation")
 		case guestresource.ResourceTypeHvSocket:
 			hvSocketAddress := guestModificationRequest.Settings.(*hcsschema.HvSocketAddress)
 			log.Printf(", hvSocketAddress { %v} \n", hvSocketAddress)
