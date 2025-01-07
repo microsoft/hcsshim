@@ -341,6 +341,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.NoDirectMap = ParseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)
 		wopts.NoInheritHostTimezone = ParseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
 		wopts.AdditionalRegistryKeys = append(wopts.AdditionalRegistryKeys, parseAdditionalRegistryValues(ctx, s.Annotations)...)
+		wopts.WCOWSecurityPolicy = ParseAnnotationsString(s.Annotations, annotations.WCOWSecurityPolicy, wopts.WCOWSecurityPolicy)
+		wopts.WCOWSecurityPolicyEnforcer = ParseAnnotationsString(s.Annotations, annotations.SecurityPolicyEnforcer, wopts.WCOWSecurityPolicyEnforcer)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		return wopts, nil
 	}

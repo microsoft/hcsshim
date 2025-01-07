@@ -28,9 +28,17 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
+type WCOWConfidentialOptions struct {
+	WCOWSecurityPolicy         string // Optional security policy
+	WCOWSecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	WCOWSecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
+	//WCOWUVMReferenceInfoFile   string // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
+}
+
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
 type OptionsWCOW struct {
 	*Options
+	*WCOWConfidentialOptions
 
 	BootFiles *WCOWBootFiles
 
@@ -55,6 +63,9 @@ func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 	return &OptionsWCOW{
 		Options:                newDefaultOptions(id, owner),
 		AdditionalRegistryKeys: []hcsschema.RegistryValue{},
+		WCOWConfidentialOptions: &WCOWConfidentialOptions{
+			WCOWSecurityPolicyEnabled: false,
+		},
 	}
 }
 
@@ -365,19 +376,20 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	log.G(ctx).WithField("options", log.Format(ctx, opts)).Debug("uvm::CreateWCOW options")
 
 	uvm := &UtilityVM{
-		id:                      opts.ID,
-		owner:                   opts.Owner,
-		operatingSystem:         "windows",
-		scsiControllerCount:     opts.SCSIControllerCount,
-		vsmbDirShares:           make(map[string]*VSMBShare),
-		vsmbFileShares:          make(map[string]*VSMBShare),
-		vpciDevices:             make(map[VPCIDeviceID]*VPCIDevice),
-		noInheritHostTimezone:   opts.NoInheritHostTimezone,
-		physicallyBacked:        !opts.AllowOvercommit,
-		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
-		vsmbNoDirectMap:         opts.NoDirectMap,
-		noWritableFileShares:    opts.NoWritableFileShares,
-		createOpts:              *opts,
+		id:                         opts.ID,
+		owner:                      opts.Owner,
+		operatingSystem:            "windows",
+		scsiControllerCount:        opts.SCSIControllerCount,
+		vsmbDirShares:              make(map[string]*VSMBShare),
+		vsmbFileShares:             make(map[string]*VSMBShare),
+		vpciDevices:                make(map[VPCIDeviceID]*VPCIDevice),
+		noInheritHostTimezone:      opts.NoInheritHostTimezone,
+		physicallyBacked:           !opts.AllowOvercommit,
+		devicesPhysicallyBacked:    opts.FullyPhysicallyBacked,
+		vsmbNoDirectMap:            opts.NoDirectMap,
+		noWritableFileShares:       opts.NoWritableFileShares,
+		createOpts:                 *opts,
+		WCOWconfidentialUVMOptions: opts.WCOWConfidentialOptions,
 	}
 
 	defer func() {
