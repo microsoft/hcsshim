@@ -91,9 +91,10 @@ func (uvm *UtilityVM) MountBlockCIMs(ctx context.Context, mergedCIM *cimfs.Block
 	}
 
 	settings := &guestresource.WCOWBlockCIMMounts{
-		BlockCIMs:  []guestresource.BlockCIMDevice{},
-		VolumeGUID: volumeGUID,
-		MountFlags: cimfs.CimMountBlockDeviceCim,
+		BlockCIMs:   []guestresource.BlockCIMDevice{},
+		VolumeGUID:  volumeGUID,
+		MountFlags:  cimfs.CimMountBlockDeviceCim,
+		ContainerID: containerID,
 	}
 
 	umb := &UVMMountedBlockCIMs{

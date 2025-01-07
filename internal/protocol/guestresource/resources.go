@@ -82,6 +82,11 @@ type CWCOWCombinedLayers struct {
 	CombinedLayers WCOWCombinedLayers `json:"CombinedLayers,omitempty"`
 }
 
+type CWCOWHostedSystem struct {
+	Spec              specs.Spec
+	CWCOWHostedSystem hcsschema.HostedSystem
+}
+
 // Defines the schema for hosted settings passed to GCS and/or OpenGCS
 
 // SCSIDevice represents a SCSI device that is attached to the system.
@@ -114,9 +119,10 @@ type BlockCIMDevice struct {
 
 type WCOWBlockCIMMounts struct {
 	// BlockCIMs should be ordered from merged CIM followed by Layer n .. layer 1
-	BlockCIMs  []BlockCIMDevice `json:"BlockCIMs,omitempty"`
-	VolumeGUID guid.GUID        `json:"VolumeGUID,omitempty"`
-	MountFlags uint32           `json:"MountFlags,omitempty"`
+	BlockCIMs   []BlockCIMDevice `json:"BlockCIMs,omitempty"`
+	VolumeGUID  guid.GUID        `json:"VolumeGUID,omitempty"`
+	MountFlags  uint32           `json:"MountFlags,omitempty"`
+	ContainerID string           `json:"ContainerID,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {
@@ -244,4 +250,8 @@ type WCOWConfidentialOptions struct {
 	WCOWSecurityPolicyEnabled bool
 	// Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
 	WCOWSecurityPolicyEnforcer string
+}
+
+type WCOWSecurityPolicyFragment struct {
+	Fragment string `json:"Fragment,omitempty"`
 }

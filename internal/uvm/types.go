@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
@@ -146,6 +147,8 @@ type UtilityVM struct {
 	// ref counting for block CIMs
 	blockCIMMounts    map[string]*UVMMountedBlockCIMs
 	blockCIMMountLock sync.Mutex
+	// WCOWconfidentialUVMOptions hold confidential UVM specific options
+	WCOWconfidentialUVMOptions *guestresource.WCOWConfidentialOptions
 }
 
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {

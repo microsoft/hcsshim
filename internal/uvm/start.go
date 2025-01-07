@@ -334,6 +334,16 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		}
 	}
 
+	if uvm.WCOWconfidentialUVMOptions != nil && uvm.OS() == "windows" {
+		copts := []WCOWConfidentialUVMOpt{
+			WithWCOWSecurityPolicy(uvm.WCOWconfidentialUVMOptions.WCOWSecurityPolicy),
+			WithWCOWSecurityPolicyEnforcer(uvm.WCOWconfidentialUVMOptions.WCOWSecurityPolicyEnforcer),
+		}
+		if err := uvm.SetWCOWConfidentialUVMOptions(ctx, copts...); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
