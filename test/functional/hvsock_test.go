@@ -1140,8 +1140,8 @@ func goBlockT[T any](f func() T) <-chan T {
 
 // reExecSelfShareUVM shares the current testing binary directly into the specified uVM,
 //
-// This assumes that binary will be run directly on a uVM, and not from within a container.
-// For the later case, see [reExecSelfCmd].
+// This assumes that the binary will be run directly on a uVM, and not from within a container.
+// For the latter case, see [reExecSelfCmd].
 //
 // See [util.ReExecSelfGuestPath] for information on generating the guest path.
 func reExecSelfShareUVM(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM, base string) string {

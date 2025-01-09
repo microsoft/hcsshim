@@ -21,7 +21,7 @@ func ReExecSelfGuestPath(ctx context.Context, tb testing.TB, base string) (strin
 	tb.Helper()
 
 	if base == "" {
-		base = `C:\`
+		base = ReExecDefaultGuestPathBase
 	}
 
 	self := TestingBinaryPath(ctx, tb)
