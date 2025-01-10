@@ -23,10 +23,10 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli/v2 v2.27.1
 	go.opencensus.io v0.24.0
-	golang.org/x/sync v0.8.0
-	golang.org/x/sys v0.25.0
-	google.golang.org/grpc v1.67.0
-	google.golang.org/protobuf v1.34.2
+	golang.org/x/sync v0.10.0
+	golang.org/x/sys v0.28.0
+	google.golang.org/grpc v1.69.0
+	google.golang.org/protobuf v1.35.2
 	k8s.io/cri-api v0.27.1
 )
 
@@ -115,9 +115,9 @@ require (
 	go.opentelemetry.io/otel/metric v1.28.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.28.0 // indirect
 	go.opentelemetry.io/otel/trace v1.28.0 // indirect
-	golang.org/x/crypto v0.26.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.28.0 // indirect
+	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
