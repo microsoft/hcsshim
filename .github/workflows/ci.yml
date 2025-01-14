@@ -266,12 +266,19 @@ jobs:
         working-directory: test
 
   test-windows:
+    name: test-windows (${{ matrix.name }})
     needs: [lint, protos, verify-vendor, go-gen]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2019, windows-2022]
+        name:
+          [windows-2022, windows-2019]
+        include: 
+          - name: "windows-2019"
+            runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2019-containers-enabled]
+          - name: "windows-2022"
+            runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -353,8 +360,8 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          # Don't run uVM (ie, nested virt) or LCOW integrity tests
-          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity,uVM -test.timeout=1h -test.v -log-level=info'
+          # Don't run Linux uVM (ie, nested virt) or LCOW integrity tests. Windows uVM tests will be run on 1ES runner pool.
+          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity -test.timeout=1h -test.v -log-level=info'
           $cmd = $cmd -replace 'gotestsum', $gotestsum
           Write-Host "gotestsum command: $cmd"
 
