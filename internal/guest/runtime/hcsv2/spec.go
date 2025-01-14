@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	int_oci "github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/moby/sys/user"
 	"github.com/opencontainers/runc/libcontainer/devices"
-	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
