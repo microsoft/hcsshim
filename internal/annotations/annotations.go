@@ -48,4 +48,12 @@ const (
 	// UVMConsolePipe is the name of the named pipe that the UVM console is connected to. This works only for non-SNP
 	// scenario, for SNP use a debugger.
 	UVMConsolePipe = "io.microsoft.virtualmachine.console.pipe"
+
+	// NetworkingPolicyBasedRouting toggles on the ability to set policy based routing in the
+	// guest for LCOW.
+	//
+	// TODO(katiewasnothere): The goal of this annotation was to be used as a fallback if the
+	// work to support multiple custom network routes per adapter in LCOW breaks existing
+	// LCOW scenarios. Ideally, this annotation should be removed if no issues are found.
+	NetworkingPolicyBasedRouting = "io.microsoft.virtualmachine.lcow.network.policybasedrouting"
 )

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/hcn"
 )
 
 func Test_SortEndpoints(t *testing.T) {
@@ -50,9 +50,9 @@ func Test_SortEndpoints(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprint(t.Name(), i), func(st *testing.T) {
-			endpoints := []*hns.HNSEndpoint{}
+			endpoints := []*hcn.HostComputeEndpoint{}
 			for _, n := range test.endpointNames {
-				e := &hns.HNSEndpoint{
+				e := &hcn.HostComputeEndpoint{
 					Name: n,
 				}
 				endpoints = append(endpoints, e)
