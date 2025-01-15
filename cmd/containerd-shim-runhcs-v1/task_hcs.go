@@ -252,8 +252,8 @@ func newHcsTask(
 	if parent != nil {
 		// We have a parent UVM. Listen for its exit and forcibly close this
 		// task. This is not expected but in the event of a UVM crash we need to
-		// handle this case.
-		go ht.waitForHostExit()
+		// ensure the resources are cleaned up as expected.
+		go ht.waitForHostOrContainerExit()
 	}
 
 	go ht.waitInitExit()
@@ -616,19 +616,21 @@ func (ht *hcsTask) waitInitExit() {
 	ht.close(ctx)
 }
 
-// waitForHostExit waits for the host virtual machine to exit. Once exited
-// forcibly exits all additional exec's in this task.
+// waitForHostOrContainerExit waits for the host virtual machine to exit. Once exited,
+// it forcibly exits all additional execs in this task. Make sure to check
+// for container exit as well since the container could exit before
+// the UVM and leak this goroutine started for its task.
 //
 // This MUST be called via a goroutine to wait on a background thread.
 //
 // Note: For Windows process isolated containers there is no host virtual
 // machine so this should not be called.
-func (ht *hcsTask) waitForHostExit() {
-	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitForHostExit")
+func (ht *hcsTask) waitForHostOrContainerExit() {
+	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitForHostOrContainerExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
-	err := ht.host.WaitCtx(ctx)
+	err := ht.host.WaitForUvmOrContainerExit(ctx, ht.c)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("failed to wait for host virtual machine exit")
 	} else {
