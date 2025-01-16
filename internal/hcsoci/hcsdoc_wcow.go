@@ -49,6 +49,14 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
 			config.mpsv1 = append(config.mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
 			config.mpsv2 = append(config.mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
+		} else if strings.HasPrefix(mount.Source, guestpath.UVMMountPrefix) {
+			if uvm.IsPipe(strings.TrimPrefix(mount.Source, guestpath.UVMMountPrefix)) {
+				src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
+				config.mpsv1 = append(config.mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
+				config.mpsv2 = append(config.mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
+			} else {
+				return nil, fmt.Errorf("unsupported UVM mount source: %s", mount.Source)
+			}
 		} else {
 			readOnly := false
 			for _, o := range mount.Options {
@@ -69,7 +77,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 				}
 				mdv2.HostPath = src
 			} else if mount.Type == MountTypeVirtualDisk || mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeExtensibleVirtualDisk {
-				// For v2 schema containers, any disk mounts will be part of coi.additionalMounts.
+				// For v2 schema containers, any disk mounts will be part of coi.windowsAdditionalMounts.
 				// For v1 schema containers, we don't even get here, since there is no HostingSystem.
 				continue
 			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
