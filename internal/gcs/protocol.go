@@ -25,6 +25,23 @@ var WindowsGcsHvsockServiceID = guid.GUID{
 	Data4: [8]uint8{0x85, 0x6b, 0x62, 0x45, 0xe6, 0x9f, 0x46, 0x20},
 }
 
+// SidecarGcsHvsockServiceID is the hvsock service ID that the sidecar GCS
+// will connect to.
+var SidecarGcsHvsockServiceID = guid.GUID{
+	Data1: 0x4de21eee,
+	Data2: 0x4cd0,
+	Data3: 0x4aac,
+	Data4: [8]uint8{0x92, 0xa8, 0x6c, 0x2b, 0x7e, 0x54, 0xb5, 0x85},
+}
+
+// 8225629d-6bfa-4b6e-a75d-7c2a1d489ffb
+var SidecarGuestHvsockServiceID = guid.GUID{
+	Data1: 0x8225629d,
+	Data2: 0x6bfa,
+	Data3: 0x4b6e,
+	Data4: [8]uint8{0xa7, 0x5d, 0x7c, 0x2a, 0x1d, 0x48, 0x9f, 0xfb},
+}
+
 // WindowsGcsHvHostID is the hvsock address for the parent of the VM running the GCS
 var WindowsGcsHvHostID = guid.GUID{
 	Data1: 0x894cc2d6,
