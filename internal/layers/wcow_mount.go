@@ -12,12 +12,14 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/computestorage"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
@@ -37,6 +39,11 @@ func MountWCOWLayers(ctx context.Context, containerID string, vm *uvm.UtilityVM,
 			return mountProcessIsolatedForkedCimLayers(ctx, containerID, l)
 		}
 		return nil, nil, fmt.Errorf("hyperv isolated containers aren't supported with forked cim layers")
+	case *wcowBlockCIMLayers:
+		if vm == nil {
+			return mountProcessIsolatedBlockCIMLayers(ctx, containerID, l)
+		}
+		return nil, nil, fmt.Errorf("hyperv isolated containers aren't supported with block cim layers")
 	default:
 		return nil, nil, fmt.Errorf("invalid layer type %T", wl)
 	}
@@ -171,57 +178,45 @@ func mountProcessIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers) (_
 		}, nil
 }
 
-// wcowHostForkedCIMLayerCloser is used to cleanup forked CIM layers mounted on the host for process isolated
-// containers
-type wcowHostForkedCIMLayerCloser struct {
-	scratchLayerData
-	containerID string
-}
+// Handles the common processing for mounting all 3 types of cimfs layers. This involves
+// mounting the scratch, attaching the filter and preparing the return values.
+// `volume` is the path to the volume at which read only layer CIMs are mounted.
+func mountProcessIsolatedCimLayersCommon(ctx context.Context, containerID string, volume string, s *scratchLayerData) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
+	ctx, span := oc.StartSpan(ctx, "mountProcessIsolatedCimLayersCommon")
+	defer func() {
+		oc.SetSpanStatus(span, err)
+		span.End()
+	}()
+	span.AddAttributes(
+		trace.StringAttribute("scratch path", s.scratchLayerPath),
+		trace.StringAttribute("mounted CIM volume", volume))
 
-func (l *wcowHostForkedCIMLayerCloser) Release(ctx context.Context) error {
-	mountPath, err := wclayer.GetLayerMountPath(ctx, l.scratchLayerPath)
-	if err != nil {
-		return err
-	}
-
-	if err = computestorage.DetachOverlayFilter(ctx, mountPath, hcsschema.UnionFS); err != nil {
-		return err
-	}
-
-	if err = cimlayer.CleanupContainerMounts(l.containerID); err != nil {
-		return err
-	}
-	return wclayer.DeactivateLayer(ctx, l.scratchLayerPath)
-}
-
-func mountProcessIsolatedForkedCimLayers(ctx context.Context, containerID string, l *wcowForkedCIMLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
-	if err = wclayer.ActivateLayer(ctx, l.scratchLayerPath); err != nil {
-		return nil, nil, err
-	}
+	rcl := &resources.ResourceCloserList{}
 	defer func() {
 		if err != nil {
-			_ = wclayer.DeactivateLayer(ctx, l.scratchLayerPath)
+			if rErr := rcl.Release(ctx); rErr != nil {
+				log.G(ctx).WithError(err).Warnf("mount process isolated cim layers common, undo failed with: %s", rErr)
+			}
 		}
 	}()
 
-	mountPath, err := wclayer.GetLayerMountPath(ctx, l.scratchLayerPath)
+	if err = wclayer.ActivateLayer(ctx, s.scratchLayerPath); err != nil {
+		return nil, nil, err
+	}
+	rcl.AddFunc(func(uCtx context.Context) error {
+		return wclayer.DeactivateLayer(uCtx, s.scratchLayerPath)
+	})
+
+	mountPath, err := wclayer.GetLayerMountPath(ctx, s.scratchLayerPath)
 	if err != nil {
 		return nil, nil, err
 	}
+	log.G(ctx).WithFields(logrus.Fields{
+		"scratch":      s.scratchLayerPath,
+		"mounted path": mountPath,
+	}).Debug("scratch activated")
 
-	volume, err := cimlayer.MountCimLayer(ctx, l.layers[0].cimPath, containerID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("mount layer cim: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = cimlayer.UnmountCimLayer(ctx, l.layers[0].cimPath, containerID)
-		}
-	}()
-
-	// Use the layer path for GUID rather than the mounted volume path, so that the generated layerID
-	// remains same.
-	layerID, err := cimlayer.LayerID(l.layers[0].cimPath, containerID)
+	layerID, err := cimlayer.LayerID(volume)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -241,22 +236,97 @@ func mountProcessIsolatedForkedCimLayers(ctx context.Context, containerID string
 	if err = computestorage.AttachOverlayFilter(ctx, mountPath, layerData); err != nil {
 		return nil, nil, err
 	}
+	rcl.AddFunc(func(uCtx context.Context) error {
+		return computestorage.DetachOverlayFilter(uCtx, mountPath, hcsschema.UnionFS)
+	})
+
+	log.G(ctx).WithField("layer data", layerData).Debug("unionFS filter attached")
+
+	return &MountedWCOWLayers{
+		RootFS: mountPath,
+		MountedLayerPaths: []MountedWCOWLayer{{
+			LayerID:     layerID,
+			MountedPath: volume,
+		}},
+	}, rcl, nil
+}
+
+func mountProcessIsolatedForkedCimLayers(ctx context.Context, containerID string, l *wcowForkedCIMLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
+	ctx, span := oc.StartSpan(ctx, "mountProcessIsolatedForkedCimLayers")
+	defer func() {
+		oc.SetSpanStatus(span, err)
+		span.End()
+	}()
+
+	rcl := &resources.ResourceCloserList{}
 	defer func() {
 		if err != nil {
-			_ = computestorage.DetachOverlayFilter(ctx, mountPath, hcsschema.UnionFS)
+			if rErr := rcl.Release(ctx); rErr != nil {
+				log.G(ctx).WithError(err).Warnf("mount process isolated forked CIM layers, undo failed with: %s", rErr)
+			}
 		}
 	}()
 
-	return &MountedWCOWLayers{
-			RootFS: mountPath,
-			MountedLayerPaths: []MountedWCOWLayer{{
-				LayerID:     layerID,
-				MountedPath: volume,
-			}},
-		}, &wcowHostForkedCIMLayerCloser{
-			containerID:      containerID,
-			scratchLayerData: l.scratchLayerData,
-		}, nil
+	volume, err := cimlayer.MountForkedCimLayer(ctx, l.layers[0].cimPath, containerID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("mount forked layer cim: %w", err)
+	}
+	rcl.AddFunc(func(uCtx context.Context) error {
+		return cimlayer.UnmountCimLayer(uCtx, volume)
+	})
+
+	mountedLayers, closer, err := mountProcessIsolatedCimLayersCommon(ctx, containerID, volume, &l.scratchLayerData)
+	if err != nil {
+		return nil, nil, err
+	}
+	return mountedLayers, rcl.Add(closer), nil
+}
+
+func mountProcessIsolatedBlockCIMLayers(ctx context.Context, containerID string, l *wcowBlockCIMLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
+	ctx, span := oc.StartSpan(ctx, "mountProcessIsolatedBlockCIMLayers")
+	defer func() {
+		oc.SetSpanStatus(span, err)
+		span.End()
+	}()
+
+	var volume string
+
+	rcl := &resources.ResourceCloserList{}
+	defer func() {
+		if err != nil {
+			if rErr := rcl.Release(ctx); rErr != nil {
+				log.G(ctx).WithError(err).Warnf("mount process isolated forked CIM layers, undo failed with: %s", rErr)
+			}
+		}
+	}()
+
+	log.G(ctx).WithFields(logrus.Fields{
+		"scratch":       l.scratchLayerPath,
+		"merged layer":  l.mergedLayer,
+		"parent layers": l.parentLayers,
+	}).Debug("mounting process isolated block CIM layers")
+
+	if len(l.parentLayers) > 1 {
+		volume, err = cimlayer.MergeMountBlockCIMLayer(ctx, l.mergedLayer, l.parentLayers, containerID)
+	} else {
+		volume, err = cimlayer.MountBlockCIMLayer(ctx, l.parentLayers[0], containerID)
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("mount block CIM layers: %w", err)
+	}
+	rcl.AddFunc(func(uCtx context.Context) error {
+		return cimlayer.UnmountCimLayer(uCtx, volume)
+	})
+
+	log.G(ctx).WithField("volume", volume).Debug("mounted blockCIM layers for process isolated container")
+
+	mountedLayers, layerCloser, err := mountProcessIsolatedCimLayersCommon(ctx, containerID, volume, &l.scratchLayerData)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed mount CIM layers common: %w", err)
+	}
+	rcl.Add(layerCloser)
+
+	return mountedLayers, rcl, nil
 }
 
 type wcowIsolatedWCIFSLayerCloser struct {

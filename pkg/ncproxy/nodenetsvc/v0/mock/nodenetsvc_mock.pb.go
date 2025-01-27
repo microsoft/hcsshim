@@ -22,6 +22,7 @@ import (
 type MockNodeNetworkServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodeNetworkServiceClientMockRecorder
+	isgomock struct{}
 }
 
 // MockNodeNetworkServiceClientMockRecorder is the mock recorder for MockNodeNetworkServiceClient.
@@ -125,6 +126,7 @@ func (mr *MockNodeNetworkServiceClientMockRecorder) PingNodeNetworkService(ctx, 
 type MockNodeNetworkServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodeNetworkServiceServerMockRecorder
+	isgomock struct{}
 }
 
 // MockNodeNetworkServiceServerMockRecorder is the mock recorder for MockNodeNetworkServiceServer.
@@ -220,6 +222,7 @@ func (mr *MockNodeNetworkServiceServerMockRecorder) mustEmbedUnimplementedNodeNe
 type MockUnsafeNodeNetworkServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockUnsafeNodeNetworkServiceServerMockRecorder
+	isgomock struct{}
 }
 
 // MockUnsafeNodeNetworkServiceServerMockRecorder is the mock recorder for MockUnsafeNodeNetworkServiceServer.

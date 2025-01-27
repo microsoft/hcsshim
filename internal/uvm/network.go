@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
@@ -38,8 +39,8 @@ var (
 	ErrNICNotFound = errors.New("NIC not found in network namespace")
 )
 
-func sortEndpoints(endpoints []*hns.HNSEndpoint) {
-	cmp := func(a, b *hns.HNSEndpoint) int {
+func sortEndpoints(endpoints []*hcn.HostComputeEndpoint) {
+	cmp := func(a, b *hcn.HostComputeEndpoint) int {
 		if strings.HasSuffix(a.Name, "eth0") {
 			return -1
 		}
@@ -59,7 +60,7 @@ func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) er
 	nsidInsideUVM := nsid
 
 	// Query endpoints with actual nsid
-	endpoints, err := GetNamespaceEndpoints(ctx, nsid)
+	endpoints, err := GetHCNNamespaceEndpoints(ctx, nsid)
 	if err != nil {
 		return err
 	}
@@ -92,22 +93,22 @@ func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) er
 	return nil
 }
 
-// GetNamespaceEndpoints gets all endpoints in `netNS`
-func GetNamespaceEndpoints(ctx context.Context, netNS string) ([]*hns.HNSEndpoint, error) {
-	op := "uvm::GetNamespaceEndpoints"
+// GetHCNNamespaceEndpoints gets all endpoints in `netNS` with the HCN v2 API
+func GetHCNNamespaceEndpoints(ctx context.Context, netNS string) ([]*hcn.HostComputeEndpoint, error) {
+	op := "uvm::GetHCNNamespaceEndpoints"
 	l := log.G(ctx).WithField("netns-id", netNS)
 	l.Debug(op + " - Begin")
 	defer func() {
 		l.Debug(op + " - End")
 	}()
 
-	ids, err := hns.GetNamespaceEndpoints(netNS)
+	ids, err := hcn.GetNamespaceEndpointIds(netNS)
 	if err != nil {
 		return nil, err
 	}
-	var endpoints []*hns.HNSEndpoint
+	var endpoints []*hcn.HostComputeEndpoint
 	for _, id := range ids {
-		endpoint, err := hns.GetHNSEndpointByID(id)
+		endpoint, err := hcn.GetEndpointByID(id)
 		if err != nil {
 			return nil, err
 		}
@@ -382,13 +383,18 @@ func (uvm *UtilityVM) AddNetNSByID(ctx context.Context, id string) error {
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
 func (uvm *UtilityVM) AddEndpointToNSWithID(ctx context.Context, nsID, nicID string, endpoint *hns.HNSEndpoint) error {
+	// get the v2 endpoint
+	endpointV2, err := hcn.GetEndpointByID(endpoint.Id)
+	if err != nil {
+		return err
+	}
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	ns, ok := uvm.namespaces[nsID]
 	if !ok {
 		return ErrNetNSNotFound
 	}
-	if _, ok := ns.nics[endpoint.Id]; !ok {
+	if _, ok := ns.nics[endpointV2.Id]; !ok {
 		if nicID == "" {
 			id, err := guid.NewV4()
 			if err != nil {
@@ -396,12 +402,12 @@ func (uvm *UtilityVM) AddEndpointToNSWithID(ctx context.Context, nsID, nicID str
 			}
 			nicID = id.String()
 		}
-		if err := uvm.addNIC(ctx, nicID, endpoint); err != nil {
+		if err := uvm.addNIC(ctx, nicID, endpointV2); err != nil {
 			return err
 		}
-		ns.nics[endpoint.Id] = &nicInfo{
+		ns.nics[endpointV2.Id] = &nicInfo{
 			ID:       nicID,
-			Endpoint: endpoint,
+			Endpoint: endpointV2,
 		}
 	}
 	return nil
@@ -412,7 +418,7 @@ func (uvm *UtilityVM) AddEndpointToNSWithID(ctx context.Context, nsID, nicID str
 // added endpoints.
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
-func (uvm *UtilityVM) AddEndpointsToNS(ctx context.Context, id string, endpoints []*hns.HNSEndpoint) error {
+func (uvm *UtilityVM) AddEndpointsToNS(ctx context.Context, id string, endpoints []*hcn.HostComputeEndpoint) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
@@ -547,8 +553,54 @@ func getNetworkModifyRequest(adapterID string, requestType guestrequest.RequestT
 	}
 }
 
+// convertToLCOWReq converts the HCN endpoint type to the guestresource.LCOWNetworkAdapter type that is
+// passed to the GCS for a request.
+func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint, policyBasedRouting bool) (*guestresource.LCOWNetworkAdapter, error) {
+	req := &guestresource.LCOWNetworkAdapter{
+		NamespaceID: endpoint.HostComputeNamespace,
+		ID:          id,
+		MacAddress:  endpoint.MacAddress,
+		IPConfigs:   make([]guestresource.LCOWIPConfig, 0, len(endpoint.IpConfigurations)),
+		Routes:      make([]guestresource.LCOWRoute, 0, len(endpoint.Routes)),
+	}
+
+	for _, i := range endpoint.IpConfigurations {
+		ipConfig := guestresource.LCOWIPConfig{
+			IPAddress:    i.IpAddress,
+			PrefixLength: i.PrefixLength,
+		}
+		req.IPConfigs = append(req.IPConfigs, ipConfig)
+	}
+
+	for _, r := range endpoint.Routes {
+		newRoute := guestresource.LCOWRoute{
+			DestinationPrefix: r.DestinationPrefix,
+			NextHop:           r.NextHop,
+			Metric:            r.Metric,
+		}
+		req.Routes = append(req.Routes, newRoute)
+	}
+
+	req.DNSSuffix = endpoint.Dns.Domain
+	req.DNSServerList = strings.Join(endpoint.Dns.ServerList, ",")
+
+	for _, p := range endpoint.Policies {
+		if p.Type == hcn.EncapOverhead {
+			var settings hcn.EncapOverheadEndpointPolicySetting
+			if err := json.Unmarshal(p.Settings, &settings); err != nil {
+				return nil, fmt.Errorf("unmarshal encap overhead policy setting: %w", err)
+			}
+			req.EncapOverhead = settings.Overhead
+		}
+	}
+
+	req.PolicyBasedRouting = policyBasedRouting
+
+	return req, nil
+}
+
 // addNIC adds a nic to the Utility VM.
-func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEndpoint) error {
+func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hcn.HostComputeEndpoint) error {
 	// First a pre-add. This is a guest-only request and is only done on Windows.
 	if uvm.operatingSystem == "windows" {
 		preAddRequest := hcsschema.ModifySettingRequest{
@@ -586,31 +638,12 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 				nil),
 		}
 	} else {
+		s, err := convertToLCOWReq(id, endpoint, uvm.policyBasedRouting)
+		if err != nil {
+			return err
+		}
+
 		// Verify this version of LCOW supports Network HotAdd
-		s := &guestresource.LCOWNetworkAdapter{
-			NamespaceID:     endpoint.Namespace.ID,
-			ID:              id,
-			MacAddress:      endpoint.MacAddress,
-			IPAddress:       endpoint.IPAddress.String(),
-			PrefixLength:    endpoint.PrefixLength,
-			GatewayAddress:  endpoint.GatewayAddress,
-			DNSSuffix:       endpoint.DNSSuffix,
-			DNSServerList:   endpoint.DNSServerList,
-			EnableLowMetric: endpoint.EnableLowMetric,
-			EncapOverhead:   endpoint.EncapOverhead,
-		}
-		if v6 := endpoint.IPv6Address.To16(); v6 != nil && !v6.IsUnspecified() {
-			// if the address is empty or invalid, endpoint.IPv6Address.String will be "<nil>"
-			// since we should be guranteed an IPv4, but not a v6, skip invalid v6 address
-			s.IPv6Address = v6.String()
-			s.IPv6PrefixLength = endpoint.IPv6PrefixLength
-			s.IPv6GatewayAddress = endpoint.GatewayAddressV6
-			log.G(ctx).WithFields(logrus.Fields{
-				"ip":           s.IPAddress,
-				"prefixLength": s.IPv6PrefixLength,
-				"gateway":      s.IPv6GatewayAddress,
-			}).Debug("adding IPv6 settings")
-		}
 		if uvm.isNetworkNamespaceSupported() {
 			request.GuestRequest = guestrequest.ModificationRequest{
 				ResourceType: guestresource.ResourceTypeNetwork,
@@ -627,7 +660,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 	return nil
 }
 
-func (uvm *UtilityVM) removeNIC(ctx context.Context, id string, endpoint *hns.HNSEndpoint) error {
+func (uvm *UtilityVM) removeNIC(ctx context.Context, id string, endpoint *hcn.HostComputeEndpoint) error {
 	request := hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeRemove,
 		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
@@ -652,7 +685,7 @@ func (uvm *UtilityVM) removeNIC(ctx context.Context, id string, endpoint *hns.HN
 				ResourceType: guestresource.ResourceTypeNetwork,
 				RequestType:  guestrequest.RequestTypeRemove,
 				Settings: &guestresource.LCOWNetworkAdapter{
-					NamespaceID: endpoint.Namespace.ID,
+					NamespaceID: endpoint.HostComputeNamespace,
 					ID:          endpoint.Id,
 				},
 			}

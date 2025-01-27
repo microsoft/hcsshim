@@ -133,6 +133,7 @@ type OptionsLCOW struct {
 	HclEnabled              *bool                // Whether to enable the host compatibility layer
 	ExtraVSockPorts         []uint32             // Extra vsock ports to allow
 	AssignedDevices         []VPCIDeviceID       // AssignedDevices are devices to add on pod boot
+	PolicyBasedRouting      bool                 // Whether we should use policy based routing when configuring net interfaces in guest
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -931,6 +932,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		encryptScratch:          opts.EnableScratchEncryption,
 		noWritableFileShares:    opts.NoWritableFileShares,
 		confidentialUVMOptions:  opts.ConfidentialOptions,
+		policyBasedRouting:      opts.PolicyBasedRouting,
 	}
 
 	defer func() {

@@ -168,3 +168,27 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 	}
 	return nil
 }
+
+type ResourceCloserList struct {
+	closers []ResourceCloser
+}
+
+func (l *ResourceCloserList) Add(rOp ResourceCloser) *ResourceCloserList {
+	l.closers = append(l.closers, rOp)
+	return l
+}
+
+func (l *ResourceCloserList) AddFunc(rOp ResourceCloserFunc) *ResourceCloserList {
+	l.closers = append(l.closers, rOp)
+	return l
+}
+
+func (l *ResourceCloserList) Release(ctx context.Context) error {
+	// MUST release in the reverse order
+	for i := len(l.closers) - 1; i >= 0; i-- {
+		if oErr := l.closers[i].Release(ctx); oErr != nil {
+			return oErr
+		}
+	}
+	return nil
+}

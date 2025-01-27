@@ -429,5 +429,5 @@ version of the pause container is automatically added to policy even though it
 isn't in the TOML configuration.
 
 If the version of the pause container changes from 3.1, you will need to update
-the hardcoded root hash by running the `dmverity-vhd` to compute the root hash
-for the new container and update this tool accordingly.
+the hardcoded root hash by running the [dmverity-vhd](https://github.com/microsoft/integrity-vhd/tree/main/cmd/dmverity-vhd)
+to compute the root hash for the new container and update this tool accordingly.
