@@ -19,7 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
-	"github.com/opencontainers/runc/libcontainer/user"
+	"github.com/moby/sys/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
