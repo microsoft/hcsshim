@@ -399,6 +399,14 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 		}
 
 		log.Printf(", WCOWCombinedLayers {ContainerRootPath: %v, Layers: %v, ScratchPath: %v} \n", settings.ContainerRootPath, settings.Layers, settings.ScratchPath)
+		for i, layer := range settings.Layers {
+			log.Printf("Layer %d Id: %s\n", i, layer.Id)
+			var ctx context.Context
+			err := b.PolicyEnforcer.securityPolicyEnforcer.EnforceDeviceMountPolicy(ctx, settings.ContainerRootPath, layer.Id)
+			if err != nil {
+				log.Printf("denied by policy %v", r)
+			}
+		}
 	case guestresource.ResourceTypeNetworkNamespace:
 		settings := &hcn.HostComputeNamespace{}
 		if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
@@ -422,11 +430,6 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 		if err := json.Unmarshal(rawGuestRequest, wcowMappedVirtualDisk); err != nil {
 			log.Printf("invalid ResourceTypeMappedVirtualDisk request %v", r)
 			return fmt.Errorf("invalid ResourceTypeMappedVirtualDisk request %v", r)
-		}
-		var ctx context.Context
-		err := b.PolicyEnforcer.securityPolicyEnforcer.EnforceDeviceMountPolicy(ctx, wcowMappedVirtualDisk.ContainerPath, "0123456789")
-		if err != nil {
-			log.Printf("denied by policy %v", r)
 		}
 		log.Printf(", wcowMappedVirtualDisk { %v} \n", wcowMappedVirtualDisk)
 	// TODO need a case similar to guestresource.ResourceTypeSecurityPolicy of lcow?
