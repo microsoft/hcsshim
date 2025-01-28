@@ -4,6 +4,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -422,7 +423,11 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 			log.Printf("invalid ResourceTypeMappedVirtualDisk request %v", r)
 			return fmt.Errorf("invalid ResourceTypeMappedVirtualDisk request %v", r)
 		}
-
+		var ctx context.Context
+		err := b.PolicyEnforcer.securityPolicyEnforcer.EnforceDeviceMountPolicy(ctx, wcowMappedVirtualDisk.ContainerPath, "0123456789")
+		if err != nil {
+			log.Printf("denied by policy %v", r)
+		}
 		log.Printf(", wcowMappedVirtualDisk { %v} \n", wcowMappedVirtualDisk)
 	// TODO need a case similar to guestresource.ResourceTypeSecurityPolicy of lcow?
 	// case guestresource.ResourceTypeSecurityPolicy:

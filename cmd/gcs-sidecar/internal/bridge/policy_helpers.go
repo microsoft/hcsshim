@@ -29,7 +29,7 @@ func (s *SecurityPoliyEnforcer) SetWCOWConfidentialUVMOptions(securityPolicyRequ
 	// Initialize security policy enforcer for a given enforcer type and
 	// encoded security policy.
 	p, err := windowssecuritypolicy.CreateSecurityPolicyEnforcer(
-		securityPolicyRequest.EnforcerType,
+		"rego",
 		securityPolicyRequest.EncodedSecurityPolicy,
 		DefaultCRIMounts(),
 		DefaultCRIPrivilegedMounts(),
