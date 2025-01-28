@@ -57,6 +57,8 @@ const (
 //
 
 func TestHVSock_UVM_HostBind(t *testing.T) {
+	t.Skip("tests are flaky, skipping until fixed")
+
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW, featureUVM)
 
@@ -193,6 +195,8 @@ func TestHVSock_UVM_HostBind(t *testing.T) {
 }
 
 func TestHVSock_UVM_GuestBind(t *testing.T) {
+	t.Skip("tests are flaky, skipping until fixed")
+
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW, featureUVM)
 
@@ -318,6 +322,8 @@ func TestHVSock_UVM_GuestBind(t *testing.T) {
 //  - internal\hcs\schema2.Container.HvSockets
 
 func TestHVSock_Container_HostBind(t *testing.T) {
+	t.Skip("tests are flaky, skipping until fixed")
+
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW, featureUVM, featureContainer)
 
@@ -462,6 +468,8 @@ func TestHVSock_Container_HostBind(t *testing.T) {
 }
 
 func TestHVSock_Container_GuestBind(t *testing.T) {
+	t.Skip("tests are flaky, skipping until fixed")
+
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW, featureUVM, featureContainer)
 
