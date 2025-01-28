@@ -117,8 +117,11 @@ type Bridge struct {
 
 	// Response channels to forward incoming requests to inbox GCS
 	// and send responses back to hcsshim respectively.
-	sendToGCSCh  chan request
-	sendToShimCh chan request
+	sendToGCSChan chan request
+	sendToShimCh  chan request
+
+	quitChan chan error
+	// brdgErr error
 }
 
 type SecurityPoliyEnforcer struct {
@@ -134,8 +137,9 @@ func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser) *Br
 		rpcHandlerList: make(map[rpcProc]HandlerFunc),
 		shimConn:       shimConn,
 		inboxGCSConn:   inboxGCSConn,
-		sendToGCSCh:    make(chan request),
+		sendToGCSChan:  make(chan request),
 		sendToShimCh:   make(chan request),
+		quitChan:       make(chan error),
 	}
 }
 
@@ -222,16 +226,16 @@ func isLocalDisconnectError(err error) bool {
 
 func (b *Bridge) ListenAndServeShimRequests() error {
 	shimRequestChan := make(chan request)
-	shimErrChan := make(chan error)
-	inboxGcsErrChan := make(chan error)
+	shimRequestErrChan := make(chan error)
+	gcsRequestErrChan := make(chan error)
 
-	defer close(inboxGcsErrChan)
+	defer close(gcsRequestErrChan)
 	defer b.inboxGCSConn.Close()
 	defer close(shimRequestChan)
-	defer close(shimErrChan)
+	defer close(shimRequestErrChan)
 	defer b.shimConn.Close()
 	defer close(b.sendToShimCh)
-	defer close(b.sendToGCSCh)
+	defer close(b.sendToGCSChan)
 
 	// Listen to requests from hcsshim
 	go func() {
@@ -251,9 +255,9 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 			log.Printf("Request from shim: \n Header {Type: %v Size: %v ID: %v }\n msg: %v \n", getMessageType(req.header), getMessageSize(req.header), getMessageID(req.header), string(req.message))
 			shimRequestChan <- req
 		}
-		shimErrChan <- recverr
+		shimRequestErrChan <- recverr
 	}()
-	// Process each bridge request received from shim asynchronously.
+	// Process each bridge request async and create the response writer.
 	go func() {
 		for req := range shimRequestChan {
 			go func(req request) {
@@ -271,14 +275,14 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 		}
 	}()
 	go func() {
-		var sendErr error
-		for req := range b.sendToGCSCh {
-			// Forward message to gcs
+		//var resperr error
+		for req := range b.sendToGCSChan {
+			// reconstruct message and forward to gcs
+			var buf bytes.Buffer
 			log.Printf("bridge send to gcs, req %v", req)
-			if sendErr = b.prepareMessageAndSend(&req.header, req.message, b.inboxGCSConn); sendErr != nil {
+			if b.prepareMessageAndSend(&req.header, req.message, &buf, b.inboxGCSConn) != nil {
 				// kill bridge?
-				log.Printf("err forwarding shim req to nbox GCS")
-				inboxGcsErrChan <- fmt.Errorf("err forwarding shim req to inbox GCS: %v", sendErr)
+				log.Printf("err sending message to GCS")
 			}
 		}
 	}()
@@ -301,50 +305,75 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 			// Reconstruct message and forward to shim
 			b.sendToShimCh <- req
 		}
-		inboxGcsErrChan <- recverr
+		gcsRequestErrChan <- recverr
 	}()
 
 	go func() {
-		var sendErr error
 		for req := range b.sendToShimCh {
-			// Send response to shim
-			log.Printf("Send response to shim \n Header:{ID: %v, Type: %v, Size: %v} \n msg: %v \n", getMessageID(req.header),
-				getMessageType(req.header), getMessageSize(req.header), string(req.message))
-			if sendErr = b.prepareMessageAndSend(&req.header, req.message, b.shimConn); sendErr != nil {
+			// reconstruct message and forward to shim
+			var buf bytes.Buffer
+			log.Printf("send to shim, req: \n Header: %v \n msg: %v \n", "", string(req.message))
+			if err := b.prepareMessageAndSend(&req.header, req.message, &buf, b.shimConn); err != nil {
 				// kill bridge?
-				log.Printf("err sending response to shim")
-
-				// b.close(err)
-				shimErrChan <- fmt.Errorf("err sendign response to shim: %v", sendErr)
+				log.Printf("err sending message to ")
+				b.close(err)
 			}
 		}
 	}()
 
 	select {
-	case err := <-shimErrChan:
+	case err := <-shimRequestErrChan:
 		b.close(err)
 		return err
-	case err := <-inboxGcsErrChan:
+	case err := <-gcsRequestErrChan:
 		b.close(err)
 		return err
+
+		// TODO: A quit channel that can be used from handler function
+		// to indicate an error and shutdown the bridge itself. For example,
+		// when requested operation like mount container layers, data mounts
+		// are not allowed?
+		// case err := <-b.quitCh:
+		//	return err
+
 	}
 }
 
 func (b *Bridge) close(err error) {
+	// TODO: Fail outstanding rpc requests before closing bridge and other channels
+	// This is important to do as valid errors need to be recorded by callers and fail
+	// the requests.
+	/********
+	b.mu.Lock()
+	for _, req := range b.rpcs {
+		b.mu.Unlock()
+		var buf bytes.Buffer
+		// TODO: send error responses to all outstanding requests before killing bridge?
+		resp := responseBase{
+			Result:       1, // TODO: Set appropriate result string HRESULT; 0 means no error
+			ErrorMessage: fmt.Errorf("%v", err),
+			ActivityID:   req.header.ActivityID, // TODO: fill in correct activityID
+			ErrorRecords: nil,                   // TODO:  []errorRecord. Has message, stacktrace, file:line etc
+		}
+		// resp []bytes? or prepareMessageAndSend should take an interface.
+		// have a base of header, typ, id, ctrdID, activityID and vary by the message?
+		b.prepareMessageAndSend(*req, &buf, b.shimConn)
+
+	}
+	*/
+
 	b.shimConn.Close()
 	b.inboxGCSConn.Close()
-	close(b.sendToGCSCh)
-	close(b.sendToShimCh)
+	close(b.quitChan)
 }
 
-// Prepare response message and send to `conn`.
-func (b *Bridge) prepareMessageAndSend(header *[hdrSize]byte, message []byte, conn io.ReadWriteCloser) error {
-	var buf bytes.Buffer
-	// Write message header followed by actual payload.
-
-	// Write the message to connection.
+func (b *Bridge) prepareMessageAndSend(header *[hdrSize]byte, message []byte, buf *bytes.Buffer, conn io.ReadWriteCloser) error {
+	buf.Write(header[:])
+	buf.Write(message[:])
+	// Write the message.
 	_, err := buf.WriteTo(conn)
 	if err != nil {
+		return fmt.Errorf("bridge write: %s", err)
 	}
 	return nil
 }
