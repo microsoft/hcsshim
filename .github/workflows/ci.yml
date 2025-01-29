@@ -390,7 +390,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ github.event_name == 'pull_request' }}
         with:
-          name: test_binaries_${{ matrix.os }}
+          name: test_binaries_${{ matrix.name }}
           path: |
             test/containerd-shim-runhcs-v1.test.exe
             test/cri-containerd.test.exe
