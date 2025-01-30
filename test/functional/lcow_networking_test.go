@@ -38,6 +38,16 @@ func TestLCOW_IPv6_Assignment(t *testing.T) {
 	})
 	t.Logf("created namespace %s", ns.Id)
 
+	ipv4Route := hcn.Route{
+		NextHop:           "192.168.128.1",
+		DestinationPrefix: "0.0.0.0/0",
+	}
+
+	ipv6Route := hcn.Route{
+		NextHop:           "fd00::101",
+		DestinationPrefix: "::/0",
+	}
+
 	// create network and endpoint
 	ntwk, err := (&hcn.HostComputeNetwork{
 		Name: hcsOwner + "network",
@@ -48,21 +58,11 @@ func TestLCOW_IPv6_Assignment(t *testing.T) {
 				Subnets: []hcn.Subnet{
 					{
 						IpAddressPrefix: "192.168.128.0/20",
-						Routes: []hcn.Route{
-							{
-								NextHop:           "192.168.128.1",
-								DestinationPrefix: "0.0.0.0/0",
-							},
-						},
+						Routes:          []hcn.Route{ipv4Route},
 					},
 					{
 						IpAddressPrefix: "fd00::100/120",
-						Routes: []hcn.Route{
-							{
-								NextHop:           "fd00::101",
-								DestinationPrefix: "::/0",
-							},
-						},
+						Routes:          []hcn.Route{ipv6Route},
 					},
 				},
 			},
@@ -88,17 +88,10 @@ func TestLCOW_IPv6_Assignment(t *testing.T) {
 		PrefixLength: 120,
 	}
 
-	rts := []hcn.Route{}
-	for _, ipam := range ntwk.Ipams {
-		for _, sb := range ipam.Subnets {
-			rts = append(rts, sb.Routes...)
-			t.Logf("%s subnet %s (gw: %s)", ipam.Type, sb.IpAddressPrefix, sb.Routes[0].NextHop)
-		}
-	}
 	ep, err := (&hcn.HostComputeEndpoint{
 		Name:               ntwk.Name + "endpoint",
 		HostComputeNetwork: ntwk.Id,
-		Routes:             rts,
+		Routes:             []hcn.Route{ipv4Route, ipv6Route},
 		IpConfigurations:   []hcn.IpConfig{ip4Want, ip6Want},
 		SchemaVersion:      hcn.Version{Major: 2, Minor: 2},
 	}).Create()
