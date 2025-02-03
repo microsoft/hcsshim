@@ -308,7 +308,7 @@ jobs:
         echo "The full file name is $ROOTFS_TAR"
 
         make clean
-        sudo make KMOD=1 BASE=${{ github.workspace }}/$ROOTFS_TAR rootfs
+        sudo make KMOD=1 BASE=${{ github.workspace }}/$ROOTFS_TAR rootfs GO_BUILD_TAGS=rego
 
     - name: Move newly created rootfs.vhd and initrd.img
       run: |
@@ -486,10 +486,9 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          # Don't run LCOW integrity tests.
+          # Try run LCOW integrity tests.
           # Windows/Linux uVM tests will be run on 1ES Github Runner Pool.
           $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe ' +
-                 '-exclude=LCOWIntegrity ' +
                  '-linux-bootfiles=${{ env.LINUX_BOOT_FILES_PATH }} ' +
                  '-test.timeout=1h -test.v -log-level=info'
           $cmd = $cmd -replace 'gotestsum', $gotestsum
