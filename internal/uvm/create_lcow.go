@@ -129,6 +129,7 @@ type OptionsLCOW struct {
 	EnableColdDiscardHint   bool                 // Whether the HCS should use cold discard hints. Defaults to false
 	VPCIEnabled             bool                 // Whether the kernel should enable pci
 	EnableScratchEncryption bool                 // Whether the scratch should be encrypted
+	NoSecurityHardware      bool                 // Whether security hardware is used
 	DisableTimeSyncService  bool                 // Disables the time synchronization service
 	HclEnabled              *bool                // Whether to enable the host compatibility layer
 	ExtraVSockPorts         []uint32             // Extra vsock ports to allow

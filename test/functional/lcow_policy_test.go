@@ -61,6 +61,8 @@ func TestGetProperties_WithPolicy(t *testing.T) {
 			)
 			opts.SecurityPolicyEnforcer = "rego"
 			opts.SecurityPolicy = policy
+			opts.NoSecurityHardware = true
+			opts.EnableScratchEncryption = false
 
 			cleanName := util.CleanName(t.Name())
 			vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
