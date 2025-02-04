@@ -69,7 +69,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 				}
 				mdv2.HostPath = src
 			} else if mount.Type == MountTypeVirtualDisk || mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeExtensibleVirtualDisk {
-				// For v2 schema containers, any disk mounts will be part of coi.additionalMounts.
+				// For v2 schema containers, any disk mounts will be part of coi.windowsAdditionalMounts.
 				// For v1 schema containers, we don't even get here, since there is no HostingSystem.
 				continue
 			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {

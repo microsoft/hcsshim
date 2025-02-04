@@ -181,9 +181,16 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 				// Mounts that map to a path in the UVM are specified with a 'sandbox://' prefix.
 				//
-				// Example: sandbox:///a/dirInUvm destination:C:\\dirInContainer.
+				// Example:
+				//   - sandbox:///a/dirInUvm destination:C:\\dirInContainer.
+				//   - sandbox://\\.\pipe\uvmNamedPipe destination: \\.\pipe\containerNamedPipe
 				//
 				// so first convert to a path in the sandboxmounts path itself.
+				if uvm.IsPipe(mount.Source) {
+					// When mapping UVM named pipe into container, we don't need to do anything else, since it'll be
+					// handled via `createMountsConfig`.
+					continue
+				}
 				sandboxPath := convertToWCOWSandboxMountPath(mount.Source)
 
 				// Now we need to exec a process in the vm that will make these directories as theres
