@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -67,6 +68,22 @@ type shimPod interface {
 	// return `errdefs.ErrFailedPrecondition`. Deleting the pod's sandbox task
 	// is a no-op.
 	DeleteTask(ctx context.Context, tid string) error
+}
+
+func isPauseContainerRequired() bool {
+	// HNS versions >= 15.2 change how network compartments are
+	// initialized for pods. This supports removal of pause containers
+	// for process isolation.
+	isPauseContainerNeeded := true
+	hnsGlobals, err := hcsshim.GetHNSGlobals()
+	if err == nil {
+		if hnsGlobals.Version.Major > 15 ||
+			(hnsGlobals.Version.Major == 15 && hnsGlobals.Version.Minor >= 2) {
+			isPauseContainerNeeded = false
+		}
+	}
+
+	return isPauseContainerNeeded
 }
 
 func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimPod, err error) {
@@ -143,7 +160,6 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			parent.Close()
 			return nil, err
 		}
-
 	} else if oci.IsJobContainer(s) {
 		// If we're making a job container fake a task (i.e reuse the wcowPodSandbox logic)
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent, "")
@@ -190,25 +206,21 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 	}
 
-	// TODO: JTERRY75 - There is a bug in the compartment activation for Windows
-	// Process isolated that requires us to create the real pause container to
-	// hold the network compartment open. This is not required for Windows
-	// Hypervisor isolated. When we have a build that supports this for Windows
-	// Process isolated make sure to move back to this model.
-
 	// For WCOW we fake out the init task since we dont need it. We only
 	// need to provision the guest network namespace if this is hypervisor
 	// isolated. Process isolated WCOW gets the namespace endpoints
 	// automatically.
 	nsid := ""
-	if isWCOW && parent != nil {
-		if s.Windows != nil && s.Windows.Network != nil {
-			nsid = s.Windows.Network.NetworkNamespace
-		}
+	if isWCOW && (parent != nil || !isPauseContainerRequired()) {
+		if parent != nil {
+			if s.Windows != nil && s.Windows.Network != nil {
+				nsid = s.Windows.Network.NetworkNamespace
+			}
 
-		if nsid != "" {
-			if err := parent.ConfigureNetworking(ctx, nsid); err != nil {
-				return nil, errors.Wrapf(err, "failed to setup networking for pod %q", req.ID)
+			if nsid != "" {
+				if err := parent.ConfigureNetworking(ctx, nsid); err != nil {
+					return nil, errors.Wrapf(err, "failed to setup networking for pod %q", req.ID)
+				}
 			}
 		}
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent, nsid)
