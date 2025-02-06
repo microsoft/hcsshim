@@ -47,6 +47,9 @@ func TestGetProperties_WithPolicy(t *testing.T) {
 	for _, allowProperties := range []bool{true, false} {
 		t.Run(fmt.Sprintf("AllowPropertiesAccess_%t", allowProperties), func(t *testing.T) {
 			opts := defaultLCOWOptions(ctx, t)
+			opts.EnableScratchEncryption = false
+			opts.VPMemDeviceCount = 0
+
 			policy := policytest.PolicyFromImageWithOpts(
 				t,
 				testimages.ImageLinuxAlpineLatest,
@@ -72,6 +75,7 @@ func TestGetProperties_WithPolicy(t *testing.T) {
 					"",
 					ctrdoci.WithProcessArgs("/bin/sh", "-c", testoci.TailNullArgs),
 					testoci.WithWindowsLayerFolders(append(ls, scratchPath)),
+					ctrdoci.WithEnv([]string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}),
 				)...,
 			)
 

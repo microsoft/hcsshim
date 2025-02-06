@@ -489,6 +489,7 @@ jobs:
           # Try run LCOW integrity tests.
           # Windows/Linux uVM tests will be run on 1ES Github Runner Pool.
           $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe ' +
+                 '-test.run=^TestGetProperties_WithPolicy ' +
                  '-linux-bootfiles=${{ env.LINUX_BOOT_FILES_PATH }} ' +
                  '-test.timeout=1h -test.v -log-level=info'
           $cmd = $cmd -replace 'gotestsum', $gotestsum
