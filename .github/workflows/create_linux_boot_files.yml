@@ -1,0 +1,108 @@
+name: Create Linux Boot Files
+on: 
+  - push
+  - pull_request_target
+
+env:
+  LCOW_ARTIFACT_PROJECT: "ContainerPlatform"
+  LCOW_ARTIFACT_FEED: "ContainerPlat-Dev"
+  LCOW_ARTIFACT_NAME: "azurelinux-uvm"
+  LCOW_ARTIFACT_VERSION: "*.*.*"
+  LINUX_BOOT_FILES_PATH: ${{ github.workspace }}/LinuxBootFiles
+
+jobs:
+  # This job downloads the Linux boot files from the Azure Artifact feed and
+  # create the rootfs containing the local Linux-GCS. It needs to be run on
+  # the 1ES github runner pool in order to access the Azure Artifact feed.
+  create-linux-boot-files:
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=containerplat-github-runner-pool-east-us-2
+      - 1ES.ImageOverride=github-mms-ubuntu-22
+    permissions:
+      id-token: write   # This is required for OIDC login (azure/login) to succeed
+      contents: read    # This is required for actions/checkout to succeed
+    steps:
+    - name: Checkout hcsshim
+      uses: actions/checkout@v4
+      with:
+        show-progress: false
+    
+    # Install Azure CLI and login to Azure
+    - name: Azure OIDC Login
+      uses: azure/login@v2
+      with:
+        auth-type: IDENTITY
+        client-id: "930a0428-2b45-4cf9-9afe-b81bde516504"
+        tenant-id: "72f988bf-86f1-41af-91ab-2d7cd011db47"
+        allow-no-subscriptions: true
+
+    - name: Download artifact from feed
+      uses: azure/cli@v2
+      with:
+        azcliversion: latest
+        inlineScript: |
+          az extension add --name azure-devops
+          export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+
+          az artifacts universal download \
+          --organization "https://msazure.visualstudio.com/" \
+          --project ${{ env.LCOW_ARTIFACT_PROJECT }} \
+          --scope project \
+          --feed  ${{ env.LCOW_ARTIFACT_FEED }} \
+          --name  ${{ env.LCOW_ARTIFACT_NAME }} \
+          --version ${{ env.LCOW_ARTIFACT_VERSION }} \
+          --path ./downloaded_artifacts
+
+    - name: Show downloaded lcow artifacts
+      run: find ./downloaded_artifacts -maxdepth 3 -ls
+
+    - name: Create directory for storing linux boot files
+      run: |
+        mkdir -p ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mkdir -p ./temp_rootfs/
+
+    - name: Copy Linux kernel and rootfs tar files
+      run: |
+        mv ./downloaded_artifacts/LinuxBootFiles/kernel ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mv ./downloaded_artifacts/LinuxBootFiles/vmlinux ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mv ./downloaded_artifacts/rootfs-*.tar.gz ./temp_rootfs/
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y make gcc binutils linux-headers-generic \
+          libarchive-tools btrfs-progs libseccomp-dev pkg-config cpio libkmod-dev
+
+    - name: Create rootfs containing the local Linux-GCS
+      run: |
+        chmod a+x ${{ github.workspace }}/hack/catcpio.sh
+
+        # Find the full file name for rootfs tar
+        ROOTFS_TAR=$(ls temp_rootfs/rootfs-*.tar.gz | head -n 1)
+        echo "The full file name is $ROOTFS_TAR"
+
+        make clean
+        sudo make KMOD=1 BASE=${{ github.workspace }}/$ROOTFS_TAR rootfs
+
+    - name: Move newly created rootfs.vhd and initrd.img
+      run: |
+        mv out/rootfs.vhd ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mv out/initrd.img ${{ env.LINUX_BOOT_FILES_PATH }}/
+
+    # This is a workaround to overcome the limitation of actions/upload-artifact@v4 used in later jobs.
+    # See https://github.com/actions/upload-artifact/tree/v4/?tab=readme-ov-file#permission-loss.
+    - name: Tar the files to preserve file permissions prior to upload
+      run: |
+        cd ${{ env.LINUX_BOOT_FILES_PATH }}
+        tar -cvf ../linux_boot_files.tar .
+
+    # Upload the Linux boot files so that they can be used in later jobs.
+    - name: Upload Linux boot files to artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux_artifact
+        path: linux_boot_files.tar
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 1

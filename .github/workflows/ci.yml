@@ -1,8 +1,10 @@
 name: CI
 on:
-  - push
-  - pull_request
-
+  workflow_run:
+    workflows: ["Create Linux Boot Files"]
+    types:
+      - completed
+      
 env:
   GO_BUILD_CMD: 'go build "-ldflags=-s -w" -trimpath'
   GO_BUILD_TEST_CMD: "go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional"
