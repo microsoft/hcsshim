@@ -52,7 +52,6 @@ func TestPlan9(t *testing.T) {
 }
 
 func TestPlan9_Writable(t *testing.T) {
-	t.Skip("not yet working on the azurelinux rootfs")
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureUVM, featurePlan9)
 	ctx := util.Context(context.Background(), t)
