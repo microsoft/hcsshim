@@ -254,10 +254,12 @@ jobs:
       uses: actions/checkout@v4
       with:
         show-progress: false
-
+    
+    # Install Azure CLI and login to Azure
     - name: Azure OIDC Login
       uses: azure/login@v2
       with:
+        auth-type: IDENTITY
         client-id: "930a0428-2b45-4cf9-9afe-b81bde516504"
         tenant-id: "72f988bf-86f1-41af-91ab-2d7cd011db47"
         allow-no-subscriptions: true
