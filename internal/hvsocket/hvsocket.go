@@ -36,8 +36,24 @@ func (aic addressInfoCloser) Release(_ context.Context) error {
 	return windows.CloseHandle(aic.handle)
 }
 
-func CreateAddressInfo(cid, vmid guid.GUID, passthru bool) (resources.ResourceCloser, error) {
-	path := fmt.Sprintf(`\\.\HvSocketSystem\AddressInfo\{%s}`, cid)
+// CreateContainerAddressInfo creates an address info entry in HvSocket to redirect
+// the calls to the container silo inside UVM.
+func CreateContainerAddressInfo(containerID, uvmID guid.GUID) (resources.ResourceCloser, error) {
+	return CreateAddressInfo(containerID, uvmID, guid.GUID{}, true)
+}
+
+// CreateAddressInfo creates an address info entry in the HvSocket provider to map a
+// compute system GUID to a virtual machine ID or compartment ID.
+//
+// `systemID` is the compute system GUID to map.
+// `vmID` is the virtual machine ID to which the system GUID maps to. Must be guid.GUID{} to specify
+// that the system GUID maps to a network compartment ID on the hosting system.
+// `siloID` is the silo object ID to which the system GUID maps to.
+// `passthru` when vmID is not guid.GUID{}, specifies whether the systemID maps to the primary
+// compartment of the virtual machine (set to `false`) or to another compartment within the
+// virtual machine (set to `true`)
+func CreateAddressInfo(systemID, vmID, siloID guid.GUID, passthru bool) (resources.ResourceCloser, error) {
+	path := fmt.Sprintf(`\\.\HvSocketSystem\AddressInfo\{%s}`, systemID)
 	u16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err
@@ -56,9 +72,11 @@ func CreateAddressInfo(cid, vmid guid.GUID, passthru bool) (resources.ResourceCl
 	}
 
 	addrInfo := addressInfo{
-		systemID:         cid,
-		virtualMachineID: vmid,
+		systemID:         systemID,
+		virtualMachineID: vmID,
+		siloID:           siloID,
 	}
+
 	if passthru {
 		addrInfo.flags |= addressFlagPassthru
 	}

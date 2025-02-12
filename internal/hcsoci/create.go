@@ -291,7 +291,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			if err != nil {
 				return nil, r, fmt.Errorf("convert to system GUID failed: %w", err)
 			}
-			addressInfoCloser, err := hvsocket.CreateAddressInfo(containerSystemGUID, coi.HostingSystem.RuntimeID(), true)
+			addressInfoCloser, err := hvsocket.CreateContainerAddressInfo(containerSystemGUID, coi.HostingSystem.RuntimeID())
 			if err != nil {
 				return nil, r, fmt.Errorf("redirect container HvSocket failed: %w", err)
 			}
