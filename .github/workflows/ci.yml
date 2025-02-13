@@ -36,7 +36,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.54
+          version: v1.64
           args: >-
             --verbose
             --max-issues-per-linter=0
@@ -45,6 +45,7 @@ jobs:
             --timeout=10m
             --config=${{ github.workspace }}/.golangci.yml
           working-directory: ${{ github.workspace }}/${{ matrix.root }}
+          only-new-issues: true
         env:
           GOOS: ${{ matrix.goos }}
 
@@ -642,6 +643,8 @@ jobs:
         name: Build device-util.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/ncproxy
         name: Build ncproxy.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/hvsocketaddr
+        name: Build hvsocketaddr.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/grantvmgroupaccess
         name: Build grantvmgroupaccess.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/networkagent
@@ -669,6 +672,7 @@ jobs:
             wclayer.exe
             device-util.exe
             ncproxy.exe
+            hvsocketaddr.exe
             grantvmgroupaccess.exe
             networkagent.exe
             securitypolicy.exe
