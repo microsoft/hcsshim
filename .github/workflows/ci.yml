@@ -36,7 +36,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.54
+          version: v1.64
           args: >-
             --verbose
             --max-issues-per-linter=0
@@ -45,6 +45,7 @@ jobs:
             --timeout=10m
             --config=${{ github.workspace }}/.golangci.yml
           working-directory: ${{ github.workspace }}/${{ matrix.root }}
+          only-new-issues: true
         env:
           GOOS: ${{ matrix.goos }}
 
