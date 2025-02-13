@@ -543,7 +543,7 @@ func (r *RegoPolicyInterpreter) query(rule string, input map[string]interface{})
 	resultSet, err := query.Eval(ctx)
 	output := buf.String()
 
-	r.logInfo(output)
+	r.logInfo("%s", output)
 
 	return resultSet, err
 }

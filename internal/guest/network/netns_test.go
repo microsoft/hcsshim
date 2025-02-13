@@ -6,6 +6,7 @@ package network
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -72,7 +73,7 @@ func unreachableNetlinkRouteAdd(count *int, link netlink.Link, expected []*testR
 		if err := f(route); err != nil {
 			return err
 		}
-		return fmt.Errorf(unreachableErrStr)
+		return errors.New(unreachableErrStr)
 	}
 }
 
