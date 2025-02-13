@@ -73,11 +73,11 @@ func BaseStackTrace(e error) errors.StackTrace {
 	cause := e
 	var tracer StackTracer
 	for cause != nil {
-		serr, ok := cause.(StackTracer) //nolint:errorlint
+		serr, ok := cause.(StackTracer)
 		if ok {
 			tracer = serr
 		}
-		cerr, ok := cause.(causer) //nolint:errorlint
+		cerr, ok := cause.(causer)
 		if !ok {
 			break
 		}
@@ -132,7 +132,7 @@ func (e *wrappingHresultError) StackTrace() errors.StackTrace {
 	type stackTracer interface {
 		StackTrace() errors.StackTrace
 	}
-	serr, ok := e.Cause().(stackTracer) //nolint:errorlint
+	serr, ok := e.Cause().(stackTracer)
 	if !ok {
 		return nil
 	}
@@ -167,11 +167,11 @@ func GetHresult(e error) (Hresult, error) {
 	}
 	cause := e
 	for cause != nil {
-		herr, ok := cause.(hresulter) //nolint:errorlint
+		herr, ok := cause.(hresulter)
 		if ok {
 			return herr.Hresult(), nil
 		}
-		cerr, ok := cause.(causer) //nolint:errorlint
+		cerr, ok := cause.(causer)
 		if !ok {
 			break
 		}
