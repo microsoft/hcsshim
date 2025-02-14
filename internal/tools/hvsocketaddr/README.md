@@ -7,7 +7,7 @@ querying HCS isn't an option.
 ## Build
 Build the binary as following
 ```powershell
-> go build ./cmd/hvsocketaddr
+> go build ./internal/tools/hvsocketaddr
 ```
 
 ## Run

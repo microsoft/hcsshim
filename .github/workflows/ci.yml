@@ -642,8 +642,6 @@ jobs:
         name: Build device-util.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/ncproxy
         name: Build ncproxy.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/hvsocketaddr
-        name: Build hvsocketaddr.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/grantvmgroupaccess
         name: Build grantvmgroupaccess.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/networkagent
@@ -659,6 +657,8 @@ jobs:
         name: Build uvmboot.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
         name: Build zapdir.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/hvsocketaddr
+        name: Build hvsocketaddr.exe
 
       - uses: actions/upload-artifact@v4
         if: ${{ github.event_name == 'pull_request' }}
