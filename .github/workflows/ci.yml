@@ -1,3 +1,4 @@
+# test 1
 name: CI
 permissions: read-all
 on:
