@@ -31,9 +31,9 @@ jobs:
               "${{ github.event.pull_request.author_association }}" != "OWNER" ]]; then
           echo "Author association: ${{ github.event.pull_request.author_association }}"
           echo "Event not triggered by a collaborator/contributor/owner. Will not continue CI."
-          exit 1
         else
-          echo "Author is a collaborator/contributor/owner. Continuing CI."
+          echo "Author is a ${{ github.event.pull_request.author_association }}. Continuing CI."
+          exit 1
         fi
 
   lint:
