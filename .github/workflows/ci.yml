@@ -1,9 +1,15 @@
 name: CI
 permissions: read-all
 on:
+<<<<<<< HEAD
   pull_request_target:
     branches: ["jiechen3/github_runner"]
 
+=======
+  - push
+  - pull_request
+# adding a comment to test which workflow file is used 2
+>>>>>>> 01533416 (test 2)
 env:
   GO_BUILD_CMD: 'go build "-ldflags=-s -w" -trimpath'
   GO_BUILD_TEST_CMD: "go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional"
