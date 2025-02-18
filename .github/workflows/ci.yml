@@ -1,7 +1,8 @@
 name: CI
+permissions: read-all
 on:
-  - push
-  - pull_request
+  pull_request_target:
+    branches: ["jiechen3/github_runner"]
 
 env:
   GO_BUILD_CMD: 'go build "-ldflags=-s -w" -trimpath'
@@ -19,8 +20,25 @@ env:
   LINUX_BOOT_FILES_PATH: ${{ github.workspace }}/LinuxBootFiles
 
 jobs:
+  check-access:
+    runs-on:
+      - ubuntu-latest
+    steps:
+    - name: Check access
+      run: |
+        if [[ "${{ github.event.pull_request.author_association }}" != "COLLABORATOR" && \
+              "${{ github.event.pull_request.author_association }}" != "CONTRIBUTOR" && \
+              "${{ github.event.pull_request.author_association }}" != "OWNER" ]]; then
+          echo "Author association: ${{ github.event.pull_request.author_association }}"
+          echo "Event not triggered by a collaborator/contributor/owner. Will not continue CI."
+          exit 1
+        else
+          echo "Triggering actor is a ${{ github.event.pull_request.author_association }}. Continuing CI."
+        fi
+
   lint:
     runs-on: "windows-2022"
+    needs: [check-access]
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +74,8 @@ jobs:
 
   protos:
     runs-on: "windows-2022"
+
+    needs: [check-access]
 
     env:
       # translating from github.com/Microsoft/hcsshim/<path> (via `go list`) to <path> is easier if hcsshim is in GOPATH/src
@@ -118,6 +138,7 @@ jobs:
         working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
 
   verify-vendor:
+    needs: [check-access]
     runs-on: "windows-2022"
     env:
       GOPROXY: "https://proxy.golang.org,direct"
@@ -185,6 +206,7 @@ jobs:
 
   go-gen:
     name: Go Generate
+    needs: [check-access]
     runs-on: "windows-2022"
     steps:
       - name: Checkout
@@ -242,6 +264,7 @@ jobs:
   # create the rootfs containing the local Linux-GCS. It needs to be run on
   # the 1ES github runner pool in order to access the Azure Artifact feed.
   create-linux-boot-files:
+    needs: [check-access]
     runs-on:
       - self-hosted
       - 1ES.Pool=containerplat-github-runner-pool-east-us-2
