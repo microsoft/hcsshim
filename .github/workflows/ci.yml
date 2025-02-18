@@ -24,17 +24,22 @@ jobs:
     runs-on:
       - ubuntu-latest
     steps:
-    - name: Check access
+    - name: Get User Permission
+      id: checkAccess
+      uses: actions-cool/check-user-permission@v2
+      with:
+        require: write
+        username: ${{ github.triggering_actor }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Check User Permission
+      if: steps.checkAccess.outputs.require-result == 'false'
       run: |
-        if [[ "${{ github.event.pull_request.author_association }}" != "COLLABORATOR" && \
-              "${{ github.event.pull_request.author_association }}" != "CONTRIBUTOR" && \
-              "${{ github.event.pull_request.author_association }}" != "OWNER" ]]; then
-          echo "Author association: ${{ github.event.pull_request.author_association }}"
-          echo "Event not triggered by a collaborator/contributor/owner. Will not continue CI."
-          exit 1
-        else
-          echo "Triggering actor is a ${{ github.event.pull_request.author_association }}. Continuing CI."
-        fi
+        echo "${{ github.triggering_actor }} does not have permissions on this repo."
+        echo "Current permission level is ${{ steps.checkAccess.outputs.user-permission }}"
+        echo "Job originally triggered by ${{ github.actor }}"
+        exit 1
 
   lint:
     runs-on: "windows-2022"
