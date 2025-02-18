@@ -1,8 +1,9 @@
 name: CI
+permissions: read-all
 on:
-  - push
-  - pull_request
-# adding a comment to test which workflow file is used
+  pull_request_target:
+    branches: ["jiechen3/github_runner"]
+
 env:
   GO_BUILD_CMD: 'go build "-ldflags=-s -w" -trimpath'
   GO_BUILD_TEST_CMD: "go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional"
@@ -12,9 +13,32 @@ env:
   GOTESTSUM_CMD: "gotestsum --format standard-verbose --debug --"
   GOTESTSUM_CMD_RAW: "gotestsum --format standard-verbose --debug --raw-command -- go tool test2json -t"
 
+  LCOW_ARTIFACT_PROJECT: "ContainerPlatform"
+  LCOW_ARTIFACT_FEED: "ContainerPlat-Dev"
+  LCOW_ARTIFACT_NAME: "azurelinux-uvm"
+  LCOW_ARTIFACT_VERSION: "*.*.*"
+  LINUX_BOOT_FILES_PATH: ${{ github.workspace }}/LinuxBootFiles
+
 jobs:
+  check-access:
+    runs-on:
+      - ubuntu-latest
+    steps:
+    - name: Check access
+      run: |
+        if [[ "${{ github.event.pull_request.author_association }}" != "COLLABORATOR" && \
+              "${{ github.event.pull_request.author_association }}" != "CONTRIBUTOR" && \
+              "${{ github.event.pull_request.author_association }}" != "OWNER" ]]; then
+          echo "Author association: ${{ github.event.pull_request.author_association }}"
+          echo "Event not triggered by a collaborator/contributor/owner. Will not continue CI."
+          exit 1
+        else
+          echo "Triggering actor is a ${{ github.event.pull_request.author_association }}. Continuing CI."
+        fi
+
   lint:
     runs-on: "windows-2022"
+    needs: [check-access]
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +74,8 @@ jobs:
 
   protos:
     runs-on: "windows-2022"
+
+    needs: [check-access]
 
     env:
       # translating from github.com/Microsoft/hcsshim/<path> (via `go list`) to <path> is easier if hcsshim is in GOPATH/src
@@ -112,6 +138,7 @@ jobs:
         working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
 
   verify-vendor:
+    needs: [check-access]
     runs-on: "windows-2022"
     env:
       GOPROXY: "https://proxy.golang.org,direct"
@@ -179,6 +206,7 @@ jobs:
 
   go-gen:
     name: Go Generate
+    needs: [check-access]
     runs-on: "windows-2022"
     steps:
       - name: Checkout
@@ -232,6 +260,101 @@ jobs:
             exit $LASTEXITCODE
           }
 
+  # This job downloads the Linux boot files from the Azure Artifact feed and
+  # create the rootfs containing the local Linux-GCS. It needs to be run on
+  # the 1ES github runner pool in order to access the Azure Artifact feed.
+  create-linux-boot-files:
+    needs: [check-access]
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=containerplat-github-runner-pool-east-us-2
+      - 1ES.ImageOverride=github-mms-ubuntu-22
+    permissions:
+      id-token: write   # This is required for OIDC login (azure/login) to succeed
+      contents: read    # This is required for actions/checkout to succeed
+    steps:
+    - name: Checkout hcsshim
+      uses: actions/checkout@v4
+      with:
+        show-progress: false
+
+    - name: Azure OIDC Login
+      uses: azure/login@v2
+      with:
+        client-id: "930a0428-2b45-4cf9-9afe-b81bde516504"
+        tenant-id: "72f988bf-86f1-41af-91ab-2d7cd011db47"
+        allow-no-subscriptions: true
+
+    - name: Download artifact from feed
+      uses: azure/cli@v2
+      with:
+        azcliversion: latest
+        inlineScript: |
+          az extension add --name azure-devops
+          export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+
+          az artifacts universal download \
+          --organization "https://msazure.visualstudio.com/" \
+          --project ${{ env.LCOW_ARTIFACT_PROJECT }} \
+          --scope project \
+          --feed  ${{ env.LCOW_ARTIFACT_FEED }} \
+          --name  ${{ env.LCOW_ARTIFACT_NAME }} \
+          --version ${{ env.LCOW_ARTIFACT_VERSION }} \
+          --path ./downloaded_artifacts
+
+    - name: Show downloaded lcow artifacts
+      run: find ./downloaded_artifacts -maxdepth 3 -ls
+
+    - name: Create directory for storing linux boot files
+      run: |
+        mkdir -p ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mkdir -p ./temp_rootfs/
+
+    - name: Copy Linux kernel and rootfs tar files
+      run: |
+        mv ./downloaded_artifacts/LinuxBootFiles/kernel ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mv ./downloaded_artifacts/LinuxBootFiles/vmlinux ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mv ./downloaded_artifacts/rootfs-*.tar.gz ./temp_rootfs/
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y make gcc binutils linux-headers-generic \
+          libarchive-tools btrfs-progs libseccomp-dev pkg-config cpio libkmod-dev
+
+    - name: Create rootfs containing the local Linux-GCS
+      run: |
+        chmod a+x ${{ github.workspace }}/hack/catcpio.sh
+
+        # Find the full file name for rootfs tar
+        ROOTFS_TAR=$(ls temp_rootfs/rootfs-*.tar.gz | head -n 1)
+        echo "The full file name is $ROOTFS_TAR"
+
+        make clean
+        sudo make KMOD=1 BASE=${{ github.workspace }}/$ROOTFS_TAR rootfs
+
+    - name: Move newly created rootfs.vhd and initrd.img
+      run: |
+        mv out/rootfs.vhd ${{ env.LINUX_BOOT_FILES_PATH }}/
+        mv out/initrd.img ${{ env.LINUX_BOOT_FILES_PATH }}/
+
+    # This is a workaround to overcome the limitation of actions/upload-artifact@v4 used in later jobs.
+    # See https://github.com/actions/upload-artifact/tree/v4/?tab=readme-ov-file#permission-loss.
+    - name: Tar the files to preserve file permissions prior to upload
+      run: |
+        cd ${{ env.LINUX_BOOT_FILES_PATH }}
+        tar -cvf ../linux_boot_files.tar .
+
+    # Upload the Linux boot files so that they can be used in later jobs.
+    - name: Upload Linux boot files to artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux_artifact
+        path: linux_boot_files.tar
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 1
+
   test-linux:
     needs: [lint, protos, verify-vendor, go-gen]
     runs-on: ubuntu-latest
@@ -267,7 +390,7 @@ jobs:
 
   test-windows:
     name: test-windows (${{ matrix.name }})
-    needs: [lint, protos, verify-vendor, go-gen]
+    needs: [lint, protos, verify-vendor, go-gen, create-linux-boot-files]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -276,9 +399,15 @@ jobs:
           [windows-2022, windows-2019]
         include: 
           - name: "windows-2019"
-            runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2019-containers-enabled]
+            runner:
+              - self-hosted
+              - 1ES.Pool=containerplat-github-runner-pool-east-us-2
+              - 1ES.ImageOverride=github-mms-ws2019-containers-enabled
           - name: "windows-2022"
-            runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]
+            runner:
+              - self-hosted
+              - 1ES.Pool=containerplat-github-runner-pool-east-us-2
+              - 1ES.ImageOverride=github-mms-ws2022-containers-enabled
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -344,6 +473,26 @@ jobs:
           ${{ env.GOTESTSUM_CMD_RAW }} ./containerd-shim-runhcs-v1.test.exe '-test.v'
         working-directory: test
 
+      - name: Create directory for Linux boot files
+        shell: pwsh
+        run: mkdir -p ${{ env.LINUX_BOOT_FILES_PATH }}/
+
+      # Download Linux kernel files and newly created rootfs containing the Linux-GCS under testing.
+      - name: Download Linux boot files from artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux_artifact
+
+      - name: Extract Linux boot files
+        shell: pwsh
+        run: |
+          tar -xvf linux_boot_files.tar -C ${{ env.LINUX_BOOT_FILES_PATH }}/
+
+      - name: Display downloaded Linux boot files
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Force -Path  ${{ env.LINUX_BOOT_FILES_PATH }}/
+
       - name: Build and run functional testing binary
         run: |
           ${{ env.GO_BUILD_TEST_CMD }} ./functional
@@ -360,8 +509,12 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          # Don't run Linux uVM (ie, nested virt) or LCOW integrity tests. Windows uVM tests will be run on 1ES runner pool.
-          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity -test.timeout=1h -test.v -log-level=info'
+          # Don't run LCOW integrity tests.
+          # Windows/Linux uVM tests will be run on 1ES Github Runner Pool.
+          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe ' +
+                 '-exclude=LCOWIntegrity ' +
+                 '-linux-bootfiles=${{ env.LINUX_BOOT_FILES_PATH }} ' +
+                 '-test.timeout=1h -test.v -log-level=info'
           $cmd = $cmd -replace 'gotestsum', $gotestsum
           Write-Host "gotestsum command: $cmd"
 
