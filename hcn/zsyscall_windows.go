@@ -77,6 +77,7 @@ var (
 	procHcnQueryNetworkProperties      = modcomputenetwork.NewProc("HcnQueryNetworkProperties")
 	procHcnQuerySdnRouteProperties     = modcomputenetwork.NewProc("HcnQuerySdnRouteProperties")
 	procSetCurrentThreadCompartmentId  = modiphlpapi.NewProc("SetCurrentThreadCompartmentId")
+	procGetCurrentThreadCompartmentId = modiphlpapi.NewProc("GetCurrentThreadCompartmentId")
 	procHNSCall                        = modvmcompute.NewProc("HNSCall")
 )
 
@@ -793,6 +794,12 @@ func SetCurrentThreadCompartmentId(compartmentId uint32) (hr error) {
 		}
 		hr = syscall.Errno(r0)
 	}
+	return
+}
+
+func GetCurrentThreadCompartmentId() (compartmentId uint32) {
+	r0, _, _ := syscall.SyscallN(procGetCurrentThreadCompartmentId.Addr())
+	compartmentId = uint32(r0)
 	return
 }
 

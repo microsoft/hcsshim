@@ -39,8 +39,15 @@ func errnoErr(e syscall.Errno) error {
 var (
 	modiphlpapi = windows.NewLazySystemDLL("iphlpapi.dll")
 
+	procGetCurrentThreadCompartmentId = modiphlpapi.NewProc("GetCurrentThreadCompartmentId")
 	procSetCurrentThreadCompartmentId = modiphlpapi.NewProc("SetCurrentThreadCompartmentId")
 )
+
+func GetCurrentThreadCompartmentId() (compartmentId uint32) {
+	r0, _, _ := syscall.SyscallN(procGetCurrentThreadCompartmentId.Addr())
+	compartmentId = uint32(r0)
+	return
+}
 
 func SetCurrentThreadCompartmentId(compartmentId uint32) (hr error) {
 	r0, _, _ := syscall.SyscallN(procSetCurrentThreadCompartmentId.Addr(), uintptr(compartmentId))

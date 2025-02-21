@@ -15,6 +15,7 @@ import (
 /// HNS V1 API
 
 //sys SetCurrentThreadCompartmentId(compartmentId uint32) (hr error) = iphlpapi.SetCurrentThreadCompartmentId
+//sys GetCurrentThreadCompartmentId() (compartmentId uint32) = iphlpapi.GetCurrentThreadCompartmentId
 //sys _hnsCall(method string, path string, object string, response **uint16) (hr error) = vmcompute.HNSCall?
 
 /// HCN V2 API

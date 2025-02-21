@@ -14,6 +14,7 @@ import (
 //go:generate go run github.com/Microsoft/go-winio/tools/mkwinsyscall -output zsyscall_windows.go hcsshim.go
 
 //sys SetCurrentThreadCompartmentId(compartmentId uint32) (hr error) = iphlpapi.SetCurrentThreadCompartmentId
+//sys GetCurrentThreadCompartmentId() (compartmentId uint32) = iphlpapi.GetCurrentThreadCompartmentId
 
 const (
 	// Specific user-visible exit codes
