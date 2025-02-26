@@ -122,6 +122,9 @@ type Options struct {
 	NumaProcessorCounts []uint32
 	// NumaMemoryBlocksCounts are the number of memory blocks per vNUMA node.
 	NumaMemoryBlocksCounts []uint64
+
+	EnableGraphicsConsole bool   // If true, enable a graphics console for the utility VM
+	ConsolePipe           string // The named pipe path to use for the serial console (COM1).  eg \\.\pipe\vmpipe
 }
 
 func verifyWCOWBootFiles(bootFiles *WCOWBootFiles) error {
@@ -177,6 +180,9 @@ func verifyOptions(_ context.Context, options interface{}) error {
 		}
 		if err := verifyWCOWBootFiles(opts.BootFiles); err != nil {
 			return err
+		}
+		if opts.SecurityPolicyEnabled && opts.GuestStateFilePath == "" {
+			return fmt.Errorf("GuestStateFilePath must be provided when enabling security policy")
 		}
 	}
 	return nil

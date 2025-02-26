@@ -86,6 +86,7 @@ func main() {
 	app.Commands = []cli.Command{
 		lcowCommand,
 		wcowCommand,
+		cwcowCommand,
 	}
 
 	app.Before = func(c *cli.Context) error {
@@ -120,6 +121,11 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 	if c.GlobalIsSet(enableDeferredCommitArgName) {
 		options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
 	}
+	if c.GlobalIsSet(enableDeferredCommitArgName) {
+		options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
+	}
+	// Always set the console pipe in uvmboot, it helps with testing/debugging
+	options.ConsolePipe = "\\\\.\\pipe\\uvmpipe"
 }
 
 // todo: add a context here to propagate cancel/timeouts to runFunc uvm
