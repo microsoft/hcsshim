@@ -124,6 +124,25 @@ type Options struct {
 	NumaMemoryBlocksCounts []uint64
 }
 
+func verifyWCOWBootFiles(bootFiles *WCOWBootFiles) error {
+	if bootFiles.BootType == VmbFSBoot {
+		if bootFiles.VmbFSFiles == nil {
+			return fmt.Errorf("VmbFS boot files is empty")
+		} else if bootFiles.BlockCIMFiles != nil {
+			return fmt.Errorf("confidential boot files should be empty")
+		}
+	} else if bootFiles.BootType == BlockCIMBoot {
+		if bootFiles.BlockCIMFiles == nil {
+			return fmt.Errorf("Confidential boot files is empty")
+		} else if bootFiles.VmbFSFiles != nil {
+			return fmt.Errorf("VmbFS boot files should be empty")
+		}
+	} else {
+		return fmt.Errorf("invalid boot type specified")
+	}
+	return nil
+}
+
 // Verifies that the final UVM options are correct and supported.
 func verifyOptions(_ context.Context, options interface{}) error {
 	switch opts := options.(type) {
@@ -155,6 +174,9 @@ func verifyOptions(_ context.Context, options interface{}) error {
 		}
 		if opts.SCSIControllerCount != 1 {
 			return errors.New("exactly 1 SCSI controller is required for WCOW")
+		}
+		if err := verifyWCOWBootFiles(opts.BootFiles); err != nil {
+			return err
 		}
 	}
 	return nil

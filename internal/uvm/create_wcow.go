@@ -86,6 +86,9 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	// UVM rootfs share is readonly.
+	if opts.BootFiles.BootType != VmbFSBoot {
+		return nil, fmt.Errorf("expected VmbFS boot type, found: %d", opts.BootFiles.BootType)
+	}
 	vsmbOpts := uvm.DefaultVSMBOptions(true)
 	vsmbOpts.TakeBackupPrivilege = true
 	virtualSMB := &hcsschema.VirtualSmb{
@@ -93,7 +96,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 		Shares: []hcsschema.VirtualSmbShare{
 			{
 				Name:    "os",
-				Path:    opts.BootFiles.OSFilesPath,
+				Path:    opts.BootFiles.VmbFSFiles.OSFilesPath,
 				Options: vsmbOpts,
 			},
 		},
@@ -192,7 +195,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 			Chipset: &hcsschema.Chipset{
 				Uefi: &hcsschema.Uefi{
 					BootThis: &hcsschema.UefiBootEntry{
-						DevicePath: filepath.Join(opts.BootFiles.OSRelativeBootDirPath, "bootmgfw.efi"),
+						DevicePath: filepath.Join(opts.BootFiles.VmbFSFiles.OSRelativeBootDirPath, "bootmgfw.efi"),
 						DeviceType: "VmbFs",
 					},
 				},
@@ -313,7 +316,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("error in preparing config doc: %w", err)
 	}
 
-	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.ScratchVHDPath); err != nil {
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.VmbFSFiles.ScratchVHDPath); err != nil {
 		return nil, errors.Wrap(err, "failed to grant vm access to scratch")
 	}
 
@@ -326,7 +329,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
 
-		Path:  opts.BootFiles.ScratchVHDPath,
+		Path:  opts.BootFiles.VmbFSFiles.ScratchVHDPath,
 		Type_: "VirtualDisk",
 	}
 
