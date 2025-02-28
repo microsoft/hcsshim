@@ -69,22 +69,22 @@ issues:
     - path: layer.go
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: hcsshim.go
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: cmd\\ncproxy\\nodenetsvc\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: cmd\\ncproxy_mock\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\hcs\\schema2\\
       linters:
@@ -94,67 +94,67 @@ issues:
     - path: internal\\wclayer\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: hcn\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\hcs\\schema1\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\hns\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: ext4\\internal\\compactext4\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: ext4\\internal\\format\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\guestrequest\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\guest\\prot\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\windevice\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\winapi\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\vmcompute\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\regstate\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     - path: internal\\hcserror\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
 
     # v0 APIs are deprecated, but still retained for backwards compatability
     - path: cmd\\ncproxy\\
@@ -170,4 +170,4 @@ issues:
     - path: internal\\vhdx\\info
       linters:
         - stylecheck
-      Text: "ST1003:"
+      text: "ST1003:"
