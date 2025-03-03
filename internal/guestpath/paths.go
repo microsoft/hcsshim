@@ -24,6 +24,15 @@ const (
 	// LCOWGlobalMountPrefixFmt is the path format in the LCOW UVM where global
 	// mounts are added
 	LCOWGlobalMountPrefixFmt = "/run/mounts/m%d"
+	// LCOWSCSIMountPrefixFmt is the path format in the LCOW UVM where SCSI
+	// devices are mounted.
+	LCOWSCSIMountPrefixFmt = "/run/mounts/scsi/m%d"
+	// LCOWSCSIMountPrefixRegex is the regex of the path format in the LCOW UVM
+	// where SCSI devices are mounted.
+	LCOWSCSIMountPrefixRegex = `^/run/mounts/scsi/m\d+$`
+	// WCOWSCSIMountPrefixFmt is the path format in the WCOW UVM where SCSI
+	// devices are mounted.
+	WCOWSCSIMountPrefixFmt = `c:\mounts\scsi\m%d`
 	// LCOWGlobalDriverPrefixFmt is the path format in the LCOW UVM where drivers
 	// are mounted as read/write
 	LCOWGlobalDriverPrefixFmt = "/run/drivers/%s"

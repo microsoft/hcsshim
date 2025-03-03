@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -306,9 +307,9 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	} else {
 		gb = scsi.NewHCSGuestBackend(uvm.hcsSystem, uvm.OS())
 	}
-	guestMountFmt := `c:\mounts\scsi\m%d`
+	guestMountFmt := guestpath.WCOWSCSIMountPrefixFmt
 	if uvm.OS() == "linux" {
-		guestMountFmt = "/run/mounts/scsi/m%d"
+		guestMountFmt = guestpath.LCOWSCSIMountPrefixFmt
 	}
 	mgr, err := scsi.NewManager(
 		scsi.NewHCSHostBackend(uvm.hcsSystem),

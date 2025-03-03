@@ -93,7 +93,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					readOnly,
 					coi.HostingSystem.ID(),
 					"",
-					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
+					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev, ContainerMount: true},
 				)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
@@ -116,7 +116,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					readOnly,
 					coi.HostingSystem.ID(),
 					"",
-					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
+					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev, ContainerMount: true},
 				)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)

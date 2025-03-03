@@ -191,6 +191,8 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 		"sandboxPrefix":                   guestpath.SandboxMountPrefix,
 		"hugePagesPrefix":                 guestpath.HugePagesMountPrefix,
 		"plan9Prefix":                     plan9Prefix,
+		"blockDevPrefix":                  guestpath.BlockDevMountPrefix,
+		"lcowSCSIMountPrefixRegex":        guestpath.LCOWSCSIMountPrefixRegex,
 		"defaultUnprivilegedCapabilities": DefaultUnprivilegedCapabilities(),
 		"defaultPrivilegedCapabilities":   DefaultPrivilegedCapabilities(),
 	}

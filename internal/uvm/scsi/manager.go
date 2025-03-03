@@ -86,6 +86,8 @@ type MountConfig struct {
 	// BlockDev indicates if the device should be mounted as a block device.
 	// This is only supported for LCOW.
 	BlockDev bool
+	// ContainerMount indicates if the mount is part of the container mount spec.
+	ContainerMount bool
 }
 
 // Mount represents a SCSI device that has been attached to a VM, and potentially
@@ -162,6 +164,7 @@ func (m *Manager) AddVirtualDisk(
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
 			blockDev:         mc.BlockDev,
+			containerMount:   mc.ContainerMount,
 		}
 	}
 	return m.add(ctx,
@@ -210,6 +213,7 @@ func (m *Manager) AddPhysicalDisk(
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
 			blockDev:         mc.BlockDev,
+			containerMount:   mc.ContainerMount,
 		}
 	}
 	return m.add(ctx,
@@ -256,6 +260,7 @@ func (m *Manager) AddExtensibleVirtualDisk(
 			options:          mc.Options,
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
+			containerMount:   mc.ContainerMount,
 		}
 	}
 	return m.add(ctx,

@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,6 +37,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pmem"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
@@ -53,6 +55,21 @@ import (
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
 // for V2 where the specific message is targeted at the UVM itself.
 const UVMContainerID = "00000000-0000-0000-0000-000000000000"
+
+var (
+	// scsiActualControllerNumberFn is the function to retrieves the actual controller
+	// number assigned to a SCSI controller.
+	scsiActualControllerNumberFn = scsi.ActualControllerNumber
+	// scsiGetDevicePathFn is the function to retrieves the device path for a SCSI device.
+	scsiGetDevicePathFn = scsi.GetDevicePath
+	// scsiMountFn is the function to mount a SCSI device.
+	scsiMountFn = scsi.Mount
+	// scsiUnmountFn is the function to unmount a SCSI device.
+	scsiUnmountFn = scsi.Unmount
+	// readVeritySuperBlockFn is the function to read ext4 super block
+	// for a given VHD to then further read the dm-verity super block and root hash.
+	readVeritySuperBlockFn = verity.ReadVeritySuperBlock
+)
 
 // Host is the structure tracking all UVM host state including all containers
 // and processes.
@@ -549,9 +566,22 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		return modifySCSIDevice(ctx, req.RequestType, req.Settings.(*guestresource.SCSIDevice))
 	case guestresource.ResourceTypeMappedVirtualDisk:
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
+
+		if mvd.ContainerMount {
+			// Ensure that devices for container mounts are always mounted at /run/mounts/scsi/m.
+			vhdMountPathCompiledExpression := regexp.MustCompile(guestpath.LCOWSCSIMountPrefixRegex)
+			if !vhdMountPathCompiledExpression.MatchString(mvd.MountPath) {
+				return fmt.Errorf("invalid mount path inside guest %s", mvd.MountPath)
+			}
+			// In the case of Confidential Containers, we can mount VHDs only as block devices.
+			if len(h.securityPolicyEnforcer.EncodedSecurityPolicy()) > 0 && !mvd.BlockDev {
+				return fmt.Errorf("vhd mounts for containers are allowed only as block devices when security policy is set")
+			}
+		}
+
 		// find the actual controller number on the bus and update the incoming request.
 		var cNum uint8
-		cNum, err := scsi.ActualControllerNumber(ctx, mvd.Controller)
+		cNum, err := scsiActualControllerNumberFn(ctx, mvd.Controller)
 		if err != nil {
 			return err
 		}
@@ -560,7 +590,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		if !mvd.ReadOnly {
 			localCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 			defer cancel()
-			source, err := scsi.GetDevicePath(localCtx, mvd.Controller, mvd.Lun, mvd.Partition)
+			source, err := scsiGetDevicePathFn(localCtx, mvd.Controller, mvd.Lun, mvd.Partition)
 			if err != nil {
 				return err
 			}
@@ -584,7 +614,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 				}()
 			}
 		}
-		return modifyMappedVirtualDisk(ctx, req.RequestType, mvd, h.securityPolicyEnforcer)
+		return modifyMappedVirtualDisk(ctx, req.RequestType, mvd, h.securityPolicyEnforcer, mvd.ContainerMount && mvd.BlockDev)
 	case guestresource.ResourceTypeMappedDirectory:
 		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory), h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeVPMemDevice:
@@ -970,22 +1000,46 @@ func modifyMappedVirtualDisk(
 	rt guestrequest.RequestType,
 	mvd *guestresource.LCOWMappedVirtualDisk,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+	isContainerBlockDevice bool,
 ) (err error) {
 	var verityInfo *guestresource.DeviceVerityInfo
-	if mvd.ReadOnly {
-		// The only time the policy is empty, and we want it to be empty
-		// is when no policy is provided, and we default to open door
-		// policy. In any other case, e.g. explicit open door or any
-		// other rego policy we would like to mount layers with verity.
-		if len(securityPolicy.EncodedSecurityPolicy()) > 0 {
-			devPath, err := scsi.GetDevicePath(ctx, mvd.Controller, mvd.Lun, mvd.Partition)
-			if err != nil {
-				return err
-			}
-			verityInfo, err = verity.ReadVeritySuperBlock(ctx, devPath)
-			if err != nil {
-				return err
-			}
+
+	// enforcePolicy specifies if the device mount and unmount should be
+	// enforced via policy framework.
+	//
+	// We enforce the mount_device and unmount_device enforcement
+	// point only for read-only devices.
+	// For read-write devices, we cannot use the verity hash for
+	// policy enforcement and therefore, we skip any enforcement
+	// for the same. That being said, we perform a check outside
+	// the policy framework to ensure that the device is being
+	// mounted in an expected location.
+	enforcePolicy := mvd.ReadOnly
+
+	// Read-only devices which are meant for block device mounts within
+	// the containers should not be enforced by policy.
+	// If the policy has not been specified, then we default to open
+	// door policy and therefore, we can go via existing route.
+	if mvd.ReadOnly &&
+		len(securityPolicy.EncodedSecurityPolicy()) > 0 &&
+		isContainerBlockDevice {
+		enforcePolicy = false
+	}
+
+	// The only time the policy is empty, and we want it to be empty
+	// is when no policy is provided, and we default to open door
+	// policy. In any other case, e.g. explicit open door or any
+	// other rego policy we would like to mount layers with verity, unless
+	// it is a block device meant for a container mount. In the latter case,
+	// we don't want to check the verity information.
+	if len(securityPolicy.EncodedSecurityPolicy()) > 0 && enforcePolicy {
+		devPath, err := scsiGetDevicePathFn(ctx, mvd.Controller, mvd.Lun, mvd.Partition)
+		if err != nil {
+			return err
+		}
+		verityInfo, err = readVeritySuperBlockFn(ctx, devPath)
+		if err != nil {
+			return err
 		}
 	}
 	switch rt {
@@ -993,7 +1047,7 @@ func modifyMappedVirtualDisk(
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
-			if mvd.ReadOnly {
+			if enforcePolicy {
 				var deviceHash string
 				if verityInfo != nil {
 					deviceHash = verityInfo.RootDigest
@@ -1010,13 +1064,13 @@ func modifyMappedVirtualDisk(
 				Filesystem:       mvd.Filesystem,
 				BlockDev:         mvd.BlockDev,
 			}
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
+			return scsiMountFn(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
 				mvd.ReadOnly, mvd.Options, config)
 		}
 		return nil
 	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
-			if mvd.ReadOnly {
+			if enforcePolicy {
 				if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
 					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
 				}
@@ -1028,7 +1082,7 @@ func modifyMappedVirtualDisk(
 				Filesystem:       mvd.Filesystem,
 				BlockDev:         mvd.BlockDev,
 			}
-			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition,
+			if err := scsiUnmountFn(ctx, mvd.Controller, mvd.Lun, mvd.Partition,
 				mvd.MountPath, config); err != nil {
 				return err
 			}
@@ -1077,7 +1131,7 @@ func modifyMappedVPMemDevice(ctx context.Context,
 		if vpd.MappingInfo != nil {
 			return fmt.Errorf("multi mapping is not supported with verity")
 		}
-		verityInfo, err = verity.ReadVeritySuperBlock(ctx, pmem.GetDevicePath(vpd.DeviceNumber))
+		verityInfo, err = readVeritySuperBlockFn(ctx, pmem.GetDevicePath(vpd.DeviceNumber))
 		if err != nil {
 			return err
 		}

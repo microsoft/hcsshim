@@ -461,7 +461,8 @@ func newOptionsFromConfig(mCfg *MountConfig) []string {
 func newMountTypeFromConfig(mCfg *MountConfig) string {
 	if strings.HasPrefix(mCfg.HostPath, guestpath.SandboxMountPrefix) ||
 		strings.HasPrefix(mCfg.HostPath, guestpath.HugePagesMountPrefix) ||
-		strings.HasPrefix(mCfg.HostPath, plan9Prefix) {
+		strings.HasPrefix(mCfg.HostPath, plan9Prefix) ||
+		strings.HasPrefix(mCfg.HostPath, guestpath.BlockDevMountPrefix) {
 		return "bind"
 	}
 	return "none"

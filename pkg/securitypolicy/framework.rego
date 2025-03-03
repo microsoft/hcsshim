@@ -544,6 +544,11 @@ mountSource_ok(constraint, source) {
 }
 
 mountSource_ok(constraint, source) {
+    startswith(constraint, data.blockDevPrefix)
+    regex.match(data.lcowSCSIMountPrefixRegex, source)
+}
+
+mountSource_ok(constraint, source) {
     constraint == source
 }
 

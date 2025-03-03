@@ -145,7 +145,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						readOnly,
 						coi.HostingSystem.ID(),
 						"",
-						&scsi.MountConfig{},
+						&scsi.MountConfig{ContainerMount: true},
 					)
 				case MountTypeVirtualDisk:
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
@@ -155,7 +155,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						readOnly,
 						coi.HostingSystem.ID(),
 						"",
-						&scsi.MountConfig{},
+						&scsi.MountConfig{ContainerMount: true},
 					)
 				case MountTypeExtensibleVirtualDisk:
 					l.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
@@ -164,7 +164,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 						mount.Source,
 						readOnly,
 						"",
-						&scsi.MountConfig{},
+						&scsi.MountConfig{ContainerMount: true},
 					)
 				}
 				if err != nil {
