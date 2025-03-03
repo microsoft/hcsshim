@@ -12,18 +12,20 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/hvsocket"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -278,6 +280,24 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		if err != nil {
 			return nil, r, err
 		}
+
+		if coi.HostingSystem.OS() == "windows" {
+			log.G(ctx).Debug("redirecting container HvSocket for WCOW")
+			props, err := c.PropertiesV2(ctx, hcsschema.PTSystemGUID)
+			if err != nil {
+				return nil, r, fmt.Errorf("query created container properties failed: %w", err)
+			}
+			containerSystemGUID, err := guid.FromString(props.SystemGUID)
+			if err != nil {
+				return nil, r, fmt.Errorf("convert to system GUID failed: %w", err)
+			}
+			addressInfoCloser, err := hvsocket.CreateContainerAddressInfo(containerSystemGUID, coi.HostingSystem.RuntimeID())
+			if err != nil {
+				return nil, r, fmt.Errorf("redirect container HvSocket failed: %w", err)
+			}
+			r.Add(addressInfoCloser)
+		}
+
 		return c, r, nil
 	}
 
