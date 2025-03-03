@@ -122,6 +122,28 @@ type Options struct {
 	NumaProcessorCounts []uint32
 	// NumaMemoryBlocksCounts are the number of memory blocks per vNUMA node.
 	NumaMemoryBlocksCounts []uint64
+
+	EnableGraphicsConsole bool   // If true, enable a graphics console for the utility VM
+	ConsolePipe           string // The named pipe path to use for the serial console (COM1).  eg \\.\pipe\vmpipe
+}
+
+func verifyWCOWBootFiles(bootFiles *WCOWBootFiles) error {
+	if bootFiles.BootType == VmbFSBoot {
+		if bootFiles.VmbFSFiles == nil {
+			return fmt.Errorf("VmbFS boot files is empty")
+		} else if bootFiles.BlockCIMFiles != nil {
+			return fmt.Errorf("confidential boot files should be empty")
+		}
+	} else if bootFiles.BootType == BlockCIMBoot {
+		if bootFiles.BlockCIMFiles == nil {
+			return fmt.Errorf("Confidential boot files is empty")
+		} else if bootFiles.VmbFSFiles != nil {
+			return fmt.Errorf("VmbFS boot files should be empty")
+		}
+	} else {
+		return fmt.Errorf("invalid boot type specified")
+	}
+	return nil
 }
 
 // Verifies that the final UVM options are correct and supported.
@@ -155,6 +177,12 @@ func verifyOptions(_ context.Context, options interface{}) error {
 		}
 		if opts.SCSIControllerCount != 1 {
 			return errors.New("exactly 1 SCSI controller is required for WCOW")
+		}
+		if err := verifyWCOWBootFiles(opts.BootFiles); err != nil {
+			return err
+		}
+		if opts.SecurityPolicyEnabled && opts.GuestStateFilePath == "" {
+			return fmt.Errorf("GuestStateFilePath must be provided when enabling security policy")
 		}
 	}
 	return nil
