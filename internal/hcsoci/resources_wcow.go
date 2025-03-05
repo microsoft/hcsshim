@@ -181,7 +181,8 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 				// Mounts that map to a path in the UVM are specified with a 'sandbox://' prefix.
 				//
-				// Example: sandbox:///a/dirInUvm destination:C:\\dirInContainer.
+				// Example:
+				//   - sandbox:///a/dirInUvm destination:C:\\dirInContainer.
 				//
 				// so first convert to a path in the sandboxmounts path itself.
 				sandboxPath := convertToWCOWSandboxMountPath(mount.Source)
@@ -203,6 +204,11 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				exitCode, err := cmd.ExecInUvm(ctx, coi.HostingSystem, req)
 				if err != nil {
 					return errors.Wrapf(err, "failed to create sandbox mount directory in utility VM with exit code %d %q", exitCode, b.String())
+				}
+			} else if strings.HasPrefix(mount.Source, guestpath.UVMMountPrefix) {
+				uvmPath := strings.TrimPrefix(mount.Source, guestpath.UVMMountPrefix)
+				if !uvm.IsPipe(uvmPath) {
+					return fmt.Errorf("unsupported UVM mount source %s", uvmPath)
 				}
 			} else {
 				if uvm.IsPipe(mount.Source) {

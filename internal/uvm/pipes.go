@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 const pipePrefix = `\\.\pipe\`
@@ -54,18 +55,35 @@ func (uvm *UtilityVM) RemovePipe(ctx context.Context, hostPath string) error {
 	return nil
 }
 
-// IsPipe returns true if the given path references a named pipe.
+// UVMNamedPipe returns a named pipe in UVM, which will be shared across containers.
+func (uvm *UtilityVM) UVMNamedPipe(hostPath string) string {
+	podID := strings.TrimSuffix(uvm.id, "@vm")
+	if uvm.operatingSystem == "windows" {
+		uvmPipeName := strings.TrimPrefix(hostPath, pipePrefix)
+		return fmt.Sprintf(`%s%s\%s`, pipePrefix, podID, uvmPipeName)
+	}
+	// TODO (anmaxvl): LCOW doesn't support UVM named pipes at the moment
+	return hostPath
+}
+
+// IsPipe returns true if the given path references a named pipe. The pipe can be:
+// - host named pipe shared via VSMB
 func IsPipe(hostPath string) bool {
 	return strings.HasPrefix(hostPath, pipePrefix)
 }
 
 // GetContainerPipeMapping returns the source and destination to use for a given
 // pipe mount in a container.
+// The pipe mount can be either a host pipe shared via VSMB or a UVM pipe.
 func GetContainerPipeMapping(uvm *UtilityVM, mount specs.Mount) (src string, dst string) {
 	if uvm == nil {
 		src = mount.Source
 	} else {
-		src = vsmbSharePrefix + `IPC$\` + strings.TrimPrefix(mount.Source, pipePrefix)
+		if uvmPipe, ok := strings.CutPrefix(mount.Source, guestpath.UVMMountPrefix); ok {
+			src = uvm.UVMNamedPipe(uvmPipe)
+		} else {
+			src = vsmbSharePrefix + `IPC$\` + strings.TrimPrefix(mount.Source, pipePrefix)
+		}
 	}
 	dst = strings.TrimPrefix(mount.Destination, pipePrefix)
 	return src, dst
