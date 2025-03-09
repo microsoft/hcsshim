@@ -1,6 +1,7 @@
 module github.com/Microsoft/hcsshim/test
 
 go 1.22.0
+toolchain go1.23.7
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
@@ -24,7 +25,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.1
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.31.0
 	google.golang.org/grpc v1.69.0
 	google.golang.org/protobuf v1.35.2
 	k8s.io/cri-api v0.27.1
