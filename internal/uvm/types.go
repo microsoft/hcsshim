@@ -41,6 +41,8 @@ type UtilityVM struct {
 	hcsSystem        *hcs.System          // The handle to the compute system
 	gcListener       net.Listener         // The GCS connection listener
 	gc               *gcs.GuestConnection // The GCS connection
+	scListener       net.Listener         // The sidecar GCS connection listener
+	sc               *gcs.GuestConnection // The sidecar GCS connection
 	processorCount   int32
 	physicallyBacked bool       // If the uvm is backed by physical memory and not virtual memory
 	m                sync.Mutex // Lock for adding/removing devices

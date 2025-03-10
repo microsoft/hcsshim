@@ -72,6 +72,20 @@ func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
 	return nil
 }
 
+func (uvm *UtilityVM) startSidecarGcsListener(ctx context.Context) error {
+	log.G(ctx).WithField("vmID", uvm.runtimeID).Info("Using sidecar GCS bridge")
+
+	l, err := winio.ListenHvsock(&winio.HvsockAddr{
+		VMID:      uvm.runtimeID,
+		ServiceID: gcs.SidecarGcsHvsockServiceID,
+	})
+	if err != nil {
+		return err
+	}
+	uvm.scListener = l
+	return nil
+}
+
 func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*hcsschema.ComputeSystem, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
@@ -338,6 +352,10 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	if err = uvm.startExternalGcsListener(ctx); err != nil {
+		return nil, err
+	}
+
+	if err = uvm.startSidecarGcsListener(ctx); err != nil {
 		return nil, err
 	}
 
