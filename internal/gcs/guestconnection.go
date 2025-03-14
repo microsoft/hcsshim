@@ -151,8 +151,6 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 			requestBase:     makeRequest(ctx, nullContainerID),
 			ContainerConfig: anyInString{conf},
 		}
-		log.G(ctx).Debugf("!! ContainerCreate request %v", createReq)
-		log.G(ctx).Debugf("!! ContainerCreate.ContainerConfig request %v", createReq.ContainerConfig.Value)
 		var createResp responseBase
 		err = gc.brdg.RPC(ctx, rpcCreate, &createReq, &createResp, true)
 		if err != nil {

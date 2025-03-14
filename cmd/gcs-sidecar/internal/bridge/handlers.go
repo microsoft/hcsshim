@@ -9,10 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 
 	hcsschema "github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/hcs/schema2/resourcepaths"
 	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/hcn"
@@ -23,14 +21,11 @@ import (
 // Else error is returned.
 // Also, these handler functions decide if request needs to be forwarded
 // to inbox GCS or not. Request is forwarded asynchronously.
-// TODO: The caller, that is hcsshim, starts a 30 second timer and if response
-// is not got by then, bridge is killed. Should we track responses from gcs by
-// time in sidecar too? Maybe not.
 func (b *Bridge) createContainer(req *request) error {
-	var err error
-	err = nil
+	var err error = nil
 	var r containerCreate
 	var containerConfig json.RawMessage
+
 	r.ContainerConfig.Value = &containerConfig
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		log.Printf("failed to unmarshal rpcCreate: %v", req)
@@ -38,6 +33,7 @@ func (b *Bridge) createContainer(req *request) error {
 		return fmt.Errorf("failed to unmarshal rpcCreate: %v", req)
 	}
 
+	// containerCreate.ContainerConfig can be of type uvnConfig or hcsschema.HostedSystem
 	var uvmConfig uvmConfig
 	var hostedSystemConfig hcsschema.HostedSystem
 	if err = json.Unmarshal(containerConfig, &uvmConfig); err == nil {
@@ -86,7 +82,7 @@ func (b *Bridge) startContainer(req *request) error {
 
 func (b *Bridge) shutdownGraceful(req *request) error {
 	var r requestBase
-	var err error
+	var err error = nil
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcShutdownGraceful: %v", req)
 	}
@@ -105,8 +101,7 @@ func (b *Bridge) shutdownGraceful(req *request) error {
 
 func (b *Bridge) shutdownForced(req *request) error {
 	var r requestBase
-	var err error
-	err = nil
+	var err error = nil
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcShutdownForced: %v", req)
 	}
@@ -126,10 +121,9 @@ func (b *Bridge) shutdownForced(req *request) error {
 }
 
 func (b *Bridge) executeProcess(req *request) error {
+	var err error = nil
 	var r containerExecuteProcess
 	var processParamSettings json.RawMessage
-	var err error
-	err = nil
 	r.Settings.ProcessParameters.Value = &processParamSettings
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcExecuteProcess: %v", req)
@@ -154,14 +148,14 @@ func (b *Bridge) executeProcess(req *request) error {
 
 func (b *Bridge) waitForProcess(req *request) error {
 	var r containerWaitForProcess
-	var err error
-	err = nil
+	var err error = nil
+
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal waitForProcess: %v", req)
 	}
 	log.Printf("rpcWaitForProcess: \n containerWaitForProcess{ requestBase: %v, processID: %v, timeoutInMs: %v }", r.requestBase, r.ProcessID, r.TimeoutInMs)
 
-	// waitForProcess does not have enforcer in clcow, why?
+	// enforcement
 
 	b.sendToGCSCh <- *req
 
@@ -173,6 +167,7 @@ func (b *Bridge) signalProcess(req *request) error {
 	var r containerSignalProcess
 	var rawOpts json.RawMessage
 	r.Options = &rawOpts
+
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcSignalProcess: %v", req)
 	}
@@ -189,7 +184,7 @@ func (b *Bridge) signalProcess(req *request) error {
 	}
 	log.Printf("rpcSignalProcess: \n containerSignalProcess{ requestBase: %v, processID: %v, Options: %v }", r.requestBase, r.ProcessID, wcowOptions)
 
-	// calling policy enforcer
+	// placeholder for calling policy enforcer and return error message
 	err = signalProcess(r.ContainerID, r.ProcessID, wcowOptions.Signal)
 	if err != nil {
 		return fmt.Errorf("waitForProcess not allowed due to policy")
@@ -204,12 +199,14 @@ func (b *Bridge) signalProcess(req *request) error {
 
 func (b *Bridge) resizeConsole(req *request) error {
 	var r containerResizeConsole
-	var err error
+	var err error = nil
+
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcSignalProcess: %v", req)
 	}
 	log.Printf("rpcResizeConsole: \n containerResizeConsole{ requestBase: %v, processID: %v, height: %v, width: %v }", r.requestBase, r.ProcessID, r.Height, r.Width)
 
+	// placeholder for calling policy enforcer and return error message
 	err = resizeConsole(r.ContainerID, r.Height, r.Width)
 	if err != nil {
 		return fmt.Errorf("waitForProcess not allowed due to policy")
@@ -230,151 +227,19 @@ func (b *Bridge) getProperties(req *request) error {
 			return fmt.Errorf("failed to unmarshal rpcSignalProcess: %v", req)
 		}
 	*/
+	// TODO: Error out if v1 schema is being used as we will not support bringing up sidecar-gcs there
 	return nil
 }
 
-func isSpecialResourcePaths(resourcePath string, rawGuestRequest json.RawMessage) bool {
-	if strings.HasPrefix(resourcePath, resourcepaths.HvSocketConfigResourcePrefix) {
-		sid := strings.TrimPrefix(resourcePath, resourcepaths.HvSocketConfigResourcePrefix)
-		doc := &hcsschema.HvSocketServiceConfig{}
-
-		if err := json.Unmarshal(rawGuestRequest, &doc); err != nil {
-			log.Printf("invalid rpcModifySettings request %v", rawGuestRequest)
-			return false
-			//fmt.Errorf("invalid rpcModifySettings request %v", r)
-		}
-
-		log.Printf(", sid: %v, HvSocketServiceConfig{ %v } \n", sid, doc)
-		return true
-	} else if strings.HasPrefix(resourcePath, resourcepaths.NetworkResourcePrefix) {
-		id := strings.TrimPrefix(resourcePath, resourcepaths.NetworkResourcePrefix)
-		settings := &hcsschema.NetworkAdapter{}
-		if err := json.Unmarshal(rawGuestRequest, &settings); err != nil {
-			log.Printf("invalid rpcModifySettings request %v", rawGuestRequest)
-			return false
-			//fmt.Errorf("invalid rpcModifySettings request %v", r)
-		}
-
-		log.Printf(", sid: %v, NetworkAdapter{ %v } \n", id, settings)
-		return true
-	} else if strings.HasPrefix(resourcePath, resourcepaths.SCSIResourcePrefix) {
-		var controller string
-		var lun string
-		if _, err := fmt.Sscanf(resourcePath, resourcepaths.SCSIResourceFormat, &controller, &lun); err != nil {
-			log.Printf("Invalid SCSIResourceFormat %v", resourcePath)
-			return false
-		} else {
-			log.Printf(", controller: %v, lun{ %v } \n", controller, lun)
-		}
-		return true
-	}
-	// if we reached here, request is invalid
-	return false
-}
-
-func (b *Bridge) unMarshalAndModifySettings(req *request) error {
+func (b *Bridge) unmarshalModifySettingsAndForward(req *request) error {
 	// skipSendToGCS := false
-	// var err error
-	// err = nil
 	var r containerModifySettings
 	var requestRawSettings json.RawMessage
 	r.Request = &requestRawSettings
 	if err := json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcModifySettings: %v", req)
 	}
-	//// TODO (kiashok): Test and optimize!
-	// Test with crictl/ctr update resources call for wcow hyperv
-	var modifySettingsRequest hcsschema.ModifySettingRequest
-	var modifySettingsReqRawSettings json.RawMessage
 
-	modifySettingsRequest.Settings = &modifySettingsReqRawSettings
-	//modifySettingsRequest.GuestRequest = rawGuestRequest
-	if err := json.Unmarshal(requestRawSettings, &modifySettingsRequest); err != nil {
-		log.Printf("invalid rpcModifySettings request %v", r)
-		return fmt.Errorf("invalid rpcModifySettings request %v", r)
-	}
-	log.Printf("rpcModifySettings: ModifySettingRequest %v\n", modifySettingsRequest)
-	if modifySettingsRequest.ResourcePath != "" {
-		reqType := modifySettingsRequest.RequestType
-		resourcePath := modifySettingsRequest.ResourcePath
-
-		log.Printf("rpcModifySettings: ModifySettingRequest { RequestType: %v \n, ResourcePath: %v", reqType, resourcePath)
-
-		switch resourcePath {
-		case resourcepaths.SiloMappedDirectoryResourcePath:
-			mappedDirectory := &hcsschema.MappedDirectory{}
-			if err := json.Unmarshal(modifySettingsReqRawSettings, &mappedDirectory); err != nil {
-				log.Printf("invalid SiloMappedDirectoryResourcePath request %v", r)
-				return fmt.Errorf("invalid SiloMappedDirectoryResourcePath request %v", r)
-			}
-
-			// TODO: check for Settings to be nil as in some examples
-			log.Printf(", mappedDirectory: %v \n", mappedDirectory)
-		case resourcepaths.SiloMemoryResourcePath:
-			var memoryLimit uint64
-			if err := json.Unmarshal(modifySettingsReqRawSettings, &memoryLimit); err != nil {
-				log.Printf("invalid SiloMemoryResourcePath request %v", r)
-				return fmt.Errorf("invalid SiloMemoryResourcePath request %v", r)
-			}
-
-			log.Printf(", memoryLimit: %v \n", memoryLimit)
-		case resourcepaths.SiloProcessorResourcePath:
-			processor := &hcsschema.Processor{}
-			if err := json.Unmarshal(modifySettingsReqRawSettings, &processor); err != nil {
-				log.Printf("invalid SiloProcessorResourcePath request %v", r)
-				return fmt.Errorf("invalid SiloProcessorResourcePath request %v", r)
-			}
-
-			log.Printf(", processor: %v \n", processor)
-		case resourcepaths.CPUGroupResourcePath:
-			cpuGroup := &hcsschema.CpuGroup{}
-			if err := json.Unmarshal(modifySettingsReqRawSettings, &cpuGroup); err != nil {
-				log.Printf("invalid CpuGroup request %v", r)
-				return fmt.Errorf("invalid CpuGroup request %v", r)
-			}
-
-			log.Printf(", cpuGroup: %v \n", cpuGroup)
-		case resourcepaths.CPULimitsResourcePath:
-			processorLimits := &hcsschema.ProcessorLimits{}
-			if err := json.Unmarshal(modifySettingsReqRawSettings, &processorLimits); err != nil {
-				log.Printf("invalid CPULimitsResourcePath request %v", r)
-				return fmt.Errorf("invalid CPULimitsResourcePath request %v", r)
-			}
-
-			log.Printf(", processorLimits: %v \n", processorLimits)
-		case resourcepaths.MemoryResourcePath:
-			var actualMemory uint64
-			if err := json.Unmarshal(modifySettingsReqRawSettings, &actualMemory); err != nil {
-				log.Printf("invalid MemoryResourcePath request %v", r)
-				return fmt.Errorf("invalid MemoryResourcePath request %v", r)
-			}
-
-			log.Printf(", actualMemory: %v \n", actualMemory)
-		case resourcepaths.VSMBShareResourcePath:
-			virtualSmbShareSettings := &hcsschema.VirtualSmbShare{}
-			if err := json.Unmarshal(modifySettingsReqRawSettings, &virtualSmbShareSettings); err != nil {
-				log.Printf("invalid VSMBShareResourcePath request %v", r)
-				return fmt.Errorf("invalid VSMBShareResourcePath request %v", r)
-			}
-
-			log.Printf(", VirtualSmbShare: %v \n", virtualSmbShareSettings)
-		// TODO: Plan9 is only for LCOW right?
-		// case resourcepaths.Plan9ShareResourcePath:
-		//	plat9ShareSettings := modifyRequest.Settings.(*hcsschema.Plan9Share)
-		//	log.Printf(", Plan9Share: %v \n", plat9ShareSettings)
-
-		// TODO: Does following apply for cwcow?
-		// case resourcepaths.VirtualPCIResourceFormat
-		// case resourcepaths.VPMemControllerResourceFormat
-		default:
-			// Handle cases of HvSocketConfigResourcePrefix, NetworkResourceFormatetc as they have data values in resourcePath string
-			if !isSpecialResourcePaths(resourcePath, modifySettingsReqRawSettings) {
-				return fmt.Errorf("invalid rpcModifySettings resourcePath %v", resourcePath)
-			}
-		}
-	}
-
-	////
 	var modifyGuestSettingsRequest guestrequest.ModificationRequest
 	var rawGuestRequest json.RawMessage
 	modifyGuestSettingsRequest.Settings = &rawGuestRequest
@@ -384,90 +249,111 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 	}
 	log.Printf("rpcModifySettings: ModificationRequest %v\n", modifyGuestSettingsRequest)
 
-	//if rawGuestRequest != nil {
 	guestResourceType := modifyGuestSettingsRequest.ResourceType
-	guestRequestType := modifyGuestSettingsRequest.RequestType
-
+	guestRequestType := modifyGuestSettingsRequest.RequestType // add, remove, preadd, update
+	if guestResourceType == "" {
+		modifyGuestSettingsRequest.RequestType = guestrequest.RequestTypeAdd
+	}
 	log.Printf("rpcModifySettings: guestRequest.ModificationRequest { resourceType: %v \n, requestType: %v", guestResourceType, guestRequestType)
 
-	switch guestResourceType {
-	case guestresource.ResourceTypeCombinedLayers:
-		settings := &guestresource.WCOWCombinedLayers{}
-		if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
-			log.Printf("invalid ResourceTypeCombinedLayers request %v", r)
-			return fmt.Errorf("invalid ResourceTypeCombinedLayers request %v", r)
-		}
+	// TODO: Do we need to validate request types?
+	switch guestRequestType {
+	case guestrequest.RequestTypeAdd:
 
-		log.Printf(", WCOWCombinedLayers {ContainerRootPath: %v, Layers: %v, ScratchPath: %v} \n", settings.ContainerRootPath, settings.Layers, settings.ScratchPath)
-		for i, layer := range settings.Layers {
-			log.Printf("Layer %d Id: %s\n", i, layer.Id)
-			var ctx context.Context
-			err := b.PolicyEnforcer.securityPolicyEnforcer.EnforceDeviceMountPolicy(ctx, settings.ContainerRootPath, layer.Id)
-			if err != nil {
-				log.Printf("denied by policy %v", r)
-			}
-		}
-	case guestresource.ResourceTypeNetworkNamespace:
-		settings := &hcn.HostComputeNamespace{}
-		if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
-			log.Printf("invalid ResourceTypeNetworkNamespace request %v", r)
-			return fmt.Errorf("invalid ResourceTypeNetworkNamespace request %v", r)
-		}
+	case guestrequest.RequestTypeRemove:
 
-		log.Printf(", HostComputeNamespaces { %v} \n", settings)
-	case guestresource.ResourceTypeNetwork:
-		// following valid only for osversion.Build() >= osversion.RS5
-		// since Cwcow is available only for latest versions this is ok
-		settings := &guestrequest.NetworkModifyRequest{}
-		if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
-			log.Printf("invalid ResourceTypeNetwork request %v", r)
-			return fmt.Errorf("invalid ResourceTypeNetwork request %v", r)
-		}
+	case guestrequest.RequestTypePreAdd:
 
-		log.Printf(", NetworkModifyRequest { %v} \n", settings)
-	case guestresource.ResourceTypeMappedVirtualDisk:
-		wcowMappedVirtualDisk := &guestresource.WCOWMappedVirtualDisk{}
-		if err := json.Unmarshal(rawGuestRequest, wcowMappedVirtualDisk); err != nil {
-			log.Printf("invalid ResourceTypeMappedVirtualDisk request %v", r)
-			return fmt.Errorf("invalid ResourceTypeMappedVirtualDisk request %v", r)
-		}
-		log.Printf(", wcowMappedVirtualDisk { %v} \n", wcowMappedVirtualDisk)
-	// TODO need a case similar to guestresource.ResourceTypeSecurityPolicy of lcow?
-	// case guestresource.ResourceTypeSecurityPolicy:
-	case guestresource.ResourceTypeHvSocket:
-		hvSocketAddress := &hcsschema.HvSocketAddress{}
-		if err := json.Unmarshal(rawGuestRequest, hvSocketAddress); err != nil {
-			log.Printf("invalid ResourceTypeHvSocket request %v", r)
-			return fmt.Errorf("invalid ResourceTypeHvSocket request %v", r)
-		}
-
-		log.Printf(", hvSocketAddress { %v} \n", hvSocketAddress)
-	case guestresource.ResourceTypeSecurityPolicy:
-		securityPolicyRequest := &guestresource.WCOWConfidentialOptions{}
-		if err := json.Unmarshal(rawGuestRequest, securityPolicyRequest); err != nil {
-			log.Printf("invalid ResourceTypeSecurityPolicy request %v", r)
-			return fmt.Errorf("invalid ResourceTypeSecurityPolicy request %v", r)
-		}
-
-		log.Printf(", WCOWConfidentialOptions: { %v} \n", securityPolicyRequest)
-		_ = b.PolicyEnforcer.SetWCOWConfidentialUVMOptions( /*ctx, */ securityPolicyRequest)
-		// skipSendToGCS = true
-		// send response back to shim
-		log.Printf("\n early response to hcsshim? \n")
-		err := b.sendReplyToShim(rpcModifySettings, *req)
-		if err != nil {
-			//
-			log.Printf("error sending early reply back to hcsshim")
-			err = fmt.Errorf("error sending early reply back to hcsshim")
-			return err
-		}
-		return nil
-		//return err, skipSendToGCS
+	case guestrequest.RequestTypeUpdate:
 	default:
-		isSpecialGuestRequests(string(guestResourceType), rawGuestRequest)
-		// invalid
+		log.Printf("\n Invald guestRequestType: %v", guestRequestType)
+		return fmt.Errorf("invald guestRequestType %v", guestRequestType)
 	}
-	//}
+
+	if guestResourceType != "" {
+		switch guestResourceType {
+		case guestresource.ResourceTypeCombinedLayers:
+			settings := &guestresource.WCOWCombinedLayers{}
+			if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
+				log.Printf("invalid ResourceTypeCombinedLayers request %v", r)
+				return fmt.Errorf("invalid ResourceTypeCombinedLayers request %v", r)
+			}
+
+			log.Printf(", WCOWCombinedLayers {ContainerRootPath: %v, Layers: %v, ScratchPath: %v} \n", settings.ContainerRootPath, settings.Layers, settings.ScratchPath)
+			for i, layer := range settings.Layers {
+				log.Printf("Layer %d Id: %s\n", i, layer.Id)
+				var ctx context.Context
+				err := b.PolicyEnforcer.securityPolicyEnforcer.EnforceDeviceMountPolicy(ctx, settings.ContainerRootPath, layer.Id)
+				if err != nil {
+					log.Printf("denied by policy %v", r)
+				}
+			}
+
+		case guestresource.ResourceTypeNetworkNamespace:
+			settings := &hcn.HostComputeNamespace{}
+			if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
+				log.Printf("invalid ResourceTypeNetworkNamespace request %v", r)
+				return fmt.Errorf("invalid ResourceTypeNetworkNamespace request %v", r)
+			}
+
+			log.Printf(", HostComputeNamespaces { %v} \n", settings)
+
+		case guestresource.ResourceTypeNetwork:
+			// following valid only for osversion.Build() >= osversion.RS5
+			// since Cwcow is available only for latest versions this is ok
+			settings := &guestrequest.NetworkModifyRequest{}
+			if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
+				log.Printf("invalid ResourceTypeNetwork request %v", r)
+				return fmt.Errorf("invalid ResourceTypeNetwork request %v", r)
+			}
+
+			log.Printf(", NetworkModifyRequest { %v} \n", settings)
+
+		case guestresource.ResourceTypeMappedVirtualDisk:
+			wcowMappedVirtualDisk := &guestresource.WCOWMappedVirtualDisk{}
+			if err := json.Unmarshal(rawGuestRequest, wcowMappedVirtualDisk); err != nil {
+				log.Printf("invalid ResourceTypeMappedVirtualDisk request %v", r)
+				return fmt.Errorf("invalid ResourceTypeMappedVirtualDisk request %v", r)
+			}
+
+			log.Printf(", wcowMappedVirtualDisk { %v} \n", wcowMappedVirtualDisk)
+
+		case guestresource.ResourceTypeHvSocket:
+			hvSocketAddress := &hcsschema.HvSocketAddress{}
+			if err := json.Unmarshal(rawGuestRequest, hvSocketAddress); err != nil {
+				log.Printf("invalid ResourceTypeHvSocket request %v", r)
+				return fmt.Errorf("invalid ResourceTypeHvSocket request %v", r)
+			}
+
+			log.Printf(", hvSocketAddress { %v} \n", hvSocketAddress)
+
+		case guestresource.ResourceTypeSecurityPolicy:
+			securityPolicyRequest := &guestresource.WCOWConfidentialOptions{}
+			if err := json.Unmarshal(rawGuestRequest, securityPolicyRequest); err != nil {
+				log.Printf("invalid ResourceTypeSecurityPolicy request %v", r)
+				return fmt.Errorf("invalid ResourceTypeSecurityPolicy request %v", r)
+			}
+
+			log.Printf(", WCOWConfidentialOptions: { %v} \n", securityPolicyRequest)
+			_ = b.PolicyEnforcer.SetWCOWConfidentialUVMOptions( /*ctx, */ securityPolicyRequest)
+			// skipSendToGCS = true
+			// send response back to shim
+			log.Printf("\n early response to hcsshim? \n")
+			err := b.sendReplyToShim(rpcModifySettings, *req)
+			if err != nil {
+				//
+				log.Printf("error sending early reply back to hcsshim")
+				err = fmt.Errorf("error sending early reply back to hcsshim")
+				return err
+			}
+			return nil
+			//return err, skipSendToGCS
+		default:
+			// invalid
+			log.Printf("\n Invald modifySettingsRequest: %v", guestResourceType)
+			return fmt.Errorf("invald modifySettingsRequest: %v", guestResourceType)
+		}
+	}
 
 	// If we are here, there is no error and we want to
 	// forward the message to inbox GCS
@@ -481,7 +367,7 @@ func (b *Bridge) unMarshalAndModifySettings(req *request) error {
 func (b *Bridge) sendReplyToShim(rpcProcType rpcProc, req request) error {
 	respType := msgTypeResponse | msgType(rpcProcType)
 	var msgBase requestBase
-	_ = json.Unmarshal(req.message, msgBase)
+	_ = json.Unmarshal(req.message, &msgBase)
 	resp := &responseBase{
 		Result: 0, // 0 means succes!
 		//	ErrorMessage: "",
@@ -513,12 +399,10 @@ func (b *Bridge) sendMessageToShim(typ msgType, id int64, msg []byte) {
 }
 
 func (b *Bridge) modifySettings(req *request) error {
-	var err error
-
 	log.Printf("\n rpcModifySettings handler \n")
 
 	//skipSendToGCS := false
-	if err = b.unMarshalAndModifySettings(req); err != nil {
+	if err := b.unmarshalModifySettingsAndForward(req); err != nil {
 		return err
 	}
 
@@ -529,16 +413,6 @@ func (b *Bridge) modifySettings(req *request) error {
 	//	}
 
 	return nil
-}
-
-func isSpecialGuestRequests(guestResourceType string, settings interface{}) bool {
-	if strings.HasPrefix(guestResourceType, resourcepaths.MappedPipeResourcePrefix) {
-		hostPath := strings.TrimPrefix(guestResourceType, resourcepaths.MappedPipeResourcePrefix)
-		log.Printf(", hostPath: %v \n", hostPath)
-		return true
-	}
-	// if we reached here, request is invalid
-	return false
 }
 
 func (b *Bridge) negotiateProtocol(req *request) error {
