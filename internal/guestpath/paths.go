@@ -16,6 +16,9 @@ const (
 	// BlockDevMountPrefix is mount prefix used in container spec to mark a
 	// block-device mount.
 	BlockDevMountPrefix = "blockdev://"
+	// UVMMountPrefix is mount prefix used in container spec to mark a UVM mount
+	// into container.
+	UVMMountPrefix = "uvm://"
 	// PipePrefix is the mount prefix used in container spec to mark a named pipe
 	PipePrefix = `\\.\pipe`
 	// LCOWMountPathPrefixFmt is the path format in the LCOW UVM where

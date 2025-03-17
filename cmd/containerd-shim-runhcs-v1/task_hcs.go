@@ -988,10 +988,11 @@ func isMountTypeSupported(hostPath, mountType string) bool {
 		hcsoci.MountTypeVirtualDisk, hcsoci.MountTypeExtensibleVirtualDisk:
 		return false
 	default:
-		// Ensure that host path is not sandbox://, hugepages://
+		// Ensure that host path is not sandbox://, hugepages://, \\.\pipe, uvm://
 		if strings.HasPrefix(hostPath, guestpath.SandboxMountPrefix) ||
 			strings.HasPrefix(hostPath, guestpath.HugePagesMountPrefix) ||
-			strings.HasPrefix(hostPath, guestpath.PipePrefix) {
+			strings.HasPrefix(hostPath, guestpath.PipePrefix) ||
+			strings.HasPrefix(hostPath, guestpath.UVMMountPrefix) {
 			return false
 		} else {
 			// hcsshim treats mountType == "" as a normal directory mount

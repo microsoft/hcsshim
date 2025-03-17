@@ -107,12 +107,21 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 // request.
 func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.Resources) error {
 	// Validate each of the mounts. If this is a V2 Xenon, we have to add them as
-	// VSMB shares to the utility VM. For V1 Xenon and Argons, there's nothing for
-	// us to do as it's done by HCS.
+	// VSMB shares to the utility VM. For V1 Xenon and Argons, only process named pipe
+	// mounts.
 	for _, mount := range coi.Spec.Mounts {
 		if mount.Destination == "" || mount.Source == "" {
 			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
 		}
+
+		// check if this is a named pipe for process isolated containers and add it to `namedPipeMounts`
+		if coi.HostingSystem == nil || !schemaversion.IsV21(coi.actualSchemaVersion) {
+			if np, ok := uvm.ParseNamedPipe(coi.HostingSystem, mount); ok {
+				coi.namedPipeMounts = append(coi.namedPipeMounts, np)
+			}
+			continue
+		}
+
 		switch mount.Type {
 		case "":
 		case MountTypePhysicalDisk:
@@ -122,105 +131,107 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 			return fmt.Errorf("invalid OCI spec - Type '%s' not supported", mount.Type)
 		}
 
-		if coi.HostingSystem != nil && schemaversion.IsV21(coi.actualSchemaVersion) {
-			readOnly := false
-			for _, o := range mount.Options {
-				if strings.ToLower(o) == "ro" {
-					readOnly = true
-					break
-				}
+		readOnly := false
+		for _, o := range mount.Options {
+			if strings.ToLower(o) == "ro" {
+				readOnly = true
+				break
 			}
-			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
-			if mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeVirtualDisk || mount.Type == MountTypeExtensibleVirtualDisk {
-				var (
-					scsiMount *scsi.Mount
-					err       error
+		}
+		l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
+		if mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeVirtualDisk || mount.Type == MountTypeExtensibleVirtualDisk {
+			var (
+				scsiMount *scsi.Mount
+				err       error
+			)
+			switch mount.Type {
+			case MountTypePhysicalDisk:
+				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
+				scsiMount, err = coi.HostingSystem.SCSIManager.AddPhysicalDisk(
+					ctx,
+					mount.Source,
+					readOnly,
+					coi.HostingSystem.ID(),
+					"",
+					&scsi.MountConfig{},
 				)
-				switch mount.Type {
-				case MountTypePhysicalDisk:
-					l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
-					scsiMount, err = coi.HostingSystem.SCSIManager.AddPhysicalDisk(
-						ctx,
-						mount.Source,
-						readOnly,
-						coi.HostingSystem.ID(),
-						"",
-						&scsi.MountConfig{},
-					)
-				case MountTypeVirtualDisk:
-					l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-					scsiMount, err = coi.HostingSystem.SCSIManager.AddVirtualDisk(
-						ctx,
-						mount.Source,
-						readOnly,
-						coi.HostingSystem.ID(),
-						"",
-						&scsi.MountConfig{},
-					)
-				case MountTypeExtensibleVirtualDisk:
-					l.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
-					scsiMount, err = coi.HostingSystem.SCSIManager.AddExtensibleVirtualDisk(
-						ctx,
-						mount.Source,
-						readOnly,
-						"",
-						&scsi.MountConfig{},
-					)
-				}
-				if err != nil {
-					return fmt.Errorf("adding SCSI mount %+v: %w", mount, err)
-				}
-				r.Add(scsiMount)
-				// Compute guest mounts now, and store them, so they can be added to the container doc later.
-				// We do this now because we have access to the guest path through the returned mount object.
-				coi.windowsAdditionalMounts = append(coi.windowsAdditionalMounts, hcsschema.MappedDirectory{
-					HostPath:      scsiMount.GuestPath(),
-					ContainerPath: mount.Destination,
-					ReadOnly:      readOnly,
-				})
-			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
-				// Mounts that map to a path in the UVM are specified with a 'sandbox://' prefix.
-				//
-				// Example: sandbox:///a/dirInUvm destination:C:\\dirInContainer.
-				//
-				// so first convert to a path in the sandboxmounts path itself.
-				sandboxPath := convertToWCOWSandboxMountPath(mount.Source)
-
-				// Now we need to exec a process in the vm that will make these directories as theres
-				// no functionality in the Windows gcs to create an arbitrary directory.
-				//
-				// Create the directory, but also run dir afterwards regardless of if mkdir succeeded to handle the case where the directory already exists
-				// e.g. from a previous container specifying the same mount (and thus creating the same directory).
-				b := &bytes.Buffer{}
-				stderr, err := cmd.CreatePipeAndListen(b, false)
-				if err != nil {
-					return err
-				}
-				req := &cmd.CmdProcessRequest{
-					Args:   []string{"cmd", "/c", "mkdir", sandboxPath, "&", "dir", sandboxPath},
-					Stderr: stderr,
-				}
-				exitCode, err := cmd.ExecInUvm(ctx, coi.HostingSystem, req)
-				if err != nil {
-					return errors.Wrapf(err, "failed to create sandbox mount directory in utility VM with exit code %d %q", exitCode, b.String())
-				}
-			} else {
-				if uvm.IsPipe(mount.Source) {
-					pipe, err := coi.HostingSystem.AddPipe(ctx, mount.Source)
-					if err != nil {
-						return errors.Wrap(err, "failed to add named pipe to UVM")
-					}
-					r.Add(pipe)
-				} else {
-					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
-					options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
-					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, options)
-					if err != nil {
-						return errors.Wrapf(err, "failed to add VSMB share to utility VM for mount %+v", mount)
-					}
-					r.Add(share)
-				}
+			case MountTypeVirtualDisk:
+				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
+				scsiMount, err = coi.HostingSystem.SCSIManager.AddVirtualDisk(
+					ctx,
+					mount.Source,
+					readOnly,
+					coi.HostingSystem.ID(),
+					"",
+					&scsi.MountConfig{},
+				)
+			case MountTypeExtensibleVirtualDisk:
+				l.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
+				scsiMount, err = coi.HostingSystem.SCSIManager.AddExtensibleVirtualDisk(
+					ctx,
+					mount.Source,
+					readOnly,
+					"",
+					&scsi.MountConfig{},
+				)
 			}
+			if err != nil {
+				return fmt.Errorf("adding SCSI mount %+v: %w", mount, err)
+			}
+			r.Add(scsiMount)
+			// Compute guest mounts now, and store them, so they can be added to the container doc later.
+			// We do this now because we have access to the guest path through the returned mount object.
+			coi.windowsAdditionalMounts = append(coi.windowsAdditionalMounts, hcsschema.MappedDirectory{
+				HostPath:      scsiMount.GuestPath(),
+				ContainerPath: mount.Destination,
+				ReadOnly:      readOnly,
+			})
+		} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
+			// Mounts that map to a path in the UVM are specified with a 'sandbox://' prefix.
+			//
+			// Example:
+			//   - sandbox:///a/dirInUvm destination:C:\\dirInContainer.
+			//
+			// so first convert to a path in the sandboxmounts path itself.
+			sandboxPath := convertToWCOWSandboxMountPath(mount.Source)
+
+			// Now we need to exec a process in the vm that will make these directories as theres
+			// no functionality in the Windows gcs to create an arbitrary directory.
+			//
+			// Create the directory, but also run dir afterwards regardless of if mkdir succeeded to handle the case where the directory already exists
+			// e.g. from a previous container specifying the same mount (and thus creating the same directory).
+			b := &bytes.Buffer{}
+			stderr, err := cmd.CreatePipeAndListen(b, false)
+			if err != nil {
+				return err
+			}
+			req := &cmd.CmdProcessRequest{
+				Args:   []string{"cmd", "/c", "mkdir", sandboxPath, "&", "dir", sandboxPath},
+				Stderr: stderr,
+			}
+			exitCode, err := cmd.ExecInUvm(ctx, coi.HostingSystem, req)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create sandbox mount directory in utility VM with exit code %d %q", exitCode, b.String())
+			}
+		} else if np, ok := uvm.ParseNamedPipe(coi.HostingSystem, mount); ok {
+			if !np.UVMPipe {
+				pipe, err := coi.HostingSystem.AddPipe(ctx, mount.Source)
+				if err != nil {
+					return errors.Wrap(err, "failed to add named pipe to UVM")
+				}
+				r.Add(pipe)
+			}
+			coi.namedPipeMounts = append(coi.namedPipeMounts, np)
+		} else if strings.HasPrefix(mount.Source, guestpath.UVMMountPrefix) {
+			return fmt.Errorf("unsupported UVM mount source %s", mount.Source)
+		} else {
+			l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
+			options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
+			share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, options)
+			if err != nil {
+				return errors.Wrapf(err, "failed to add VSMB share to utility VM for mount %+v", mount)
+			}
+			r.Add(share)
 		}
 	}
 
