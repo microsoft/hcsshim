@@ -228,6 +228,7 @@ func (b *Bridge) getProperties(req *request) error {
 		}
 	*/
 	// TODO: Error out if v1 schema is being used as we will not support bringing up sidecar-gcs there
+	b.sendToGCSCh <- *req
 	return nil
 }
 
