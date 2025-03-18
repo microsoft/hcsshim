@@ -42,50 +42,53 @@ type mountsConfig struct {
 
 func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mountsConfig, error) {
 	// Add the mounts as mapped directories or mapped pipes
-	// TODO: Mapped pipes to add in v2 schema.
 	var config mountsConfig
 	for _, mount := range coi.Spec.Mounts {
+		// mapped pipes will be added outside the loop
 		if uvm.IsPipe(mount.Source) {
-			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
-			config.mpsv1 = append(config.mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
-			config.mpsv2 = append(config.mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
-		} else {
-			readOnly := false
-			for _, o := range mount.Options {
-				if strings.ToLower(o) == "ro" {
-					readOnly = true
-				}
-			}
-			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
-			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
-			if coi.HostingSystem == nil {
-				// HCS has a bug where it does not correctly resolve file (not dir) paths
-				// if the path includes a symlink. Therefore, we resolve the path here before
-				// passing it in. The issue does not occur with VSMB, so don't need to worry
-				// about the isolated case.
-				src, err := fs.ResolvePath(mount.Source)
-				if err != nil {
-					return nil, fmt.Errorf("failed to resolve path for mount source %q: %w", mount.Source, err)
-				}
-				mdv2.HostPath = src
-			} else if mount.Type == MountTypeVirtualDisk || mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeExtensibleVirtualDisk {
-				// For v2 schema containers, any disk mounts will be part of coi.additionalMounts.
-				// For v1 schema containers, we don't even get here, since there is no HostingSystem.
-				continue
-			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
-				// Convert to the path in the guest that was asked for.
-				mdv2.HostPath = convertToWCOWSandboxMountPath(mount.Source)
-			} else {
-				// vsmb mount
-				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
-				if err != nil {
-					return nil, err
-				}
-				mdv2.HostPath = uvmPath
-			}
-			config.mdsv1 = append(config.mdsv1, mdv1)
-			config.mdsv2 = append(config.mdsv2, mdv2)
+			continue
 		}
+
+		readOnly := false
+		for _, o := range mount.Options {
+			if strings.ToLower(o) == "ro" {
+				readOnly = true
+			}
+		}
+		mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
+		mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
+		if coi.HostingSystem == nil {
+			// HCS has a bug where it does not correctly resolve file (not dir) paths
+			// if the path includes a symlink. Therefore, we resolve the path here before
+			// passing it in. The issue does not occur with VSMB, so don't need to worry
+			// about the isolated case.
+			src, err := fs.ResolvePath(mount.Source)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve path for mount source %q: %w", mount.Source, err)
+			}
+			mdv2.HostPath = src
+		} else if mount.Type == MountTypeVirtualDisk || mount.Type == MountTypePhysicalDisk || mount.Type == MountTypeExtensibleVirtualDisk {
+			// For v2 schema containers, any disk mounts will be part of coi.windowsAdditionalMounts.
+			// For v1 schema containers, we don't even get here, since there is no HostingSystem.
+			continue
+		} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
+			// Convert to the path in the guest that was asked for.
+			mdv2.HostPath = convertToWCOWSandboxMountPath(mount.Source)
+		} else {
+			// vsmb mount
+			uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
+			if err != nil {
+				return nil, err
+			}
+			mdv2.HostPath = uvmPath
+		}
+		config.mdsv1 = append(config.mdsv1, mdv1)
+		config.mdsv2 = append(config.mdsv2, mdv2)
+	}
+	// adding mapped pipes
+	for _, np := range coi.namedPipeMounts {
+		config.mpsv1 = append(config.mpsv1, schema1.MappedPipe{HostPath: np.HostPath, ContainerPipeName: np.ContainerPath})
+		config.mpsv2 = append(config.mpsv2, hcsschema.MappedPipe{HostPath: np.HostPath, ContainerPipeName: np.ContainerPath})
 	}
 	config.mdsv2 = append(config.mdsv2, coi.windowsAdditionalMounts...)
 	return &config, nil

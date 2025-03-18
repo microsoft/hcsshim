@@ -70,9 +70,15 @@ type createOptionsInternal struct {
 	actualID               string             // Identifier for the container
 	actualOwner            string             // Owner for the container
 	actualNetworkNamespace string
-	ccgState               *hcsschema.ContainerCredentialGuardState // Container Credential Guard information to be attached to HCS container document
+	// ccgState is Container Credential Guard information to be attached to HCS container document
+	ccgState *hcsschema.ContainerCredentialGuardState
 
-	windowsAdditionalMounts []hcsschema.MappedDirectory // Holds additional mounts based on added devices (such as SCSI). Only used for Windows v2 schema containers.
+	// windowsAdditionalMounts holds additional mounts based on added devices (such as SCSI).
+	// Only used for Windows v2 schema containers.
+	windowsAdditionalMounts []hcsschema.MappedDirectory
+
+	// namedPipeMounts holds named pipe mount information.
+	namedPipeMounts []uvm.NamedPipe
 
 	mountedWCOWLayers *layers.MountedWCOWLayers
 }
