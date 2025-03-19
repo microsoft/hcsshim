@@ -180,6 +180,9 @@ func getMessageType(header [hdrSize]byte) msgType {
 	return msgType(binary.LittleEndian.Uint32(header[hdrOffType:]))
 }
 
+func setMessageSize() {
+
+}
 func getMessageSize(header [hdrSize]byte) uint32 {
 	return binary.LittleEndian.Uint32(header[hdrOffSize:])
 }

@@ -233,6 +233,7 @@ func (b *Bridge) getProperties(req *request) error {
 }
 
 func (b *Bridge) unmarshalModifySettingsAndForward(req *request) error {
+	log.Printf("\n, unmarshalModifySettingsAndForward:Header {Type: %v Size: %v ID: %v }\n msg: %v \n", getMessageType(req.header), getMessageSize(req.header), getMessageID(req.header), string(req.message))
 	// skipSendToGCS := false
 	var r containerModifySettings
 	var requestRawSettings json.RawMessage
@@ -273,6 +274,35 @@ func (b *Bridge) unmarshalModifySettingsAndForward(req *request) error {
 
 	if guestResourceType != "" {
 		switch guestResourceType {
+		case guestresource.ResourceTypeCWCOWCombinedLayers:
+			settings := &guestresource.CWCOWCombinedLayers{}
+			if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
+				log.Printf("invalid ResourceTypeCombinedLayers request %v", r)
+				return fmt.Errorf("invalid ResourceTypeCombinedLayers request %v", r)
+			}
+			containerID := settings.ContainerID
+			log.Printf(", CWCOWCombinedLayers {ContainerID: %v {ContainerRootPath: %v, Layers: %v, ScratchPath: %v}} \n",
+				containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
+
+			// reconstruct WCOWCombinedLayers{} and req before forwarding to GCS
+			// as GCS does not understand containerID in CombinedLayers request
+
+			//wcowCombinedLayerSettings := settings.CombinedLayers
+			modifyGuestSettingsRequest.ResourceType = guestresource.ResourceTypeCombinedLayers
+			modifyGuestSettingsRequest.Settings = settings.CombinedLayers
+			r.Request = modifyGuestSettingsRequest
+			buf, err := json.Marshal(r)
+			if err != nil {
+				return fmt.Errorf("failed to marshal rpcModifySettings: %v", req)
+			}
+
+			var newRequest request
+			newRequest.header = req.header
+			size := uint32(len(buf)) + hdrSize
+			binary.LittleEndian.PutUint32(newRequest.header[hdrOffSize:], size)
+			newRequest.message = buf
+			req = &newRequest
+
 		case guestresource.ResourceTypeCombinedLayers:
 			settings := &guestresource.WCOWCombinedLayers{}
 			if err := json.Unmarshal(rawGuestRequest, settings); err != nil {
