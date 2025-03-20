@@ -32,7 +32,8 @@ const (
 	ResourceTypeNetworkNamespace guestrequest.ResourceType = "NetworkNamespace"
 	// ResourceTypeCombinedLayers is the modify resource type for combined
 	// layers
-	ResourceTypeCombinedLayers guestrequest.ResourceType = "CombinedLayers"
+	ResourceTypeCombinedLayers      guestrequest.ResourceType = "CombinedLayers"
+	ResourceTypeCWCOWCombinedLayers guestrequest.ResourceType = "CWCOWCombinedLayers"
 	// ResourceTypeVPMemDevice is the modify resource type for VPMem devices
 	ResourceTypeVPMemDevice guestrequest.ResourceType = "VPMemDevice"
 	// ResourceTypeVPCIDevice is the modify resource type for vpci devices
@@ -59,6 +60,11 @@ type LCOWCombinedLayers struct {
 	ContainerRootPath string            `json:",omitempty"`
 	Layers            []hcsschema.Layer `json:",omitempty"`
 	ScratchPath       string            `json:",omitempty"`
+}
+
+type CWCOWCombinedLayers struct {
+	ContainerID    string             `json:"ContainerID,omitempty"`
+	CombinedLayers WCOWCombinedLayers `json:"CombinedLayers,omitempty"`
 }
 
 type WCOWCombinedLayers struct {
