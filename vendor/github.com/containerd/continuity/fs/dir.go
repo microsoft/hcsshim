@@ -1,5 +1,3 @@
-//go:build !windows && !freebsd
-
 /*
    Copyright The containerd Authors.
 
@@ -19,21 +17,37 @@
 package fs
 
 import (
-	"fmt"
+	"io"
 	"os"
-	"syscall"
 )
 
-// copyIrregular covers devices, pipes, and sockets
-func copyIrregular(dst string, fi os.FileInfo) error {
-	st, ok := fi.Sys().(*syscall.Stat_t) // not *unix.Stat_t
-	if !ok {
-		return fmt.Errorf("unsupported stat type: %s: %v", dst, fi.Mode())
+type dirReader struct {
+	buf []os.DirEntry
+	f   *os.File
+	err error
+}
+
+func (r *dirReader) Next() os.DirEntry {
+	if len(r.buf) == 0 {
+		infos, err := r.f.ReadDir(32)
+		if err != nil {
+			if err != io.EOF {
+				r.err = err
+			}
+			return nil
+		}
+		r.buf = infos
 	}
-	var rDev int
-	if fi.Mode()&os.ModeDevice == os.ModeDevice {
-		rDev = int(st.Rdev)
+
+	if len(r.buf) == 0 {
+		return nil
 	}
-	//nolint:unconvert
-	return syscall.Mknod(dst, uint32(st.Mode), rDev)
+	out := r.buf[0]
+	r.buf[0] = nil
+	r.buf = r.buf[1:]
+	return out
+}
+
+func (r *dirReader) Err() error {
+	return r.err
 }
