@@ -487,9 +487,14 @@ func mountHypervIsolatedBlockCIMLayers(ctx context.Context, l *wcowBlockCIMLayer
 
 	hostPath := filepath.Join(l.scratchLayerPath, "sandbox.vhdx")
 
+	shouldFormatWithRefs := false
+	wopts := vm.GetWCOWCreateOpts()
+	if wopts.SecurityPolicy != "" {
+		shouldFormatWithRefs = true
+	}
 	scsiMount, err := vm.SCSIManager.AddVirtualDisk(ctx, hostPath, false, vm.ID(), "",
 		&scsi.MountConfig{
-			// TODO(ambarve): Add SCSI config to format the scratch in guest
+			FormatWithRefs: shouldFormatWithRefs,
 		})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to add SCSI scratch VHD: %w", err)
