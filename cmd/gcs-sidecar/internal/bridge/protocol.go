@@ -9,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
@@ -300,19 +299,4 @@ type containerSignalProcess struct {
 	requestBase
 	ProcessID uint32      `json:"ProcessId"`
 	Options   interface{} `json:",omitempty"`
-}
-
-type containerPropertiesQuery schema1.PropertyQuery
-
-func (q *containerPropertiesQuery) MarshalText() ([]byte, error) {
-	return json.Marshal((*schema1.PropertyQuery)(q))
-}
-
-func (q *containerPropertiesQuery) UnmarshalText(b []byte) error {
-	return json.Unmarshal(b, (*schema1.PropertyQuery)(q))
-}
-
-type containerGetProperties struct {
-	requestBase
-	Query containerPropertiesQuery
 }
