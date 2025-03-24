@@ -163,6 +163,7 @@ func repeat(f func() error, n int, d time.Duration) (err error) {
 func Context(ctx context.Context, tb testing.TB) context.Context {
 	tb.Helper()
 
+	// TODO(go1.24): use tb.Context()
 	var (
 		cancelCtx   context.CancelFunc
 		gracePeriod time.Duration // unlimited unless the test has a deadline (to allow for interactive debugging)

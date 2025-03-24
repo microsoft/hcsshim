@@ -68,7 +68,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				opts := defaultLCOWOptions(ctx, b)
 				vm, vmCleanup = testuvm.CreateLCOW(ctx, b, opts)
 				testuvm.Start(ctx, b, vm)
-				cache = testlayers.CacheFile(ctx, b, "")
+				cache = testlayers.LCOWScratchCacheFile(ctx, b, "")
 			}
 
 			id := criutil.GenerateID()
@@ -147,7 +147,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				opts := defaultLCOWOptions(ctx, b)
 				vm, vmCleanup = testuvm.CreateLCOW(ctx, b, opts)
 				testuvm.Start(ctx, b, vm)
-				cache = testlayers.CacheFile(ctx, b, "")
+				cache = testlayers.LCOWScratchCacheFile(ctx, b, "")
 			}
 
 			id := criutil.GenerateID()
@@ -201,7 +201,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				opts := defaultLCOWOptions(ctx, b)
 				vm, vmCleanup = testuvm.CreateLCOW(ctx, b, opts)
 				testuvm.Start(ctx, b, vm)
-				cache = testlayers.CacheFile(ctx, b, "")
+				cache = testlayers.LCOWScratchCacheFile(ctx, b, "")
 			}
 
 			id := criutil.GenerateID()
@@ -258,7 +258,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				opts := defaultLCOWOptions(ctx, b)
 				vm, vmCleanup = testuvm.CreateLCOW(ctx, b, opts)
 				testuvm.Start(ctx, b, vm)
-				cache = testlayers.CacheFile(ctx, b, "")
+				cache = testlayers.LCOWScratchCacheFile(ctx, b, "")
 			}
 
 			id := criutil.GenerateID()
@@ -321,7 +321,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				opts := defaultLCOWOptions(ctx, b)
 				vm, vmCleanup = testuvm.CreateLCOW(ctx, b, opts)
 				testuvm.Start(ctx, b, vm)
-				cache = testlayers.CacheFile(ctx, b, "")
+				cache = testlayers.LCOWScratchCacheFile(ctx, b, "")
 			}
 
 			id := criutil.GenerateID()
@@ -385,7 +385,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				opts := defaultLCOWOptions(ctx, b)
 				vm, vmCleanup = testuvm.CreateLCOW(ctx, b, opts)
 				testuvm.Start(ctx, b, vm)
-				cache = testlayers.CacheFile(ctx, b, "")
+				cache = testlayers.LCOWScratchCacheFile(ctx, b, "")
 			}
 
 			id := criutil.GenerateID()
@@ -449,7 +449,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				opts := defaultLCOWOptions(ctx, b)
 				vm, vmCleanup = testuvm.CreateLCOW(ctx, b, opts)
 				testuvm.Start(ctx, b, vm)
-				cache = testlayers.CacheFile(ctx, b, "")
+				cache = testlayers.LCOWScratchCacheFile(ctx, b, "")
 			}
 
 			id := criutil.GenerateID()

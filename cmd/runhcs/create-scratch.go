@@ -5,13 +5,14 @@ package main
 import (
 	gcontext "context"
 
+	"github.com/pkg/errors"
+	"github.com/urfave/cli"
+
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
-	"github.com/urfave/cli"
 )
 
 var createScratchCommand = cli.Command{
@@ -36,6 +37,10 @@ var createScratchCommand = cli.Command{
 			Name:  "use-virtual-memory",
 			Usage: "optional: Whether the UVM should be backed with virtual memory.",
 		},
+		cli.StringFlag{
+			Name:  "linux-bootfiles",
+			Usage: "optional: The `path` for LCOW uVM boot files (rootfs.vhd, initrd.img, kernel, and vmlinux)",
+		},
 	},
 	Before: appargs.Validate(),
 	Action: func(context *cli.Context) (err error) {
@@ -53,6 +58,9 @@ var createScratchCommand = cli.Command{
 		}
 
 		opts := uvm.NewDefaultOptionsLCOW("createscratch-uvm", context.GlobalString("owner"))
+		if p := context.String("linux-bootfiles"); p != "" {
+			opts.UpdateBootFilesPath(ctx, p)
+		}
 
 		// 512MB with boot from vhd supported.
 		opts.MemorySizeInMB = 512

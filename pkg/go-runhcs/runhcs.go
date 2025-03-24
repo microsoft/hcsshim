@@ -141,6 +141,8 @@ func (r *Runhcs) command(ctx context.Context, args ...string) *exec.Cmd {
 // stderr of the command will be returned in the format of <error>:
 // <stderr>.
 func (r *Runhcs) runOrError(cmd *exec.Cmd) error {
+	fmt.Printf("running: %s", cmd.String())
+
 	if cmd.Stdout != nil || cmd.Stderr != nil {
 		ec, err := runc.Monitor.Start(cmd)
 		if err != nil {

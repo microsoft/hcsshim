@@ -48,7 +48,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 		"dest":   destFile,
 		"sizeGB": sizeGB,
 		"cache":  cacheFile,
-	}).Debug("lcow::CreateScratch opts")
+	}).Warning("lcow::CreateScratch opts")
 
 	// Retrieve from cache if the default size and already on disk
 	if cacheFile != "" && sizeGB == DefaultScratchSizeGB {
@@ -59,7 +59,8 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 			log.G(ctx).WithFields(logrus.Fields{
 				"dest":  destFile,
 				"cache": cacheFile,
-			}).Debug("lcow::CreateScratch copied from cache")
+			}).Warning("lcow::CreateScratch copied from cache")
+			// }).Debug("lcow::CreateScratch copied from cache")
 			return nil
 		}
 	}
@@ -95,7 +96,8 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 		"controller": scsiMount.Controller(),
 		"lun":        scsiMount.LUN(),
 		"blockdev":   scsiMount.GuestPath(),
-	}).Debug("lcow::CreateScratch device attached")
+	}).Warning("lcow::CreateScratch device attached")
+	// }).Debug("lcow::CreateScratch device attached")
 
 	// Format block device mount as ext4
 	mkfsCtx, cancel := context.WithTimeout(ctx, timeout.ExternalCommandToStart)

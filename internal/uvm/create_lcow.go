@@ -1006,3 +1006,15 @@ func (uvm *UtilityVM) listenVsock(port uint32) (net.Listener, error) {
 		ServiceID: winio.VsockServiceID(port),
 	})
 }
+
+// LCOWBootFiles returns the path to the boot files directory used to create the uVM.
+func (uvm *UtilityVM) LCOWBootFiles() (string, error) {
+	if uvm.operatingSystem != "linux" {
+		return "", fmt.Errorf("invalid uVM OS: %s: %w", uvm.operatingSystem, errNotSupported)
+	}
+	lopts, ok := uvm.createOpts.(*OptionsLCOW)
+	if !ok {
+		return "", fmt.Errorf("invalid creation options type: %T", uvm.createOpts)
+	}
+	return lopts.BootFilesPath, nil
+}

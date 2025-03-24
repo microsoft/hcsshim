@@ -180,7 +180,6 @@ func TestContainerIO(t *testing.T) {
 		vm := testuvm.CreateAndStart(ctx, t, opts)
 
 		ls := linuxImageLayers(ctx, t)
-		cache := testlayers.CacheFile(ctx, t, "")
 
 		for _, tt := range ioTests {
 			if len(tt.lcowArgs) == 0 {
@@ -190,7 +189,7 @@ func TestContainerIO(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				cID := testName(t, "container")
 
-				scratch, _ := testlayers.ScratchSpace(ctx, t, vm, "", "", cache)
+				scratch, _ := testlayers.ScratchSpace(ctx, t, vm, "", "", "")
 				spec := testoci.CreateLinuxSpec(ctx, t, cID,
 					testoci.DefaultLinuxSpecOpts(cID,
 						ctrdoci.WithProcessArgs(tt.lcowArgs...),

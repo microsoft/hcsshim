@@ -25,6 +25,8 @@ type CreateScratchOpts struct {
 	// UseVirtualMemory indicates whether the UVM used to create the
 	// scratch should be backed with virtual memory or not.
 	UseVirtualMemory bool
+	// BootFiles is the path to the LCOW uVM boot files (rootfs.vhd, initrd.img, kernel, and vmlinux).
+	BootFiles string
 }
 
 func (opt *CreateScratchOpts) args() ([]string, error) {
@@ -43,6 +45,13 @@ func (opt *CreateScratchOpts) args() ([]string, error) {
 	}
 	if opt.UseVirtualMemory {
 		out = append(out, "--use-virtual-memory")
+	}
+	if opt.BootFiles != "" {
+		abs, err := filepath.Abs(opt.BootFiles)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, "--linux-bootfiles", abs)
 	}
 	return out, nil
 }

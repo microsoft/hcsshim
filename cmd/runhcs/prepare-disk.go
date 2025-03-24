@@ -28,6 +28,10 @@ var prepareDiskCommand = cli.Command{
 			Name:  "destpath",
 			Usage: "Required: describes the destination disk path",
 		},
+		cli.StringFlag{
+			Name:  "linux-bootfiles",
+			Usage: "optional: The `path` for LCOW uVM boot files (rootfs.vhd, initrd.img, kernel, and vmlinux)",
+		},
 	},
 	Before: appargs.Validate(),
 	Action: func(context *cli.Context) (err error) {
@@ -45,6 +49,10 @@ var prepareDiskCommand = cli.Command{
 		}
 
 		opts := uvm.NewDefaultOptionsLCOW("preparedisk-uvm", context.GlobalString("owner"))
+		if p := context.String("linux-bootfiles"); p != "" {
+			opts.UpdateBootFilesPath(ctx, p)
+		}
+
 		// Default SCSI controller count is 4, we don't need that for this UVM,
 		// bring it back to 1 to avoid any confusion with SCSI controller numbers.
 		opts.SCSIControllerCount = 1

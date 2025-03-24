@@ -203,6 +203,11 @@ func (uvm *UtilityVM) OS() string {
 	return uvm.operatingSystem
 }
 
+// Owner returns the owner of the utility VM.
+func (uvm *UtilityVM) Owner() string {
+	return uvm.owner
+}
+
 func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 	uvm.exitCh = make(chan struct{})
 	system, err := hcs.CreateComputeSystem(ctx, uvm.id, doc)
