@@ -86,6 +86,9 @@ type MountConfig struct {
 	// BlockDev indicates if the device should be mounted as a block device.
 	// This is only supported for LCOW.
 	BlockDev bool
+	// FormatWithRefs indicates to refs format the disk.
+	// This is only supported for CWCOW scratch disks.
+	FormatWithRefs bool
 }
 
 // Mount represents a SCSI device that has been attached to a VM, and potentially
@@ -162,6 +165,7 @@ func (m *Manager) AddVirtualDisk(
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
 			blockDev:         mc.BlockDev,
+			formatWithRefs:   mc.FormatWithRefs,
 		}
 	}
 	return m.add(ctx,
