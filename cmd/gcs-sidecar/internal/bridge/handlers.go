@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/windowssecuritypolicy"
 	"github.com/Microsoft/hcsshim/hcn"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/pkg/errors"
 )
 
 // Current intent of these handler functions is to call the security policy
@@ -83,17 +85,17 @@ func (b *Bridge) startContainer(req *request) error {
 func (b *Bridge) shutdownGraceful(req *request) error {
 	var r requestBase
 	var err error = nil
+	var ctx context.Context
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcShutdownGraceful: %v", req)
 	}
 	log.Printf("rpcShutdownGraceful: \n requestBase: %v", r)
-	/*
-		containerdID := r.ContainerdID
-		b.PolicyEnforcer.EnforceShutdownContainerPolicy(ctx, containerID)
-		if err != nil {
-			return fmt.Errorf("rpcShudownGraceful operation not allowed: %v", err)
-		}
-	*/
+
+	b.PolicyEnforcer.securityPolicyEnforcer.EnforceShutdownContainerPolicy(ctx, r.ContainerID)
+	if err != nil {
+		return fmt.Errorf("rpcShudownGraceful operation not allowed: %v", err)
+	}
+
 	b.sendToGCSCh <- *req
 
 	return nil
@@ -284,10 +286,17 @@ func (b *Bridge) unmarshalModifySettingsAndForward(req *request) error {
 			log.Printf(", CWCOWCombinedLayers {ContainerID: %v {ContainerRootPath: %v, Layers: %v, ScratchPath: %v}} \n",
 				containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
+			// check that this is not denied by policy
+			// TODO: modify gcs-sidecar code to pass context across all calls
+			// TODO: Update modifyCombinedLayers with verified CimFS API
+			var ctx context.Context
+			policy_err := modifyCombinedLayers(ctx, containerID, guestRequestType, settings.CombinedLayers, b.PolicyEnforcer.securityPolicyEnforcer)
+			if policy_err != nil {
+				return fmt.Errorf("CimFS layer mount is denied by policy: %v", r)
+			}
+
 			// reconstruct WCOWCombinedLayers{} and req before forwarding to GCS
 			// as GCS does not understand containerID in CombinedLayers request
-
-			//wcowCombinedLayerSettings := settings.CombinedLayers
 			modifyGuestSettingsRequest.ResourceType = guestresource.ResourceTypeCombinedLayers
 			modifyGuestSettingsRequest.Settings = settings.CombinedLayers
 			r.Request = modifyGuestSettingsRequest
@@ -311,14 +320,6 @@ func (b *Bridge) unmarshalModifySettingsAndForward(req *request) error {
 			}
 
 			log.Printf(", WCOWCombinedLayers {ContainerRootPath: %v, Layers: %v, ScratchPath: %v} \n", settings.ContainerRootPath, settings.Layers, settings.ScratchPath)
-			for i, layer := range settings.Layers {
-				log.Printf("Layer %d Id: %s\n", i, layer.Id)
-				var ctx context.Context
-				err := b.PolicyEnforcer.securityPolicyEnforcer.EnforceDeviceMountPolicy(ctx, settings.ContainerRootPath, layer.Id)
-				if err != nil {
-					log.Printf("denied by policy %v", r)
-				}
-			}
 
 		case guestresource.ResourceTypeNetworkNamespace:
 			settings := &hcn.HostComputeNamespace{}
@@ -347,6 +348,11 @@ func (b *Bridge) unmarshalModifySettingsAndForward(req *request) error {
 				return fmt.Errorf("invalid ResourceTypeMappedVirtualDisk request %v", r)
 			}
 
+			var ctx context.Context
+			policy_err := modifyMappedVirtualDisk(ctx, guestRequestType, wcowMappedVirtualDisk, b.PolicyEnforcer.securityPolicyEnforcer)
+			if policy_err != nil {
+				return fmt.Errorf("Mount device denied by policy %v", r)
+			}
 			log.Printf(", wcowMappedVirtualDisk { %v} \n", wcowMappedVirtualDisk)
 
 		case guestresource.ResourceTypeHvSocket:
@@ -392,6 +398,49 @@ func (b *Bridge) unmarshalModifySettingsAndForward(req *request) error {
 
 	return nil
 	//, skipSendToGCS
+}
+
+func newInvalidRequestTypeError(rt guestrequest.RequestType) error {
+	return errors.Errorf("the RequestType %q is not supported", rt)
+}
+
+func modifyMappedVirtualDisk(
+	ctx context.Context,
+	rt guestrequest.RequestType,
+	mvd *guestresource.WCOWMappedVirtualDisk,
+	securityPolicy windowssecuritypolicy.SecurityPolicyEnforcer,
+) (err error) {
+	switch rt {
+	case guestrequest.RequestTypeAdd:
+		// TODO: Modify and update this with verified Cims API
+		return securityPolicy.EnforceDeviceMountPolicy(ctx, mvd.ContainerPath, "hash")
+	case guestrequest.RequestTypeRemove:
+		// TODO: Modify and update this with verified Cims API
+		return securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.ContainerPath)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
+}
+
+func modifyCombinedLayers(
+	ctx context.Context,
+	containerID string,
+	rt guestrequest.RequestType,
+	cl guestresource.WCOWCombinedLayers,
+	securityPolicy windowssecuritypolicy.SecurityPolicyEnforcer,
+) (err error) {
+	switch rt {
+	case guestrequest.RequestTypeAdd:
+		layerPaths := make([]string, len(cl.Layers))
+		for i, layer := range cl.Layers {
+			layerPaths[i] = layer.Path
+		}
+		return securityPolicy.EnforceOverlayMountPolicy(ctx, containerID, layerPaths, cl.ContainerRootPath)
+	case guestrequest.RequestTypeRemove:
+		return securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
 }
 
 // TODO: cleanup helper
@@ -467,6 +516,13 @@ func (b *Bridge) dumpStacks(req *request) error {
 	if err = json.Unmarshal(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal rpcStart: %v", req)
 	}
+	var ctx context.Context
+	err = b.PolicyEnforcer.securityPolicyEnforcer.EnforceDumpStacksPolicy(ctx)
+
+	if err != nil {
+		return errors.Wrapf(err, "dump stacks denied due to policy")
+	}
+
 	log.Printf("rpcDumpStacks: \n requestBase: %v", r.requestBase)
 
 	// If we've reached here, means the policy has allowed it.

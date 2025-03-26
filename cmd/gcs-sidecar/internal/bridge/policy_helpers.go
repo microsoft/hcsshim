@@ -39,33 +39,36 @@ func (s *SecurityPoliyEnforcer) SetWCOWConfidentialUVMOptions(securityPolicyRequ
 		return fmt.Errorf("error creating security policy enforcer: %v", err)
 	}
 
+	// TODO(kiashok): logging for c-wcow?
+
+	// This is one of two points at which we might change our logging.
+	// At this time, we now have a policy and can determine what the policy
+	// author put as policy around runtime logging.
+	// The other point is on startup where we take a flag to set the default
+	// policy enforcer to use before a policy arrives. After that flag is set,
+	// we use the enforcer in question to set up logging as well.
+	/*var ctx context.Context
+	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
+		// TODO: enable OTL logging
+		//logrus.SetOutput(h.logWriter)
+	} else {
+		// TODO: disable OTL logging
+		//logrus.SetOutput(io.Discard)
+	}*/
+
+	// TODO: Use PSP driver attestation API and enable this
 	/*
-			// TODO(kiashok): logging for c-wcow?
-
-			// This is one of two points at which we might change our logging.
-			// At this time, we now have a policy and can determine what the policy
-			// author put as policy around runtime logging.
-			// The other point is on startup where we take a flag to set the default
-			// policy enforcer to use before a policy arrives. After that flag is set,
-			// we use the enforcer in question to set up logging as well.
-			if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
-				logrus.SetOutput(h.logWriter)
-			} else {
-				logrus.SetOutput(io.Discard)
-			}
-
-		hostData, err := securitypolicy.NewSecurityPolicyDigest(r.EncodedSecurityPolicy)
+		hostData, err := securitypolicy.NewSecurityPolicyDigest(securityPolicyRequest.EncodedSecurityPolicy)
 		if err != nil {
 			return err
 		}
-
 		if err := validateHostData(hostData[:]); err != nil {
 			return err
-		}
-	*/
+		}*/
 
 	s.securityPolicyEnforcer = p
 	s.securityPolicyEnforcerSet = true
+
 	// TODO(kiashok): Update the following
 	// s.uvmReferenceInfo = s.EncodedUVMReference
 
