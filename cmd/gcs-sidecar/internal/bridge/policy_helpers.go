@@ -8,10 +8,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/windowssecuritypolicy"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	windowssecuritypolicy "github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 func (s *SecurityPoliyEnforcer) SetWCOWConfidentialUVMOptions(securityPolicyRequest *guestresource.WCOWConfidentialOptions) error {

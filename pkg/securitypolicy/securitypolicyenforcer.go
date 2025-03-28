@@ -1,6 +1,3 @@
-//go:build linux
-// +build linux
-
 package securitypolicy
 
 import (
@@ -10,14 +7,11 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 
-	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
-	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/pkg/errors"
 )
 
@@ -854,18 +848,6 @@ func (c *securityPolicyContainer) matchMount(sandboxID string, m oci.Mount) (err
 		}
 	}
 	return fmt.Errorf("mount is not allowed by policy: %+v", m)
-}
-
-// substituteUVMPath substitutes mount prefix to an appropriate path inside
-// UVM. At policy generation time, it's impossible to tell what the sandboxID
-// will be, so the prefix substitution needs to happen during runtime.
-func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
-	if strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
-		m.Source = specInternal.SandboxMountSource(sandboxID, m.Source)
-	} else if strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
-		m.Source = specInternal.HugePagesMountSource(sandboxID, m.Source)
-	}
-	return m
 }
 
 func stringSlicesEqual(slice1, slice2 []string) bool {

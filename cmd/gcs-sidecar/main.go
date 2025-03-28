@@ -17,7 +17,7 @@ import (
 	"golang.org/x/sys/windows/svc/debug"
 
 	gcsBridge "github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/bridge"
-	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/windowssecuritypolicy"
+	windowssecuritypolicy "github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 type handler struct {

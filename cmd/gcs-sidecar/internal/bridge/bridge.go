@@ -15,8 +15,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 
-	"github.com/Microsoft/hcsshim/cmd/gcs-sidecar/internal/windowssecuritypolicy"
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	windowssecuritypolicy "github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 // TODO:
