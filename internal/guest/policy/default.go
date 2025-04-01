@@ -6,7 +6,7 @@ package policy
 import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 
-	internalSpec "github.com/Microsoft/hcsshim/internal/guest/spec"
+	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -14,7 +14,7 @@ func ExtendPolicyWithNetworkingMounts(sandboxID string, enforcer securitypolicy.
 	roSpec := &oci.Spec{
 		Root: spec.Root,
 	}
-	networkingMounts := internalSpec.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
+	networkingMounts := specGuest.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
 	if err := enforcer.ExtendDefaultMounts(networkingMounts); err != nil {
 		return err
 	}
