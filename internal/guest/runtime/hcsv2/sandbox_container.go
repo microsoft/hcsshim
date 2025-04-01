@@ -14,21 +14,21 @@ import (
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/network"
-	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
+	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 func getSandboxHostnamePath(id string) string {
-	return filepath.Join(specInternal.SandboxRootDir(id), "hostname")
+	return filepath.Join(specGuest.SandboxRootDir(id), "hostname")
 }
 
 func getSandboxHostsPath(id string) string {
-	return filepath.Join(specInternal.SandboxRootDir(id), "hosts")
+	return filepath.Join(specGuest.SandboxRootDir(id), "hosts")
 }
 
 func getSandboxResolvPath(id string) string {
-	return filepath.Join(specInternal.SandboxRootDir(id), "resolv.conf")
+	return filepath.Join(specGuest.SandboxRootDir(id), "resolv.conf")
 }
 
 func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (err error) {
@@ -38,7 +38,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	span.AddAttributes(trace.StringAttribute("cid", id))
 
 	// Generate the sandbox root dir
-	rootDir := specInternal.SandboxRootDir(id)
+	rootDir := specGuest.SandboxRootDir(id)
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create sandbox root directory %q", rootDir)
 	}
@@ -71,7 +71,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	}
 
 	// Write resolv.conf
-	ns, err := getNetworkNamespace(getNetworkNamespaceID(spec))
+	ns, err := getNetworkNamespace(specGuest.GetNetworkNamespaceID(spec))
 	if err != nil {
 		return err
 	}
@@ -98,13 +98,13 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	// guest. The username field is used as a temporary holding place until we can perform this work here when
 	// we actually have the rootfs to inspect.
 	if spec.Process.User.Username != "" {
-		if err := setUserStr(spec, spec.Process.User.Username); err != nil {
+		if err := specGuest.SetUserStr(spec, spec.Process.User.Username); err != nil {
 			return err
 		}
 	}
 
 	if rlimCore := spec.Annotations[annotations.RLimitCore]; rlimCore != "" {
-		if err := setCoreRLimit(spec, rlimCore); err != nil {
+		if err := specGuest.SetCoreRLimit(spec, rlimCore); err != nil {
 			return err
 		}
 	}
