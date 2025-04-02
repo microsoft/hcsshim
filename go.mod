@@ -1,6 +1,8 @@
 module github.com/Microsoft/hcsshim
 
-go 1.22.0
+go 1.23.0
+
+toolchain go1.23.4
 
 require (
 	github.com/Microsoft/cosesign1go v1.4.0
@@ -37,7 +39,7 @@ require (
 	go.opencensus.io v0.24.0
 	go.uber.org/mock v0.5.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.31.0
 	google.golang.org/grpc v1.69.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
 	google.golang.org/protobuf v1.35.2
@@ -57,7 +59,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/docker/cli v24.0.0+incompatible // indirect
-	github.com/docker/distribution v2.8.2+incompatible // indirect
+	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v27.3.1+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect

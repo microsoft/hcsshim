@@ -16,7 +16,7 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
-	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
+	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -35,11 +35,11 @@ func mkdirAllModePerm(target string) error {
 func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 	for i, m := range spec.Mounts {
 		if strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
-			sandboxSource := specInternal.SandboxMountSource(sbid, m.Source)
+			sandboxSource := specGuest.SandboxMountSource(sbid, m.Source)
 
 			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
 			// Hence, we need to ensure that the resolved path is still under the correct directory
-			if !strings.HasPrefix(sandboxSource, specInternal.SandboxMountsDir(sbid)) {
+			if !strings.HasPrefix(sandboxSource, specGuest.SandboxMountsDir(sbid)) {
 				return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
 			}
 
@@ -59,7 +59,7 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 func updateHugePageMounts(sbid string, spec *oci.Spec) error {
 	for i, m := range spec.Mounts {
 		if strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
-			mountsDir := specInternal.HugePagesMountsDir(sbid)
+			mountsDir := specGuest.HugePagesMountsDir(sbid)
 			subPath := strings.TrimPrefix(m.Source, guestpath.HugePagesMountPrefix)
 			pageSize := strings.Split(subPath, string(os.PathSeparator))[0]
 			hugePageMountSource := filepath.Join(mountsDir, subPath)
@@ -162,19 +162,19 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 
 	// Add default mounts for container networking (e.g. /etc/hostname, /etc/hosts),
 	// if spec didn't override them explicitly.
-	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMounts(sbid, spec)
+	networkingMounts := specGuest.GenerateWorkloadContainerNetworkMounts(sbid, spec)
 	spec.Mounts = append(spec.Mounts, networkingMounts...)
 
 	// TODO: JTERRY75 /dev/shm is not properly setup for LCOW I believe. CRI
 	// also has a concept of a sandbox/shm file when the IPC NamespaceMode !=
 	// NODE.
 
-	if err := applyAnnotationsToSpec(ctx, spec); err != nil {
+	if err := specGuest.ApplyAnnotationsToSpec(ctx, spec); err != nil {
 		return err
 	}
 
 	if rlimCore := spec.Annotations[annotations.RLimitCore]; rlimCore != "" {
-		if err := setCoreRLimit(spec, rlimCore); err != nil {
+		if err := specGuest.SetCoreRLimit(spec, rlimCore); err != nil {
 			return err
 		}
 	}
@@ -184,7 +184,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	// guest. The username field is used as a temporary holding place until we can perform this work here when
 	// we actually have the rootfs to inspect.
 	if spec.Process.User.Username != "" {
-		if err := setUserStr(spec, spec.Process.User.Username); err != nil {
+		if err := specGuest.SetUserStr(spec, spec.Process.User.Username); err != nil {
 			return err
 		}
 	}
@@ -200,7 +200,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 			}
 		}
 		// add other assigned devices to the spec
-		if err := addAssignedDevice(ctx, spec); err != nil {
+		if err := specGuest.AddAssignedDevice(ctx, spec); err != nil {
 			return errors.Wrap(err, "failed to add assigned device(s) to the container spec")
 		}
 	}

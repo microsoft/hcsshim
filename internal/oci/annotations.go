@@ -9,15 +9,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Microsoft/go-winio/pkg/guid"
 	iannotations "github.com/Microsoft/hcsshim/internal/annotations"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 var ErrAnnotationExpansionConflict = errors.New("annotation expansion conflict")
