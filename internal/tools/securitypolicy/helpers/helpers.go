@@ -71,8 +71,9 @@ func ParseEnvFromImage(img v1.Image) ([]string, error) {
 // The slice includes only a sandbox pause container.
 func DefaultContainerConfigs() []sp.ContainerConfig {
 	pause := sp.ContainerConfig{
-		ImageName: "k8s.gcr.io/pause:3.1",
-		Command:   []string{"/pause"},
+		ImageName:     "k8s.gcr.io/pause:3.1",
+		Command:       []string{"/pause"},
+		AllowElevated: true,
 	}
 	return []sp.ContainerConfig{pause}
 }
