@@ -263,8 +263,11 @@ func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, l
 		}
 	}
 	return &uvm.WCOWBootFiles{
-		OSFilesPath:           filepath.Join(uvmFolder, `UtilityVM\Files`),
-		OSRelativeBootDirPath: `\EFI\Microsoft\Boot`,
-		ScratchVHDPath:        scratchVHDPath,
+		BootType: uvm.VmbFSBoot,
+		VmbFSFiles: &uvm.VmbFSBootFiles{
+			OSFilesPath:           filepath.Join(uvmFolder, `UtilityVM\Files`),
+			OSRelativeBootDirPath: `\EFI\Microsoft\Boot`,
+			ScratchVHDPath:        scratchVHDPath,
+		},
 	}, nil
 }
