@@ -115,8 +115,6 @@ type OptionsLCOW struct {
 	KernelDirect            bool                 // Skip UEFI and boot directly to `kernel`
 	RootFSFile              string               // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
 	KernelBootOptions       string               // Additional boot options for the kernel
-	EnableGraphicsConsole   bool                 // If true, enable a graphics console for the utility VM
-	ConsolePipe             string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
 	UseGuestConnection      bool                 // Whether the HCS should connect to the UVM's GCS. Defaults to true
 	ExecCommandLine         string               // The command line to exec from init. Defaults to GCS
 	ForwardStdout           bool                 // Whether stdout will be forwarded from the executed program. Defaults to false
@@ -164,8 +162,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		KernelDirect:            kernelDirectSupported,
 		RootFSFile:              InitrdFile,
 		KernelBootOptions:       "",
-		EnableGraphicsConsole:   false,
-		ConsolePipe:             "",
 		UseGuestConnection:      true,
 		ExecCommandLine:         fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
 		ForwardStdout:           false,
