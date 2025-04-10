@@ -14,7 +14,7 @@ import (
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/network"
-	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
+	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
@@ -62,7 +62,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 	}
 
 	// Write the hostname
-	if !specInternal.MountPresent("/etc/hostname", spec.Mounts) {
+	if !specGuest.MountPresent("/etc/hostname", spec.Mounts) {
 		standaloneHostnamePath := getStandaloneHostnamePath(id)
 		if err := os.WriteFile(standaloneHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
 			return errors.Wrapf(err, "failed to write hostname to %q", standaloneHostnamePath)
@@ -74,14 +74,14 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 			Source:      getStandaloneHostnamePath(id),
 			Options:     []string{"bind"},
 		}
-		if isRootReadonly(spec) {
+		if specGuest.IsRootReadonly(spec) {
 			mt.Options = append(mt.Options, "ro")
 		}
 		spec.Mounts = append(spec.Mounts, mt)
 	}
 
 	// Write the hosts
-	if !specInternal.MountPresent("/etc/hosts", spec.Mounts) {
+	if !specGuest.MountPresent("/etc/hosts", spec.Mounts) {
 		standaloneHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
 		standaloneHostsPath := getStandaloneHostsPath(id)
 		if err := os.WriteFile(standaloneHostsPath, []byte(standaloneHostsContent), 0644); err != nil {
@@ -94,15 +94,15 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 			Source:      getStandaloneHostsPath(id),
 			Options:     []string{"bind"},
 		}
-		if isRootReadonly(spec) {
+		if specGuest.IsRootReadonly(spec) {
 			mt.Options = append(mt.Options, "ro")
 		}
 		spec.Mounts = append(spec.Mounts, mt)
 	}
 
 	// Write resolv.conf
-	if !specInternal.MountPresent("/etc/resolv.conf", spec.Mounts) {
-		ns := GetOrAddNetworkNamespace(getNetworkNamespaceID(spec))
+	if !specGuest.MountPresent("/etc/resolv.conf", spec.Mounts) {
+		ns := GetOrAddNetworkNamespace(specGuest.GetNetworkNamespaceID(spec))
 		var searches, servers []string
 		for _, n := range ns.Adapters() {
 			if len(n.DNSSuffix) > 0 {
@@ -127,7 +127,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 			Source:      getStandaloneResolvPath(id),
 			Options:     []string{"bind"},
 		}
-		if isRootReadonly(spec) {
+		if specGuest.IsRootReadonly(spec) {
 			mt.Options = append(mt.Options, "ro")
 		}
 		spec.Mounts = append(spec.Mounts, mt)

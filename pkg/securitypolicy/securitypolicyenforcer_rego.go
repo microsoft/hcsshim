@@ -15,13 +15,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guest/spec"
-	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/Microsoft/hcsshim/internal/log"
-	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+
+	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/log"
+	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 )
 
 const regoEnforcerName = "rego"
@@ -719,8 +720,8 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"argList":              argList,
 		"envList":              envList,
 		"workingDir":           workingDir,
-		"sandboxDir":           spec.SandboxMountsDir(sandboxID),
-		"hugePagesDir":         spec.HugePagesMountsDir(sandboxID),
+		"sandboxDir":           specGuest.SandboxMountsDir(sandboxID),
+		"hugePagesDir":         specGuest.HugePagesMountsDir(sandboxID),
 		"mounts":               appendMountData([]interface{}{}, mounts),
 		"privileged":           privileged,
 		"noNewPrivileges":      noNewPrivileges,
@@ -1022,6 +1023,23 @@ func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process
 		return IDName{}, nil, "", errors.New("spec.Process is nil")
 	}
 
+	// this default value is used in the Linux kernel if no umask is specified
+	umask := "0022"
+	if process.User.Umask != nil {
+		umask = fmt.Sprintf("%04o", *process.User.Umask)
+	}
+
+	if process.User.Username != "" {
+		uid, gid, err := specGuest.ParseUserStr(rootPath, process.User.Username)
+		if err == nil {
+			userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10)}
+			groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10)}
+			return userIDName, []IDName{groupIDName}, umask, nil
+		}
+		log.G(context.Background()).WithError(err).Warn("failed to parse user str, fallback to lookup")
+	}
+
+	// fallback UID/GID lookup
 	uid := process.User.UID
 	userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
 	if _, err := os.Stat(passwdPath); err == nil {
@@ -1069,12 +1087,6 @@ func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process
 			}
 			groupIDNames = append(groupIDNames, groupIDName)
 		}
-	}
-
-	// this default value is used in the Linux kernel if no umask is specified
-	umask := "0022"
-	if process.User.Umask != nil {
-		umask = fmt.Sprintf("%04o", *process.User.Umask)
 	}
 
 	return userIDName, groupIDNames, umask, nil
