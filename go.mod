@@ -1,4 +1,4 @@
-module github.com/Microsoft/hcsshim
+module github.com/microsoft/hcsshim
 
 go 1.22.0
 
