@@ -28,10 +28,14 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 	ctx := context.Background()
 
 	testAnnotations := []struct {
-		name            string
-		an              map[string]string
-		expectedSuccess bool
+		name string
+		an   map[string]string
+		errs []error
 	}{
+		//
+		// valid cases
+		//
+
 		{
 			name: "DisableUnsafeOperations-DisableHostProcessContainer",
 			an: map[string]string{
@@ -39,34 +43,6 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 				annotations.DisableHostProcessContainer: "true",
 				annotations.HostProcessContainer:        "false",
 			},
-			expectedSuccess: true,
-		},
-		{
-			name: "DisableUnsafeOperations-DisableHostProcessContainer-HostProcessContainer",
-			an: map[string]string{
-				annotations.DisableUnsafeOperations:     "true",
-				annotations.DisableHostProcessContainer: "true",
-				annotations.HostProcessContainer:        "true",
-			},
-			expectedSuccess: false,
-		},
-		{
-			name: "DisableUnsafeOperations-HostProcessContainer",
-			an: map[string]string{
-				annotations.DisableUnsafeOperations:     "true",
-				annotations.DisableHostProcessContainer: "false",
-				annotations.HostProcessContainer:        "true",
-			},
-			expectedSuccess: false,
-		},
-		{
-			name: "DisableUnsafeOperations",
-			an: map[string]string{
-				annotations.DisableUnsafeOperations:     "true",
-				annotations.DisableHostProcessContainer: "false",
-				annotations.HostProcessContainer:        "false",
-			},
-			expectedSuccess: false,
 		},
 		{
 			name: "HostProcessContainer",
@@ -75,25 +51,6 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 				annotations.DisableHostProcessContainer: "false",
 				annotations.HostProcessContainer:        "true",
 			},
-			expectedSuccess: true,
-		},
-		{
-			name: "DisableHostProcessContainer-HostProcessContainer",
-			an: map[string]string{
-				annotations.DisableUnsafeOperations:     "false",
-				annotations.DisableHostProcessContainer: "true",
-				annotations.HostProcessContainer:        "true",
-			},
-			expectedSuccess: false,
-		},
-		{
-			name: "DisableHostProcessContainer",
-			an: map[string]string{
-				annotations.DisableUnsafeOperations:     "false",
-				annotations.DisableHostProcessContainer: "true",
-				annotations.HostProcessContainer:        "false",
-			},
-			expectedSuccess: false,
 		},
 		{
 			name: "All false",
@@ -102,7 +59,58 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 				annotations.DisableHostProcessContainer: "false",
 				annotations.HostProcessContainer:        "false",
 			},
-			expectedSuccess: true,
+		},
+
+		//
+		// invalid
+		//
+
+		{
+			name: "DisableUnsafeOperations-DisableHostProcessContainer-HostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "true",
+				annotations.DisableHostProcessContainer: "true",
+				annotations.HostProcessContainer:        "true",
+			},
+			errs: []error{ErrGenericAnnotationConflict},
+		},
+		{
+			name: "DisableUnsafeOperations",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "true",
+				annotations.DisableHostProcessContainer: "false",
+				annotations.HostProcessContainer:        "false",
+			},
+			errs: []error{ErrAnnotationExpansionConflict},
+		},
+		{
+			name: "DisableHostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "false",
+				annotations.DisableHostProcessContainer: "true",
+				annotations.HostProcessContainer:        "false",
+			},
+			errs: []error{ErrAnnotationExpansionConflict},
+		},
+
+		// expansion both conflicts and causes conflict
+		{
+			name: "DisableUnsafeOperations-HostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "true",
+				annotations.DisableHostProcessContainer: "false",
+				annotations.HostProcessContainer:        "true",
+			},
+			errs: []error{ErrAnnotationExpansionConflict, ErrGenericAnnotationConflict},
+		},
+		{
+			name: "DisableHostProcessContainer-HostProcessContainer",
+			an: map[string]string{
+				annotations.DisableUnsafeOperations:     "false",
+				annotations.DisableHostProcessContainer: "true",
+				annotations.HostProcessContainer:        "true",
+			},
+			errs: []error{ErrAnnotationExpansionConflict, ErrGenericAnnotationConflict},
 		},
 	}
 
@@ -114,11 +122,16 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 			}
 
 			err := ProcessAnnotations(ctx, &spec)
-			if err != nil && tt.expectedSuccess {
+			if err != nil && len(tt.errs) == 0 {
 				t.Fatalf("ProcessAnnotations should have succeeded, instead got %v", err)
 			}
-			if err == nil && !tt.expectedSuccess {
-				t.Fatal("ProcessAnnotations should have failed due to conflicting annotations, instead returned success")
+			if err == nil && len(tt.errs) > 0 {
+				t.Fatalf("ProcessAnnotations succeeded; should have failed with %v", tt.errs)
+				for _, e := range tt.errs {
+					if !errors.Is(err, e) {
+						t.Fatalf("ProcessAnnotations should failed with %v", e)
+					}
+				}
 			}
 		})
 	}
