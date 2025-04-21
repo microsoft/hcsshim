@@ -11,7 +11,7 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
-	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -601,26 +601,13 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	return &request, nil
 }
 
-// ErrorRecord represents a single error to be reported back to the HCS. It
-// allows for specifying information about the source of the error, as well as
-// an error message and stack trace.
-type ErrorRecord struct {
-	Result       int32
-	Message      string
-	StackTrace   string `json:",omitempty"`
-	ModuleName   string
-	FileName     string
-	Line         uint32
-	FunctionName string `json:",omitempty"`
-}
-
 // MessageResponseBase is the base type embedded in all messages sent from the
 // GCS to the HCS except for ContainerNotification.
 type MessageResponseBase struct {
 	Result       int32
-	ActivityID   string        `json:"ActivityId,omitempty"`
-	ErrorMessage string        `json:",omitempty"` // Only used by hcsshim external bridge
-	ErrorRecords []ErrorRecord `json:",omitempty"`
+	ActivityID   string                    `json:"ActivityId,omitempty"`
+	ErrorMessage string                    `json:",omitempty"` // Only used by hcsshim external bridge
+	ErrorRecords []commonutils.ErrorRecord `json:",omitempty"`
 }
 
 // Base returns the response base by reference.

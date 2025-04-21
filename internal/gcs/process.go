@@ -12,6 +12,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -29,7 +30,7 @@ type Process struct {
 	cid                   string
 	id                    uint32
 	waitCall              *rpc
-	waitResp              containerWaitForProcessResponse
+	waitResp              prot.ContainerWaitForProcessResponse
 	stdin, stdout, stderr *ioChannel
 	stdinCloseWriteOnce   sync.Once
 	stdinCloseWriteErr    error
@@ -52,10 +53,10 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		return nil, err
 	}
 
-	req := containerExecuteProcess{
-		requestBase: makeRequest(ctx, cid),
-		Settings: executeProcessSettings{
-			ProcessParameters: anyInString{params},
+	req := prot.ContainerExecuteProcess{
+		RequestBase: makeRequest(ctx, cid),
+		Settings: prot.ExecuteProcessSettings{
+			ProcessParameters: prot.AnyInString{params},
 		},
 	}
 
@@ -68,8 +69,8 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 
 	// Construct the stdio channels. Windows guests expect hvsock service IDs
 	// instead of vsock ports.
-	var hvsockSettings executeProcessStdioRelaySettings
-	var vsockSettings executeProcessVsockStdioRelaySettings
+	var hvsockSettings prot.ExecuteProcessStdioRelaySettings
+	var vsockSettings prot.ExecuteProcessVsockStdioRelaySettings
 	if gc.os == "windows" {
 		req.Settings.StdioRelaySettings = &hvsockSettings
 	} else {
@@ -100,20 +101,20 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		hvsockSettings.StdErr = &g
 	}
 
-	var resp containerExecuteProcessResponse
-	err = gc.brdg.RPC(ctx, rpcExecuteProcess, &req, &resp, false)
+	var resp prot.ContainerExecuteProcessResponse
+	err = gc.brdg.RPC(ctx, prot.RpcExecuteProcess, &req, &resp, false)
 	if err != nil {
 		return nil, err
 	}
 	p.id = resp.ProcessID
 	log.G(ctx).WithField("pid", p.id).Debug("created process pid")
 	// Start a wait message.
-	waitReq := containerWaitForProcess{
-		requestBase: makeRequest(ctx, cid),
+	waitReq := prot.ContainerWaitForProcess{
+		RequestBase: makeRequest(ctx, cid),
 		ProcessID:   p.id,
 		TimeoutInMs: 0xffffffff,
 	}
-	p.waitCall, err = gc.brdg.AsyncRPC(ctx, rpcWaitForProcess, &waitReq, &p.waitResp)
+	p.waitCall, err = gc.brdg.AsyncRPC(ctx, prot.RpcWaitForProcess, &waitReq, &p.waitResp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait on process, leaking process: %w", err)
 	}
@@ -220,14 +221,14 @@ func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err 
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	req := containerResizeConsole{
-		requestBase: makeRequest(ctx, p.cid),
+	req := prot.ContainerResizeConsole{
+		RequestBase: makeRequest(ctx, p.cid),
 		ProcessID:   p.id,
 		Height:      height,
 		Width:       width,
 	}
-	var resp responseBase
-	return p.gc.brdg.RPC(ctx, rpcResizeConsole, &req, &resp, true)
+	var resp prot.ResponseBase
+	return p.gc.brdg.RPC(ctx, prot.RpcResizeConsole, &req, &resp, true)
 }
 
 // Signal sends a signal to the process, returning whether it was delivered.
@@ -239,15 +240,15 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	req := containerSignalProcess{
-		requestBase: makeRequest(ctx, p.cid),
+	req := prot.ContainerSignalProcess{
+		RequestBase: makeRequest(ctx, p.cid),
 		ProcessID:   p.id,
 		Options:     options,
 	}
-	var resp responseBase
+	var resp prot.ResponseBase
 	// FUTURE: SIGKILL is idempotent and can safely be cancelled, but this interface
 	//		   does currently make it easy to determine what signal is being sent.
-	err = p.gc.brdg.RPC(ctx, rpcSignalProcess, &req, &resp, false)
+	err = p.gc.brdg.RPC(ctx, prot.RpcSignalProcess, &req, &resp, false)
 	if err != nil {
 		if uint32(resp.Result) != hrNotFound {
 			return false, err
