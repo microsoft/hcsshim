@@ -4,6 +4,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
@@ -33,6 +34,10 @@ const (
 	// ResourceTypeCombinedLayers is the modify resource type for combined
 	// layers
 	ResourceTypeCombinedLayers guestrequest.ResourceType = "CombinedLayers"
+	// ResourceTypeCWCOWCombinedLayers is the modify resource type for combined
+	// layers call for cwcow cases. This resource type wraps containerID around
+	// ResourceTypeCombinedLayers.
+	ResourceTypeCWCOWCombinedLayers guestrequest.ResourceType = "CWCOWCombinedLayers"
 	// ResourceTypeVPMemDevice is the modify resource type for VPMem devices
 	ResourceTypeVPMemDevice guestrequest.ResourceType = "VPMemDevice"
 	// ResourceTypeVPCIDevice is the modify resource type for vpci devices
@@ -46,6 +51,12 @@ const (
 	ResourceTypeSecurityPolicy guestrequest.ResourceType = "SecurityPolicy"
 	// ResourceTypePolicyFragment is the modify resource type for injecting policy fragments.
 	ResourceTypePolicyFragment guestrequest.ResourceType = "SecurityPolicyFragment"
+	// ResourceTypeWCOWBlockCims is the modify resource type for mounting block cims for hyperv
+	// wcow containers.
+	ResourceTypeWCOWBlockCims guestrequest.ResourceType = "WCOWBlockCims"
+	// ResourceTypeMappedVirtualDiskForContainerScratch is the modify resource type
+	// specifically for refs formatting and mounting scratch vhds for c-wcow cases only.
+	ResourceTypeMappedVirtualDiskForContainerScratch guestrequest.ResourceType = "MappedVirtualDiskForContainerScratch"
 )
 
 // This class is used by a modify request to add or remove a combined layers
@@ -65,6 +76,11 @@ type WCOWCombinedLayers struct {
 	ContainerRootPath string            `json:"ContainerRootPath,omitempty"`
 	Layers            []hcsschema.Layer `json:"Layers,omitempty"`
 	ScratchPath       string            `json:"ScratchPath,omitempty"`
+}
+
+type CWCOWCombinedLayers struct {
+	ContainerID    string             `json:"ContainerID,omitempty"`
+	CombinedLayers WCOWCombinedLayers `json:"CombinedLayers,omitempty"`
 }
 
 // Defines the schema for hosted settings passed to GCS and/or OpenGCS
@@ -90,6 +106,18 @@ type LCOWMappedVirtualDisk struct {
 	VerityInfo       *DeviceVerityInfo `json:"VerityInfo,omitempty"`
 	EnsureFilesystem bool              `json:"EnsureFilesystem,omitempty"`
 	Filesystem       string            `json:"Filesystem,omitempty"`
+}
+
+type BlockCIMDevice struct {
+	CimName string
+	Lun     int32
+}
+
+type WCOWBlockCIMMounts struct {
+	// BlockCIMs should be ordered from merged CIM followed by Layer n .. layer 1
+	BlockCIMs  []BlockCIMDevice `json:"BlockCIMs,omitempty"`
+	VolumeGUID guid.GUID        `json:"VolumeGUID,omitempty"`
+	MountFlags uint32           `json:"MountFlags,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {
@@ -206,4 +234,15 @@ type LCOWConfidentialOptions struct {
 
 type LCOWSecurityPolicyFragment struct {
 	Fragment string `json:"Fragment,omitempty"`
+}
+
+type WCOWConfidentialOptions struct {
+	EnforcerType          string `json:"EnforcerType,omitempty"`
+	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
+	// Optional security policy
+	WCOWSecurityPolicy string
+	// Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	WCOWSecurityPolicyEnabled bool
+	// Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
+	WCOWSecurityPolicyEnforcer string
 }
