@@ -22,13 +22,6 @@ import (
 
 	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	"github.com/mattn/go-shellwords"
-	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/guest/policy"
@@ -48,6 +41,13 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/verity"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	"github.com/mattn/go-shellwords"
+	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
