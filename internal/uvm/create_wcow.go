@@ -15,7 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
-	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -55,15 +55,6 @@ type OptionsWCOW struct {
 
 	// AdditionalRegistryKeys are Registry keys and their values to additionally add to the uVM.
 	AdditionalRegistryKeys []hcsschema.RegistryValue
-}
-
-// WindowsSidecarGcsHvsockServiceID is the hvsock service ID that the Windows GCS
-// sidecar will connect to. This is only used in the confidential mode.
-var windowsSidecarGcsHvsockServiceID = guid.GUID{
-	Data1: 0xae8da506,
-	Data2: 0xa019,
-	Data3: 0x4553,
-	Data4: [8]uint8{0xa5, 0x2b, 0x90, 0x2b, 0xc0, 0xfa, 0x04, 0x11},
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
@@ -502,9 +493,9 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
 
-	gcsServiceID := gcs.WindowsGcsHvsockServiceID
+	gcsServiceID := prot.WindowsGcsHvsockServiceID
 	if opts.SecurityPolicyEnabled {
-		gcsServiceID = windowsSidecarGcsHvsockServiceID
+		gcsServiceID = prot.WindowsSidecarGcsHvsockServiceID
 	}
 
 	if err = uvm.startExternalGcsListener(ctx, gcsServiceID); err != nil {

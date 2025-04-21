@@ -1,6 +1,6 @@
 //go:build windows
 
-package gcs
+package prot
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
@@ -33,97 +34,97 @@ var WindowsGcsHvHostID = guid.GUID{
 	Data4: [8]uint8{0x93, 0xfe, 0x42, 0x96, 0x9a, 0xe6, 0xd8, 0xd1},
 }
 
-type anyInString struct {
+type AnyInString struct {
 	Value interface{}
 }
 
-func (a *anyInString) MarshalText() ([]byte, error) {
+func (a *AnyInString) MarshalText() ([]byte, error) {
 	return json.Marshal(a.Value)
 }
 
-func (a *anyInString) UnmarshalText(b []byte) error {
+func (a *AnyInString) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, &a.Value)
 }
 
-type rpcProc uint32
+type RpcProc uint32
 
 const (
-	rpcCreate rpcProc = (iota+1)<<8 | 1
-	rpcStart
-	rpcShutdownGraceful
-	rpcShutdownForced
-	rpcExecuteProcess
-	rpcWaitForProcess
-	rpcSignalProcess
-	rpcResizeConsole
-	rpcGetProperties
-	rpcModifySettings
-	rpcNegotiateProtocol
-	rpcDumpStacks
-	rpcDeleteContainerState
-	rpcUpdateContainer
-	rpcLifecycleNotification
+	RpcCreate RpcProc = (iota+1)<<8 | 1
+	RpcStart
+	RpcShutdownGraceful
+	RpcShutdownForced
+	RpcExecuteProcess
+	RpcWaitForProcess
+	RpcSignalProcess
+	RpcResizeConsole
+	RpcGetProperties
+	RpcModifySettings
+	RpcNegotiateProtocol
+	RpcDumpStacks
+	RpcDeleteContainerState
+	RpcUpdateContainer
+	RpcLifecycleNotification
 )
 
-func (rpc rpcProc) String() string {
+func (rpc RpcProc) String() string {
 	switch rpc {
-	case rpcCreate:
+	case RpcCreate:
 		return "Create"
-	case rpcStart:
+	case RpcStart:
 		return "Start"
-	case rpcShutdownGraceful:
+	case RpcShutdownGraceful:
 		return "ShutdownGraceful"
-	case rpcShutdownForced:
+	case RpcShutdownForced:
 		return "ShutdownForced"
-	case rpcExecuteProcess:
+	case RpcExecuteProcess:
 		return "ExecuteProcess"
-	case rpcWaitForProcess:
+	case RpcWaitForProcess:
 		return "WaitForProcess"
-	case rpcSignalProcess:
+	case RpcSignalProcess:
 		return "SignalProcess"
-	case rpcResizeConsole:
+	case RpcResizeConsole:
 		return "ResizeConsole"
-	case rpcGetProperties:
+	case RpcGetProperties:
 		return "GetProperties"
-	case rpcModifySettings:
+	case RpcModifySettings:
 		return "ModifySettings"
-	case rpcNegotiateProtocol:
+	case RpcNegotiateProtocol:
 		return "NegotiateProtocol"
-	case rpcDumpStacks:
+	case RpcDumpStacks:
 		return "DumpStacks"
-	case rpcDeleteContainerState:
+	case RpcDeleteContainerState:
 		return "DeleteContainerState"
-	case rpcUpdateContainer:
+	case RpcUpdateContainer:
 		return "UpdateContainer"
-	case rpcLifecycleNotification:
+	case RpcLifecycleNotification:
 		return "LifecycleNotification"
 	default:
 		return "0x" + strconv.FormatUint(uint64(rpc), 16)
 	}
 }
 
-type msgType uint32
+type MsgType uint32
 
 const (
-	msgTypeRequest  msgType = 0x10100000
-	msgTypeResponse msgType = 0x20100000
-	msgTypeNotify   msgType = 0x30100000
-	msgTypeMask     msgType = 0xfff00000
+	MsgTypeRequest  MsgType = 0x10100000
+	MsgTypeResponse MsgType = 0x20100000
+	MsgTypeNotify   MsgType = 0x30100000
+	MsgTypeMask     MsgType = 0xfff00000
 
-	notifyContainer = 1<<8 | 1
+	NotifyContainer = 1<<8 | 1
 )
 
-func (typ msgType) String() string {
+func (typ MsgType) String() string {
 	var s string
-	switch typ & msgTypeMask {
-	case msgTypeRequest:
+	switch typ & MsgTypeMask {
+	case MsgTypeRequest:
 		s = "Request("
-	case msgTypeResponse:
+	case MsgTypeResponse:
 		s = "Response("
-	case msgTypeNotify:
+	case MsgTypeNotify:
 		s = "Notify("
-		switch typ - msgTypeNotify {
-		case notifyContainer:
+		switch typ - MsgTypeNotify {
+		case NotifyContainer:
 			s += "Container"
 		default:
 			s += fmt.Sprintf("%#x", uint32(typ))
@@ -132,13 +133,13 @@ func (typ msgType) String() string {
 	default:
 		return fmt.Sprintf("%#x", uint32(typ))
 	}
-	s += rpcProc(typ &^ msgTypeMask).String()
+	s += RpcProc(typ &^ MsgTypeMask).String()
 	return s + ")"
 }
 
-// ocspancontext is the internal JSON representation of the OpenCensus
+// Ocspancontext is the internal JSON representation of the OpenCensus
 // `trace.SpanContext` for fowarding to a GCS that supports it.
-type ocspancontext struct {
+type Ocspancontext struct {
 	// TraceID is the `hex` encoded string of the OpenCensus
 	// `SpanContext.TraceID` to propagate to the guest.
 	TraceID string `json:",omitempty"`
@@ -158,7 +159,7 @@ type ocspancontext struct {
 	Tracestate string `json:",omitempty"`
 }
 
-type requestBase struct {
+type RequestBase struct {
 	ContainerID string    `json:"ContainerId"`
 	ActivityID  guid.GUID `json:"ActivityId"`
 
@@ -168,155 +169,145 @@ type requestBase struct {
 	// NOTE: This is not a part of the protocol but because its a JSON protocol
 	// adding fields is a non-breaking change. If the guest supports it this is
 	// just additive context.
-	OpenCensusSpanContext *ocspancontext `json:"ocsc,omitempty"`
+	OpenCensusSpanContext *Ocspancontext `json:"ocsc,omitempty"`
 }
 
-func (req *requestBase) Base() *requestBase {
+func (req *RequestBase) Base() *RequestBase {
 	return req
 }
 
-type responseBase struct {
-	Result       int32         // HResult
-	ErrorMessage string        `json:",omitempty"`
-	ActivityID   guid.GUID     `json:"ActivityId,omitempty"`
-	ErrorRecords []errorRecord `json:",omitempty"`
+type ResponseBase struct {
+	Result       int32                     // HResult
+	ErrorMessage string                    `json:",omitempty"`
+	ActivityID   guid.GUID                 `json:"ActivityId,omitempty"`
+	ErrorRecords []commonutils.ErrorRecord `json:",omitempty"`
 }
 
-type errorRecord struct {
-	Result       int32 // HResult
-	Message      string
-	StackTrace   string `json:",omitempty"`
-	ModuleName   string
-	FileName     string
-	Line         uint32
-	FunctionName string `json:",omitempty"`
-}
-
-func (resp *responseBase) Base() *responseBase {
+func (resp *ResponseBase) Base() *ResponseBase {
 	return resp
 }
 
-type negotiateProtocolRequest struct {
-	requestBase
+type NegotiateProtocolRequest struct {
+	RequestBase
 	MinimumVersion uint32
 	MaximumVersion uint32
 }
 
-type negotiateProtocolResponse struct {
-	responseBase
+type NegotiateProtocolResponse struct {
+	ResponseBase
 	Version      uint32          `json:",omitempty"`
-	Capabilities gcsCapabilities `json:",omitempty"`
+	Capabilities GcsCapabilities `json:",omitempty"`
 }
 
-type dumpStacksRequest struct {
-	requestBase
+type DumpStacksRequest struct {
+	RequestBase
 }
 
-type dumpStacksResponse struct {
-	responseBase
+type DumpStacksResponse struct {
+	ResponseBase
 	GuestStacks string
 }
 
-type deleteContainerStateRequest struct {
-	requestBase
+type DeleteContainerStateRequest struct {
+	RequestBase
 }
 
-type containerCreate struct {
-	requestBase
-	ContainerConfig anyInString
+type ContainerCreate struct {
+	RequestBase
+	ContainerConfig AnyInString
 }
 
-type uvmConfig struct {
+type UvmConfig struct {
 	SystemType          string // must be "Container"
 	TimeZoneInformation *hcsschema.TimeZoneInformation
 }
 
-type containerNotification struct {
-	requestBase
+type ContainerNotification struct {
+	RequestBase
 	Type       string      // Compute.System.NotificationType
 	Operation  string      // Compute.System.ActiveOperation
 	Result     int32       // HResult
-	ResultInfo anyInString `json:",omitempty"`
+	ResultInfo AnyInString `json:",omitempty"`
 }
 
-type containerExecuteProcess struct {
-	requestBase
-	Settings executeProcessSettings
+type ContainerExecuteProcess struct {
+	RequestBase
+	Settings ExecuteProcessSettings
 }
 
-type executeProcessSettings struct {
-	ProcessParameters       anyInString
-	StdioRelaySettings      *executeProcessStdioRelaySettings      `json:",omitempty"`
-	VsockStdioRelaySettings *executeProcessVsockStdioRelaySettings `json:",omitempty"`
+type ExecuteProcessSettings struct {
+	ProcessParameters       AnyInString
+	StdioRelaySettings      *ExecuteProcessStdioRelaySettings      `json:",omitempty"`
+	VsockStdioRelaySettings *ExecuteProcessVsockStdioRelaySettings `json:",omitempty"`
 }
 
-type executeProcessStdioRelaySettings struct {
+type ExecuteProcessStdioRelaySettings struct {
 	StdIn  *guid.GUID `json:",omitempty"`
 	StdOut *guid.GUID `json:",omitempty"`
 	StdErr *guid.GUID `json:",omitempty"`
 }
 
-type executeProcessVsockStdioRelaySettings struct {
+type ExecuteProcessVsockStdioRelaySettings struct {
 	StdIn  uint32 `json:",omitempty"`
 	StdOut uint32 `json:",omitempty"`
 	StdErr uint32 `json:",omitempty"`
 }
 
-type containerResizeConsole struct {
-	requestBase
+type ContainerResizeConsole struct {
+	RequestBase
 	ProcessID uint32 `json:"ProcessId"`
 	Height    uint16
 	Width     uint16
 }
 
-type containerWaitForProcess struct {
-	requestBase
+type ContainerWaitForProcess struct {
+	RequestBase
 	ProcessID   uint32 `json:"ProcessId"`
 	TimeoutInMs uint32
 }
 
-type containerSignalProcess struct {
-	requestBase
+type ContainerSignalProcess struct {
+	RequestBase
 	ProcessID uint32      `json:"ProcessId"`
 	Options   interface{} `json:",omitempty"`
 }
 
-type containerPropertiesQuery schema1.PropertyQuery
+type ContainerPropertiesQuery schema1.PropertyQuery
 
-func (q *containerPropertiesQuery) MarshalText() ([]byte, error) {
+func (q *ContainerPropertiesQuery) MarshalText() ([]byte, error) {
 	return json.Marshal((*schema1.PropertyQuery)(q))
 }
 
-func (q *containerPropertiesQuery) UnmarshalText(b []byte) error {
+func (q *ContainerPropertiesQuery) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, (*schema1.PropertyQuery)(q))
 }
 
-type containerPropertiesQueryV2 hcsschema.PropertyQuery
+type ContainerPropertiesQueryV2 hcsschema.PropertyQuery
 
-func (q *containerPropertiesQueryV2) MarshalText() ([]byte, error) {
+func (q *ContainerPropertiesQueryV2) MarshalText() ([]byte, error) {
 	return json.Marshal((*hcsschema.PropertyQuery)(q))
 }
 
-func (q *containerPropertiesQueryV2) UnmarshalText(b []byte) error {
+func (q *ContainerPropertiesQueryV2) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, (*hcsschema.PropertyQuery)(q))
 }
 
-type containerGetProperties struct {
-	requestBase
-	Query containerPropertiesQuery
+type ContainerGetProperties struct {
+	RequestBase
+	Query ContainerPropertiesQuery
 }
 
-type containerGetPropertiesV2 struct {
-	requestBase
-	Query containerPropertiesQueryV2
+type ContainerGetPropertiesV2 struct {
+	RequestBase
+	Query ContainerPropertiesQueryV2
 }
 
-type containerModifySettings struct {
-	requestBase
+type ContainerModifySettings struct {
+	RequestBase
 	Request interface{}
 }
 
-type gcsCapabilities struct {
+type GcsCapabilities struct {
 	SendHostCreateMessage      bool
 	SendHostStartMessage       bool
 	HvSocketConfigOnStartup    bool
@@ -326,46 +317,46 @@ type gcsCapabilities struct {
 	GuestDefinedCapabilities   json.RawMessage
 }
 
-type containerCreateResponse struct {
-	responseBase
+type ContainerCreateResponse struct {
+	ResponseBase
 }
 
-type containerExecuteProcessResponse struct {
-	responseBase
+type ContainerExecuteProcessResponse struct {
+	ResponseBase
 	ProcessID uint32 `json:"ProcessId"`
 }
 
-type containerWaitForProcessResponse struct {
-	responseBase
+type ContainerWaitForProcessResponse struct {
+	ResponseBase
 	ExitCode uint32
 }
 
-type containerProperties schema1.ContainerProperties
+type ContainerProperties schema1.ContainerProperties
 
-func (p *containerProperties) MarshalText() ([]byte, error) {
+func (p *ContainerProperties) MarshalText() ([]byte, error) {
 	return json.Marshal((*schema1.ContainerProperties)(p))
 }
 
-func (p *containerProperties) UnmarshalText(b []byte) error {
+func (p *ContainerProperties) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, (*schema1.ContainerProperties)(p))
 }
 
-type containerPropertiesV2 hcsschema.Properties
+type ContainerPropertiesV2 hcsschema.Properties
 
-func (p *containerPropertiesV2) MarshalText() ([]byte, error) {
+func (p *ContainerPropertiesV2) MarshalText() ([]byte, error) {
 	return json.Marshal((*hcsschema.Properties)(p))
 }
 
-func (p *containerPropertiesV2) UnmarshalText(b []byte) error {
+func (p *ContainerPropertiesV2) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, (*hcsschema.Properties)(p))
 }
 
-type containerGetPropertiesResponse struct {
-	responseBase
-	Properties containerProperties
+type ContainerGetPropertiesResponse struct {
+	ResponseBase
+	Properties ContainerProperties
 }
 
-type containerGetPropertiesResponseV2 struct {
-	responseBase
-	Properties containerPropertiesV2
+type ContainerGetPropertiesResponseV2 struct {
+	ResponseBase
+	Properties ContainerPropertiesV2
 }

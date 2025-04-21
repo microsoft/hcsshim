@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -28,7 +29,7 @@ import (
 const (
 	protocolVersion = 4
 
-	firstIoChannelVsockPort = LinuxGcsVsockPort + 1
+	firstIoChannelVsockPort = prot.LinuxGcsVsockPort + 1
 	nullContainerID         = "00000000-0000-0000-0000-000000000000"
 )
 
@@ -117,12 +118,12 @@ func (gc *GuestConnection) Protocol() uint32 {
 // isColdStart should be true when the UVM is being connected to for the first time post-boot.
 // It should be false for subsequent connections (e.g. if reconnecting to an existing UVM).
 func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGuestState *InitialGuestState) (err error) {
-	req := negotiateProtocolRequest{
+	req := prot.NegotiateProtocolRequest{
 		MinimumVersion: protocolVersion,
 		MaximumVersion: protocolVersion,
 	}
-	var resp negotiateProtocolResponse
-	err = gc.brdg.RPC(ctx, rpcNegotiateProtocol, &req, &resp, true)
+	var resp prot.NegotiateProtocolResponse
+	err = gc.brdg.RPC(ctx, prot.RpcNegotiateProtocol, &req, &resp, true)
 	if err != nil {
 		return err
 	}
@@ -141,25 +142,25 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 	}
 
 	if isColdStart && resp.Capabilities.SendHostCreateMessage {
-		conf := &uvmConfig{
+		conf := &prot.UvmConfig{
 			SystemType: "Container",
 		}
 		if initGuestState != nil && initGuestState.Timezone != nil {
 			conf.TimeZoneInformation = initGuestState.Timezone
 		}
-		createReq := containerCreate{
-			requestBase:     makeRequest(ctx, nullContainerID),
-			ContainerConfig: anyInString{conf},
+		createReq := prot.ContainerCreate{
+			RequestBase:     makeRequest(ctx, nullContainerID),
+			ContainerConfig: prot.AnyInString{conf},
 		}
-		var createResp responseBase
-		err = gc.brdg.RPC(ctx, rpcCreate, &createReq, &createResp, true)
+		var createResp prot.ResponseBase
+		err = gc.brdg.RPC(ctx, prot.RpcCreate, &createReq, &createResp, true)
 		if err != nil {
 			return err
 		}
 		if resp.Capabilities.SendHostStartMessage {
 			startReq := makeRequest(ctx, nullContainerID)
-			var startResp responseBase
-			err = gc.brdg.RPC(ctx, rpcStart, &startReq, &startResp, true)
+			var startResp prot.ResponseBase
+			err = gc.brdg.RPC(ctx, prot.RpcStart, &startReq, &startResp, true)
 			if err != nil {
 				return err
 			}
@@ -175,12 +176,12 @@ func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (er
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	req := containerModifySettings{
-		requestBase: makeRequest(ctx, nullContainerID),
+	req := prot.ContainerModifySettings{
+		RequestBase: makeRequest(ctx, nullContainerID),
 		Request:     settings,
 	}
-	var resp responseBase
-	return gc.brdg.RPC(ctx, rpcModifySettings, &req, &resp, false)
+	var resp prot.ResponseBase
+	return gc.brdg.RPC(ctx, prot.RpcModifySettings, &req, &resp, false)
 }
 
 func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err error) {
@@ -188,11 +189,11 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	req := dumpStacksRequest{
-		requestBase: makeRequest(ctx, nullContainerID),
+	req := prot.DumpStacksRequest{
+		RequestBase: makeRequest(ctx, nullContainerID),
 	}
-	var resp dumpStacksResponse
-	err = gc.brdg.RPC(ctx, rpcDumpStacks, &req, &resp, false)
+	var resp prot.DumpStacksResponse
+	err = gc.brdg.RPC(ctx, prot.RpcDumpStacks, &req, &resp, false)
 	return resp.GuestStacks, err
 }
 
@@ -202,11 +203,11 @@ func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string)
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", cid))
 
-	req := deleteContainerStateRequest{
-		requestBase: makeRequest(ctx, cid),
+	req := prot.DeleteContainerStateRequest{
+		RequestBase: makeRequest(ctx, cid),
 	}
-	var resp responseBase
-	return gc.brdg.RPC(ctx, rpcDeleteContainerState, &req, &resp, false)
+	var resp prot.ResponseBase
+	return gc.brdg.RPC(ctx, prot.RpcDeleteContainerState, &req, &resp, false)
 }
 
 // Close terminates the guest connection. It is undefined to call any other
@@ -263,7 +264,7 @@ func (gc *GuestConnection) requestNotify(cid string, ch chan struct{}) error {
 	return nil
 }
 
-func (gc *GuestConnection) notify(ntf *containerNotification) error {
+func (gc *GuestConnection) notify(ntf *prot.ContainerNotification) error {
 	cid := ntf.ContainerID
 	gc.mu.Lock()
 	ch := gc.notifyChs[cid]
@@ -287,14 +288,14 @@ func (gc *GuestConnection) clearNotifies() {
 	}
 }
 
-func makeRequest(ctx context.Context, cid string) requestBase {
-	r := requestBase{
+func makeRequest(ctx context.Context, cid string) prot.RequestBase {
+	r := prot.RequestBase{
 		ContainerID: cid,
 	}
 	span := trace.FromContext(ctx)
 	if span != nil {
 		sc := span.SpanContext()
-		r.OpenCensusSpanContext = &ocspancontext{
+		r.OpenCensusSpanContext = &prot.Ocspancontext{
 			TraceID:      hex.EncodeToString(sc.TraceID[:]),
 			SpanID:       hex.EncodeToString(sc.SpanID[:]),
 			TraceOptions: uint32(sc.TraceOptions),
