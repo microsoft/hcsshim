@@ -501,9 +501,9 @@ type ResourceModificationRequestResponse struct {
 	Settings     interface{} `json:",omitempty"`
 }
 
-// ContainerModifySettings is the message from the HCS specifying how a certain
+// containerModifySettings is the message from the HCS specifying how a certain
 // container resource should be modified.
-type ContainerModifySettings struct {
+type containerModifySettings struct {
 	MessageBase
 	Request interface{}
 }
@@ -512,9 +512,9 @@ type ContainerModifySettings struct {
 // ContainerModifySettings message. This function is required because properties
 // such as `Settings` can be of many types identified by the `ResourceType` and
 // require dynamic unmarshalling.
-func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error) {
+func UnmarshalContainerModifySettings(b []byte) (*containerModifySettings, error) {
 	// Unmarshal the message.
-	var request ContainerModifySettings
+	var request containerModifySettings
 	var requestRawSettings json.RawMessage
 	request.Request = &requestRawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {

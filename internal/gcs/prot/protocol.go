@@ -13,9 +13,37 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
-// LinuxGcsVsockPort is the vsock port number that the Linux GCS will
-// connect to.
-const LinuxGcsVsockPort = 0x40000000
+const (
+	HdrSize    = 16
+	HdrOffType = 0
+	HdrOffSize = 4
+	HdrOffID   = 8
+
+	// maxMsgSize is the maximum size of an incoming message. This is not
+	// enforced by the guest today but some maximum must be set to avoid
+	// unbounded allocations.
+	MaxMsgSize = 0x10000
+
+	// LinuxGcsVsockPort is the vsock port number that the Linux GCS will
+	// connect to.
+	LinuxGcsVsockPort = 0x40000000
+)
+
+// e0e16197-dd56-4a10-9195-5ee7a155a838
+var HvGUIDLoopback = guid.GUID{
+	Data1: 0xe0e16197,
+	Data2: 0xdd56,
+	Data3: 0x4a10,
+	Data4: [8]uint8{0x91, 0x95, 0x5e, 0xe7, 0xa1, 0x55, 0xa8, 0x38},
+}
+
+// a42e7cda-d03f-480c-9cc2-a4de20abb878
+var HvGUIDParent = guid.GUID{
+	Data1: 0xa42e7cda,
+	Data2: 0xd03f,
+	Data3: 0x480c,
+	Data4: [8]uint8{0x9c, 0xc2, 0xa4, 0xde, 0x20, 0xab, 0xb8, 0x78},
+}
 
 // WindowsGcsHvsockServiceID is the hvsock service ID that the Windows GCS
 // will connect to.
@@ -24,6 +52,15 @@ var WindowsGcsHvsockServiceID = guid.GUID{
 	Data2: 0x84a1,
 	Data3: 0x4e44,
 	Data4: [8]uint8{0x85, 0x6b, 0x62, 0x45, 0xe6, 0x9f, 0x46, 0x20},
+}
+
+// WindowsSidecarGcsHvsockServiceID is the hvsock service ID that the Windows GCS
+// sidecar will connect to. This is only used in the confidential mode.
+var WindowsSidecarGcsHvsockServiceID = guid.GUID{
+	Data1: 0xae8da506,
+	Data2: 0xa019,
+	Data3: 0x4553,
+	Data4: [8]uint8{0xa5, 0x2b, 0x90, 0x2b, 0xc0, 0xfa, 0x04, 0x11},
 }
 
 // WindowsGcsHvHostID is the hvsock address for the parent of the VM running the GCS
@@ -46,57 +83,57 @@ func (a *AnyInString) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, &a.Value)
 }
 
-type RpcProc uint32
+type RPCProc uint32
 
 const (
-	RpcCreate RpcProc = (iota+1)<<8 | 1
-	RpcStart
-	RpcShutdownGraceful
-	RpcShutdownForced
-	RpcExecuteProcess
-	RpcWaitForProcess
-	RpcSignalProcess
-	RpcResizeConsole
-	RpcGetProperties
-	RpcModifySettings
-	RpcNegotiateProtocol
-	RpcDumpStacks
-	RpcDeleteContainerState
-	RpcUpdateContainer
-	RpcLifecycleNotification
+	RPCCreate RPCProc = (iota+1)<<8 | 1
+	RPCStart
+	RPCShutdownGraceful
+	RPCShutdownForced
+	RPCExecuteProcess
+	RPCWaitForProcess
+	RPCSignalProcess
+	RPCResizeConsole
+	RPCGetProperties
+	RPCModifySettings
+	RPCNegotiateProtocol
+	RPCDumpStacks
+	RPCDeleteContainerState
+	RPCUpdateContainer
+	RPCLifecycleNotification
 )
 
-func (rpc RpcProc) String() string {
+func (rpc RPCProc) String() string {
 	switch rpc {
-	case RpcCreate:
+	case RPCCreate:
 		return "Create"
-	case RpcStart:
+	case RPCStart:
 		return "Start"
-	case RpcShutdownGraceful:
+	case RPCShutdownGraceful:
 		return "ShutdownGraceful"
-	case RpcShutdownForced:
+	case RPCShutdownForced:
 		return "ShutdownForced"
-	case RpcExecuteProcess:
+	case RPCExecuteProcess:
 		return "ExecuteProcess"
-	case RpcWaitForProcess:
+	case RPCWaitForProcess:
 		return "WaitForProcess"
-	case RpcSignalProcess:
+	case RPCSignalProcess:
 		return "SignalProcess"
-	case RpcResizeConsole:
+	case RPCResizeConsole:
 		return "ResizeConsole"
-	case RpcGetProperties:
+	case RPCGetProperties:
 		return "GetProperties"
-	case RpcModifySettings:
+	case RPCModifySettings:
 		return "ModifySettings"
-	case RpcNegotiateProtocol:
+	case RPCNegotiateProtocol:
 		return "NegotiateProtocol"
-	case RpcDumpStacks:
+	case RPCDumpStacks:
 		return "DumpStacks"
-	case RpcDeleteContainerState:
+	case RPCDeleteContainerState:
 		return "DeleteContainerState"
-	case RpcUpdateContainer:
+	case RPCUpdateContainer:
 		return "UpdateContainer"
-	case RpcLifecycleNotification:
+	case RPCLifecycleNotification:
 		return "LifecycleNotification"
 	default:
 		return "0x" + strconv.FormatUint(uint64(rpc), 16)
@@ -133,7 +170,7 @@ func (typ MsgType) String() string {
 	default:
 		return fmt.Sprintf("%#x", uint32(typ))
 	}
-	s += RpcProc(typ &^ MsgTypeMask).String()
+	s += RPCProc(typ &^ MsgTypeMask).String()
 	return s + ")"
 }
 

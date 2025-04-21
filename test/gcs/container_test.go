@@ -12,7 +12,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 
 	testoci "github.com/Microsoft/hcsshim/test/internal/oci"

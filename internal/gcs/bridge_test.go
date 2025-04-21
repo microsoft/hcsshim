@@ -93,7 +93,7 @@ func TestBridgeRPC(t *testing.T) {
 	defer b.Close()
 	req := testReq{X: 5}
 	var resp testResp
-	err := b.RPC(context.Background(), prot.RpcCreate, &req, &resp, false)
+	err := b.RPC(context.Background(), prot.RPCCreate, &req, &resp, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestBridgeRPCResponseTimeout(t *testing.T) {
 	b.Timeout = time.Millisecond * 100
 	req := testReq{X: 5}
 	var resp testResp
-	err := b.RPC(context.Background(), prot.RpcCreate, &req, &resp, false)
+	err := b.RPC(context.Background(), prot.RPCCreate, &req, &resp, false)
 	if err == nil || !strings.Contains(err.Error(), "bridge closed") {
 		t.Fatalf("expected bridge disconnection, got %s", err)
 	}
@@ -122,7 +122,7 @@ func TestBridgeRPCContextDone(t *testing.T) {
 	defer cancel()
 	req := testReq{X: 5}
 	var resp testResp
-	err := b.RPC(ctx, prot.RpcCreate, &req, &resp, true)
+	err := b.RPC(ctx, prot.RPCCreate, &req, &resp, true)
 	if err != context.DeadlineExceeded { //nolint:errorlint
 		t.Fatalf("expected deadline exceeded, got %s", err)
 	}
@@ -136,7 +136,7 @@ func TestBridgeRPCContextDoneNoCancel(t *testing.T) {
 	defer cancel()
 	req := testReq{X: 5}
 	var resp testResp
-	err := b.RPC(ctx, prot.RpcCreate, &req, &resp, false)
+	err := b.RPC(ctx, prot.RPCCreate, &req, &resp, false)
 	if err == nil || !strings.Contains(err.Error(), "bridge closed") {
 		t.Fatalf("expected bridge disconnection, got %s", err)
 	}
@@ -146,7 +146,7 @@ func TestBridgeRPCBridgeClosed(t *testing.T) {
 	b := startReflectedBridge(t, 0)
 	eerr := errors.New("forcibly terminated")
 	b.kill(eerr)
-	err := b.RPC(context.Background(), prot.RpcCreate, nil, nil, false)
+	err := b.RPC(context.Background(), prot.RPCCreate, nil, nil, false)
 	if err != eerr { //nolint:errorlint
 		t.Fatal("unexpected: ", err)
 	}
