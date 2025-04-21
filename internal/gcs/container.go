@@ -56,10 +56,10 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	}
 	req := prot.ContainerCreate{
 		RequestBase:     makeRequest(ctx, cid),
-		ContainerConfig: prot.AnyInString{config},
+		ContainerConfig: prot.AnyInString{Value: config},
 	}
 	var resp prot.ContainerCreateResponse
-	err = gc.brdg.RPC(ctx, prot.RpcCreate, &req, &resp, false)
+	err = gc.brdg.RPC(ctx, prot.RPCCreate, &req, &resp, false)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (c *Container) Modify(ctx context.Context, config interface{}) (err error) 
 		Request:     config,
 	}
 	var resp prot.ResponseBase
-	return c.gc.brdg.RPC(ctx, prot.RpcModifySettings, &req, &resp, false)
+	return c.gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
 }
 
 // Properties returns the requested container properties targeting a V1 schema prot.Container.
@@ -150,7 +150,7 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 		Query:       prot.ContainerPropertiesQuery{PropertyTypes: types},
 	}
 	var resp prot.ContainerGetPropertiesResponse
-	err = c.gc.brdg.RPC(ctx, prot.RpcGetProperties, &req, &resp, true)
+	err = c.gc.brdg.RPC(ctx, prot.RPCGetProperties, &req, &resp, true)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.Propert
 		Query:       prot.ContainerPropertiesQueryV2{PropertyTypes: types},
 	}
 	var resp prot.ContainerGetPropertiesResponseV2
-	err = c.gc.brdg.RPC(ctx, prot.RpcGetProperties, &req, &resp, true)
+	err = c.gc.brdg.RPC(ctx, prot.RPCGetProperties, &req, &resp, true)
 	if err != nil {
 		return nil, err
 	}
@@ -185,10 +185,10 @@ func (c *Container) Start(ctx context.Context) (err error) {
 
 	req := makeRequest(ctx, c.id)
 	var resp prot.ResponseBase
-	return c.gc.brdg.RPC(ctx, prot.RpcStart, &req, &resp, false)
+	return c.gc.brdg.RPC(ctx, prot.RPCStart, &req, &resp, false)
 }
 
-func (c *Container) shutdown(ctx context.Context, proc prot.RpcProc) error {
+func (c *Container) shutdown(ctx context.Context, proc prot.RPCProc) error {
 	req := makeRequest(ctx, c.id)
 	var resp prot.ResponseBase
 	err := c.gc.brdg.RPC(ctx, proc, &req, &resp, true)
@@ -216,7 +216,7 @@ func (c *Container) Shutdown(ctx context.Context) (err error) {
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return c.shutdown(ctx, prot.RpcShutdownGraceful)
+	return c.shutdown(ctx, prot.RPCShutdownGraceful)
 }
 
 // Terminate sends a forceful terminate request to the container. The container
@@ -230,7 +230,7 @@ func (c *Container) Terminate(ctx context.Context) (err error) {
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return c.shutdown(ctx, prot.RpcShutdownForced)
+	return c.shutdown(ctx, prot.RPCShutdownForced)
 }
 
 func (c *Container) WaitChannel() <-chan struct{} {

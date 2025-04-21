@@ -123,7 +123,7 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 		MaximumVersion: protocolVersion,
 	}
 	var resp prot.NegotiateProtocolResponse
-	err = gc.brdg.RPC(ctx, prot.RpcNegotiateProtocol, &req, &resp, true)
+	err = gc.brdg.RPC(ctx, prot.RPCNegotiateProtocol, &req, &resp, true)
 	if err != nil {
 		return err
 	}
@@ -150,17 +150,17 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 		}
 		createReq := prot.ContainerCreate{
 			RequestBase:     makeRequest(ctx, nullContainerID),
-			ContainerConfig: prot.AnyInString{conf},
+			ContainerConfig: prot.AnyInString{Value: conf},
 		}
 		var createResp prot.ResponseBase
-		err = gc.brdg.RPC(ctx, prot.RpcCreate, &createReq, &createResp, true)
+		err = gc.brdg.RPC(ctx, prot.RPCCreate, &createReq, &createResp, true)
 		if err != nil {
 			return err
 		}
 		if resp.Capabilities.SendHostStartMessage {
 			startReq := makeRequest(ctx, nullContainerID)
 			var startResp prot.ResponseBase
-			err = gc.brdg.RPC(ctx, prot.RpcStart, &startReq, &startResp, true)
+			err = gc.brdg.RPC(ctx, prot.RPCStart, &startReq, &startResp, true)
 			if err != nil {
 				return err
 			}
@@ -181,7 +181,7 @@ func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (er
 		Request:     settings,
 	}
 	var resp prot.ResponseBase
-	return gc.brdg.RPC(ctx, prot.RpcModifySettings, &req, &resp, false)
+	return gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
 }
 
 func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err error) {
@@ -193,7 +193,7 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 		RequestBase: makeRequest(ctx, nullContainerID),
 	}
 	var resp prot.DumpStacksResponse
-	err = gc.brdg.RPC(ctx, prot.RpcDumpStacks, &req, &resp, false)
+	err = gc.brdg.RPC(ctx, prot.RPCDumpStacks, &req, &resp, false)
 	return resp.GuestStacks, err
 }
 
@@ -207,7 +207,7 @@ func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string)
 		RequestBase: makeRequest(ctx, cid),
 	}
 	var resp prot.ResponseBase
-	return gc.brdg.RPC(ctx, prot.RpcDeleteContainerState, &req, &resp, false)
+	return gc.brdg.RPC(ctx, prot.RPCDeleteContainerState, &req, &resp, false)
 }
 
 // Close terminates the guest connection. It is undefined to call any other

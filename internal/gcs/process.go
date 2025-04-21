@@ -56,7 +56,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	req := prot.ContainerExecuteProcess{
 		RequestBase: makeRequest(ctx, cid),
 		Settings: prot.ExecuteProcessSettings{
-			ProcessParameters: prot.AnyInString{params},
+			ProcessParameters: prot.AnyInString{Value: params},
 		},
 	}
 
@@ -102,7 +102,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	}
 
 	var resp prot.ContainerExecuteProcessResponse
-	err = gc.brdg.RPC(ctx, prot.RpcExecuteProcess, &req, &resp, false)
+	err = gc.brdg.RPC(ctx, prot.RPCExecuteProcess, &req, &resp, false)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		ProcessID:   p.id,
 		TimeoutInMs: 0xffffffff,
 	}
-	p.waitCall, err = gc.brdg.AsyncRPC(ctx, prot.RpcWaitForProcess, &waitReq, &p.waitResp)
+	p.waitCall, err = gc.brdg.AsyncRPC(ctx, prot.RPCWaitForProcess, &waitReq, &p.waitResp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait on process, leaking process: %w", err)
 	}
@@ -228,7 +228,7 @@ func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err 
 		Width:       width,
 	}
 	var resp prot.ResponseBase
-	return p.gc.brdg.RPC(ctx, prot.RpcResizeConsole, &req, &resp, true)
+	return p.gc.brdg.RPC(ctx, prot.RPCResizeConsole, &req, &resp, true)
 }
 
 // Signal sends a signal to the process, returning whether it was delivered.
@@ -248,7 +248,7 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 	var resp prot.ResponseBase
 	// FUTURE: SIGKILL is idempotent and can safely be cancelled, but this interface
 	//		   does currently make it easy to determine what signal is being sent.
-	err = p.gc.brdg.RPC(ctx, prot.RpcSignalProcess, &req, &resp, false)
+	err = p.gc.brdg.RPC(ctx, prot.RPCSignalProcess, &req, &resp, false)
 	if err != nil {
 		if uint32(resp.Result) != hrNotFound {
 			return false, err

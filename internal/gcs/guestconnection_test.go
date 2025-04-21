@@ -56,8 +56,8 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			}
 			return err
 		}
-		switch proc := prot.RpcProc(typ &^ prot.MsgTypeRequest); proc {
-		case prot.RpcNegotiateProtocol:
+		switch proc := prot.RPCProc(typ &^ prot.MsgTypeRequest); proc {
+		case prot.RPCNegotiateProtocol:
 			err := sendJSON(t, rw, prot.MsgTypeResponse|prot.MsgType(proc), id, &prot.NegotiateProtocolResponse{
 				Version: protocolVersion,
 				Capabilities: prot.GcsCapabilities{
@@ -67,12 +67,12 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			if err != nil {
 				return err
 			}
-		case prot.RpcCreate:
+		case prot.RPCCreate:
 			err := sendJSON(t, rw, prot.MsgTypeResponse|prot.MsgType(proc), id, &prot.ContainerCreateResponse{})
 			if err != nil {
 				return err
 			}
-		case prot.RpcExecuteProcess:
+		case prot.RPCExecuteProcess:
 			var req prot.ContainerExecuteProcess
 			var params baseProcessParams
 			req.Settings.ProcessParameters.Value = &params
@@ -118,9 +118,9 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			if err != nil {
 				return err
 			}
-		case prot.RpcWaitForProcess:
+		case prot.RPCWaitForProcess:
 			// nothing
-		case prot.RpcShutdownForced:
+		case prot.RPCShutdownForced:
 			var req prot.RequestBase
 			err = json.Unmarshal(b, &req)
 			if err != nil {
