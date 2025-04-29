@@ -24,17 +24,16 @@ var ErrAnnotationExpansionConflict = errors.New("annotation expansion conflict")
 var ErrGenericAnnotationConflict = errors.New("specified annotations conflict")
 
 // ProcessAnnotations expands annotations into their corresponding annotation groups.
-func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
+func ProcessAnnotations(ctx context.Context, s *specs.Spec) error {
 	// Named `Process` and not `Expand` since this function may be expanded (pun intended) to
 	// deal with other annotation issues and validation.
 
 	// Rather than give up part of the way through on error, this just emits a warning (similar
 	// to the `parseAnnotation*` functions) and continues through, so the spec is not left in a
 	// (partially) unusable form.
-	// If multiple different errors are to be raised, they should be combined or, if they
-	// are logged, only the last kept, depending on their severity.
 
 	// expand annotations
+	var errs []error
 	for key, exps := range annotations.AnnotationExpansions {
 		// check if annotation is present
 		if val, ok := s.Annotations[key]; ok {
@@ -42,7 +41,8 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
 			// but strings may be case-sensitive
 			for _, k := range exps {
 				if v, ok := s.Annotations[k]; ok && val != v {
-					err = ErrAnnotationExpansionConflict
+					err := fmt.Errorf("%w: %q = %q and %q = %q", ErrAnnotationExpansionConflict, key, val, k, v)
+					errs = append(errs, err)
 					log.G(ctx).WithFields(logrus.Fields{
 						logfields.OCIAnnotation:               key,
 						logfields.Value:                       val,
@@ -60,7 +60,12 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
 	disableHPC := ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableHostProcessContainer, false)
 	enableHPC := ParseAnnotationsBool(ctx, s.Annotations, annotations.HostProcessContainer, false)
 	if disableHPC && enableHPC {
-		err = ErrGenericAnnotationConflict
+		err := fmt.Errorf("%w: host process container annotations %q = %q and %q = %q",
+			ErrGenericAnnotationConflict,
+			annotations.DisableHostProcessContainer, s.Annotations[annotations.DisableHostProcessContainer],
+			annotations.HostProcessContainer, s.Annotations[annotations.HostProcessContainer])
+		errs = append(errs, err)
+
 		log.G(ctx).WithFields(logrus.Fields{
 			logfields.OCIAnnotation:               annotations.DisableHostProcessContainer,
 			logfields.Value:                       s.Annotations[annotations.DisableHostProcessContainer],
@@ -69,7 +74,7 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
 		}).WithError(err).Warning("Host process container and disable host process container cannot both be true")
 	}
 
-	return err
+	return errors.Join(errs...)
 }
 
 // handle specific annotations
