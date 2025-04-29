@@ -101,7 +101,7 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 				annotations.DisableHostProcessContainer: "false",
 				annotations.HostProcessContainer:        "true",
 			},
-			errs: []error{ErrAnnotationExpansionConflict, ErrGenericAnnotationConflict},
+			errs: []error{ErrAnnotationExpansionConflict},
 		},
 		{
 			name: "DisableHostProcessContainer-HostProcessContainer",
@@ -115,7 +115,7 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 	}
 
 	for _, tt := range testAnnotations {
-		t.Run(tt.name, func(subtest *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			spec := specs.Spec{
 				Windows:     &specs.Windows{},
 				Annotations: tt.an,
@@ -125,8 +125,10 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 			if err != nil && len(tt.errs) == 0 {
 				t.Fatalf("ProcessAnnotations should have succeeded, instead got %v", err)
 			}
-			if err == nil && len(tt.errs) > 0 {
-				t.Fatalf("ProcessAnnotations succeeded; should have failed with %v", tt.errs)
+			if len(tt.errs) > 0 {
+				if err == nil {
+					t.Fatalf("ProcessAnnotations succeeded; should have failed with %v", tt.errs)
+				}
 				for _, e := range tt.errs {
 					if !errors.Is(err, e) {
 						t.Fatalf("ProcessAnnotations should failed with %v", e)
