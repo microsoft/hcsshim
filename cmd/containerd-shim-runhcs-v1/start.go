@@ -15,7 +15,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/containerd/v2/pkg/atomicfile"
+	"github.com/containerd/containerd/v2/pkg/shim"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -171,7 +172,7 @@ The start command can either start a new shim or return an address to an existin
 		if err := shim.WritePidFile(filepath.Join(cwd, "shim.pid"), pid); err != nil {
 			return err
 		}
-		if err := shim.WriteAddress(filepath.Join(cwd, "address"), address); err != nil {
+		if err := writeAddress(filepath.Join(cwd, "address"), address); err != nil {
 			return err
 		}
 
@@ -181,6 +182,24 @@ The start command can either start a new shim or return an address to an existin
 		}
 		return nil
 	},
+}
+
+// writeAddress writes an address file atomically
+func writeAddress(path, address string) error {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	f, err := atomicfile.New(path, 0o644)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write([]byte(address))
+	if err != nil {
+		_ = f.Cancel()
+		return err
+	}
+	return f.Close()
 }
 
 func getSpecAnnotations(bundlePath string) (map[string]string, error) {

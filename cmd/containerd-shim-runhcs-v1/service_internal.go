@@ -11,7 +11,6 @@ import (
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/errdefs"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -231,7 +230,7 @@ func (s *service) pidsInternal(ctx context.Context, req *task.PidsRequest) (*tas
 		}
 		proc := &containerd_v1_types.ProcessInfo{
 			Pid:  p.ProcessID,
-			Info: protobuf.FromAny(a),
+			Info: typeurl.MarshalProto(a),
 		}
 		processes[i] = proc
 	}
@@ -478,7 +477,7 @@ func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*t
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to marshal Statistics for task: %s", req.ID)
 	}
-	return &task.StatsResponse{Stats: protobuf.FromAny(any)}, nil
+	return &task.StatsResponse{Stats: typeurl.MarshalProto(any)}, nil
 }
 
 func (s *service) connectInternal(ctx context.Context, req *task.ConnectRequest) (*task.ConnectResponse, error) {
