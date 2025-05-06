@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	kubeutil "github.com/containerd/containerd/integration/remote/util"
+	kubeutil "github.com/containerd/containerd/v2/integration/remote/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"

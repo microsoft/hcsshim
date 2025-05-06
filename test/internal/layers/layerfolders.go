@@ -8,21 +8,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/mount"
 
 	testctrd "github.com/Microsoft/hcsshim/test/internal/containerd"
 )
 
 // FromImage returns thee layer paths of a given image, pulling it if necessary
-func FromImage(ctx context.Context, tb testing.TB, client *containerd.Client, ref, platform, snapshotter string) []string {
+func FromImage(ctx context.Context, tb testing.TB, client *client.Client, ref, platform, snapshotter string) []string {
 	tb.Helper()
 	chainID := testctrd.PullImage(ctx, tb, client, ref, platform)
 	return FromChainID(ctx, tb, client, chainID, snapshotter)
 }
 
 // FromChainID returns thee layer paths of a given image chain ID
-func FromChainID(ctx context.Context, tb testing.TB, client *containerd.Client, chainID, snapshotter string) []string {
+func FromChainID(ctx context.Context, tb testing.TB, client *client.Client, chainID, snapshotter string) []string {
 	tb.Helper()
 	ms := testctrd.CreateViewSnapshot(ctx, tb, client, snapshotter, chainID, chainID+"view")
 	if len(ms) != 1 {
