@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/pkg/errors"
@@ -152,7 +151,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 	caReq := &computeagent.AddNICInternalRequest{
 		ContainerID: req.ContainerID,
 		NicID:       req.NicID,
-		Endpoint:    protobuf.FromAny(anyEndpoint),
+		Endpoint:    typeurl.MarshalProto(anyEndpoint),
 	}
 	if _, err := agent.AddNIC(ctx, caReq); err != nil {
 		return nil, err
@@ -204,7 +203,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 	iovReqSettings := settings.Policies.IovPolicySettings
 	caReq := &computeagent.ModifyNICInternalRequest{
 		NicID:    req.NicID,
-		Endpoint: protobuf.FromAny(anyEndpoint),
+		Endpoint: typeurl.MarshalProto(anyEndpoint),
 		IovPolicySettings: &computeagent.IovSettings{
 			IovOffloadWeight:    iovReqSettings.IovOffloadWeight,
 			QueuePairsRequested: iovReqSettings.QueuePairsRequested,
@@ -296,7 +295,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 		caReq := &computeagent.DeleteNICInternalRequest{
 			ContainerID: req.ContainerID,
 			NicID:       req.NicID,
-			Endpoint:    protobuf.FromAny(anyEndpoint),
+			Endpoint:    typeurl.MarshalProto(anyEndpoint),
 		}
 		if _, err := agent.DeleteNIC(ctx, caReq); err != nil {
 			if errors.Is(err, uvm.ErrNICNotFound) || errors.Is(err, uvm.ErrNetNSNotFound) {

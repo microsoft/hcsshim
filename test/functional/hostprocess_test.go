@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	ctrdoci "github.com/containerd/containerd/oci"
+	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"

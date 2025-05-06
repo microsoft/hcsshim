@@ -273,12 +273,12 @@ jobs:
       fail-fast: false
       matrix:
         name:
-          [windows-2022, windows-2019]
+          [windows-2025, windows-2022]
         include:
-          - name: "windows-2019"
-            runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2019-containers-enabled]
           - name: "windows-2022"
             runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]
+          - name: "windows-2025"
+            runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-ws2025-containers-enabled]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -313,7 +313,7 @@ jobs:
           }
 
           # accept the eula
-          & '${{ github.workspace }}/bin/psexec' -accepteula -nobanner cmd /c "exit 0" 2>$null
+          & '${{ github.workspace }}/bin/psexec' -accepteula -nobanner cmd /c "exit 0"
 
       # run tests
       - name: Test repo
@@ -326,10 +326,10 @@ jobs:
       - name: Build and run containerd-shim-runhcs-v1 tests
         shell: powershell
         run: |
-          pwsh {
-            cd '..'
-            ${{ env.GO_BUILD_CMD }} -o ./test ./cmd/containerd-shim-runhcs-v1 2>&1
-          }
+          Push-Location '..'
+          ${{ env.GO_BUILD_CMD }} -o ./test ./cmd/containerd-shim-runhcs-v1 2>&1
+          Pop-Location
+
           if ( $LASTEXITCODE ) {
             Write-Output '::error::Could not build containerd-shim-runhcs-v1.exe'
             exit $LASTEXITCODE
@@ -360,9 +360,18 @@ jobs:
             exit $LASTEXITCODE
           }
 
+          # Resolve go.exe path
+          $go = Get-Command -Name 'go' -CommandType Application -ErrorAction Stop |
+          Select-Object -First 1 -ExpandProperty Source
+          if ([string]::IsNullOrEmpty($go)) {
+            Write-Output '::error::Could not find go.exe path'
+            exit 1
+          }
+
           # Don't run Linux uVM (ie, nested virt) or LCOW integrity tests. Windows uVM tests will be run on 1ES runner pool.
           $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity -test.timeout=1h -test.v -log-level=info'
-          $cmd = $cmd -replace 'gotestsum', $gotestsum
+          $cmd = $cmd -replace '\bgo\b', $go
+          $cmd = $cmd -replace '\bgotestsum\b', $gotestsum
           Write-Host "gotestsum command: $cmd"
 
           # Apparently, in a GH runner, PsExec always runs noninteractively (even with `-i`)
@@ -404,7 +413,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2019, windows-2022]
+        os: [windows-2022, windows-2025]
 
     steps:
       - name: Checkout hcsshim
@@ -429,7 +438,7 @@ jobs:
       - name: Get containerd ref
         shell: powershell
         run: |
-          $v = go list -m -f '{{ .Version }}' 'github.com/containerd/containerd' 2>&1
+          $v = go list -m -f '{{ .Version }}' 'github.com/containerd/containerd/v2' 2>&1
           if ( $LASTEXITCODE ) {
             Write-Output '::error::Could not retrieve containerd version.'
             exit $LASTEXITCODE
