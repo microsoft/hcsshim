@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/pkg/errors"
@@ -27,6 +26,7 @@ import (
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func init() {
@@ -54,6 +54,16 @@ type grpcService struct {
 	// ncproxyNetworking is a database that stores the ncproxy networking networks
 	// and endpoints persistently.
 	ncpNetworkingStore *ncproxystore.NetworkingStore
+}
+
+func typeURLToAnyPb(any typeurl.Any) *anypb.Any {
+	if any == nil {
+		return nil
+	}
+	return &anypb.Any{
+		TypeUrl: any.GetTypeUrl(),
+		Value:   any.GetValue(),
+	}
 }
 
 func newGRPCService(agentCache *computeAgentCache, ncproxyNetworking *ncproxystore.NetworkingStore) *grpcService {
@@ -152,7 +162,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 	caReq := &computeagent.AddNICInternalRequest{
 		ContainerID: req.ContainerID,
 		NicID:       req.NicID,
-		Endpoint:    protobuf.FromAny(anyEndpoint),
+		Endpoint:    typeURLToAnyPb(anyEndpoint),
 	}
 	if _, err := agent.AddNIC(ctx, caReq); err != nil {
 		return nil, err
@@ -204,7 +214,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 	iovReqSettings := settings.Policies.IovPolicySettings
 	caReq := &computeagent.ModifyNICInternalRequest{
 		NicID:    req.NicID,
-		Endpoint: protobuf.FromAny(anyEndpoint),
+		Endpoint: typeURLToAnyPb(anyEndpoint),
 		IovPolicySettings: &computeagent.IovSettings{
 			IovOffloadWeight:    iovReqSettings.IovOffloadWeight,
 			QueuePairsRequested: iovReqSettings.QueuePairsRequested,
@@ -296,7 +306,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 		caReq := &computeagent.DeleteNICInternalRequest{
 			ContainerID: req.ContainerID,
 			NicID:       req.NicID,
-			Endpoint:    protobuf.FromAny(anyEndpoint),
+			Endpoint:    typeURLToAnyPb(anyEndpoint),
 		}
 		if _, err := agent.DeleteNIC(ctx, caReq); err != nil {
 			if errors.Is(err, uvm.ErrNICNotFound) || errors.Is(err, uvm.ErrNetNSNotFound) {

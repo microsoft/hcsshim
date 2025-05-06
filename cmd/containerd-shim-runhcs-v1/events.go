@@ -7,8 +7,8 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/containerd/containerd/namespaces"
-	shim "github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/pkg/shim"
 	"go.opencensus.io/trace"
 )
 

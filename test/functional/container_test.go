@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	ctrdoci "github.com/containerd/containerd/oci"
+	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
