@@ -6,11 +6,10 @@ import (
 	"context"
 	"testing"
 
-	cri_util "github.com/containerd/containerd/pkg/cri/util"
-
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
+	"github.com/Microsoft/hcsshim/test/functional"
 )
 
 func BenchmarkCRISanboxCreate(b *testing.B) {
@@ -21,7 +20,7 @@ func BenchmarkCRISanboxCreate(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id := cri_util.GenerateID()
+		id := functional.GenerateID()
 		scratch, rootfs := mountRootfs(ctx, b, host, id)
 		nns := id
 		createNamespace(ctx, b, nns)
@@ -52,7 +51,7 @@ func BenchmarkCRISandboxStart(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id := cri_util.GenerateID()
+		id := functional.GenerateID()
 		scratch, rootfs := mountRootfs(ctx, b, host, id)
 		nns := id
 		createNamespace(ctx, b, nns)
@@ -84,7 +83,7 @@ func BenchmarkCRISandboxKill(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id := cri_util.GenerateID()
+		id := functional.GenerateID()
 		scratch, rootfs := mountRootfs(ctx, b, host, id)
 		nns := id
 		createNamespace(ctx, b, nns)
@@ -218,7 +217,7 @@ func workloadContainerRequest(
 	nns string,
 ) (string, *prot.VMHostedContainerSettingsV2, func()) {
 	tb.Helper()
-	id := sid + cri_util.GenerateID()
+	id := sid + functional.GenerateID()
 	scratch, rootfs := mountRootfs(ctx, tb, host, id)
 	spec := containerSpec(ctx, tb,
 		sid,

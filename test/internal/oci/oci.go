@@ -5,15 +5,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/containerd/containerd/containers"
-	"github.com/containerd/containerd/namespaces"
-	ctrdoci "github.com/containerd/containerd/oci"
-	criconstants "github.com/containerd/containerd/pkg/cri/constants"
-	criopts "github.com/containerd/containerd/pkg/cri/opts"
+	"github.com/containerd/containerd/v2/core/containers"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-
 	"github.com/Microsoft/hcsshim/test/pkg/images"
 )
 
@@ -26,10 +23,11 @@ const (
 	PingSelfCmd  = "cmd.exe /c ping -t 127.0.0.1"
 
 	DefaultNamespace = namespaces.Default
-	CRINamespace     = criconstants.K8sContainerdNamespace
+	// K8sContainerdNamespace is the namespace we use to connect containerd.
+	K8sContainerdNamespace = "k8s.io"
+	CRINamespace           = K8sContainerdNamespace
 
 	// from containerd\pkg\cri\server\helpers_linux.go
-
 	HostnameEnv = "HOSTNAME"
 )
 
@@ -37,12 +35,17 @@ func DefaultLinuxSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecO
 	opts := []ctrdoci.SpecOpts{
 		ctrdoci.WithoutRunMount,
 		ctrdoci.WithRootFSReadonly(),
-		criopts.WithDisabledCgroups, // we set our own cgroups
 		ctrdoci.WithDefaultUnixDevices,
 		ctrdoci.WithDefaultPathEnv,
 		ctrdoci.WithWindowsNetworkNamespace(nns),
 	}
 	return append(opts, extra...)
+}
+
+// WithoutRoot sets the root to nil for the container.
+func WithoutRoot(ctx context.Context, client ctrdoci.Client, c *containers.Container, s *specs.Spec) error {
+	s.Root = nil
+	return nil
 }
 
 func DefaultWindowsSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecOpts {
@@ -54,7 +57,10 @@ func DefaultWindowsSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.Spe
 			}
 			return nil
 		},
-		criopts.WithoutRoot,
+		func(_ context.Context, _ ctrdoci.Client, _ *containers.Container, s *specs.Spec) error {
+			s.Root = nil
+			return nil
+		},
 		ctrdoci.WithProcessCwd(`C:\`),
 		ctrdoci.WithWindowsNetworkNamespace(nns),
 	}
