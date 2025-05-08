@@ -52,6 +52,8 @@ var (
 	procCM_Get_DevNode_PropertyW               = modcfgmgr32.NewProc("CM_Get_DevNode_PropertyW")
 	procCM_Get_Device_ID_ListA                 = modcfgmgr32.NewProc("CM_Get_Device_ID_ListA")
 	procCM_Get_Device_ID_List_SizeA            = modcfgmgr32.NewProc("CM_Get_Device_ID_List_SizeA")
+	procCM_Get_Device_Interface_ListW          = modcfgmgr32.NewProc("CM_Get_Device_Interface_ListW")
+	procCM_Get_Device_Interface_List_SizeW     = modcfgmgr32.NewProc("CM_Get_Device_Interface_List_SizeW")
 	procCM_Locate_DevNodeW                     = modcfgmgr32.NewProc("CM_Locate_DevNodeW")
 	procCimAddFsToMergedImage                  = modcimfs.NewProc("CimAddFsToMergedImage")
 	procCimAddFsToMergedImage2                 = modcimfs.NewProc("CimAddFsToMergedImage2")
@@ -158,6 +160,28 @@ func CMGetDeviceIDList(pszFilter *byte, buffer *byte, bufferLen uint32, uFlags u
 
 func CMGetDeviceIDListSize(pulLen *uint32, pszFilter *byte, uFlags uint32) (hr error) {
 	r0, _, _ := syscall.SyscallN(procCM_Get_Device_ID_List_SizeA.Addr(), uintptr(unsafe.Pointer(pulLen)), uintptr(unsafe.Pointer(pszFilter)), uintptr(uFlags))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func CMGetDeviceInterfaceList(classGUID *g, deviceID *uint16, buffer *uint16, bufLen uint32, ulFlags uint32) (hr error) {
+	r0, _, _ := syscall.SyscallN(procCM_Get_Device_Interface_ListW.Addr(), uintptr(unsafe.Pointer(classGUID)), uintptr(unsafe.Pointer(deviceID)), uintptr(unsafe.Pointer(buffer)), uintptr(bufLen), uintptr(ulFlags))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func CMGetDeviceInterfaceListSize(listlen *uint32, classGUID *g, deviceID *uint16, ulFlags uint32) (hr error) {
+	r0, _, _ := syscall.SyscallN(procCM_Get_Device_Interface_List_SizeW.Addr(), uintptr(unsafe.Pointer(listlen)), uintptr(unsafe.Pointer(classGUID)), uintptr(unsafe.Pointer(deviceID)), uintptr(ulFlags))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
