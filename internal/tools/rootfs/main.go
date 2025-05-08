@@ -14,7 +14,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
-// TODO: tests ...............
+// TODO: add tests for:
+// - general functionality (Windows + Linux)
+// - adding `./` prefix
+// - adding `/` suffix
+// - overriding UID and GUID
+// TODO: output CPIO archive?
 
 func main() {
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
@@ -71,18 +76,4 @@ func run() error {
 	}
 
 	return app.Run(args)
-}
-
-// TODO: output CPIO archive
-
-// see 	"github.com/u-root/mkuimage/cpio".fs_windows.go
-type tarRecorder struct {
-	inumber uint64
-}
-
-func newTarRecorder() *tarRecorder { return &tarRecorder{inumber: 2} }
-
-func (r *tarRecorder) inode() uint64 {
-	r.inumber++
-	return r.inumber - 1
 }

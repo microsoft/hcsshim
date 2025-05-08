@@ -287,9 +287,7 @@ func (c *mergeCommand) writeLayer(
 			continue
 		}
 
-		//
 		// update header (as needed)
-		//
 
 		if c.RelativePathPrefix && !(strings.HasPrefix(header.Name, `./`) || (c.OS == windowsOS && strings.HasPrefix(header.Name, `.\`))) {
 			stats.numRelPrepend++
