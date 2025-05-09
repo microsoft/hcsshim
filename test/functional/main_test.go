@@ -41,6 +41,8 @@ import (
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
 
+// TODO(go1.24): use [(*"testing".B).Loop()] instead of `for i := 0; i < b.N; i++ { }`
+
 // owner field for uVMs.
 const hcsOwner = "hcsshim-functional-tests"
 

@@ -155,6 +155,12 @@ func repeat(f func() error, n int, d time.Duration) (err error) {
 	return err
 }
 
+// TODO(go1.24): use [TB.Context]
+// See:
+//  - https://tip.golang.org/doc/go1.24#testingpkgtesting
+//  - https://pkg.go.dev/testing@master#T.Context
+//  - https://pkg.go.dev/testing@master#TB
+
 // Context creates a [context.Context] that uses the testing.Deadline minus a small grace period (if applicable)
 // and the cancellation to the testing cleanup.
 //
