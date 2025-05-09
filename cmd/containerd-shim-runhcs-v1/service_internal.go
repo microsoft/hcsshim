@@ -11,11 +11,11 @@ import (
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/errdefs"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -225,13 +225,13 @@ func (s *service) pidsInternal(ctx context.Context, req *task.PidsRequest) (*tas
 	}
 	processes := make([]*containerd_v1_types.ProcessInfo, len(pids))
 	for i, p := range pids {
-		a, err := typeurl.MarshalAny(p)
+		a, err := anypb.New(p)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal ProcessDetails for process: %s, task: %s", p.ExecID, req.ID)
 		}
 		proc := &containerd_v1_types.ProcessInfo{
 			Pid:  p.ProcessID,
-			Info: protobuf.FromAny(a),
+			Info: a,
 		}
 		processes[i] = proc
 	}
@@ -474,11 +474,11 @@ func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	any, err := typeurl.MarshalAny(stats)
+	any, err := anypb.New(stats)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to marshal Statistics for task: %s", req.ID)
 	}
-	return &task.StatsResponse{Stats: protobuf.FromAny(any)}, nil
+	return &task.StatsResponse{Stats: any}, nil
 }
 
 func (s *service) connectInternal(ctx context.Context, req *task.ConnectRequest) (*task.ConnectResponse, error) {

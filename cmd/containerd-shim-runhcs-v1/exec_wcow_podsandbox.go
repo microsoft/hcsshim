@@ -11,7 +11,7 @@ import (
 	eventstypes "github.com/containerd/containerd/api/events"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/containerd/runtime"
+	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/errdefs"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
