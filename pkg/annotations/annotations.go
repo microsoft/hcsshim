@@ -343,6 +343,9 @@ const (
 	// number of memory blocks at slice index 1, etc.
 	// This should be used for explicit vNUMA topology.
 	NumaCountOfMemoryBlocks = "io.microsoft.virtualmachine.computetopology.numa.count-of-memory-blocks"
+
+	// ResourcePoolID is a GUID string representing a resource pool ID the UVM should be associated with.
+	ResourcePoolID = "io.microsoft.virtualmachine.resource-pool-id"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of
