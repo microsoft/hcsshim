@@ -14,7 +14,7 @@ import (
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/api/types"
-	"github.com/containerd/containerd/runtime"
+	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
