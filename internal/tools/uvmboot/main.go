@@ -24,6 +24,7 @@ const (
 	measureArgName              = "measure"
 	parallelArgName             = "parallel"
 	countArgName                = "count"
+	resourcePoolArgName         = "resource-pool"
 
 	execCommandLineArgName = "exec"
 	uvmConsolePipe         = "\\\\.\\pipe\\uvmpipe"
@@ -82,6 +83,10 @@ func main() {
 			Usage:       "Launch the GCS and perform requested operations via its RPC interface",
 			Destination: &useGCS,
 		},
+		cli.StringFlag{
+			Name:  resourcePoolArgName,
+			Usage: "Resource pool GUID to assign UVM to",
+		},
 	}
 
 	app.Commands = []cli.Command{
@@ -124,6 +129,9 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 	}
 	if c.GlobalIsSet(enableDeferredCommitArgName) {
 		options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
+	}
+	if c.GlobalIsSet(resourcePoolArgName) {
+		options.ResourcePoolID = c.GlobalString(resourcePoolArgName)
 	}
 	// Always set the console pipe in uvmboot, it helps with testing/debugging
 	options.ConsolePipe = uvmConsolePipe
