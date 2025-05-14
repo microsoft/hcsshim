@@ -34,22 +34,23 @@ func mkdirAllModePerm(target string) error {
 
 func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 	for i, m := range spec.Mounts {
-		if strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
-			sandboxSource := specGuest.SandboxMountSource(sbid, m.Source)
+		if !strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
+			continue
+		}
+		sandboxSource := specGuest.SandboxMountSource(sbid, m.Source)
 
-			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
-			// Hence, we need to ensure that the resolved path is still under the correct directory
-			if !strings.HasPrefix(sandboxSource, specGuest.SandboxMountsDir(sbid)) {
-				return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
-			}
+		// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
+		// Hence, we need to ensure that the resolved path is still under the correct directory
+		if !strings.HasPrefix(sandboxSource, specGuest.SandboxMountsDir(sbid)) {
+			return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
+		}
 
-			spec.Mounts[i].Source = sandboxSource
+		spec.Mounts[i].Source = sandboxSource
 
-			_, err := os.Stat(sandboxSource)
-			if os.IsNotExist(err) {
-				if err := mkdirAllModePerm(sandboxSource); err != nil {
-					return err
-				}
+		_, err := os.Stat(sandboxSource)
+		if os.IsNotExist(err) {
+			if err := mkdirAllModePerm(sandboxSource); err != nil {
+				return err
 			}
 		}
 	}
@@ -58,28 +59,29 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 
 func updateHugePageMounts(sbid string, spec *oci.Spec) error {
 	for i, m := range spec.Mounts {
-		if strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
-			mountsDir := specGuest.HugePagesMountsDir(sbid)
-			subPath := strings.TrimPrefix(m.Source, guestpath.HugePagesMountPrefix)
-			pageSize := strings.Split(subPath, string(os.PathSeparator))[0]
-			hugePageMountSource := filepath.Join(mountsDir, subPath)
+		if !strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
+			continue
+		}
+		mountsDir := specGuest.HugePagesMountsDir(sbid)
+		subPath := strings.TrimPrefix(m.Source, guestpath.HugePagesMountPrefix)
+		pageSize := strings.Split(subPath, string(os.PathSeparator))[0]
+		hugePageMountSource := filepath.Join(mountsDir, subPath)
 
-			// filepath.Join cleans the resulting path before returning so it would resolve the relative path if one was given.
-			// Hence, we need to ensure that the resolved path is still under the correct directory
-			if !strings.HasPrefix(hugePageMountSource, mountsDir) {
-				return errors.Errorf("mount path %v for mount %v is not within hugepages's mounts dir", hugePageMountSource, m.Source)
+		// filepath.Join cleans the resulting path before returning so it would resolve the relative path if one was given.
+		// Hence, we need to ensure that the resolved path is still under the correct directory
+		if !strings.HasPrefix(hugePageMountSource, mountsDir) {
+			return errors.Errorf("mount path %v for mount %v is not within hugepages's mounts dir", hugePageMountSource, m.Source)
+		}
+
+		spec.Mounts[i].Source = hugePageMountSource
+
+		_, err := os.Stat(hugePageMountSource)
+		if os.IsNotExist(err) {
+			if err := mkdirAllModePerm(hugePageMountSource); err != nil {
+				return err
 			}
-
-			spec.Mounts[i].Source = hugePageMountSource
-
-			_, err := os.Stat(hugePageMountSource)
-			if os.IsNotExist(err) {
-				if err := mkdirAllModePerm(hugePageMountSource); err != nil {
-					return err
-				}
-				if err := unix.Mount("none", hugePageMountSource, "hugetlbfs", 0, "pagesize="+pageSize); err != nil {
-					return errors.Errorf("mount operation failed for %v failed with error %v", hugePageMountSource, err)
-				}
+			if err := unix.Mount("none", hugePageMountSource, "hugetlbfs", 0, "pagesize="+pageSize); err != nil {
+				return errors.Errorf("mount operation failed for %v failed with error %v", hugePageMountSource, err)
 			}
 		}
 	}
@@ -125,6 +127,22 @@ func updateBlockDeviceMounts(spec *oci.Spec) error {
 	return nil
 }
 
+func updateUVMMounts(spec *oci.Spec) error {
+	for i, m := range spec.Mounts {
+		if !strings.HasPrefix(m.Source, guestpath.UVMMountPrefix) {
+			continue
+		}
+		hostPath := strings.TrimPrefix(m.Source, guestpath.UVMMountPrefix)
+
+		spec.Mounts[i].Source = hostPath
+
+		if _, err := os.Stat(hostPath); err != nil {
+			return errors.Wrap(err, "could not open uVM mount target")
+		}
+	}
+	return nil
+}
+
 func specHasGPUDevice(spec *oci.Spec) bool {
 	for _, d := range spec.Windows.Devices {
 		if d.IDType == "gpu" {
@@ -158,6 +176,10 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 
 	if err = updateBlockDeviceMounts(spec); err != nil {
 		return fmt.Errorf("failed to update block device mounts for container %v in sandbox %v: %w", id, sbid, err)
+	}
+
+	if err = updateUVMMounts(spec); err != nil {
+		return errors.Wrapf(err, "failed to update uVM mounts for container %v in sandbox %v", id, sbid)
 	}
 
 	// Add default mounts for container networking (e.g. /etc/hostname, /etc/hosts),
