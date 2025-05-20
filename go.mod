@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim
 
-go 1.23.0
+go 1.23.8
 
 require (
 	github.com/Microsoft/cosesign1go v1.4.0
@@ -24,7 +24,7 @@ require (
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/moby/sys/user v0.3.0
-	github.com/open-policy-agent/opa v0.70.0
+	github.com/open-policy-agent/opa v1.4.0
 	github.com/opencontainers/runc v1.2.3
 	github.com/opencontainers/runtime-spec v1.2.0
 	github.com/pelletier/go-toml v1.9.5

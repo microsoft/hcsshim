@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.23.0
+go 1.23.8
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
@@ -89,7 +89,7 @@ require (
 	github.com/moby/sys/user v0.3.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/open-policy-agent/opa v0.70.0 // indirect
+	github.com/open-policy-agent/opa v1.4.0 // indirect
 	github.com/opencontainers/runc v1.2.3 // indirect
 	github.com/opencontainers/selinux v1.11.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
