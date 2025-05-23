@@ -721,7 +721,13 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 			Rule:     "PREFIX_.+=.+",
 		}
 
-		container.EnvRules = append(container.EnvRules, re2MatchRule)
+		// it must pass even if there is leading ^ and trailing $ in the rule
+		re2MatchPrefix := EnvRuleConfig{
+			Strategy: EnvVarRuleRegex,
+			Rule:     "^LEAD_.+=.+_TRAIL$",
+		}
+
+		container.EnvRules = append(container.EnvRules, re2MatchRule, re2MatchPrefix)
 
 		tc, err := setupRegoCreateContainerTest(gc, container, false)
 		if err != nil {
@@ -729,7 +735,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 			return false
 		}
 
-		envList := append(tc.envList, "PREFIX_FOO=BAR")
+		envList := append(tc.envList, "PREFIX_FOO=BAR", "LEAD_FOO=BAR_TRAIL")
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
@@ -739,6 +745,39 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 		}
 
 		return true
+	}
+
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match: %v", err)
+	}
+}
+
+func Test_Rego_EnforceEnvironmentVariablePolicy_Re2MisMatch(t *testing.T) {
+	testFunc := func(gc *generatedConstraints) bool {
+		container := selectContainerFromContainerList(gc.containers, testRand)
+		// add a rule to re2 match
+		re2MatchRule := EnvRuleConfig{
+			Strategy: EnvVarRuleRegex,
+			Rule:     "PREFIX_.+=.+BAR$",
+		}
+
+		container.EnvRules = append(container.EnvRules, re2MatchRule)
+
+		tc, err := setupRegoCreateContainerTest(gc, container, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		envList := append(tc.envList, "PREFIX_FOO=BAR_FOO")
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+		// not getting an error means something is broken
+		if err == nil {
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "invalid env list", "PREFIX_FOO")
 	}
 
 	if err := quick.Check(testFunc, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
