@@ -132,11 +132,11 @@ func updateUVMMounts(spec *oci.Spec) error {
 		if !strings.HasPrefix(m.Source, guestpath.UVMMountPrefix) {
 			continue
 		}
-		hostPath := strings.TrimPrefix(m.Source, guestpath.UVMMountPrefix)
+		uvmPath := strings.TrimPrefix(m.Source, guestpath.UVMMountPrefix)
 
-		spec.Mounts[i].Source = hostPath
+		spec.Mounts[i].Source = uvmPath
 
-		if _, err := os.Stat(hostPath); err != nil {
+		if _, err := os.Stat(uvmPath); err != nil {
 			return errors.Wrap(err, "could not open uVM mount target")
 		}
 	}
