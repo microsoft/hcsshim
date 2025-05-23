@@ -632,20 +632,30 @@ jobs:
 
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/containerd-shim-runhcs-v1
         name: Build containerd-shim-runhcs-v1.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/device-util
+        name: Build device-util.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/jobobject-util
+        name: Build jobobject-util.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/mkuvmcim
+        name: Build mkuvmcim.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/ncproxy
+        name: Build ncproxy.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/runhcs
         name: Build runhcs.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/shimdiag
+        name: Build shimdiag.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/tar2ext4
         name: Build tar2ext4.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/wclayer
         name: Build wclayer.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/device-util
-        name: Build device-util.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/ncproxy
-        name: Build ncproxy.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/grantvmgroupaccess
         name: Build grantvmgroupaccess.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/hvsocketaddr
+        name: Build hvsocketaddr.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/networkagent
         name: Build networkagent.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/rootfs
+        name: Build rootfs.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
         name: Build securitypolicy.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
@@ -657,8 +667,6 @@ jobs:
         name: Build uvmboot.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
         name: Build zapdir.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/hvsocketaddr
-        name: Build hvsocketaddr.exe
 
       - uses: actions/upload-artifact@v4
         if: ${{ github.event_name == 'pull_request' }}
