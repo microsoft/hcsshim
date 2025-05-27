@@ -287,6 +287,11 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 		}
 	}
 
+	if opts.ResourcePoolID != "" {
+		// TODO (maksiman): assign pod to resource pool and potentially do an OS version check before that
+		log.G(ctx).WithField("resource-pool-id", opts.ResourcePoolID).Debug("setting resource pool ID")
+	}
+
 	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
 	for i := 0; i < int(uvm.scsiControllerCount); i++ {
 		doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{

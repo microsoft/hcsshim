@@ -701,6 +701,11 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		}
 	}
 
+	if opts.ResourcePoolID != "" {
+		// TODO (maksiman): assign pod to resource pool and potentially do an OS version check before that
+		log.G(ctx).WithField("resource-pool-id", opts.ResourcePoolID).Debug("setting resource pool ID")
+	}
+
 	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)
 
 	// Handle StorageQoS if set
