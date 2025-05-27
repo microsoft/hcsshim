@@ -100,7 +100,6 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 	}
 	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (_ interface{}, err error) {
 		name := convertMethodName(info.FullMethod)
-
 		var span *trace.Span
 		opts := []trace.StartOption{trace.WithSampler(o.sampler), oc.WithServerSpanKind}
 		parent, ok := getParentSpanFromContext(ctx)
