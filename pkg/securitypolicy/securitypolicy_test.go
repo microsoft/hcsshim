@@ -1206,8 +1206,11 @@ func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) 
 	// Build in all required rules, this isn't a setup method of "missing item"
 	// tests
 	for _, rule := range rules {
+
 		if rule.Required {
-			vars = append(vars, rule.Rule)
+			if rule.Strategy != EnvVarRuleRegex {
+				vars = append(vars, rule.Rule)
+			}
 			numberOfMatches--
 		}
 	}
@@ -1234,10 +1237,13 @@ func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) 
 			}
 		}
 
-		vars = append(vars, rules[anIndex].Rule)
-		usedIndexes[anIndex] = struct{}{}
-
+		// include it if it's not regex
+		if rules[anIndex].Strategy != EnvVarRuleRegex {
+			vars = append(vars, rules[anIndex].Rule)
+			usedIndexes[anIndex] = struct{}{}
+		}
 		numberOfMatches--
+
 	}
 
 	return vars
