@@ -20,7 +20,7 @@ import (
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -438,7 +438,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	//		entropyVsockPort - 1 is the entropy port,
 	//		linuxLogVsockPort - 109 used by vsockexec to log stdout/stderr logging,
 	//		0x40000000 + 1 (LinuxGcsVsockPort + 1) is the bridge (see guestconnectiuon.go)
-	hvSockets := []uint32{entropyVsockPort, linuxLogVsockPort, gcs.LinuxGcsVsockPort, gcs.LinuxGcsVsockPort + 1}
+	hvSockets := []uint32{entropyVsockPort, linuxLogVsockPort, prot.LinuxGcsVsockPort, prot.LinuxGcsVsockPort + 1}
 	hvSockets = append(hvSockets, opts.ExtraVSockPorts...)
 	for _, whichSocket := range hvSockets {
 		key := winio.VsockServiceID(whichSocket).String()
@@ -984,7 +984,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 
 	if opts.UseGuestConnection {
 		log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
-		l, err := uvm.listenVsock(gcs.LinuxGcsVsockPort)
+		l, err := uvm.listenVsock(prot.LinuxGcsVsockPort)
 		if err != nil {
 			return nil, err
 		}
