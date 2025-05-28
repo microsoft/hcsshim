@@ -429,7 +429,7 @@ jobs:
       - name: Get containerd ref
         shell: powershell
         run: |
-          $v = go list -m -f '{{ .Version }}' 'github.com/containerd/containerd' 2>&1
+          $v = go list -m -f '{{ .Version }}' 'github.com/containerd/containerd/v2' 2>&1
           if ( $LASTEXITCODE ) {
             Write-Output '::error::Could not retrieve containerd version.'
             exit $LASTEXITCODE

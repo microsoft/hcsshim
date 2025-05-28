@@ -8,7 +8,7 @@ branding:
 inputs:
   go-version:
     description: The Go version to download.
-    default: oldstable
+    default: stable
   cache:
     description: Enable caching Go modules and build outputs,
     default: "true"
