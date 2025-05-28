@@ -113,7 +113,7 @@ func (e *Exec) Start() error {
 	pi := new(windows.ProcessInformation)
 
 	// Need EXTENDED_STARTUPINFO_PRESENT as we're making use of the attribute list field.
-	flags := uint32(windows.CREATE_UNICODE_ENVIRONMENT) | windows.EXTENDED_STARTUPINFO_PRESENT | e.execConfig.processFlags
+	flags := uint32(windows.CREATE_UNICODE_ENVIRONMENT) | windows.EXTENDED_STARTUPINFO_PRESENT | e.processFlags
 
 	// Allocate an attribute list that's large enough to do the operations we care about
 	// 1. Assigning to a job object at creation time
@@ -177,9 +177,9 @@ func (e *Exec) Start() error {
 
 	siEx.ProcThreadAttributeList = attrList.List()
 	siEx.Cb = uint32(unsafe.Sizeof(*siEx))
-	if e.execConfig.token != 0 {
+	if e.token != 0 {
 		err = windows.CreateProcessAsUser(
-			e.execConfig.token,
+			e.token,
 			argv0p,
 			argvp,
 			pSec,

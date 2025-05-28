@@ -565,7 +565,8 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 			if err != nil {
 				return err
 			}
-			if req.RequestType == guestrequest.RequestTypeAdd {
+			switch req.RequestType {
+			case guestrequest.RequestTypeAdd:
 				if err := h.hostMounts.AddRWDevice(mvd.MountPath, source, mvd.Encrypted); err != nil {
 					return err
 				}
@@ -574,7 +575,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 						_ = h.hostMounts.RemoveRWDevice(mvd.MountPath, source)
 					}
 				}()
-			} else if req.RequestType == guestrequest.RequestTypeRemove {
+			case guestrequest.RequestTypeRemove:
 				if err := h.hostMounts.RemoveRWDevice(mvd.MountPath, source); err != nil {
 					return err
 				}
@@ -818,7 +819,8 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 
 	properties := &prot.PropertiesV2{}
 	for _, requestedProperty := range query.PropertyTypes {
-		if requestedProperty == prot.PtProcessList {
+		switch requestedProperty {
+		case prot.PtProcessList:
 			pids, err := c.GetAllProcessPids(ctx)
 			if err != nil {
 				return nil, err
@@ -830,7 +832,7 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 				}
 				properties.ProcessList[i].ProcessID = uint32(pid)
 			}
-		} else if requestedProperty == prot.PtStatistics {
+		case prot.PtStatistics:
 			cgroupMetrics, err := c.GetStats(ctx)
 			if err != nil {
 				return nil, err

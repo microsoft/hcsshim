@@ -114,7 +114,7 @@ func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
 				}).Error("Named pipe disconnected, retrying dial")
 
 				// Close the old conn first.
-				nprw.Conn.Close()
+				nprw.Close()
 				newConn, retryErr := nprw.retryDialPipe()
 				if retryErr == nil {
 					log.G(nprw.ctx).WithField("address", nprw.pipePath).Info("Succeeded in reconnecting to named pipe")

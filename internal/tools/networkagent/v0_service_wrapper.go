@@ -62,7 +62,7 @@ func (s *v0ServiceWrapper) ConfigureNetworking(ctx context.Context, req *nodenet
 	return &nodenetsvcV0.ConfigureNetworkingResponse{}, nil
 }
 
-//nolint:stylecheck
+//nolint:staticcheck // ST1003: ALL_CAPS
 func (s *v0ServiceWrapper) GetHostLocalIpAddress(ctx context.Context, req *nodenetsvcV0.GetHostLocalIpAddressRequest) (*nodenetsvcV0.GetHostLocalIpAddressResponse, error) {
 	return &nodenetsvcV0.GetHostLocalIpAddressResponse{IpAddr: ""}, nil
 }

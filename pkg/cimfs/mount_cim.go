@@ -47,7 +47,7 @@ func Unmount(volumePath string) error {
 		volumePath += "\\"
 	}
 
-	if !(strings.HasPrefix(volumePath, "\\\\?\\Volume{") && strings.HasSuffix(volumePath, "}\\")) {
+	if !strings.HasPrefix(volumePath, "\\\\?\\Volume{") || !strings.HasSuffix(volumePath, "}\\") {
 		return errors.Errorf("volume path %s is not in the expected format", volumePath)
 	}
 

@@ -60,7 +60,7 @@ func (uvm *UtilityVM) Share(ctx context.Context, reqHostPath, reqUVMPath string,
 			return fmt.Errorf("could not open '%s' path on host: %w", reqHostPath, err)
 		}
 		var (
-			hostPath       string = reqHostPath
+			hostPath       = reqHostPath
 			restrictAccess bool
 			fileName       string
 			allowedNames   []string
