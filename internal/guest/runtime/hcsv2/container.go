@@ -251,9 +251,10 @@ func (c *Container) setExitType(signal syscall.Signal) {
 	c.etL.Lock()
 	defer c.etL.Unlock()
 
-	if signal == syscall.SIGTERM {
+	switch signal {
+	case syscall.SIGTERM:
 		c.exitType = prot.NtGracefulExit
-	} else if signal == syscall.SIGKILL {
+	case syscall.SIGKILL:
 		c.exitType = prot.NtForcedExit
 	}
 }
