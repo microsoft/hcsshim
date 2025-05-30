@@ -289,7 +289,7 @@ func (c *mergeCommand) writeLayer(
 
 		// update header (as needed)
 
-		if c.RelativePathPrefix && !(strings.HasPrefix(header.Name, `./`) || (c.OS == windowsOS && strings.HasPrefix(header.Name, `.\`))) {
+		if c.RelativePathPrefix && !strings.HasPrefix(header.Name, `./`) && (c.OS != windowsOS || !strings.HasPrefix(header.Name, `.\`)) {
 			stats.numRelPrepend++
 			entry.Trace("prepend relative path specifier to path")
 
@@ -302,7 +302,7 @@ func (c *mergeCommand) writeLayer(
 		case tar.TypeDir:
 			stats.numDir++
 
-			if c.TrailingSlash && !(strings.HasSuffix(header.Name, `/`) || (c.OS == windowsOS && strings.HasSuffix(header.Name, `\`))) {
+			if c.TrailingSlash && !strings.HasSuffix(header.Name, `/`) && (c.OS != windowsOS || !strings.HasSuffix(header.Name, `\`)) {
 				stats.numTrailing++
 				entry.Trace("append trailing slash to directory name")
 
@@ -343,7 +343,7 @@ func (c *mergeCommand) writeLayer(
 
 		// mark file as handled. non-directory implicitly tombstones
 		// any entries with a matching (or child) name
-		fileMap[name] = tombstone || !(header.Typeflag == tar.TypeDir)
+		fileMap[name] = tombstone || header.Typeflag != tar.TypeDir
 		if !tombstone {
 			if err := tw.WriteHeader(header); err != nil {
 				return fmt.Errorf("write %q header: %w", header.Name, err)
@@ -371,10 +371,7 @@ func (c *mergeCommand) normalize(p string) string {
 // based off of:
 //   - https://github.com/google/go-containerregistry/blob/a07d1cab8700a9875699d2e7052f47acec30399d/pkg/v1/mutate/mutate.go#L264
 func inWhiteoutDir(fileMap map[string]bool, file string) bool {
-	for {
-		if file == "" {
-			break
-		}
+	for file != "" {
 		dirname := path.Dir(file)
 		if file == dirname {
 			break

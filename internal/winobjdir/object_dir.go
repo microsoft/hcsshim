@@ -71,10 +71,8 @@ func EnumerateNTObjectDirectory(ntObjDirPath string) ([]string, error) {
 		}
 		dirInfo := (*winapi.ObjectDirectoryInformation)(unsafe.Pointer(&buffer[0]))
 		index := 1
-		for {
-			if dirInfo == nil || dirInfo.Name.Length == 0 {
-				break
-			}
+		for dirInfo != nil && dirInfo.Name.Length != 0 {
+
 			result = append(result, dirInfo.Name.String())
 			size := unsafe.Sizeof(winapi.ObjectDirectoryInformation{}) * uintptr(index)
 			dirInfo = (*winapi.ObjectDirectoryInformation)(unsafe.Pointer(&buffer[size]))

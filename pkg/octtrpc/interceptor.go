@@ -34,7 +34,7 @@ const metadataTraceContextKey = "octtrpc.tracecontext"
 
 func convertMethodName(name string) string {
 	name = strings.TrimPrefix(name, "/")
-	name = strings.Replace(name, "/", ".", -1)
+	name = strings.ReplaceAll(name, "/", ".")
 	return name
 }
 

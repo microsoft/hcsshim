@@ -50,7 +50,7 @@ func generateMAC() (string, error) {
 	buf[0] = 0
 	mac := net.HardwareAddr(buf)
 	macString := strings.ToUpper(mac.String())
-	macString = strings.Replace(macString, ":", "-", -1)
+	macString = strings.ReplaceAll(macString, ":", "-")
 
 	return macString, nil
 }
@@ -307,7 +307,8 @@ func (s *service) ConfigureContainerNetworking(ctx context.Context, req *nodenet
 	// for testing purposes, make endpoints here
 	log.G(ctx).WithField("req", req).Info("ConfigureContainerNetworking request")
 
-	if req.RequestType == nodenetsvc.RequestType_Setup {
+	switch req.RequestType {
+	case nodenetsvc.RequestType_Setup:
 		interfaces := []*nodenetsvc.ContainerNetworkInterface{}
 		if s.conf.NetworkingSettings != nil && s.conf.NetworkingSettings.HNSSettings != nil {
 			result, err := s.configureHCNNetworkingHelper(ctx, req)
@@ -326,7 +327,7 @@ func (s *service) ConfigureContainerNetworking(ctx context.Context, req *nodenet
 		return &nodenetsvc.ConfigureContainerNetworkingResponse{
 			Interfaces: interfaces,
 		}, nil
-	} else if req.RequestType == nodenetsvc.RequestType_Teardown {
+	case nodenetsvc.RequestType_Teardown:
 		return s.teardownConfigureContainerNetworking(ctx, req)
 	}
 	return nil, fmt.Errorf("invalid request type %v", req.RequestType)
@@ -448,7 +449,7 @@ func (s *service) ConfigureNetworking(ctx context.Context, req *nodenetsvc.Confi
 	return s.teardownHelper(ctx, req, containerNamespaceID)
 }
 
-//nolint:stylecheck
+//nolint:staticcheck // ST1003: ALL_CAPS
 func (s *service) GetHostLocalIpAddress(ctx context.Context, req *nodenetsvc.GetHostLocalIpAddressRequest) (*nodenetsvc.GetHostLocalIpAddressResponse, error) {
 	return &nodenetsvc.GetHostLocalIpAddressResponse{IpAddr: ""}, nil
 }

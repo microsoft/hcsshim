@@ -115,7 +115,7 @@ func (mm *mountManager) trackMount(controller, lun uint, path string, c *mountCo
 	mm.m.Lock()
 	defer mm.m.Unlock()
 
-	var freeIndex int = -1
+	var freeIndex = -1
 	for i, mount := range mm.mounts {
 		if mount == nil {
 			if freeIndex == -1 {

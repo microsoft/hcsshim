@@ -132,7 +132,7 @@ func getLayers(imageName string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to find layers for %s", imageName)
 	}
-	imagePath := strings.Replace(strings.TrimSpace(string(out)), `"`, ``, -1)
+	imagePath := strings.ReplaceAll(strings.TrimSpace(string(out)), `"`, ``)
 	layers, err := getLayerChain(imagePath)
 	if err != nil {
 		return nil, err

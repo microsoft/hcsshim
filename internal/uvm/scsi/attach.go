@@ -120,8 +120,8 @@ func (am *attachManager) trackAttachment(c *attachConfig) (*attachment, bool, er
 	defer am.m.Unlock()
 
 	var (
-		freeController int = -1
-		freeLUN        int = -1
+		freeController = -1
+		freeLUN        = -1
 	)
 	for controller := range am.slots {
 		for lun := range am.slots[controller] {
