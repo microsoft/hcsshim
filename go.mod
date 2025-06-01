@@ -20,7 +20,7 @@ require (
 	github.com/containerd/typeurl/v2 v2.2.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-containerregistry v0.20.1
-	github.com/josephspurrier/goversioninfo v1.4.0
+	github.com/josephspurrier/goversioninfo v1.5.0
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/moby/sys/user v0.3.0
