@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -136,6 +136,41 @@ func padBytes(i int) []byte {
 	return make([]byte, i)
 }
 
+// NewFileVersion parses semver version string into a FileVersion object
+func NewFileVersion(version string) (FileVersion, error) {
+	re := regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?`)
+
+	comps := re.FindStringSubmatch(version)
+	if len(comps) == 0 {
+		return FileVersion{}, fmt.Errorf("version expected to start from x.y.z")
+	}
+
+	// First match group is a whole matched string.
+	comps = comps[1:]
+	if comps[3] == "" {
+		comps = comps[:3]
+	}
+
+	nums := make([]int, len(comps))
+	for i := range nums {
+		n, err := strconv.Atoi(comps[i])
+		if err != nil {
+			return FileVersion{}, fmt.Errorf("%s: %s", comps[i], err)
+		}
+		nums[i] = n
+	}
+
+	res := FileVersion{
+		Major: nums[0],
+		Minor: nums[1],
+		Patch: nums[2],
+	}
+	if len(nums) == 4 {
+		res.Build = nums[3]
+	}
+	return res, nil
+}
+
 func (f FileVersion) getVersionHighString() string {
 	return fmt.Sprintf("%04x%04x", f.Major, f.Minor)
 }
@@ -182,13 +217,11 @@ func (vi *VersionInfo) Walk() {
 // arch must be an architecture string accepted by coff.Arch, like "386" or "amd64"
 func (vi *VersionInfo) WriteSyso(filename string, arch string) error {
 
-	// Channel for generating IDs
-	newID := make(chan uint16)
-	go func() {
-		for i := uint16(1); ; i++ {
-			newID <- i
-		}
-	}()
+	var i uint16
+	newID := func() uint16 {
+		i++
+		return i
+	}
 
 	// Create a new RSRC section
 	rsrc := coff.NewRSRC()
@@ -211,7 +244,7 @@ func (vi *VersionInfo) WriteSyso(filename string, arch string) error {
 		}
 		defer manifest.Close()
 
-		id := <-newID
+		id := newID()
 		rsrc.AddResource(rtManifest, id, manifest)
 	}
 
@@ -230,7 +263,7 @@ func (vi *VersionInfo) WriteSyso(filename string, arch string) error {
 
 // WriteHex creates a hex file for debugging version info
 func (vi *VersionInfo) WriteHex(filename string) error {
-	return ioutil.WriteFile(filename, vi.Buffer.Bytes(), 0655)
+	return os.WriteFile(filename, vi.Buffer.Bytes(), 0655)
 }
 
 // WriteGo creates a Go file that contains the version info so you can access
