@@ -9,15 +9,15 @@ import (
 	"fmt"
 	"strings"
 
-	gqlast "github.com/open-policy-agent/opa/internal/gqlparser/ast"
-	gqlparser "github.com/open-policy-agent/opa/internal/gqlparser/parser"
-	gqlvalidator "github.com/open-policy-agent/opa/internal/gqlparser/validator"
+	gqlast "github.com/vektah/gqlparser/v2/ast"
+	gqlparser "github.com/vektah/gqlparser/v2/parser"
+	gqlvalidator "github.com/vektah/gqlparser/v2/validator"
 
 	// Side-effecting import. Triggers GraphQL library's validation rule init() functions.
-	_ "github.com/open-policy-agent/opa/internal/gqlparser/validator/rules"
+	_ "github.com/vektah/gqlparser/v2/validator/rules"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/topdown/builtins"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/topdown/builtins"
 )
 
 // Parses a GraphQL schema, and returns the GraphQL AST for the schema.
@@ -100,7 +100,7 @@ func convertSchema(schemaDoc *gqlast.SchemaDocument) (*gqlast.Schema, error) {
 
 // Converts an ast.Object into a gqlast.QueryDocument object.
 func objectToQueryDocument(value ast.Object) (*gqlast.QueryDocument, error) {
-	// Convert ast.Term to interface{} for JSON encoding below.
+	// Convert ast.Term to any for JSON encoding below.
 	asJSON, err := ast.JSON(value)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func objectToQueryDocument(value ast.Object) (*gqlast.QueryDocument, error) {
 
 // Converts an ast.Object into a gqlast.SchemaDocument object.
 func objectToSchemaDocument(value ast.Object) (*gqlast.SchemaDocument, error) {
-	// Convert ast.Term to interface{} for JSON encoding below.
+	// Convert ast.Term to any for JSON encoding below.
 	asJSON, err := ast.JSON(value)
 	if err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func pruneIrrelevantGraphQLASTNodes(value ast.Value) ast.Value {
 		// Iterate over the array's elements, and do the following:
 		// - Drop any Nulls
 		// - Drop any any empty object/array value (after running the pruner)
-		for i := 0; i < x.Len(); i++ {
+		for i := range x.Len() {
 			vTerm := x.Elem(i)
 			switch v := vTerm.Value.(type) {
 			case ast.Null:
@@ -295,7 +295,7 @@ func builtinGraphQLParseAndVerify(_ BuiltinContext, operands []*ast.Term, iter f
 	var err error
 
 	unverified := ast.ArrayTerm(
-		ast.BooleanTerm(false),
+		ast.InternedBooleanTerm(false),
 		ast.NewTerm(ast.NewObject()),
 		ast.NewTerm(ast.NewObject()),
 	)
@@ -353,7 +353,7 @@ func builtinGraphQLParseAndVerify(_ BuiltinContext, operands []*ast.Term, iter f
 
 	// Construct return value.
 	verified := ast.ArrayTerm(
-		ast.BooleanTerm(true),
+		ast.InternedBooleanTerm(true),
 		ast.NewTerm(queryResult),
 		ast.NewTerm(querySchema),
 	)
@@ -421,10 +421,10 @@ func builtinGraphQLIsValid(_ BuiltinContext, operands []*ast.Term, iter func(*as
 		queryDoc, err = objectToQueryDocument(x)
 	default:
 		// Error if wrong type.
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 	if err != nil {
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 
 	switch x := operands[1].Value.(type) {
@@ -434,23 +434,23 @@ func builtinGraphQLIsValid(_ BuiltinContext, operands []*ast.Term, iter func(*as
 		schemaDoc, err = objectToSchemaDocument(x)
 	default:
 		// Error if wrong type.
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 	if err != nil {
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 
 	// Validate the query against the schema, erroring if there's an issue.
 	schema, err := convertSchema(schemaDoc)
 	if err != nil {
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 	if err := validateQuery(schema, queryDoc); err != nil {
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 
 	// If we got this far, the GraphQL query passed validation.
-	return iter(ast.BooleanTerm(true))
+	return iter(ast.InternedBooleanTerm(true))
 }
 
 func builtinGraphQLSchemaIsValid(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
@@ -464,15 +464,15 @@ func builtinGraphQLSchemaIsValid(_ BuiltinContext, operands []*ast.Term, iter fu
 		schemaDoc, err = objectToSchemaDocument(x)
 	default:
 		// Error if wrong type.
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 	if err != nil {
-		return iter(ast.BooleanTerm(false))
+		return iter(ast.InternedBooleanTerm(false))
 	}
 
 	// Validate the schema, this determines the result
 	_, err = convertSchema(schemaDoc)
-	return iter(ast.BooleanTerm(err == nil))
+	return iter(ast.InternedBooleanTerm(err == nil))
 }
 
 func init() {
