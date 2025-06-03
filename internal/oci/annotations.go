@@ -34,7 +34,7 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) error {
 
 	// expand annotations
 	var errs []error
-	for key, exps := range annotations.AnnotationExpansions {
+	for key, exps := range annotations.AnnotationExpansionMap() {
 		// check if annotation is present
 		if val, ok := s.Annotations[key]; ok {
 			// ideally, some normalization would occur here (ie, "True" -> "true")
