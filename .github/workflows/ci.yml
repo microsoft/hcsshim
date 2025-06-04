@@ -326,10 +326,8 @@ jobs:
       - name: Build and run containerd-shim-runhcs-v1 tests
         shell: powershell
         run: |
-          pwsh {
-            cd '..'
-            ${{ env.GO_BUILD_CMD }} -o ./test ./cmd/containerd-shim-runhcs-v1 2>&1
-          }
+          cd ..
+          ${{ env.GO_BUILD_CMD }} -o ./test ./cmd/containerd-shim-runhcs-v1 2>&1
           if ( $LASTEXITCODE ) {
             Write-Output '::error::Could not build containerd-shim-runhcs-v1.exe'
             exit $LASTEXITCODE
