@@ -163,14 +163,15 @@ func (x *LazyImageLayers) extractLayers(ctx context.Context) (err error) {
 
 func extractImageHandler(platform string, appendVerity bool) (extractHandler, error) {
 	var extract extractHandler
-	if platform == images.PlatformLinux {
+	switch platform {
+	case images.PlatformLinux:
 		extract = linuxExt4LayerExtractHandler()
 		if appendVerity {
 			extract = withAppendVerity(extract)
 		}
 		extract = withVHDFooter(extract)
 		return extract, nil
-	} else if platform == images.PlatformWindows {
+	case images.PlatformWindows:
 		return windowsImage, nil
 	}
 	return nil, fmt.Errorf("unsupported platform %q", platform)

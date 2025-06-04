@@ -125,11 +125,12 @@ func parseBlockCIMMount(m *types.Mount) (*wcowBlockCIMLayers, error) {
 				return nil, err
 			}
 		} else if val, ok = strings.CutPrefix(option, blockCIMTypeFlag); ok {
-			if val == "device" {
+			switch val {
+			case "device":
 				layerType = cimfs.BlockCIMTypeDevice
-			} else if val == "file" {
+			case "file":
 				layerType = cimfs.BlockCIMTypeSingleFile
-			} else {
+			default:
 				return nil, fmt.Errorf("invalid block CIM type `%s`", val)
 			}
 		} else if val, ok = strings.CutPrefix(option, mergedCIMPathFlag); ok {

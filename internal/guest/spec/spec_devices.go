@@ -85,13 +85,13 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Dev
 
 		// find corresponding entries in sysfs
 		for _, d := range hostDevices {
-			major := d.Rule.Major
-			minor := d.Rule.Minor
+			major := d.Major
+			minor := d.Minor
 
 			log.G(ctx).WithField("device", d).Infof("looking at device: %+v", d)
 
 			deviceTypeString := ""
-			switch d.Rule.Type {
+			switch d.Type {
 			case devices.BlockDevice:
 				deviceTypeString = blockType
 			case devices.CharDevice:
