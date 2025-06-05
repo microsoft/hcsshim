@@ -13,8 +13,8 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
-	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
-	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
