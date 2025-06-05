@@ -89,18 +89,28 @@ func HugePagesMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "hugepages")
 }
 
-// SandboxMountSource returns sandbox mount path inside UVM
+// SandboxMountSource returns sandbox mount path inside UVM.
 func SandboxMountSource(sandboxID, path string) string {
 	mountsDir := SandboxMountsDir(sandboxID)
 	subPath := strings.TrimPrefix(path, guestpath.SandboxMountPrefix)
 	return filepath.Join(mountsDir, subPath)
 }
 
-// HugePagesMountSource returns hugepages mount path inside UVM
+// HugePagesMountSource returns hugepages mount path inside UVM.
 func HugePagesMountSource(sandboxID, path string) string {
 	mountsDir := HugePagesMountsDir(sandboxID)
 	subPath := strings.TrimPrefix(path, guestpath.HugePagesMountPrefix)
 	return filepath.Join(mountsDir, subPath)
+}
+
+// SandboxLogsDir returns the logs directory inside the UVM for forwarding container stdio to.
+func SandboxLogsDir(sandboxID string) string {
+	return filepath.Join(SandboxRootDir(sandboxID), "logs")
+}
+
+// SandboxLogPath returns the log path inside the UVM.
+func SandboxLogPath(sandboxID, path string) string {
+	return filepath.Join(SandboxLogsDir(sandboxID), path)
 }
 
 // GetNetworkNamespaceID returns the `ToLower` of
