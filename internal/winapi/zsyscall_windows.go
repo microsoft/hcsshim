@@ -68,8 +68,11 @@ var (
 	procCimCreateMergeLink                     = modcimfs.NewProc("CimCreateMergeLink")
 	procCimDeletePath                          = modcimfs.NewProc("CimDeletePath")
 	procCimDismountImage                       = modcimfs.NewProc("CimDismountImage")
+	procCimGetVerificationInformation          = modcimfs.NewProc("CimGetVerificationInformation")
 	procCimMergeMountImage                     = modcimfs.NewProc("CimMergeMountImage")
 	procCimMountImage                          = modcimfs.NewProc("CimMountImage")
+	procCimMountVerifiedImage                  = modcimfs.NewProc("CimMountVerifiedImage")
+	procCimSealImage                           = modcimfs.NewProc("CimSealImage")
 	procCimTombstoneFile                       = modcimfs.NewProc("CimTombstoneFile")
 	procCimWriteStream                         = modcimfs.NewProc("CimWriteStream")
 	procSetJobCompartmentId                    = modiphlpapi.NewProc("SetJobCompartmentId")
@@ -491,6 +494,30 @@ func CimDismountImage(volumeID *g) (hr error) {
 	return
 }
 
+func CimGetVerificationInformation(blockCimPath string, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(blockCimPath)
+	if hr != nil {
+		return
+	}
+	return _CimGetVerificationInformation(_p0, isSealed, hashSize, signatureSize, fixedHeaderSize, hash, signature)
+}
+
+func _CimGetVerificationInformation(blockCimPath *uint16, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) {
+	hr = procCimGetVerificationInformation.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.SyscallN(procCimGetVerificationInformation.Addr(), uintptr(unsafe.Pointer(blockCimPath)), uintptr(unsafe.Pointer(isSealed)), uintptr(unsafe.Pointer(hashSize)), uintptr(unsafe.Pointer(signatureSize)), uintptr(unsafe.Pointer(fixedHeaderSize)), uintptr(unsafe.Pointer(hash)), uintptr(unsafe.Pointer(signature)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
 func CimMergeMountImage(numCimPaths uint32, backingImagePaths *CimFsImagePath, flags uint32, volumeID *g) (hr error) {
 	hr = procCimMergeMountImage.Find()
 	if hr != nil {
@@ -526,6 +553,59 @@ func _CimMountImage(imagePath *uint16, fsName *uint16, flags uint32, volumeID *g
 		return
 	}
 	r0, _, _ := syscall.SyscallN(procCimMountImage.Addr(), uintptr(unsafe.Pointer(imagePath)), uintptr(unsafe.Pointer(fsName)), uintptr(flags), uintptr(unsafe.Pointer(volumeID)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(imagePath)
+	if hr != nil {
+		return
+	}
+	var _p1 *uint16
+	_p1, hr = syscall.UTF16PtrFromString(fsName)
+	if hr != nil {
+		return
+	}
+	return _CimMountVerifiedImage(_p0, _p1, flags, volumeID, hashSize, hash)
+}
+
+func _CimMountVerifiedImage(imagePath *uint16, fsName *uint16, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) {
+	hr = procCimMountVerifiedImage.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.SyscallN(procCimMountVerifiedImage.Addr(), uintptr(unsafe.Pointer(imagePath)), uintptr(unsafe.Pointer(fsName)), uintptr(flags), uintptr(unsafe.Pointer(volumeID)), uintptr(hashSize), uintptr(unsafe.Pointer(hash)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(blockCimPath)
+	if hr != nil {
+		return
+	}
+	return _CimSealImage(_p0, hashSize, fixedHeaderSize, hash)
+}
+
+func _CimSealImage(blockCimPath *uint16, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) {
+	hr = procCimSealImage.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.SyscallN(procCimSealImage.Addr(), uintptr(unsafe.Pointer(blockCimPath)), uintptr(unsafe.Pointer(hashSize)), uintptr(unsafe.Pointer(fixedHeaderSize)), uintptr(unsafe.Pointer(hash)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
