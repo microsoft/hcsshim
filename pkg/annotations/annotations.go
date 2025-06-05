@@ -105,6 +105,12 @@ const (
 
 	// LCOWPrivileged is used to specify that the container should be run in privileged mode.
 	LCOWPrivileged = "io.microsoft.virtualmachine.lcow.privileged"
+
+	// LCOWTeeLogPath specifies a path inside the Linux uVM to write container's stdio to,
+	// in addition to the usual vsock pipe.
+	//
+	// Functionally, it is similar to `LogDirectory` and `LogPath` for CRI, but within the guest.
+	LCOWTeeLogPath = "io.microsoft.container.lcow.tee-log-path"
 )
 
 // LCOW integrity protection and confidential container annotations.
