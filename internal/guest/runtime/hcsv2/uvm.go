@@ -22,6 +22,13 @@ import (
 
 	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
+	cgroup1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
+	"github.com/mattn/go-shellwords"
+	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
+
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/guest/policy"
@@ -37,18 +44,13 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/verity"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	cgroup1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
-	"github.com/mattn/go-shellwords"
-	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
@@ -324,6 +326,17 @@ func setupSandboxHugePageMountsPath(id string) error {
 	return storage.MountRShared(mountPath)
 }
 
+func setupSandboxLogDir(id string) error {
+	mountPath := specGuest.SandboxLogsDir(id)
+	if err := mkdirAllModePerm(mountPath); err != nil {
+		return errors.Wrapf(err, "failed to create sandbox logs dir in sandbox %v", id)
+	}
+	return nil
+}
+
+// TODO: unify workload and standalone logic for non-sandbox features (e.g., block devices, huge pages, uVM mounts)
+// TODO(go1.24): use [os.Root] instead of `!strings.HasPrefix(<path>, <root>)`
+
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 	c := &Container{
@@ -383,6 +396,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			if err = setupSandboxHugePageMountsPath(id); err != nil {
 				return nil, err
 			}
+			if err = setupSandboxLogDir(id); err != nil {
+				return nil, err
+			}
 
 			if err := policy.ExtendPolicyWithNetworkingMounts(id, h.securityPolicyEnforcer, settings.OCISpecification); err != nil {
 				return nil, err
@@ -434,6 +450,17 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
+	// don't specialize tee logs (both files and mounts) just for workload containers
+	// add log directory mount before enforcing (mount) policy
+	if logDirMount := settings.OCISpecification.Annotations[annotations.LCOWTeeLogDirMount]; logDirMount != "" {
+		settings.OCISpecification.Mounts = append(settings.OCISpecification.Mounts, specs.Mount{
+			Destination: logDirMount,
+			Type:        "bind",
+			Source:      specGuest.SandboxLogsDir(sandboxID),
+			Options:     []string{"bind"},
+		})
+	}
+
 	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(settings.OCISpecification.Process, settings.OCISpecification.Root.Path)
 	if err != nil {
 		return nil, err
@@ -468,6 +495,31 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		// stdio access isn't allow for this container. Switch to the /dev/null
 		// transport that will eat all input/ouput.
 		c.vsock = h.devNullTransport
+	}
+
+	if logPath := settings.OCISpecification.Annotations[annotations.LCOWTeeLogPath]; logPath != "" {
+		if !allowStdio {
+			return nil, errors.Errorf("teeing container stdio to log path %q denied due to policy not allowing stdio access", logPath)
+		}
+
+		logPath = specGuest.SandboxLogPath(sandboxID, logPath)
+		// verify the logpath is still under the correct directory
+		if !strings.HasPrefix(logPath, specGuest.SandboxLogsDir(sandboxID)) {
+			return nil, errors.Errorf("log path %v is not within sandbox's log dir", logPath)
+		}
+
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.Path:        logPath,
+			logfields.ContainerID: id,
+		}).Debug("creating container log file in uVM")
+		dir := filepath.Dir(logPath)
+		if err := mkdirAllModePerm(dir); err != nil {
+			return nil, errors.Wrapf(err, "failed to create log file parent directory: %s", dir)
+		}
+		// don't use [os.Create] since that truncates an existing file, which is not desired
+		if c.logFile, err = os.OpenFile(logPath, os.O_RDWR|os.O_CREATE, 0666); err != nil {
+			return nil, errors.Wrapf(err, "failed to create log file: %s", logPath)
+		}
 	}
 
 	if envToKeep != nil {
