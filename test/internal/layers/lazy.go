@@ -110,7 +110,7 @@ func (x *LazyImageLayers) extractLayers(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		x.dir, err = os.MkdirTemp(dir, util.CleanName(x.Image))
+		x.dir, err = os.MkdirTemp(dir, util.CleanString(x.Image))
 		if err != nil {
 			return fmt.Errorf("failed to create temp directory: %w", err)
 		}

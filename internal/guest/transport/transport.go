@@ -5,6 +5,10 @@ import (
 	"os"
 )
 
+// TODO: specialized [Transport] and [Connection] for [io.Reader]/[io.Writer] instead of both,
+// so either stdin or stdout/stderr can be specialized without affecting the other.
+// i.e., don't use [multiWriter] for stdin.
+
 // Transport is the interface defining a method of transporting data in a
 // connection-like way.
 // Examples of a Transport implementation could be:
