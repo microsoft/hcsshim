@@ -32,6 +32,8 @@ type CimFsWriter struct {
 	activeStream winapi.StreamHandle
 	// amount of bytes that can be written to the activeStream.
 	activeLeft uint64
+	// if true the CIM will be sealed after the writer is closed.
+	sealOnClose bool
 }
 
 // Create creates a new cim image. The CimFsWriter returned can then be used to do
@@ -95,7 +97,43 @@ func CreateBlockCIM(blockPath, name string, blockType BlockCIMType) (_ *CimFsWri
 	if err := winapi.CimCreateImage2(blockPath, createFlags, nil, newNameUTF16, &handle); err != nil {
 		return nil, fmt.Errorf("failed to create block CIM at path %s,%s: %w", blockPath, name, err)
 	}
-	return &CimFsWriter{handle: handle, name: name}, nil
+	return &CimFsWriter{handle: handle, name: filepath.Join(blockPath, name)}, nil
+}
+
+// Create creates a new verified block CIM and opens it for writing. The CimFsWriter
+// returned can then be used to add/remove files to/from this CIM.  When the writer is
+// closed, the CIM will be sealed and can not be modified anymore.
+func CreateVerifiedBlockCIM(blockPath, name string, blockType BlockCIMType) (_ *CimFsWriter, err error) {
+	if !IsVerifiedCimSupported() {
+		return nil, fmt.Errorf("verified CIMs are not supported on this OS version")
+	}
+	if blockPath == "" || name == "" {
+		return nil, fmt.Errorf("both blockPath & name must be non empty: %w", os.ErrInvalid)
+	}
+
+	// When creating block CIMs we always want them to be consistent CIMs i.e a CIMs
+	// created from the same layer tar will always be identical.
+	createFlags := CimCreateFlagConsistentCim | CimCreateFlagVerifiedCim
+	switch blockType {
+	case BlockCIMTypeDevice:
+		createFlags |= CimCreateFlagBlockDeviceCim
+	case BlockCIMTypeSingleFile:
+		createFlags |= CimCreateFlagSingleFileCim
+	default:
+		return nil, fmt.Errorf("invalid block CIM type `%d`: %w", blockType, os.ErrInvalid)
+	}
+
+	var newNameUTF16 *uint16
+	newNameUTF16, err = windows.UTF16PtrFromString(name)
+	if err != nil {
+		return nil, err
+	}
+
+	var handle winapi.FsHandle
+	if err := winapi.CimCreateImage2(blockPath, createFlags, nil, newNameUTF16, &handle); err != nil {
+		return nil, fmt.Errorf("failed to create block CIM at path %s,%s: %w", blockPath, name, err)
+	}
+	return &CimFsWriter{handle: handle, name: filepath.Join(blockPath, name), sealOnClose: true}, nil
 }
 
 // CreateAlternateStream creates alternate stream of given size at the given path inside the cim. This will
@@ -268,7 +306,15 @@ func (c *CimFsWriter) Close() (err error) {
 	}
 	err = winapi.CimCloseImage(c.handle)
 	c.handle = 0
-	return err
+	if err != nil {
+		return &OpError{Cim: c.name, Op: "close", Err: err}
+	}
+	if c.sealOnClose {
+		if err = sealBlockCIM(filepath.Dir(c.name)); err != nil {
+			return &OpError{Cim: c.name, Op: "seal", Err: err}
+		}
+	}
+	return nil
 }
 
 // DestroyCim finds out the region files, object files of this cim and then delete the
@@ -394,4 +440,37 @@ func MergeBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM) (err error) {
 		}
 	}
 	return nil
+}
+
+// sealBlockCIM seals a blockCIM at the given path so that no further modifications are allowed on it. This also writes a
+// root hash in the block header so that in future any reads happening on the CIM can be easily verified against this root hash
+// to detect tampering.
+func sealBlockCIM(blockPath string) error {
+	var hashSize, fixedHeaderSize uint64
+	hashBuf := make([]byte, cimHashSize)
+	if err := winapi.CimSealImage(blockPath, &hashSize, &fixedHeaderSize, &hashBuf[0]); err != nil {
+		return fmt.Errorf("failed to seal block CIM: %w", err)
+	} else if hashSize != cimHashSize {
+		return fmt.Errorf("unexpected cim hash size %d", hashSize)
+	}
+	return nil
+}
+
+// getDigest returns the digest of a sealed CIM.
+func getVerificationInfo(blockPath string) ([]byte, error) {
+	var (
+		isSealed        uint32
+		hashSize        uint64
+		signatureSize   uint64
+		fixedHeaderSize uint64
+		hash            = make([]byte, cimHashSize)
+	)
+	if err := winapi.CimGetVerificationInformation(blockPath, &isSealed, &hashSize, &signatureSize, &fixedHeaderSize, &hash[0], nil); err != nil {
+		return nil, fmt.Errorf("failed to get verification info from the CIM: %w", err)
+	} else if hashSize != cimHashSize {
+		return nil, fmt.Errorf("unexpected cim hash size %d", hashSize)
+	} else if isSealed == 0 {
+		return nil, fmt.Errorf("cim is not sealed")
+	}
+	return hash, nil
 }
