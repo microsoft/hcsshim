@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/containerd/containerd/protobuf"
 	typeurl "github.com/containerd/typeurl/v2"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -14,11 +13,22 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type testUtilityVM struct{}
 
 var _ agentComputeSystem = &testUtilityVM{}
+
+func typeURLToAnyPb(any typeurl.Any) *anypb.Any {
+	if any == nil {
+		return nil
+	}
+	return &anypb.Any{
+		TypeUrl: any.GetTypeUrl(),
+		Value:   any.GetValue(),
+	}
+}
 
 func (t *testUtilityVM) AddEndpointToNSWithID(ctx context.Context, nsID, nicID string, endpoint *hns.HNSEndpoint) error {
 	return nil
@@ -108,7 +118,7 @@ func TestAddNIC(t *testing.T) {
 			}
 			req := &computeagent.AddNICInternalRequest{
 				NicID:    test.nicID,
-				Endpoint: protobuf.FromAny(anyEndpoint),
+				Endpoint: typeURLToAnyPb(anyEndpoint),
 			}
 
 			_, err = agent.AddNIC(ctx, req)
@@ -197,7 +207,7 @@ func TestModifyNIC(t *testing.T) {
 			}
 			req := &computeagent.ModifyNICInternalRequest{
 				NicID:             test.nicID,
-				Endpoint:          protobuf.FromAny(anyEndpoint),
+				Endpoint:          typeURLToAnyPb(anyEndpoint),
 				IovPolicySettings: test.iovSettings,
 			}
 
@@ -271,7 +281,7 @@ func TestDeleteNIC(t *testing.T) {
 			}
 			req := &computeagent.DeleteNICInternalRequest{
 				NicID:    test.nicID,
-				Endpoint: protobuf.FromAny(anyEndpoint),
+				Endpoint: typeURLToAnyPb(anyEndpoint),
 			}
 
 			_, err = agent.DeleteNIC(ctx, req)
