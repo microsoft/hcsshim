@@ -5,6 +5,7 @@ package cimfs
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -50,6 +51,14 @@ type testBlockCIM struct {
 }
 
 func (t *testBlockCIM) cimPath() string {
+	return filepath.Join(t.BlockPath, t.CimName)
+}
+
+type testVerifiedBlockCIM struct {
+	BlockCIM
+}
+
+func (t *testVerifiedBlockCIM) cimPath() string {
 	return filepath.Join(t.BlockPath, t.CimName)
 }
 
@@ -99,6 +108,8 @@ func openNewCIM(t *testing.T, newCIM testCIM) *CimFsWriter {
 		writer, err = Create(val.imageDir, val.parentName, val.imageName)
 	case *testBlockCIM:
 		writer, err = CreateBlockCIM(val.BlockPath, val.CimName, val.Type)
+	case *testVerifiedBlockCIM:
+		writer, err = CreateBlockCIMWithOptions(context.Background(), &val.BlockCIM, WithDataIntegrity())
 	}
 	if err != nil {
 		t.Fatalf("failed while creating a cim: %s", err)
@@ -665,4 +676,76 @@ func TestMergedLinksInMergedBlockCIMs(rootT *testing.T) {
 	if !bytes.Equal(data, testContents[0].fileContents) {
 		rootT.Logf("file contents don't match!")
 	}
+}
+
+func TestVerifiedSingleFileBlockCIM(t *testing.T) {
+	if !IsVerifiedCimSupported() {
+		t.Skipf("verified CIMs are not supported")
+	}
+
+	// contents to write to the CIM
+	testContents := []tuple{
+		{"foo.txt", []byte("foo1"), false},
+		{"bar.txt", []byte("bar"), false},
+	}
+
+	root := t.TempDir()
+	blockPath := filepath.Join(root, "layer.bcim")
+	tc := &testVerifiedBlockCIM{
+		BlockCIM: BlockCIM{
+			Type:      BlockCIMTypeSingleFile,
+			BlockPath: blockPath,
+			CimName:   "layer.cim",
+		}}
+	writer := openNewCIM(t, tc)
+	writeCIM(t, writer, testContents)
+
+	mountvol := mountCIM(t, tc, CimMountVerifiedCim|CimMountSingleFileCim)
+
+	compareContent(t, mountvol, testContents)
+}
+
+func TestVerifiedSingleFileBlockCIMMount(t *testing.T) {
+	if !IsVerifiedCimSupported() {
+		t.Skipf("verified CIMs are not supported")
+	}
+
+	// contents to write to the CIM
+	testContents := []tuple{
+		{"foo.txt", []byte("foo1"), false},
+		{"bar.txt", []byte("bar"), false},
+	}
+
+	root := t.TempDir()
+	blockPath := filepath.Join(root, "layer.bcim")
+	tc := &testVerifiedBlockCIM{
+		BlockCIM: BlockCIM{
+			Type:      BlockCIMTypeSingleFile,
+			BlockPath: blockPath,
+			CimName:   "layer.cim",
+		}}
+	writer := openNewCIM(t, tc)
+	writeCIM(t, writer, testContents)
+
+	rootHash, err := getVerificationInfo(blockPath)
+	if err != nil {
+		t.Fatalf("failed to get verification info: %s", err)
+	}
+
+	// mount and read the contents of the cim
+	volumeGUID, err := guid.NewV4()
+	if err != nil {
+		t.Fatalf("generate cim mount GUID: %s", err)
+	}
+
+	mountvol, err := MountVerifiedBlockCIM(&tc.BlockCIM, CimMountSingleFileCim, volumeGUID, rootHash)
+	if err != nil {
+		t.Fatalf("mount verified cim : %s", err)
+	}
+	t.Cleanup(func() {
+		if err := Unmount(mountvol); err != nil {
+			t.Logf("CIM unmount failed: %s", err)
+		}
+	})
+	compareContent(t, mountvol, testContents)
 }
