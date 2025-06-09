@@ -26,11 +26,9 @@ type BlockCIMLayerWriter struct {
 
 var _ CIMLayerWriter = &BlockCIMLayerWriter{}
 
-// NewBlockCIMLayerWriter writes the layer files in the block CIM format.
-func NewBlockCIMLayerWriter(ctx context.Context, layer *cimfs.BlockCIM, parentLayers []*cimfs.BlockCIM) (_ *BlockCIMLayerWriter, err error) {
-	if !cimfs.IsBlockCimSupported() {
-		return nil, fmt.Errorf("BlockCIM not supported on this build")
-	} else if layer.Type != cimfs.BlockCIMTypeSingleFile {
+// newBlockCIMLayerWriter writes the layer files in the block CIM format.
+func NewBlockCIMLayerWriterWithOpts(ctx context.Context, layer *cimfs.BlockCIM, parentLayers []*cimfs.BlockCIM, opts ...cimfs.BlockCIMOpt) (_ *BlockCIMLayerWriter, err error) {
+	if layer.Type != cimfs.BlockCIMTypeSingleFile {
 		// we only support writing single file CIMs for now because in layer
 		// writing process we still need to write some files (registry hives)
 		// outside the CIM. We currently use the parent directory of the CIM (i.e
@@ -50,7 +48,10 @@ func NewBlockCIMLayerWriter(ctx context.Context, layer *cimfs.BlockCIM, parentLa
 		parentLayerPaths = append(parentLayerPaths, filepath.Dir(pl.BlockPath))
 	}
 
-	cim, err := cimfs.CreateBlockCIM(layer.BlockPath, layer.CimName, layer.Type)
+	// We always want to write layers with consistent flag
+	bcimOpts := append([]cimfs.BlockCIMOpt{cimfs.WithConsistentCIM()}, opts...)
+
+	cim, err := cimfs.CreateBlockCIMWithOptions(ctx, layer, bcimOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error in creating a new cim: %w", err)
 	}
@@ -84,6 +85,11 @@ func NewBlockCIMLayerWriter(ctx context.Context, layer *cimfs.BlockCIM, parentLa
 			parentLayerPaths: parentLayerPaths,
 		},
 	}, nil
+}
+
+// NewBlockCIMLayerWriter writes the layer files in the block CIM format.
+func NewBlockCIMLayerWriter(ctx context.Context, layer *cimfs.BlockCIM, parentLayers []*cimfs.BlockCIM) (_ *BlockCIMLayerWriter, err error) {
+	return NewBlockCIMLayerWriterWithOpts(ctx, layer, parentLayers)
 }
 
 // Add adds a file to the layer with given metadata.
