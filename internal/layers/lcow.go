@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/go-winio/pkg/fs"
 	"github.com/containerd/containerd/api/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -77,7 +78,13 @@ func (lc *lcowLayersCloser) Release(ctx context.Context) (retErr error) {
 // Returns the path at which the `rootfs` of the container can be accessed. Also, returns the path inside the
 // UVM at which container scratch directory is located. Usually, this path is the path at which the container
 // scratch VHD is mounted. However, in case of scratch sharing this is a directory under the UVM scratch.
-func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers, guestRoot string, vm *uvm.UtilityVM) (_, _ string, _ resources.ResourceCloser, err error) {
+func MountLCOWLayers(
+	ctx context.Context,
+	containerID string,
+	layers *LCOWLayers,
+	guestRoot string,
+	vm *uvm.UtilityVM,
+) (_, _ string, _ resources.ResourceCloser, err error) {
 	if vm == nil {
 		return "", "", nil, errors.New("MountLCOWLayers cannot be called for process-isolated containers")
 	}
@@ -114,7 +121,13 @@ func MountLCOWLayers(ctx context.Context, containerID string, layers *LCOWLayers
 	}
 
 	hostPath := layers.ScratchVHDPath
-	hostPath, err = filepath.EvalSymlinks(hostPath)
+	// For LCOW, we can reuse another container's scratch space (usually the sandbox container's).
+	//
+	// When sharing a scratch space, the `hostPath` will be a symlink to the sandbox.vhdx location to use.
+	// When not sharing a scratch space, `hostPath` will be the path to the sandbox.vhdx to use.
+	//
+	// Evaluate the symlink here (if there is one).
+	hostPath, err = fs.ResolvePath(hostPath)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to eval symlinks on scratch path: %w", err)
 	}
