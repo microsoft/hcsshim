@@ -2,6 +2,11 @@
 
 package tools
 
+// TODO(go1.24): use tools directive in go.mod
+// See:
+//  - https://github.com/golang/go/issues/48429
+//  - https://go.googlesource.com/proposal/+/54d6775ff71ccbc00c276db2a4e4841d67011cf4/design/48429-go-tool-modules.md
+
 import (
 	// protobuf/gRPC/ttrpc generation
 	_ "github.com/containerd/protobuild"

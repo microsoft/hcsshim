@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
@@ -28,9 +29,21 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
+type ConfidentialWCOWOptions struct {
+	GuestStateFilePath    string // The vmgs file path
+	SecurityPolicyEnabled bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicy        string // Optional security policy
+
+	/* Below options are only included for testing/debugging purposes - shouldn't be used in regular scenarios */
+	IsolationType      string
+	DisableSecureBoot  bool
+	FirmwareParameters string
+}
+
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
 type OptionsWCOW struct {
 	*Options
+	*ConfidentialWCOWOptions
 
 	BootFiles *WCOWBootFiles
 
@@ -44,6 +57,15 @@ type OptionsWCOW struct {
 	AdditionalRegistryKeys []hcsschema.RegistryValue
 }
 
+// WindowsSidecarGcsHvsockServiceID is the hvsock service ID that the Windows GCS
+// sidecar will connect to. This is only used in the confidential mode.
+var windowsSidecarGcsHvsockServiceID = guid.GUID{
+	Data1: 0xae8da506,
+	Data2: 0xa019,
+	Data3: 0x4553,
+	Data4: [8]uint8{0xa5, 0x2b, 0x90, 0x2b, 0xc0, 0xfa, 0x04, 0x11},
+}
+
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
 // WCOW. The caller `MUST` set the `BootFiles` on the returned value.
 //
@@ -53,18 +75,27 @@ type OptionsWCOW struct {
 // executable files name.
 func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 	return &OptionsWCOW{
-		Options:                newDefaultOptions(id, owner),
-		AdditionalRegistryKeys: []hcsschema.RegistryValue{},
+		Options:                 newDefaultOptions(id, owner),
+		AdditionalRegistryKeys:  []hcsschema.RegistryValue{},
+		ConfidentialWCOWOptions: &ConfidentialWCOWOptions{},
 	}
 }
 
-func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
-	log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
+// startExternalGcsListener connects to the GCS service running inside the
+// UVM. gcsServiceID can either be the service ID of the default GCS that is present in
+// all UtilityVMs or it can be the service ID of the sidecar GCS that is used mostly in
+// confidential mode.
+func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context, gcsServiceID guid.GUID) error {
+	log.G(ctx).WithFields(logrus.Fields{
+		"vmID":         uvm.runtimeID,
+		"gcsServiceID": gcsServiceID.String(),
+	}).Debug("Using external GCS bridge")
 
 	l, err := winio.ListenHvsock(&winio.HvsockAddr{
 		VMID:      uvm.runtimeID,
-		ServiceID: gcs.WindowsGcsHvsockServiceID,
+		ServiceID: gcsServiceID,
 	})
+
 	if err != nil {
 		return err
 	}
@@ -72,7 +103,7 @@ func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
 	return nil
 }
 
-func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*hcsschema.ComputeSystem, error) {
+func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*hcsschema.ComputeSystem, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %w", err)
@@ -84,20 +115,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
-
-	// UVM rootfs share is readonly.
-	vsmbOpts := uvm.DefaultVSMBOptions(true)
-	vsmbOpts.TakeBackupPrivilege = true
-	virtualSMB := &hcsschema.VirtualSmb{
-		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
-		Shares: []hcsschema.VirtualSmbShare{
-			{
-				Name:    "os",
-				Path:    opts.BootFiles.OSFilesPath,
-				Options: vsmbOpts,
-			},
-		},
-	}
 
 	var registryChanges hcsschema.RegistryChanges
 	// We're getting asked to setup local dump collection for WCOW. We need to:
@@ -188,15 +205,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 		SchemaVersion:                     schemaversion.SchemaV21(),
 		ShouldTerminateOnLastHandleClosed: true,
 		VirtualMachine: &hcsschema.VirtualMachine{
-			StopOnReset: true,
-			Chipset: &hcsschema.Chipset{
-				Uefi: &hcsschema.Uefi{
-					BootThis: &hcsschema.UefiBootEntry{
-						DevicePath: filepath.Join(opts.BootFiles.OSRelativeBootDirPath, "bootmgfw.efi"),
-						DeviceType: "VmbFs",
-					},
-				},
-			},
+			StopOnReset:     true,
 			RegistryChanges: &registryChanges,
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.VirtualMachineMemory{
@@ -221,7 +230,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 						ServiceTable:                  make(map[string]hcsschema.HvSocketServiceConfig),
 					},
 				},
-				VirtualSmb: virtualSMB,
 			},
 		},
 	}
@@ -242,7 +250,21 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 		}
 	}
 
-	// Set boot options
+	if opts.ConsolePipe != "" {
+		doc.VirtualMachine.Devices.ComPorts = map[string]hcsschema.ComPort{
+			"0": {
+				NamedPipe: opts.ConsolePipe,
+			},
+		}
+	}
+
+	if opts.EnableGraphicsConsole {
+		doc.VirtualMachine.Devices.Keyboard = &hcsschema.Keyboard{}
+		doc.VirtualMachine.Devices.EnhancedModeVideo = &hcsschema.EnhancedModeVideo{}
+		doc.VirtualMachine.Devices.VideoMonitor = &hcsschema.VideoMonitor{}
+	}
+
+	// Set crash dump options
 	if opts.DumpDirectoryPath != "" {
 		if info, err := os.Stat(opts.DumpDirectoryPath); err != nil {
 			return nil, fmt.Errorf("failed to stat dump directory %s: %w", opts.DumpDirectoryPath, err)
@@ -252,12 +274,167 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 		if err := security.GrantVmGroupAccessWithMask(opts.DumpDirectoryPath, security.AccessMaskAll); err != nil {
 			return nil, fmt.Errorf("failed to add SDL to dump directory: %w", err)
 		}
-		debugOpts := &hcsschema.DebugOptions{
+		doc.VirtualMachine.DebugOptions = &hcsschema.DebugOptions{
 			BugcheckSavedStateFileName:            filepath.Join(opts.DumpDirectoryPath, fmt.Sprintf("%s-savedstate.vmrs", uvm.id)),
 			BugcheckNoCrashdumpSavedStateFileName: filepath.Join(opts.DumpDirectoryPath, fmt.Sprintf("%s-savedstate_nocrashdump.vmrs", uvm.id)),
 		}
-		doc.VirtualMachine.DebugOptions = debugOpts
+
+		doc.VirtualMachine.Devices.GuestCrashReporting = &hcsschema.GuestCrashReporting{
+			WindowsCrashSettings: &hcsschema.WindowsCrashReporting{
+				DumpFileName: filepath.Join(opts.DumpDirectoryPath, fmt.Sprintf("%s-windows-crash", uvm.id)),
+				DumpType:     "Full",
+			},
+		}
 	}
+
+	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+	for i := 0; i < int(uvm.scsiControllerCount); i++ {
+		doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
+			Attachments: make(map[string]hcsschema.Attachment),
+		}
+	}
+
+	return doc, nil
+}
+
+func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*hcsschema.ComputeSystem, error) {
+	if opts.BootFiles.BootType != BlockCIMBoot {
+		return nil, fmt.Errorf("expected BlockCIM boot type, found: %d", opts.BootFiles.BootType)
+	}
+
+	doc, err := prepareCommonConfigDoc(ctx, uvm, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.DisableSecureBoot {
+		doc.VirtualMachine.Chipset = &hcsschema.Chipset{
+			Uefi: &hcsschema.Uefi{
+				BootThis:                nil,
+				ApplySecureBootTemplate: "Skip",
+			},
+		}
+	} else {
+		doc.VirtualMachine.Chipset = &hcsschema.Chipset{
+			Uefi: &hcsschema.Uefi{
+				BootThis:                nil,
+				ApplySecureBootTemplate: "Apply",
+				SecureBootTemplateId:    "1734c6e8-3154-4dda-ba5f-a874cc483422", // aka MicrosoftWindowsSecureBootTemplateGUID equivalent to "Microsoft Windows" template from Get-VMHost | select SecureBootTemplates,
+			},
+		}
+	}
+
+	enableHCL := true
+	doc.VirtualMachine.SecuritySettings = &hcsschema.SecuritySettings{
+		EnableTpm: false,
+		Isolation: &hcsschema.IsolationSettings{
+			IsolationType: "SecureNestedPaging",
+			HclEnabled:    &enableHCL,
+		},
+	}
+
+	if opts.IsolationType != "" {
+		doc.VirtualMachine.SecuritySettings.Isolation.IsolationType = opts.IsolationType
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.GuestStateFilePath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to guest state file")
+	}
+
+	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
+		GuestStateFilePath: opts.GuestStateFilePath,
+		GuestStateFileType: "BlockStorage",
+	}
+
+	if opts.FirmwareParameters != "" {
+		doc.VirtualMachine.Chipset.FirmwareFile = &hcsschema.FirmwareFile{
+			Parameters: []byte(opts.FirmwareParameters),
+		}
+	}
+
+	memoryBacking := hcsschema.MemoryBackingType_PHYSICAL
+	doc.VirtualMachine.ComputeTopology.Memory.Backing = &memoryBacking
+	doc.SchemaVersion = schemaversion.SchemaV25()
+	doc.VirtualMachine.Version = &hcsschema.Version{
+		Major: 11,
+		Minor: 0,
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.BootCIMVHDPath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to boot CIM VHD")
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.EFIVHDPath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to EFI VHD")
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.ScratchVHDPath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to scratch VHD")
+	}
+
+	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
+		Path:  opts.BootFiles.BlockCIMFiles.ScratchVHDPath,
+		Type_: "VirtualDisk",
+	}
+	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["1"] = hcsschema.Attachment{
+		Path:  opts.BootFiles.BlockCIMFiles.EFIVHDPath,
+		Type_: "VirtualDisk",
+	}
+	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["2"] = hcsschema.Attachment{
+		Path:     opts.BootFiles.BlockCIMFiles.BootCIMVHDPath,
+		Type_:    "VirtualDisk",
+		ReadOnly: true,
+	}
+
+	uvm.reservedSCSISlots = append(uvm.reservedSCSISlots,
+		scsi.Slot{Controller: 0, LUN: 0},
+		scsi.Slot{Controller: 0, LUN: 1},
+		scsi.Slot{Controller: 0, LUN: 2})
+
+	return doc, nil
+}
+
+func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*hcsschema.ComputeSystem, error) {
+	if opts.BootFiles.BootType != VmbFSBoot {
+		return nil, fmt.Errorf("expected VmbFS boot type, found: %d", opts.BootFiles.BootType)
+	}
+
+	doc, err := prepareCommonConfigDoc(ctx, uvm, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	vsmbOpts := uvm.DefaultVSMBOptions(true)
+	vsmbOpts.TakeBackupPrivilege = true
+	doc.VirtualMachine.Devices.VirtualSmb = &hcsschema.VirtualSmb{
+		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
+		Shares: []hcsschema.VirtualSmbShare{
+			{
+				Name:    "os",
+				Path:    opts.BootFiles.VmbFSFiles.OSFilesPath,
+				Options: vsmbOpts,
+			},
+		},
+	}
+
+	doc.VirtualMachine.Chipset = &hcsschema.Chipset{
+		Uefi: &hcsschema.Uefi{
+			BootThis: &hcsschema.UefiBootEntry{
+				DevicePath: filepath.Join(opts.BootFiles.VmbFSFiles.OSRelativeBootDirPath, "bootmgfw.efi"),
+				DeviceType: "VmbFs",
+			},
+		},
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.VmbFSFiles.ScratchVHDPath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to scratch")
+	}
+
+	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
+		Path:  opts.BootFiles.VmbFSFiles.ScratchVHDPath,
+		Type_: "VirtualDisk",
+	}
+	uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
 
 	return doc, nil
 }
@@ -308,36 +485,29 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
 
-	doc, err := prepareConfigDoc(ctx, uvm, opts)
+	var doc *hcsschema.ComputeSystem
+	if opts.SecurityPolicyEnabled {
+		doc, err = prepareSecurityConfigDoc(ctx, uvm, opts)
+		log.G(ctx).Tracef("CreateWCOW prepareSecurityConfigDoc result doc: %v err %v", doc, err)
+	} else {
+		doc, err = prepareConfigDoc(ctx, uvm, opts)
+		log.G(ctx).Tracef("CreateWCOW prepareConfigDoc result doc: %v err %v", doc, err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("error in preparing config doc: %w", err)
 	}
-
-	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.ScratchVHDPath); err != nil {
-		return nil, errors.Wrap(err, "failed to grant vm access to scratch")
-	}
-
-	doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
-	for i := 0; i < int(uvm.scsiControllerCount); i++ {
-		doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
-			Attachments: make(map[string]hcsschema.Attachment),
-		}
-	}
-
-	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
-
-		Path:  opts.BootFiles.ScratchVHDPath,
-		Type_: "VirtualDisk",
-	}
-
-	uvm.reservedSCSISlots = append(uvm.reservedSCSISlots, scsi.Slot{Controller: 0, LUN: 0})
 
 	err = uvm.create(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
 
-	if err = uvm.startExternalGcsListener(ctx); err != nil {
+	gcsServiceID := gcs.WindowsGcsHvsockServiceID
+	if opts.SecurityPolicyEnabled {
+		gcsServiceID = windowsSidecarGcsHvsockServiceID
+	}
+
+	if err = uvm.startExternalGcsListener(ctx, gcsServiceID); err != nil {
 		return nil, err
 	}
 

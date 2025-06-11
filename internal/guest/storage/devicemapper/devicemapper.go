@@ -33,7 +33,7 @@ var (
 	_createDevice       = CreateDevice
 )
 
-//nolint:stylecheck // ST1003: ALL_CAPS
+//nolint:staticcheck // ST1003: ALL_CAPS
 const (
 	_DM_IOCTL      = 0xfd
 	_DM_IOCTL_SIZE = 312
@@ -46,7 +46,7 @@ const (
 
 const blockSize = 512
 
-//nolint:stylecheck // ST1003: ALL_CAPS
+//nolint:staticcheck // ST1003: ALL_CAPS
 const (
 	_DM_VERSION = iota
 	_DM_REMOVE_ALL

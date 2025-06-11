@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 )
 
@@ -124,11 +125,12 @@ func parseBlockCIMMount(m *types.Mount) (*wcowBlockCIMLayers, error) {
 				return nil, err
 			}
 		} else if val, ok = strings.CutPrefix(option, blockCIMTypeFlag); ok {
-			if val == "device" {
+			switch val {
+			case "device":
 				layerType = cimfs.BlockCIMTypeDevice
-			} else if val == "file" {
+			case "file":
 				layerType = cimfs.BlockCIMTypeSingleFile
-			} else {
+			default:
 				return nil, fmt.Errorf("invalid block CIM type `%s`", val)
 			}
 		} else if val, ok = strings.CutPrefix(option, mergedCIMPathFlag); ok {
@@ -257,14 +259,17 @@ func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, l
 	}
 
 	if _, err = os.Stat(scratchVHDPath); os.IsNotExist(err) {
-		sourceScratch := filepath.Join(uvmFolder, `UtilityVM\SystemTemplate.vhdx`)
+		sourceScratch := filepath.Join(uvmFolder, wclayer.UtilityVMPath, wclayer.UtilityVMScratchVhd)
 		if err := copyfile.CopyFile(ctx, sourceScratch, scratchVHDPath, true); err != nil {
 			return nil, err
 		}
 	}
 	return &uvm.WCOWBootFiles{
-		OSFilesPath:           filepath.Join(uvmFolder, `UtilityVM\Files`),
-		OSRelativeBootDirPath: `\EFI\Microsoft\Boot`,
-		ScratchVHDPath:        scratchVHDPath,
+		BootType: uvm.VmbFSBoot,
+		VmbFSFiles: &uvm.VmbFSBootFiles{
+			OSFilesPath:           filepath.Join(uvmFolder, wclayer.UtilityVMFilesPath),
+			OSRelativeBootDirPath: wclayer.BootDirRelativePath,
+			ScratchVHDPath:        scratchVHDPath,
+		},
 	}, nil
 }

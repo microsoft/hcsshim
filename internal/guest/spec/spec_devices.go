@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-package hcsv2
+package spec
 
 import (
 	"context"
@@ -27,10 +27,10 @@ const (
 	vpciDeviceIDType       = "vpci-instance-id"
 )
 
-// addAssignedDevice goes through the assigned devices that have been enumerated
+// AddAssignedDevice goes through the assigned devices that have been enumerated
 // on the spec and updates the spec so that the correct device nodes can be mounted
 // into the resulting container by the runtime.
-func addAssignedDevice(ctx context.Context, spec *oci.Spec) error {
+func AddAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 	// Add an explicit timeout before we try to find the dev nodes so we
 	// aren't waiting forever.
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -50,7 +50,7 @@ func addAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 				return errors.Wrapf(err, "failed to find dev node for device %v", d)
 			}
 			for _, dev := range devs {
-				addLinuxDeviceToSpec(ctx, dev, spec, true)
+				AddLinuxDeviceToSpec(ctx, dev, spec, true)
 			}
 		}
 	}
@@ -85,13 +85,13 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Dev
 
 		// find corresponding entries in sysfs
 		for _, d := range hostDevices {
-			major := d.Rule.Major
-			minor := d.Rule.Minor
+			major := d.Major
+			minor := d.Minor
 
 			log.G(ctx).WithField("device", d).Infof("looking at device: %+v", d)
 
 			deviceTypeString := ""
-			switch d.Rule.Type {
+			switch d.Type {
 			case devices.BlockDevice:
 				deviceTypeString = blockType
 			case devices.CharDevice:
@@ -127,7 +127,7 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Dev
 	}
 }
 
-func addLinuxDeviceToSpec(ctx context.Context, hostDevice *devices.Device, spec *oci.Spec, addCgroupDevice bool) {
+func AddLinuxDeviceToSpec(ctx context.Context, hostDevice *devices.Device, spec *oci.Spec, addCgroupDevice bool) {
 	rd := oci.LinuxDevice{
 		Path:  hostDevice.Path,
 		Type:  string(hostDevice.Type),

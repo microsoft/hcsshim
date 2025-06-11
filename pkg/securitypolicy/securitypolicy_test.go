@@ -1206,8 +1206,11 @@ func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) 
 	// Build in all required rules, this isn't a setup method of "missing item"
 	// tests
 	for _, rule := range rules {
+
 		if rule.Required {
-			vars = append(vars, rule.Rule)
+			if rule.Strategy != EnvVarRuleRegex {
+				vars = append(vars, rule.Rule)
+			}
 			numberOfMatches--
 		}
 	}
@@ -1234,10 +1237,13 @@ func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) 
 			}
 		}
 
-		vars = append(vars, rules[anIndex].Rule)
-		usedIndexes[anIndex] = struct{}{}
-
+		// include it if it's not regex
+		if rules[anIndex].Strategy != EnvVarRuleRegex {
+			vars = append(vars, rules[anIndex].Rule)
+			usedIndexes[anIndex] = struct{}{}
+		}
 		numberOfMatches--
+
 	}
 
 	return vars
@@ -1290,10 +1296,11 @@ func generateMounts(r *rand.Rand) []mountInternal {
 		// select a "source type". our default is "no special prefix" ie a
 		// "standard source".
 		prefixType := randMinMax(r, 1, 3)
-		if prefixType == 2 {
+		switch prefixType {
+		case 2:
 			// sandbox mount, gets special handling
 			sourcePrefix = guestpath.SandboxMountPrefix
-		} else if prefixType == 3 {
+		case 3:
 			// huge page mount, gets special handling
 			sourcePrefix = guestpath.HugePagesMountPrefix
 		}
@@ -1399,11 +1406,12 @@ func (gen *dataGenerator) createValidOverlayForContainer(enforcer SecurityPolicy
 
 func (gen *dataGenerator) createInvalidOverlayForContainer(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer) ([]string, error) {
 	method := gen.rng.Intn(3)
-	if method == 0 {
+	switch method {
+	case 0:
 		return gen.invalidOverlaySameSizeWrongMounts(enforcer, container)
-	} else if method == 1 {
+	case 1:
 		return gen.invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer, container)
-	} else {
+	default:
 		return gen.invalidOverlayRandomJunk(enforcer, container)
 	}
 }

@@ -41,7 +41,7 @@ func TestHcsErrorUnwrap(t *testing.T) {
 			}
 
 			var e *MyError
-			if !(errors.As(nerr, &e) && e.S == err.S) {
+			if !errors.As(nerr, &e) || e.S != err.S {
 				t.Errorf("error '%v' did not unwrap '%v' properly", errors.Unwrap(nerr), e)
 			}
 
