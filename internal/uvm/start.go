@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -134,7 +135,7 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 
 	hvsocketAddress := &hcsschema.HvSocketAddress{
 		LocalAddress:  uvm.runtimeID.String(),
-		ParentAddress: gcs.WindowsGcsHvHostID.String(),
+		ParentAddress: prot.WindowsGcsHvHostID.String(),
 	}
 
 	conSetupReq := &hcsschema.ModifySettingRequest{

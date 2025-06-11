@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/pkg/errors"
