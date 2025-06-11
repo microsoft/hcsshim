@@ -32,6 +32,8 @@ const (
 	// maxMsgSize is the maximum size of an incoming message. This is not
 	// enforced by the guest today but some maximum must be set to avoid
 	// unbounded allocations.
+	//
+	// Matches HCS limitions on maximum (sent and received) message size.
 	maxMsgSize = 0x10000
 )
 
@@ -72,6 +74,7 @@ type bridge struct {
 }
 
 var errBridgeClosed = fmt.Errorf("bridge closed: %w", net.ErrClosed)
+var errMessageSize = errors.New("invalid message size")
 
 const (
 	// bridgeFailureTimeout is the default value for bridge.Timeout
@@ -266,7 +269,7 @@ func readMessage(r io.Reader) (int64, msgType, []byte, error) {
 	var h [hdrSize]byte
 	_, err := io.ReadFull(r, h[:])
 	if err != nil {
-		return 0, 0, nil, err
+		return 0, 0, nil, fmt.Errorf("header read: %w", err)
 	}
 	typ := msgType(binary.LittleEndian.Uint32(h[hdrOffType:]))
 	n := binary.LittleEndian.Uint32(h[hdrOffSize:])
@@ -276,7 +279,7 @@ func readMessage(r io.Reader) (int64, msgType, []byte, error) {
 		trace.Int64Attribute("message-id", id))
 
 	if n < hdrSize || n > maxMsgSize {
-		return 0, 0, nil, fmt.Errorf("invalid message size %d", n)
+		return 0, 0, nil, fmt.Errorf("%w: %d", errMessageSize, n)
 	}
 	n -= hdrSize
 	b := make([]byte, n)
@@ -301,6 +304,11 @@ func (brdg *bridge) recvLoop() error {
 		if err != nil {
 			if err == io.EOF || isLocalDisconnectError(err) { //nolint:errorlint
 				return nil
+			}
+			if errors.Is(err, errMessageSize) {
+				// should be safe to only warn and not crash the bridge if the message size is wrong
+				brdg.log.WithError(err).Warn("bridge received failed")
+				continue
 			}
 			return fmt.Errorf("bridge read failed: %w", err)
 		}
