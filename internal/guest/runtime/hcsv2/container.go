@@ -21,7 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
-	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
+	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
@@ -115,7 +115,7 @@ func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSe
 	// assign the uid:gid from the container.
 	if process.User.Username != "" {
 		// The exec provided a user string of it's own. Grab the uid:gid pairing for the string (if one exists).
-		if err := setUserStr(&oci.Spec{Root: c.spec.Root, Process: process}, process.User.Username); err != nil {
+		if err := specGuest.SetUserStr(&oci.Spec{Root: c.spec.Root, Process: process}, process.User.Username); err != nil {
 			return -1, err
 		}
 		// Runc doesn't care about this, and just to be safe clear it.
@@ -194,12 +194,12 @@ func (c *Container) Delete(ctx context.Context) error {
 	entity.Info("opengcs::Container::Delete")
 	if c.isSandbox {
 		// remove user mounts in sandbox container
-		if err := storage.UnmountAllInPath(ctx, specInternal.SandboxMountsDir(c.id), true); err != nil {
+		if err := storage.UnmountAllInPath(ctx, specGuest.SandboxMountsDir(c.id), true); err != nil {
 			entity.WithError(err).Error("failed to unmount sandbox mounts")
 		}
 
 		// remove hugepages mounts in sandbox container
-		if err := storage.UnmountAllInPath(ctx, specInternal.HugePagesMountsDir(c.id), true); err != nil {
+		if err := storage.UnmountAllInPath(ctx, specGuest.HugePagesMountsDir(c.id), true); err != nil {
 			entity.WithError(err).Error("failed to unmount hugepages mounts")
 		}
 	}
@@ -251,9 +251,10 @@ func (c *Container) setExitType(signal syscall.Signal) {
 	c.etL.Lock()
 	defer c.etL.Unlock()
 
-	if signal == syscall.SIGTERM {
+	switch signal {
+	case syscall.SIGTERM:
 		c.exitType = prot.NtGracefulExit
-	} else if signal == syscall.SIGKILL {
+	case syscall.SIGKILL:
 		c.exitType = prot.NtForcedExit
 	}
 }

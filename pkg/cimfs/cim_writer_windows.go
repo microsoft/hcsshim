@@ -75,7 +75,7 @@ func CreateBlockCIM(blockPath, name string, blockType BlockCIMType) (_ *CimFsWri
 
 	// When creating block CIMs we always want them to be consistent CIMs i.e a CIMs
 	// created from the same layer tar will always be identical.
-	var createFlags uint32 = CimCreateFlagConsistentCim
+	var createFlags = CimCreateFlagConsistentCim
 	switch blockType {
 	case BlockCIMTypeDevice:
 		createFlags |= CimCreateFlagBlockDeviceCim

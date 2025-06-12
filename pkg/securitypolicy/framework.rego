@@ -144,7 +144,30 @@ env_ok(pattern, "string", value) {
 }
 
 env_ok(pattern, "re2", value) {
-    regex.match(pattern, value)
+    anchored := anchor_pattern(pattern)
+    regex.match(anchored, value)
+}
+
+anchor_pattern(p) := anchored {
+    startswith_leading := startswith(p, "^")
+    endswith_trailing := endswith(p, "$")
+
+    anchored = sprintf("%s%s%s", [
+        add_leading_trailing_chars(startswith_leading, "", "^"),  # Add ^ only if missing
+        p,
+        add_leading_trailing_chars(endswith_trailing, "", "$")     # Add $ only if missing
+    ])
+}
+
+# Function to return one of two values depending on a boolean condition
+add_leading_trailing_chars(cond, ifTrue, ifFalse) := result {
+    cond
+    result = ifTrue
+}
+
+add_leading_trailing_chars(cond, ifTrue, ifFalse) := result {
+    not cond
+    result = ifFalse
 }
 
 rule_ok(rule, env) {

@@ -42,9 +42,11 @@ type LazyImageLayers struct {
 	// Defaults to [os.TempDir] if left empty.
 	TempPath string
 	// dedicated directory, under [TempPath], to store layers in
-	dir    string
-	once   sync.Once
-	layers []string // extracted layer directories, under [dir]
+	dir string
+
+	once       sync.Once // sets the [layers] and [extractErr] fields
+	layers     []string  // extracted layer directories, under [dir]
+	extractErr error     // extraction error
 }
 
 type extractHandler func(ctx context.Context, rc io.ReadCloser, dir string, parents []string) error
@@ -62,7 +64,10 @@ func (x *LazyImageLayers) Close(ctx context.Context) error {
 		"image": x.Image,
 	}).Debug("removing image")
 
-	if _, err := os.Stat(x.dir); err != nil && !os.IsNotExist(err) {
+	if _, err := os.Stat(x.dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return fmt.Errorf("path %q is not valid: %w", x.dir, err)
 	}
 
@@ -83,13 +88,12 @@ func (x *LazyImageLayers) Layers(ctx context.Context, tb testing.TB) []string {
 		return nil
 	}
 
-	var err error
 	x.once.Do(func() {
-		err = x.extractLayers(ctx)
+		x.extractErr = x.extractLayers(ctx)
 	})
-	if err != nil {
+	if x.extractErr != nil {
 		x.Close(ctx)
-		tb.Fatal(err)
+		tb.Fatal(x.extractErr)
 	}
 	return x.layers
 }
@@ -159,14 +163,15 @@ func (x *LazyImageLayers) extractLayers(ctx context.Context) (err error) {
 
 func extractImageHandler(platform string, appendVerity bool) (extractHandler, error) {
 	var extract extractHandler
-	if platform == images.PlatformLinux {
+	switch platform {
+	case images.PlatformLinux:
 		extract = linuxExt4LayerExtractHandler()
 		if appendVerity {
 			extract = withAppendVerity(extract)
 		}
 		extract = withVHDFooter(extract)
 		return extract, nil
-	} else if platform == images.PlatformWindows {
+	case images.PlatformWindows:
 		return windowsImage, nil
 	}
 	return nil, fmt.Errorf("unsupported platform %q", platform)
