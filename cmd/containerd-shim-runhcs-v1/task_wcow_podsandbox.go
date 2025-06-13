@@ -16,7 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/runtime"
+	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/errdefs"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
