@@ -74,7 +74,6 @@ type bridge struct {
 }
 
 var errBridgeClosed = fmt.Errorf("bridge closed: %w", net.ErrClosed)
-var errMessageSize = errors.New("invalid message size")
 
 const (
 	// bridgeFailureTimeout is the default value for bridge.Timeout
@@ -279,7 +278,7 @@ func readMessage(r io.Reader) (int64, msgType, []byte, error) {
 		trace.Int64Attribute("message-id", id))
 
 	if n < hdrSize || n > maxMsgSize {
-		return 0, 0, nil, fmt.Errorf("%w: %d", errMessageSize, n)
+		return 0, 0, nil, fmt.Errorf("invalid message size %d", n)
 	}
 	n -= hdrSize
 	b := make([]byte, n)
@@ -304,11 +303,6 @@ func (brdg *bridge) recvLoop() error {
 		if err != nil {
 			if err == io.EOF || isLocalDisconnectError(err) { //nolint:errorlint
 				return nil
-			}
-			if errors.Is(err, errMessageSize) {
-				// should be safe to only warn and not crash the bridge if the message size is wrong
-				brdg.log.WithError(err).Warn("bridge received failed")
-				continue
 			}
 			return fmt.Errorf("bridge read failed: %w", err)
 		}
