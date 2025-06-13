@@ -24,6 +24,7 @@ import (
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	cgroup1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	"github.com/mattn/go-shellwords"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -837,7 +838,16 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 			if err != nil {
 				return nil, err
 			}
+			// zero out [Blkio] sections, since:
+			//  1. (Az)CRI (currently) only looks at the CPU and memory sections; and
+			//  2. it can get very large for containers with many layers
+			cgroupMetrics.Blkio.Reset()
+			// also preemptively zero out [Rdma] and [Network], since they could also grow untenable large
+			cgroupMetrics.Rdma.Reset()
+			cgroupMetrics.Network = []*cgroup1stats.NetworkStat{}
 			properties.Metrics = cgroupMetrics
+		default:
+			log.G(ctx).WithField("propertyType", requestedProperty).Warn("unknown or empty property type")
 		}
 	}
 
