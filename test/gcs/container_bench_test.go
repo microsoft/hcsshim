@@ -9,10 +9,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/oci"
-	cri_util "github.com/containerd/containerd/pkg/cri/util"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/pkg/oci"
 
+	"github.com/Microsoft/hcsshim/test/functional"
 	testoci "github.com/Microsoft/hcsshim/test/internal/oci"
 )
 
@@ -24,7 +24,7 @@ func BenchmarkContainerCreate(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id := b.Name() + cri_util.GenerateID()
+		id := b.Name() + functional.GenerateID()
 		scratch, rootfs := mountRootfs(ctx, b, host, id)
 
 		s := testoci.CreateLinuxSpec(ctx, b, id,
@@ -204,7 +204,7 @@ func standaloneContainerRequest(
 ) (string, *prot.VMHostedContainerSettingsV2, func()) {
 	tb.Helper()
 	ctx = namespaces.WithNamespace(ctx, testoci.DefaultNamespace)
-	id := tb.Name() + cri_util.GenerateID()
+	id := tb.Name() + functional.GenerateID()
 	scratch, rootfs := mountRootfs(ctx, tb, host, id)
 
 	opts := testoci.DefaultLinuxSpecOpts(id,

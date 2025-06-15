@@ -18,7 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	eventstypes "github.com/containerd/containerd/api/events"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/runtime"
+	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
