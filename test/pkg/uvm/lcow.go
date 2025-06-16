@@ -19,14 +19,14 @@ var lcowOSBootFilesOnce = sync.OnceValues(func() (string, error) {
 	// first start with where containerd is, since there may be a leftover C:\ContainerPlat
 	// directory from a prior install.
 	paths := make([]string, 0, 2)
-	if p, err := exec.LookPath("containerd.exe"); err != nil {
-		paths = append(paths, p)
+	if p, err := exec.LookPath("containerd.exe"); err == nil {
+		paths = append(paths, filepath.Dir(p))
 	}
 	paths = append(paths, `C:\ContainerPlat`)
 	for _, p := range paths {
 		p = filepath.Join(p, "LinuxBootFiles")
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			return filepath.Abs(p)
 		}
 	}
 	return "", nil
