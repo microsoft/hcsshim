@@ -32,6 +32,8 @@ const (
 	// maxMsgSize is the maximum size of an incoming message. This is not
 	// enforced by the guest today but some maximum must be set to avoid
 	// unbounded allocations.
+	//
+	// Matches HCS limitions on maximum (sent and received) message size.
 	maxMsgSize = 0x10000
 )
 
@@ -266,7 +268,7 @@ func readMessage(r io.Reader) (int64, msgType, []byte, error) {
 	var h [hdrSize]byte
 	_, err := io.ReadFull(r, h[:])
 	if err != nil {
-		return 0, 0, nil, err
+		return 0, 0, nil, fmt.Errorf("header read: %w", err)
 	}
 	typ := msgType(binary.LittleEndian.Uint32(h[hdrOffType:]))
 	n := binary.LittleEndian.Uint32(h[hdrOffSize:])
