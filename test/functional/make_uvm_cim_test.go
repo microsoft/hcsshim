@@ -12,22 +12,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Microsoft/go-winio/pkg/fs"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/pkg/cimfs"
-	"github.com/Microsoft/hcsshim/pkg/extractuvm"
 	"github.com/google/go-containerregistry/pkg/crane"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+
+	"github.com/Microsoft/hcsshim/pkg/cimfs"
+	"github.com/Microsoft/hcsshim/pkg/extractuvm"
 )
 
 func compareFiles(t *testing.T, file1, file2 string) (bool, error) {
 	t.Helper()
 
-	file1, err := filepath.EvalSymlinks(file1)
+	file1, err := fs.ResolvePath(file1)
 	if err != nil {
 		return false, err
 	}
 
-	file2, err = filepath.EvalSymlinks(file2)
+	file2, err = fs.ResolvePath(file2)
 	if err != nil {
 		return false, err
 	}
