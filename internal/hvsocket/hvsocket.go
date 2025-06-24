@@ -6,6 +6,7 @@ package hvsocket
 import (
 	"context"
 	"fmt"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"unsafe"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -92,6 +93,9 @@ func CreateAddressInfo(systemID, vmID, siloID guid.GUID, passthru bool) (resourc
 		&ret,
 		nil,
 	); err != nil {
+		if closeErr := windows.CloseHandle(h); closeErr != nil {
+			log.G(context.Background()).WithError(closeErr).Debug("failed to close address info handle")
+		}
 		return nil, err
 	}
 
