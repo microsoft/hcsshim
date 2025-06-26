@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -19,9 +18,11 @@ func main() {
 	flagGo := flag.String("gofile", "", "Go output file name (optional)")
 	flagPackage := flag.String("gofilepackage", "main", "Go output package name (optional, requires parameter: 'gofile')")
 	flagPlatformSpecific := flag.Bool("platform-specific", false, "output i386, amd64, arm and arm64 named resource.syso, ignores -o")
-	flagIcon := flag.String("icon", "", "icon file name")
+	flagIcon := flag.String("icon", "", "icon file name(s), separated by commas")
 	flagManifest := flag.String("manifest", "", "manifest file name")
 	flagSkipVersion := flag.Bool("skip-versioninfo", false, "skip version info")
+	flagPropagateVerStrings := flag.Bool("propagate-ver-strings", false,
+		"fill FixedFileInfo version fields using FileVersion and ProductVersion from the StringFileInfo")
 
 	flagComment := flag.String("comment", "", "StringFileInfo.Comments")
 	flagCompany := flag.String("company", "", "StringFileInfo.CompanyName")
@@ -81,7 +82,7 @@ func main() {
 		}
 
 		// Read the config file.
-		jsonBytes, err := ioutil.ReadAll(input)
+		jsonBytes, err := io.ReadAll(input)
 		input.Close()
 		if err != nil {
 			log.Printf("Error reading %q: %v", configFile, err)
@@ -173,6 +174,24 @@ func main() {
 	}
 	if *flagProductVerBuild >= 0 {
 		vi.FixedFileInfo.ProductVersion.Build = *flagProductVerBuild
+	}
+
+	// Fill FixedFileInfo versions if needed.
+	if *flagPropagateVerStrings && vi.StringFileInfo.FileVersion != "" {
+		v, err := goversioninfo.NewFileVersion(vi.StringFileInfo.FileVersion)
+		if err != nil {
+			log.Printf("Unexpected StringFileInfo.FileVersion format: %v", err)
+			os.Exit(3)
+		}
+		vi.FixedFileInfo.FileVersion = v
+	}
+	if *flagPropagateVerStrings && vi.StringFileInfo.ProductVersion != "" {
+		v, err := goversioninfo.NewFileVersion(vi.StringFileInfo.ProductVersion)
+		if err != nil {
+			log.Printf("Unexpected StringFileInfo.ProductVersion format: %v", err)
+			os.Exit(3)
+		}
+		vi.FixedFileInfo.ProductVersion = v
 	}
 
 	// Fill the structures with config data.
