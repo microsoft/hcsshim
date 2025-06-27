@@ -1014,70 +1014,90 @@ func getGroup(groupPath string, filter func(user.Group) bool) (user.Group, error
 	return groups[0], nil
 }
 
-func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process) (IDName, []IDName, string, error) {
+func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process) (
+	userIDName IDName,
+	groupIDNames []IDName,
+	umask string,
+	err error,
+) {
 	rootPath := filepath.Join(guestpath.LCOWRootPrefixInUVM, containerID, guestpath.RootfsPath)
 	passwdPath := filepath.Join(rootPath, "/etc/passwd")
 	groupPath := filepath.Join(rootPath, "/etc/group")
 
 	if process == nil {
-		return IDName{}, nil, "", errors.New("spec.Process is nil")
+		err = errors.New("spec.Process is nil")
+		return
 	}
 
 	// this default value is used in the Linux kernel if no umask is specified
-	umask := "0022"
+	umask = "0022"
 	if process.User.Umask != nil {
 		umask = fmt.Sprintf("%04o", *process.User.Umask)
 	}
 
-	if process.User.Username != "" {
-		uid, gid, err := specGuest.ParseUserStr(rootPath, process.User.Username)
-		if err == nil {
-			userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10)}
-			groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10)}
-			return userIDName, []IDName{groupIDName}, umask, nil
-		}
-		log.G(context.Background()).WithError(err).Warn("failed to parse user str, fallback to lookup")
-	}
-
-	// fallback UID/GID lookup
-	uid := process.User.UID
-	userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
-	if _, err := os.Stat(passwdPath); err == nil {
-		userInfo, err := getUser(passwdPath, func(user user.User) bool {
-			return uint32(user.Uid) == uid
-		})
-
-		if err != nil {
-			return userIDName, nil, "", err
-		}
-
-		userIDName.Name = userInfo.Name
-	}
-
-	gid := process.User.GID
-	groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
-
+	parsedUserStr := false
 	checkGroup := true
-	if _, err := os.Stat(groupPath); err == nil {
-		groupInfo, err := getGroup(groupPath, func(group user.Group) bool {
-			return uint32(group.Gid) == gid
-		})
 
-		if err != nil {
-			return userIDName, nil, "", err
+	if process.User.Username != "" {
+		var usrInfo specGuest.ParseUserStrResult
+		usrInfo, err = specGuest.ParseUserStr(rootPath, process.User.Username)
+		if err == nil {
+			userIDName = IDName{ID: strconv.FormatUint(uint64(usrInfo.UID), 10), Name: usrInfo.Username}
+			groupIDNames = []IDName{
+				{ID: strconv.FormatUint(uint64(usrInfo.GID), 10), Name: usrInfo.Groupname},
+			}
+			parsedUserStr = true
+		} else {
+			log.G(context.Background()).WithError(err).Warnf("failed to parse user str %q, fallback to lookup", process.User.Username)
+			err = nil
 		}
-		groupIDName.Name = groupInfo.Name
-	} else {
-		checkGroup = false
 	}
 
-	groupIDNames := []IDName{groupIDName}
+	if !parsedUserStr {
+		// fallback UID/GID lookup
+		uid := process.User.UID
+		userIDName = IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
+		if _, err = os.Stat(passwdPath); err == nil {
+			var userInfo user.User
+			userInfo, err = getUser(passwdPath, func(user user.User) bool {
+				return uint32(user.Uid) == uid
+			})
+
+			if err != nil {
+				return userIDName, nil, "", err
+			}
+
+			userIDName.Name = userInfo.Name
+		}
+
+		gid := process.User.GID
+		groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
+
+		if _, err = os.Stat(groupPath); err == nil {
+			var groupInfo user.Group
+			groupInfo, err = getGroup(groupPath, func(group user.Group) bool {
+				return uint32(group.Gid) == gid
+			})
+
+			if err != nil {
+				return userIDName, nil, "", err
+			}
+			groupIDName.Name = groupInfo.Name
+		} else {
+			checkGroup = false
+			err = nil
+		}
+
+		groupIDNames = []IDName{groupIDName}
+	}
+
 	additionalGIDs := process.User.AdditionalGids
 	if len(additionalGIDs) > 0 {
 		for _, gid := range additionalGIDs {
-			groupIDName = IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
+			groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
 			if checkGroup {
-				groupInfo, err := getGroup(groupPath, func(group user.Group) bool {
+				var groupInfo user.Group
+				groupInfo, err = getGroup(groupPath, func(group user.Group) bool {
 					return uint32(group.Gid) == gid
 				})
 				if err != nil {
