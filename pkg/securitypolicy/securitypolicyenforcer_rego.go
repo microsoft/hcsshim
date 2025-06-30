@@ -15,7 +15,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/opencontainers/runc/libcontainer/user"
+	"github.com/moby/sys/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
@@ -992,28 +992,6 @@ func (policy *regoEnforcer) EnforceScratchUnmountPolicy(ctx context.Context, scr
 	return nil
 }
 
-func getUser(passwdPath string, filter func(user.User) bool) (user.User, error) {
-	users, err := user.ParsePasswdFileFilter(passwdPath, filter)
-	if err != nil {
-		return user.User{}, err
-	}
-	if len(users) != 1 {
-		return user.User{}, errors.Errorf("expected exactly 1 user matched '%d'", len(users))
-	}
-	return users[0], nil
-}
-
-func getGroup(groupPath string, filter func(user.Group) bool) (user.Group, error) {
-	groups, err := user.ParseGroupFileFilter(groupPath, filter)
-	if err != nil {
-		return user.Group{}, err
-	}
-	if len(groups) != 1 {
-		return user.Group{}, errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
-	}
-	return groups[0], nil
-}
-
 func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process) (
 	userIDName IDName,
 	groupIDNames []IDName,
@@ -1059,7 +1037,7 @@ func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process
 		userIDName = IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
 		if _, err = os.Stat(passwdPath); err == nil {
 			var userInfo user.User
-			userInfo, err = getUser(passwdPath, func(user user.User) bool {
+			userInfo, err = specGuest.GetUser(rootPath, func(user user.User) bool {
 				return uint32(user.Uid) == uid
 			})
 
@@ -1075,7 +1053,7 @@ func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process
 
 		if _, err = os.Stat(groupPath); err == nil {
 			var groupInfo user.Group
-			groupInfo, err = getGroup(groupPath, func(group user.Group) bool {
+			groupInfo, err = specGuest.GetGroup(rootPath, func(group user.Group) bool {
 				return uint32(group.Gid) == gid
 			})
 
@@ -1097,7 +1075,7 @@ func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process
 			groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
 			if checkGroup {
 				var groupInfo user.Group
-				groupInfo, err = getGroup(groupPath, func(group user.Group) bool {
+				groupInfo, err = specGuest.GetGroup(rootPath, func(group user.Group) bool {
 					return uint32(group.Gid) == gid
 				})
 				if err != nil {

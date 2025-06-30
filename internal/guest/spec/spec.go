@@ -190,7 +190,7 @@ func ParseUserStr(rootPath, userStr string) (res ParseUserStrResult, err error) 
 	v, err = strconv.Atoi(parts[0])
 	if err != nil {
 		// this is a username string, evaluate uid/gid
-		u, err = getUser(rootPath, func(u user.User) bool {
+		u, err = GetUser(rootPath, func(u user.User) bool {
 			return u.Name == parts[0]
 		})
 		if err != nil {
@@ -202,7 +202,7 @@ func ParseUserStr(rootPath, userStr string) (res ParseUserStrResult, err error) 
 		// Will determine group name below
 	} else {
 		// this is a UID, parse /etc/passwd to find name and GID.
-		u, err = getUser(rootPath, func(u user.User) bool {
+		u, err = GetUser(rootPath, func(u user.User) bool {
 			return u.Uid == v
 		})
 		if err != nil {
@@ -220,7 +220,7 @@ func ParseUserStr(rootPath, userStr string) (res ParseUserStrResult, err error) 
 	}
 
 	if len(parts) == 1 {
-		g, err = getGroup(rootPath, func(g user.Group) bool {
+		g, err = GetGroup(rootPath, func(g user.Group) bool {
 			return g.Gid == int(res.GID)
 		})
 		// If GID doesn't exist we just don't fill in groupName
@@ -233,7 +233,7 @@ func ParseUserStr(rootPath, userStr string) (res ParseUserStrResult, err error) 
 	v, err = strconv.Atoi(parts[1])
 	if err != nil {
 		// this is a group name string, evaluate gid
-		g, err = getGroup(rootPath, func(g user.Group) bool {
+		g, err = GetGroup(rootPath, func(g user.Group) bool {
 			return g.Name == parts[1]
 		})
 		if err != nil {
@@ -243,7 +243,7 @@ func ParseUserStr(rootPath, userStr string) (res ParseUserStrResult, err error) 
 		res.Groupname = g.Name
 	} else {
 		// this is a GID, parse /etc/group to find name.
-		g, err = getGroup(rootPath, func(g user.Group) bool {
+		g, err = GetGroup(rootPath, func(g user.Group) bool {
 			return g.Gid == v
 		})
 		if err != nil {
@@ -290,8 +290,8 @@ func SetUserStr(spec *oci.Spec, userstr string) error {
 	return nil
 }
 
-// getUser looks up /etc/passwd file in a container filesystem and returns parsed user
-func getUser(rootPath string, filter func(user.User) bool) (user.User, error) {
+// GetUser looks up /etc/passwd file in a container filesystem and returns parsed user
+func GetUser(rootPath string, filter func(user.User) bool) (user.User, error) {
 	users, err := user.ParsePasswdFileFilter(filepath.Join(rootPath, "/etc/passwd"), filter)
 	if err != nil {
 		return user.User{}, err
@@ -310,8 +310,8 @@ func getUser(rootPath string, filter func(user.User) bool) (user.User, error) {
 	return users[0], nil
 }
 
-// getGroup looks up /etc/group file in a container filesystem and returns parsed group
-func getGroup(rootPath string, filter func(user.Group) bool) (user.Group, error) {
+// GetGroup looks up /etc/group file in a container filesystem and returns parsed group
+func GetGroup(rootPath string, filter func(user.Group) bool) (user.Group, error) {
 	groups, err := user.ParseGroupFileFilter(filepath.Join(rootPath, "/etc/group"), filter)
 	if err != nil {
 		return user.Group{}, err
