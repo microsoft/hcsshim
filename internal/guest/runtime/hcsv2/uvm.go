@@ -406,7 +406,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
-	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(id, settings.OCISpecification.Process)
+	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(settings.OCISpecification.Process, settings.OCISpecification.Root.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -754,7 +754,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			var umask string
 			var allowStdioAccess bool
 
-			user, groups, umask, err = h.securityPolicyEnforcer.GetUserInfo(containerID, params.OCIProcess)
+			user, groups, umask, err = h.securityPolicyEnforcer.GetUserInfo(params.OCIProcess, c.spec.Root.Path)
 			if err != nil {
 				return 0, err
 			}
