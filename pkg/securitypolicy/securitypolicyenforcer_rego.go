@@ -992,13 +992,12 @@ func (policy *regoEnforcer) EnforceScratchUnmountPolicy(ctx context.Context, scr
 	return nil
 }
 
-func (policy *regoEnforcer) GetUserInfo(containerID string, process *oci.Process) (
+func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (
 	userIDName IDName,
 	groupIDNames []IDName,
 	umask string,
 	err error,
 ) {
-	rootPath := filepath.Join(guestpath.LCOWRootPrefixInUVM, containerID, guestpath.RootfsPath)
 	passwdPath := filepath.Join(rootPath, "/etc/passwd")
 	groupPath := filepath.Join(rootPath, "/etc/group")
 
