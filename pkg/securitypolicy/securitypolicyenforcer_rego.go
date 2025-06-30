@@ -1018,16 +1018,15 @@ func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (
 	if process.User.Username != "" {
 		var usrInfo specGuest.ParseUserStrResult
 		usrInfo, err = specGuest.ParseUserStr(rootPath, process.User.Username)
-		if err == nil {
-			userIDName = IDName{ID: strconv.FormatUint(uint64(usrInfo.UID), 10), Name: usrInfo.Username}
-			groupIDNames = []IDName{
-				{ID: strconv.FormatUint(uint64(usrInfo.GID), 10), Name: usrInfo.Groupname},
-			}
-			parsedUserStr = true
-		} else {
-			log.G(context.Background()).WithError(err).Warnf("failed to parse user str %q, fallback to lookup", process.User.Username)
-			err = nil
+		if err != nil {
+			err = errors.Errorf("failed to parse user str %q: %v", process.User.Username, err)
+			return
 		}
+		userIDName = IDName{ID: strconv.FormatUint(uint64(usrInfo.UID), 10), Name: usrInfo.Username}
+		groupIDNames = []IDName{
+			{ID: strconv.FormatUint(uint64(usrInfo.GID), 10), Name: usrInfo.Groupname},
+		}
+		parsedUserStr = true
 	}
 
 	if !parsedUserStr {
