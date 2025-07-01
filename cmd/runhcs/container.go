@@ -153,7 +153,7 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 		}
 
 		fullargs = append(fullargs, "--log-format", logFormat)
-		if logrus.GetLevel() == logrus.DebugLevel {
+		if logrus.IsLevelEnabled(logrus.DebugLevel) {
 			fullargs = append(fullargs, "--debug")
 		}
 	}

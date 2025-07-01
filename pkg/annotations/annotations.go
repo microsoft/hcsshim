@@ -286,9 +286,11 @@ const (
 	// This should be used for implicit vNUMA topology.
 	NumaMaximumProcessorsPerNode = "io.microsoft.virtualmachine.computetopology.processor.numa.max-processors-per-node"
 
-	// NumaMaximumSizePerNode is the maximum size per vNUMA node.
+	// NumaMaximumMemorySizePerNode is the maximum memory size (in MB) per vNUMA node.
 	// This should be used for implicit vNUMA topology.
-	NumaMaximumSizePerNode = "io.microsoft.virtualmachine.computetopology.processor.numa.max-size-per-node"
+	NumaMaximumMemorySizePerNode = "io.microsoft.virtualmachine.computetopology.processor.numa.max-size-per-node"
+	// Deprecated: Use [NumaMaximumMemorySizePerNode] instead.
+	NumaMaximumSizePerNode = NumaMaximumMemorySizePerNode
 
 	// NumaPreferredPhysicalNodes is an integer slice representing the preferred physical NUMA nodes.
 	// This should be used for implicit vNUMA topology.
