@@ -165,7 +165,7 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 		Weight: uint64(opts.ProcessorWeight),
 	}
 
-	numa, numaProcessors, err := prepareVNumaTopology(opts.Options)
+	numa, numaProcessors, err := prepareVNumaTopology(ctx, opts.Options)
 	if err != nil {
 		return nil, err
 	}

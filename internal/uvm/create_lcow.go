@@ -596,7 +596,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		return nil, err
 	}
 
-	numa, numaProcessors, err := prepareVNumaTopology(opts.Options)
+	numa, numaProcessors, err := prepareVNumaTopology(ctx, opts.Options)
 	if err != nil {
 		return nil, err
 	}

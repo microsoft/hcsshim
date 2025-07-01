@@ -3,30 +3,58 @@
 package uvm
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
+
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
 // prepareVNumaTopology creates vNUMA settings for implicit (platform) or explicit (user-defined) topology.
 //
-// For implicit topology we look for `MaxProcessorsPerNumaNode`, `MaxSizePerNode` and `preferredNumaNodes` create options. Setting them
-// in HCS doc, will trigger platform to create vNUMA topology based on the given values. Based on experiments, the
-// platform will create an evenly distributed topology based on requested memory and processor count for the HCS VM.
+// For implicit topology we look for `MaxProcessorsPerNumaNode`, `MaxMemorySizePerNumaNode` and
+// `PreferredPhysicalNumaNodes` create options.
+// Setting them in HCS doc will trigger platform to create vNUMA topology based on the given values.
+// Based on experiments, the platform will create an evenly distributed topology based on
+// requested memory and processor count for the HCS VM.
 //
-// For explicit topology we look for `NumaMappedPhysicalNodes`, `NumaProcessorCounts` and `NumaMemoryBlocksCounts` create
-// options. The above options are number slices, where a value at index `i` in each slice represents the corresponding
+// For explicit topology we look for `NumaMappedPhysicalNodes`, `NumaProcessorCounts` and
+// `NumaMemoryBlocksCounts` create options.
+// The above options are number slices, where a value at index `i` in each slice represents the corresponding
 // value for the `i`th vNUMA node.
+//
 // Limitations:
-// - only hcsschema.MemoryBackingType_PHYSICAL is supported
-// - `PhysicalNumaNodes` values at index `i` will be mapped to virtual node number `i`
-// - client is responsible for setting wildcard physical node numbers
-// TODO: Add exact OS build version for vNUMA support.
-func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProcessors, error) {
+//
+//   - only `hcsschema.MemoryBackingType_PHYSICAL` is supported
+//   - `PhysicalNumaNodes` values at index `i` will be mapped to virtual node number `i`
+//   - client is responsible for setting wildcard physical node numbers
+func prepareVNumaTopology(ctx context.Context, opts *Options) (*hcsschema.Numa, *hcsschema.NumaProcessors, error) {
 	if opts.MaxProcessorsPerNumaNode == 0 && len(opts.NumaMappedPhysicalNodes) == 0 {
+		// warn if vNUMA settings are partially specified, since its likely an error on the client's side
+		if opts.MaxMemorySizePerNumaNode > 0 || len(opts.PreferredPhysicalNumaNodes) > 0 {
+			log.G(ctx).WithFields(logrus.Fields{
+				"max-memory-size-per-numa-node": opts.MaxMemorySizePerNumaNode,
+				"max-processors-per-numa-node":  opts.MaxProcessorsPerNumaNode,
+				"preferred-physical-numa-nodes": log.Format(ctx, opts.PreferredPhysicalNumaNodes),
+			}).Warn("potentially incomplete implicit vNUMA topology")
+		}
+		if len(opts.NumaProcessorCounts) > 0 || len(opts.NumaMemoryBlocksCounts) > 0 {
+			log.G(ctx).WithFields(logrus.Fields{
+				"numa-mapped-physical-nodes": log.Format(ctx, opts.NumaMappedPhysicalNodes),
+				"numa-processor-counts":      log.Format(ctx, opts.NumaProcessorCounts),
+				"numa-memory-block-counts":   log.Format(ctx, opts.NumaMemoryBlocksCounts),
+			}).Warn("potentially incomplete explicit vNUMA topology")
+		}
 		// vNUMA settings are missing, return empty topology
 		return nil, nil, nil
+	}
+
+	// TODO: Add exact OS build version for vNUMA support, or check for dedicated NUMA feature.
+	if build := osversion.Build(); build < osversion.V25H1Server {
+		return nil, nil, fmt.Errorf("vNUMA topology is not supported on %d version of Windows", build)
 	}
 
 	var preferredNumaNodes []int64
@@ -34,14 +62,9 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 		preferredNumaNodes = append(preferredNumaNodes, int64(pn))
 	}
 
-	build := osversion.Get().Build
-	if build < osversion.V25H1Server {
-		return nil, nil, fmt.Errorf("vNUMA topology is not supported on %d version of Windows", build)
-	}
-
 	// Implicit vNUMA topology.
 	if opts.MaxProcessorsPerNumaNode > 0 {
-		if opts.MaxSizePerNode == 0 {
+		if opts.MaxMemorySizePerNumaNode == 0 {
 			return nil, nil, fmt.Errorf("max size per node must be set when max processors per numa node is set")
 		}
 		numaProcessors := &hcsschema.NumaProcessors{
@@ -50,8 +73,14 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 			},
 		}
 		numa := &hcsschema.Numa{
-			MaxSizePerNode:         opts.MaxSizePerNode,
+			MaxSizePerNode:         opts.MaxMemorySizePerNumaNode,
 			PreferredPhysicalNodes: preferredNumaNodes,
+		}
+		if entry := log.G(ctx); entry.Logger.IsLevelEnabled(logrus.DebugLevel) {
+			entry.WithFields(logrus.Fields{
+				"numa":            log.Format(ctx, numa),
+				"numa-processors": log.Format(ctx, numaProcessors),
+			}).Debug("created implicit NUMA topology")
 		}
 		return numa, numaProcessors, nil
 	}
@@ -78,6 +107,9 @@ func prepareVNumaTopology(opts *Options) (*hcsschema.Numa, *hcsschema.NumaProces
 			CountOfMemoryBlocks: opts.NumaMemoryBlocksCounts[i],
 		}
 		numa.Settings = append(numa.Settings, nodeTopology)
+	}
+	if entry := log.G(ctx); entry.Logger.IsLevelEnabled(logrus.DebugLevel) {
+		entry.WithField("numa", log.Format(ctx, numa)).Debug("created explicit NUMA topology")
 	}
 	return numa, nil, validate(numa)
 }

@@ -391,7 +391,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ prot.
 	// Update the message header with the size.
 	binary.LittleEndian.PutUint32(buf.Bytes()[prot.HdrOffSize:], uint32(buf.Len()))
 
-	if brdg.log.Logger.GetLevel() > logrus.DebugLevel {
+	if brdg.log.Logger.IsLevelEnabled(logrus.TraceLevel) {
 		b := buf.Bytes()[prot.HdrSize:]
 		switch typ {
 		// container environment vars are in rpCreate for linux; rpcExecuteProcess for windows

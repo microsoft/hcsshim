@@ -108,8 +108,8 @@ type Options struct {
 	AdditionalHyperVConfig map[string]hcsschema.HvSocketServiceConfig
 
 	// The following options are for implicit vNUMA topology settings.
-	// MaxSizePerNode is the maximum size of memory per vNUMA node.
-	MaxSizePerNode uint64
+	// MaxMemorySizePerNumaNode is the maximum size of memory (in MiB) per vNUMA node.
+	MaxMemorySizePerNumaNode uint64
 	// MaxProcessorsPerNumaNode is the maximum number of processors per vNUMA node.
 	MaxProcessorsPerNumaNode uint32
 	// PhysicalNumaNodes are the preferred physical NUMA nodes to map to vNUMA nodes.
