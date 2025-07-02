@@ -795,6 +795,10 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		}
 	}
 
+	// Explicitly disable virtio_vsock_init, to make sure that we use hv_sock transport. For kernels built without
+	// virtio-vsock this is a no-op.
+	kernelArgs += " initcall_blacklist=virtio_vsock_init"
+
 	vmDebugging := false
 	if opts.ConsolePipe != "" {
 		vmDebugging = true
