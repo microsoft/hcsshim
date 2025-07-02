@@ -8,7 +8,7 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
