@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/containerd/containerd/protobuf"
 	typeurl "github.com/containerd/typeurl/v2"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -108,7 +107,7 @@ func TestAddNIC(t *testing.T) {
 			}
 			req := &computeagent.AddNICInternalRequest{
 				NicID:    test.nicID,
-				Endpoint: protobuf.FromAny(anyEndpoint),
+				Endpoint: typeurl.MarshalProto(anyEndpoint),
 			}
 
 			_, err = agent.AddNIC(ctx, req)
@@ -197,7 +196,7 @@ func TestModifyNIC(t *testing.T) {
 			}
 			req := &computeagent.ModifyNICInternalRequest{
 				NicID:             test.nicID,
-				Endpoint:          protobuf.FromAny(anyEndpoint),
+				Endpoint:          typeurl.MarshalProto(anyEndpoint),
 				IovPolicySettings: test.iovSettings,
 			}
 
@@ -271,7 +270,7 @@ func TestDeleteNIC(t *testing.T) {
 			}
 			req := &computeagent.DeleteNICInternalRequest{
 				NicID:    test.nicID,
-				Endpoint: protobuf.FromAny(anyEndpoint),
+				Endpoint: typeurl.MarshalProto(anyEndpoint),
 			}
 
 			_, err = agent.DeleteNIC(ctx, req)
