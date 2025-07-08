@@ -118,3 +118,32 @@ func MountMergedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlag
 	}
 	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
 }
+
+// Mounts a verified block CIM with the provided root hash. The root hash is usually
+// returned when the CIM is sealed or the root hash can be queried from a block CIM.
+// Every read on the mounted volume will be verified to match against the provided root
+// hash if it doesn't, the read will fail.  The CIM MUST have been created with the
+// verified creation flag.
+func MountVerifiedBlockCIM(bCIM *BlockCIM, mountFlags uint32, volumeGUID guid.GUID, rootHash []byte) (string, error) {
+	if len(rootHash) != cimHashSize {
+		return "", fmt.Errorf("unexpected root hash size %d, expected size is %d", len(rootHash), cimHashSize)
+	}
+
+	// The CimMountVerifiedCim flag should only be used when using the regular mount
+	// CIM API. That flag is required to tell that API that this is a verified
+	// CIM. This API doesn't need that flag as it is already assumed that the CIM is
+	// verified.
+	switch bCIM.Type {
+	case BlockCIMTypeDevice:
+		mountFlags |= CimMountBlockDeviceCim
+	case BlockCIMTypeSingleFile:
+		mountFlags |= CimMountSingleFileCim
+	default:
+		return "", fmt.Errorf("invalid block CIM type `%d`: %w", bCIM.Type, os.ErrInvalid)
+	}
+
+	if err := winapi.CimMountVerifiedImage(bCIM.BlockPath, bCIM.CimName, mountFlags, &volumeGUID, cimHashSize, &rootHash[0]); err != nil {
+		return "", &MountError{Cim: bCIM.String(), Op: "MountVerifiedCIM", Err: err}
+	}
+	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
+}
