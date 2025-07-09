@@ -347,6 +347,9 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 	// Devices matching the given SCSI code should each have a subdirectory
 	// under /sys/bus/scsi/devices/<scsiID>/block.
 	blockPath := filepath.Join(scsiDevicesPath, scsiID, "block")
+	waitStartTime := time.Now()
+	logTime := waitStartTime.Add(time.Second * 5)
+	logged := false
 	var deviceNames []os.DirEntry
 	for {
 		deviceNames, err = osReadDir(blockPath)
@@ -358,6 +361,12 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 			case <-ctx.Done():
 				return "", ctx.Err()
 			default:
+				if !logged && logTime.Before(time.Now()) {
+					log.G(ctx).WithField("blockPath", blockPath).Warn(
+						"scsi::GetDevicePath blocked for more than 5 seconds waiting for SCSI device to show up in sysfs",
+					)
+					logged = true
+				}
 				time.Sleep(time.Millisecond * 10)
 				continue
 			}
