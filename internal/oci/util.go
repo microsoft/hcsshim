@@ -22,5 +22,5 @@ func IsIsolated(s *specs.Spec) bool {
 
 // IsJobContainer checks if `s` is asking for a Windows job container.
 func IsJobContainer(s *specs.Spec) bool {
-	return s.Annotations[annotations.HostProcessContainer] == "true"
+	return IsWCOW(s) && s.Annotations[annotations.HostProcessContainer] == "true"
 }
