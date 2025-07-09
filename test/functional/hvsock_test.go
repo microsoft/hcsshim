@@ -14,7 +14,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	ctrdoci "github.com/containerd/containerd/oci"
+	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/google/go-cmp/cmp"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/windows"

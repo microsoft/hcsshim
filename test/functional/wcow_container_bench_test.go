@@ -10,8 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	ctrdoci "github.com/containerd/containerd/oci"
-	criutil "github.com/containerd/containerd/pkg/cri/util"
+	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
@@ -85,7 +84,7 @@ func BenchmarkWCOW_Container(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-					id := criutil.GenerateID()
+					id := GenerateID()
 					scratch := testlayers.WCOWScratchDir(ctx, b, "")
 					spec := testoci.CreateWindowsSpec(ctx, b, id,
 						testoci.DefaultWindowsSpecOpts(id,
@@ -151,7 +150,7 @@ func BenchmarkWCOW_Container(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-					id := criutil.GenerateID()
+					id := GenerateID()
 					scratch := testlayers.WCOWScratchDir(ctx, b, "")
 					spec := testoci.CreateWindowsSpec(ctx, b, id,
 						testoci.DefaultWindowsSpecOpts(id,
@@ -192,7 +191,7 @@ func BenchmarkWCOW_Container(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-					id := criutil.GenerateID()
+					id := GenerateID()
 					scratch := testlayers.WCOWScratchDir(ctx, b, "")
 					spec := testoci.CreateWindowsSpec(ctx, b, id,
 						testoci.DefaultWindowsSpecOpts(id,
@@ -236,7 +235,7 @@ func BenchmarkWCOW_Container(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-					id := criutil.GenerateID()
+					id := GenerateID()
 					scratch := testlayers.WCOWScratchDir(ctx, b, "")
 					spec := testoci.CreateWindowsSpec(ctx, b, id,
 						testoci.DefaultWindowsSpecOpts(id,
@@ -286,7 +285,7 @@ func BenchmarkWCOW_Container(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-					id := criutil.GenerateID()
+					id := GenerateID()
 					scratch := testlayers.WCOWScratchDir(ctx, b, "")
 					spec := testoci.CreateWindowsSpec(ctx, b, id,
 						testoci.DefaultWindowsSpecOpts(id,
@@ -339,7 +338,7 @@ func BenchmarkWCOW_Container(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-					id := criutil.GenerateID()
+					id := GenerateID()
 					scratch := testlayers.WCOWScratchDir(ctx, b, "")
 					spec := testoci.CreateWindowsSpec(ctx, b, id,
 						testoci.DefaultWindowsSpecOpts(id,
@@ -392,7 +391,7 @@ func BenchmarkWCOW_Container(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ctx, cancel := context.WithTimeout(pCtx, benchmarkIterationTimeout)
 
-					id := criutil.GenerateID()
+					id := GenerateID()
 					scratch := testlayers.WCOWScratchDir(ctx, b, "")
 					spec := testoci.CreateWindowsSpec(ctx, b, id,
 						testoci.DefaultWindowsSpecOpts(id,

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/pkg/oci"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"

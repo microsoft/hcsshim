@@ -39,7 +39,6 @@ import (
 	"google.golang.org/grpc/internal/grpclog"
 	"google.golang.org/grpc/internal/grpcutil"
 	"google.golang.org/grpc/internal/pretty"
-	istatus "google.golang.org/grpc/internal/status"
 	"google.golang.org/grpc/internal/syscall"
 	"google.golang.org/grpc/mem"
 	"google.golang.org/protobuf/proto"
@@ -1056,7 +1055,7 @@ func (t *http2Server) writeHeaderLocked(s *ServerStream) error {
 	return nil
 }
 
-// writeStatus sends stream status to the client and terminates the stream.
+// WriteStatus sends stream status to the client and terminates the stream.
 // There is no further I/O operations being able to perform on this stream.
 // TODO(zhaoq): Now it indicates the end of entire stream. Revisit if early
 // OK is adopted.
@@ -1084,7 +1083,7 @@ func (t *http2Server) writeStatus(s *ServerStream, st *status.Status) error {
 	headerFields = append(headerFields, hpack.HeaderField{Name: "grpc-status", Value: strconv.Itoa(int(st.Code()))})
 	headerFields = append(headerFields, hpack.HeaderField{Name: "grpc-message", Value: encodeGrpcMessage(st.Message())})
 
-	if p := istatus.RawStatusProto(st); len(p.GetDetails()) > 0 {
+	if p := st.Proto(); p != nil && len(p.Details) > 0 {
 		// Do not use the user's grpc-status-details-bin (if present) if we are
 		// even attempting to set our own.
 		delete(s.trailer, grpcStatusDetailsBinHeader)

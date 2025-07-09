@@ -10,8 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	ctrdoci "github.com/containerd/containerd/oci"
-	criutil "github.com/containerd/containerd/pkg/cri/util"
+	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
@@ -71,7 +70,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				cache = testlayers.CacheFile(ctx, b, "")
 			}
 
-			id := criutil.GenerateID()
+			id := GenerateID()
 			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := testoci.CreateLinuxSpec(ctx, b, id,
 				testoci.DefaultLinuxSpecOpts(id,
@@ -150,7 +149,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				cache = testlayers.CacheFile(ctx, b, "")
 			}
 
-			id := criutil.GenerateID()
+			id := GenerateID()
 			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := testoci.CreateLinuxSpec(ctx, b, id,
 				testoci.DefaultLinuxSpecOpts(id,
@@ -204,7 +203,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				cache = testlayers.CacheFile(ctx, b, "")
 			}
 
-			id := criutil.GenerateID()
+			id := GenerateID()
 			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := testoci.CreateLinuxSpec(ctx, b, id,
 				testoci.DefaultLinuxSpecOpts(id,
@@ -261,7 +260,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				cache = testlayers.CacheFile(ctx, b, "")
 			}
 
-			id := criutil.GenerateID()
+			id := GenerateID()
 			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := testoci.CreateLinuxSpec(ctx, b, id,
 				testoci.DefaultLinuxSpecOpts(id,
@@ -324,7 +323,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				cache = testlayers.CacheFile(ctx, b, "")
 			}
 
-			id := criutil.GenerateID()
+			id := GenerateID()
 			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := testoci.CreateLinuxSpec(ctx, b, id,
 				testoci.DefaultLinuxSpecOpts(id,
@@ -388,7 +387,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				cache = testlayers.CacheFile(ctx, b, "")
 			}
 
-			id := criutil.GenerateID()
+			id := GenerateID()
 			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := testoci.CreateLinuxSpec(ctx, b, id,
 				testoci.DefaultLinuxSpecOpts(id,
@@ -452,7 +451,7 @@ func BenchmarkLCOW_Container(b *testing.B) {
 				cache = testlayers.CacheFile(ctx, b, "")
 			}
 
-			id := criutil.GenerateID()
+			id := GenerateID()
 			scratch, _ := testlayers.ScratchSpace(ctx, b, vm, "", "", cache)
 			spec := testoci.CreateLinuxSpec(ctx, b, id,
 				testoci.DefaultLinuxSpecOpts(id,

@@ -24,7 +24,7 @@ import (
 	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 
 	// register common types spec with typeurl
-	_ "github.com/containerd/containerd/runtime"
+	_ "github.com/containerd/containerd/v2/core/runtime"
 )
 
 const usage = ``
