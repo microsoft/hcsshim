@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -5953,6 +5956,318 @@ func Test_Rego_Capabiltiies_Placeholder_Object_Unprivileged(t *testing.T) {
 	assertDecisionJSONDoesNotContain(t, err, DefaultUnprivilegedCapabilities()...)
 }
 
+func Test_Rego_GetUserInfo_WithEtcPasswdAndGroup(t *testing.T) {
+	etcPasswdString := strings.Join([]string{
+		"root:x:0:0:root:/root:/bin/bash",
+		"daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin",
+		"postgres:x:105:111:PostgreSQL administrator,,,:/var/lib/postgresql:/bin/bash",
+		"ihavenogroup:x:1000:1000:ihavenogroup:/home/ihavenogroup:/bin/bash",
+		"nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin",
+		"",
+	}, "\n")
+	etcGroupsString := strings.Join([]string{
+		"root:x:0:",
+		"daemon:x:1:",
+		"postgres:x:111:",
+		"nogroup:x:65534:",
+		"",
+	}, "\n")
+
+	testDir := t.TempDir()
+	os.MkdirAll(filepath.Join(testDir, "etc"), 0755)
+	if err := os.WriteFile(filepath.Join(testDir, "etc/passwd"), []byte(etcPasswdString), 0644); err != nil {
+		t.Fatalf("Failed to write /etc/passwd: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(testDir, "etc/group"), []byte(etcGroupsString), 0644); err != nil {
+		t.Fatalf("Failed to write /etc/group: %v", err)
+	}
+
+	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Errorf("cannot compile open door rego policy: %v", err)
+		return
+	}
+
+	testCases := []getUserInfoTestCase{
+		{
+			userStrs:           []string{"0:0", "root:root", "0:root", "root:0", "root", "0", ""},
+			additionalGIDs:     []uint32{},
+			expectedUID:        0,
+			expectedGIDs:       []int{0},
+			expectedUsername:   "root",
+			expectedGroupNames: []string{"root"},
+		},
+		{
+			userStrs:           []string{"1:1", "daemon:daemon", "1:daemon", "daemon:1", "daemon", "1"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1,
+			expectedGIDs:       []int{1},
+			expectedUsername:   "daemon",
+			expectedGroupNames: []string{"daemon"},
+		},
+		{
+			userStrs:           []string{"1:0", "daemon:root", "daemon:0", "1:root"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1,
+			expectedGIDs:       []int{0},
+			expectedUsername:   "daemon",
+			expectedGroupNames: []string{"root"},
+		},
+		{
+			userStrs:           []string{"105:111", "postgres:postgres", "105", "postgres", "105:postgres", "postgres:111"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        105,
+			expectedGIDs:       []int{111},
+			expectedUsername:   "postgres",
+			expectedGroupNames: []string{"postgres"},
+		},
+		{
+			userStrs:           []string{"postgres:daemon", "105:1", "postgres:1", "105:daemon"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        105,
+			expectedGIDs:       []int{1},
+			expectedUsername:   "postgres",
+			expectedGroupNames: []string{"daemon"},
+		},
+		{
+			userStrs:           []string{"1234", "1234:0"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1234,
+			expectedGIDs:       []int{0},
+			expectedUsername:   "",
+			expectedGroupNames: []string{"root"},
+		},
+		{
+			userStrs:           []string{"0:1234"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        0,
+			expectedGIDs:       []int{1234},
+			expectedUsername:   "root",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:           []string{"1234:1234"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1234,
+			expectedGIDs:       []int{1234},
+			expectedUsername:   "",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:           []string{"1234:postgres", "1234:111"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1234,
+			expectedGIDs:       []int{111},
+			expectedUsername:   "",
+			expectedGroupNames: []string{"postgres"},
+		},
+		{
+			userStrs:           []string{"postgres:1234", "105:1234"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        105,
+			expectedGIDs:       []int{1234},
+			expectedUsername:   "postgres",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:           []string{"ihavenogroup:nogroup", "ihavenogroup:65534", "1000:65534"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1000,
+			expectedGIDs:       []int{65534},
+			expectedUsername:   "ihavenogroup",
+			expectedGroupNames: []string{"nogroup"},
+		},
+		{
+			userStrs:           []string{"ihavenogroup", "ihavenogroup:1000", "1000:1000"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1000,
+			expectedGIDs:       []int{1000},
+			expectedUsername:   "ihavenogroup",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:       []string{"nobody", "nobody:nogroup", "nobody:65534", "65534:65534", "65534:nogroup"},
+			additionalGIDs: []uint32{100},
+			expectErr:      true, // non-existent additionalGIDs not allowed
+		},
+		{
+			userStrs:           []string{"nobody", "nobody:nogroup", "nobody:65534", "65534:65534", "65534:nogroup"},
+			additionalGIDs:     []uint32{111},
+			expectedUID:        65534,
+			expectedGIDs:       []int{65534, 111},
+			expectedUsername:   "nobody",
+			expectedGroupNames: []string{"nogroup", "postgres"},
+		},
+		{
+			userStrs:           []string{"1234", "1234:0"},
+			additionalGIDs:     []uint32{111},
+			expectedUID:        1234,
+			expectedGIDs:       []int{0, 111},
+			expectedUsername:   "",
+			expectedGroupNames: []string{"root", "postgres"},
+		},
+		{
+			userStrs:       []string{"nonexistentuser", "nonexistentuser:0", "nonexistentuser:nonexistentgroup"},
+			additionalGIDs: []uint32{},
+			expectErr:      true, // non-existent username will fail since we don't know the UID
+		},
+		{
+			userStrs:       []string{"postgres:nonexistentgroup", "105:nonexistentgroup"},
+			additionalGIDs: []uint32{},
+			expectErr:      true, // non-existent group will fail since we don't know the GID
+		},
+		{
+			userStrs:       []string{":", "malformed:b:c", ":root", "root:", ":0", "0:", "2a01:110::/32"},
+			additionalGIDs: []uint32{},
+			expectErr:      true,
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("TestCase%d", i), func(t *testing.T) {
+			for _, userStr := range tc.userStrs {
+				testGetUserInfo(t, tc, userStr, regoEnforcer, testDir)
+			}
+		})
+	}
+}
+
+func Test_Rego_GetUserInfo_NoEtc(t *testing.T) {
+	testDir := t.TempDir()
+
+	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Errorf("cannot compile open door rego policy: %v", err)
+		return
+	}
+
+	testCases := []getUserInfoTestCase{
+		{
+			userStrs:           []string{"0:0", "0", ""},
+			additionalGIDs:     []uint32{},
+			expectedUID:        0,
+			expectedGIDs:       []int{0},
+			expectedUsername:   "",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:           []string{"1:1"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1,
+			expectedGIDs:       []int{1},
+			expectedUsername:   "",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:       []string{"root:root", "root", "daemon:daemon", "1:daemon", "daemon:1", "daemon", "daemon:root", "daemon:0"},
+			additionalGIDs: []uint32{},
+			expectErr:      true, // no /etc/passwd or /etc/group, so we cannot resolve any names
+		},
+		{
+			userStrs:           []string{"1:0", "1"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1,
+			expectedGIDs:       []int{0},
+			expectedUsername:   "",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:           []string{"1234:4321"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1234,
+			expectedGIDs:       []int{4321},
+			expectedUsername:   "",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:       []string{"1234:4321"},
+			additionalGIDs: []uint32{5678, 9012},
+			expectErr:      true, // non-existent additionalGIDs not allowed
+		},
+		{
+			userStrs:       []string{":", "malformed:b:c", ":root", "root:", ":0", "0:", "2a01:110::/32"},
+			additionalGIDs: []uint32{},
+			expectErr:      true,
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("TestCase%d", i), func(t *testing.T) {
+			for _, userStr := range tc.userStrs {
+				testGetUserInfo(t, tc, userStr, regoEnforcer, testDir)
+			}
+		})
+	}
+}
+
+func Test_Rego_GetUserInfo_EtcPasswdOnly(t *testing.T) {
+	etcPasswdString := strings.Join([]string{
+		"root:x:0:0:root:/root:/bin/bash",
+		"daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin",
+		"postgres:x:105:111:PostgreSQL administrator,,,:/var/lib/postgresql:/bin/bash",
+		"ihavenogroup:x:1000:1000:ihavenogroup:/home/ihavenogroup:/bin/bash",
+		"nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin",
+		"",
+	}, "\n")
+
+	testDir := t.TempDir()
+	os.MkdirAll(filepath.Join(testDir, "etc"), 0755)
+	if err := os.WriteFile(filepath.Join(testDir, "etc/passwd"), []byte(etcPasswdString), 0644); err != nil {
+		t.Fatalf("Failed to write /etc/passwd: %v", err)
+	}
+
+	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Errorf("cannot compile open door rego policy: %v", err)
+		return
+	}
+
+	testCases := []getUserInfoTestCase{
+		{
+			userStrs:           []string{"0:0", "root:0", "0", "root", ""},
+			additionalGIDs:     []uint32{},
+			expectedUID:        0,
+			expectedGIDs:       []int{0},
+			expectedUsername:   "root",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:           []string{"1000:1234", "ihavenogroup:1234"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1000,
+			expectedGIDs:       []int{1234},
+			expectedUsername:   "ihavenogroup",
+			expectedGroupNames: []string{""},
+		},
+		{
+			userStrs:       []string{"nonexistentuser"},
+			additionalGIDs: []uint32{},
+			expectErr:      true, // non-existent username will fail since we don't know the UID
+		},
+		{
+			userStrs:       []string{"1000:root", "0:root"},
+			additionalGIDs: []uint32{},
+			expectErr:      true, // No /etc/group, can't resolve group names
+		},
+		{
+			userStrs:           []string{"1234"},
+			additionalGIDs:     []uint32{},
+			expectedUID:        1234,
+			expectedGIDs:       []int{0},
+			expectedUsername:   "",
+			expectedGroupNames: []string{""},
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("TestCase%d", i), func(t *testing.T) {
+			for _, userStr := range tc.userStrs {
+				testGetUserInfo(t, tc, userStr, regoEnforcer, testDir)
+			}
+		})
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -7618,4 +7933,80 @@ func assertDecisionJSONDoesNotContain(t *testing.T, err error, expectedValues ..
 	}
 
 	return true
+}
+
+type getUserInfoTestCase struct {
+	userStrs           []string
+	additionalGIDs     []uint32
+	expectErr          bool
+	expectedUID        int
+	expectedGIDs       []int
+	expectedUsername   string
+	expectedGroupNames []string
+}
+
+func testGetUserInfo(t *testing.T, tc getUserInfoTestCase, userStr string, regoEnforcer *regoEnforcer, testDir string) {
+	testName := userStr
+	if userStr == "" {
+		testName = "(empty)"
+	}
+	if len(tc.additionalGIDs) > 0 {
+		testName += " additionalGIDs="
+		for i, gid := range tc.additionalGIDs {
+			if i > 0 {
+				testName += ","
+			}
+			testName += fmt.Sprintf("%d", gid)
+		}
+	}
+	t.Run(testName, func(t *testing.T) {
+		ociProcess := &oci.Process{
+			User: oci.User{
+				UID:            0,
+				GID:            0,
+				Umask:          nil,
+				Username:       userStr,
+				AdditionalGids: tc.additionalGIDs,
+			},
+		}
+		userIDName, groupIDNames, umask, err := regoEnforcer.GetUserInfo(ociProcess, testDir)
+		if tc.expectErr {
+			if err == nil {
+				t.Errorf("Expected error for userStr %q, but succeed", userStr)
+			}
+			return
+		}
+		if err != nil {
+			t.Errorf("GetUserInfo failed for userStr %q: %v", userStr, err)
+			return
+		}
+		if userIDName.ID != fmt.Sprintf("%d", tc.expectedUID) {
+			t.Errorf("Expected UID %d, got %s", tc.expectedUID, userIDName.ID)
+		}
+		if userIDName.Name != tc.expectedUsername {
+			t.Errorf("Expected username %s, got %s", tc.expectedUsername, userIDName.Name)
+		}
+		groupIDs := make([]int, 0, len(groupIDNames))
+		for _, groupIDName := range groupIDNames {
+			gid, err := strconv.Atoi(groupIDName.ID)
+			if err != nil {
+				t.Errorf("Returned group ID %s is not a valid integer", groupIDName.ID)
+			}
+			groupIDs = append(groupIDs, gid)
+		}
+		if !slices.Equal(groupIDs, tc.expectedGIDs) {
+			t.Errorf("Expected group IDs %v, got %v", tc.expectedGIDs, groupIDs)
+		}
+		groupNames := make([]string, 0, len(groupIDNames))
+		for _, groupIDName := range groupIDNames {
+			groupNames = append(groupNames, groupIDName.Name)
+		}
+		if !slices.Equal(groupNames, tc.expectedGroupNames) {
+			t.Errorf("Expected group names %v, got %v", tc.expectedGroupNames, groupNames)
+		}
+		defaultUmask := "0022"
+		if umask != defaultUmask {
+			t.Errorf("Expected umask '%s', got '%s'", defaultUmask, umask)
+		}
+	})
 }
