@@ -105,6 +105,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 	err = cmd.Run()
 	cancel()
 	if err != nil {
+		log.G(ctx).WithError(err).WithField("stderr", mkfsStderr.String()).Error("mkfs.ext4 failed")
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %w", cmd.Spec.Args, destFile, err)
 	}
 
