@@ -12,14 +12,18 @@ import (
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/errdefs"
+	"github.com/containerd/platforms"
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 )
@@ -81,7 +85,14 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 			return nil, err
 		}
 		shimOpts = v.(*runhcsopts.Options)
+
+		if entry := log.G(ctx); entry.Logger.IsLevelEnabled(logrus.DebugLevel) {
+			entry.WithField("options", log.Format(ctx, shimOpts)).Debug("parsed runhcs runtime options")
+		}
 	}
+	// ideally the runtime options would be set appropriately, but cannot guarantee that
+	// instead, distinguish between empty and misconfigured options
+	emptyShimOpts := req.Options == nil || proto.Equal(shimOpts, &runhcsopts.Options{})
 
 	var spec specs.Spec
 	f, err := os.Open(filepath.Join(req.Bundle, "config.json"))
@@ -95,7 +106,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	f.Close()
 
 	spec = oci.UpdateSpecFromOptions(spec, shimOpts)
-	//expand annotations after defaults have been loaded in from options
+	// expand annotations after defaults have been loaded in from options
 	err = oci.ProcessAnnotations(ctx, &spec)
 	// since annotation expansion is used to toggle security features
 	// raise it rather than suppress and move on
@@ -106,12 +117,35 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	// If sandbox isolation is set to hypervisor, make sure the HyperV option
 	// is filled in. This lessens the burden on Containerd to parse our shims
 	// options if we can set this ourselves.
-	if shimOpts.SandboxIsolation == runhcsopts.Options_HYPERVISOR {
+	if isolation := shimOpts.GetSandboxIsolation(); isolation == runhcsopts.Options_HYPERVISOR {
 		if spec.Windows == nil {
 			spec.Windows = &specs.Windows{}
 		}
 		if spec.Windows.HyperV == nil {
 			spec.Windows.HyperV = &specs.WindowsHyperV{}
+		}
+	} else if !emptyShimOpts && oci.IsIsolated(&spec) {
+		// non-empty runtime options, but invalid isolation
+		return nil, fmt.Errorf("invalid runtime sandbox isolation (%s) for hypervisor isolated OCI spec", isolation.String())
+	}
+
+	if !emptyShimOpts {
+		// validate runtime platform
+		plat, err := platforms.Parse(shimOpts.GetSandboxPlatform())
+		if err != nil {
+			return nil, fmt.Errorf("invalid runtime sandbox platform: %w", err)
+		}
+		switch plat.OS {
+		case "windows":
+			if oci.IsLCOW(&spec) {
+				return nil, fmt.Errorf("non-empty Linux config in OCI spec for Windows sandbox platform: %s", platforms.Format(plat))
+			}
+		case "linux":
+			if oci.IsWCOW(&spec) {
+				return nil, fmt.Errorf("empty Linux config in OCI spec for Linux sandbox platform: %s", platforms.Format(plat))
+			}
+		default:
+			return nil, fmt.Errorf("unknown runtime sandbox platform OS: %s", platforms.Format(plat))
 		}
 	}
 
