@@ -60,12 +60,17 @@ func (filesystemType kernelFormatVolumeFilesystemTypes) String() string {
 
 type kernelFormatVolumeFormatInputBufferFlags uint32
 
-const kernelFormatVolumeFormatInputBufferFlagNone = kernelFormatVolumeFormatInputBufferFlags(0x00000000)
+const (
+	kernelFormatVolumeFormatInputBufferFlagNone        = kernelFormatVolumeFormatInputBufferFlags(0x00000000)
+	kernelFormatVolumeFormatInputBufferFlagSuperFloppy = kernelFormatVolumeFormatInputBufferFlags(0x00000001)
+)
 
 func (flag kernelFormatVolumeFormatInputBufferFlags) String() string {
 	switch flag {
 	case kernelFormatVolumeFormatInputBufferFlagNone:
 		return "kernelFormatVolumeFormatInputBufferFlagNone"
+	case kernelFormatVolumeFormatInputBufferFlagSuperFloppy:
+		return "kernelFormatVolumeFormatInputBufferFlagSuperFloppy"
 	default:
 		return "Unknown"
 	}
@@ -211,7 +216,7 @@ func KmFmtCreateFormatInputBuffer(diskPath string) *KernelFormatVolumeFormatInpu
 	inputBuffer := (*KernelFormatVolumeFormatInputBuffer)(unsafe.Pointer(&buf[0]))
 
 	inputBuffer.Size = uint64(bufferSize)
-	inputBuffer.Flags = kernelFormatVolumeFormatInputBufferFlagNone
+	inputBuffer.Flags = kernelFormatVolumeFormatInputBufferFlagSuperFloppy
 
 	inputBuffer.FsParameters.FileSystemType = kernelFormatVolumeFilesystemTypeRefs
 	inputBuffer.FsParameters.VolumeLabelLength = 0
