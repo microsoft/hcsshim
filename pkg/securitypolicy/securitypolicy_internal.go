@@ -4,11 +4,26 @@ import (
 	"fmt"
 	"strconv"
 	"syscall"
+
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // Internal version of SecurityPolicy
 type securityPolicyInternal struct {
 	Containers                       []*securityPolicyContainer
+	ExternalProcesses                []*externalProcess
+	Fragments                        []*fragment
+	AllowPropertiesAccess            bool
+	AllowDumpStacks                  bool
+	AllowRuntimeLogging              bool
+	AllowEnvironmentVariableDropping bool
+	AllowUnencryptedScratch          bool
+	AllowCapabilityDropping          bool
+}
+
+// Internal version of Windows SecurityPolicy
+type securityPolicyWindowsInternal struct {
+	Containers                       []*securityPolicyWindowsContainer
 	ExternalProcesses                []*externalProcess
 	Fragments                        []*fragment
 	AllowPropertiesAccess            bool
@@ -37,6 +52,18 @@ func containersToInternal(containers []*Container) ([]*securityPolicyContainer, 
 		result[i] = cInternal
 	}
 
+	return result, nil
+}
+
+func windowsContainersToInternal(containers []*WindowsContainer) ([]*securityPolicyWindowsContainer, error) {
+	result := make([]*securityPolicyWindowsContainer, len(containers))
+	for i, cConf := range containers {
+		cInternal, err := cConf.toInternal()
+		if err != nil {
+			return nil, err
+		}
+		result[i] = cInternal
+	}
 	return result, nil
 }
 
@@ -94,7 +121,8 @@ func newSecurityPolicyFragment(
 	svn string,
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
-	fragments []FragmentConfig) (*securityPolicyFragment, error) {
+	fragments []FragmentConfig,
+) (*securityPolicyFragment, error) {
 	containersInternal, err := containersToInternal(containers)
 	if err != nil {
 		return nil, err
@@ -124,30 +152,63 @@ type securityPolicyContainer struct {
 	// will default to.
 	WorkingDir string `json:"working_dir"`
 	// A list of constraints for determining if a given mount is allowed.
-	Mounts        []mountInternal `json:"mounts"`
+	Mounts        []mountInternal `json:"mounts,omitempty"`
 	AllowElevated bool            `json:"allow_elevated"`
 	// A list of lists of commands that can be used to execute additional
 	// processes within the container
 	ExecProcesses []containerExecProcess `json:"exec_processes"`
 	// A list of signals that are allowed to be sent to the container's init
 	// process.
-	Signals []syscall.Signal `json:"signals"`
+	Signals []syscall.Signal `json:"signals,omitempty"`
+
 	// Whether to allow the capture of init process standard out and standard error
 	AllowStdioAccess bool `json:"allow_stdio_access"`
 	// Whether to deny new privileges
 	NoNewPrivileges bool `json:"no_new_privileges"`
 	// The user that the container will run as
-	User UserConfig `json:"user"`
+	User UserConfig `json:"user,omitempty"`
 	// Capability sets for the container
 	Capabilities *capabilitiesInternal `json:"capabilities"`
 	// Seccomp configuration for the container
 	SeccompProfileSHA256 string `json:"seccomp_profile_sha256"`
 }
 
+// Internal version of Container
+type securityPolicyWindowsContainer struct {
+	// The command that we will allow the container to execute
+	Command []string `json:"command"`
+	// The rules for determining if a given environment variable is allowed
+	EnvRules []EnvRuleConfig `json:"env_rules"`
+	// An ordered list of dm-verity root hashes for each layer that makes up
+	// "a container". Containers are constructed as an overlay file system. The
+	// order that the layers are overlayed is important and needs to be enforced
+	// as part of policy.
+	Layers []string `json:"layers"`
+	// WorkingDir is a path to container's working directory, which all the processes
+	// will default to.
+	WorkingDir string `json:"working_dir"`
+	// A list of lists of commands that can be used to execute additional
+	// processes within the container
+	ExecProcesses []windowsContainerExecProcess `json:"exec_processes"`
+	// A list of signals that are allowed to be sent to the container's init
+	// process
+	Signals []guestrequest.SignalValueWCOW `json:"signals,omitempty"`
+	// Whether to allow the capture of init process standard out and standard error
+	AllowStdioAccess bool `json:"allow_stdio_access"`
+	// The user that the container will run as
+	User string `json:"user,omitempty"`
+}
+
 type containerExecProcess struct {
 	Command []string `json:"command"`
 	// A list of signals that are allowed to be sent to this process
-	Signals []syscall.Signal `json:"signals"`
+	Signals []syscall.Signal `json:"signals,omitempty"`
+}
+
+type windowsContainerExecProcess struct {
+	Command string `json:"command"`
+	// A list of signals that are allowed to be sent to this process
+	Signals []guestrequest.SignalValueWCOW `json:"signals,omitempty"`
 }
 
 type externalProcess struct {
@@ -197,16 +258,15 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		return nil, err
 	}
 
-	mounts, err := c.Mounts.toInternal()
-	if err != nil {
-		return nil, err
-	}
-
 	execProcesses := make([]containerExecProcess, len(c.ExecProcesses))
 	for i, ep := range c.ExecProcesses {
 		execProcesses[i] = containerExecProcess(ep)
 	}
 
+	mounts, err := c.Mounts.toInternal()
+	if err != nil {
+		return nil, err
+	}
 	var capabilities *capabilitiesInternal
 	if c.Capabilities != nil {
 		c := c.Capabilities.toInternal()
@@ -229,6 +289,40 @@ func (c *Container) toInternal() (*securityPolicyContainer, error) {
 		User:                 c.User,
 		Capabilities:         capabilities,
 		SeccompProfileSHA256: c.SeccompProfileSHA256,
+	}, nil
+
+}
+
+func (c *WindowsContainer) toInternal() (*securityPolicyWindowsContainer, error) {
+	command, err := c.Command.toInternal()
+	if err != nil {
+		return nil, err
+	}
+
+	envRules, err := c.EnvRules.toInternal()
+	if err != nil {
+		return nil, err
+	}
+
+	layers, err := c.Layers.toInternal()
+	if err != nil {
+		return nil, err
+	}
+
+	execProcesses := make([]windowsContainerExecProcess, len(c.ExecProcesses))
+	for i, ep := range c.ExecProcesses {
+		execProcesses[i] = windowsContainerExecProcess(ep)
+	}
+
+	return &securityPolicyWindowsContainer{
+		Command:          command,
+		EnvRules:         envRules,
+		Layers:           layers,
+		WorkingDir:       c.WorkingDir,
+		ExecProcesses:    execProcesses,
+		Signals:          c.Signals,
+		AllowStdioAccess: c.AllowStdioAccess,
+		User:             c.User,
 	}, nil
 }
 

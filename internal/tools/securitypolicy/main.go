@@ -18,6 +18,7 @@ var (
 	fragmentNamespace = flag.String("n", "", "fragment namespace")
 	fragmentSVN       = flag.String("v", "", "fragment svn")
 	outputRaw         = flag.Bool("r", false, "whether to print the raw output")
+	osType            = flag.String("os", "windows", "OS type for the policy (windows|linux)")
 )
 
 func main() {
