@@ -61,7 +61,7 @@ type regoEnforcer struct {
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
 
 //nolint:unused
-func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
+/*func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 	policy := new(securityPolicyInternal)
 	var err error
 	if policy.Containers, err = sp.Containers.toInternal(); err != nil {
@@ -69,7 +69,7 @@ func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 	}
 
 	return policy, nil
-}
+}*/
 
 func toStringSet(items []string) stringSet {
 	s := make(stringSet)
@@ -106,7 +106,6 @@ func createRegoEnforcer(base64EncodedPolicy string,
 	defaultMounts []oci.Mount,
 	privilegedMounts []oci.Mount,
 	maxErrorMessageLength int,
-	osType string,
 ) (SecurityPolicyEnforcer, error) {
 	// base64 decode the incoming policy string
 	// It will either be (legacy) JSON or Rego.
@@ -116,47 +115,80 @@ func createRegoEnforcer(base64EncodedPolicy string,
 	}
 
 	// Try to unmarshal the JSON
+
 	var code string
 	securityPolicy := new(SecurityPolicy)
 	err = json.Unmarshal(rawPolicy, securityPolicy)
 	if err == nil {
 		if securityPolicy.AllowAll {
-			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts, maxErrorMessageLength, osType)
+			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts, maxErrorMessageLength)
 		}
 
-		containers := make([]*Container, securityPolicy.Containers.Length)
-
-		for i := 0; i < securityPolicy.Containers.Length; i++ {
-			index := strconv.Itoa(i)
-			cConf, ok := securityPolicy.Containers.Elements[index]
-			if !ok {
-				return nil, fmt.Errorf("container constraint with index %q not found", index)
+		if osType == "linux" {
+			containers := make([]*Container, securityPolicy.Containers.Length)
+			for i := 0; i < securityPolicy.Containers.Length; i++ {
+				index := strconv.Itoa(i)
+				cConf, ok := securityPolicy.Containers.Elements[index]
+				if !ok {
+					return nil, fmt.Errorf("container constraint with index %q not found", index)
+				}
+				cConf.AllowStdioAccess = true
+				cConf.NoNewPrivileges = false
+				cConf.User = UserConfig{
+					UserIDName:   IDNameConfig{Strategy: IDNameStrategyAny},
+					GroupIDNames: []IDNameConfig{{Strategy: IDNameStrategyAny}},
+					Umask:        "0022",
+				}
+				cConf.SeccompProfileSHA256 = ""
+				containers[i] = &cConf
 			}
-			cConf.AllowStdioAccess = true
-			cConf.NoNewPrivileges = false
-			cConf.User = UserConfig{
-				UserIDName:   IDNameConfig{Strategy: IDNameStrategyAny},
-				GroupIDNames: []IDNameConfig{{Strategy: IDNameStrategyAny}},
-				Umask:        "0022",
-			}
-			cConf.SeccompProfileSHA256 = ""
-			containers[i] = &cConf
-		}
 
-		code, err = marshalRego(
-			securityPolicy.AllowAll,
-			containers,
-			[]ExternalProcessConfig{},
-			[]FragmentConfig{},
-			true,
-			true,
-			true,
-			false,
-			true,
-			false,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
+			code, err = osAwareMarshalRego(
+				securityPolicy.AllowAll,
+				containers,
+				nil,
+				osType,
+				[]ExternalProcessConfig{},
+				[]FragmentConfig{},
+				true,
+				true,
+				true,
+				false,
+				true,
+				false,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
+			}
+		} else if osType == "windows" {
+			windows_containers := make([]*WindowsContainer, securityPolicy.Containers.Length)
+			for i := 0; i < securityPolicy.Containers.Length; i++ {
+				index := strconv.Itoa(i)
+				cConf, ok := securityPolicy.WindowsContainers.Elements[index]
+				if !ok {
+					return nil, fmt.Errorf("container constraint with index %q not found", index)
+				}
+				cConf.AllowStdioAccess = true
+				windows_containers[i] = &cConf
+			}
+
+			code, err = osAwareMarshalRego(
+				securityPolicy.AllowAll,
+				nil,
+				windows_containers,
+				osType,
+				[]ExternalProcessConfig{},
+				[]FragmentConfig{},
+				true,
+				true,
+				true,
+				false,
+				true,
+				false,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
+			}
 		}
 	} else {
 		// this is either a Rego policy or malformed JSON
@@ -208,6 +240,7 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 
 	err = policy.rego.Compile()
 	if err != nil {
+		fmt.Printf("print rego compilation failed: %v\n", err)
 		return nil, fmt.Errorf("rego compilation failed: %w", err)
 	}
 
@@ -743,6 +776,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 
 	var input inputData
 
+	if envList == nil {
+		envList = []string{}
+	}
 	switch policy.osType {
 	case "linux":
 		input = inputData{
@@ -762,15 +798,11 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 			"seccompProfileSHA256": opts.SeccompProfileSHA256,
 		}
 	case "windows":
-		if envList == nil {
-			envList = []string{}
-		}
 		input = inputData{
 			"containerID": containerID,
 			"argList":     argList,
 			"envList":     envList,
 			"workingDir":  workingDir,
-			"privileged":  true,
 			"user":        user.Name,
 		}
 	default:
@@ -829,6 +861,18 @@ func appendMountData(mountData []interface{}, mounts []oci.Mount) []interface{} 
 	return mountData
 }
 
+func appendMountDataWindows(mountData []interface{}, mounts []oci.Mount) []interface{} {
+	for _, mount := range mounts {
+		mountData = append(mountData, inputData{
+			"destination": mount.Destination,
+			"source":      mount.Source,
+			"options":     mount.Options,
+		})
+	}
+
+	return mountData
+}
+
 func (policy *regoEnforcer) ExtendDefaultMounts(mounts []oci.Mount) error {
 	policy.defaultMounts = append(policy.defaultMounts, mounts...)
 	defaultMounts := appendMountData([]interface{}{}, policy.defaultMounts)
@@ -855,13 +899,12 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(
 	stdioAccessAllowed bool,
 	err error) {
 	opts := &ExecOptions{
-		User:            &user,
 		Groups:          groups,
 		Umask:           umask,
 		Capabilities:    capabilities,
 		NoNewPrivileges: &noNewPrivileges,
 	}
-	return policy.EnforceExecInContainerPolicyV2(ctx, containerID, argList, envList, workingDir, opts)
+	return policy.EnforceExecInContainerPolicyV2(ctx, containerID, argList, envList, workingDir, user, opts)
 }
 
 func (policy *regoEnforcer) EnforceExecInContainerPolicyV2(
@@ -870,6 +913,7 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicyV2(
 	argList []string,
 	envList []string,
 	workingDir string,
+	user IDName,
 	opts *ExecOptions,
 ) (envToKeep EnvList,
 	capsToKeep *oci.LinuxCapabilities,
@@ -890,7 +934,7 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicyV2(
 			"envList":         envList,
 			"workingDir":      workingDir,
 			"noNewPrivileges": opts.NoNewPrivileges,
-			"user":            opts.User.toInput(),
+			"user":            user.toInput(),
 			"groups":          groupsToInputs(opts.Groups),
 			"umask":           opts.Umask,
 			"capabilities":    mapifyCapabilities(opts.Capabilities),
@@ -901,7 +945,7 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicyV2(
 			"argList":     argList,
 			"envList":     envList,
 			"workingDir":  workingDir,
-			"user":        opts.User.Name,
+			"user":        user.Name,
 		}
 	default:
 		return nil, nil, false, errors.Errorf("unsupported OS value in options: %q", policy.osType)
@@ -961,15 +1005,12 @@ func (policy *regoEnforcer) EnforceShutdownContainerPolicy(ctx context.Context, 
 }
 
 func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(ctx context.Context, containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error {
-	input := inputData{
-		"containerID":   containerID,
-		"signal":        signal,
-		"isInitProcess": isInitProcess,
-		"argList":       startupArgList,
+	opts := &SignalContainerOptions{
+		LinuxSignal:      signal,
+		IsInitProcess:    isInitProcess,
+		LinuxStartupArgs: startupArgList,
 	}
-
-	_, err := policy.enforce(ctx, "signal_container_process", input)
-	return err
+	return policy.EnforceSignalContainerProcessPolicyV2(ctx, containerID, opts)
 }
 
 func (policy *regoEnforcer) EnforceSignalContainerProcessPolicyV2(ctx context.Context, containerID string, opts *SignalContainerOptions) error {
@@ -988,7 +1029,7 @@ func (policy *regoEnforcer) EnforceSignalContainerProcessPolicyV2(ctx context.Co
 			"containerID":   containerID,
 			"signal":        opts.WindowsSignal,
 			"isInitProcess": opts.IsInitProcess,
-			"cmdLine":       opts.WindowsCommand,
+			"argList":       opts.WindowsCommand,
 		}
 	default:
 		return errors.Errorf("unsupported OS value in options: %q", policy.osType)
