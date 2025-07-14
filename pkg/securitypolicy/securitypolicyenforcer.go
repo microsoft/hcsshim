@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -15,12 +16,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-type createEnforcerFunc func(base64EncodedPolicy string, criMounts, criPrivilegedMounts []oci.Mount, maxErrorMessageLength int, osType string) (SecurityPolicyEnforcer, error)
+type createEnforcerFunc func(base64EncodedPolicy string, criMounts, criPrivilegedMounts []oci.Mount, maxErrorMessageLength int) (SecurityPolicyEnforcer, error)
 
 type EnvList []string
 
 type ExecOptions struct {
-	User            *IDName                // for linux, optional: nil means "not set". for windows, only name is set
 	Groups          []IDName               // optional: empty slice or nil
 	Umask           string                 // optional: "" means unspecified
 	Capabilities    *oci.LinuxCapabilities // optional: nil means "none"
@@ -44,7 +44,7 @@ type SignalContainerOptions struct {
 	WindowsSignal guestrequest.SignalValueWCOW
 
 	LinuxStartupArgs []string
-	WindowsCommand   string
+	WindowsCommand   []string
 }
 
 const (
@@ -56,6 +56,9 @@ var (
 	registeredEnforcers = map[string]createEnforcerFunc{}
 	defaultEnforcer     = standardEnforcer
 )
+
+// Package-level variable for OS type, set during enforcer creation
+var osType string = "unknown"
 
 func init() {
 	registeredEnforcers[openDoorEnforcer] = createOpenDoorEnforcer
@@ -113,6 +116,7 @@ type SecurityPolicyEnforcer interface {
 		argList []string,
 		envList []string,
 		workingDir string,
+		user IDName,
 		opts *ExecOptions,
 	) (EnvList, *oci.LinuxCapabilities, bool, error)
 	EnforceExecExternalProcessPolicy(ctx context.Context, argList []string, envList []string, workingDir string) (EnvList, bool, error)
@@ -167,7 +171,7 @@ func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolic
 
 // createAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer instance.
 // Both AllowAll and Containers cannot be set at the same time.
-func createOpenDoorEnforcer(base64EncodedPolicy string, _, _ []oci.Mount, _ int, _ string) (SecurityPolicyEnforcer, error) {
+func createOpenDoorEnforcer(base64EncodedPolicy string, _, _ []oci.Mount, _ int) (SecurityPolicyEnforcer, error) {
 	// This covers the case when an "open_door" enforcer was requested, but no
 	// actual security policy was passed. This can happen e.g. when a container
 	// scratch is created for the first time.
@@ -217,7 +221,6 @@ func createStandardEnforcer(
 	criMounts,
 	criPrivilegedMounts []oci.Mount,
 	maxErrorMessageLength int,
-	osType string,
 ) (SecurityPolicyEnforcer, error) {
 	securityPolicy, err := newSecurityPolicyFromBase64JSON(base64EncodedPolicy)
 	if err != nil {
@@ -225,7 +228,7 @@ func createStandardEnforcer(
 	}
 
 	if securityPolicy.AllowAll {
-		return createOpenDoorEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts, maxErrorMessageLength, osType)
+		return createOpenDoorEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts, maxErrorMessageLength)
 	}
 
 	containers, err := securityPolicy.Containers.toInternal()
@@ -255,7 +258,7 @@ func CreateSecurityPolicyEnforcer(
 	criMounts,
 	criPrivilegedMounts []oci.Mount,
 	maxErrorMessageLength int,
-	osType string,
+	operatingSystem string,
 ) (SecurityPolicyEnforcer, error) {
 	if enforcer == "" {
 		enforcer = defaultEnforcer
@@ -263,10 +266,12 @@ func CreateSecurityPolicyEnforcer(
 			enforcer = openDoorEnforcer
 		}
 	}
+	osType = strings.ToLower(operatingSystem)
+
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
 		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)
 	} else {
-		return createEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts, maxErrorMessageLength, osType)
+		return createEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts, maxErrorMessageLength)
 	}
 }
 
@@ -584,6 +589,7 @@ func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicyV2(
 	argList []string,
 	envList []string,
 	workingDir string,
+	user IDName,
 	opts *ExecOptions,
 ) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, opts.Capabilities, true, nil
@@ -1001,6 +1007,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicyV2(
 	argList []string,
 	envList []string,
 	workingDir string,
+	user IDName,
 	opts *ExecOptions,
 ) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, opts.Capabilities, true, nil
@@ -1119,6 +1126,7 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicyV2(
 	argList []string,
 	envList []string,
 	workingDir string,
+	user IDName,
 	opts *ExecOptions,
 ) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return nil, nil, false, errors.New("starting additional processes in a container is denied by policy")
