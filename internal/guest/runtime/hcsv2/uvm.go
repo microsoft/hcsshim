@@ -305,6 +305,10 @@ func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHost
 			scratchDirPath, expectedScratchDirPathNonShared, expectedScratchDirPathShared)
 	}
 
+	if settings.OCISpecification.Hooks != nil {
+		return errors.Errorf("OCISpecification.Hooks must be nil.")
+	}
+
 	return nil
 }
 
