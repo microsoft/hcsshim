@@ -29,7 +29,7 @@ func init() {
 	// are no race conditions. When multiple init functions are defined in a
 	// single package, the order of their execution is determined by the
 	// filename.
-	defaultEnforcer = regoEnforcerName
+	defaultConfidentialEnforcer = regoEnforcerName
 	defaultMarshaller = regoMarshaller
 }
 
