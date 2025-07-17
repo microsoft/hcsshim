@@ -14,7 +14,7 @@ import (
 	"github.com/vishvananda/netns"
 	"go.opencensus.io/trace"
 
-	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"

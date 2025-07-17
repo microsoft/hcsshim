@@ -10,7 +10,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"

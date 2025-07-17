@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
-	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 )
