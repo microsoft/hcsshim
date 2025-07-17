@@ -273,12 +273,10 @@ jobs:
       fail-fast: false
       matrix:
         name:
-          [windows-2025, windows-2022]
+          [windows-2022]
         include:
           - name: "windows-2022"
             runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]
-          - name: "windows-2025"
-            runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-ws2025-containers-enabled]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -413,7 +411,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, windows-2025]
+        os: [windows-2022]
 
     steps:
       - name: Checkout hcsshim
