@@ -231,9 +231,9 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 		doc.VirtualMachine.ComputeTopology.Memory.SlitType = &firmwareFallbackMeasured
 	}
 
-	if opts.ResourcePoolID != "" {
+	if opts.ResourcePoolID != nil {
 		// TODO (maksiman): assign pod to resource pool and potentially do an OS version check before that
-		log.G(ctx).WithField("resource-pool-id", opts.ResourcePoolID).Debug("setting resource pool ID")
+		log.G(ctx).WithField("resource-pool-id", opts.ResourcePoolID.String()).Debug("setting resource pool ID")
 	}
 
 	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)

@@ -85,8 +85,8 @@ type Options struct {
 	// Defaults to an empty string which indicates the UVM should not be added to any CPUGroup.
 	CPUGroupID string
 
-	// ResourcePoolID holds the resource pool ID the UVM should be assigned to.
-	ResourcePoolID string
+	// ResourcePoolID holds the resource pool guid.GUID the UVM should be assigned to.
+	ResourcePoolID *guid.GUID
 
 	// NetworkConfigProxy holds the address of the network config proxy service.
 	// This != "" determines whether to start the ComputeAgent TTRPC service

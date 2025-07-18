@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
@@ -131,7 +132,11 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 		options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
 	}
 	if c.GlobalIsSet(resourcePoolArgName) {
-		options.ResourcePoolID = c.GlobalString(resourcePoolArgName)
+		rpID, err := guid.FromString(c.GlobalString(resourcePoolArgName))
+		if err != nil {
+			logrus.Fatalf("Failed to parse resource pool GUID: %v", err)
+		}
+		options.ResourcePoolID = &rpID
 	}
 	// Always set the console pipe in uvmboot, it helps with testing/debugging
 	options.ConsolePipe = uvmConsolePipe
