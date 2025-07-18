@@ -79,7 +79,7 @@ type SecurityPolicyEnforcer interface {
 	LoadFragment(ctx context.Context, issuer string, feed string, code string) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
-	GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error)
+	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 }
 
 //nolint
@@ -587,7 +587,7 @@ func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Contex
 }
 
 // Stub. We are deprecating the standard enforcer.
-func (StandardSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {
+func (StandardSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
 
@@ -951,7 +951,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Contex
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {
+func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
 
@@ -1037,6 +1037,6 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Cont
 	return errors.New("unmounting scratch is denied by the policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {
+func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
