@@ -32,6 +32,7 @@ func main() {
 	g, err := HCSIDToGUID(os.Args[1])
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
+		os.Exit(1)
 	}
 	fmt.Printf("%s\n", g)
 }
