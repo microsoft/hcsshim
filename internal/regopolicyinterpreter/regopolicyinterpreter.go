@@ -6,8 +6,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 	"sync"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -17,15 +15,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-type LogLevel int
+type LogLevel int32
 
 const (
 	LogNone LogLevel = iota
-	// Logs the output of Rego print() statements in the policy
+	// LogInfo logs the output of Rego print() statements in the policy
 	LogInfo
-	// Logs the result objects returned from each query
+	// LogResults logs the result objects returned from each query
 	LogResults
-	// Logs the full metadata state after each query
+	// LogMetadata logs the full metadata state after each query
 	LogMetadata
 )
 
@@ -40,12 +38,17 @@ type RegoPolicyInterpreter struct {
 	modules map[string]*RegoModule
 	// Compiled modules
 	compiledModules *ast.Compiler
-	// Logging
-	logLevel       LogLevel
-	logFile        *os.File
-	infoLogger     *log.Logger
-	resultsLogger  *log.Logger
-	metadataLogger *log.Logger
+
+	logger InterpreterLogger
+}
+
+type InterpreterOpt func(rpi *RegoPolicyInterpreter) error
+
+func WithLogger(logger InterpreterLogger) InterpreterOpt {
+	return func(rpi *RegoPolicyInterpreter) error {
+		rpi.logger = logger
+		return nil
+	}
 }
 
 type RegoModule struct {
@@ -78,7 +81,7 @@ type regoMetadataOperation struct {
 	Value  interface{}        `json:"value"`
 }
 
-// The result from a policy query
+// RegoQueryResult is the result from a policy query
 type RegoQueryResult map[string]interface{}
 
 // deep copy for an object
@@ -117,7 +120,7 @@ func copyValue(value interface{}) (interface{}, error) {
 // inputData is the Rego data which should be used as the initial state
 // of the interpreter. A deep copy is performed on it such that it will
 // not be modified.
-func NewRegoPolicyInterpreter(code string, inputData map[string]interface{}) (*RegoPolicyInterpreter, error) {
+func NewRegoPolicyInterpreter(code string, inputData map[string]interface{}, opts ...InterpreterOpt) (*RegoPolicyInterpreter, error) {
 	data, err := copyObject(inputData)
 	if err != nil {
 		return nil, fmt.Errorf("unable to copy the input data: %w", err)
@@ -128,10 +131,15 @@ func NewRegoPolicyInterpreter(code string, inputData map[string]interface{}) (*R
 	}
 
 	policy := &RegoPolicyInterpreter{
-		code:     code,
-		data:     data,
-		modules:  make(map[string]*RegoModule),
-		logLevel: LogNone,
+		code:    code,
+		data:    data,
+		modules: make(map[string]*RegoModule),
+	}
+
+	for _, opt := range opts {
+		if err := opt(policy); err != nil {
+			return nil, err
+		}
 	}
 
 	return policy, nil
@@ -173,12 +181,11 @@ func (r *RegoPolicyInterpreter) GetData(key string) (interface{}, error) {
 	r.dataAndModulesMutex.Lock()
 	defer r.dataAndModulesMutex.Unlock()
 	if value, ok := r.data[key]; ok {
-		copy, err := copyValue(value)
+		cp, err := copyValue(value)
 		if err != nil {
 			return nil, fmt.Errorf("unable to copy value: %w", err)
 		}
-
-		return copy, nil
+		return cp, nil
 	}
 
 	return nil, fmt.Errorf("data value not found for `%s`", key)
@@ -269,9 +276,8 @@ func (m regoMetadata) getOrCreate(name string) map[string]interface{} {
 	return metadata
 }
 
+// dataAndModulesMutex must be held before calling this
 func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) error {
-	// dataAndModulesMutex must be held before calling this
-
 	metadataRoot, ok := r.data["metadata"].(regoMetadata)
 	if !ok {
 		return errors.New("illegal interpreter state: invalid metadata object type")
@@ -286,13 +292,10 @@ func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) err
 			} else {
 				metadata[op.Key] = op.Value
 			}
-
 		case metadataUpdate:
 			metadata[op.Key] = op.Value
-
 		case metadataRemove:
 			delete(metadata, op.Key)
-
 		default:
 			return fmt.Errorf("unrecognized metadata action: %s", op.Action)
 		}
@@ -310,18 +313,12 @@ func (r *RegoPolicyInterpreter) EnableLogging(path string, level LogLevel) error
 	defer r.dataAndModulesMutex.Unlock()
 
 	r.compiledModules = nil
-	r.logLevel = level
-
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	filelogger, err := NewFileLogger(path, level)
 	if err != nil {
 		return err
 	}
-
-	r.logFile = file
-	r.infoLogger = log.New(file, "INFO: ", log.Ldate|log.Ltime)
-	r.resultsLogger = log.New(file, "RESULT: ", log.Ldate|log.Ltime)
-	r.metadataLogger = log.New(file, "METADATA: ", log.Ldate|log.Ltime)
-	r.logInfo("Logging Enabled at level %d", level)
+	r.logger = filelogger
+	r.logInfo(context.TODO(), "Logging Enabled at level %d", level)
 
 	return nil
 }
@@ -334,7 +331,9 @@ func (r *RegoPolicyInterpreter) SetLogLevel(level LogLevel) {
 	defer r.dataAndModulesMutex.Unlock()
 
 	r.compiledModules = nil
-	r.logLevel = level
+	if r.logger != nil {
+		r.logger.SetLevel(level)
+	}
 }
 
 // DisableLogging disables logging and closes the underlying log file.
@@ -344,26 +343,14 @@ func (r *RegoPolicyInterpreter) DisableLogging() error {
 	defer r.dataAndModulesMutex.Unlock()
 
 	r.compiledModules = nil
-	r.logLevel = LogNone
-	if r.logFile != nil {
-		r.logInfo("Logging disabled")
-		r.infoLogger = nil
-		r.resultsLogger = nil
-		r.metadataLogger = nil
-		err := r.logFile.Close()
-		if err != nil {
-			return err
-		}
-
-		r.logFile = nil
+	if r.logger == nil {
+		return nil
 	}
-
-	return nil
+	return r.logger.Close(context.TODO())
 }
 
+// dataAndModulesMutex must be held before calling this
 func (r *RegoPolicyInterpreter) compile() error {
-	// dataAndModulesMutex must be held before calling this
-
 	modules := make(map[string]string)
 	for _, module := range r.modules {
 		modules[module.Namespace+".rego"] = module.Code
@@ -371,8 +358,12 @@ func (r *RegoPolicyInterpreter) compile() error {
 
 	modules["policy.rego"] = r.code
 
+	printStatements := false
+	if r.logger != nil && r.logger.Level() != LogNone {
+		printStatements = true
+	}
 	options := ast.CompileOpts{
-		EnablePrintStatements: r.logLevel != LogNone,
+		EnablePrintStatements: printStatements,
 	}
 
 	if compiled, err := ast.CompileModulesWithOpt(modules, options); err == nil {
@@ -392,37 +383,25 @@ func (r *RegoPolicyInterpreter) Compile() error {
 	return r.compile()
 }
 
-func (r *RegoPolicyInterpreter) logInfo(message string, args ...interface{}) {
-	if r.logLevel < LogInfo || len(message) == 0 {
+func (r *RegoPolicyInterpreter) logInfo(ctx context.Context, message string, args ...interface{}) {
+	if r.logger == nil {
 		return
 	}
-	r.infoLogger.Printf(message, args...)
+	r.logger.LogInfo(ctx, message, args...)
 }
 
-func (r *RegoPolicyInterpreter) logResult(rule string, resultSet interface{}) {
-	if r.logLevel < LogResults {
+func (r *RegoPolicyInterpreter) logResult(ctx context.Context, rule string, resultSet interface{}) {
+	if r.logger == nil {
 		return
 	}
-
-	contents, err := json.Marshal(resultSet)
-	if err != nil {
-		r.resultsLogger.Printf("error marshaling result set: %v\n", err.Error())
-	} else {
-		r.resultsLogger.Printf("%s -> %s", rule, string(contents))
-	}
+	r.logger.LogResult(ctx, rule, resultSet)
 }
 
 func (r *RegoPolicyInterpreter) logMetadata() {
-	if r.logLevel < LogMetadata {
+	if r.logger == nil {
 		return
 	}
-
-	contents, err := json.Marshal(r.data["metadata"])
-	if err != nil {
-		r.metadataLogger.Printf("error marshaling metadata: %v\n", err.Error())
-	} else {
-		r.metadataLogger.Println(string(contents))
-	}
+	r.logger.LogMetadata(context.TODO(), r.data)
 }
 
 // Value returns the raw value from a Rego query result.
@@ -525,30 +504,32 @@ func (r RegoQueryResult) Union(other RegoQueryResult) RegoQueryResult {
 	return result
 }
 
-func (r *RegoPolicyInterpreter) query(rule string, input map[string]interface{}) (rego.ResultSet, error) {
-	// dataAndModulesMutex must be held before calling this
-
+// dataAndModulesMutex must be held before calling this
+func (r *RegoPolicyInterpreter) query(ctx context.Context, rule string, input map[string]interface{}) (rego.ResultSet, error) {
 	store := inmem.NewFromObject(r.data)
 
 	var buf bytes.Buffer
+	printStatements := false
+	if r.logger != nil && r.logger.Level() != LogNone {
+		printStatements = true
+	}
 	query := rego.New(
 		rego.Query(rule),
 		rego.Input(input),
 		rego.Store(store),
-		rego.EnablePrintStatements(r.logLevel != LogNone),
+		rego.EnablePrintStatements(printStatements),
 		rego.PrintHook(topdown.NewPrintHook(&buf)),
 		rego.Compiler(r.compiledModules))
 
-	ctx := context.Background()
 	resultSet, err := query.Eval(ctx)
 	output := buf.String()
 
-	r.logInfo("%s", output)
+	r.logInfo(ctx, output)
 
 	return resultSet, err
 }
 
-func (r *RegoPolicyInterpreter) RawQuery(rule string, input map[string]interface{}) (rego.ResultSet, error) {
+func (r *RegoPolicyInterpreter) RawQuery(ctx context.Context, rule string, input map[string]interface{}) (rego.ResultSet, error) {
 	// this mutex ensures no other threads modify the data and compiledModules fields during query execution
 	r.dataAndModulesMutex.Lock()
 	defer r.dataAndModulesMutex.Unlock()
@@ -560,19 +541,18 @@ func (r *RegoPolicyInterpreter) RawQuery(rule string, input map[string]interface
 		}
 	}
 
-	resultSet, err := r.query(rule, input)
-
+	resultSet, err := r.query(ctx, rule, input)
 	if err != nil {
 		return nil, err
 	}
 
-	r.logResult(rule, resultSet)
+	r.logResult(ctx, rule, resultSet)
 
 	return resultSet, nil
 }
 
 // Query queries the policy with the given rule and input data and returns the result.
-func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{}) (RegoQueryResult, error) {
+func (r *RegoPolicyInterpreter) Query(ctx context.Context, rule string, input map[string]interface{}) (RegoQueryResult, error) {
 	// this mutex ensures no other threads modify the data and compiledModules fields during query execution
 	r.dataAndModulesMutex.Lock()
 	defer r.dataAndModulesMutex.Unlock()
@@ -584,8 +564,7 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 		}
 	}
 
-	rawResult, err := r.query(rule, input)
-
+	rawResult, err := r.query(ctx, rule, input)
 	if err != nil {
 		return nil, err
 	}
@@ -600,9 +579,9 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 		return nil, errors.New("unable to load results object from Rego query")
 	}
 
-	r.logResult(rule, resultSet)
+	r.logResult(ctx, rule, resultSet)
 
-	ops := []*regoMetadataOperation{}
+	var ops []*regoMetadataOperation
 	if rawMetadata, ok := resultSet["metadata"]; ok {
 		metadata, ok := rawMetadata.([]interface{})
 		if !ok {
