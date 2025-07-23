@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 )
 
@@ -22,7 +23,9 @@ const (
 )
 
 func MakeUtilityVMCIMFromTar(ctx context.Context, tarPath, destPath string) (_ *cimfs.BlockCIM, err error) {
-	slog.InfoContext(ctx, "Extracting UtilityVM files from tar", "tarPath", tarPath, "destPath", destPath)
+	slog.InfoContext(ctx, "Extracting UtilityVM files from tar",
+		"tarPath", tarPath,
+		"destPath", destPath)
 
 	tarFile, err := os.Open(tarPath)
 	if err != nil {
@@ -41,19 +44,31 @@ func MakeUtilityVMCIMFromTar(ctx context.Context, tarPath, destPath string) (_ *
 		CimName:   "boot.cim",
 	}
 
-	w, err := newUVMCIMWriter(uvmCIM)
+	w, err := newUVMCIMWriter(ctx, uvmCIM)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create block CIM writer: %w", err)
 	}
 	defer func() {
-		cErr := w.Close(ctx)
-		if err == nil {
-			err = cErr
+		// only attempt to close the writer in case of errors, in success case we close it anyway
+		if err != nil {
+			if closeErr := w.Close(ctx); closeErr != nil {
+				slog.ErrorContext(ctx, "failed to close CIM writer", "error", closeErr)
+			}
 		}
 	}()
 
 	if err = extractUtilityVMFilesFromTar(ctx, tarFile, w); err != nil {
 		return nil, fmt.Errorf("failed to extract UVM layer: %w", err)
+	}
+
+	// MUST close the writer before appending VHD footer
+	if err = w.Close(ctx); err != nil {
+		return nil, fmt.Errorf("failed to close CIM writer: %w", err)
+	}
+
+	// We always want to append the VHD footer to the UVM CIM
+	if err := appendVHDFooterToCIM(uvmCIM.BlockPath); err != nil {
+		return nil, fmt.Errorf("failed to append VHD footer: %w", err)
 	}
 	return uvmCIM, nil
 }
@@ -204,5 +219,22 @@ func extractUtilityVMFilesFromTar(ctx context.Context, tarFile *os.File, w *uvmC
 			return fmt.Errorf("failed to add link from [%s] to [%s]: %w", pl.name, pl.target, err)
 		}
 	}
+	return nil
+}
+
+// appendVHDFooterToCIM appends a VHD footer to the CIM file using the tar2ext4.ConvertToVhd function
+func appendVHDFooterToCIM(cimPath string) error {
+	// Open the CIM file for reading and writing
+	file, err := os.OpenFile(cimPath, os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open CIM file for VHD footer: %w", err)
+	}
+	defer file.Close()
+
+	// Use the existing ConvertToVhd function to append the VHD footer
+	if err := tar2ext4.ConvertToVhd(file); err != nil {
+		return fmt.Errorf("failed to convert CIM to VHD: %w", err)
+	}
+
 	return nil
 }
