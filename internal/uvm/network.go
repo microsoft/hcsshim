@@ -39,6 +39,13 @@ var (
 	ErrNICNotFound = errors.New("NIC not found in network namespace")
 )
 
+const (
+	ipv4GwDestination = "0.0.0.0/0"
+	ipv4EmptyGw       = "0.0.0.0"
+	ipv6GwDestination = "::/0"
+	ipv6EmptyGw       = "::"
+)
+
 func sortEndpoints(endpoints []*hcn.HostComputeEndpoint) {
 	cmp := func(a, b *hcn.HostComputeEndpoint) int {
 		if strings.HasSuffix(a.Name, "eth0") {
@@ -573,6 +580,15 @@ func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint, policyBasedR
 	}
 
 	for _, r := range endpoint.Routes {
+
+		if (r.DestinationPrefix == ipv4GwDestination || r.DestinationPrefix == ipv6GwDestination) &&
+			r.NextHop == "" {
+			// This is the default route
+			// But NextHop should either specify a gateway or be equal to 0.0.0.0 to be on-link
+			// The fact that it's empty makes this an invalid route
+			continue
+		}
+
 		newRoute := guestresource.LCOWRoute{
 			DestinationPrefix: r.DestinationPrefix,
 			NextHop:           r.NextHop,
