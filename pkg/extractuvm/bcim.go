@@ -67,7 +67,7 @@ func MakeUtilityVMCIMFromTar(ctx context.Context, tarPath, destPath string) (_ *
 	}
 
 	// We always want to append the VHD footer to the UVM CIM
-	if err := appendVHDFooterToCIM(uvmCIM.BlockPath); err != nil {
+	if err := tar2ext4.ConvertFileToVhd(uvmCIM.BlockPath); err != nil {
 		return nil, fmt.Errorf("failed to append VHD footer: %w", err)
 	}
 	return uvmCIM, nil
@@ -219,22 +219,5 @@ func extractUtilityVMFilesFromTar(ctx context.Context, tarFile *os.File, w *uvmC
 			return fmt.Errorf("failed to add link from [%s] to [%s]: %w", pl.name, pl.target, err)
 		}
 	}
-	return nil
-}
-
-// appendVHDFooterToCIM appends a VHD footer to the CIM file using the tar2ext4.ConvertToVhd function
-func appendVHDFooterToCIM(cimPath string) error {
-	// Open the CIM file for reading and writing
-	file, err := os.OpenFile(cimPath, os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open CIM file for VHD footer: %w", err)
-	}
-	defer file.Close()
-
-	// Use the existing ConvertToVhd function to append the VHD footer
-	if err := tar2ext4.ConvertToVhd(file); err != nil {
-		return fmt.Errorf("failed to convert CIM to VHD: %w", err)
-	}
-
 	return nil
 }

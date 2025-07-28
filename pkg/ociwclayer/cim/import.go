@@ -96,22 +96,8 @@ func WithParentLayers(parentLayers []*cimfs.BlockCIM) BlockCIMLayerImportOpt {
 	}
 }
 
-func appendVHDFooterToBlockCIM(ctx context.Context, blockPath string) error {
-	log.G(ctx).Debug("appending VHD footer")
-	// append footer only after all writers are closed
-	blockFile, err := os.OpenFile(blockPath, os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open block CIM to append VHD footer: %w", err)
-	}
-	defer blockFile.Close()
-
-	if err := tar2ext4.ConvertToVhd(blockFile); err != nil {
-		return fmt.Errorf("failed to append VHD footer: %w", err)
-	}
-	return nil
-}
-
 func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string) error {
+	log.G(ctx).Debugf("writing integrity checksum file for block CIM `%s`", blockPath)
 	// for convenience write a file that has the base64 encoded root digest of the generated verified CIM.
 	// this same base64 string can be used in the confidential policy.
 	digest, err := cimfs.GetVerificationInfo(blockPath)
@@ -171,8 +157,9 @@ func ImportBlockCIMLayerWithOpts(ctx context.Context, r io.Reader, layer *cimfs.
 	}
 
 	if config.appendVHDFooter {
-		if err = appendVHDFooterToBlockCIM(ctx, layer.BlockPath); err != nil {
-			return 0, err
+		log.G(ctx).Debugf("appending VHD footer to block CIM at `%s`", layer.BlockPath)
+		if err = tar2ext4.ConvertFileToVhd(layer.BlockPath); err != nil {
+			return 0, fmt.Errorf("append VHD footer to block CIM: %w", err)
 		}
 	}
 
@@ -366,15 +353,9 @@ func MergeBlockCIMLayersWithOpts(ctx context.Context, sourceCIMs []*cimfs.BlockC
 
 	// Handle VHD footer if requested
 	if config.appendVHDFooter {
-		// append footer only after merge is complete
-		blockFile, err := os.OpenFile(mergedCIM.BlockPath, os.O_WRONLY, 0755)
-		if err != nil {
-			return fmt.Errorf("failed to open merged CIM to append VHD footer: %w", err)
-		}
-		defer blockFile.Close()
-
-		if err := tar2ext4.ConvertToVhd(blockFile); err != nil {
-			return fmt.Errorf("failed to append VHD footer to merged CIM: %w", err)
+		log.G(ctx).Debugf("appending VHD footer to block CIM at `%s`", mergedCIM.BlockPath)
+		if err = tar2ext4.ConvertFileToVhd(mergedCIM.BlockPath); err != nil {
+			return fmt.Errorf("append VHD footer to block CIM: %w", err)
 		}
 	}
 	return nil
