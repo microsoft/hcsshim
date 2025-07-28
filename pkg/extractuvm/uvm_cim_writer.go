@@ -25,8 +25,12 @@ type uvmCIMWriter struct {
 	filesAdded map[string]struct{}
 }
 
-func newUVMCIMWriter(l *cimfs.BlockCIM) (*uvmCIMWriter, error) {
-	cim, err := cimfs.CreateBlockCIM(l.BlockPath, l.CimName, l.Type)
+func newUVMCIMWriter(ctx context.Context, l *cimfs.BlockCIM) (*uvmCIMWriter, error) {
+	var cim *cimfs.CimFsWriter
+	var err error
+
+	// We always want to create the UVM CIM with data integrity
+	cim, err = cimfs.CreateBlockCIMWithOptions(ctx, l, cimfs.WithDataIntegrity())
 	if err != nil {
 		return nil, fmt.Errorf("error in creating a new cim: %w", err)
 	}
