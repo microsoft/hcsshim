@@ -10,11 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
-	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/opencontainers/cgroups/devices/config"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+
+	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
+	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 const (
@@ -60,7 +62,7 @@ func AddAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 
 // devicePathsFromPCIPath takes a sysfs bus path to the pci device assigned into the guest
 // and attempts to find the dev nodes in the guest that map to it.
-func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Device, error) {
+func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*config.Device, error) {
 	// get the full pci path to make sure that it's the final path
 	pciFullPath, err := filepath.EvalSymlinks(pciPath)
 	if err != nil {
@@ -75,7 +77,7 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Dev
 		}
 
 		// some drivers create multiple dev nodes associated with the PCI device
-		out := []*devices.Device{}
+		out := []*config.Device{}
 
 		// get all host dev devices
 		hostDevices, err := devices.HostDevices()
@@ -92,9 +94,9 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Dev
 
 			deviceTypeString := ""
 			switch d.Type {
-			case devices.BlockDevice:
+			case config.BlockDevice:
 				deviceTypeString = blockType
-			case devices.CharDevice:
+			case config.CharDevice:
 				deviceTypeString = charType
 			default:
 				return nil, errors.New("unsupported device type")
@@ -127,7 +129,7 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*devices.Dev
 	}
 }
 
-func AddLinuxDeviceToSpec(ctx context.Context, hostDevice *devices.Device, spec *oci.Spec, addCgroupDevice bool) {
+func AddLinuxDeviceToSpec(ctx context.Context, hostDevice *config.Device, spec *oci.Spec, addCgroupDevice bool) {
 	rd := oci.LinuxDevice{
 		Path:  hostDevice.Path,
 		Type:  string(hostDevice.Type),
