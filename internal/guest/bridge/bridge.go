@@ -309,7 +309,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					trace.StringAttribute("cid", base.ContainerID))
 
 				entry := log.G(ctx)
-				if entry.Logger.GetLevel() > logrus.DebugLevel {
+				if entry.Logger.IsLevelEnabled(logrus.TraceLevel) {
 					var err error
 					var msgBytes []byte
 					switch header.Type {
