@@ -657,9 +657,9 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		doc.VirtualMachine.ComputeTopology.Memory.SlitType = &firmwareFallbackMeasured
 	}
 
-	if opts.ResourcePoolID != nil {
-		// TODO (maksiman): assign pod to resource pool and potentially do an OS version check before that
-		log.G(ctx).WithField("resource-pool-id", opts.ResourcePoolID.String()).Debug("setting resource pool ID")
+	if opts.ResourcePartitionID != nil {
+		// TODO (maksiman): assign pod to resource partition and potentially do an OS version check before that
+		log.G(ctx).WithField("resource-partition-id", opts.ResourcePartitionID.String()).Debug("setting resource partition ID")
 	}
 
 	// Add optional devices that were specified on the UVM spec

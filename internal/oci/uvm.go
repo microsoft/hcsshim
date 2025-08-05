@@ -251,7 +251,7 @@ func parseDevices(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDev
 }
 
 // sets options common to both WCOW and LCOW from annotations.
-func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) (err error) {
+func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) error {
 	opts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, opts.MemorySizeInMB)
 	opts.LowMMIOGapInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, opts.LowMMIOGapInMB)
 	opts.HighMMIOBaseInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, opts.HighMMIOBaseInMB)
@@ -284,7 +284,8 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
 
 	// parse error yielding annotations
-	opts.ResourcePoolID, err = ParseAnnotationsGUID(s.Annotations, annotations.ResourcePoolID, opts.ResourcePoolID)
+	var err error
+	opts.ResourcePartitionID, err = ParseAnnotationsGUID(s.Annotations, annotations.ResourcePartitionID, opts.ResourcePartitionID)
 	if err != nil {
 		return err
 	}

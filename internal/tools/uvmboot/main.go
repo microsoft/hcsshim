@@ -25,7 +25,7 @@ const (
 	measureArgName              = "measure"
 	parallelArgName             = "parallel"
 	countArgName                = "count"
-	resourcePoolArgName         = "resource-pool"
+	resourcePartitionArgName    = "resource-partition"
 
 	execCommandLineArgName = "exec"
 	uvmConsolePipe         = "\\\\.\\pipe\\uvmpipe"
@@ -85,8 +85,8 @@ func main() {
 			Destination: &useGCS,
 		},
 		cli.StringFlag{
-			Name:  resourcePoolArgName,
-			Usage: "Resource pool GUID to assign UVM to",
+			Name:  resourcePartitionArgName,
+			Usage: "Resource partition GUID to assign UVM to",
 		},
 	}
 
@@ -131,12 +131,12 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 	if c.GlobalIsSet(enableDeferredCommitArgName) {
 		options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
 	}
-	if c.GlobalIsSet(resourcePoolArgName) {
-		rpID, err := guid.FromString(c.GlobalString(resourcePoolArgName))
+	if c.GlobalIsSet(resourcePartitionArgName) {
+		rpID, err := guid.FromString(c.GlobalString(resourcePartitionArgName))
 		if err != nil {
-			logrus.Fatalf("Failed to parse resource pool GUID: %v", err)
+			logrus.Fatalf("Failed to parse resource partition GUID: %v", err)
 		}
-		options.ResourcePoolID = &rpID
+		options.ResourcePartitionID = &rpID
 	}
 	// Always set the console pipe in uvmboot, it helps with testing/debugging
 	options.ConsolePipe = uvmConsolePipe

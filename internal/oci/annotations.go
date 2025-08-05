@@ -383,7 +383,7 @@ func ParseAnnotationsGUID(a map[string]string, key string, def *guid.GUID) (*gui
 	if v, ok := a[key]; ok {
 		g, err := guid.FromString(v)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse annotation %q with value %q as GUID: %w", key, v, err)
 		}
 		return &g, nil
 	}

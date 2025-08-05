@@ -217,6 +217,7 @@ const (
 // uVM CPU annotations.
 const (
 	// CPUGroupID specifies the cpugroup ID that a UVM should be assigned to, if any.
+	// Passing this annotation together with ResourcePartitionID will result in an error.
 	CPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
 
 	// ProcessorCount overrides the hypervisor isolated vCPU count set
@@ -313,8 +314,10 @@ const (
 	// This should be used for explicit vNUMA topology.
 	NumaCountOfMemoryBlocks = "io.microsoft.virtualmachine.computetopology.numa.count-of-memory-blocks"
 
-	// ResourcePoolID is a GUID string representing a resource pool ID the UVM should be associated with.
-	ResourcePoolID = "io.microsoft.virtualmachine.resource-pool-id"
+	// ResourcePartitionID is a GUID string representing a resource partition ID the UVM should be associated with.
+	// Resource partition will have its own CPU group, as a result this annotation cannot be used together with
+	// CPUGroupID and will yield an error.
+	ResourcePartitionID = "io.microsoft.virtualmachine.resource-partition-id"
 )
 
 // uVM storage (Quality of Service) annotations.
