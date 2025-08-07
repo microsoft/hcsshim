@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/containerd/console"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
@@ -140,6 +142,14 @@ var cwcowCommand = cli.Command{
 					cmd.Stdout = os.Stdout
 					con, err := console.ConsoleFromFile(os.Stdin)
 					if err == nil {
+						csz, err := con.Size()
+						if err != nil {
+							return fmt.Errorf("failed to get console size: %w", err)
+						}
+						cmd.Spec.ConsoleSize = &specs.Box{
+							Height: uint(csz.Height),
+							Width:  uint(csz.Width),
+						}
 						err = con.SetRaw()
 						if err != nil {
 							return err
