@@ -268,8 +268,10 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 	opts.ProcessDumpLocation = ParseAnnotationsString(s.Annotations, annotations.ContainerProcessDumpLocation, opts.ProcessDumpLocation)
 	opts.NoWritableFileShares = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableWritableFileShares, opts.NoWritableFileShares)
 	opts.DumpDirectoryPath = ParseAnnotationsString(s.Annotations, annotations.DumpDirectoryPath, opts.DumpDirectoryPath)
+
+	// NUMA settings
 	opts.MaxProcessorsPerNumaNode = ParseAnnotationsUint32(ctx, s.Annotations, annotations.NumaMaximumProcessorsPerNode, opts.MaxProcessorsPerNumaNode)
-	opts.MaxSizePerNode = ParseAnnotationsUint64(ctx, s.Annotations, annotations.NumaMaximumSizePerNode, opts.MaxSizePerNode)
+	opts.MaxMemorySizePerNumaNode = ParseAnnotationsUint64(ctx, s.Annotations, annotations.NumaMaximumMemorySizePerNode, opts.MaxMemorySizePerNumaNode)
 	opts.PreferredPhysicalNumaNodes = ParseAnnotationCommaSeparatedUint32(ctx, s.Annotations, annotations.NumaPreferredPhysicalNodes,
 		opts.PreferredPhysicalNumaNodes)
 	opts.NumaMappedPhysicalNodes = ParseAnnotationCommaSeparatedUint32(ctx, s.Annotations, annotations.NumaMappedPhysicalNodes,
@@ -278,6 +280,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 		opts.NumaProcessorCounts)
 	opts.NumaMemoryBlocksCounts = ParseAnnotationCommaSeparatedUint64(ctx, s.Annotations, annotations.NumaCountOfMemoryBlocks,
 		opts.NumaMemoryBlocksCounts)
+
 	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
 }
 
