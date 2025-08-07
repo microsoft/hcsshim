@@ -186,7 +186,8 @@ func TestProccessAnnotations_Expansion(t *testing.T) {
 					subtest.Fatalf("could not update spec from options: %v", err)
 				}
 
-				for _, k := range annotations.AnnotationExpansions[annotations.DisableUnsafeOperations] {
+				ae := annotations.AnnotationExpansionMap()
+				for _, k := range ae[annotations.DisableUnsafeOperations] {
 					if vv := tt.spec.Annotations[k]; vv != v {
 						subtest.Fatalf("annotation %q was incorrectly expanded to %q, expected %q", k, vv, v)
 					}
