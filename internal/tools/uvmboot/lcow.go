@@ -4,11 +4,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/containerd/console"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
@@ -306,6 +308,14 @@ func execViaGCS(ctx context.Context, vm *uvm.UtilityVM, cCtx *cli.Context) error
 		if err != nil {
 			log.G(ctx).WithError(err).Warn("could not create console from stdin")
 		} else {
+			csz, err := con.Size()
+			if err != nil {
+				return fmt.Errorf("failed to get console size: %w", err)
+			}
+			c.Spec.ConsoleSize = &specs.Box{
+				Height: uint(csz.Height),
+				Width:  uint(csz.Width),
+			}
 			if err := con.SetRaw(); err != nil {
 				return err
 			}
