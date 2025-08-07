@@ -220,6 +220,25 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 			if err := addNvidiaDeviceHook(ctx, spec, ociBundlePath); err != nil {
 				return err
 			}
+
+			// The NVIDIA device hook `nvidia-container-cli` adds `rw` permissions for the
+			// GPU and ctl nodes (`c 195:*`) to the  devices allow list, but CUDA apparently also
+			// needs `rwm` permission for other device nodes (e.g., `c 235`)
+			//
+			// Grant `rwm` to all character devices (`c *:* rwm`) to avoid hard coding exact node
+			// numbers, which are unknown before the driver runs (GPU devices are presented as I2C
+			// devices initially) or could change with driver implementation.
+			//
+			// Note: runc already grants mknod, `c *:* m`, so this really adds `rw` permissions for
+			// all character devices:
+			// https://github.com/opencontainers/runc/blob/6bae6cad4759a5b3537d550f43ea37d51c6b518a/libcontainer/specconv/spec_linux.go#L205-L222
+			spec.Linux.Resources.Devices = append(spec.Linux.Resources.Devices,
+				oci.LinuxDeviceCgroup{
+					Allow:  true,
+					Type:   "c",
+					Access: "rwm",
+				},
+			)
 		}
 		// add other assigned devices to the spec
 		if err := specGuest.AddAssignedDevice(ctx, spec); err != nil {
