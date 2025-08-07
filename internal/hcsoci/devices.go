@@ -174,21 +174,21 @@ func handleAssignedDevicesLCOW(
 
 	// assign device into UVM and create corresponding spec windows devices
 	for _, d := range specDevs {
-		if uvm.IsValidDeviceType(d.IDType) {
-			pciID, index := devices.GetDeviceInfoFromPath(d.ID)
-			vpci, err := vm.AssignDevice(ctx, pciID, index, "")
-			if err != nil {
-				return resultDevs, closers, errors.Wrapf(err, "failed to assign device %s, function %d to pod %s", pciID, index, vm.ID())
-			}
-			closers = append(closers, vpci)
-
-			// update device ID on the spec to the assigned device's resulting vmbus guid so gcs knows which devices to
-			// map into the container
-			d.ID = vpci.VMBusGUID
-			resultDevs = append(resultDevs, d)
-		} else {
+		if !uvm.IsValidDeviceType(d.IDType) {
 			return resultDevs, closers, errors.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
+
+		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
+		vpci, err := vm.AssignDevice(ctx, pciID, index, "")
+		if err != nil {
+			return resultDevs, closers, errors.Wrapf(err, "failed to assign device %s, function %d to pod %s", pciID, index, vm.ID())
+		}
+		closers = append(closers, vpci)
+
+		// update device ID on the spec to the assigned device's resulting vmbus guid so gcs knows which devices to
+		// map into the container
+		d.ID = vpci.VMBusGUID
+		resultDevs = append(resultDevs, d)
 	}
 
 	return resultDevs, closers, nil
