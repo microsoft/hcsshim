@@ -189,9 +189,9 @@ func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]str
 	}
 }
 
-// handleSecurityPolicy handles parsing SecurityPolicy and NoSecurityHardware and setting
-// implied options from the results. Both LCOW only, not WCOW.
-func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
+// handleLCOWSecurityPolicy handles parsing SecurityPolicy and NoSecurityHardware and setting
+// implied options from the results for LCOW.
+func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
 	lopts.SecurityPolicy = ParseAnnotationsString(a, annotations.SecurityPolicy, lopts.SecurityPolicy)
 	// allow actual isolated boot etc to be ignored if we have no hardware. Required for dev
 	// this is not a security issue as the attestation will fail without a genuine report
@@ -225,6 +225,30 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 	if len(lopts.SecurityPolicy) > 0 {
 		// will only be false if explicitly set false by the annotation. We will otherwise default to true when there is a security policy
 		lopts.EnableScratchEncryption = ParseAnnotationsBool(ctx, a, annotations.EncryptedScratchDisk, true)
+	}
+}
+
+// handleWCOWSecurityPolicy handles parsing WCOW SecurityPolicy and SecurityPolicyEnforcer and setting
+// implied options from the results for WCOW.
+func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *uvm.OptionsWCOW) {
+	wopts.SecurityPolicy = ParseAnnotationsString(a, annotations.WCOWSecurityPolicy, wopts.SecurityPolicy)
+	if len(wopts.SecurityPolicy) == 0 {
+		return
+	}
+	wopts.SecurityPolicyEnabled = true
+	// overcommit isn't allowed when running in confidential mode
+	wopts.AllowOvercommit = false
+
+	// TODO(ambarve): You need a minimum of 2GB memory when running in confidential mode,
+	// we should throw error if the provided value is smaller.
+	wopts.MemorySizeInMB = 2048
+	wopts.SecurityPolicyEnforcer = ParseAnnotationsString(a, annotations.WCOWSecurityPolicyEnforcer, wopts.SecurityPolicyEnforcer)
+	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
+	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
+	wopts.WritableEFI = ParseAnnotationsBool(ctx, a, annotations.WCOWWritableEFI, false)
+	if ParseAnnotationsBool(ctx, a, annotations.WCOWNoSecurityHardware, false) {
+		wopts.NoSecurityHardware = true
+		wopts.IsolationType = "VirtualizationBasedSecurity"
 	}
 }
 
@@ -323,7 +347,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 
 		// SecurityPolicy is very sensitive to other settings and will silently change those that are incompatible.
 		// Eg VMPem device count, overridden kernel option cannot be respected.
-		handleSecurityPolicy(ctx, s.Annotations, lopts)
+		handleLCOWSecurityPolicy(ctx, s.Annotations, lopts)
 
 		// override the default GuestState and DmVerityRootFs filenames if specified
 		lopts.GuestStateFile = ParseAnnotationsString(s.Annotations, annotations.GuestStateFile, lopts.GuestStateFile)
@@ -346,6 +370,10 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.NoInheritHostTimezone = ParseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
 		wopts.AdditionalRegistryKeys = append(wopts.AdditionalRegistryKeys, parseAdditionalRegistryValues(ctx, s.Annotations)...)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
+
+		// Handle WCOW security policy settings
+		handleWCOWSecurityPolicy(ctx, s.Annotations, wopts)
+
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")
