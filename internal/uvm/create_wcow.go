@@ -42,6 +42,7 @@ type ConfidentialWCOWOptions struct {
 	IsolationType      string
 	DisableSecureBoot  bool
 	FirmwareParameters string
+	WritableEFI        bool
 }
 
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
@@ -402,8 +403,9 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 		Type_: "VirtualDisk",
 	}
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["1"] = hcsschema.Attachment{
-		Path:  opts.BootFiles.BlockCIMFiles.EFIVHDPath,
-		Type_: "VirtualDisk",
+		Path:     opts.BootFiles.BlockCIMFiles.EFIVHDPath,
+		Type_:    "VirtualDisk",
+		ReadOnly: !opts.WritableEFI,
 	}
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["2"] = hcsschema.Attachment{
 		Path:     opts.BootFiles.BlockCIMFiles.BootCIMVHDPath,

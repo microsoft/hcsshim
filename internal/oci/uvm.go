@@ -245,6 +245,7 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	wopts.SecurityPolicyEnforcer = ParseAnnotationsString(a, annotations.WCOWSecurityPolicyEnforcer, wopts.SecurityPolicyEnforcer)
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
 	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
+	wopts.WritableEFI = ParseAnnotationsBool(ctx, a, annotations.WCOWWritableEFI, false)
 	if ParseAnnotationsBool(ctx, a, annotations.WCOWNoSecurityHardware, false) {
 		wopts.NoSecurityHardware = true
 		wopts.IsolationType = "VirtualizationBasedSecurity"
