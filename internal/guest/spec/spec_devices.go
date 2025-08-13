@@ -10,11 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+
+	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
+	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 const (
@@ -23,6 +25,8 @@ const (
 	charType  = "char"
 	blockType = "block"
 
+	// TODO: consolidate with `internal\uvm\virtual_device.go` and use in both locations
+	gpuDeviceIDType        = "gpu"
 	vpciDeviceIDTypeLegacy = "vpci"
 	vpciDeviceIDType       = "vpci-instance-id"
 )
@@ -30,6 +34,8 @@ const (
 // AddAssignedDevice goes through the assigned devices that have been enumerated
 // on the spec and updates the spec so that the correct device nodes can be mounted
 // into the resulting container by the runtime.
+//
+// GPU devices are skipped, since they are handled in [addNvidiaDeviceHook].
 func AddAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 	// Add an explicit timeout before we try to find the dev nodes so we
 	// aren't waiting forever.
@@ -52,6 +58,12 @@ func AddAssignedDevice(ctx context.Context, spec *oci.Spec) error {
 			for _, dev := range devs {
 				AddLinuxDeviceToSpec(ctx, dev, spec, true)
 			}
+		case gpuDeviceIDType:
+		default:
+			log.G(ctx).WithFields(logrus.Fields{
+				"type": d.IDType,
+				"id":   d.ID,
+			}).Warn("unknown device type")
 		}
 	}
 
