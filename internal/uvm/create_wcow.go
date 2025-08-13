@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"maps"
 	"os"
@@ -27,17 +28,21 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 type ConfidentialWCOWOptions struct {
-	GuestStateFilePath    string // The vmgs file path
-	SecurityPolicyEnabled bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	SecurityPolicy        string // Optional security policy
+	GuestStateFilePath     string // The vmgs file path
+	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicy         string // Optional security policy
+	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
 
 	/* Below options are only included for testing/debugging purposes - shouldn't be used in regular scenarios */
+	NoSecurityHardware bool
 	IsolationType      string
 	DisableSecureBoot  bool
 	FirmwareParameters string
+	WritableEFI        bool
 }
 
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
@@ -55,6 +60,22 @@ type OptionsWCOW struct {
 
 	// AdditionalRegistryKeys are Registry keys and their values to additionally add to the uVM.
 	AdditionalRegistryKeys []hcsschema.RegistryValue
+}
+
+func defaultConfidentialWCOWOSBootFilesPath() string {
+	return filepath.Join(filepath.Dir(os.Args[0]), "WindowsBootFiles", "confidential")
+}
+
+func GetDefaultConfidentialVMGSPath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "cwcow.vmgs")
+}
+
+func GetDefaultConfidentialBootCIMPath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "rootfs.vhd")
+}
+
+func GetDefaultConfidentialEFIPath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "efi.vhd")
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
@@ -221,6 +242,9 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 						ServiceTable:                  make(map[string]hcsschema.HvSocketServiceConfig),
 					},
 				},
+				VirtualSmb: &hcsschema.VirtualSmb{
+					DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
+				},
 			},
 		},
 	}
@@ -315,12 +339,23 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 		}
 	}
 
+	policyDigest, err := securitypolicy.NewSecurityPolicyDigest(opts.SecurityPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	// HCS API expect a base64 encoded string as LaunchData. Internally it
+	// decodes it to bytes. SEV later returns the decoded byte blob as HostData
+	// field of the report.
+	hostData := base64.StdEncoding.EncodeToString(policyDigest)
+
 	enableHCL := true
 	doc.VirtualMachine.SecuritySettings = &hcsschema.SecuritySettings{
 		EnableTpm: false,
 		Isolation: &hcsschema.IsolationSettings{
 			IsolationType: "SecureNestedPaging",
 			HclEnabled:    &enableHCL,
+			LaunchData:    hostData,
 		},
 	}
 
@@ -368,8 +403,9 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 		Type_: "VirtualDisk",
 	}
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["1"] = hcsschema.Attachment{
-		Path:  opts.BootFiles.BlockCIMFiles.EFIVHDPath,
-		Type_: "VirtualDisk",
+		Path:     opts.BootFiles.BlockCIMFiles.EFIVHDPath,
+		Type_:    "VirtualDisk",
+		ReadOnly: !opts.WritableEFI,
 	}
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["2"] = hcsschema.Attachment{
 		Path:     opts.BootFiles.BlockCIMFiles.BootCIMVHDPath,
@@ -397,16 +433,11 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 
 	vsmbOpts := uvm.DefaultVSMBOptions(true)
 	vsmbOpts.TakeBackupPrivilege = true
-	doc.VirtualMachine.Devices.VirtualSmb = &hcsschema.VirtualSmb{
-		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
-		Shares: []hcsschema.VirtualSmbShare{
-			{
-				Name:    "os",
-				Path:    opts.BootFiles.VmbFSFiles.OSFilesPath,
-				Options: vsmbOpts,
-			},
-		},
-	}
+	doc.VirtualMachine.Devices.VirtualSmb.Shares = []hcsschema.VirtualSmbShare{{
+		Name:    "os",
+		Path:    opts.BootFiles.VmbFSFiles.OSFilesPath,
+		Options: vsmbOpts,
+	}}
 
 	doc.VirtualMachine.Chipset = &hcsschema.Chipset{
 		Uefi: &hcsschema.Uefi{

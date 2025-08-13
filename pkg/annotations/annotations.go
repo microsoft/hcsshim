@@ -184,6 +184,33 @@ const (
 	WCOWProcessDumpCount = "io.microsoft.wcow.processdumpcount"
 )
 
+// WCOW confidential container related annotations
+const (
+	// WCOWGuestStateFile allows overriding the default VMGS path.
+	WCOWGuestStateFile = "io.microsoft.virtualmachine.wcow.gueststatefile"
+
+	// WCOWSecurityPolicy is used to specify a security policy for WCOW containers to enforce.
+	WCOWSecurityPolicy = "io.microsoft.virtualmachine.wcow.securitypolicy"
+
+	// WCOWSecurityPolicyEnforcer is used to specify which enforcer to
+	// initialize for WCOW (open-door, standard or rego).  This allows for better
+	// fallback mechanics.
+	WCOWSecurityPolicyEnforcer = "io.microsoft.virtualmachine.wcow.enforcer"
+
+	// WCOWNoSecurityHardware allows us, when it is set to true, to do testing and
+	// development without requiring SNP hardware.  This will automatically change the security isolation mode to
+	// "VirtualizationBasedSecurity" instead of "SecureNestedPaging"
+	WCOWNoSecurityHardware = "io.microsoft.virtualmachine.wcow.no_security_hardware"
+
+	// Allows disabling secure boot for testing and debugging scenarios, secure boot doesn't apply to confidential LCOW so
+	// this is a WCOW only config
+	WCOWDisableSecureBoot = "io.microsoft.virtualmachine.wcow.no_secure_boot"
+
+	// Attaches the EFI/boot VHD in the writable mode (instead of the default read-only mode). This is usually required
+	// when debugging boot to capture bootstat traces.
+	WCOWWritableEFI = "io.microsoft.virtualmachine.wcow.writable_efi"
+)
+
 // WCOW host process container annotations.
 const (
 	// HostProcessInheritUser indicates whether to ignore the username passed in to run a host process
