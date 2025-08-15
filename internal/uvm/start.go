@@ -26,6 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
@@ -157,7 +158,9 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	// save parent context, without timeout to use in terminate
 	pCtx := ctx
-	ctx, cancel := context.WithTimeout(pCtx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(pCtx, timeout.GCSConnectionTimeout)
+	log.G(ctx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
+
 	g, gctx := errgroup.WithContext(ctx)
 	defer func() {
 		_ = g.Wait()
