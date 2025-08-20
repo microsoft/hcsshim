@@ -41,6 +41,7 @@ type ConfidentialWCOWOptions struct {
 	IsolationType      string
 	DisableSecureBoot  bool
 	FirmwareParameters string
+	WritableEFI        bool
 }
 
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
@@ -384,26 +385,37 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 		Minor: 0,
 	}
 
-	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.BootCIMVHDPath); err != nil {
-		return nil, errors.Wrap(err, "failed to grant vm access to boot CIM VHD")
-	}
-
+	// TODO(ambarve): only scratch VHD is unique per VM, EFI & Boot CIM VHDs are
+	// shared across UVMs, so we don't need to assign VM group access to them every
+	// time. It should have been done once while deploying the package.
 	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.EFIVHDPath); err != nil {
 		return nil, errors.Wrap(err, "failed to grant vm access to EFI VHD")
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.BootCIMVHDPath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to Boot CIM VHD")
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.GuestStateFilePath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to guest state file")
 	}
 
 	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.ScratchVHDPath); err != nil {
 		return nil, errors.Wrap(err, "failed to grant vm access to scratch VHD")
 	}
 
+	// boot depends on scratch being attached at LUN 0, it MUST ALWAYS remain at LUN 0
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
 		Path:  opts.BootFiles.BlockCIMFiles.ScratchVHDPath,
 		Type_: "VirtualDisk",
 	}
+
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["1"] = hcsschema.Attachment{
-		Path:  opts.BootFiles.BlockCIMFiles.EFIVHDPath,
-		Type_: "VirtualDisk",
+		Path:     opts.BootFiles.BlockCIMFiles.EFIVHDPath,
+		Type_:    "VirtualDisk",
+		ReadOnly: !opts.WritableEFI,
 	}
+
 	doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["2"] = hcsschema.Attachment{
 		Path:     opts.BootFiles.BlockCIMFiles.BootCIMVHDPath,
 		Type_:    "VirtualDisk",

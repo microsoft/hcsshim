@@ -139,6 +139,10 @@ func Test_SpecToUVMCreateOptions_WCOW_Confidential_Defaults(t *testing.T) {
 	if !wopts.SecurityPolicyEnabled {
 		t.Fatal("SecurityPolicyEnabled should be true when WCOWSecurityPolicy is set")
 	}
+	// Writable EFI should default to false unless explicitly enabled
+	if wopts.WritableEFI {
+		t.Fatal("WritableEFI should default to false when not specified")
+	}
 	if wopts.MemorySizeInMB != 2048 {
 		t.Fatalf("expected MemorySizeInMB to default to 2048, got %d", wopts.MemorySizeInMB)
 	}
@@ -156,6 +160,47 @@ func Test_SpecToUVMCreateOptions_WCOW_Confidential_Defaults(t *testing.T) {
 	}
 	if wopts.IsolationType != "" {
 		t.Fatalf("expected empty IsolationType by default, got %q", wopts.IsolationType)
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_WritableEFI_Enabled(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+			annotations.WCOWWritableEFI:    "true",
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	wopts := (opts).(*uvm.OptionsWCOW)
+	if !wopts.WritableEFI {
+		t.Fatal("WritableEFI should be true when WCOWWritableEFI annotation is set to true")
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_NonConfidential_WritableEFI_Enabled(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			// No WCOWSecurityPolicy means non-confidential path
+			annotations.WCOWWritableEFI: "true",
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	wopts := (opts).(*uvm.OptionsWCOW)
+	// WritableEFI should be respected for non-confidential as well
+	if !wopts.WritableEFI {
+		t.Fatal("WritableEFI should be true for non-confidential when WCOWWritableEFI is set")
 	}
 }
 
@@ -191,13 +236,13 @@ func Test_SpecToUVMCreateOptions_WCOW_Confidential_Overrides(t *testing.T) {
 	s := &specs.Spec{
 		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
 		Annotations: map[string]string{
-			annotations.WCOWSecurityPolicy:        "test-policy",
-			annotations.MemorySizeInMB:            "4096",
-			annotations.AllowOvercommit:           "false",
+			annotations.WCOWSecurityPolicy:         "test-policy",
+			annotations.MemorySizeInMB:             "4096",
+			annotations.AllowOvercommit:            "false",
 			annotations.WCOWSecurityPolicyEnforcer: "rego",
-			annotations.WCOWDisableSecureBoot:     "true",
-			annotations.WCOWGuestStateFile:        "C:\\custom\\cwcow.vmgs",
-			annotations.WCOWIsolationType:         "VirtualizationBasedSecurity",
+			annotations.WCOWDisableSecureBoot:      "true",
+			annotations.WCOWGuestStateFile:         "C:\\custom\\cwcow.vmgs",
+			annotations.WCOWIsolationType:          "VirtualizationBasedSecurity",
 		},
 	}
 
