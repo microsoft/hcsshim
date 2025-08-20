@@ -184,6 +184,29 @@ const (
 	WCOWProcessDumpCount = "io.microsoft.wcow.processdumpcount"
 )
 
+// WCOW confidential container related annotations
+const (
+	// WCOWGuestStateFile allows overriding the default VMGS path.
+	WCOWGuestStateFile = "io.microsoft.virtualmachine.wcow.gueststatefile"
+
+	// WCOWSecurityPolicy is used to specify a security policy for WCOW containers to enforce.
+	WCOWSecurityPolicy = "io.microsoft.virtualmachine.wcow.securitypolicy"
+
+	// WCOWSecurityPolicyEnforcer is used to specify which enforcer to
+	// initialize for WCOW (open-door, standard or rego).  This allows for better
+	// fallback mechanics.
+	WCOWSecurityPolicyEnforcer = "io.microsoft.virtualmachine.wcow.enforcer"
+
+	// WCOWIsolationType allows overriding isolation type of a confidential pod.
+	// Default is "SecureNestedPaging" and valid override values are
+	// "VirtualizationBasedSecurity" and "GuestStateOnly"
+	WCOWIsolationType = "io.microsoft.virtualmachine.wcow.isolation_type"
+
+	// Allows disabling secure boot for testing and debugging scenarios, secure boot doesn't apply to confidential LCOW so
+	// this is a WCOW only config
+	WCOWDisableSecureBoot = "io.microsoft.virtualmachine.wcow.no_secure_boot"
+)
+
 // WCOW host process container annotations.
 const (
 	// HostProcessInheritUser indicates whether to ignore the username passed in to run a host process

@@ -30,9 +30,10 @@ import (
 )
 
 type ConfidentialWCOWOptions struct {
-	GuestStateFilePath    string // The vmgs file path
-	SecurityPolicyEnabled bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	SecurityPolicy        string // Optional security policy
+	GuestStateFilePath     string // The vmgs file path
+	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicy         string // Optional security policy
+	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
 
 	/* Below options are only included for testing/debugging purposes - shouldn't be used in regular scenarios */
 	IsolationType      string
@@ -55,6 +56,22 @@ type OptionsWCOW struct {
 
 	// AdditionalRegistryKeys are Registry keys and their values to additionally add to the uVM.
 	AdditionalRegistryKeys []hcsschema.RegistryValue
+}
+
+func defaultConfidentialWCOWOSBootFilesPath() string {
+	return filepath.Join(filepath.Dir(os.Args[0]), "WindowsBootFiles", "confidential")
+}
+
+func GetDefaultConfidentialVMGSPath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "cwcow.vmgs")
+}
+
+func GetDefaultConfidentialBootCIMPath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "rootfs.vhd")
+}
+
+func GetDefaultConfidentialEFIPath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "efi.vhd")
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
@@ -220,6 +237,9 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
 						ServiceTable:                  make(map[string]hcsschema.HvSocketServiceConfig),
 					},
+				},
+				VirtualSmb: &hcsschema.VirtualSmb{
+					DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
 				},
 			},
 		},
@@ -397,16 +417,11 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 
 	vsmbOpts := uvm.DefaultVSMBOptions(true)
 	vsmbOpts.TakeBackupPrivilege = true
-	doc.VirtualMachine.Devices.VirtualSmb = &hcsschema.VirtualSmb{
-		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
-		Shares: []hcsschema.VirtualSmbShare{
-			{
-				Name:    "os",
-				Path:    opts.BootFiles.VmbFSFiles.OSFilesPath,
-				Options: vsmbOpts,
-			},
-		},
-	}
+	doc.VirtualMachine.Devices.VirtualSmb.Shares = []hcsschema.VirtualSmbShare{{
+		Name:    "os",
+		Path:    opts.BootFiles.VmbFSFiles.OSFilesPath,
+		Options: vsmbOpts,
+	}}
 
 	doc.VirtualMachine.Chipset = &hcsschema.Chipset{
 		Uefi: &hcsschema.Uefi{
