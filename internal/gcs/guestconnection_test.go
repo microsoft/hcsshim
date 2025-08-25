@@ -256,9 +256,19 @@ func TestGcsWaitProcessBridgeTerminated(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Close()
+
+	// There is a race condition here. gc.CreateProcess starts an AsyncRPC to wait on
+	// the created process. However, the AsyncRPC sends the request message on rpcCh
+	// and returns immediately (after the sendLoop reads that message). The test then
+	// sometimes ends up canceling the context (which closes the communication pipes)
+	// before the request message on rpcCh is processes and written on the pipe by
+	// `sendRPC`. In that case we receive the "bridge write failed" error instead of
+	// "bridge closed" error. To avoid this we put a small sleep here.
+	time.Sleep(1 * time.Second)
+
 	cancel()
 	err = p.Wait()
-	if err == nil || !strings.Contains(err.Error(), "bridge closed") {
+	if err == nil || (!strings.Contains(err.Error(), "bridge closed") && !strings.Contains(err.Error(), "bridge write")) {
 		t.Fatal("unexpected: ", err)
 	}
 }
