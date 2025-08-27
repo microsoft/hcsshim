@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/moby/sys/user"
@@ -86,8 +85,8 @@ func (policy *regoEnforcer) GetAllUserInfo(process *oci.Process, rootPath string
 	checkGroup := true
 
 	if process.User.Username != "" {
-		var usrInfo specGuest.ParseUserStrResult
-		usrInfo, err = specGuest.ParseUserStr(rootPath, process.User.Username)
+		var usrInfo specInternal.ParseUserStrResult
+		usrInfo, err = specInternal.ParseUserStr(rootPath, process.User.Username)
 		if err != nil {
 			err = errors.Errorf("failed to parse user str %q: %v", process.User.Username, err)
 			return
@@ -105,7 +104,7 @@ func (policy *regoEnforcer) GetAllUserInfo(process *oci.Process, rootPath string
 		userIDName = IDName{ID: strconv.FormatUint(uint64(uid), 10), Name: ""}
 		if _, err = os.Stat(passwdPath); err == nil {
 			var userInfo user.User
-			userInfo, err = specGuest.GetUser(rootPath, func(user user.User) bool {
+			userInfo, err = specInternal.GetUser(rootPath, func(user user.User) bool {
 				return uint32(user.Uid) == uid
 			})
 
@@ -121,7 +120,7 @@ func (policy *regoEnforcer) GetAllUserInfo(process *oci.Process, rootPath string
 
 		if _, err = os.Stat(groupPath); err == nil {
 			var groupInfo user.Group
-			groupInfo, err = specGuest.GetGroup(rootPath, func(group user.Group) bool {
+			groupInfo, err = specInternal.GetGroup(rootPath, func(group user.Group) bool {
 				return uint32(group.Gid) == gid
 			})
 
@@ -143,7 +142,7 @@ func (policy *regoEnforcer) GetAllUserInfo(process *oci.Process, rootPath string
 			groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10), Name: ""}
 			if checkGroup {
 				var groupInfo user.Group
-				groupInfo, err = specGuest.GetGroup(rootPath, func(group user.Group) bool {
+				groupInfo, err = specInternal.GetGroup(rootPath, func(group user.Group) bool {
 					return uint32(group.Gid) == gid
 				})
 				if err != nil {

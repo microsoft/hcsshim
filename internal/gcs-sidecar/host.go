@@ -178,13 +178,13 @@ func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicy
 		return fmt.Errorf("error creating security policy enforcer: %w", err)
 	}
 
-	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
+	/*if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
 		// TODO: enable OTL logging
 		//logrus.SetOutput(h.logWriter)
 	} else {
 		// TODO: disable OTL logging
 		//logrus.SetOutput(io.Discard)
-	}
+	}*/
 
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
