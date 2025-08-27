@@ -73,9 +73,10 @@ type LCOWCombinedLayers struct {
 }
 
 type WCOWCombinedLayers struct {
-	ContainerRootPath string            `json:"ContainerRootPath,omitempty"`
-	Layers            []hcsschema.Layer `json:"Layers,omitempty"`
-	ScratchPath       string            `json:"ScratchPath,omitempty"`
+	ContainerRootPath string                         `json:"ContainerRootPath,omitempty"`
+	Layers            []hcsschema.Layer              `json:"Layers,omitempty"`
+	ScratchPath       string                         `json:"ScratchPath,omitempty"`
+	FilterType        hcsschema.FileSystemFilterType `json:"FilterType,omitempty"`
 }
 
 type CWCOWCombinedLayers struct {
