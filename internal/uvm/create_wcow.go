@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"maps"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 type ConfidentialWCOWOptions struct {
@@ -335,12 +337,23 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 		}
 	}
 
+	policyDigest, err := securitypolicy.NewSecurityPolicyDigest(opts.SecurityPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	// HCS API expect a base64 encoded string as LaunchData. Internally it
+	// decodes it to bytes. SEV later returns the decoded byte blob as HostData
+	// field of the report.
+	hostData := base64.StdEncoding.EncodeToString(policyDigest)
+
 	enableHCL := true
 	doc.VirtualMachine.SecuritySettings = &hcsschema.SecuritySettings{
 		EnableTpm: false,
 		Isolation: &hcsschema.IsolationSettings{
 			IsolationType: "SecureNestedPaging",
 			HclEnabled:    &enableHCL,
+			LaunchData:    hostData,
 		},
 	}
 
