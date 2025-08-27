@@ -122,6 +122,111 @@ func Test_SpecToUVMCreateOptions_Default_WCOW(t *testing.T) {
 	}
 }
 
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_Defaults(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	wopts := (opts).(*uvm.OptionsWCOW)
+	if !wopts.SecurityPolicyEnabled {
+		t.Fatal("SecurityPolicyEnabled should be true when WCOWSecurityPolicy is set")
+	}
+	if wopts.MemorySizeInMB != 2048 {
+		t.Fatalf("expected MemorySizeInMB to default to 2048, got %d", wopts.MemorySizeInMB)
+	}
+	if wopts.AllowOvercommit {
+		t.Fatal("AllowOvercommit must be false for confidential pods by default")
+	}
+	if wopts.DisableSecureBoot {
+		t.Fatal("DisableSecureBoot should default to false when not specified")
+	}
+	if wopts.SecurityPolicyEnforcer != "" {
+		t.Fatalf("expected empty SecurityPolicyEnforcer by default, got %q", wopts.SecurityPolicyEnforcer)
+	}
+	if wopts.GuestStateFilePath != uvm.GetDefaultConfidentialVMGSPath() {
+		t.Fatalf("expected GuestStateFilePath to default to %q, got %q", uvm.GetDefaultConfidentialVMGSPath(), wopts.GuestStateFilePath)
+	}
+	if wopts.IsolationType != "" {
+		t.Fatalf("expected empty IsolationType by default, got %q", wopts.IsolationType)
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_ErrorOnLowMemory(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+			annotations.MemorySizeInMB:     "1024",
+		},
+	}
+
+	if _, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), ""); err == nil {
+		t.Fatal("expected error for confidential pods with MemorySizeInMB < 2048, got nil")
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_ErrorOnAllowOvercommit(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+			annotations.AllowOvercommit:    "true",
+		},
+	}
+
+	if _, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), ""); err == nil {
+		t.Fatal("expected error for confidential pods when AllowOvercommit=true, got nil")
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_Overrides(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy:        "test-policy",
+			annotations.MemorySizeInMB:            "4096",
+			annotations.AllowOvercommit:           "false",
+			annotations.WCOWSecurityPolicyEnforcer: "rego",
+			annotations.WCOWDisableSecureBoot:     "true",
+			annotations.WCOWGuestStateFile:        "C:\\custom\\cwcow.vmgs",
+			annotations.WCOWIsolationType:         "VirtualizationBasedSecurity",
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	wopts := (opts).(*uvm.OptionsWCOW)
+	if wopts.MemorySizeInMB != 4096 {
+		t.Fatalf("expected MemorySizeInMB=4096, got %d", wopts.MemorySizeInMB)
+	}
+	if wopts.AllowOvercommit {
+		t.Fatal("AllowOvercommit should be false when explicitly set to false")
+	}
+	if wopts.SecurityPolicyEnforcer != "rego" {
+		t.Fatalf("expected SecurityPolicyEnforcer=rego, got %q", wopts.SecurityPolicyEnforcer)
+	}
+	if !wopts.DisableSecureBoot {
+		t.Fatal("DisableSecureBoot should be true when specified")
+	}
+	if wopts.GuestStateFilePath != "C:\\custom\\cwcow.vmgs" {
+		t.Fatalf("expected GuestStateFilePath to match override, got %q", wopts.GuestStateFilePath)
+	}
+	if wopts.IsolationType != "VirtualizationBasedSecurity" {
+		t.Fatalf("expected IsolationType=VirtualizationBasedSecurity, got %q", wopts.IsolationType)
+	}
+}
+
 func Test_SpecToUVMCreateOptions_Common(t *testing.T) {
 	cpugroupid := "1"
 	lowmmiogap := 1024
