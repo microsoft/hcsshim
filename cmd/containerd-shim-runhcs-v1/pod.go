@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -58,6 +59,21 @@ func initializeWCOWBootFiles(ctx context.Context, wopts *uvm.OptionsWCOW, rootfs
 		// we can enable this.
 		return fmt.Errorf("hyperv isolation is not supported with block CIM layers yet")
 	}
+
+	// writable EFI VHD is a valid config for both confidential and regular hyperv
+	// isolated WCOW. Override the default value here if required.
+	if wopts.WritableEFI {
+		// Make a copy of EFI VHD, we can't risk the UVM accidentally modifying
+		// the original VHD.  make copy next to the scratch VHD, this assumes that
+		// the scratch is located in the separate directory dedicated for this
+		// UVM.
+		writableEFIVHDPath := filepath.Join(filepath.Dir(wopts.BootFiles.BlockCIMFiles.ScratchVHDPath), filepath.Base(wopts.BootFiles.BlockCIMFiles.EFIVHDPath))
+		if err := copyfile.CopyFile(ctx, wopts.BootFiles.BlockCIMFiles.EFIVHDPath, writableEFIVHDPath, false); err != nil {
+			return fmt.Errorf("failed to copy EFI VHD at %s: %w", writableEFIVHDPath, err)
+		}
+		wopts.BootFiles.BlockCIMFiles.EFIVHDPath = writableEFIVHDPath
+	}
+
 	return nil
 }
 
