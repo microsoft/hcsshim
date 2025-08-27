@@ -223,6 +223,10 @@ const (
 	// Allows disabling secure boot for testing and debugging scenarios, secure boot doesn't apply to confidential LCOW so
 	// this is a WCOW only config
 	WCOWDisableSecureBoot = "io.microsoft.virtualmachine.wcow.no_secure_boot"
+
+	// Attaches the EFI/boot VHD in the writable mode (instead of the default read-only mode). This is usually required
+	// when debugging boot to capture bootstat traces.
+	WCOWWritableEFI = "io.microsoft.virtualmachine.wcow.writable_efi"
 )
 
 // WCOW host process container annotations.
