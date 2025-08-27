@@ -134,7 +134,7 @@ func (uvm *UtilityVM) SetConfidentialUVMOptions(ctx context.Context, opts ...Con
 		}
 	}
 	modification := &hcsschema.ModifySettingRequest{
-		//RequestType: guestrequest.RequestTypeAdd,
+		RequestType: guestrequest.RequestTypeAdd,
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeSecurityPolicy,
 			RequestType:  guestrequest.RequestTypeAdd,
@@ -151,9 +151,7 @@ func (uvm *UtilityVM) SetConfidentialUVMOptions(ctx context.Context, opts ...Con
 
 // InjectPolicyFragment sends policy fragment to GCS.
 func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdtaskapi.PolicyFragment) error {
-	if uvm.operatingSystem != "linux" {
-		return errNotSupported
-	}
+
 	mod := &hcsschema.ModifySettingRequest{
 		RequestType: guestrequest.RequestTypeUpdate,
 		GuestRequest: guestrequest.ModificationRequest{

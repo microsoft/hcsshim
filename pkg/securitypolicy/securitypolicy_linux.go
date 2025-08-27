@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -81,7 +80,7 @@ func GetAllUserInfo(containerID string, process *oci.Process) (IDName, []IDName,
 	}
 
 	if process.User.Username != "" {
-		uid, gid, err := specGuest.ParseUserStr(rootPath, process.User.Username)
+		uid, gid, err := specInternal.ParseUserStr(rootPath, process.User.Username)
 		if err == nil {
 			userIDName := IDName{ID: strconv.FormatUint(uint64(uid), 10)}
 			groupIDName := IDName{ID: strconv.FormatUint(uint64(gid), 10)}

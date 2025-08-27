@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"os"
 	"strconv"
 	"strings"
 	"syscall"
@@ -99,7 +98,6 @@ func Test_MarshalRego_Policy(t *testing.T) {
 			return false
 		}
 
-		os.WriteFile("linux-expected-output.txt", []byte(expected), 0644)
 		_, err = newRegoPolicy(expected, defaultMounts, privilegedMounts, testOSType)
 
 		if err != nil {

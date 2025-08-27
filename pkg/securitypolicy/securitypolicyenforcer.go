@@ -266,7 +266,7 @@ func CreateSecurityPolicyEnforcer(
 			enforcer = openDoorEnforcer
 		}
 	}
-	osType = strings.ToLower(operatingSystem)
+	osType = strings.ToLower(operatingSystem) //nolint:unused // used in rego enforcer (build tag: rego)
 
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
 		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)
