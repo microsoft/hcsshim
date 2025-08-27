@@ -14,7 +14,7 @@ import (
 // container file system.
 //
 // Note: `layerPaths` and `containerRootPath` are paths from within the UVM.
-func (uvm *UtilityVM) CombineLayersWCOW(ctx context.Context, layerPaths []hcsschema.Layer, containerRootPath string) error {
+func (uvm *UtilityVM) CombineLayersWCOW(ctx context.Context, layerPaths []hcsschema.Layer, containerRootPath string, filterType hcsschema.FileSystemFilterType) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
@@ -25,6 +25,7 @@ func (uvm *UtilityVM) CombineLayersWCOW(ctx context.Context, layerPaths []hcssch
 			Settings: guestresource.WCOWCombinedLayers{
 				ContainerRootPath: containerRootPath,
 				Layers:            layerPaths,
+				FilterType:        filterType,
 			},
 		},
 	}
