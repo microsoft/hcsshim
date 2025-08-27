@@ -217,33 +217,7 @@ func ParseWCOWLayers(rootfs []*types.Mount, layerFolders []string) (WCOWLayers, 
 	}
 }
 
-// GetWCOWUVMBootFilesFromLayers prepares the UVM boot files from the rootfs or layerFolders.
-func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, layerFolders []string) (*uvm.WCOWBootFiles, error) {
-	var parentLayers []string
-	var scratchLayer string
-	var err error
-
-	if err = validateRootfsAndLayers(rootfs, layerFolders); err != nil {
-		return nil, err
-	}
-
-	if len(layerFolders) > 0 {
-		parentLayers = layerFolders[:len(layerFolders)-1]
-		scratchLayer = layerFolders[len(layerFolders)-1]
-	} else {
-		m := rootfs[0]
-		switch m.Type {
-		case legacyMountType:
-			parentLayers, err = getOptionAsArray(m, parentLayerPathsFlag)
-			if err != nil {
-				return nil, err
-			}
-			scratchLayer = m.Source
-		default:
-			return nil, fmt.Errorf("mount type '%s' is not supported for UVM boot", m.Type)
-		}
-	}
-
+func getVmbFSBootFiles(ctx context.Context, scratchLayer string, parentLayers []string) (*uvm.WCOWBootFiles, error) {
 	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, parentLayers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %w", err)
@@ -252,6 +226,11 @@ func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, l
 	// In order for the UVM sandbox.vhdx not to collide with the actual
 	// nested Argon sandbox.vhdx we append the \vm folder to the last
 	// entry in the list.
+	// TODO(ambarve): This probably is a bug, we should make a separate `vm` directory
+	// only if we are creating a standalone task. If we are starting a separate pod,
+	// containerd snapshotter already creates a separate directory for the pod. We
+	// won't have to worry about the name collision in that case. Keeping this for
+	// backward compatibility/avoid breaking existing code.
 	scratchLayer = filepath.Join(scratchLayer, "vm")
 	scratchVHDPath := filepath.Join(scratchLayer, "sandbox.vhdx")
 	if err = os.MkdirAll(scratchLayer, 0777); err != nil {
@@ -264,6 +243,7 @@ func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, l
 			return nil, err
 		}
 	}
+
 	return &uvm.WCOWBootFiles{
 		BootType: uvm.VmbFSBoot,
 		VmbFSFiles: &uvm.VmbFSBootFiles{
@@ -272,4 +252,39 @@ func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, l
 			ScratchVHDPath:        scratchVHDPath,
 		},
 	}, nil
+}
+
+func getBlockCIMBootFiles(ctx context.Context, wl *wcowBlockCIMLayers) (*uvm.WCOWBootFiles, error) {
+	scratchVHDPath := filepath.Join(wl.scratchLayerPath, "sandbox.vhdx")
+
+	// block CIM based layers don't support multiple layers in the UVM, pick the base layer and continue
+	efiVHDPath := filepath.Join(filepath.Dir(wl.parentLayers[0].BlockPath), "boot.vhd")
+
+	return &uvm.WCOWBootFiles{
+		BootType: uvm.BlockCIMBoot,
+		BlockCIMFiles: &uvm.BlockCIMBootFiles{
+			BootCIMVHDPath: wl.parentLayers[0].BlockPath, // This should be a block CIM with VHD footer attached.
+			EFIVHDPath:     efiVHDPath,
+			ScratchVHDPath: scratchVHDPath,
+		},
+	}, nil
+}
+
+// GetWCOWUVMBootFilesFromLayers prepares the UVM boot files from the rootfs or layerFolders.
+func GetWCOWUVMBootFilesFromLayers(ctx context.Context, rootfs []*types.Mount, layerFolders []string) (*uvm.WCOWBootFiles, error) {
+	var err error
+
+	parsedWCOWLayers, err := ParseWCOWLayers(rootfs, layerFolders)
+	if err != nil {
+		return nil, err
+	}
+
+	switch wl := parsedWCOWLayers.(type) {
+	case *wcowWCIFSLayers:
+		return getVmbFSBootFiles(ctx, wl.scratchLayerPath, wl.layerPaths)
+	case *wcowBlockCIMLayers:
+		return getBlockCIMBootFiles(ctx, wl)
+	default:
+		return nil, fmt.Errorf("unsupported layer format for UVM boot: %T", parsedWCOWLayers)
+	}
 }

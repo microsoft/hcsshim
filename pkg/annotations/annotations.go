@@ -121,40 +121,58 @@ const (
 	// Only applies in SNP mode.
 	DmVerityRootFsVhd = "io.microsoft.virtualmachine.lcow.dmverity-rootfs-vhd"
 
-	// EncryptedScratchDisk indicates whether or not the container scratch disks
+	// LCOWEncryptedScratchDisk indicates whether or not the container scratch disks
 	// should be encrypted or not.
 	//
 	// LCOW only.
-	EncryptedScratchDisk = "io.microsoft.virtualmachine.storage.scratch.encrypted"
+	LCOWEncryptedScratchDisk = "io.microsoft.virtualmachine.storage.scratch.encrypted"
+	// Deprecated: use [LCOWEncryptedScratchDisk] instead.
+	EncryptedScratchDisk = LCOWEncryptedScratchDisk
 
-	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
-	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
+	// LCOWGuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
+	LCOWGuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
+	// Deprecated: use [LCOWGuestStateFile] instead.
+	GuestStateFile = LCOWGuestStateFile
 
-	// HclEnabled specifies whether to enable the host compatibility layer.
-	HclEnabled = "io.microsoft.virtualmachine.lcow.hcl-enabled"
+	// LCOWHclEnabled specifies whether to enable the host compatibility layer.
+	LCOWHclEnabled = "io.microsoft.virtualmachine.lcow.hcl-enabled"
+	// Deprecated: use [LCOWHclEnabled] instead.
+	HclEnabled = LCOWHclEnabled
 
-	// HostAMDCertificate specifies the filename of the AMD certificates to be passed to UVM.
+	// LCOWHostAMDCertificate specifies the filename of the AMD certificates to be passed to UVM.
 	// The certificate is expected to be located in the same directory as the shim executable.
-	HostAMDCertificate = "io.microsoft.virtualmachine.lcow.amd-certificate"
+	LCOWHostAMDCertificate = "io.microsoft.virtualmachine.lcow.amd-certificate"
+	// Deprecated: use [LCOWHostAMDCertificate] instead.
+	HostAMDCertificate = LCOWHostAMDCertificate
 
-	// NoSecurityHardware allows us, when it is set to true, to do testing and development without requiring SNP hardware.
-	NoSecurityHardware = "io.microsoft.virtualmachine.lcow.no_security_hardware"
+	// LCOWNoSecurityHardware allows us, when it is set to true, to do testing and development without requiring SNP hardware.
+	LCOWNoSecurityHardware = "io.microsoft.virtualmachine.lcow.no_security_hardware"
+	// Deprecated: use [LCOWNoSecurityHardware] instead.
+	NoSecurityHardware = LCOWNoSecurityHardware
 
-	// SecurityPolicy is used to specify a security policy for opengcs to enforce.
-	SecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
+	// LCOWSecurityPolicy is used to specify a security policy for opengcs to enforce.
+	LCOWSecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
+	// Deprecated: use [LCOWSecurityPolicy] instead.
+	SecurityPolicy = LCOWSecurityPolicy
 
-	// SecurityPolicyEnforcer is used to specify which enforcer to initialize (open-door, standard or rego).
+	// LCOWSecurityPolicyEnforcer is used to specify which enforcer to initialize (open-door, standard or rego).
 	// This allows for better fallback mechanics.
-	SecurityPolicyEnforcer = "io.microsoft.virtualmachine.lcow.enforcer"
+	LCOWSecurityPolicyEnforcer = "io.microsoft.virtualmachine.lcow.enforcer"
+	// Deprecated: use [LCOWSecurityPolicyEnforcer] instead.
+	SecurityPolicyEnforcer = LCOWSecurityPolicyEnforcer
 
-	// UVMSecurityPolicyEnv specifies if confidential containers' related information
+	// LCOWSecurityPolicyEnv specifies if confidential containers' related information
 	// should be written to containers' rootfs. The filenames and location are defined
 	// by securitypolicy.PolicyFilename, securitypolicy.HostAMDCertFilename and
 	// securitypolicy.ReferenceInfoFilename.
-	UVMSecurityPolicyEnv = "io.microsoft.virtualmachine.lcow.securitypolicy.env"
+	LCOWSecurityPolicyEnv = "io.microsoft.virtualmachine.lcow.securitypolicy.env"
+	// Deprecated: use [LCOWSecurityPolicyEnv] instead.
+	UVMSecurityPolicyEnv = LCOWSecurityPolicyEnv
 
-	// UVMReferenceInfoFile specifies the filename of a signed UVM reference file to be passed to UVM.
-	UVMReferenceInfoFile = "io.microsoft.virtualmachine.lcow.uvm-reference-info-file"
+	// LCOWReferenceInfoFile specifies the filename of a signed UVM reference file to be passed to UVM.
+	LCOWReferenceInfoFile = "io.microsoft.virtualmachine.lcow.uvm-reference-info-file"
+	// Deprecated: use [LCOWReferenceInfoFile] instead.
+	UVMReferenceInfoFile = LCOWReferenceInfoFile
 )
 
 // WCOW container annotations.
@@ -182,6 +200,29 @@ const (
 	// ContainerProcessDumpLocation path. When the maximum value is exceeded, the oldest dump file in the
 	// folder will be replaced by the new dump file. The default value is 10.
 	WCOWProcessDumpCount = "io.microsoft.wcow.processdumpcount"
+)
+
+// WCOW confidential container related annotations
+const (
+	// WCOWGuestStateFile allows overriding the default VMGS path.
+	WCOWGuestStateFile = "io.microsoft.virtualmachine.wcow.gueststatefile"
+
+	// WCOWSecurityPolicy is used to specify a security policy for WCOW containers to enforce.
+	WCOWSecurityPolicy = "io.microsoft.virtualmachine.wcow.securitypolicy"
+
+	// WCOWSecurityPolicyEnforcer is used to specify which enforcer to
+	// initialize for WCOW (open-door, standard or rego).  This allows for better
+	// fallback mechanics.
+	WCOWSecurityPolicyEnforcer = "io.microsoft.virtualmachine.wcow.enforcer"
+
+	// WCOWIsolationType allows overriding isolation type of a confidential pod.
+	// Default is "SecureNestedPaging" and valid override values are
+	// "VirtualizationBasedSecurity" and "GuestStateOnly"
+	WCOWIsolationType = "io.microsoft.virtualmachine.wcow.isolation_type"
+
+	// Allows disabling secure boot for testing and debugging scenarios, secure boot doesn't apply to confidential LCOW so
+	// this is a WCOW only config
+	WCOWDisableSecureBoot = "io.microsoft.virtualmachine.wcow.no_secure_boot"
 )
 
 // WCOW host process container annotations.
