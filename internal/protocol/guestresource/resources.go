@@ -251,7 +251,3 @@ type WCOWConfidentialOptions struct {
 	// Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
 	WCOWSecurityPolicyEnforcer string
 }
-
-type WCOWSecurityPolicyFragment struct {
-	Fragment string `json:"Fragment,omitempty"`
-}

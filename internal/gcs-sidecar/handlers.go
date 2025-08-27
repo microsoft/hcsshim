@@ -88,7 +88,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			_, _, _, err := b.hostState.securityPolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
 
 			if err != nil {
-				return fmt.Errorf("CreateContainer operation is denied by policy: %v", err)
+				return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
 			}
 			c := &Container{
 				id:        containerID,
@@ -175,7 +175,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		buf, err := json.Marshal(createContainerRequestModified)
 		log.G(ctx).Tracef("marshaled request buffer: %s", string(buf))
 		if err != nil {
-			return fmt.Errorf("failed to marshal rpcCreatecontainer: %v", err)
+			return fmt.Errorf("failed to marshal rpcCreatecontainer: %w", err)
 		}
 		var newRequest request
 		newRequest.ctx = req.ctx
@@ -246,9 +246,9 @@ func (b *Bridge) shutdownGraceful(req *request) (err error) {
 	// TODO (kiashok/Mahati): Since gcs-sidecar can be used for all types of windows
 	// containers, it is important to check if we want to
 	// enforce policy or not.
-	b.hostState.securityPolicyEnforcer.EnforceShutdownContainerPolicy(req.ctx, r.ContainerID)
+	err = b.hostState.securityPolicyEnforcer.EnforceShutdownContainerPolicy(req.ctx, r.ContainerID)
 	if err != nil {
-		return fmt.Errorf("rpcShudownGraceful operation not allowed: %v", err)
+		return fmt.Errorf("rpcShudownGraceful operation not allowed: %w", err)
 	}
 
 	b.forwardRequestToGcs(req)
@@ -289,7 +289,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal executeProcess: %w", err)
 	}
-	containerID := r.RequestBase.ContainerID
+	containerID := r.ContainerID
 	var processParams hcsschema.ProcessParameters
 	if err := commonutils.UnmarshalJSONWithHresult(processParamSettings, &processParams); err != nil {
 		return fmt.Errorf("executeProcess: invalid params type for request: %w", err)
@@ -423,7 +423,7 @@ func (b *Bridge) signalProcess(req *request) (err error) {
 
 		if b.hostState.isSecurityPolicyEnforcerInitialized() {
 			log.G(req.ctx).Tracef("RawOpts are not nil")
-			containerID := r.RequestBase.ContainerID
+			containerID := r.ContainerID
 			c, err := b.hostState.GetCreatedContainer(req.ctx, containerID)
 			if err != nil {
 				return err
@@ -631,6 +631,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			}
 			return nil
 		case guestresource.ResourceTypePolicyFragment:
+			//Note: Reusing the same type LCOWSecurityPolicyFragment for CWCOW.
 			r, ok := modifyGuestSettingsRequest.Settings.(*guestresource.LCOWSecurityPolicyFragment)
 			if !ok {
 				return errors.New("the request settings are not of type LCOWSecurityPolicyFragment")
@@ -653,11 +654,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			var layerCIMs []*cimfs.BlockCIM
 			layerHashes := make([]string, len(wcowBlockCimMounts.BlockCIMs))
 			layerDigests := make([][]byte, len(wcowBlockCimMounts.BlockCIMs))
-			ctx := req.ctx
 			for i, blockCimDevice := range wcowBlockCimMounts.BlockCIMs {
 				// Get the scsi device path for the blockCim lun
 				devNumber, err := windevice.GetDeviceNumberFromControllerLUN(
-					ctx,
+					req.ctx,
 					0, /* controller is always 0 for wcow */
 					uint8(blockCimDevice.Lun))
 				if err != nil {
@@ -728,9 +728,9 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			// check that this is not denied by policy
 			// TODO: modify gcs-sidecar code to pass context across all calls
 			// TODO: Update modifyCombinedLayers with verified CimFS API
-			policy_err := modifyCombinedLayers(ctx, containerID, guestRequestType, settings.CombinedLayers, b.hostState.securityPolicyEnforcer)
-			if policy_err != nil {
-				return errors.Wrapf(policy_err, "CimFS layer mount is denied by policy: %v", settings)
+			policyErr := modifyCombinedLayers(ctx, containerID, guestRequestType, settings.CombinedLayers, b.hostState.securityPolicyEnforcer)
+			if policyErr != nil {
+				return errors.Wrapf(policyErr, "CimFS layer mount is denied by policy: %v", settings)
 			}
 
 			// TODO: Update modifyCombinedLayers with verified CimFS API
@@ -770,9 +770,9 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("ResourceTypeMappedVirtualDiskForContainerScratch: { %v }", wcowMappedVirtualDisk)
 
-			policy_err := modifyMappedVirtualDisk(ctx, guestRequestType, wcowMappedVirtualDisk, b.hostState.securityPolicyEnforcer)
-			if policy_err != nil {
-				return errors.Wrapf(policy_err, "Mount device denied by policy %v", wcowMappedVirtualDisk)
+			policyErr := modifyMappedVirtualDisk(ctx, guestRequestType, wcowMappedVirtualDisk, b.hostState.securityPolicyEnforcer)
+			if policyErr != nil {
+				return errors.Wrapf(policyErr, "Mount device denied by policy %v", wcowMappedVirtualDisk)
 			}
 
 			// 1. TODO (kiashok/Mahati): Need to enforce policy before calling into fsFormatter
