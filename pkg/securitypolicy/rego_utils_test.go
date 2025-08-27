@@ -1,3 +1,6 @@
+//go:build rego
+// +build rego
+
 package securitypolicy
 
 import (

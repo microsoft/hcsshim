@@ -15,19 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-type marshalFunc func(
-	allowAll bool,
-	containers []*Container,
-	externalProcesses []ExternalProcessConfig,
-	fragments []FragmentConfig,
-	allowPropertiesAccess bool,
-	allowDumpStacks bool,
-	allowRuntimeLogging bool,
-	allowEnvironmentVariableDropping bool,
-	allowUnencryptedScratch bool,
-	allowCapabilityDropping bool,
-) (string, error)
-
 const (
 	jsonMarshaller = "json"
 	regoMarshaller = "rego"
