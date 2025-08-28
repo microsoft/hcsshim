@@ -62,7 +62,7 @@ func TestGetProperties_WithPolicy(t *testing.T) {
 			opts.SecurityPolicyEnforcer = "rego"
 			opts.SecurityPolicy = policy
 
-			cleanName := util.CleanName(t.Name())
+			cleanName := util.CleanName(t)
 			vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 			spec := testoci.CreateLinuxSpec(
 				ctx,
