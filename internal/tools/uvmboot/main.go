@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
@@ -24,6 +25,7 @@ const (
 	measureArgName              = "measure"
 	parallelArgName             = "parallel"
 	countArgName                = "count"
+	resourcePartitionArgName    = "resource-partition"
 
 	execCommandLineArgName = "exec"
 	uvmConsolePipe         = "\\\\.\\pipe\\uvmpipe"
@@ -82,6 +84,10 @@ func main() {
 			Usage:       "Launch the GCS and perform requested operations via its RPC interface",
 			Destination: &useGCS,
 		},
+		cli.StringFlag{
+			Name:  resourcePartitionArgName,
+			Usage: "Resource partition GUID to assign UVM to",
+		},
 	}
 
 	app.Commands = []cli.Command{
@@ -124,6 +130,13 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 	}
 	if c.GlobalIsSet(enableDeferredCommitArgName) {
 		options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
+	}
+	if c.GlobalIsSet(resourcePartitionArgName) {
+		rpID, err := guid.FromString(c.GlobalString(resourcePartitionArgName))
+		if err != nil {
+			logrus.Fatalf("Failed to parse resource partition GUID: %v", err)
+		}
+		options.ResourcePartitionID = &rpID
 	}
 	// Always set the console pipe in uvmboot, it helps with testing/debugging
 	options.ConsolePipe = uvmConsolePipe

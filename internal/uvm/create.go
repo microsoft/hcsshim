@@ -84,6 +84,10 @@ type Options struct {
 	// CPUGroupID set the ID of a CPUGroup on the host that the UVM should be added to on start.
 	// Defaults to an empty string which indicates the UVM should not be added to any CPUGroup.
 	CPUGroupID string
+
+	// ResourcePartitionID holds the resource partition guid.GUID the UVM should be assigned to.
+	ResourcePartitionID *guid.GUID
+
 	// NetworkConfigProxy holds the address of the network config proxy service.
 	// This != "" determines whether to start the ComputeAgent TTRPC service
 	// that receives the UVMs set of NICs from this proxy instead of enumerating
@@ -171,6 +175,11 @@ func verifyOptions(_ context.Context, options interface{}) error {
 		if opts.EnableColdDiscardHint && osversion.Build() < 18967 {
 			return errors.New("EnableColdDiscardHint is not supported on builds older than 18967")
 		}
+		if opts.ResourcePartitionID != nil {
+			if opts.CPUGroupID != "" {
+				return errors.New("resource partition ID and CPU group ID cannot be set at the same time")
+			}
+		}
 	case *OptionsWCOW:
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
 			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
@@ -183,6 +192,11 @@ func verifyOptions(_ context.Context, options interface{}) error {
 		}
 		if opts.SecurityPolicyEnabled && opts.GuestStateFilePath == "" {
 			return fmt.Errorf("GuestStateFilePath must be provided when enabling security policy")
+		}
+		if opts.ResourcePartitionID != nil {
+			if opts.CPUGroupID != "" {
+				return errors.New("resource partition ID and CPU group ID cannot be set at the same time")
+			}
 		}
 	}
 	return nil

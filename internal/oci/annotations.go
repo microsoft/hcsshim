@@ -377,6 +377,19 @@ func ParseAnnotationCommaSeparated(key string, a map[string]string) []string {
 	return results
 }
 
+// ParseAnnotationsGUID searches `a` for `key`. If `key` is found, tries to parse it as guid.GUID, otherwise
+// returns `def`.
+func ParseAnnotationsGUID(a map[string]string, key string, def *guid.GUID) (*guid.GUID, error) {
+	if v, ok := a[key]; ok {
+		g, err := guid.FromString(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse annotation %q with value %q as GUID: %w", key, v, err)
+		}
+		return &g, nil
+	}
+	return def, nil
+}
+
 func logAnnotationValueParseError(ctx context.Context, k, v, et string, err error) {
 	entry := log.G(ctx).WithFields(logrus.Fields{
 		logfields.OCIAnnotation: k,
