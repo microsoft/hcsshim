@@ -5,6 +5,20 @@ import (
 	"reflect"
 )
 
+type errInvalidValue struct{}
+
+func (*errInvalidValue) Error() string {
+	return "invalid value (probably an untyped nil)"
+}
+
+// InvalidValueError is a sentinel error that can be used to
+// indicate that a value is invalid. This can happen when the
+// source value is an untyped nil, and we have no further information
+// about the type of the value, obstructing the assignment.
+func InvalidValueError() error {
+	return &errInvalidValue{}
+}
+
 // AssignField is a convenience function to assign a value to
 // an optional struct field. In Go, an optional struct field is
 // usually denoted by a pointer to T instead of T:
@@ -32,7 +46,7 @@ func AssignOptionalField(dst, src interface{}) error {
 	if !dstRV.Elem().CanSet() {
 		return fmt.Errorf(`dst (%T) is not assignable`, dstRV.Elem().Interface())
 	}
-	if !reflect.PtrTo(srcRV.Type()).AssignableTo(dstRV.Elem().Type()) {
+	if !reflect.PointerTo(srcRV.Type()).AssignableTo(dstRV.Elem().Type()) {
 		return fmt.Errorf(`cannot assign src (%T) to dst (%T)`, src, dst)
 	}
 
@@ -50,15 +64,15 @@ func AssignIfCompatible(dst, src interface{}) error {
 	orv := reflect.ValueOf(src) // save this value for error reporting
 	result := orv
 
-	// t can be a pointer or a slice, and the code will slightly change
+	// src can be a pointer or a slice, and the code will slightly change
 	// depending on this
-	var isPtr bool
-	var isSlice bool
+	var srcIsPtr bool
+	var srcIsSlice bool
 	switch result.Kind() {
 	case reflect.Ptr:
-		isPtr = true
+		srcIsPtr = true
 	case reflect.Slice:
-		isSlice = true
+		srcIsSlice = true
 	}
 
 	rv := reflect.ValueOf(dst)
@@ -66,17 +80,38 @@ func AssignIfCompatible(dst, src interface{}) error {
 		return fmt.Errorf(`destination argument to AssignIfCompatible() must be a pointer: %T`, dst)
 	}
 
-	actualDst := rv.Elem()
+	actualDst := rv
+	for {
+		if !actualDst.IsValid() {
+			return fmt.Errorf(`could not find a valid destination for AssignIfCompatible() (%T)`, dst)
+		}
+		if actualDst.CanSet() {
+			break
+		}
+		actualDst = actualDst.Elem()
+	}
+
 	switch actualDst.Kind() {
 	case reflect.Interface:
 		// If it's an interface, we can just assign the pointer to the interface{}
 	default:
 		// If it's a pointer to the struct we're looking for, we need to set
 		// the de-referenced struct
-		if !isSlice && isPtr {
+		if !srcIsSlice && srcIsPtr {
 			result = result.Elem()
 		}
 	}
+
+	if !result.IsValid() {
+		// At this point there's nothing we can do. return an error
+		return fmt.Errorf(`source value is invalid (%T): %w`, src, InvalidValueError())
+	}
+
+	if actualDst.Kind() == reflect.Ptr {
+		actualDst.Set(result.Addr())
+		return nil
+	}
+
 	if !result.Type().AssignableTo(actualDst.Type()) {
 		return fmt.Errorf(`argument to AssignIfCompatible() must be compatible with %T (was %T)`, orv.Interface(), dst)
 	}

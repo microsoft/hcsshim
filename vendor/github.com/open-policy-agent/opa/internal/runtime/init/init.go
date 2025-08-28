@@ -12,12 +12,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/bundle"
 	storedversion "github.com/open-policy-agent/opa/internal/version"
-	"github.com/open-policy-agent/opa/loader"
-	"github.com/open-policy-agent/opa/metrics"
-	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/loader"
+	"github.com/open-policy-agent/opa/v1/metrics"
+	"github.com/open-policy-agent/opa/v1/storage"
 )
 
 // InsertAndCompileOptions contains the input for the operation.
@@ -29,6 +29,7 @@ type InsertAndCompileOptions struct {
 	MaxErrors             int
 	EnablePrintStatements bool
 	ParserOptions         ast.ParserOptions
+	BundleActivatorPlugin string
 }
 
 // InsertAndCompileResult contains the output of the operation.
@@ -53,6 +54,7 @@ func InsertAndCompile(ctx context.Context, opts InsertAndCompileOptions) (*Inser
 	}
 
 	compiler := ast.NewCompiler().
+		WithDefaultRegoVersion(opts.ParserOptions.RegoVersion).
 		SetErrorLimit(opts.MaxErrors).
 		WithPathConflictsCheck(storage.NonEmpty(ctx, opts.Store, opts.Txn)).
 		WithEnablePrintStatements(opts.EnablePrintStatements)
@@ -67,6 +69,7 @@ func InsertAndCompile(ctx context.Context, opts InsertAndCompileOptions) (*Inser
 		Bundles:       opts.Bundles,
 		ExtraModules:  policies,
 		ParserOptions: opts.ParserOptions,
+		Plugin:        opts.BundleActivatorPlugin,
 	}
 
 	err := bundle.Activate(activation)
@@ -121,10 +124,11 @@ func LoadPaths(paths []string,
 	asBundle bool,
 	bvc *bundle.VerificationConfig,
 	skipVerify bool,
+	bundleLazyLoading bool,
 	processAnnotations bool,
 	caps *ast.Capabilities,
 	fsys fs.FS) (*LoadPathsResult, error) {
-	return LoadPathsForRegoVersion(ast.RegoV0, paths, filter, asBundle, bvc, skipVerify, processAnnotations, false, caps, fsys)
+	return LoadPathsForRegoVersion(ast.RegoV0, paths, filter, asBundle, bvc, skipVerify, bundleLazyLoading, processAnnotations, false, caps, fsys)
 }
 
 func LoadPathsForRegoVersion(regoVersion ast.RegoVersion,
@@ -133,6 +137,7 @@ func LoadPathsForRegoVersion(regoVersion ast.RegoVersion,
 	asBundle bool,
 	bvc *bundle.VerificationConfig,
 	skipVerify bool,
+	bundleLazyLoading bool,
 	processAnnotations bool,
 	followSymlinks bool,
 	caps *ast.Capabilities,
@@ -158,6 +163,7 @@ func LoadPathsForRegoVersion(regoVersion ast.RegoVersion,
 				WithFS(fsys).
 				WithBundleVerificationConfig(bvc).
 				WithSkipBundleVerification(skipVerify).
+				WithBundleLazyLoadingMode(bundleLazyLoading).
 				WithFilter(filter).
 				WithProcessAnnotation(processAnnotations).
 				WithCapabilities(caps).
@@ -176,6 +182,7 @@ func LoadPathsForRegoVersion(regoVersion ast.RegoVersion,
 
 	files, err := loader.NewFileLoader().
 		WithFS(fsys).
+		WithBundleLazyLoadingMode(bundleLazyLoading).
 		WithProcessAnnotation(processAnnotations).
 		WithCapabilities(caps).
 		WithRegoVersion(regoVersion).
