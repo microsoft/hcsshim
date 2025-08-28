@@ -337,6 +337,13 @@ const (
 
 	// VSMBNoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM.
 	VSMBNoDirectMap = "io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap"
+
+	// WCOWIsolationType specifies the isolation type for the WCOW UVM.
+	// Supported values are: "SNP", "VBS", and "GuestStateOnly".
+	WCOWIsolationType = "io.microsoft.virtualmachine.wcow.isolationtype"
+
+	// WCOWDisableSecureBoot specifies whether to disable secure boot for the WCOW UVM.
+	WCOWDisableSecureBoot = "io.microsoft.virtualmachine.wcow.disable-secure-boot"
 )
 
 // LCOW uVM annotations.
