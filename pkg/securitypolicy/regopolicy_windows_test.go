@@ -1,5 +1,5 @@
-//go:build windows
-// +build windows
+//go:build windows && rego
+// +build windows,rego
 
 package securitypolicy
 

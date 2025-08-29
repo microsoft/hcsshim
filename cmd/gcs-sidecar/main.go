@@ -151,7 +151,6 @@ func main() {
 		logrus.Fatal(err)
 	}
 	logrus.SetLevel(level)
-	logrus.SetOutput(logFileHandle)
 	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 	trace.RegisterExporter(&oc.LogrusExporter{})
 
@@ -227,7 +226,7 @@ func main() {
 	initialEnforcer := &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}
 
 	// 3. Create bridge and initializa
-	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer)
+	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer, logFileHandle)
 	brdg.AssignHandlers()
 
 	// 3. Listen and serve for hcsshim requests.

@@ -58,6 +58,8 @@ var (
 )
 
 // Package-level variable for OS type, set during enforcer creation
+//
+//nolint:unused
 var osType string = "unknown"
 
 func init() {
@@ -135,15 +137,15 @@ type SecurityPolicyEnforcer interface {
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) (err error)
 }
 
-// nolint
+//nolint:unused
 type stringSet map[string]struct{}
 
-// nolint
+//nolint:unused
 func (s stringSet) add(item string) {
 	s[item] = struct{}{}
 }
 
-// nolint
+//nolint:unused
 func (s stringSet) contains(item string) bool {
 	_, contains := s[item]
 	return contains
@@ -266,7 +268,7 @@ func CreateSecurityPolicyEnforcer(
 			enforcer = openDoorEnforcer
 		}
 	}
-	osType = strings.ToLower(operatingSystem) //nolint:unused // used in rego enforcer (build tag: rego)
+	osType = strings.ToLower(operatingSystem)
 
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
 		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)
