@@ -440,7 +440,8 @@ func mountHypervIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers, vm 
 		})
 	}
 
-	err = vm.CombineLayersWCOW(ctx, hcsLayers, ml.RootFS, hcsschema.WCIFS)
+	// containerID isn't required when using non-confidential pods (WCIFS based layers can't run confidential pods)
+	err = vm.CombineLayersWCOW(ctx, hcsLayers, ml.RootFS, hcsschema.WCIFS, "")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -476,7 +477,7 @@ func mountHypervIsolatedBlockCIMLayers(ctx context.Context, l *wcowBlockCIMLayer
 		"parent layers": l.parentLayers,
 	}).Debug("mounting hyperv isolated block CIM layers")
 
-	mountedCIMs, err := vm.MountBlockCIMs(ctx, l.mergedLayer, l.parentLayers)
+	mountedCIMs, err := vm.MountBlockCIMs(ctx, l.mergedLayer, l.parentLayers, containerID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to mount block CIMs in UVM: %w", err)
 	}
@@ -524,8 +525,7 @@ func mountHypervIsolatedBlockCIMLayers(ctx context.Context, l *wcowBlockCIMLayer
 		},
 	}
 
-	// TODO(ambarve): Do we need CWCOW specific request type here?
-	err = vm.CombineLayersWCOW(ctx, hcsLayers, ml.RootFS, hcsschema.UnionFS)
+	err = vm.CombineLayersWCOW(ctx, hcsLayers, ml.RootFS, hcsschema.UnionFS, containerID)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -46,7 +46,7 @@ func (umb *UVMMountedBlockCIMs) Release(ctx context.Context) error {
 	guestReq := guestrequest.ModificationRequest{
 		ResourceType: guestresource.ResourceTypeWCOWBlockCims,
 		RequestType:  guestrequest.RequestTypeRemove,
-		Settings: &guestresource.WCOWBlockCIMMounts{
+		Settings: &guestresource.CWCOWBlockCIMMounts{
 			VolumeGUID: umb.volumeGUID,
 		},
 	}
@@ -67,7 +67,7 @@ func (umb *UVMMountedBlockCIMs) Release(ctx context.Context) error {
 
 // mergedCIM can be nil,
 // sourceCIMs MUST be in the top to bottom order
-func (uvm *UtilityVM) MountBlockCIMs(ctx context.Context, mergedCIM *cimfs.BlockCIM, sourceCIMs []*cimfs.BlockCIM) (_ *UVMMountedBlockCIMs, retErr error) {
+func (uvm *UtilityVM) MountBlockCIMs(ctx context.Context, mergedCIM *cimfs.BlockCIM, sourceCIMs []*cimfs.BlockCIM, containerID string) (_ *UVMMountedBlockCIMs, retErr error) {
 	if len(sourceCIMs) < 1 {
 		return nil, fmt.Errorf("at least 1 source CIM is required")
 	}
@@ -94,10 +94,14 @@ func (uvm *UtilityVM) MountBlockCIMs(ctx context.Context, mergedCIM *cimfs.Block
 		return nil, fmt.Errorf("generated cim mount GUID: %w", err)
 	}
 
-	settings := &guestresource.WCOWBlockCIMMounts{
-		BlockCIMs:  []guestresource.BlockCIMDevice{},
-		VolumeGUID: volumeGUID,
-		MountFlags: cimfs.CimMountBlockDeviceCim,
+	// TODO(ambarve): When inbox GCS adds support for mounting block CIMs, we should
+	// use the appropriate request type for confidential vs regular pods as inbox GCS
+	// may not understand the CWCOWBlockCIMMounts type.
+	settings := &guestresource.CWCOWBlockCIMMounts{
+		BlockCIMs:   []guestresource.BlockCIMDevice{},
+		VolumeGUID:  volumeGUID,
+		MountFlags:  cimfs.CimMountBlockDeviceCim,
+		ContainerID: containerID,
 	}
 
 	umb := &UVMMountedBlockCIMs{

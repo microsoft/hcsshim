@@ -114,11 +114,12 @@ type BlockCIMDevice struct {
 	Lun     int32
 }
 
-type WCOWBlockCIMMounts struct {
+type CWCOWBlockCIMMounts struct {
 	// BlockCIMs should be ordered from merged CIM followed by Layer n .. layer 1
-	BlockCIMs  []BlockCIMDevice `json:"BlockCIMs,omitempty"`
-	VolumeGUID guid.GUID        `json:"VolumeGUID,omitempty"`
-	MountFlags uint32           `json:"MountFlags,omitempty"`
+	BlockCIMs   []BlockCIMDevice `json:"BlockCIMs,omitempty"`
+	VolumeGUID  guid.GUID        `json:"VolumeGUID,omitempty"`
+	MountFlags  uint32           `json:"MountFlags,omitempty"`
+	ContainerID string           `json:"ContainerID,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {
