@@ -616,7 +616,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeSecurityPolicy:
 			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWConfidentialOptions)
 			log.G(ctx).Tracef("WCOWConfidentialOptions: { %v}", securityPolicyRequest)
-			err := b.hostState.SetWCOWConfidentialUVMOptions(req.ctx, securityPolicyRequest)
+			err := b.hostState.SetWCOWConfidentialUVMOptions(req.ctx, securityPolicyRequest, b.logWriter)
 			if err != nil {
 				return errors.Wrap(err, "error creating enforcer")
 			}

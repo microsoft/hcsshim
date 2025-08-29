@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -135,7 +136,7 @@ func (h *Host) isSecurityPolicyEnforcerInitialized() bool {
 	return h.securityPolicyEnforcer != nil
 }
 
-func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.WCOWConfidentialOptions) error {
+func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.WCOWConfidentialOptions, logWriter io.Writer) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 
@@ -161,13 +162,11 @@ func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicy
 		return fmt.Errorf("error creating security policy enforcer: %w", err)
 	}
 
-	/*if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
-		// TODO: enable OTL logging
-		//logrus.SetOutput(h.logWriter)
+	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
+		logrus.SetOutput(logWriter)
 	} else {
-		// TODO: disable OTL logging
-		//logrus.SetOutput(io.Discard)
-	}*/
+		logrus.SetOutput(io.Discard)
+	}
 
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
