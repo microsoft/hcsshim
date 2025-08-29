@@ -53,7 +53,6 @@ func WithWCOWSecurityPolicyEnforcer(enforcer string) WCOWConfidentialUVMOpt {
 	}
 }
 
-// TODO: Separate this out later
 func (uvm *UtilityVM) SetWCOWConfidentialUVMOptions(ctx context.Context, opts ...WCOWConfidentialUVMOpt) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported

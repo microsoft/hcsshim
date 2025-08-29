@@ -4,7 +4,6 @@
 package bridge
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -16,54 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	"github.com/pkg/errors"
 )
-
-func modifyMappedVirtualDisk(
-	ctx context.Context,
-	rt guestrequest.RequestType,
-	mvd *guestresource.WCOWMappedVirtualDisk,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
-) (err error) {
-	switch rt {
-	case guestrequest.RequestTypeAdd:
-		// TODO: Modify and update this with verified Cims API
-		return securityPolicy.EnforceDeviceMountPolicy(ctx, mvd.ContainerPath, "hash")
-	case guestrequest.RequestTypeRemove:
-		log.G(ctx).Tracef("enforcing mount_device in mappedvirtualdisk")
-		// TODO: Modify and update this with verified Cims API
-		return securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.ContainerPath)
-	default:
-		return newInvalidRequestTypeError(rt)
-	}
-}
-
-func modifyCombinedLayers(
-	ctx context.Context,
-	containerID string,
-	rt guestrequest.RequestType,
-	cl guestresource.WCOWCombinedLayers,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
-) (err error) {
-	switch rt {
-	case guestrequest.RequestTypeAdd:
-		layerPaths := make([]string, len(cl.Layers))
-		for i, layer := range cl.Layers {
-			layerPaths[i] = layer.Path
-		}
-		//TODO: Remove this when there is verified Cimfs API
-		return securityPolicy.EnforceOverlayMountPolicy(ctx, containerID, layerPaths, cl.ContainerRootPath)
-	case guestrequest.RequestTypeRemove:
-		return securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath)
-	default:
-		return newInvalidRequestTypeError(rt)
-	}
-}
-
-func newInvalidRequestTypeError(rt guestrequest.RequestType) error {
-	return errors.Errorf("the RequestType %q is not supported", rt)
-}
 
 func unmarshalContainerModifySettings(req *request) (_ *prot.ContainerModifySettings, err error) {
 	ctx, span := oc.StartSpan(req.ctx, "sidecar::unmarshalContainerModifySettings")
