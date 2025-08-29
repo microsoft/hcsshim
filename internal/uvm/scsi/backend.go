@@ -170,6 +170,13 @@ func mountRequest(controller, lun uint, path string, config *mountConfig, osType
 		ResourceType: guestresource.ResourceTypeMappedVirtualDisk,
 		RequestType:  guestrequest.RequestTypeAdd,
 	}
+	// This option is set only for cwcow scratch disk mount requests
+	// where we need to format the disk with refs.
+	// For refs the scratch disk size should > 30 GB.
+	if config.formatWithRefs {
+		req.ResourceType = guestresource.ResourceTypeMappedVirtualDiskForContainerScratch
+	}
+
 	switch osType {
 	case "windows":
 		// We don't check config.readOnly here, as that will still result in the overall attachment being read-only.
@@ -185,6 +192,7 @@ func mountRequest(controller, lun uint, path string, config *mountConfig, osType
 			ContainerPath: path,
 			Lun:           int32(lun),
 		}
+
 	case "linux":
 		req.Settings = guestresource.LCOWMappedVirtualDisk{
 			MountPath:        path,

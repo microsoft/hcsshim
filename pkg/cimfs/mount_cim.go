@@ -15,6 +15,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const (
+	VolumePathFormat = "\\\\?\\Volume{%s}\\"
+)
+
 type MountError struct {
 	Cim        string
 	Op         string
@@ -37,7 +41,7 @@ func Mount(cimPath string, volumeGUID guid.GUID, mountFlags uint32) (string, err
 	if err := winapi.CimMountImage(filepath.Dir(cimPath), filepath.Base(cimPath), mountFlags, &volumeGUID); err != nil {
 		return "", &MountError{Cim: cimPath, Op: "Mount", VolumeGUID: volumeGUID, Err: err}
 	}
-	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
+	return fmt.Sprintf(VolumePathFormat, volumeGUID.String()), nil
 }
 
 // Unmount unmounts the cim at mounted at path `volumePath`.
@@ -116,7 +120,7 @@ func MountMergedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlag
 	if err := winapi.CimMergeMountImage(uint32(len(cimsToMerge)), &cimsToMerge[0], mountFlags, &volumeGUID); err != nil {
 		return "", &MountError{Cim: filepath.Join(mergedCIM.BlockPath, mergedCIM.CimName), Op: "MountMerged", Err: err}
 	}
-	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
+	return fmt.Sprintf(VolumePathFormat, volumeGUID.String()), nil
 }
 
 // Mounts a verified block CIM with the provided root hash. The root hash is usually

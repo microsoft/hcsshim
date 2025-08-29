@@ -27,6 +27,10 @@ const (
 	// ResourceTypeMappedVirtualDisk is the modify resource type for mapped
 	// virtual disks
 	ResourceTypeMappedVirtualDisk guestrequest.ResourceType = "MappedVirtualDisk"
+	// ResourceTypeMappedVirtualDiskForContainerScratch is the modify resource type
+	// specifically for refs formatting and mounting scratch vhds for c-wcow cases only.
+	ResourceTypeMappedVirtualDiskForContainerScratch guestrequest.ResourceType = "MappedVirtualDiskForContainerScratch"
+	ResourceTypeWCOWBlockCims                        guestrequest.ResourceType = "WCOWBlockCims"
 	// ResourceTypeNetwork is the modify resource type for the `NetworkAdapterV2`
 	// device.
 	ResourceTypeNetwork          guestrequest.ResourceType = "Network"
@@ -51,12 +55,6 @@ const (
 	ResourceTypeSecurityPolicy guestrequest.ResourceType = "SecurityPolicy"
 	// ResourceTypePolicyFragment is the modify resource type for injecting policy fragments.
 	ResourceTypePolicyFragment guestrequest.ResourceType = "SecurityPolicyFragment"
-	// ResourceTypeWCOWBlockCims is the modify resource type for mounting block cims for hyperv
-	// wcow containers.
-	ResourceTypeWCOWBlockCims guestrequest.ResourceType = "WCOWBlockCims"
-	// ResourceTypeMappedVirtualDiskForContainerScratch is the modify resource type
-	// specifically for refs formatting and mounting scratch vhds for c-wcow cases only.
-	ResourceTypeMappedVirtualDiskForContainerScratch guestrequest.ResourceType = "MappedVirtualDiskForContainerScratch"
 )
 
 // This class is used by a modify request to add or remove a combined layers
@@ -73,14 +71,20 @@ type LCOWCombinedLayers struct {
 }
 
 type WCOWCombinedLayers struct {
-	ContainerRootPath string            `json:"ContainerRootPath,omitempty"`
-	Layers            []hcsschema.Layer `json:"Layers,omitempty"`
-	ScratchPath       string            `json:"ScratchPath,omitempty"`
+	ContainerRootPath string                         `json:"ContainerRootPath,omitempty"`
+	Layers            []hcsschema.Layer              `json:"Layers,omitempty"`
+	ScratchPath       string                         `json:"ScratchPath,omitempty"`
+	FilterType        hcsschema.FileSystemFilterType `json:"FilterType,omitempty"`
 }
 
 type CWCOWCombinedLayers struct {
 	ContainerID    string             `json:"ContainerID,omitempty"`
 	CombinedLayers WCOWCombinedLayers `json:"CombinedLayers,omitempty"`
+}
+
+type CWCOWHostedSystem struct {
+	Spec              specs.Spec
+	CWCOWHostedSystem hcsschema.HostedSystem
 }
 
 // Defines the schema for hosted settings passed to GCS and/or OpenGCS
@@ -115,9 +119,10 @@ type BlockCIMDevice struct {
 
 type WCOWBlockCIMMounts struct {
 	// BlockCIMs should be ordered from merged CIM followed by Layer n .. layer 1
-	BlockCIMs  []BlockCIMDevice `json:"BlockCIMs,omitempty"`
-	VolumeGUID guid.GUID        `json:"VolumeGUID,omitempty"`
-	MountFlags uint32           `json:"MountFlags,omitempty"`
+	BlockCIMs   []BlockCIMDevice `json:"BlockCIMs,omitempty"`
+	VolumeGUID  guid.GUID        `json:"VolumeGUID,omitempty"`
+	MountFlags  uint32           `json:"MountFlags,omitempty"`
+	ContainerID string           `json:"ContainerID,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {

@@ -57,6 +57,14 @@ layerPaths_ok(layers) {
     }
 }
 
+layerHashes_ok(layers) {
+    length := count(layers)
+    count(input.layerHashes) == length
+    every i, hash in input.layerHashes {
+        layers[(length - i) - 1] == hash
+    }
+}
+
 default overlay_exists := false
 
 overlay_exists {
@@ -93,6 +101,25 @@ candidate_containers := containers {
     ]
 
     containers := array.concat(policy_containers, fragment_containers)
+}
+
+default mount_cims := {"allowed": false}
+
+mount_cims := {"metadata": [addMatches], "allowed": true} {
+    not overlay_exists
+
+    containers := [container |
+        container := candidate_containers[_]
+        layerHashes_ok(container.layers)
+    ]
+
+    count(containers) > 0
+    addMatches := {
+        "name": "matches",
+        "action": "add",
+        "key": input.containerID,
+        "value": containers,
+    }
 }
 
 default mount_overlay := {"allowed": false}
@@ -246,12 +273,19 @@ workingDirectory_ok(working_dir) {
 }
 
 privileged_ok(elevation_allowed) {
+    is_linux
     not input.privileged
 }
 
 privileged_ok(elevation_allowed) {
+    is_linux
     input.privileged
     input.privileged == elevation_allowed
+}
+
+privileged_ok(no_new_privileges) {
+    # no-op for windows
+    is_windows
 }
 
 noNewPrivileges_ok(no_new_privileges) {
@@ -260,7 +294,16 @@ noNewPrivileges_ok(no_new_privileges) {
 }
 
 noNewPrivileges_ok(no_new_privileges) {
-    no_new_privileges == false
+    not no_new_privileges
+}
+
+noNewPrivileges_ok_check(obj) {
+    is_linux
+    noNewPrivileges_ok(obj.no_new_privileges)
+}
+
+noNewPrivileges_ok_check(obj) {
+    is_windows
 }
 
 idName_ok(pattern, "any", value) {
@@ -280,6 +323,7 @@ idName_ok(pattern, "re2", value) {
 }
 
 user_ok(user) {
+    is_linux
     user.umask == input.umask
     idName_ok(user.user_idname.pattern, user.user_idname.strategy, input.user)
     every group in input.groups {
@@ -288,8 +332,18 @@ user_ok(user) {
     }
 }
 
+user_ok(user) {
+    is_windows
+    input.user == user
+}
+
 seccomp_ok(seccomp_profile_sha256) {
+    is_linux
     input.seccompProfileSHA256 == seccomp_profile_sha256
+}
+
+seccomp_ok(seccomp_profile_sha256) {
+    is_windows
 }
 
 default container_started := false
@@ -301,6 +355,7 @@ container_started {
 default container_privileged := false
 
 container_privileged {
+    is_linux
     data.metadata.started[input.containerID].privileged
 }
 
@@ -401,6 +456,7 @@ all_caps_sets_are_equal(sets) := caps {
 }
 
 valid_caps_for_all(containers, privileged) := caps {
+    is_linux
     allow_capability_dropping
 
     # find largest matching capabilities sets aka "the most specific"
@@ -412,6 +468,7 @@ valid_caps_for_all(containers, privileged) := caps {
 }
 
 valid_caps_for_all(containers, privileged) := caps {
+    is_linux
     not allow_capability_dropping
 
     # no dropping allowed, so we just return the input
@@ -419,11 +476,16 @@ valid_caps_for_all(containers, privileged) := caps {
 }
 
 caps_ok(allowed_caps, requested_caps) {
+    is_linux
     capsList_ok(allowed_caps.bounding, requested_caps.bounding)
     capsList_ok(allowed_caps.effective, requested_caps.effective)
     capsList_ok(allowed_caps.inheritable, requested_caps.inheritable)
     capsList_ok(allowed_caps.permitted, requested_caps.permitted)
     capsList_ok(allowed_caps.ambient, requested_caps.ambient)
+}
+
+caps_ok(allowed_caps, requested_caps) {
+    is_windows
 }
 
 get_capabilities(container, privileged) := capabilities {
@@ -487,13 +549,10 @@ create_container := {"metadata": [updateMatches, addStarted],
         # NB any change to these narrowing conditions should be reflected in
         # the error handling, such that error messaging correctly reflects
         # the narrowing process.
-        noNewPrivileges_ok(container.no_new_privileges)
+        security_ok(container)
         user_ok(container.user)
-        privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
-        mountList_ok(container.mounts, container.allow_elevated)
-        seccomp_ok(container.seccomp_profile_sha256)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -510,11 +569,11 @@ create_container := {"metadata": [updateMatches, addStarted],
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers, input.privileged)
-    possible_after_caps_containers := [container |
-        container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container, input.privileged), caps_list)
-    ]
+    is_exec_eval := false
+    caps_result := possible_container_after_caps(possible_after_env_containers, is_exec_eval)
+
+    possible_after_caps_containers := caps_result.containers
+    caps_list := caps_result.caps_list
 
     count(possible_after_caps_containers) > 0
 
@@ -537,14 +596,70 @@ create_container := {"metadata": [updateMatches, addStarted],
         "value": containers,
     }
 
-    addStarted := {
-        "name": "started",
-        "action": "add",
-        "key": input.containerID,
-        "value": {
-            "privileged": input.privileged,
-        },
-    }
+    addStarted := addStarted_filter
+}
+
+addStarted_filter := {
+    "name": "started",
+    "action": "add",
+    "key": input.containerID,
+    "value": {
+        "privileged": false,
+    },
+} {
+    is_windows
+}
+
+addStarted_filter := {
+    "name": "started",
+    "action": "add",
+    "key": input.containerID,
+    "value": {
+        "privileged": input.privileged,
+    },
+} {
+    is_linux
+}
+
+security_ok(current_container) {
+    is_linux
+    noNewPrivileges_ok(current_container.no_new_privileges)
+    privileged_ok(current_container.allow_elevated)
+    seccomp_ok(current_container.seccomp_profile_sha256)
+    mountList_ok(current_container.mounts, current_container.allow_elevated)
+}
+
+security_ok(current_container) {
+    is_windows
+}
+
+possible_container_after_caps(env_containers, is_exec) := {
+    "containers": env_containers,
+    "caps_list": []
+} {
+    is_windows
+}
+
+possible_container_after_caps(env_containers, is_exec) := {
+    "containers": filtered,
+    "caps_list": caps_list
+} {
+    is_linux
+    is_privileged := get_privileged_value(is_exec)
+    
+    caps_list := valid_caps_for_all(env_containers, is_privileged)
+    filtered := [container |
+        container := env_containers[_]
+        caps_ok(get_capabilities(container, input.privileged), caps_list)
+    ]
+}
+
+get_privileged_value(is_exec) := container_privileged {
+    is_exec
+}
+
+get_privileged_value(is_exec) := input.privileged {
+    not is_exec
 }
 
 mountSource_ok(constraint, source) {
@@ -608,9 +723,22 @@ mount_ok(mounts, allow_elevated, mount) {
 }
 
 mountList_ok(mounts, allow_elevated) {
+    is_linux
     every mount in input.mounts {
         mount_ok(mounts, allow_elevated, mount)
     }
+}
+mountList_ok(mounts, allow_elevated) {
+    # no-op for windows
+    is_windows
+}
+
+is_linux {
+    data.metadata.operatingsystem[ostype] == "linux"
+}
+
+is_windows {
+    data.metadata.operatingsystem[ostype] == "windows"
 }
 
 default exec_in_container := {"allowed": false}
@@ -628,7 +756,7 @@ exec_in_container := {"metadata": [updateMatches],
         # the error handling, such that error messaging correctly reflects
         # the narrowing process.
         workingDirectory_ok(container.working_dir)
-        noNewPrivileges_ok(container.no_new_privileges)
+        #noNewPrivileges_ok(container.no_new_privileges)
         user_ok(container.user)
         some process in container.exec_processes
         command_ok(process.command)
@@ -648,11 +776,11 @@ exec_in_container := {"metadata": [updateMatches],
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers, container_privileged)
-    possible_after_caps_containers := [container |
-        container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container, container_privileged), caps_list)
-    ]
+    is_exec_eval := true
+    caps_result := possible_container_after_caps(possible_after_env_containers, is_exec_eval)
+
+    possible_after_caps_containers := caps_result.containers
+    caps_list := caps_result.caps_list
 
     count(possible_after_caps_containers) > 0
 
@@ -665,6 +793,16 @@ exec_in_container := {"metadata": [updateMatches],
         "key": input.containerID,
         "value": containers,
     }
+}
+
+noNewPrivileges(current_container) {
+    is_linux
+    current_container.no_new_privileges
+    input.noNewPrivileges
+}
+
+noNewPrivileges(current_container) {
+    is_windows
 }
 
 default shutdown_container := {"allowed": false}
@@ -1108,6 +1246,7 @@ privileged_matches {
 }
 
 errors["privileged escalation not allowed"] {
+    is_linux
     input.rule in ["create_container"]
     not privileged_matches
 }
@@ -1176,7 +1315,7 @@ errors["missing required environment variable"] {
     not container_started
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        noNewPrivileges_ok(container.no_new_privileges)
+        noNewPrivileges_ok_check(container)
         user_ok(container.user)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
@@ -1208,7 +1347,7 @@ errors["missing required environment variable"] {
     container_started
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        noNewPrivileges_ok(container.no_new_privileges)
+        noNewPrivileges_ok_check(container)
         user_ok(container.user)
         workingDirectory_ok(container.working_dir)
         some process in container.exec_processes
@@ -1285,6 +1424,7 @@ mount_matches(mount) {
 }
 
 errors[mountError] {
+    is_linux
     input.rule == "create_container"
     bad_mounts := [mount.destination |
         mount := input.mounts[_]
@@ -1435,16 +1575,19 @@ errors[fragment_framework_version_error] {
 errors["containers only distinguishable by allow_stdio_access"] {
     input.rule == "create_container"
 
-    not container_started
+     not container_started
+
+    # narrow the matches based upon command, working directory, and
+    # mount list
     possible_after_initial_containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        noNewPrivileges_ok(container.no_new_privileges)
+        # NB any change to these narrowing conditions should be reflected in
+        # the error handling, such that error messaging correctly reflects
+        # the narrowing process.
+        security_ok(container)
         user_ok(container.user)
-        privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
-        mountList_ok(container.mounts, container.allow_elevated)
-        seccomp_ok(container.seccomp_profile_sha256)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -1461,11 +1604,11 @@ errors["containers only distinguishable by allow_stdio_access"] {
 
     # check to see if the capabilities variables match, dropping
     # them if allowed (and necessary)
-    caps_list := valid_caps_for_all(possible_after_env_containers, input.privileged)
-    possible_after_caps_containers := [container |
-        container := possible_after_env_containers[_]
-        caps_ok(get_capabilities(container, input.privileged), caps_list)
-    ]
+    is_exec_eval := false
+    caps_result := possible_container_after_caps(possible_after_env_containers, is_exec_eval)
+
+    possible_after_caps_containers := caps_result.containers
+    caps_list := caps_result.caps_list
 
     count(possible_after_caps_containers) > 0
 
@@ -1509,7 +1652,7 @@ default noNewPrivileges_matches := false
 noNewPrivileges_matches {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
-    noNewPrivileges_ok(container.no_new_privileges)
+    noNewPrivileges_ok_check(container)
 }
 
 noNewPrivileges_matches {
@@ -1518,10 +1661,11 @@ noNewPrivileges_matches {
     some process in container.exec_processes
     command_ok(process.command)
     workingDirectory_ok(process.working_dir)
-    noNewPrivileges_ok(process.no_new_privileges)
+    noNewPrivileges_ok_check(process)
 }
 
 errors["invalid noNewPrivileges"] {
+    is_linux
     input.rule in ["create_container", "exec_in_container"]
     not noNewPrivileges_matches
 }
@@ -1544,11 +1688,13 @@ user_matches {
 }
 
 errors["invalid user"] {
+    is_linux
     input.rule in ["create_container", "exec_in_container"]
     not user_matches
 }
 
 errors["capabilities don't match"] {
+    is_linux
     input.rule == "create_container"
 
     not container_started
@@ -1588,6 +1734,7 @@ errors["capabilities don't match"] {
 }
 
 errors["capabilities don't match"] {
+    is_linux
     input.rule == "exec_in_container"
 
     container_started
@@ -1627,6 +1774,7 @@ errors["capabilities don't match"] {
 # covers exec_in_container as well. it shouldn't be possible to ever get
 # an exec_in_container as it "inherits" capabilities rules from create_container
 errors["containers only distinguishable by capabilties"] {
+    is_linux
     input.rule == "create_container"
 
     allow_capability_dropping
@@ -1672,6 +1820,7 @@ seccomp_matches {
 }
 
 errors["invalid seccomp"] {
+    is_linux
     input.rule == "create_container"
     not seccomp_matches
 }

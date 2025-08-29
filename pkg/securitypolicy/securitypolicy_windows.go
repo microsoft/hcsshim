@@ -3,6 +3,8 @@
 
 package securitypolicy
 
+import oci "github.com/opencontainers/runtime-spec/specs-go"
+
 // This is being used by StandEnforcer and is a no-op for windows.
 // substituteUVMPath substitutes mount prefix to an appropriate path inside
 // UVM. At policy generation time, it's impossible to tell what the sandboxID
@@ -21,4 +23,8 @@ func SandboxMountsDir(sandboxID string) string {
 // HugePagesMountsDir returns hugepages mounts directory inside UVM.
 func HugePagesMountsDir(sandboxID string) string {
 	return ""
+}
+
+func GetAllUserInfo(containerID string, process *oci.Process) (IDName, []IDName, string, error) {
+	return IDName{}, []IDName{}, "", nil
 }
