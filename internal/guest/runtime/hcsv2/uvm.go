@@ -456,9 +456,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
 	// It may be an error to have a security policy but not expose it to the
 	// container as in that case it can never be checked as correct by a verifier.
-	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.UVMSecurityPolicyEnv, true) {
+	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.LCOWSecurityPolicyEnv, true) {
 		encodedPolicy := h.securityPolicyEnforcer.EncodedSecurityPolicy()
-		hostAMDCert := settings.OCISpecification.Annotations[annotations.HostAMDCertificate]
+		hostAMDCert := settings.OCISpecification.Annotations[annotations.LCOWHostAMDCertificate]
 		if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(h.uvmReferenceInfo) > 0 {
 			// Use os.MkdirTemp to make sure that the directory is unique.
 			securityContextDir, err := os.MkdirTemp(settings.OCISpecification.Root.Path, securitypolicy.SecurityContextDirTemplate)

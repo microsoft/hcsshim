@@ -120,3 +120,14 @@ func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdta
 	}
 	return uvm.modify(ctx, mod)
 }
+
+// returns if this instance of the UtilityVM is created with confidential policy
+func (uvm *UtilityVM) HasConfidentialPolicy() bool {
+	switch opts := uvm.createOpts.(type) {
+	case *OptionsWCOW:
+		return opts.SecurityPolicyEnabled
+	case *OptionsLCOW:
+		return opts.SecurityPolicyEnabled
+	}
+	return false
+}

@@ -106,7 +106,7 @@ func unmarshalContainerModifySettings(req *request) (_ *prot.ContainerModifySett
 			modifyGuestSettingsRequest.Settings = wcowMappedVirtualDisk
 
 		case guestresource.ResourceTypeWCOWBlockCims:
-			wcowBlockCimMounts := &guestresource.WCOWBlockCIMMounts{}
+			wcowBlockCimMounts := &guestresource.CWCOWBlockCIMMounts{}
 			if err := commonutils.UnmarshalJSONWithHresult(rawGuestRequest, wcowBlockCimMounts); err != nil {
 				return nil, fmt.Errorf("invalid ResourceTypeWCOWBlockCims request: %w", err)
 			}

@@ -338,7 +338,11 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 
 		case guestresource.ResourceTypeWCOWBlockCims:
 			// This is request to mount the merged cim at given volumeGUID
-			wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWBlockCIMMounts)
+			if modifyGuestSettingsRequest.RequestType == guestrequest.RequestTypeRemove {
+				return fmt.Errorf("not implemented")
+			}
+
+			wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWBlockCIMMounts)
 			log.G(ctx).Tracef("WCOWBlockCIMMounts { %v}", wcowBlockCimMounts)
 
 			// The block device takes some time to show up. Wait for a few seconds.
@@ -386,6 +390,11 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			return nil
 
 		case guestresource.ResourceTypeCWCOWCombinedLayers:
+
+			if modifyGuestSettingsRequest.RequestType == guestrequest.RequestTypeRemove {
+				return fmt.Errorf("not implemented")
+			}
+
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWCombinedLayers)
 			containerID := settings.ContainerID
 			log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
