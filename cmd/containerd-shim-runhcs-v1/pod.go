@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -18,12 +19,63 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	eventstypes "github.com/containerd/containerd/api/events"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+// initializeWCOWBootFiles handles the initialization of boot files for WCOW VMs
+func initializeWCOWBootFiles(ctx context.Context, wopts *uvm.OptionsWCOW, rootfs []*types.Mount, s *specs.Spec) error {
+	var (
+		layerFolders []string
+		err          error
+	)
+
+	if s.Windows != nil {
+		layerFolders = s.Windows.LayerFolders
+	}
+
+	wopts.BootFiles, err = layers.GetWCOWUVMBootFilesFromLayers(ctx, rootfs, layerFolders)
+	if err != nil {
+		return err
+	}
+
+	if wopts.SecurityPolicyEnabled {
+		if wopts.BootFiles.BootType != uvm.BlockCIMBoot {
+			return fmt.Errorf("security policy (confidential mode) only works with block CIM based layers")
+		}
+		// we use measured EFI & rootfs for confidential UVMs, use those instead of the ones passed in layers/rootfs
+		wopts.BootFiles.BlockCIMFiles.EFIVHDPath = uvm.GetDefaultConfidentialEFIPath()
+		wopts.BootFiles.BlockCIMFiles.BootCIMVHDPath = uvm.GetDefaultConfidentialBootCIMPath()
+	} else if wopts.BootFiles.BootType == uvm.BlockCIMBoot {
+		// Supporting hyperv isolation with block CIM layers requires changes in
+		// the image pull path to prepare the EFI VHD. But more importantly, since both the
+		// container and UtilityVM files will be in the same CIM, the early boot
+		// code (bootmgr, winload etc.) will need to support reading the UVM OS
+		// files from `UtilityVM/Files` inside the CIM. Once that support is added
+		// we can enable this.
+		return fmt.Errorf("hyperv isolation is not supported with block CIM layers yet")
+	}
+
+	// writable EFI VHD is a valid config for both confidential and regular hyperv
+	// isolated WCOW. Override the default value here if required.
+	if wopts.WritableEFI {
+		// Make a copy of EFI VHD, we can't risk the UVM accidentally modifying
+		// the original VHD.  make copy next to the scratch VHD, this assumes that
+		// the scratch is located in the separate directory dedicated for this
+		// UVM.
+		writableEFIVHDPath := filepath.Join(filepath.Dir(wopts.BootFiles.BlockCIMFiles.ScratchVHDPath), filepath.Base(wopts.BootFiles.BlockCIMFiles.EFIVHDPath))
+		if err := copyfile.CopyFile(ctx, wopts.BootFiles.BlockCIMFiles.EFIVHDPath, writableEFIVHDPath, false); err != nil {
+			return fmt.Errorf("failed to copy EFI VHD at %s: %w", writableEFIVHDPath, err)
+		}
+		wopts.BootFiles.BlockCIMFiles.EFIVHDPath = writableEFIVHDPath
+	}
+
+	return nil
+}
 
 // shimPod represents the logical grouping of all tasks in a single set of
 // shared namespaces. The pod sandbox (container) is represented by the task
@@ -123,16 +175,11 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 				return nil, err
 			}
 		case *uvm.OptionsWCOW:
-			var layerFolders []string
-			if s.Windows != nil {
-				layerFolders = s.Windows.LayerFolders
-			}
 			wopts := (opts).(*uvm.OptionsWCOW)
-			wopts.BootFiles, err = layers.GetWCOWUVMBootFilesFromLayers(ctx, req.Rootfs, layerFolders)
+			err = initializeWCOWBootFiles(ctx, wopts, req.Rootfs, s)
 			if err != nil {
 				return nil, err
 			}
-
 			parent, err = uvm.CreateWCOW(ctx, wopts)
 			if err != nil {
 				return nil, err
