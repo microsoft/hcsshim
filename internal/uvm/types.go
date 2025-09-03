@@ -152,6 +152,13 @@ func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
 	return uvm.encryptScratch
 }
 
+func (uvm *UtilityVM) GetWCOWCreateOpts() *OptionsWCOW {
+	if uvm.operatingSystem == "linux" {
+		return nil
+	}
+	return uvm.createOpts.(*OptionsWCOW)
+}
+
 // OutputHandler is used to process the output from the program run in the UVM.
 type OutputHandler func(io.Reader)
 

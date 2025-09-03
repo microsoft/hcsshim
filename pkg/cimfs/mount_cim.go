@@ -15,6 +15,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const (
+	VolumePathFormat = "\\\\?\\Volume{%s}\\"
+)
+
 type MountError struct {
 	Cim        string
 	Op         string
@@ -30,10 +34,6 @@ func (e *MountError) Error() string {
 	s += " " + e.VolumeGUID.String() + ": " + e.Err.Error()
 	return s
 }
-
-const (
-	VolumePathFormat = "\\\\?\\Volume{%s}\\"
-)
 
 // Mount mounts the given cim at a volume with given GUID. Returns the full volume
 // path if mount is successful.
