@@ -280,7 +280,7 @@ func parseDevices(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDev
 }
 
 // sets options common to both WCOW and LCOW from annotations.
-func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) {
+func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) error {
 	opts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, opts.MemorySizeInMB)
 	opts.LowMMIOGapInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, opts.LowMMIOGapInMB)
 	opts.HighMMIOBaseInMB = ParseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, opts.HighMMIOBaseInMB)
@@ -311,6 +311,14 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 		opts.NumaMemoryBlocksCounts)
 
 	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
+
+	// parse error yielding annotations
+	var err error
+	opts.ResourcePartitionID, err = ParseAnnotationsGUID(s.Annotations, annotations.ResourcePartitionID, opts.ResourcePartitionID)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
@@ -321,7 +329,9 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 	}
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
-		specToUVMCreateOptionsCommon(ctx, lopts.Options, s)
+		if err := specToUVMCreateOptionsCommon(ctx, lopts.Options, s); err != nil {
+			return nil, err
+		}
 
 		/*
 			WARNING!!!!!!!!!!
@@ -368,7 +378,9 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
-		specToUVMCreateOptionsCommon(ctx, wopts.Options, s)
+		if err := specToUVMCreateOptionsCommon(ctx, wopts.Options, s); err != nil {
+			return nil, err
+		}
 
 		wopts.DisableCompartmentNamespace = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
 		wopts.NoDirectMap = ParseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)

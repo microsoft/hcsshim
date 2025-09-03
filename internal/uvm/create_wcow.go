@@ -254,6 +254,11 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 		doc.VirtualMachine.ComputeTopology.Memory.SlitType = &firmwareFallbackMeasured
 	}
 
+	if opts.ResourcePartitionID != nil {
+		// TODO (maksiman): assign pod to resource partition and potentially do an OS version check before that
+		log.G(ctx).WithField("resource-partition-id", opts.ResourcePartitionID.String()).Debug("setting resource partition ID")
+	}
+
 	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)
 
 	// Handle StorageQoS if set
