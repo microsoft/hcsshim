@@ -314,6 +314,9 @@ jobs:
           & '${{ github.workspace }}/bin/psexec' -accepteula -nobanner cmd /c "exit 0"
 
       # run tests
+      - name: Test rego security policy
+        run: ${{ env.GOTESTSUM_CMD }} -tags=rego -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
+
       - name: Test repo
         run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr -tags admin -timeout=20m ./...
 
