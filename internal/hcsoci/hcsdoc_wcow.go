@@ -490,6 +490,16 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v2Container.RegistryChanges = &hcsschema.RegistryChanges{
 		AddValues: registryAdd,
 	}
+
+	if oci.IsIsolatedJobContainer(coi.Spec) {
+		v2Container.ContainerType = "HostProcess"
+
+		// If the customer specified a custom rootfs path then use that instead of default c:\hpc.
+		if customRootFsPath, ok := coi.Spec.Annotations[annotations.HostProcessRootfsLocation]; ok {
+			v2Container.Storage.ContainerRootPath = customRootFsPath
+		}
+	}
+
 	return v1, v2Container, nil
 }
 
