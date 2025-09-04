@@ -33,4 +33,6 @@ type Container struct {
 	AssignedDevices []Device `json:"AssignedDevices,omitempty"`
 
 	AdditionalDeviceNamespace *ContainerDefinitionDevice `json:"AdditionalDeviceNamespace,omitempty"`
+
+	ContainerType string `json:"ContainerType,omitempty"`
 }
