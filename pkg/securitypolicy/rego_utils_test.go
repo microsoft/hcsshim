@@ -1410,31 +1410,18 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 
 	// Handle user configuration based on OS type
 	user := IDName{}
-	var groups []IDName
-	var umask string
+	if testContainer.User.UserIDName.Strategy != IDNameStrategyRegex {
+		user = buildIDNameFromConfig(testContainer.User.UserIDName, testRand)
+	}
+	groups := buildGroupIDNamesFromUser(testContainer.User, testRand)
+	umask := testContainer.User.Umask
+
 	var capabilities *oci.LinuxCapabilities
-
-	if testOSType == "windows" {
-		// For Windows, use the WindowsUser field from the test container if available
-		/*if testContainer.WindowsUser != "" {
-			user = IDName{Name: testContainer.WindowsUser}
-		} else {
-			user = IDName{Name: generateIDNameName(testRand)}
-		}*/
+	if testContainer.Capabilities != nil {
+		capsExternal := copyLinuxCapabilities(testContainer.Capabilities.toExternal())
+		capabilities = &capsExternal
 	} else {
-		// For Linux, use the full ID/Name strategy
-		if testContainer.User.UserIDName.Strategy != IDNameStrategyRegex {
-			user = buildIDNameFromConfig(testContainer.User.UserIDName, testRand)
-		}
-		groups = buildGroupIDNamesFromUser(testContainer.User, testRand)
-		umask = testContainer.User.Umask
-
-		if testContainer.Capabilities != nil {
-			capsExternal := copyLinuxCapabilities(testContainer.Capabilities.toExternal())
-			capabilities = &capsExternal
-		} else {
-			capabilities = nil
-		}
+		capabilities = nil
 	}
 
 	seccomp := testContainer.SeccompProfileSHA256
