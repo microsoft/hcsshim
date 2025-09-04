@@ -289,20 +289,17 @@ privileged_ok(no_new_privileges) {
 }
 
 noNewPrivileges_ok(no_new_privileges) {
+    is_linux
     no_new_privileges
     input.noNewPrivileges
 }
 
 noNewPrivileges_ok(no_new_privileges) {
+    is_linux
     not no_new_privileges
 }
 
-noNewPrivileges_ok_check(obj) {
-    is_linux
-    noNewPrivileges_ok(obj)
-}
-
-noNewPrivileges_ok_check(obj) {
+noNewPrivileges_ok(obj) {
     is_windows
 }
 
@@ -777,7 +774,7 @@ exec_in_container := {"metadata": [updateMatches],
         # the error handling, such that error messaging correctly reflects
         # the narrowing process.
         workingDirectory_ok(container.working_dir)
-        noNewPrivileges_ok_check(container.no_new_privileges)
+        noNewPrivileges_ok(container.no_new_privileges)
         user_ok(container.user)
         some process in container.exec_processes
         command_ok(process.command)
@@ -1368,7 +1365,7 @@ errors["missing required environment variable"] {
     not container_started
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        noNewPrivileges_ok_check(container.no_new_privileges)
+        noNewPrivileges_ok(container.no_new_privileges)
         user_ok(container.user)
         privileged_ok(container.allow_elevated)
         workingDirectory_ok(container.working_dir)
@@ -1400,7 +1397,7 @@ errors["missing required environment variable"] {
     container_started
     possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        noNewPrivileges_ok_check(container.no_new_privileges)
+        noNewPrivileges_ok(container.no_new_privileges)
         user_ok(container.user)
         workingDirectory_ok(container.working_dir)
         some process in container.exec_processes
@@ -1744,7 +1741,7 @@ default noNewPrivileges_matches := false
 noNewPrivileges_matches {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
-    noNewPrivileges_ok_check(container.no_new_privileges)
+    noNewPrivileges_ok(container.no_new_privileges)
 }
 
 noNewPrivileges_matches {
@@ -1753,7 +1750,7 @@ noNewPrivileges_matches {
     some process in container.exec_processes
     command_ok(process.command)
     workingDirectory_ok(process.working_dir)
-    noNewPrivileges_ok_check(process.no_new_privileges)
+    noNewPrivileges_ok(process.no_new_privileges)
 }
 
 errors["invalid noNewPrivileges"] {
