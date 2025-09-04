@@ -11,20 +11,9 @@ import (
 	"fmt"
 	"strings"
 	"syscall"
-)
 
-type marshalFunc func(
-	allowAll bool,
-	containers []*Container,
-	externalProcesses []ExternalProcessConfig,
-	fragments []FragmentConfig,
-	allowPropertiesAccess bool,
-	allowDumpStacks bool,
-	allowRuntimeLogging bool,
-	allowEnvironmentVariableDropping bool,
-	allowUnencryptedScratch bool,
-	allowCapabilityDropping bool,
-) (string, error)
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+)
 
 const (
 	jsonMarshaller = "json"
@@ -32,13 +21,13 @@ const (
 )
 
 var (
-	registeredMarshallers = map[string]marshalFunc{}
+	registeredMarshallers = map[string]OSAwareMarshalFunc{}
 	defaultMarshaller     = jsonMarshaller
 )
 
 func init() {
 	registeredMarshallers[jsonMarshaller] = marshalJSON
-	registeredMarshallers[regoMarshaller] = marshalRego
+	registeredMarshallers[regoMarshaller] = osAwareMarshalRego
 }
 
 //go:embed policy.rego
@@ -49,9 +38,127 @@ var openDoorRegoTemplate string
 
 var openDoorRego = strings.Replace(openDoorRegoTemplate, "@@API_VERSION@@", apiVersion, 1)
 
+// ContainerInterface represents either Container or WindowsContainer
+type ContainerInterface interface {
+	ToInternalContainer() (interface{}, error)
+}
+
+// Implement ContainerInterface for Container
+func (c *Container) ToInternalContainer() (interface{}, error) {
+	return c.toInternal()
+}
+
+// Implement ContainerInterface for WindowsContainer
+func (c *WindowsContainer) ToInternalContainer() (interface{}, error) {
+	return c.toInternal()
+}
+
+// OSAwareMarshalFunc is like marshalFunc but works with mixed container types
+type OSAwareMarshalFunc func(
+	allowAll bool,
+	linuxContainers []*Container,
+	windowsContainers []*WindowsContainer,
+	osType string,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
+	allowPropertiesAccess bool,
+	allowDumpStacks bool,
+	allowRuntimeLogging bool,
+	allowEnvironmentVariableDropping bool,
+	allowUnencryptedScratch bool,
+	allowCapabilityDropping bool,
+) (string, error)
+
+// osAwareMarshalRego handles both Linux and Windows containers
+func osAwareMarshalRego(
+	allowAll bool,
+	linuxContainers []*Container,
+	windowsContainers []*WindowsContainer,
+	osType string,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
+	allowPropertiesAccess bool,
+	allowDumpStacks bool,
+	allowRuntimeLogging bool,
+	allowEnvironmentVariableDropping bool,
+	allowUnencryptedScratch bool,
+	allowCapabilityDropping bool,
+) (string, error) {
+	if allowAll {
+		if len(linuxContainers) > 0 || len(windowsContainers) > 0 {
+			return "", ErrInvalidOpenDoorPolicy
+		}
+		return openDoorRego, nil
+	}
+
+	switch osType {
+	case "linux":
+		if len(windowsContainers) > 0 {
+			return "", fmt.Errorf("cannot marshal Windows containers on Linux OS")
+		}
+		return marshalRego(allowAll, linuxContainers, externalProcesses, fragments,
+			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
+			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping)
+
+	case "windows":
+		if len(linuxContainers) > 0 {
+			return "", fmt.Errorf("cannot marshal Linux containers on Windows OS")
+		}
+		return marshalWindowsRego(allowAll, windowsContainers, externalProcesses, fragments,
+			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
+			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping)
+
+	default:
+		return "", fmt.Errorf("unsupported OS type: %s", osType)
+	}
+}
+
+// marshalWindowsRego creates Rego policy for Windows containers
+func marshalWindowsRego(
+	allowAll bool,
+	containers []*WindowsContainer,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
+	allowPropertiesAccess bool,
+	allowDumpStacks bool,
+	allowRuntimeLogging bool,
+	allowEnvironmentVariableDropping bool,
+	allowUnencryptedScratch bool,
+	allowCapabilityDropping bool,
+) (string, error) {
+	if allowAll {
+		if len(containers) > 0 {
+			return "", ErrInvalidOpenDoorPolicy
+		}
+		return openDoorRego, nil
+	}
+
+	// Convert WindowsContainer to internal Windows container representation
+	windowsContainersInternal, err := windowsContainersToInternal(containers)
+	if err != nil {
+		return "", err
+	}
+
+	policy := &securityPolicyWindowsInternal{
+		Containers:                       windowsContainersInternal,
+		ExternalProcesses:                externalProcessToInternal(externalProcesses),
+		Fragments:                        fragmentsToInternal(fragments),
+		AllowPropertiesAccess:            allowPropertiesAccess,
+		AllowDumpStacks:                  allowDumpStacks,
+		AllowRuntimeLogging:              allowRuntimeLogging,
+		AllowEnvironmentVariableDropping: allowEnvironmentVariableDropping,
+		AllowUnencryptedScratch:          allowUnencryptedScratch,
+		AllowCapabilityDropping:          allowCapabilityDropping,
+	}
+
+	return policy.marshalWindowsRego(), nil
+}
+
 func marshalJSON(
 	allowAll bool,
 	containers []*Container,
+	windowsContainers []*WindowsContainer,
+	osType string,
 	_ []ExternalProcessConfig,
 	_ []FragmentConfig,
 	_ bool,
@@ -155,6 +262,8 @@ func MarshalPolicy(
 		return marshal(
 			allowAll,
 			containers,
+			nil,
+			"linux",
 			externalProcesses,
 			fragments,
 			allowPropertiesAccess,
@@ -311,6 +420,52 @@ func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string
 	writeLine(builder, `%s"mounts": [%s],`, indent, strings.Join(values, ","))
 }
 
+// Windows-specific marshal functions
+func writeWindowsSignals(builder *strings.Builder, signals []guestrequest.SignalValueWCOW, indent string) {
+	signalsArray := make([]string, len(signals))
+	for i, s := range signals {
+		signalsArray[i] = string(s)
+	}
+	array := (stringArray(signalsArray)).marshalRego()
+	writeLine(builder, `%s"signals": %s,`, indent, array)
+}
+
+func writeWindowsUser(builder *strings.Builder, user string, indent string) {
+	writeLine(builder, `%s"user": "%s",`, indent, user)
+}
+
+func (p windowsContainerExecProcess) marshalRego() string {
+	commandLine := []string{p.Command}
+	command := stringArray(commandLine).marshalRego()
+	signalsArray := make([]string, len(p.Signals))
+	for i, s := range p.Signals {
+		signalsArray[i] = string(s)
+	}
+	signals := stringArray(signalsArray).marshalRego()
+	return fmt.Sprintf(`{"command": %s, "signals": %s}`, command, signals)
+}
+
+func writeWindowsExecProcesses(builder *strings.Builder, execProcesses []windowsContainerExecProcess, indent string) {
+	values := make([]string, len(execProcesses))
+	for i, process := range execProcesses {
+		values[i] = process.marshalRego()
+	}
+	writeLine(builder, `%s"exec_processes": [%s],`, indent, strings.Join(values, ","))
+}
+
+func writeWindowsContainer(builder *strings.Builder, container *securityPolicyWindowsContainer, indent string) {
+	writeLine(builder, "%s{", indent)
+	writeCommand(builder, container.Command, indent+indentUsing)
+	writeEnvRules(builder, container.EnvRules, indent+indentUsing)
+	writeLayers(builder, container.Layers, indent+indentUsing)
+	writeWindowsExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
+	writeWindowsSignals(builder, container.Signals, indent+indentUsing)
+	writeWindowsUser(builder, container.User, indent+indentUsing)
+	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, container.WorkingDir)
+	writeLine(builder, `%s"allow_stdio_access": %t,`, indent+indentUsing, container.AllowStdioAccess)
+	writeLine(builder, "%s},", indent)
+}
+
 func (p containerExecProcess) marshalRego() string {
 	command := stringArray(p.Command).marshalRego()
 	signals := signalArray(p.Signals).marshalRego()
@@ -448,4 +603,33 @@ func (p securityPolicyFragment) marshalRego() string {
 	addContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
 	return fmt.Sprintf("package %s\n\nsvn := \"%s\"\nframework_version := \"%s\"\n\n%s", p.Namespace, p.SVN, frameworkVersion, builder.String())
+}
+
+func (p securityPolicyWindowsInternal) marshalWindowsRego() string {
+	builder := new(strings.Builder)
+	addFragments(builder, p.Fragments)
+	addWindowsContainers(builder, p.Containers)
+	addExternalProcesses(builder, p.ExternalProcesses)
+	writeLine(builder, `allow_properties_access := %t`, p.AllowPropertiesAccess)
+	writeLine(builder, `allow_dump_stacks := %t`, p.AllowDumpStacks)
+	writeLine(builder, `allow_runtime_logging := %t`, p.AllowRuntimeLogging)
+	writeLine(builder, "allow_environment_variable_dropping := %t", p.AllowEnvironmentVariableDropping)
+	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
+	writeLine(builder, "allow_capability_dropping := %t", p.AllowCapabilityDropping)
+	result := strings.Replace(policyRegoTemplate, "@@OBJECTS@@", builder.String(), 1)
+	result = strings.Replace(result, "@@API_VERSION@@", apiVersion, 1)
+	result = strings.Replace(result, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)
+	return result
+}
+
+func addWindowsContainers(builder *strings.Builder, containers []*securityPolicyWindowsContainer) {
+	if len(containers) == 0 {
+		return
+	}
+
+	writeLine(builder, "containers := [")
+	for _, container := range containers {
+		writeWindowsContainer(builder, container, indentUsing)
+	}
+	writeLine(builder, "]")
 }

@@ -215,6 +215,18 @@ const (
 	// fallback mechanics.
 	WCOWSecurityPolicyEnforcer = "io.microsoft.virtualmachine.wcow.enforcer"
 
+	// The certificate is expected to be located in the same directory as the shim executable.
+	WCOWHostAMDCertificate = "io.microsoft.virtualmachine.wcow.amd-certificate"
+
+	// WCOWSecurityPolicyEnv specifies if confidential containers' related information
+	// should be written to containers' rootfs. The filenames and location are defined
+	// by securitypolicy.PolicyFilename, securitypolicy.HostAMDCertFilename and
+	// securitypolicy.ReferenceInfoFilename.
+	WCOWSecurityPolicyEnv = "io.microsoft.virtualmachine.wcow.securitypolicy.env"
+
+	// WCOWReferenceInfoFile specifies the filename of a signed UVM reference file to be passed to UVM.
+	WCOWReferenceInfoFile = "io.microsoft.virtualmachine.wcow.uvm-reference-info-file"
+
 	// WCOWIsolationType allows overriding isolation type of a confidential pod.
 	// Default is "SecureNestedPaging" and valid override values are
 	// "VirtualizationBasedSecurity" and "GuestStateOnly"
@@ -329,6 +341,7 @@ const (
 
 // uVM NUMA annotations.
 const (
+	// NumaMaximumProcessorsPerNode is the maximum number of processors per vNUMA node.
 	// This should be used for implicit vNUMA topology.
 	NumaMaximumProcessorsPerNode = "io.microsoft.virtualmachine.computetopology.processor.numa.max-processors-per-node"
 
