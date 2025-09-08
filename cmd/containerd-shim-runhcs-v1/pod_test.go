@@ -6,10 +6,12 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strconv"
 	"sync"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/errdefs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -387,4 +389,175 @@ func Test_pod_DeleteTask_TaskID_Not_Created(t *testing.T) {
 
 	err := p.KillTask(context.Background(), strconv.Itoa(rand.Int()), "", 0xf, true)
 	verifyExpectedError(t, nil, err, errdefs.ErrNotFound)
+}
+
+func getWCOWSpecsWithAnnotations(annotation map[string]string, isIsolated bool, processUser string) *specs.Spec {
+	spec := &specs.Spec{
+		Windows:     &specs.Windows{},
+		Annotations: annotation,
+		Process: &specs.Process{
+			User: specs.User{Username: processUser},
+		},
+	}
+
+	if isIsolated {
+		spec.Windows.HyperV = &specs.WindowsHyperV{}
+	}
+	return spec
+}
+
+func Test_pod_UpdateConfigForHostProcessContainer(t *testing.T) {
+	ntAuthorityUser := `NT AUTHORITY\SYSTEM`
+
+	testCases := []struct {
+		testName              string
+		podSpec               *specs.Spec
+		containerSpec         *specs.Spec
+		expectedContainerSpec *specs.Spec
+		expectedError         string
+	}{
+		{
+			testName: "privileged container in unprivileged pod (isolated hpc)",
+			podSpec:  getWCOWSpecsWithAnnotations(map[string]string{}, true, ""),
+			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			expectedContainerSpec: nil,
+			expectedError:         "cannot create a host process container inside sandbox which has missing annotation: microsoft.com/hostprocess-container",
+		},
+		{
+			testName: "privileged container in privileged pod (isolated hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			expectedError: "",
+		},
+		{
+			testName: "normal container in privileged pod (process hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, false, ""),
+			containerSpec:         getWCOWSpecsWithAnnotations(map[string]string{}, false, ""),
+			expectedContainerSpec: nil,
+			expectedError:         "cannot create a normal process isolated container if the pod sandbox is a job container running on host",
+		},
+		{
+			testName: "normal container in privileged pod (isolated hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			containerSpec:         getWCOWSpecsWithAnnotations(map[string]string{}, false, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{}, false, ""),
+			expectedError:         "",
+		},
+		{
+			testName: "annotations passthrough (isolated hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer:      "true",
+				annotations.HostProcessInheritUser:    "true",
+				annotations.HostProcessRootfsLocation: "C:\\test",
+			}, true, ""),
+			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer:      "true",
+				annotations.HostProcessInheritUser:    "true",
+				annotations.HostProcessRootfsLocation: "C:\\test",
+			}, true, ntAuthorityUser),
+			expectedError: "",
+		},
+		{
+			testName: "annotations passthrough (process hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer:      "true",
+				annotations.HostProcessInheritUser:    "true",
+				annotations.HostProcessRootfsLocation: "C:\\test",
+			}, false, ""),
+			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, false, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer:      "true",
+				annotations.HostProcessInheritUser:    "true",
+				annotations.HostProcessRootfsLocation: "C:\\test",
+			}, false, ""),
+			expectedError: "",
+		},
+		{
+			testName: "no annotation passthrough for normal containers (isolated hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessInheritUser:    "true",
+				annotations.HostProcessRootfsLocation: "C:\\test",
+			}, true, ""),
+			containerSpec:         getWCOWSpecsWithAnnotations(map[string]string{}, true, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{}, true, ""),
+			expectedError:         "",
+		},
+		{
+			testName: "set user process for inherit annotation (isolated hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer:   "true",
+				annotations.HostProcessInheritUser: "true",
+			}, true, ""),
+			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer:   "true",
+				annotations.HostProcessInheritUser: "true",
+			}, true, ntAuthorityUser),
+			expectedError: "",
+		},
+		{
+			testName: "no changes in user process for normal containers (isolated hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer:   "true",
+				annotations.HostProcessInheritUser: "true",
+			}, true, ""),
+			containerSpec:         getWCOWSpecsWithAnnotations(map[string]string{}, true, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{}, true, ""),
+			expectedError:         "",
+		},
+		{
+			testName: "set inherit user annotation to false for normal containers (isolated hpc)",
+			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessInheritUser: "true",
+			}, true, ""),
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessInheritUser: "false",
+			}, true, ""),
+			expectedError: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			p := &pod{spec: tc.podSpec}
+
+			err := p.updateConfigForHostProcessContainer(tc.containerSpec)
+			if err == nil && tc.expectedError != "" {
+				t.Fatalf("should have failed with '%s'", tc.expectedError)
+			}
+			if err != nil && err.Error() != tc.expectedError {
+				t.Fatalf("should have failed with '%s', actual: '%s'", tc.expectedError, err.Error())
+			}
+
+			if tc.expectedContainerSpec != nil {
+				equal := reflect.DeepEqual(tc.containerSpec, tc.expectedContainerSpec)
+				if !equal {
+					t.Fatalf("containerSpec expected: %+v, got: %+v", tc.expectedContainerSpec, tc.containerSpec)
+				}
+			}
+		})
+	}
 }
