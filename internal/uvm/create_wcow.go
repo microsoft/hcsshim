@@ -74,7 +74,7 @@ func GetDefaultConfidentialBootCIMPath() string {
 }
 
 func GetDefaultConfidentialEFIPath() string {
-	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "efi.vhd")
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "boot.vhd")
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
@@ -509,6 +509,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		vsmbNoDirectMap:         opts.NoDirectMap,
 		noWritableFileShares:    opts.NoWritableFileShares,
 		createOpts:              *opts,
+		blockCIMMounts:          make(map[string]*UVMMountedBlockCIMs),
 	}
 
 	defer func() {
