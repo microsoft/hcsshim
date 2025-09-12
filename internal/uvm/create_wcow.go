@@ -221,6 +221,8 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.VirtualMachineMemory{
 					SizeInMB:             memorySizeInMB,
+					AllowOvercommit:      opts.AllowOvercommit,
+					EnableHotHint:        opts.AllowOvercommit,
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 					LowMMIOGapInMB:       opts.LowMMIOGapInMB,
 					HighMMIOBaseInMB:     opts.HighMMIOBaseInMB,
@@ -377,15 +379,6 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 		doc.VirtualMachine.Chipset.FirmwareFile = &hcsschema.FirmwareFile{
 			Parameters: []byte(opts.FirmwareParameters),
 		}
-	}
-
-	if opts.IsolationType != "SecureNestedPaging" {
-		// With these options SNP UVM doesn't boot.
-		memoryBacking := hcsschema.MemoryBackingType_PHYSICAL
-		doc.VirtualMachine.ComputeTopology.Memory.Backing = &memoryBacking
-		doc.VirtualMachine.ComputeTopology.Memory.AllowOvercommit = opts.AllowOvercommit
-		// EnableHotHint is not compatible with physical.
-		doc.VirtualMachine.ComputeTopology.Memory.EnableHotHint = opts.AllowOvercommit
 	}
 
 	doc.SchemaVersion = schemaversion.SchemaV25()

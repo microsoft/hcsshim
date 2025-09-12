@@ -196,7 +196,7 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 	lopts.SecurityPolicy = ParseAnnotationsString(a, annotations.LCOWSecurityPolicy, lopts.SecurityPolicy)
 	// allow actual isolated boot etc to be ignored if we have no hardware. Required for dev
 	// this is not a security issue as the attestation will fail without a genuine report
-	noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.LCOWNoSecurityHardware, false)
+	noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false)
 
 	// if there is a security policy (and SNP) we currently boot in a way that doesn't support any boot options
 	// this might change if the building of the vmgs file were to be done on demand but that is likely
@@ -245,23 +245,63 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 		return fmt.Errorf("minimum 2048MB of memory is required for confidential pods, got: %d", wopts.MemorySizeInMB)
 	}
 
-	wopts.AllowOvercommit = ParseAnnotationsBool(ctx, a, annotations.AllowOvercommit, false)
-	if wopts.AllowOvercommit {
-		return fmt.Errorf("allow overcommit MUST be false for confidential pods")
-	}
-
 	wopts.SecurityPolicyEnforcer = ParseAnnotationsString(a, annotations.WCOWSecurityPolicyEnforcer, wopts.SecurityPolicyEnforcer)
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
 	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
+	wopts.IsolationType = "SecureNestedPaging"
+	if noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false); noSecurityHardware {
+		wopts.IsolationType = "VirtualizationBasedSecurity"
+	}
+	if err := handleWCOWIsolationType(ctx, a, wopts); err != nil {
+		return err
+	}
 
-	isolationType := ParseAnnotationsString(a, annotations.WCOWIsolationType, "SecureNestedPaging")
+	return nil
+}
+
+// Isolation controls the behavior of the boot and actual isolation type of the VM.
+//
+// SecureNestedPaging:
+//
+//	UVM is a SNP encrypted VM.
+//	HCL (from VMGS file) enforces the hash of the bootmngr.
+//	HCL sets an UEFI variable which is the expected hash of the BCD.
+//	Bootmngr enforces the hash of the BCD matches the UEFI variable.
+//	BCD contains the root hash of the OS disk CIM.
+//	Bootmngr also requires the root hash of the OS disk CIM to be in the BCD so it can find the correct OS disk.
+//
+// VirtualizationBasedSecurity:
+//
+//	UVM is a VBS isolated VM.
+//	HCL (from VMGS file) enforces the hash of the bootmngr.
+//	HCL sets an UEFI variable which is the expected hash of the BCD.
+//	Bootmngr enforces the hash of the BCD matches the UEFI variable.
+//	BCD contains the root hash of the OS disk CIM.
+//	Bootmngr also requires the root hash of the OS disk CIM to be in the BCD so it can find the correct OS disk.
+//	This is useful for development purposes.
+//
+// GuestStateOnly:
+//
+//	Boots with the platform HCL, does not enforce CWOW rules.
+//	Bootmngr cannot enforce the BCD hash as it is not set by HCL.
+//	BCD must contain the root hash of the OS disk CIM so that the Bootmngr can find the correct OS disk.
+//	This is useful for development purposes.
+//	This is also useful if you need kernel debugger.
+//
+// Note we do not support the regular WCOW case here.
+// Regular WCOW uses normal Hyper-V isolation i.e. without HCL.
+func handleWCOWIsolationType(ctx context.Context, a map[string]string, wopts *uvm.OptionsWCOW) error {
+	isolationType := ParseAnnotationsString(a, annotations.WCOWIsolationType, wopts.IsolationType)
 	switch isolationType {
 	case "SecureNestedPaging", "SNP": // Allow VBS & SNP shorthands
 		wopts.IsolationType = "SecureNestedPaging"
+		wopts.AllowOvercommit = false
 	case "VirtualizationBasedSecurity", "VBS":
 		wopts.IsolationType = "VirtualizationBasedSecurity"
+		wopts.AllowOvercommit = false
 	case "GuestStateOnly":
 		wopts.IsolationType = "GuestStateOnly"
+		wopts.AllowOvercommit = false
 	default:
 		return fmt.Errorf("invalid WCOW isolation type %q", isolationType)
 	}
