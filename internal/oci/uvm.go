@@ -253,7 +253,21 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	wopts.SecurityPolicyEnforcer = ParseAnnotationsString(a, annotations.WCOWSecurityPolicyEnforcer, wopts.SecurityPolicyEnforcer)
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
 	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
-	wopts.IsolationType = ParseAnnotationsString(a, annotations.WCOWIsolationType, "")
+
+	isolationType := ParseAnnotationsString(a, annotations.WCOWIsolationType, "")
+	if isolationType != "" {
+		switch isolationType {
+		case "SecureNestedPaging", "SNP":
+			wopts.IsolationType = "SecureNestedPaging"
+		case "VirtualizationBasedSecurity", "VBS":
+			wopts.IsolationType = "VirtualizationBasedSecurity"
+		case "GuestStateOnly":
+			wopts.IsolationType = "GuestStateOnly"
+		default:
+			return fmt.Errorf("invalid WCOW isolation type %q", isolationType)
+		}
+	}
+
 	return nil
 }
 
@@ -386,7 +400,6 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.NoDirectMap = ParseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)
 		wopts.NoInheritHostTimezone = ParseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
 		wopts.AdditionalRegistryKeys = append(wopts.AdditionalRegistryKeys, parseAdditionalRegistryValues(ctx, s.Annotations)...)
-		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 
 		// Writable EFI is valid for both confidential and regular Hyper-V isolated WCOW.
 		wopts.WritableEFI = ParseAnnotationsBool(ctx, s.Annotations, annotations.WCOWWritableEFI, wopts.WritableEFI)
