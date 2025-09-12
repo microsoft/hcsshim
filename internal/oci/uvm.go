@@ -250,7 +250,7 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
 	wopts.IsolationType = "SecureNestedPaging"
 	if noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false); noSecurityHardware {
-		wopts.IsolationType = "VirtualizationBasedSecurity"
+		wopts.IsolationType = "GuestStateOnly"
 	}
 	if err := handleWCOWIsolationType(ctx, a, wopts); err != nil {
 		return err
