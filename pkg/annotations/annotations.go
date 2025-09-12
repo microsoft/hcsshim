@@ -145,10 +145,9 @@ const (
 	// Deprecated: use [LCOWHostAMDCertificate] instead.
 	HostAMDCertificate = LCOWHostAMDCertificate
 
-	// LCOWNoSecurityHardware allows us, when it is set to true, to do testing and development without requiring SNP hardware.
-	LCOWNoSecurityHardware = "io.microsoft.virtualmachine.lcow.no_security_hardware"
-	// Deprecated: use [LCOWNoSecurityHardware] instead.
-	NoSecurityHardware = LCOWNoSecurityHardware
+	// NoSecurityHardware allows us, when it is set to true, to do testing and development without requiring SNP hardware.
+	//
+	NoSecurityHardware = "io.microsoft.virtualmachine.no_security_hardware"
 
 	// LCOWSecurityPolicy is used to specify a security policy for opengcs to enforce.
 	LCOWSecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
