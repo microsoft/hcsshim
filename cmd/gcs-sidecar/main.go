@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"time"
@@ -150,7 +151,6 @@ func main() {
 		logrus.Fatal(err)
 	}
 	logrus.SetLevel(level)
-	logrus.SetOutput(logFileHandle)
 	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 	trace.RegisterExporter(&oc.LogrusExporter{})
 
@@ -225,15 +225,17 @@ func main() {
 	case "allow":
 		initialEnforcer = &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
 		logrus.Tracef("initial-policy-stance: allow")
+		logrus.SetOutput(logFileHandle)
 	case "deny":
 		initialEnforcer = &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}
 		logrus.Tracef("initial-policy-stance: deny")
+		logrus.SetOutput(io.Discard)
 	default:
 		logrus.Error("unknown initial-policy-stance")
 	}
 
 	// 3. Create bridge and initializa
-	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer)
+	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer, logFileHandle)
 	brdg.AssignHandlers()
 
 	// 3. Listen and serve for hcsshim requests.

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -17,6 +19,33 @@ import (
 type createEnforcerFunc func(base64EncodedPolicy string, criMounts, criPrivilegedMounts []oci.Mount, maxErrorMessageLength int) (SecurityPolicyEnforcer, error)
 
 type EnvList []string
+
+type ExecOptions struct {
+	Groups          []IDName               // optional: empty slice or nil
+	Umask           string                 // optional: "" means unspecified
+	Capabilities    *oci.LinuxCapabilities // optional: nil means "none"
+	NoNewPrivileges *bool                  // optional: nil means "not set"
+}
+
+type CreateContainerOptions struct {
+	SandboxID            string
+	Privileged           *bool
+	NoNewPrivileges      *bool
+	Groups               []IDName
+	Umask                string
+	Capabilities         *oci.LinuxCapabilities
+	SeccompProfileSHA256 string
+}
+
+type SignalContainerOptions struct {
+	IsInitProcess bool
+	// One of these will be set depending on platform
+	LinuxSignal   syscall.Signal
+	WindowsSignal guestrequest.SignalValueWCOW
+
+	LinuxStartupArgs []string
+	WindowsCommand   []string
+}
 
 const (
 	openDoorEnforcer = "open_door"
@@ -27,6 +56,11 @@ var (
 	registeredEnforcers = map[string]createEnforcerFunc{}
 	defaultEnforcer     = standardEnforcer
 )
+
+// Package-level variable for OS type, set during enforcer creation
+//
+//nolint:unused
+var osType string = "unknown"
 
 func init() {
 	registeredEnforcers[openDoorEnforcer] = createOpenDoorEnforcer
@@ -54,6 +88,16 @@ type SecurityPolicyEnforcer interface {
 		capabilities *oci.LinuxCapabilities,
 		seccompProfileSHA256 string,
 	) (EnvList, *oci.LinuxCapabilities, bool, error)
+	EnforceCreateContainerPolicyV2(
+		ctx context.Context,
+		containerID string,
+		argList []string,
+		envList []string,
+		workingDir string,
+		mounts []oci.Mount,
+		user IDName,
+		opts *CreateContainerOptions,
+	) (EnvList, *oci.LinuxCapabilities, bool, error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
 	EnforceExecInContainerPolicy(
@@ -68,9 +112,19 @@ type SecurityPolicyEnforcer interface {
 		umask string,
 		capabilities *oci.LinuxCapabilities,
 	) (EnvList, *oci.LinuxCapabilities, bool, error)
+	EnforceExecInContainerPolicyV2(
+		ctx context.Context,
+		containerID string,
+		argList []string,
+		envList []string,
+		workingDir string,
+		user IDName,
+		opts *ExecOptions,
+	) (EnvList, *oci.LinuxCapabilities, bool, error)
 	EnforceExecExternalProcessPolicy(ctx context.Context, argList []string, envList []string, workingDir string) (EnvList, bool, error)
 	EnforceShutdownContainerPolicy(ctx context.Context, containerID string) error
 	EnforceSignalContainerProcessPolicy(ctx context.Context, containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
+	EnforceSignalContainerProcessPolicyV2(ctx context.Context, containerID string, opts *SignalContainerOptions) error
 	EnforcePlan9MountPolicy(ctx context.Context, target string) (err error)
 	EnforcePlan9UnmountPolicy(ctx context.Context, target string) (err error)
 	EnforceGetPropertiesPolicy(ctx context.Context) error
@@ -79,18 +133,19 @@ type SecurityPolicyEnforcer interface {
 	LoadFragment(ctx context.Context, issuer string, feed string, code string) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
+	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) (err error)
 	GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error)
 }
 
-//nolint
+//nolint:unused
 type stringSet map[string]struct{}
 
-//nolint
+//nolint:unused
 func (s stringSet) add(item string) {
 	s[item] = struct{}{}
 }
 
-//nolint
+//nolint:unused
 func (s stringSet) contains(item string) bool {
 	_, contains := s[item]
 	return contains
@@ -205,6 +260,7 @@ func CreateSecurityPolicyEnforcer(
 	criMounts,
 	criPrivilegedMounts []oci.Mount,
 	maxErrorMessageLength int,
+	operatingSystem string,
 ) (SecurityPolicyEnforcer, error) {
 	if enforcer == "" {
 		enforcer = defaultEnforcer
@@ -212,6 +268,8 @@ func CreateSecurityPolicyEnforcer(
 			enforcer = openDoorEnforcer
 		}
 	}
+	osType = strings.ToLower(operatingSystem)
+
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
 		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)
 	} else {
@@ -508,10 +566,35 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	return envList, caps, true, nil
 }
 
+func (*StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicyV2(
+	ctx context.Context,
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	mounts []oci.Mount,
+	user IDName,
+	opts *CreateContainerOptions,
+) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return envList, opts.Capabilities, true, nil
+}
+
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
 func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ context.Context, _ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, caps, true, nil
+}
+
+func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicyV2(
+	ctx context.Context,
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	user IDName,
+	opts *ExecOptions,
+) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return envList, opts.Capabilities, true, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
@@ -529,6 +612,10 @@ func (*StandardSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(context.Co
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
 func (*StandardSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(context.Context, string, syscall.Signal, bool, []string) error {
+	return nil
+}
+
+func (*StandardSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicyV2(ctx context.Context, containerID string, opts *SignalContainerOptions) error {
 	return nil
 }
 
@@ -583,6 +670,10 @@ func (StandardSecurityPolicyEnforcer) EnforceScratchMountPolicy(context.Context,
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
 func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Context, string) error {
+	return nil
+}
+
+func (StandardSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) error {
 	return nil
 }
 
@@ -895,8 +986,33 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ context.Con
 	return envList, caps, true, nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicyV2(
+	ctx context.Context,
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	mounts []oci.Mount,
+	user IDName,
+	opts *CreateContainerOptions,
+) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return envList, opts.Capabilities, true, nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ context.Context, _ string, _ []string, envList []string, _ string, _ bool, _ IDName, _ []IDName, _ string, caps *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return envList, caps, true, nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicyV2(
+	ctx context.Context,
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	user IDName,
+	opts *ExecOptions,
+) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return envList, opts.Capabilities, true, nil
 }
 
 func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ context.Context, _ []string, envList []string, _ string) (EnvList, bool, error) {
@@ -908,6 +1024,10 @@ func (*OpenDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(context.Co
 }
 
 func (*OpenDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(context.Context, string, syscall.Signal, bool, []string) error {
+	return nil
+}
+
+func (*OpenDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicyV2(ctx context.Context, containerID string, opts *SignalContainerOptions) error {
 	return nil
 }
 
@@ -951,6 +1071,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Contex
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
@@ -981,7 +1105,32 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(context.Con
 	return nil, nil, false, errors.New("running commands is denied by policy")
 }
 
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicyV2(
+	ctx context.Context,
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	mounts []oci.Mount,
+	user IDName,
+	opts *CreateContainerOptions,
+) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return nil, nil, false, errors.New("running commands is denied by policy")
+}
+
 func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(context.Context, string, []string, []string, string, bool, IDName, []IDName, string, *oci.LinuxCapabilities) (EnvList, *oci.LinuxCapabilities, bool, error) {
+	return nil, nil, false, errors.New("starting additional processes in a container is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicyV2(
+	ctx context.Context,
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+	user IDName,
+	opts *ExecOptions,
+) (EnvList, *oci.LinuxCapabilities, bool, error) {
 	return nil, nil, false, errors.New("starting additional processes in a container is denied by policy")
 }
 
@@ -994,6 +1143,10 @@ func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(context.
 }
 
 func (*ClosedDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(context.Context, string, syscall.Signal, bool, []string) error {
+	return errors.New("signalling container processes is denied by policy")
+}
+
+func (*ClosedDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicyV2(ctx context.Context, containerID string, opts *SignalContainerOptions) error {
 	return errors.New("signalling container processes is denied by policy")
 }
 
@@ -1035,6 +1188,10 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(context.Contex
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Context, string) error {
 	return errors.New("unmounting scratch is denied by the policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) error {
+	return nil
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(containerID string, spec *oci.Process) (IDName, []IDName, string, error) {

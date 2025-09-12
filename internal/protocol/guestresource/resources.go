@@ -82,6 +82,11 @@ type CWCOWCombinedLayers struct {
 	CombinedLayers WCOWCombinedLayers `json:"CombinedLayers,omitempty"`
 }
 
+type CWCOWHostedSystem struct {
+	Spec              specs.Spec
+	CWCOWHostedSystem hcsschema.HostedSystem
+}
+
 // Defines the schema for hosted settings passed to GCS and/or OpenGCS
 
 // SCSIDevice represents a SCSI device that is attached to the system.
