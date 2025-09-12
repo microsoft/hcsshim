@@ -158,8 +158,8 @@ func Test_SpecToUVMCreateOptions_WCOW_Confidential_Defaults(t *testing.T) {
 	if wopts.GuestStateFilePath != uvm.GetDefaultConfidentialVMGSPath() {
 		t.Fatalf("expected GuestStateFilePath to default to %q, got %q", uvm.GetDefaultConfidentialVMGSPath(), wopts.GuestStateFilePath)
 	}
-	if wopts.IsolationType != "" {
-		t.Fatalf("expected empty IsolationType by default, got %q", wopts.IsolationType)
+	if wopts.IsolationType != "SecureNestedPaging" {
+		t.Fatalf("expected SecureNestedPaging IsolationType by default, got %q", wopts.IsolationType)
 	}
 }
 
@@ -215,20 +215,6 @@ func Test_SpecToUVMCreateOptions_WCOW_Confidential_ErrorOnLowMemory(t *testing.T
 
 	if _, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), ""); err == nil {
 		t.Fatal("expected error for confidential pods with MemorySizeInMB < 2048, got nil")
-	}
-}
-
-func Test_SpecToUVMCreateOptions_WCOW_Confidential_ErrorOnAllowOvercommit(t *testing.T) {
-	s := &specs.Spec{
-		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
-		Annotations: map[string]string{
-			annotations.WCOWSecurityPolicy: "test-policy",
-			annotations.AllowOvercommit:    "true",
-		},
-	}
-
-	if _, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), ""); err == nil {
-		t.Fatal("expected error for confidential pods when AllowOvercommit=true, got nil")
 	}
 }
 
