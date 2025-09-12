@@ -254,18 +254,16 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
 	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
 
-	isolationType := ParseAnnotationsString(a, annotations.WCOWIsolationType, "")
-	if isolationType != "" {
-		switch isolationType {
-		case "SecureNestedPaging", "SNP":
-			wopts.IsolationType = "SecureNestedPaging"
-		case "VirtualizationBasedSecurity", "VBS":
-			wopts.IsolationType = "VirtualizationBasedSecurity"
-		case "GuestStateOnly":
-			wopts.IsolationType = "GuestStateOnly"
-		default:
-			return fmt.Errorf("invalid WCOW isolation type %q", isolationType)
-		}
+	isolationType := ParseAnnotationsString(a, annotations.WCOWIsolationType, "SecureNestedPaging")
+	switch isolationType {
+	case "SecureNestedPaging", "SNP": // Allow VBS & SNP shorthands
+		wopts.IsolationType = "SecureNestedPaging"
+	case "VirtualizationBasedSecurity", "VBS":
+		wopts.IsolationType = "VirtualizationBasedSecurity"
+	case "GuestStateOnly":
+		wopts.IsolationType = "GuestStateOnly"
+	default:
+		return fmt.Errorf("invalid WCOW isolation type %q", isolationType)
 	}
 
 	return nil
