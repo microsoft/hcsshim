@@ -259,37 +259,6 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	return nil
 }
 
-// Isolation controls the behavior of the boot and actual isolation type of the VM.
-//
-// SecureNestedPaging:
-//
-//	UVM is a SNP encrypted VM.
-//	HCL (from VMGS file) enforces the hash of the bootmngr.
-//	HCL sets an UEFI variable which is the expected hash of the BCD.
-//	Bootmngr enforces the hash of the BCD matches the UEFI variable.
-//	BCD contains the root hash of the OS disk CIM.
-//	Bootmngr also requires the root hash of the OS disk CIM to be in the BCD so it can find the correct OS disk.
-//
-// VirtualizationBasedSecurity:
-//
-//	UVM is a VBS isolated VM.
-//	HCL (from VMGS file) enforces the hash of the bootmngr.
-//	HCL sets an UEFI variable which is the expected hash of the BCD.
-//	Bootmngr enforces the hash of the BCD matches the UEFI variable.
-//	BCD contains the root hash of the OS disk CIM.
-//	Bootmngr also requires the root hash of the OS disk CIM to be in the BCD so it can find the correct OS disk.
-//	This is useful for development purposes.
-//
-// GuestStateOnly:
-//
-//	Boots with the platform HCL, does not enforce CWOW rules.
-//	Bootmngr cannot enforce the BCD hash as it is not set by HCL.
-//	BCD must contain the root hash of the OS disk CIM so that the Bootmngr can find the correct OS disk.
-//	This is useful for development purposes.
-//	This is also useful if you need kernel debugger.
-//
-// Note we do not support the regular WCOW case here.
-// Regular WCOW uses normal Hyper-V isolation i.e. without HCL.
 func handleWCOWIsolationType(ctx context.Context, a map[string]string, wopts *uvm.OptionsWCOW) error {
 	isolationType := ParseAnnotationsString(a, annotations.WCOWIsolationType, wopts.IsolationType)
 	switch isolationType {
