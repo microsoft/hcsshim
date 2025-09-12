@@ -220,7 +220,7 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 			RegistryChanges: &registryChanges,
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.VirtualMachineMemory{
-					SizeInMB:        memorySizeInMB,
+					SizeInMB:             memorySizeInMB,
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 					LowMMIOGapInMB:       opts.LowMMIOGapInMB,
 					HighMMIOBaseInMB:     opts.HighMMIOBaseInMB,
