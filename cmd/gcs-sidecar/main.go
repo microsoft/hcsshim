@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	shimlog "github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/pspdriver"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -214,13 +215,30 @@ func main() {
 		return
 	}
 
+	var snpMode = false
+	if err := pspdriver.StartPSPDriver(ctx); err != nil {
+		// When error happens, pspdriver.GetPspDriverError() returns true.
+		// When it happens, gcs-sidecar should keep the initial "deny" policy
+		// and reject all requests from the host.
+		logrus.WithError(err).Errorf("failed to start PSP driver")
+	} else {
+		snpMode, err = pspdriver.IsSNPMode(ctx)
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to check SNP mode: %v", err)
+		}
+		logrus.Tracef("SNP mode: %v", snpMode)
+	}
+
 	// gcs-sidecar can be used for non-confidentail hyperv wcow
 	// as well. So we do not always want to check for initialPolicyStance
 	var initialEnforcer securitypolicy.SecurityPolicyEnforcer
-	// TODO (kiashok/Mahati): The initialPolicyStance is set to allow
-	// only for dev. This will eventually be set to allow/deny depending on
-	// on whether SNP is supported or not.
 	initialPolicyStance := "allow"
+	if pspdriver.GetPspDriverError() != nil || snpMode {
+		// If the driver failed to start, policy should keep returning "deny" for anything.
+		// For SNP environment, the initial policy is "deny" but it will be updated
+		// per the user's security policy.
+		initialPolicyStance = "deny"
+	}
 	switch initialPolicyStance {
 	case "allow":
 		initialEnforcer = &securitypolicy.OpenDoorSecurityPolicyEnforcer{}

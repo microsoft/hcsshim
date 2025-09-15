@@ -4,11 +4,13 @@
 package bridge
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/pspdriver"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -32,12 +34,28 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer) *Host {
 	}
 }
 
-func (h *Host) SetWCOWConfidentialUVMOptions(securityPolicyRequest *guestresource.WCOWConfidentialOptions) error {
+func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.WCOWConfidentialOptions) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 
 	if h.securityPolicyEnforcerSet {
 		return errors.New("security policy has already been set")
+	}
+
+	if pspdriver.GetPspDriverError() != nil {
+		// For this case gcs-sidecar will keep initial deny policy.
+		return fmt.Errorf("occurred error while using PSP driver: %v", pspdriver.GetPspDriverError())
+	}
+
+	// Fetch report and validate host_data
+	hostData, err := securitypolicy.NewSecurityPolicyDigest(securityPolicyRequest.EncodedSecurityPolicy)
+	if err != nil {
+		return err
+	}
+
+	if err := pspdriver.ValidateHostData(ctx, hostData[:]); err != nil {
+		// For this case gcs-sidecar will keep initial deny policy.
+		return err
 	}
 
 	// This limit ensures messages are below the character truncation limit that

@@ -323,7 +323,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeSecurityPolicy:
 			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWConfidentialOptions)
 			log.G(ctx).Tracef("WCOWConfidentialOptions: { %v}", securityPolicyRequest)
-			_ = b.hostState.SetWCOWConfidentialUVMOptions(securityPolicyRequest)
+			_ = b.hostState.SetWCOWConfidentialUVMOptions(ctx, securityPolicyRequest)
 
 			// Send response back to shim
 			resp := &prot.ResponseBase{
