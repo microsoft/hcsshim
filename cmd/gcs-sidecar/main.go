@@ -215,18 +215,11 @@ func main() {
 		return
 	}
 
-	var snpMode = false
 	if err := pspdriver.StartPSPDriver(ctx); err != nil {
 		// When error happens, pspdriver.GetPspDriverError() returns true.
-		// When it happens, gcs-sidecar should keep the initial "deny" policy
+		// In that case, gcs-sidecar should keep the initial "deny" policy
 		// and reject all requests from the host.
 		logrus.WithError(err).Errorf("failed to start PSP driver")
-	} else {
-		snpMode, err = pspdriver.IsSNPMode(ctx)
-		if err != nil {
-			logrus.WithError(err).Errorf("failed to check SNP mode: %v", err)
-		}
-		logrus.Tracef("SNP mode: %v", snpMode)
 	}
 
 	// gcs-sidecar can be used for non-confidentail hyperv wcow
