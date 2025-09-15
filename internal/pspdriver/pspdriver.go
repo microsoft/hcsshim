@@ -25,20 +25,20 @@ const (
 )
 
 const (
-	SNPPSP_API_STATUS_SUCCESS              = 0x00000000
-	SNPPSP_API_STATUS_UNSUCCESSFUL         = 0x00000001
-	SNPPSP_API_STATUS_DRIVER_UNSUCCESSFUL  = 0x00000003
-	SNPPSP_API_STATUS_PSP_UNSUCCESSFUL     = 0x00000004
-	SNPPSP_API_STATUS_INVALID_PARAMETER    = 0x00000005
-	SNPPSP_API_STATUS_DEVICE_NOT_AVAILABLE = 0x00000006
+	SnpPspAPIStatusSuccess            = 0x00000000
+	SnpPspAPIStatusUnsuccessful       = 0x00000001
+	SnpPspAPIStatusDriverUnsuccessful = 0x00000003
+	SnpPspAPIStatusPspUnsuccessful    = 0x00000004
+	SnpPspAPIStatusInvalidParameter   = 0x00000005
+	SnpPspAPIStatusDeviceNotAvailable = 0x00000006
 )
 
 // TODO: Fix duplication with pkg/amdsevsnp and merge this into it.
 
 const (
-	SNPPSP_API_REPORT_DATA_SIZE        = 64
-	SNPPSP_API_REPORT_HOST_DATA_SIZE   = 32
-	SNPPSP_API_ATTESTATION_REPORT_SIZE = 0x4A0
+	SnpPspReportDataSize        = 64
+	SnpPspReportHostDataSize    = 32
+	SnpPspAttestationReportSize = 0x4A0
 )
 
 type SNPPSPGuestRequestResult struct {
@@ -58,9 +58,9 @@ type report struct {
 	PlatformInfo     uint64
 	AuthorKeyEn      uint32
 	Reserved1        uint32
-	ReportData       [SNPPSP_API_REPORT_DATA_SIZE]byte
+	ReportData       [SnpPspReportDataSize]byte
 	Measurement      [48]byte
-	HostData         [SNPPSP_API_REPORT_HOST_DATA_SIZE]byte
+	HostData         [SnpPspReportHostDataSize]byte
 	IDKeyDigest      [48]byte
 	AuthorKeyDigest  [48]byte
 	ReportID         [32]byte
@@ -160,7 +160,12 @@ func StartPSPDriver(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to connect to service manager")
 	}
-	defer m.Disconnect()
+	defer func() {
+		if derr := m.Disconnect(); derr != nil {
+			// Log the error on disconnect but do not override the returned error.
+			log.G(ctx).Warnf("Failed to disconnect from service manager: %v", derr)
+		}
+	}()
 
 	// Open the service
 	s, err := m.OpenService(serviceName)
@@ -226,7 +231,7 @@ func IsSNPMode(ctx context.Context) (bool, error) {
 	// snpMode is defined as BOOLEAN (= byte)
 	var snpMode uint8
 	ret, _, _ := isSnpModeProc.Call(uintptr(unsafe.Pointer(&snpMode)))
-	if ret != SNPPSP_API_STATUS_SUCCESS {
+	if ret != SnpPspAPIStatusSuccess {
 		pspDriverError = errors.Errorf("failed to determine if it's in SNP VM. SNPPSP_API_STATUS: 0x%x", ret)
 		return false, pspDriverError
 	}
@@ -244,16 +249,16 @@ func FetchRawSNPReport(ctx context.Context, reportData []byte) ([]byte, error) {
 		return nil, errors.New("PSP driver is not started")
 	}
 
-	var reportDataBuf [SNPPSP_API_REPORT_DATA_SIZE]uint8
+	var reportDataBuf [SnpPspReportDataSize]uint8
 
 	if reportData != nil {
-		if len(reportData) > SNPPSP_API_REPORT_DATA_SIZE {
+		if len(reportData) > SnpPspReportDataSize {
 			return nil, fmt.Errorf("reportData too large: %s", reportData)
 		}
 		copy(reportDataBuf[:], reportData)
 	}
 
-	var report [SNPPSP_API_ATTESTATION_REPORT_SIZE]uint8
+	var report [SnpPspAttestationReportSize]uint8
 	var guestRequestResult SNPPSPGuestRequestResult
 
 	// Fetch attestation report
@@ -262,7 +267,7 @@ func FetchRawSNPReport(ctx context.Context, reportData []byte) ([]byte, error) {
 		uintptr(unsafe.Pointer(&guestRequestResult)),
 		uintptr(unsafe.Pointer(&report[0])))
 
-	if ret != SNPPSP_API_STATUS_SUCCESS {
+	if ret != SnpPspAPIStatusSuccess {
 		log.G(ctx).Errorf("Failed to fetch attestation report. res: 0x%x, DriverStatus: 0x%x, PspStatus: 0x%x\n",
 			ret, guestRequestResult.DriverStatus, guestRequestResult.PspStatus)
 		os.Exit(1)

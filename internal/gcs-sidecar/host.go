@@ -5,13 +5,13 @@ package bridge
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/pspdriver"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	"github.com/pkg/errors"
 )
 
 type Host struct {
@@ -42,9 +42,9 @@ func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicy
 		return errors.New("security policy has already been set")
 	}
 
-	if pspdriver.GetPspDriverError() != nil {
+	if err := pspdriver.GetPspDriverError(); err != nil {
 		// For this case gcs-sidecar will keep initial deny policy.
-		return fmt.Errorf("occurred error while using PSP driver: %v", pspdriver.GetPspDriverError())
+		return errors.Wrapf(err, "an error occurred while using PSP driver")
 	}
 
 	// Fetch report and validate host_data
