@@ -341,6 +341,19 @@ func (job *JobObject) Terminate(exitCode uint32) error {
 	return windows.TerminateJobObject(job.handle, exitCode)
 }
 
+func (job *JobObject) SetNetworkCompartment() error {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+	if job.handle == 0 {
+		return ErrAlreadyClosed
+	}
+	err := winapi.SetJobCompartmentId(job.handle, 2)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Pids returns all of the process IDs in the job object.
 func (job *JobObject) Pids() ([]uint32, error) {
 	job.handleLock.RLock()

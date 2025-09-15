@@ -132,6 +132,12 @@ func Create(ctx context.Context, id string, s *specs.Spec, createOpts CreateOpti
 		return nil, nil, fmt.Errorf("failed to set terminate on last handle close on job container: %w", err)
 	}
 
+	// Set the network compartment for job object
+	err = container.job.SetNetworkCompartment()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to set network compartment on job container: %w", err)
+	}
+
 	r := resources.NewContainerResources(id)
 	defer func() {
 		if err != nil {
