@@ -152,8 +152,6 @@ var (
 	pspDriverError error = nil
 )
 
-// TODO: Should we use ctx for functions here?
-
 func StartPSPDriver(ctx context.Context) error {
 	// Connect to the Service Control Manager
 	m, err := mgr.Connect()
