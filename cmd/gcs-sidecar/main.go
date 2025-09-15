@@ -230,15 +230,10 @@ func main() {
 	}
 
 	// gcs-sidecar can be used for non-confidentail hyperv wcow
-	// as well. So we do not always want to check for initialPolicyStance
+	// as well. So we do not always want to check for initialPolicyStance.
+	// While it's used only for confidential cwow, always use "deny" as initial policy.
 	var initialEnforcer securitypolicy.SecurityPolicyEnforcer
-	initialPolicyStance := "allow"
-	if pspdriver.GetPspDriverError() != nil || snpMode {
-		// If the driver failed to start, policy should keep returning "deny" for anything.
-		// For SNP environment, the initial policy is "deny" but it will be updated
-		// per the user's security policy.
-		initialPolicyStance = "deny"
-	}
+	initialPolicyStance := "deny"
 	switch initialPolicyStance {
 	case "allow":
 		initialEnforcer = &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
