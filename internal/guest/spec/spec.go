@@ -165,82 +165,99 @@ func SetCoreRLimit(spec *oci.Spec, value string) error {
 	return nil
 }
 
+type ParseUserStrResult struct {
+	UID       uint32
+	GID       uint32
+	Username  string
+	Groupname string
+}
+
 // ParseUserStr parses `userStr`, looks up container filesystem's /etc/passwd and /etc/group
 // files for UID and GID for the process.
 //
 // NB: When `userStr` represents a UID, which doesn't exist, return UID as is with GID set to 0.
-func ParseUserStr(rootPath, userStr string) (uint32, uint32, error) {
+func ParseUserStr(rootPath, userStr string) (res ParseUserStrResult, err error) {
 	parts := strings.Split(userStr, ":")
-	switch len(parts) {
-	case 1:
-		v, err := strconv.Atoi(parts[0])
-		if err != nil {
-			// this is a username string, evaluate uid/gid
-			u, err := getUser(rootPath, func(u user.User) bool {
-				return u.Name == userStr
-			})
-			if err != nil {
-				return 0, 0, errors.Wrapf(err, "failed to find user by username: %s", userStr)
-			}
-			return uint32(u.Uid), uint32(u.Gid), nil
-		}
+	if len(parts) > 2 {
+		return res, fmt.Errorf("invalid userstr: '%s'", userStr)
+	}
 
-		// this is a UID, parse /etc/passwd to find GID.
-		u, err := getUser(rootPath, func(u user.User) bool {
+	var v int
+	var u user.User
+	var g user.Group
+
+	// Handle the "user part" first.
+	v, err = strconv.Atoi(parts[0])
+	if err != nil {
+		// this is a username string, evaluate uid/gid
+		u, err = GetUser(rootPath, func(u user.User) bool {
+			return u.Name == parts[0]
+		})
+		if err != nil {
+			return res, errors.Wrapf(err, "failed to find user by username: %s", parts[0])
+		}
+		res.UID = uint32(u.Uid)
+		res.GID = uint32(u.Gid)
+		res.Username = u.Name
+		// Will determine group name below
+	} else {
+		// this is a UID, parse /etc/passwd to find name and GID.
+		u, err = GetUser(rootPath, func(u user.User) bool {
 			return u.Uid == v
 		})
 		if err != nil {
-			// UID doesn't exist, return as is with GID 0.
 			if OutOfUint32Bounds(v) {
-				return 0, 0, errors.Errorf("UID (%d) exceeds uint32 bounds", v)
+				return res, errors.Errorf("UID (%d) exceeds uint32 bounds", v)
 			}
-			return uint32(v), 0, nil
-		}
-		return uint32(u.Uid), uint32(u.Gid), nil
-	case 2:
-		var (
-			userName, groupName string
-			uid, gid            uint32
-		)
-		v, err := strconv.Atoi(parts[0])
-		if err != nil {
-			// username string, lookup UID
-			userName = parts[0]
-			u, err := getUser(rootPath, func(u user.User) bool {
-				return u.Name == userName
-			})
-			if err != nil {
-				return 0, 0, errors.Wrapf(err, "failed to find user by username: %s", userName)
-			}
-			uid = uint32(u.Uid)
+			// UID doesn't exist, continue with GID default to 0 (but we still want to
+			// look up its name) unless overridden.
+			res.UID = uint32(v)
 		} else {
-			if OutOfUint32Bounds(v) {
-				return 0, 0, errors.Errorf("UID (%d) exceeds uint32 bounds", v)
-			}
-			uid = uint32(v)
+			res.UID = uint32(u.Uid)
+			res.GID = uint32(u.Gid)
+			res.Username = u.Name
 		}
-
-		v, err = strconv.Atoi(parts[1])
-		if err != nil {
-			// groupname string, lookup GID
-			groupName = parts[1]
-			g, err := getGroup(rootPath, func(g user.Group) bool {
-				return g.Name == groupName
-			})
-			if err != nil {
-				return 0, 0, errors.Wrapf(err, "failed to find group by groupname: %s", groupName)
-			}
-			gid = uint32(g.Gid)
-		} else {
-			if OutOfUint32Bounds(v) {
-				return 0, 0, errors.Errorf("GID (%d) exceeds uint32 bounds", v)
-			}
-			gid = uint32(v)
-		}
-		return uid, gid, nil
-	default:
-		return 0, 0, fmt.Errorf("invalid userstr: '%s'", userStr)
 	}
+
+	if len(parts) == 1 {
+		g, err = GetGroup(rootPath, func(g user.Group) bool {
+			return g.Gid == int(res.GID)
+		})
+		// If GID doesn't exist we just don't fill in groupName
+		if err == nil {
+			res.Groupname = g.Name
+		}
+		return res, nil
+	}
+
+	v, err = strconv.Atoi(parts[1])
+	if err != nil {
+		// this is a group name string, evaluate gid
+		g, err = GetGroup(rootPath, func(g user.Group) bool {
+			return g.Name == parts[1]
+		})
+		if err != nil {
+			return res, errors.Wrapf(err, "failed to find group by groupname: %s", parts[1])
+		}
+		res.GID = uint32(g.Gid)
+		res.Groupname = g.Name
+	} else {
+		// this is a GID, parse /etc/group to find name.
+		g, err = GetGroup(rootPath, func(g user.Group) bool {
+			return g.Gid == v
+		})
+		if err != nil {
+			if OutOfUint32Bounds(v) {
+				return res, errors.Errorf("GID (%d) exceeds uint32 bounds", v)
+			}
+			// GID doesn't exist, continue with GID as is.
+			res.GID = uint32(v)
+		} else {
+			res.GID = uint32(g.Gid)
+			res.Groupname = g.Name
+		}
+	}
+	return res, nil
 }
 
 // SetUserStr sets `spec.Process` to the valid `userstr` based on the OCI Image Spec
@@ -264,17 +281,17 @@ func ParseUserStr(rootPath, userStr string) (uint32, uint32, error) {
 func SetUserStr(spec *oci.Spec, userstr string) error {
 	setProcess(spec)
 
-	uid, gid, err := ParseUserStr(spec.Root.Path, userstr)
+	usrInfo, err := ParseUserStr(spec.Root.Path, userstr)
 	if err != nil {
 		return err
 	}
 
-	spec.Process.User.UID, spec.Process.User.GID = uid, gid
+	spec.Process.User.UID, spec.Process.User.GID = usrInfo.UID, usrInfo.GID
 	return nil
 }
 
-// getUser looks up /etc/passwd file in a container filesystem and returns parsed user
-func getUser(rootPath string, filter func(user.User) bool) (user.User, error) {
+// GetUser looks up /etc/passwd file in a container filesystem and returns parsed user
+func GetUser(rootPath string, filter func(user.User) bool) (user.User, error) {
 	users, err := user.ParsePasswdFileFilter(filepath.Join(rootPath, "/etc/passwd"), filter)
 	if err != nil {
 		return user.User{}, err
@@ -293,8 +310,8 @@ func getUser(rootPath string, filter func(user.User) bool) (user.User, error) {
 	return users[0], nil
 }
 
-// getGroup looks up /etc/group file in a container filesystem and returns parsed group
-func getGroup(rootPath string, filter func(user.Group) bool) (user.Group, error) {
+// GetGroup looks up /etc/group file in a container filesystem and returns parsed group
+func GetGroup(rootPath string, filter func(user.Group) bool) (user.Group, error) {
 	groups, err := user.ParseGroupFileFilter(filepath.Join(rootPath, "/etc/group"), filter)
 	if err != nil {
 		return user.Group{}, err
