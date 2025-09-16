@@ -37,17 +37,20 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
-	modadvapi32   = windows.NewLazySystemDLL("advapi32.dll")
-	modbindfltapi = windows.NewLazySystemDLL("bindfltapi.dll")
-	modcfgmgr32   = windows.NewLazySystemDLL("cfgmgr32.dll")
-	modcimfs      = windows.NewLazySystemDLL("cimfs.dll")
-	modiphlpapi   = windows.NewLazySystemDLL("iphlpapi.dll")
-	modkernel32   = windows.NewLazySystemDLL("kernel32.dll")
-	modnetapi32   = windows.NewLazySystemDLL("netapi32.dll")
-	modntdll      = windows.NewLazySystemDLL("ntdll.dll")
-	modoffreg     = windows.NewLazySystemDLL("offreg.dll")
+	modadvapi32     = windows.NewLazySystemDLL("advapi32.dll")
+	modamdsnppspapi = windows.NewLazySystemDLL("amdsnppspapi.dll")
+	modbindfltapi   = windows.NewLazySystemDLL("bindfltapi.dll")
+	modcfgmgr32     = windows.NewLazySystemDLL("cfgmgr32.dll")
+	modcimfs        = windows.NewLazySystemDLL("cimfs.dll")
+	modiphlpapi     = windows.NewLazySystemDLL("iphlpapi.dll")
+	modkernel32     = windows.NewLazySystemDLL("kernel32.dll")
+	modnetapi32     = windows.NewLazySystemDLL("netapi32.dll")
+	modntdll        = windows.NewLazySystemDLL("ntdll.dll")
+	modoffreg       = windows.NewLazySystemDLL("offreg.dll")
 
 	procLogonUserW                             = modadvapi32.NewProc("LogonUserW")
+	procSnpPspFetchAttestationReport           = modamdsnppspapi.NewProc("SnpPspFetchAttestationReport")
+	procSnpPspIsSnpMode                        = modamdsnppspapi.NewProc("SnpPspIsSnpMode")
 	procBfSetupFilter                          = modbindfltapi.NewProc("BfSetupFilter")
 	procCM_Get_DevNode_PropertyW               = modcfgmgr32.NewProc("CM_Get_DevNode_PropertyW")
 	procCM_Get_Device_ID_ListA                 = modcfgmgr32.NewProc("CM_Get_Device_ID_ListA")
@@ -119,6 +122,32 @@ var (
 func LogonUser(username *uint16, domain *uint16, password *uint16, logonType uint32, logonProvider uint32, token *windows.Token) (err error) {
 	r1, _, e1 := syscall.SyscallN(procLogonUserW.Addr(), uintptr(unsafe.Pointer(username)), uintptr(unsafe.Pointer(domain)), uintptr(unsafe.Pointer(password)), uintptr(logonType), uintptr(logonProvider), uintptr(unsafe.Pointer(token)))
 	if r1 == 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+func SnpPspFetchAttestationReport(reportData *uint8, guestRequestResult *SNPPSPGuestRequestResult, report *uint8) (ret uint32, err error) {
+	err = procSnpPspFetchAttestationReport.Find()
+	if err != nil {
+		return
+	}
+	r0, _, e1 := syscall.SyscallN(procSnpPspFetchAttestationReport.Addr(), uintptr(unsafe.Pointer(reportData)), uintptr(unsafe.Pointer(guestRequestResult)), uintptr(unsafe.Pointer(report)))
+	ret = uint32(r0)
+	if ret > 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+func SnpPspIsSnpMode(snpMode *uint8) (ret uint32, err error) {
+	err = procSnpPspIsSnpMode.Find()
+	if err != nil {
+		return
+	}
+	r0, _, e1 := syscall.SyscallN(procSnpPspIsSnpMode.Addr(), uintptr(unsafe.Pointer(snpMode)))
+	ret = uint32(r0)
+	if ret > 0 {
 		err = errnoErr(e1)
 	}
 	return

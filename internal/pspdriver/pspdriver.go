@@ -9,13 +9,11 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"time"
-	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -148,11 +146,7 @@ func mirrorBytes(b []byte) []byte {
 }
 
 var (
-	amdsnppspapi = windows.NewLazySystemDLL("amdsnppspapi.dll")
-	// It will panic if the function is not found when .Call() is called.
-	isSnpModeProc              = amdsnppspapi.NewProc("SnpPspIsSnpMode")
-	fetchAttestationReportProc = amdsnppspapi.NewProc("SnpPspFetchAttestationReport")
-	pspDriverStarted           = false
+	pspDriverStarted = false
 	// The error needs to be stored to be retrieved later.
 	// When driver or its dll fails, gcs-sidecar doesn't
 	// set security policy and keep the initial deny policy.
@@ -235,9 +229,19 @@ func IsSNPMode(ctx context.Context) (bool, error) {
 
 	// snpMode is defined as BOOLEAN (= byte)
 	var snpMode uint8
-	ret, _, _ := isSnpModeProc.Call(uintptr(unsafe.Pointer(&snpMode)))
-	if ret != SnpPspAPIStatusSuccess {
-		pspDriverError = errors.Errorf("failed to determine if it's in SNP VM. SNPPSP_API_STATUS: 0x%x", ret)
+	ret, err := winapi.SnpPspIsSnpMode(&snpMode)
+
+	if ret != SnpPspAPIStatusSuccess || err != nil {
+		errMessage := ""
+		if err != nil {
+			// err is not nil either when `winapi` didn't find the API or when ret is not success.
+			// In case of the former, ret is meaningless because ret is returned by the dll.
+			// In case of the latter, we don't need to print err.
+			// We can't tell which case it is here, we print all the information we have.
+			// We could avoid this by loading the dll in this package, but we use `winapi` for consistency with existing code.
+			errMessage = fmt.Sprintf(", err: %v", err)
+		}
+		pspDriverError = errors.Errorf("failed to determine if it's in SNP VM. SNPPSP_API_STATUS: 0x%x%s", ret, errMessage)
 		return false, pspDriverError
 	}
 
@@ -264,18 +268,23 @@ func FetchRawSNPReport(ctx context.Context, reportData []byte) ([]byte, error) {
 	}
 
 	var report [SnpPspAttestationReportSize]uint8
-	var guestRequestResult SNPPSPGuestRequestResult
+	var guestRequestResult winapi.SNPPSPGuestRequestResult
 
-	// Fetch attestation report
-	ret, _, _ := fetchAttestationReportProc.Call(
-		uintptr(unsafe.Pointer(&reportDataBuf[0])),
-		uintptr(unsafe.Pointer(&guestRequestResult)),
-		uintptr(unsafe.Pointer(&report[0])))
-
-	if ret != SnpPspAPIStatusSuccess {
-		log.G(ctx).Errorf("Failed to fetch attestation report. res: 0x%x, DriverStatus: 0x%x, PspStatus: 0x%x\n",
-			ret, guestRequestResult.DriverStatus, guestRequestResult.PspStatus)
-		os.Exit(1)
+	// Fetch attestation report using generated winapi wrapper
+	ret, err := winapi.SnpPspFetchAttestationReport(&reportDataBuf[0], &guestRequestResult, &report[0])
+	if ret != SnpPspAPIStatusSuccess || err != nil {
+		errMessage := ""
+		if err != nil {
+			// err is not nil either when `winapi` didn't find the API or when ret is not success.
+			// In case of the former, ret and guestRequestResult are meaningless because they are returned by the dll.
+			// In case of the latter, we don't need to print err.
+			// We can't tell which case it is here, we print all the information we have.
+			// We could avoid this by loading the dll in this package, but we use `winapi` for consistency with existing code.
+			errMessage = fmt.Sprintf(", err: %v", err)
+		}
+		pspDriverError = errors.Errorf("failed to fetch attestation report. res: 0x%x, DriverStatus: 0x%x, PspStatus: 0x%x%s",
+			ret, guestRequestResult.DriverStatus, guestRequestResult.PspStatus, errMessage)
+		return nil, pspDriverError
 	}
 
 	return report[:], nil
