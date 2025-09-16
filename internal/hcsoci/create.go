@@ -265,11 +265,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			// v1 Argon or Xenon. Pass the document directly to HCS.
 			hcsDocument = v1
 		} else if coi.HostingSystem != nil {
-			isCWCOWUVM := false
-			if createOptions.HostingSystem.WCOWconfidentialUVMOptions != nil {
-				isCWCOWUVM = true
-			}
-			if isCWCOWUVM {
+			if coi.HostingSystem.HasConfidentialPolicy() {
 				// confidential wcow uvm
 				gcsDocument = &guestresource.CWCOWHostedSystem{
 					Spec: *createOptions.Spec,
