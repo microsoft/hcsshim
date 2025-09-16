@@ -27,10 +27,10 @@ const (
 const (
 	SnpPspAPIStatusSuccess            = 0x00000000
 	SnpPspAPIStatusUnsuccessful       = 0x00000001
-	SnpPspAPIStatusDriverUnsuccessful = 0x00000003
-	SnpPspAPIStatusPspUnsuccessful    = 0x00000004
-	SnpPspAPIStatusInvalidParameter   = 0x00000005
-	SnpPspAPIStatusDeviceNotAvailable = 0x00000006
+	SnpPspAPIStatusDriverUnsuccessful = 0x00000002
+	SnpPspAPIStatusPspUnsuccessful    = 0x00000003
+	SnpPspAPIStatusInvalidParameter   = 0x00000004
+	SnpPspAPIStatusDeviceNotAvailable = 0x00000005
 )
 
 // TODO: Fix duplication with pkg/amdsevsnp and merge this into it.
@@ -46,6 +46,9 @@ type SNPPSPGuestRequestResult struct {
 	PspStatus    uint64
 }
 
+// Type used by FetchParsedSNPReport.
+// This it converted to the public type `Report`
+// by `func (sr *report) report() Report`.
 type report struct {
 	Version          uint32
 	GuestSVN         uint32
@@ -76,6 +79,10 @@ type report struct {
 }
 
 // Report represents parsed attestation report.
+// Fields with string type is hex-encoded values of the corresponding byte arrays.
+// Based on Table 23 of 'SEV-ES Guest-Hypervisor Communication Block Standardization'.
+//
+//	https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56421.pdf
 type Report struct {
 	Version          uint32
 	GuestSVN         uint32
