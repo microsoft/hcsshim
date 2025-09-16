@@ -225,18 +225,7 @@ func main() {
 	// gcs-sidecar can be used for non-confidentail hyperv wcow
 	// as well. So we do not always want to check for initialPolicyStance.
 	// While it's used only for confidential cwow, always use "deny" as initial policy.
-	var initialEnforcer securitypolicy.SecurityPolicyEnforcer
-	initialPolicyStance := "deny"
-	switch initialPolicyStance {
-	case "allow":
-		initialEnforcer = &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
-		logrus.Tracef("initial-policy-stance: allow")
-	case "deny":
-		initialEnforcer = &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}
-		logrus.Tracef("initial-policy-stance: deny")
-	default:
-		logrus.Error("unknown initial-policy-stance")
-	}
+	initialEnforcer := &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}
 
 	// 3. Create bridge and initializa
 	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer)
