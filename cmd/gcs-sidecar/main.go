@@ -222,9 +222,8 @@ func main() {
 		logrus.WithError(err).Errorf("failed to start PSP driver")
 	}
 
-	// gcs-sidecar can be used for non-confidentail hyperv wcow
-	// as well. So we do not always want to check for initialPolicyStance.
-	// While it's used only for confidential cwow, always use "deny" as initial policy.
+	// Use "deny" policy as initial enforcer.
+	// This is updated later with user provided policy.
 	initialEnforcer := &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}
 
 	// 3. Create bridge and initializa
