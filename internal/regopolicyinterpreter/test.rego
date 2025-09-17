@@ -109,7 +109,40 @@ compute_gap := {"result": result, "metadata": [removeGreater, removeLesser]} {
         "name": input.name,
         "action": "remove",
         "key": "lesser"
-    }    
+    }
 }
 
 subtract := data.module.subtract
+
+setAdd := {"success": true, "metadata": [addSet]} {
+    addSet := {
+        "name": input.name,
+        "type": "set",
+        "action": "add",
+        "value": {
+            "value": input.value
+        }
+    }
+}
+
+setRemove := {"success": true, "metadata": [removeSet]} {
+    removeSet := {
+        "name": input.name,
+        "type": "set",
+        "action": "remove",
+        "value": {
+            "value": input.value
+        }
+    }
+}
+
+default setContains := {"result": false}
+setContains := {"result": true} {
+    data.metadata[input.name][_].value == input.value
+}
+
+default getSet := {"result": []}
+getSet := {"result": result} {
+    s := data.metadata[input.name]
+    result := [item.value | item := s[_]]
+}
