@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"log"
@@ -170,7 +171,7 @@ func main() {
 			rego.AddModule(fragment.ID(), fragment)
 		}
 
-		result, err := rego.Query("data.policy."+command.Name, command.Input)
+		result, err := rego.Query(context.Background(), "data.policy."+command.Name, command.Input)
 		if err != nil {
 			inputJSON, _ := json.Marshal(command.Input)
 			log.Fatalf("query of %s with input %s failed with error %v",
@@ -196,7 +197,7 @@ func main() {
 		} else {
 			log.Printf("%02d> %s not allowed", i, command.Name)
 			command.Input["rule"] = command.Name
-			result, err = rego.Query("data.policy.reason", command.Input)
+			result, err = rego.Query(context.Background(), "data.policy.reason", command.Input)
 			if err != nil {
 				log.Fatalf("unable to get reason for failure: %v", err)
 			}

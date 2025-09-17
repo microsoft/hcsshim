@@ -1827,7 +1827,7 @@ func Test_Rego_Version_Unregistered_Enforcement_Point(t *testing.T) {
 	}
 
 	enforcementPoint := testDataGenerator.uniqueEnforcementPoint()
-	_, err = policy.queryEnforcementPoint(enforcementPoint)
+	_, err = policy.queryEnforcementPoint(context.Background(), enforcementPoint)
 
 	// we expect an error, not getting one means something is broken
 	if err == nil {
@@ -1852,7 +1852,7 @@ func Test_Rego_Version_Future_Enforcement_Point(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = policy.queryEnforcementPoint("__fixture_for_future_test__")
+	_, err = policy.queryEnforcementPoint(context.Background(), "__fixture_for_future_test__")
 
 	// we expect an error, not getting one means something is broken
 	if err == nil {
@@ -1881,7 +1881,7 @@ func Test_Rego_Version_Unavailable_Enforcement_Point(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	info, err := policy.queryEnforcementPoint("__fixture_for_allowed_test_true__")
+	info, err := policy.queryEnforcementPoint(context.Background(), "__fixture_for_allowed_test_true__")
 	// we do not expect an error, getting one means something is broken
 	if err != nil {
 		t.Fatalf("unable to query whether enforcement point is available: %v", err)
@@ -1915,7 +1915,7 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 	}
 
 	input := make(map[string]interface{})
-	results, err := policy.applyDefaults("__fixture_for_allowed_test_false__", input)
+	results, err := policy.applyDefaults(context.Background(), "__fixture_for_allowed_test_false__", input)
 	if err != nil {
 		t.Fatalf("applied defaults for an enforcement point receieved an error: %v", err)
 	}
@@ -1931,7 +1931,7 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 	}
 
 	input = make(map[string]interface{})
-	results, err = policy.applyDefaults("__fixture_for_allowed_test_true__", input)
+	results, err = policy.applyDefaults(context.Background(), "__fixture_for_allowed_test_true__", input)
 	if err != nil {
 		t.Fatalf("applied defaults for an enforcement point receieved an error: %v", err)
 	}
@@ -2002,7 +2002,7 @@ func Test_Rego_No_API_Version(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = policy.queryEnforcementPoint("__fixture_for_allowed_test_true__")
+	_, err = policy.queryEnforcementPoint(context.Background(), "__fixture_for_allowed_test_true__")
 
 	if err == nil {
 		t.Error("querying an enforcement point without an api_version did not produce an error")
@@ -4633,7 +4633,7 @@ func Test_Rego_CreateContainer_NoNewPrivileges_Default(t *testing.T) {
 	}
 
 	input := map[string]interface{}{}
-	result, err := tc.policy.rego.RawQuery("data.framework.candidate_containers", input)
+	result, err := tc.policy.rego.RawQuery(context.Background(), "data.framework.candidate_containers", input)
 
 	if err != nil {
 		t.Fatalf("unable to query containers: %v", err)
@@ -4665,7 +4665,7 @@ func Test_Rego_CreateContainer_User_Default(t *testing.T) {
 	}
 
 	input := map[string]interface{}{}
-	result, err := tc.policy.rego.RawQuery("data.framework.candidate_containers", input)
+	result, err := tc.policy.rego.RawQuery(context.Background(), "data.framework.candidate_containers", input)
 
 	if err != nil {
 		t.Fatalf("unable to query containers: %v", err)
@@ -4726,7 +4726,7 @@ func Test_Rego_CreateContainer_Capabilities_Default(t *testing.T) {
 	input := map[string]interface{}{
 		"privileged": false,
 	}
-	result, err := tc.policy.rego.RawQuery("data.framework.candidate_containers", input)
+	result, err := tc.policy.rego.RawQuery(context.Background(), "data.framework.candidate_containers", input)
 
 	if err != nil {
 		t.Fatalf("unable to query containers: %v", err)
@@ -4763,7 +4763,7 @@ func Test_Rego_CreateContainer_AllowCapabilityDropping_Default(t *testing.T) {
 	}
 
 	input := map[string]interface{}{}
-	result, err := tc.policy.rego.RawQuery("data.framework.allow_capability_dropping", input)
+	result, err := tc.policy.rego.RawQuery(context.Background(), "data.framework.allow_capability_dropping", input)
 
 	if err != nil {
 		t.Fatalf("unable to query allow_capability_dropping: %v", err)
@@ -4787,7 +4787,7 @@ func Test_Rego_CreateContainer_Seccomp_Default(t *testing.T) {
 	}
 
 	input := map[string]interface{}{}
-	result, err := tc.policy.rego.RawQuery("data.framework.candidate_containers", input)
+	result, err := tc.policy.rego.RawQuery(context.Background(), "data.framework.candidate_containers", input)
 
 	if err != nil {
 		t.Fatalf("unable to query containers: %v", err)
@@ -5644,7 +5644,7 @@ func Test_Rego_FrameworkSVN(t *testing.T) {
 		t.Fatalf("unable to create policy: %v", err)
 	}
 
-	value, err := policy.rego.RawQuery("data.framework.policy_framework_version", map[string]interface{}{})
+	value, err := policy.rego.RawQuery(context.Background(), "data.framework.policy_framework_version", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("unable to query policy: %v", err)
 	}
@@ -5689,7 +5689,7 @@ func Test_Rego_Fragment_FrameworkSVN(t *testing.T) {
 	input := map[string]interface{}{
 		"namespace": fragmentConstraints.namespace,
 	}
-	result, err := policy.rego.RawQuery("data.framework.fragment_framework_version", input)
+	result, err := policy.rego.RawQuery(context.Background(), "data.framework.fragment_framework_version", input)
 
 	if err != nil {
 		t.Fatalf("error querying policy: %v", err)
@@ -5722,7 +5722,7 @@ func Test_Rego_APISVN(t *testing.T) {
 		t.Fatalf("unable to create policy: %v", err)
 	}
 
-	value, err := policy.rego.RawQuery("data.framework.policy_api_version", map[string]interface{}{})
+	value, err := policy.rego.RawQuery(context.Background(), "data.framework.policy_api_version", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("unable to query policy: %v", err)
 	}
@@ -7358,11 +7358,11 @@ func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *r
 //go:embed api_test.rego
 var apiTestCode string
 
-func (p *regoEnforcer) injectTestAPI() error {
-	p.rego.RemoveModule("api.rego")
-	p.rego.AddModule("api.rego", &rpi.RegoModule{Namespace: "api", Code: apiTestCode})
+func (policy *regoEnforcer) injectTestAPI() error {
+	policy.rego.RemoveModule("api.rego")
+	policy.rego.AddModule("api.rego", &rpi.RegoModule{Namespace: "api", Code: apiTestCode})
 
-	return p.rego.Compile()
+	return policy.rego.Compile()
 }
 
 func selectContainerFromRunningContainers(containers []regoRunningContainer, r *rand.Rand) regoRunningContainer {

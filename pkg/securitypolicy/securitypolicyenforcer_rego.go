@@ -196,12 +196,17 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 		"defaultPrivilegedCapabilities":   DefaultPrivilegedCapabilities(),
 	}
 
-	policy.rego, err = rpi.NewRegoPolicyInterpreter(code, data)
+	logger, err := rpi.NewLogrusLogger(rpi.LogResults)
 	if err != nil {
 		return nil, err
 	}
-	policy.stdio = map[string]bool{}
 
+	policy.rego, err = rpi.NewRegoPolicyInterpreter(code, data, rpi.WithLogger(logger))
+	if err != nil {
+		return nil, err
+	}
+
+	policy.stdio = map[string]bool{}
 	policy.base64policy = ""
 	policy.rego.AddModule("framework.rego", &rpi.RegoModule{Namespace: "framework", Code: FrameworkCode})
 	policy.rego.AddModule("api.rego", &rpi.RegoModule{Namespace: "api", Code: APICode})
@@ -217,9 +222,9 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	return policy, nil
 }
 
-func (policy *regoEnforcer) applyDefaults(enforcementPoint string, results rpi.RegoQueryResult) (rpi.RegoQueryResult, error) {
+func (policy *regoEnforcer) applyDefaults(ctx context.Context, enforcementPoint string, results rpi.RegoQueryResult) (rpi.RegoQueryResult, error) {
 	deny := rpi.RegoQueryResult{"allowed": false}
-	info, err := policy.queryEnforcementPoint(enforcementPoint)
+	info, err := policy.queryEnforcementPoint(ctx, enforcementPoint)
 	if err != nil {
 		return deny, err
 	}
@@ -237,13 +242,12 @@ type enforcementPointInfo struct {
 	defaultResults           rpi.RegoQueryResult
 }
 
-func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (*enforcementPointInfo, error) {
+func (policy *regoEnforcer) queryEnforcementPoint(ctx context.Context, enforcementPoint string) (*enforcementPointInfo, error) {
 	input := inputData{
 		"name": enforcementPoint,
 		"rule": enforcementPoint,
 	}
-	result, err := policy.rego.Query("data.framework.enforcement_point_info", input)
-
+	result, err := policy.rego.Query(ctx, "data.framework.enforcement_point_info", input)
 	if err != nil {
 		return nil, fmt.Errorf("error querying enforcement point information: %w", err)
 	}
@@ -292,13 +296,14 @@ func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (*enf
 }
 
 func (policy *regoEnforcer) enforce(ctx context.Context, enforcementPoint string, input inputData) (rpi.RegoQueryResult, error) {
+	log.G(ctx).WithField("rule", enforcementPoint).Debug("querying enforcement point")
 	rule := "data.policy." + enforcementPoint
-	result, err := policy.rego.Query(rule, input)
+	result, err := policy.rego.Query(ctx, rule, input)
 	if err != nil {
 		return nil, policy.denyWithError(ctx, err, input)
 	}
 
-	result, err = policy.applyDefaults(enforcementPoint, result)
+	result, err = policy.applyDefaults(ctx, enforcementPoint, result)
 	if err != nil {
 		return result, policy.denyWithError(ctx, err, input)
 	}
@@ -407,7 +412,7 @@ func (policy *regoEnforcer) denyWithReason(ctx context.Context, enforcementPoint
 		"decision": "deny",
 	}
 
-	result, err := policy.rego.Query("data.policy.reason", input)
+	result, err := policy.rego.Query(ctx, "data.policy.reason", input)
 	if err == nil {
 		if result.IsEmpty() {
 			policyDecision["reason"] = noReasonMessage
@@ -944,14 +949,14 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, fee
 		return fmt.Errorf("unable to load fragment: %w", err)
 	}
 
-	fragment := &rpi.RegoModule{
+	frag := &rpi.RegoModule{
 		Issuer:    issuer,
 		Feed:      feed,
 		Code:      rego,
 		Namespace: namespace,
 	}
 
-	policy.rego.AddModule(fragment.ID(), fragment)
+	policy.rego.AddModule(frag.ID(), frag)
 
 	input := inputData{
 		"issuer":    issuer,
@@ -963,7 +968,7 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, fee
 
 	addModule, _ := results.Bool("add_module")
 	if !addModule {
-		policy.rego.RemoveModule(fragment.ID())
+		policy.rego.RemoveModule(frag.ID())
 	}
 
 	return err
