@@ -4557,7 +4557,7 @@ func expectFragmentNotLoaded(t *testing.T, policy *regoEnforcer, issuer, feed st
 		t.Errorf("fragment module is present")
 		return false
 	}
-	mtdIssuer, err := policy.rego.GetMetadata("issuers", issuer)
+	mtdIssuer, err := policy.rego.GetMetadataMapValue("issuers", issuer)
 	if err != nil && !strings.Contains(err.Error(), "value not found") &&
 		!strings.Contains(err.Error(), "metadata not found for name issuers") {
 		t.Errorf("unexpected error when checking issuer metadata: %v", err)
@@ -5127,7 +5127,7 @@ mount_device := data.fragment.mount_device
 		t.Fatalf("unable to mount device: %v", err)
 	}
 
-	if test, err := policy.rego.GetMetadata("custom", key); err == nil {
+	if test, err := policy.rego.GetMetadataMapValue("custom", key); err == nil {
 		if test != value {
 			t.Error("incorrect metadata value stored by fragment")
 		}
