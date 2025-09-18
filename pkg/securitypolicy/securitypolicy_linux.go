@@ -17,6 +17,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+//nolint:unused
+const osType = "linux"
+
 // This is being used by StandEnforcer.
 // substituteUVMPath substitutes mount prefix to an appropriate path inside
 // UVM. At policy generation time, it's impossible to tell what the sandboxID

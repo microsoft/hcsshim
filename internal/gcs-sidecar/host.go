@@ -169,7 +169,6 @@ func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicy
 		DefaultCRIMounts(),
 		DefaultCRIPrivilegedMounts(),
 		maxErrorMessageLength,
-		"windows",
 	)
 	if err != nil {
 		return fmt.Errorf("error creating security policy enforcer: %w", err)
@@ -193,18 +192,20 @@ func (h *Host) AddContainer(ctx context.Context, id string, c *Container) error 
 
 	if _, ok := h.containers[id]; ok {
 		log.G(ctx).Tracef("Container exists in the map: %v", ok)
+		return gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
 	}
 	log.G(ctx).Tracef("AddContainer: ID: %v", id)
 	h.containers[id] = c
 	return nil
 }
 
-func (h *Host) RemoveContainer(id string) {
+func (h *Host) RemoveContainer(ctx context.Context, id string) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
 	_, ok := h.containers[id]
 	if !ok {
+		log.G(ctx).Tracef("RemoveContainer: Container not found: ID: %v", id)
 		return
 	}
 
@@ -217,6 +218,7 @@ func (h *Host) GetCreatedContainer(ctx context.Context, id string) (*Container, 
 
 	c, ok := h.containers[id]
 	if !ok {
+		log.G(ctx).Tracef("GetCreatedContainer: Container not found: ID: %v", id)
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 	return c, nil

@@ -5,6 +5,9 @@ package securitypolicy
 
 import oci "github.com/opencontainers/runtime-spec/specs-go"
 
+//nolint:unused
+const osType = "windows"
+
 // This is being used by StandEnforcer and is a no-op for windows.
 // substituteUVMPath substitutes mount prefix to an appropriate path inside
 // UVM. At policy generation time, it's impossible to tell what the sandboxID

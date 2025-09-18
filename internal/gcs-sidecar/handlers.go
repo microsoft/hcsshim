@@ -84,7 +84,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}
-		log.G(ctx).Tracef("user test: %v", user)
 		_, _, _, err := b.hostState.securityPolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
 
 		if err != nil {
@@ -97,11 +96,12 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		}
 		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
 		if err := b.hostState.AddContainer(req.ctx, containerID, c); err != nil {
-			log.G(ctx).Tracef("Container exists in the map!")
+			log.G(ctx).Tracef("Container exists in the map.")
+			return err
 		}
 		defer func(err error) {
 			if err != nil {
-				b.hostState.RemoveContainer(containerID)
+				b.hostState.RemoveContainer(ctx, containerID)
 			}
 		}(err)
 		// Write security policy, signed UVM reference and host AMD certificate to
@@ -242,9 +242,6 @@ func (b *Bridge) shutdownGraceful(req *request) (err error) {
 		return fmt.Errorf("failed to unmarshal shutdownGraceful: %w", err)
 	}
 
-	// TODO (kiashok/Mahati): Since gcs-sidecar can be used for all types of windows
-	// containers, it is important to check if we want to
-	// enforce policy or not.
 	err = b.hostState.securityPolicyEnforcer.EnforceShutdownContainerPolicy(req.ctx, r.ContainerID)
 	if err != nil {
 		return fmt.Errorf("rpcShudownGraceful operation not allowed: %w", err)
@@ -313,7 +310,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		c, err := b.hostState.GetCreatedContainer(req.ctx, containerID)
 		if err != nil {
 			log.G(req.ctx).Tracef("Container not found during exec: %v", containerID)
-			return errors.Wrapf(err, "containerID doesn't exist")
+			return fmt.Errorf("failed to get created container: %w", err)
 		}
 
 		// if this is an exec of Container command line, then it's already enforced
@@ -420,7 +417,7 @@ func (b *Bridge) signalProcess(req *request) (err error) {
 		containerID := r.ContainerID
 		c, err := b.hostState.GetCreatedContainer(req.ctx, containerID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get created container: %w", err)
 		}
 
 		p, err := c.GetProcess(r.ProcessID)
@@ -515,15 +512,13 @@ func (b *Bridge) deleteContainerState(req *request) (err error) {
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal deleteContainerState: %w", err)
 	}
-
-	//TODO (Mahati): Remove container state locally before passing it to inbox-gcs
-	/*
-		c, err := b.hostState.GetCreatedContainer(request.ContainerID)
-		if err != nil {
-			return nil, err
-		}
-		// remove container state regardless of delete's success
-		defer b.hostState.RemoveContainer(request.ContainerID)*/
+	_, err = b.hostState.GetCreatedContainer(req.ctx, r.ContainerID)
+	if err != nil {
+		log.G(req.ctx).Tracef("Container not found during deleteContainerState: %v", r.ContainerID)
+		return fmt.Errorf("container not found: %w", err)
+	}
+	// remove container state regardless of delete's success
+	defer b.hostState.RemoveContainer(req.ctx, r.ContainerID)
 
 	b.forwardRequestToGcs(req)
 	return nil
