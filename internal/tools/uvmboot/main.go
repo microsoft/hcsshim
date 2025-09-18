@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -76,7 +75,7 @@ func main() {
 		},
 		cli.BoolFlag{
 			Name:        "debug",
-			Usage:       "Enable debug information",
+			Usage:       "Increase logging verbosity",
 			Destination: &debug,
 		},
 		cli.BoolFlag{
@@ -98,14 +97,15 @@ func main() {
 
 	app.Before = func(c *cli.Context) error {
 		if !winapi.IsElevated() {
-			log.Fatal(c.App.Name + " must be run in an elevated context")
+			return fmt.Errorf(c.App.Name + " must be run in an elevated context")
 		}
 
+		lvl := logrus.WarnLevel
 		if debug {
-			logrus.SetLevel(logrus.DebugLevel)
-		} else {
-			logrus.SetLevel(logrus.WarnLevel)
+			// as a debugging tool, opt for more logs over less
+			lvl = logrus.TraceLevel
 		}
+		logrus.SetLevel(lvl)
 
 		return nil
 	}
@@ -116,6 +116,7 @@ func main() {
 }
 
 func setGlobalOptions(c *cli.Context, options *uvm.Options) {
+	// TODO: create appropriate spec for (conf) WCOW and handle annotations here
 	if c.GlobalIsSet(cpusArgName) {
 		options.ProcessorCount = int32(c.GlobalUint64(cpusArgName))
 	}
@@ -138,6 +139,7 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 		}
 		options.ResourcePartitionID = &rpID
 	}
+	// TODO: create common arg for console pipe and set `uvmConsolePipe` as the default value
 	// Always set the console pipe in uvmboot, it helps with testing/debugging
 	options.ConsolePipe = uvmConsolePipe
 }
