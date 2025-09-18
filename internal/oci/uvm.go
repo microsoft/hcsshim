@@ -317,6 +317,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.KernelBootOptions = ParseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 		lopts.ConsolePipe = ParseAnnotationsString(s.Annotations, iannotations.UVMConsolePipe, lopts.ConsolePipe)
+		lopts.WritableOverlayDirs = ParseAnnotationsBool(ctx, s.Annotations, iannotations.WritableOverlayDirs, lopts.WritableOverlayDirs)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)

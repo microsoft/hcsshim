@@ -6,6 +6,7 @@
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -136,6 +137,52 @@ const struct InitOp ops[] = {
     // mount /sys (which should already exist)
     {OpMount, .mount = {"sysfs", "/sys", "sysfs", MS_NODEV | MS_NOSUID | MS_NOEXEC}},
     {OpMount, .mount = {"cgroup_root", "/sys/fs/cgroup", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "mode=0755"}},
+};
+
+/*
+rootfs VHDs are mounted as read-only, which can cause issues for binaries running in the
+uVM (e.g., syslogd, (GPU) drivers) that expect to be able to write to /etc/
+(e.g., syslogd is configured by /etc/syslog.conf) or /var/ (e.g., syslogd (typically) writes to /var/log/messages).
+
+Make /var and /etc writable by creating an overlay with a tmpfs-backer upper (and work) directories.
+
+Use /run for overlay directories since that shouldn't be as volatile as /tmp.
+/run is already tmpfs backed, but create a new (smaller) tmpfs mount to prevent contestion
+with container-specific files under /run/gcs/c/ (e.g., the container config file and overlay work directory).
+
+Note: tmpfs is backed by virtual memory and can be swapped out, but the uVM is, itself, virtual memory
+backed on the host.
+Hence limiting the total size of tmpfs mounts will prevent the virtual machine's worker
+thread on the host from growing egregiously.
+
+See:
+- https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch03s07.html
+- https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch05.html
+- https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch05s10.html
+- https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch03s15.html
+*/
+#define OVERLAY_PATH "/run/over"
+#define VAR_OVERLAY_PATH OVERLAY_PATH "/var"
+#define ETC_OVERLAY_PATH OVERLAY_PATH "/etc"
+
+const struct InitOp overlay_ops[] = {
+    // /run should already exist
+    {OpMkdir, .mkdir = {OVERLAY_PATH, 0755}},
+    {OpMount, .mount = {"tmpfs", OVERLAY_PATH, "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "size=40\%,mode=0755"}},
+
+    // /etc
+    {OpMkdir, .mkdir = {ETC_OVERLAY_PATH, 0755}},
+    {OpMkdir, .mkdir = {(ETC_OVERLAY_PATH "/upper"), 0755}},
+    {OpMkdir, .mkdir = {(ETC_OVERLAY_PATH "/work"), 0755}},
+    {OpMount, .mount = {"overlay", "/etc", "overlay", MS_NODEV | MS_NOSUID | MS_NOEXEC,
+                        "lowerdir=/etc,upperdir=" ETC_OVERLAY_PATH "/upper,workdir=" ETC_OVERLAY_PATH "/work"}},
+
+    // /var
+    {OpMkdir, .mkdir = {VAR_OVERLAY_PATH, 0755}},
+    {OpMkdir, .mkdir = {VAR_OVERLAY_PATH "/upper", 0755}},
+    {OpMkdir, .mkdir = {VAR_OVERLAY_PATH "/work", 0755}},
+    {OpMount, .mount = {"overlay", "/var", "overlay", MS_NODEV | MS_NOSUID, // allow execs from the /var
+                        "lowerdir=/var,upperdir=" VAR_OVERLAY_PATH "/upper,workdir=" VAR_OVERLAY_PATH "/work"}},
 };
 
 void warn(const char* msg) {
@@ -592,6 +639,8 @@ int debug_main(int argc, char** argv) {
             close(sockets[i]);
         }
     }
+
+    return 0;
 }
 #endif
 
@@ -637,24 +686,27 @@ void start_services() {
 
 int main(int argc, char** argv) {
 #ifdef DEBUG
-    debug_main(argc, argv);
+    if (debug_main(argc, argv) != 0) {
+        dmesgWarn("failed to connect debug sockets");
+    }
     printf("Running init\n");
 #endif
     char* debug_shell = NULL;
     int entropy_port = 0;
+    bool overlay_mount = false;
     if (argc <= 1) {
         argv = (char**)default_argv;
         argc = sizeof(default_argv) / sizeof(default_argv[0]);
         optind = 0;
         debug_shell = (char*)default_shell;
     } else {
-        for (int opt; (opt = getopt(argc, argv, "+d:e:")) >= 0;) {
+        for (int opt; (opt = getopt(argc, argv, "+d:e:w")) >= 0;) {
             switch (opt) {
-            case 'd':
+            case 'd': // [d]ebug
                 debug_shell = optarg;
                 break;
 
-            case 'e':
+            case 'e': // [e]ntropy port
                 entropy_port = atoi(optarg);
 #ifdef DEBUG
                 printf("entropy port %d\n", entropy_port);
@@ -664,6 +716,10 @@ int main(int argc, char** argv) {
                     exit(1);
                 }
 
+                break;
+
+            case 'w': // [w]ritable overlay mounts
+                overlay_mount = true;
                 break;
 
             default:
@@ -701,6 +757,13 @@ int main(int argc, char** argv) {
     printf("init_fs\n");
 #endif
     init_fs(ops, sizeof(ops) / sizeof(ops[0]));
+
+    if (overlay_mount) {
+#ifdef DEBUG
+        printf("init_fs for overlay mounts\n");
+#endif
+        init_fs(overlay_ops, sizeof(overlay_ops) / sizeof(overlay_ops[0]));
+    }
 
 #ifdef DEBUG
     printf("init_cgroups\n");
