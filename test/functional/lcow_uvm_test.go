@@ -6,6 +6,9 @@ package functional
 import (
 	"context"
 	"fmt"
+	"path"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -174,7 +177,7 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 
 			ioArgs.TestStdOutContains(t, tc.wantArgs, tc.notWantArgs)
 
-			// some boot options (notably using initrd) need to validated by looking at dmesg logs
+			// some boot options (notably using initrd) need to be validated by looking at dmesg logs
 			// dmesg will output the kernel command line as
 			//
 			// 	[    0.000000] Command line: <...>
@@ -191,7 +194,7 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 	}
 }
 
-// TestLCOWUVM_Boot starts and terminates a utility VM  multiple times using different boot options.
+// TestLCOWUVM_Boot starts and terminates a utility VM multiple times using different boot options.
 func TestLCOW_UVM_Boot(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureUVM)
@@ -224,7 +227,7 @@ func TestLCOW_UVM_Boot(t *testing.T) {
 				opts.RootFSFile = uvm.InitrdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 
-				opts.VPMemDeviceCount = 32
+				opts.VPMemDeviceCount = uvm.DefaultVPMEMCount
 			},
 		},
 		{
@@ -236,7 +239,7 @@ func TestLCOW_UVM_Boot(t *testing.T) {
 				opts.RootFSFile = uvm.VhdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 
-				opts.VPMemDeviceCount = 32
+				opts.VPMemDeviceCount = uvm.DefaultVPMEMCount
 			},
 		},
 		{
@@ -248,7 +251,7 @@ func TestLCOW_UVM_Boot(t *testing.T) {
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 				opts.RootFSFile = uvm.VhdFile
 
-				opts.VPMemDeviceCount = 32
+				opts.VPMemDeviceCount = uvm.DefaultVPMEMCount
 			},
 		},
 	} {
@@ -267,5 +270,185 @@ func TestLCOW_UVM_Boot(t *testing.T) {
 				testuvm.Close(ctx, t, vm)
 			}
 		})
+	}
+}
+
+func TestLCOW_UVM_WritableOverlay(t *testing.T) {
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureLCOW, featureUVM)
+
+	ctx := util.Context(context.Background(), t)
+
+	// validate the init flags are as expected
+	// theres some weirdness with getting the exact init command line
+	// the kernel's command line will have init args after the `--` (via `/proc/cmdline`)
+	//
+	// init's command line is under `/proc/1/cmdline`, but with `\0` as separator
+	// between args (which makes reading from the command line awkward).
+	// (could use `ps -o args | sed -n '2{p;q}'`, which has the appropriate parsing)
+	//
+	// we already rely on `proc/cmdline` above, so stick with that.
+	// (potentially) match against uVM debugging scenarios, which execs a shell before vsockexec
+	re := regexp.MustCompile(`-- (.*) (?:sh -c ")?/bin/vsockexec`)
+
+	for _, tc := range []struct {
+		name   string
+		optsFn func(*uvm.OptionsLCOW)
+	}{
+		{
+			name: "no kernel direct initrd",
+			optsFn: func(opts *uvm.OptionsLCOW) {
+				opts.KernelDirect = false
+				opts.KernelFile = uvm.KernelFile
+
+				opts.RootFSFile = uvm.InitrdFile
+				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
+			},
+		},
+		{
+			name: "kernel direct initrd",
+			optsFn: func(opts *uvm.OptionsLCOW) {
+				opts.KernelDirect = true
+				opts.KernelFile = uvm.UncompressedKernelFile
+
+				opts.RootFSFile = uvm.InitrdFile
+				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
+			},
+		},
+		{
+			name: "no kernel direct VHD",
+			optsFn: func(opts *uvm.OptionsLCOW) {
+				opts.KernelDirect = false
+				opts.KernelFile = uvm.KernelFile
+
+				opts.RootFSFile = uvm.VhdFile
+				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
+			},
+		},
+		{
+			name: "kernel direct VHD",
+			optsFn: func(opts *uvm.OptionsLCOW) {
+				opts.KernelDirect = true
+				opts.KernelFile = uvm.UncompressedKernelFile
+
+				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
+				opts.RootFSFile = uvm.VhdFile
+			},
+		},
+	} {
+		for _, writable := range []bool{false, true} {
+			n := tc.name
+			if writable {
+				n += " writable"
+			}
+			t.Run(n, func(t *testing.T) {
+				// create new options every time, in case they are modified during uVM creation
+				opts := defaultLCOWOptions(ctx, t)
+				tc.optsFn(opts)
+				opts.WritableOverlayDirs = writable
+
+				if opts.KernelDirect {
+					require.Build(t, 18286)
+				}
+
+				// mounts are only added for VHD rootfs
+				overlay := writable && (opts.PreferredRootFSType == uvm.PreferredRootFSTypeVHD)
+
+				vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
+
+				// subtests just to namespace variables
+
+				// check for correct init args
+				t.Run("init args", func(t *testing.T) {
+					io := testcmd.NewBufferedIO()
+					c := testcmd.Create(ctx, t, vm, &specs.Process{Args: []string{"cat", "/proc/cmdline"}}, io)
+					testcmd.Start(ctx, t, c)
+					testcmd.WaitExitCode(ctx, t, c, 0)
+
+					out, err := io.Output()
+					out = strings.TrimSpace(out)
+					if err != nil {
+						t.Fatalf("got stderr: %v", err)
+					}
+					t.Logf("stdout:\n%s\n", out)
+
+					ms := re.FindStringSubmatch(out)
+					if len(ms) != 2 {
+						t.Fatalf("failed to match %v: %v", re, ms)
+					}
+
+					args := ms[1]
+					if found := strings.Contains(args, " -w"); overlay && !found {
+						t.Fatalf("expected '-w' flag in: %s", args)
+					} else if !overlay && found {
+						t.Fatalf("unexpected '-w' flag in: %s", args)
+					}
+				})
+
+				// validate /var and /etc are writable
+				for _, dir := range []string{"var", "etc"} {
+					t.Run("writable "+dir, func(t *testing.T) {
+						const hello = "hello world"
+						f := path.Join("/", dir, "t.txt")
+
+						ec := 0
+						outWant := hello
+						var errWant error
+						if !writable && (opts.PreferredRootFSType == uvm.PreferredRootFSTypeVHD) {
+							ec = 1
+							outWant = ""
+							errWant = fmt.Errorf("sh: %s: Read-only file system", f)
+						}
+
+						io := testcmd.NewBufferedIO()
+						c := testcmd.Create(ctx, t, vm, &specs.Process{Args: []string{
+							"sh", "-c",
+							fmt.Sprintf("echo %s>%s&&cat %s", hello, f, f),
+						}}, io)
+						testcmd.Start(ctx, t, c)
+						testcmd.WaitExitCode(ctx, t, c, ec)
+
+						io.TestOutput(t, outWant, errWant)
+					})
+				}
+
+				// parse mounts
+				if overlay {
+					for _, tcc := range []struct {
+						mType string
+						dir   string
+						want  []string
+					}{
+						{
+							mType: "tmpfs",
+							dir:   "/run/over",
+							want:  []string{"rw", "nosuid", "nodev", "noexec", "mode=755"},
+						},
+						{
+							mType: "overlay",
+							dir:   "/etc",
+							want:  []string{"rw", "nosuid", "nodev", "noexec", "mode=755"},
+						},
+						{
+							mType: "overlay",
+							dir:   "/var",
+							want:  []string{"rw", "nosuid", "nodev", "mode=755"},
+						},
+					} {
+						io := testcmd.NewBufferedIO()
+						c := testcmd.Create(ctx, t, vm, &specs.Process{Args: []string{
+							"sh", "-c",
+							fmt.Sprintf("mount -t %s | grep %s", tcc.mType, tcc.dir),
+						}}, io)
+						testcmd.Start(ctx, t, c)
+						testcmd.WaitExitCode(ctx, t, c, 0)
+
+						io.TestStdOutContains(t, tcc.want, nil)
+					}
+				}
+
+				testuvm.Close(ctx, t, vm)
+			})
+		}
 	}
 }
