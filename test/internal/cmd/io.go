@@ -42,8 +42,17 @@ func (b *BufferedIO) TestOutput(tb testing.TB, out string, err error) {
 	tb.Helper()
 
 	outGot, errGot := b.Output()
-	if !errors.Is(errGot, err) {
+
+	// dont use [errors.Is] since errGot will always be created via [errors.New] and
+	// therefore never match non-nil errors.
+	if (err == nil && errGot != nil) || (err != nil && errGot == nil) {
 		tb.Fatalf("got stderr: %v; wanted: %v", errGot, err)
+	} else if err != nil && errGot != nil {
+		errStr := strings.ToLower(strings.TrimSpace(err.Error()))
+		errGotStr := strings.ToLower(strings.TrimSpace(errGot.Error()))
+		if diff := cmp.Diff(errStr, errGotStr); diff != "" {
+			tb.Fatalf("stderr mismatch (-want +got):\n%s", diff)
+		}
 	}
 
 	out = strings.ToLower(strings.TrimSpace(out))

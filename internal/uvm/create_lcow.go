@@ -132,6 +132,7 @@ type OptionsLCOW struct {
 	ExtraVSockPorts         []uint32             // Extra vsock ports to allow
 	AssignedDevices         []VPCIDeviceID       // AssignedDevices are devices to add on pod boot
 	PolicyBasedRouting      bool                 // Whether we should use policy based routing when configuring net interfaces in guest
+	WritableOverlayDirs     bool                 // Whether init should create writable overlay mounts for /var and /etc
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -579,7 +580,9 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 
 // Make the ComputeSystem document object that will be serialized to json to be presented to the HCS api.
 func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
-	logrus.Tracef("makeLCOWDoc %v\n", opts)
+	if logrus.IsLevelEnabled(logrus.TraceLevel) {
+		log.G(ctx).WithField("options", log.Format(ctx, opts)).Trace("makeLCOWDoc")
+	}
 
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
@@ -868,10 +871,20 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		execCmdArgs += " -core-dump-location " + opts.ProcessDumpLocation
 	}
 
-	initArgs := fmt.Sprintf("%s %s", entropyArgs, execCmdArgs)
+	initArgs := entropyArgs
+	if opts.WritableOverlayDirs {
+		switch opts.PreferredRootFSType {
+		case PreferredRootFSTypeInitRd:
+			log.G(ctx).Warn("ignoring `WritableOverlayDirs` option since rootfs is already writable")
+		case PreferredRootFSTypeVHD:
+			initArgs += " -w"
+		}
+	}
 	if vmDebugging {
 		// Launch a shell on the console.
-		initArgs = entropyArgs + ` sh -c "` + execCmdArgs + ` & exec sh"`
+		initArgs += ` sh -c "` + execCmdArgs + ` & exec sh"`
+	} else {
+		initArgs += " " + execCmdArgs
 	}
 
 	kernelArgs += fmt.Sprintf(" nr_cpus=%d", opts.ProcessorCount)
@@ -915,7 +928,9 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", log.Format(ctx, opts)).Debug("uvm::CreateLCOW options")
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		log.G(ctx).WithField("options", log.Format(ctx, opts)).Debug("uvm::CreateLCOW options")
+	}
 
 	// We don't serialize OutputHandlerCreator so if it is missing we need to put it back to the default.
 	if opts.OutputHandlerCreator == nil {
@@ -960,10 +975,20 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	var doc *hcsschema.ComputeSystem
 	if opts.SecurityPolicyEnabled {
 		doc, err = makeLCOWSecurityDoc(ctx, opts, uvm)
-		log.G(ctx).Tracef("create_lcow::CreateLCOW makeLCOWSecurityDoc result doc: %v err %v", doc, err)
+		if logrus.IsLevelEnabled(logrus.TraceLevel) {
+			log.G(ctx).WithFields(logrus.Fields{
+				"doc":           log.Format(ctx, doc),
+				logrus.ErrorKey: err,
+			}).Trace("create_lcow::CreateLCOW makeLCOWSecurityDoc result")
+		}
 	} else {
 		doc, err = makeLCOWDoc(ctx, opts, uvm)
-		log.G(ctx).Tracef("create_lcow::CreateLCOW makeLCOWDoc result doc: %v err %v", doc, err)
+		if logrus.IsLevelEnabled(logrus.TraceLevel) {
+			log.G(ctx).WithFields(logrus.Fields{
+				"doc":           log.Format(ctx, doc),
+				logrus.ErrorKey: err,
+			}).Trace("create_lcow::CreateLCOW makeLCOWDoc result")
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -972,7 +997,9 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	if err = uvm.create(ctx, doc); err != nil {
 		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
-	log.G(ctx).WithField("uvm", uvm).Trace("create_lcow::CreateLCOW uvm.create result")
+	if logrus.IsLevelEnabled(logrus.TraceLevel) {
+		log.G(ctx).WithField("uvm", log.Format(ctx, uvm)).Trace("create_lcow::CreateLCOW uvm.create result")
+	}
 
 	// Create a socket to inject entropy during boot.
 	uvm.entropyListener, err = uvm.listenVsock(entropyVsockPort)
