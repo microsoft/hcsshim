@@ -5963,7 +5963,7 @@ func Test_Rego_GetUserInfo_WithEtcPasswdAndGroup(t *testing.T) {
 		t.Fatalf("Failed to write /etc/group: %v", err)
 	}
 
-	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{})
+	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{}, testOSType)
 	if err != nil {
 		t.Errorf("cannot compile open door rego policy: %v", err)
 		return
@@ -6116,7 +6116,7 @@ func Test_Rego_GetUserInfo_WithEtcPasswdAndGroup(t *testing.T) {
 func Test_Rego_GetUserInfo_NoEtc(t *testing.T) {
 	testDir := t.TempDir()
 
-	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{})
+	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{}, testOSType)
 	if err != nil {
 		t.Errorf("cannot compile open door rego policy: %v", err)
 		return
@@ -6197,7 +6197,7 @@ func Test_Rego_GetUserInfo_EtcPasswdOnly(t *testing.T) {
 		t.Fatalf("Failed to write /etc/passwd: %v", err)
 	}
 
-	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{})
+	regoEnforcer, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{}, testOSType)
 	if err != nil {
 		t.Errorf("cannot compile open door rego policy: %v", err)
 		return

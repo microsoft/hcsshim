@@ -40,28 +40,7 @@ func HugePagesMountsDir(sandboxID string) string {
 	return specInternal.HugePagesMountsDir(sandboxID)
 }
 
-func getUser(passwdPath string, filter func(user.User) bool) (user.User, error) {
-	users, err := user.ParsePasswdFileFilter(passwdPath, filter)
-	if err != nil {
-		return user.User{}, err
-	}
-	if len(users) != 1 {
-		return user.User{}, errors.Errorf("expected exactly 1 user matched '%d'", len(users))
-	}
-	return users[0], nil
-}
-
-func getGroup(groupPath string, filter func(user.Group) bool) (user.Group, error) {
-	groups, err := user.ParseGroupFileFilter(groupPath, filter)
-	if err != nil {
-		return user.Group{}, err
-	}
-	if len(groups) != 1 {
-		return user.Group{}, errors.Errorf("expected exactly 1 group matched '%d'", len(groups))
-	}
-	return groups[0], nil
-}
-func (policy *regoEnforcer) GetAllUserInfo(process *oci.Process, rootPath string) (
+func GetAllUserInfo(process *oci.Process, rootPath string) (
 	userIDName IDName,
 	groupIDNames []IDName,
 	umask string,
@@ -130,7 +109,6 @@ func (policy *regoEnforcer) GetAllUserInfo(process *oci.Process, rootPath string
 			groupIDName.Name = groupInfo.Name
 		} else {
 			checkGroup = false
-			err = nil
 		}
 
 		groupIDNames = []IDName{groupIDName}
