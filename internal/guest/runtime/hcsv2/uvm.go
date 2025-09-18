@@ -121,7 +121,6 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 		policy.DefaultCRIMounts(),
 		policy.DefaultCRIPrivilegedMounts(),
 		maxErrorMessageLength,
-		"linux",
 	)
 	if err != nil {
 		return err

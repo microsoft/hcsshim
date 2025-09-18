@@ -211,6 +211,10 @@ func (policy *regoEnforcer) enableLogging(path string, logLevel rpi.LogLevel) {
 func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oci.Mount, osType string) (policy *regoEnforcer, err error) {
 	policy = new(regoEnforcer)
 
+	if osType != "windows" && osType != "linux" {
+		return nil, fmt.Errorf("unsupported operating system: %q", osType)
+	}
+
 	policy.osType = osType
 	policy.defaultMounts = make([]oci.Mount, len(defaultMounts))
 	copy(policy.defaultMounts, defaultMounts)

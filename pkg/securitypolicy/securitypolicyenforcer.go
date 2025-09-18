@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -56,11 +55,6 @@ var (
 	registeredEnforcers = map[string]createEnforcerFunc{}
 	defaultEnforcer     = standardEnforcer
 )
-
-// Package-level variable for OS type, set during enforcer creation
-//
-//nolint:unused
-var osType string = "unknown"
 
 func init() {
 	registeredEnforcers[openDoorEnforcer] = createOpenDoorEnforcer
@@ -260,7 +254,6 @@ func CreateSecurityPolicyEnforcer(
 	criMounts,
 	criPrivilegedMounts []oci.Mount,
 	maxErrorMessageLength int,
-	operatingSystem string,
 ) (SecurityPolicyEnforcer, error) {
 	if enforcer == "" {
 		enforcer = defaultEnforcer
@@ -268,7 +261,6 @@ func CreateSecurityPolicyEnforcer(
 			enforcer = openDoorEnforcer
 		}
 	}
-	osType = strings.ToLower(operatingSystem)
 
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
 		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)
