@@ -39,6 +39,11 @@ const (
 	// ExtraVSockPorts adds additional ports to the list of ports that the UVM is allowed to use.
 	ExtraVSockPorts = "io.microsoft.virtualmachine.lcow.extra-vsock-ports"
 
+	// WritableOverlayDirs creates writable overlay mounts for the /var and /etc directories.
+	//
+	// This will nop if the LCOW uVM rootfs is already writable (e.g., initramfs-backed initrd).
+	WritableOverlayDirs = "io.microsoft.virtualmachine.lcow.writable-overlay-directories"
+
 	// NetworkingPolicyBasedRouting toggles on the ability to set policy based routing in the
 	// guest for LCOW.
 	//
