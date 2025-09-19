@@ -1317,6 +1317,65 @@ policy_fragments := pf {
     pf := apply_defaults("fragment", data.policy.fragments, policy_framework_version)
 }
 
+# data.metadata.fragment_parameters is a set of {issuer, feed, parameters}
+# objects, representing possible parameters for nested fragments.  (There can be
+# duplicate issuer and feeds, All possible parameters will be tried on load of
+# the respective fragment.)
+# [
+#   {
+#     "issuer": "did:issuer_1...",
+#     "feed": "feed1",
+#     "parameters": {
+#       "foo": "foo_standard",
+#       "bar": "bar_standard",
+#     }
+#   },
+#   {
+#     "issuer": "did:issuer_1...",
+#     "feed": "feed1",
+#     "parameters": {
+#       "foo": "foo_premium",
+#       "bar": "bar_premium",
+#     }
+#   },
+#   {
+#     "issuer": "did:issuer_2...",
+#     "feed": "feed2",
+#     "parameters": {
+#       ...
+#     }
+#   }
+# ]
+#
+# This set does not contains any parameters specified by the top-level policy.
+# Readers must combine both sources.
+#
+# Note that although both the issuers map and the fragment_parameters set are
+# updated during fragment load, issuers represents the information extracted
+# from _already loaded_ fragments (and hence it will only contain (issuer, feed)
+# pairs which the host has injected a fragment for).  The fragment_parameters
+# set represents what parameters to use when a fragment is loaded later on, so
+# it contains (issuer, feed) pairs for not-yet-loaded fragments.
+
+default fragment_parameters_for(_, _) := []
+
+fragment_parameters_for(iss, feed) := params {
+    params_nested := [
+        p.parameters
+        | p := data.metadata.fragment_parameters[_]
+          p.issuer == iss
+          p.feed == feed
+    ]
+    params_policy := [
+        p.parameters
+        | p := policy_fragments[_]
+          p.issuer == iss
+          p.feed == feed
+          p.parameters
+    ]
+    params := array.concat(params_nested, params_policy)
+}
+
 candidate_fragments := fragments {
     fragment_fragments := [f |
         feed := data.metadata.issuers[_].feeds[_]
@@ -1353,13 +1412,14 @@ default load_fragment := {"allowed": false}
 # point we can check the SVN defined in the fragment is valid, and if
 # successful, add the fragment to the metadata.
 
-load_fragment := {"allowed": true} {
+load_fragment := {"allowed": true, "parameters": possibleParams} {
     not input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
+    possibleParams := fragment_parameters_for(fragment.issuer, fragment.feed)
 }
 
-load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed": true} {
+load_fragment := {"metadata": array.concat([updateIssuer], updateParameters), "add_module": add_module, "allowed": true} {
     input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
@@ -1372,6 +1432,22 @@ load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed
         "key": input.issuer,
         "value": issuer,
     }
+
+    updateParameters := [
+        {
+            "name": "fragment_parameters",
+            "type": "set",
+            "action": "add",
+            "value": fp,
+        }
+        | fragment := fragment_fragments[_]
+          fragment.parameters
+          fp := {
+              "issuer": fragment.issuer,
+              "feed": fragment.feed,
+              "parameters": fragment.parameters
+          }
+    ]
 
     add_module := "namespace" in fragment.includes
 }
@@ -1524,6 +1600,16 @@ registry_changes := {"allowed": true} {
     result := {
         "AddValues": matched_values
     }
+}
+
+# This is a helper function that will be used by the parameter() function
+# injected into fragments, and is not otherwise intended to be called by user
+# directly.
+
+extract_parameter(name, fragment_parameters_obj, parameters_metadata) := fragment_parameters_obj[name] {
+	name in object.keys(fragment_parameters_obj)
+} else := parameters_metadata[name]["default"] {
+	"default" in object.keys(parameters_metadata[name])
 }
 
 reason := {
@@ -2424,6 +2510,15 @@ check_fragment(raw_fragment, framework_version) := fragment {
         "feed": raw_fragment.feed,
         "minimum_svn": raw_fragment.minimum_svn,
         "includes": raw_fragment.includes,
+
+        # The "parameters" field was added in 0.3.2, but we really do not want
+        # to silently ignore it if is provided in a policy mistakenly using an
+        # older framework_version, since it is restrictive.  Therefore, instead
+        # of doing a check_fragment_parameters function which returns {} if the
+        # policy's framework_version is lower, we simply do an object.get to
+        # default it, but set the value if it exists.
+        "parameters": object.get(raw_fragment, "parameters", {}),
+
         # Additional fields need to have default logic applied
     }
 }

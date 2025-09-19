@@ -4,6 +4,7 @@
 package securitypolicy
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -21,6 +22,7 @@ import (
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const regoEnforcerName = "rego"
@@ -40,6 +42,11 @@ const capabilitiesNilError = "capabilities object provided by the UVM to the pol
 const invalidPolicyMessage = "Security policy is not valid. Please check security policy or re-generate with tooling."
 const noReasonMessage = "Security policy is either not valid or did not provide a reason for denial. Please check security policy or re-generate with tooling."
 const noAPIVersionError = "policy does not define api_version"
+
+// Rego code injected at runtime to fragments to support parameters.
+//
+//go:embed fragment_definition.rego
+var fragmentDefinitionRego string
 
 // RegoEnforcer is a stub implementation of a security policy, which will be
 // based on [Rego] policy language. The detailed implementation will be
@@ -1131,6 +1138,33 @@ func parseNamespace(rego string) (string, error) {
 	return namespace, nil
 }
 
+// Inject __fragment_parameters object definition and parameter function
+// definitions into the Rego code.
+//
+// This function adds the injected object and functions to the end of the
+// provided Rego code, and returns completely the modified Rego.
+//
+// Order doesn't matter in Rego, but we add it to the end to avoid changing line
+// numbers, in case there is a syntax error in the original Rego code that needs
+// to be reported.
+func getRegoWithParameterDefinitions(rego string, parameters map[string]interface{}) (string, error) {
+	var buffer bytes.Buffer
+	buffer.WriteString(rego)
+	buffer.WriteString("\n")
+	parametersObjectJson, err := json.Marshal(parameters)
+	if err != nil {
+		return "", errors.Errorf("unable to marshal parameters object: %v", err)
+	}
+	buffer.WriteString(
+		fmt.Sprintf(
+			"__fragment_parameters := %s\n%s\n",
+			string(parametersObjectJson),
+			fragmentDefinitionRego,
+		),
+	)
+	return buffer.String(), nil
+}
+
 func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, feed string, rego string) error {
 	namespace, err := parseNamespace(rego)
 	if err != nil {
@@ -1152,10 +1186,30 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, fee
 	}
 
 	// Check that the fragment is signed by the expected issuer before loading
-	// its Rego code.
-	_, err = policy.enforce(ctx, "load_fragment", input)
+	// its Rego code.  This step also gives us a chance for Rego to pass any
+	// parameters object(s) declared in the fragment import statement to us.
+	res, err := policy.enforce(ctx, "load_fragment", input)
 	if err != nil {
 		return err
+	}
+
+	parameters := make([]map[string]interface{}, 0)
+	_, hasParameters := res["parameters"]
+
+	// Older policies which overrides load_fragment with their own code might
+	// not produce result.parameters
+	if hasParameters {
+		gotParameters, err := res.Array("parameters")
+		if err != nil {
+			return errors.Wrapf(err, "unable to get parameters from load_fragment result")
+		}
+		for _, gotParams := range gotParameters {
+			params, ok := gotParams.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("parameters must be an object, got %T", gotParams)
+			}
+			parameters = append(parameters, params)
+		}
 	}
 
 	// At this point we need to add the fragment code as a new Rego module in
@@ -1165,17 +1219,74 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, fee
 	// to load (won't override framework or other built-in modules). Once we
 	// added the module, we must make sure the module is removed if we return
 	// with error (or if add_module returned from Rego is false).
-	policy.rego.AddModule(fragment.ID(), fragment)
+
 	input["fragment_loaded"] = true
 
-	results, err := policy.enforce(ctx, "load_fragment", input)
-	if err != nil {
-		policy.rego.RemoveModule(fragment.ID())
-		return err
+	if len(parameters) == 0 {
+		// We still want to load the fragment even if no parameters are defined.
+		// We apply a default of {} in check_fragment, so we shouldn't get here
+		// unless the policy overrides the load_fragment enforcement point with
+		// its own implementation.
+		parameters = append(parameters, make(map[string]interface{}))
 	}
 
-	addModule, _ := results.Bool("add_module")
-	if !addModule {
+	// We load the module once for each possible parameter combinations, in
+	// order to capture all allowed container configurations.
+	for _, params := range parameters {
+		parameterKeys := make([]string, 0, len(params))
+		for k := range params {
+			parameterKeys = append(parameterKeys, k)
+		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"namespace": namespace,
+			// Don't actually print the parameters, since they might be
+			// sensitive.
+			"parameterKeys": strings.Join(parameterKeys, ","),
+		}).Debugf("Loading fragment module with parameters")
+
+		// We want to add the parameter functions regardless of whether any
+		// parameters are actually provided by the parent policy or not, to
+		// avoid undefined rules in case the fragment uses the parameter
+		// functions.
+		patchedRego, err := getRegoWithParameterDefinitions(rego, params)
+		if err != nil {
+			return fmt.Errorf("unable to patch fragment rego: %w", err)
+		}
+
+		log.G(ctx).WithFields(logrus.Fields{
+			"originalLength": len(rego),
+			"patchedLength":  len(patchedRego),
+		}).Debug("Injected parameters object to fragment rego")
+
+		newFragment := &rpi.RegoModule{
+			Issuer:    issuer,
+			Feed:      feed,
+			Code:      patchedRego,
+			Namespace: namespace,
+		}
+		policy.rego.AddModule(fragment.ID(), newFragment)
+
+		// The module must be removed by the end of this iteration (or when we
+		// return with error), unless add_module in the result is true (in which
+		// case we make sure we only ever add one module)
+
+		results, err := policy.enforce(ctx, "load_fragment", input)
+		if err != nil {
+			policy.rego.RemoveModule(fragment.ID())
+			return err
+		}
+
+		addModule, _ := results.Bool("add_module")
+		if addModule {
+			if len(parameters) > 1 {
+				policy.rego.RemoveModule(fragment.ID())
+				return errors.New("Fragment cannot include namespace if multiple possible parameter combinations are defined")
+			}
+			// len(parameters) == 1, the loop would not run again anyway.  We do
+			// this so we skip the RemoveModule below.
+			return nil
+		}
+
 		policy.rego.RemoveModule(fragment.ID())
 	}
 
