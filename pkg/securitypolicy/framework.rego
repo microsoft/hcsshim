@@ -1204,6 +1204,28 @@ extract_fragment_includes(includes) := fragment {
     }
 }
 
+# data.metadata.issuers is a map of maps that contains information loaded from fragments:
+# {
+#   "did:issuer_1...": {
+#     "feeds": {
+#       "feed1": [
+#         {
+#           // The extracted "includes" for a fragment with this issuer and feed, e.g.:
+#           "containers": [...],
+#           "fragments": [...],
+#         },
+#         // if multiple fragments with the same issuer and feed exists, they go here
+#       ]
+#     }
+#   }
+# }
+#
+# Rules like candidate_containers and candidate_fragments will read this map to
+# gather all the allowed containers / nested fragments.
+#
+# This map does not contain any containers / fragments allowed by the top-level
+# policy itself.  The candidate_* rules need to combine both sources.
+
 issuer_exists(iss) {
     data.metadata.issuers[iss]
 }
@@ -1234,25 +1256,21 @@ update_issuer(includes) := issuer {
     issuer := {"feeds": {input.feed: [extract_fragment_includes(includes)]}}
 }
 
-default candidate_fragments := []
+# The policy might not define the fragments variable, in which case we default
+# to [] to prevent breaking other rules.
+default policy_fragments := []
 
-candidate_fragments := fragments {
+policy_fragments := pf {
     semver.compare(policy_framework_version, version) == 0
+    pf := data.policy.fragments
+}
 
-    policy_fragments := [f | f := data.policy.fragments[_]]
-    fragment_fragments := [f |
-        feed := data.metadata.issuers[_].feeds[_]
-        fragment := feed[_]
-        f := fragment.fragments[_]
-    ]
-
-    fragments := array.concat(policy_fragments, fragment_fragments)
+policy_fragments := pf {
+    semver.compare(policy_framework_version, version) < 0
+    pf := apply_defaults("fragment", data.policy.fragments, policy_framework_version)
 }
 
 candidate_fragments := fragments {
-    semver.compare(policy_framework_version, version) < 0
-
-    policy_fragments := apply_defaults("fragment", data.policy.fragments, policy_framework_version)
     fragment_fragments := [f |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
