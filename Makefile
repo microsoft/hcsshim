@@ -1,9 +1,8 @@
 include Makefile.bootfiles
 
-GO:=go
-GO_FLAGS:=-ldflags "-s -w" # strip Go binaries
-CGO_ENABLED:=0
-GOMODVENDOR:=
+# C settings
+
+# enable loading kernel modules in init
 KMOD:=0
 
 CFLAGS:=-O2 -Wall
@@ -11,18 +10,29 @@ LDFLAGS:=-static -s #strip C binaries
 LDLIBS:=
 PREPROCESSORFLAGS:=
 ifeq "$(KMOD)" "1"
-LDFLAGS:= -s
-LDLIBS:= -lkmod
+LDFLAGS:=-s
+LDLIBS:=-lkmod
 PREPROCESSORFLAGS:=-DMODULES=1
 endif
 
-GO_FLAGS_EXTRA:=
-ifeq "$(GOMODVENDOR)" "1"
-GO_FLAGS_EXTRA += -mod=vendor
-endif
+# Go settings
+
+# explicitly use vendored modules when building
+GOMODVENDOR:=
+# Go tags to enable
 GO_BUILD_TAGS:=
+# additional Go build flags
+GO_FLAGS_EXTRA:=
+# use CGO
+CGO_ENABLED:=0
+
+GO:=go
+GO_FLAGS:=-ldflags "-s -w" # strip Go binaries
+ifeq "$(GOMODVENDOR)" "1"
+GO_FLAGS+=-mod=vendor
+endif
 ifneq ($(strip $(GO_BUILD_TAGS)),)
-GO_FLAGS_EXTRA += -tags="$(GO_BUILD_TAGS)"
+GO_FLAGS+=-tags="$(GO_BUILD_TAGS)"
 endif
 GO_BUILD:=CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GO_FLAGS) $(GO_FLAGS_EXTRA)
 
