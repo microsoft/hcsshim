@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -33,6 +32,7 @@ const (
 
 var (
 	debug  bool
+	trace  bool
 	useGCS bool
 )
 
@@ -80,6 +80,11 @@ func main() {
 			Destination: &debug,
 		},
 		cli.BoolFlag{
+			Name:        "trace",
+			Usage:       "Enable trace information",
+			Destination: &trace,
+		},
+		cli.BoolFlag{
 			Name:        "gcs",
 			Usage:       "Launch the GCS and perform requested operations via its RPC interface",
 			Destination: &useGCS,
@@ -98,14 +103,20 @@ func main() {
 
 	app.Before = func(c *cli.Context) error {
 		if !winapi.IsElevated() {
-			log.Fatal(c.App.Name + " must be run in an elevated context")
+			return fmt.Errorf(c.App.Name + " must be run in an elevated context")
 		}
 
-		if debug {
-			logrus.SetLevel(logrus.DebugLevel)
-		} else {
-			logrus.SetLevel(logrus.WarnLevel)
+		lvl := logrus.WarnLevel
+		switch {
+		case trace:
+			if debug {
+				logrus.Warn("both debug and trace flags specified")
+			}
+			lvl = logrus.TraceLevel
+		case debug:
+			lvl = logrus.DebugLevel
 		}
+		logrus.SetLevel(lvl)
 
 		return nil
 	}
@@ -116,6 +127,7 @@ func main() {
 }
 
 func setGlobalOptions(c *cli.Context, options *uvm.Options) {
+	// TODO: create appropriate spec for (conf) WCOW and handle annotations here
 	if c.GlobalIsSet(cpusArgName) {
 		options.ProcessorCount = int32(c.GlobalUint64(cpusArgName))
 	}
@@ -138,6 +150,7 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 		}
 		options.ResourcePartitionID = &rpID
 	}
+	// TODO: create common arg for console pipe and set `uvmConsolePipe` as the default value
 	// Always set the console pipe in uvmboot, it helps with testing/debugging
 	options.ConsolePipe = uvmConsolePipe
 }
