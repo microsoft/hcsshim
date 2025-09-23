@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/netutil"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows"
 
@@ -64,6 +66,19 @@ func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
 	// Do not allow fatal or panic level errors to propagate.
 	if e.Level < logrus.ErrorLevel {
 		e.Level = logrus.ErrorLevel
+	}
+	if e.Fields["Source"] == "ETW" {
+		// Windows ETW log entry
+		// Original ETW Event Data may have "message" or "Message" field instead of "msg"
+
+		if e.Message == "" && e.Fields["message"] != nil {
+			e.Message = e.Fields["message"].(string)
+			delete(e.Fields, "message")
+		}
+		if e.Message == "" && e.Fields["Message"] != nil {
+			e.Message = e.Fields["Message"].(string)
+			delete(e.Fields, "Message")
+		}
 	}
 	// Clear special fields.
 	delete(e.Fields, "time")
@@ -182,7 +197,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	// until the host accepts and closes the entropy connection.
 	if uvm.entropyListener != nil {
 		g.Go(func() error {
-			conn, err := uvm.acceptAndClose(gctx, uvm.entropyListener)
+			conn, err := uvm.accept(gctx, uvm.entropyListener, true)
 			uvm.entropyListener = nil
 			if err != nil {
 				e.WithError(err).Error("failed to connect to entropy socket")
@@ -199,22 +214,58 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}
 
 	if uvm.outputListener != nil {
-		g.Go(func() error {
-			conn, err := uvm.acceptAndClose(gctx, uvm.outputListener)
-			uvm.outputListener = nil
-			if err != nil {
-				e.WithError(err).Error("failed to connect to log socket")
-				close(uvm.outputProcessingDone)
-				return fmt.Errorf("failed to connect to log socket: %w", err)
-			}
-			go func() {
-				e.Trace("uvm output handler starting")
-				uvm.outputHandler(conn)
-				close(uvm.outputProcessingDone)
-				e.Debug("uvm output handler finished")
-			}()
-			return nil
-		})
+		switch uvm.operatingSystem {
+		case "windows":
+			// Windows specific handling
+			// For windows, the Listener can recieve a connection later, so we
+			// start the output handler in a goroutine with a non-timeout context.
+			// This allows the output handler to run independently of the UVM Create's
+			// lifecycle. This approach potentially allows to wait for reconnections,
+			// while limiting the number of concurrent connections to 1.
+			// This is useful for the case when logging service is restarted.
+			g.Go(func() error {
+				go func() {
+					var wg sync.WaitGroup
+					uvm.outputListener = netutil.LimitListener(uvm.outputListener, 1)
+					for {
+						conn, err := uvm.accept(context.Background(), uvm.outputListener, false)
+						if err != nil {
+							e.WithError(err).Error("failed to connect to log socket")
+							close(uvm.outputProcessingDone)
+							break
+						}
+						wg.Add(1)
+						go func() {
+							defer wg.Done()
+							e.Info("uvm output handler starting")
+							uvm.outputHandler(conn)
+						}()
+						e.Info("uvm output handler finished")
+					}
+					wg.Wait()
+					close(uvm.outputProcessingDone)
+				}()
+				return nil
+			})
+		default:
+			// Default handling
+			g.Go(func() error {
+				conn, err := uvm.accept(gctx, uvm.outputListener, true)
+				uvm.outputListener = nil
+				if err != nil {
+					e.WithError(err).Error("failed to connect to log socket")
+					close(uvm.outputProcessingDone)
+					return fmt.Errorf("failed to connect to log socket: %w", err)
+				}
+				go func() {
+					e.Trace("uvm output handler starting")
+					uvm.outputHandler(conn)
+					close(uvm.outputProcessingDone)
+					e.Debug("uvm output handler finished")
+				}()
+				return nil
+			})
+		}
 	}
 
 	err = uvm.hcsSystem.Start(ctx)
@@ -251,7 +302,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 
 	if uvm.gcListener != nil {
 		// Accept the GCS connection.
-		conn, err := uvm.acceptAndClose(ctx, uvm.gcListener)
+		conn, err := uvm.accept(ctx, uvm.gcListener, true)
 		uvm.gcListener = nil
 		if err != nil {
 			return fmt.Errorf("failed to connect to GCS: %w", err)
@@ -347,13 +398,23 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		}
 	}
 
+	if uvm.OS() == "windows" && uvm.forwardLogs {
+		// If the UVM is Windows and log forwarding is enabled, set the log sources
+		// and start the log forwarding service.
+		if err := uvm.SetLogSources(ctx); err != nil {
+			e.WithError(err).Error("failed to set log sources")
+		}
+		if err := uvm.StartLogForwarding(ctx); err != nil {
+			e.WithError(err).Error("failed to start log forwarding")
+		}
+	}
 	return nil
 }
 
-// acceptAndClose accepts a connection and then closes a listener. If the
+// accept accepts a connection and then closes a listener. If the
 // context becomes done or the utility VM terminates, the operation will be
 // cancelled (but the listener will still be closed).
-func (uvm *UtilityVM) acceptAndClose(ctx context.Context, l net.Listener) (net.Conn, error) {
+func (uvm *UtilityVM) accept(ctx context.Context, l net.Listener, closeListener bool) (net.Conn, error) {
 	var conn net.Conn
 	ch := make(chan error)
 	go func() {
@@ -363,7 +424,9 @@ func (uvm *UtilityVM) acceptAndClose(ctx context.Context, l net.Listener) (net.C
 	}()
 	select {
 	case err := <-ch:
-		l.Close()
+		if closeListener {
+			l.Close()
+		}
 		return conn, err
 	case <-ctx.Done():
 	case <-uvm.exitCh:

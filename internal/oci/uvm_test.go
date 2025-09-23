@@ -117,6 +117,10 @@ func Test_SpecToUVMCreateOptions_Default_WCOW(t *testing.T) {
 	wopts := (opts).(*uvm.OptionsWCOW)
 	dopts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
 
+	// output handler equality is always false, so set to nil
+	wopts.OutputHandlerCreator = nil
+	dopts.OutputHandlerCreator = nil
+
 	if !cmp.Equal(*wopts, *dopts) {
 		t.Fatalf("should not have updated create options from default when no annotation are provided:\n%s", cmp.Diff(wopts, dopts))
 	}
