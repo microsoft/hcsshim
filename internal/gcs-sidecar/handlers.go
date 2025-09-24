@@ -340,8 +340,9 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		headerID := req.header.ID
 
 		// initiate process ID
+		procRespCh := make(chan *prot.ContainerExecuteProcessResponse, 1)
 		b.pendingMu.Lock()
-		b.pending[headerID] = nil // nil means not yet received
+		b.pending[headerID] = procRespCh
 		b.pendingMu.Unlock()
 
 		defer func() {
@@ -354,13 +355,8 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		b.forwardRequestToGcs(req)
 
 		// fetch the process ID from response
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			log.G(req.ctx).Tracef("waiting for exec resp")
-			b.pendingMu.Lock()
-			resp := b.pending[headerID]
-			b.pendingMu.Unlock()
-
+		select {
+		case resp := <-procRespCh:
 			// capture the Process details, so that we can later enforce
 			// on the allowed signals on the Process
 			if resp != nil {
@@ -374,10 +370,11 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				}
 				return nil
 			}
-			time.Sleep(10 * time.Millisecond) // backoff
+			// Channel closed or received nil, treat as error
+			return errors.New("received nil exec response")
+		case <-time.After(5 * time.Second):
+			return errors.New("timed out waiting for exec response")
 		}
-
-		return errors.Wrap(err, "timedout waiting for exec response")
 	}
 	return nil
 }
