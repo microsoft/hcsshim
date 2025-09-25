@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -25,7 +24,6 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/windows"
 )
 
 const (
@@ -91,11 +89,15 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		if err := b.hostState.SetupSecurityContextDir(ctx, &spec); err != nil {
 			return err
 		}
+		commandLine := len(spec.Process.Args) > 0
 		c := &Container{
-			id:        containerID,
-			spec:      spec,
-			processes: make(map[uint32]*containerProcess),
+			id:              containerID,
+			spec:            spec,
+			processes:       make(map[uint32]*containerProcess),
+			commandLine:     commandLine,
+			commandLineExec: false,
 		}
+
 		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
 		if err := b.hostState.AddContainer(req.ctx, containerID, c); err != nil {
 			log.G(ctx).Tracef("Container exists in the map.")
@@ -224,15 +226,6 @@ func (b *Bridge) shutdownForced(req *request) (err error) {
 	return nil
 }
 
-// escapeArgs makes a Windows-style escaped command line from a set of arguments.
-func escapeArgs(args []string) string {
-	escapedArgs := make([]string, len(args))
-	for i, a := range args {
-		escapedArgs[i] = windows.EscapeArg(a)
-	}
-	return strings.Join(escapedArgs, " ")
-}
-
 func (b *Bridge) executeProcess(req *request) (err error) {
 	_, span := oc.StartSpan(req.ctx, "sidecar::executeProcess")
 	defer span.End()
@@ -272,15 +265,19 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			return fmt.Errorf("failed to get created container: %w", err)
 		}
 
-		// if this is an exec of Container command line, then it's already enforced
-		// during container creation, hence skip it here
-		containerCommandLine := escapeArgs(c.spec.Process.Args)
-		if processParams.CommandLine != containerCommandLine {
+		c.processesMutex.Lock()
+		isCreateExec := c.commandLine && !c.commandLineExec
+		if isCreateExec {
+			// if this is an exec of Container command line, then it's already enforced
+			// during container creation, hence skip it here
+			c.commandLineExec = true
 
+		}
+		c.processesMutex.Unlock()
+		if !isCreateExec {
 			user := securitypolicy.IDName{
 				Name: processParams.User,
 			}
-
 			log.G(req.ctx).Tracef("Enforcing policy on exec in container")
 			_, _, _, err = b.hostState.securityPolicyEnforcer.
 				EnforceExecInContainerPolicyV2(
@@ -298,7 +295,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		}
 		headerID := req.header.ID
 
-		// initiate process ID
+		// initiate exec process response channel
 		procRespCh := make(chan *prot.ContainerExecuteProcessResponse, 1)
 		b.pendingMu.Lock()
 		b.pending[headerID] = procRespCh
