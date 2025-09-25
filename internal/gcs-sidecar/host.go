@@ -42,10 +42,12 @@ type Host struct {
 }
 
 type Container struct {
-	id             string
-	spec           specs.Spec
-	processesMutex sync.Mutex
-	processes      map[uint32]*containerProcess
+	id              string
+	spec            specs.Spec
+	processesMutex  sync.Mutex
+	processes       map[uint32]*containerProcess
+	commandLine     bool
+	commandLineExec bool
 }
 
 // Process is a struct that defines the lifetime and operations associated with
