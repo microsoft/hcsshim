@@ -114,8 +114,10 @@ var cwcowCommand = cli.Command{
 			options.DisableSecureBoot = cwcowDisableSecureBoot
 			options.GuestStateFilePath = cwcowVMGSPath
 			options.IsolationType = cwcowIsolationMode
-			// always enable graphics console with uvmboot - helps with testing/debugging
-			options.EnableGraphicsConsole = true
+
+			// graphics console helps with testing/debugging however, it
+			// doesn't work in SNP isolation mode.
+			options.EnableGraphicsConsole = cwcowIsolationMode != "SecureNestedPaging"
 			options.WritableEFI = cwcowWritableEFI
 
 			var err error

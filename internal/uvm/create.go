@@ -193,6 +193,9 @@ func verifyOptions(_ context.Context, options interface{}) error {
 		if opts.SecurityPolicyEnabled && opts.GuestStateFilePath == "" {
 			return fmt.Errorf("GuestStateFilePath must be provided when enabling security policy")
 		}
+		if opts.IsolationType == "SecureNestedPaging" && opts.EnableGraphicsConsole {
+			return fmt.Errorf("graphics console cannot be enabled with SecureNestedPaging isolation mode")
+		}
 		if opts.ResourcePartitionID != nil {
 			if opts.CPUGroupID != "" {
 				return errors.New("resource partition ID and CPU group ID cannot be set at the same time")

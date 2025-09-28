@@ -354,7 +354,7 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 
 	enableHCL := true
 	doc.VirtualMachine.SecuritySettings = &hcsschema.SecuritySettings{
-		EnableTpm: false,
+		EnableTpm: false, // TPM MUST always remain false in confidential mode as per the design
 		Isolation: &hcsschema.IsolationSettings{
 			IsolationType: "SecureNestedPaging",
 			HclEnabled:    &enableHCL,
@@ -522,10 +522,20 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	var doc *hcsschema.ComputeSystem
 	if opts.SecurityPolicyEnabled {
 		doc, err = prepareSecurityConfigDoc(ctx, uvm, opts)
-		log.G(ctx).Tracef("CreateWCOW prepareSecurityConfigDoc result doc: %v err %v", doc, err)
+		if logrus.IsLevelEnabled(logrus.TraceLevel) {
+			log.G(ctx).WithFields(logrus.Fields{
+				"doc":           log.Format(ctx, doc),
+				logrus.ErrorKey: err,
+			}).Trace("CreateWCOW prepareSecurityConfigDoc")
+		}
 	} else {
 		doc, err = prepareConfigDoc(ctx, uvm, opts)
-		log.G(ctx).Tracef("CreateWCOW prepareConfigDoc result doc: %v err %v", doc, err)
+		if logrus.IsLevelEnabled(logrus.TraceLevel) {
+			log.G(ctx).WithFields(logrus.Fields{
+				"doc":           log.Format(ctx, doc),
+				logrus.ErrorKey: err,
+			}).Trace("CreateWCOW prepareConfigDoc")
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("error in preparing config doc: %w", err)
