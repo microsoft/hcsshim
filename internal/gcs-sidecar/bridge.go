@@ -33,7 +33,7 @@ import (
 type Bridge struct {
 	mu        sync.Mutex
 	pendingMu sync.Mutex
-	pending   map[sequenceID]*prot.ContainerExecuteProcessResponse
+	pending   map[sequenceID]chan *prot.ContainerExecuteProcessResponse
 
 	hostState *Host
 	// List of handlers for handling different rpc message requests.
@@ -83,7 +83,7 @@ type request struct {
 func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Bridge {
 	hostState := NewHost(initialEnforcer)
 	return &Bridge{
-		pending:        make(map[sequenceID]*prot.ContainerExecuteProcessResponse),
+		pending:        make(map[sequenceID]chan *prot.ContainerExecuteProcessResponse),
 		rpcHandlerList: make(map[prot.RPCProc]HandlerFunc),
 		hostState:      hostState,
 		shimConn:       shimConn,
@@ -449,20 +449,19 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 					_ = sendWithContextCancel(ctx, sidecarErrChan, recverr)
 					return
 				}
-				// If this is a ContainerExecuteProcessResponse, notify
+				// If this is a ContainerExecuteProcessResponse, notify the channel
 				const MsgExecuteProcessResponse prot.MsgType = prot.MsgTypeResponse | prot.MsgType(prot.RPCExecuteProcess)
 
 				if header.Type == MsgExecuteProcessResponse {
-					logrus.Tracef("Printing after inbox exec resp")
 					var procResp prot.ContainerExecuteProcessResponse
 					if err := json.Unmarshal(message, &procResp); err != nil {
-						logrus.Tracef("unmarshal failed")
+						log.G(ctx).WithError(err).Error("failed to unmarshal the request")
+						return
 					}
 
 					b.pendingMu.Lock()
-					if _, exists := b.pending[header.ID]; exists {
-						logrus.Tracef("Header ID in pending exists")
-						b.pending[header.ID] = &procResp
+					if ch, ok := b.pending[header.ID]; ok {
+						ch <- &procResp
 					}
 					b.pendingMu.Unlock()
 				}
