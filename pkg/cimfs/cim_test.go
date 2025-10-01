@@ -679,33 +679,6 @@ func TestMergedLinksInMergedBlockCIMs(rootT *testing.T) {
 	}
 }
 
-func TestVerifiedSingleFileBlockCIM(t *testing.T) {
-	if !IsVerifiedCimSupported() {
-		t.Skipf("verified CIMs are not supported")
-	}
-
-	// contents to write to the CIM
-	testContents := []tuple{
-		{"foo.txt", []byte("foo1"), false},
-		{"bar.txt", []byte("bar"), false},
-	}
-
-	root := t.TempDir()
-	blockPath := filepath.Join(root, "layer.bcim")
-	tc := &testVerifiedBlockCIM{
-		BlockCIM: BlockCIM{
-			Type:      BlockCIMTypeSingleFile,
-			BlockPath: blockPath,
-			CimName:   "layer.cim",
-		}}
-	writer := openNewCIM(t, tc)
-	writeCIM(t, writer, testContents)
-
-	mountvol := mountCIM(t, tc, CimMountVerifiedCim|CimMountSingleFileCim)
-
-	compareContent(t, mountvol, testContents)
-}
-
 func TestVerifiedSingleFileBlockCIMMount(t *testing.T) {
 	if !IsVerifiedCimSupported() {
 		t.Skipf("verified CIMs are not supported")
@@ -792,5 +765,104 @@ func TestVerifiedSingleFileBlockCIMMountReadFailure(t *testing.T) {
 		t.Fatalf("mount verified cim should fail with integrity error")
 	} else if !strings.Contains(err.Error(), "integrity violation") {
 		t.Fatalf("expected integrity violation error")
+	}
+}
+
+func TestMergedVerifiedBlockCIMs(rootT *testing.T) {
+	if !IsVerifiedCimSupported() {
+		rootT.Skipf("verified BlockCIMs are not supported")
+	}
+
+	// A slice of 3 slices, 1 slice for contents of each CIM
+	testContents := [][]tuple{
+		{{"foo.txt", []byte("foo1"), false}},
+		{{"bar.txt", []byte("bar"), false}},
+		{{"foo.txt", []byte("foo2"), false}},
+	}
+	// create 3 separate block CIMs
+	nCIMs := len(testContents)
+
+	// test merging for both SingleFile & BlockDevice type of block CIMs
+	type testBlock struct {
+		name               string
+		blockType          BlockCIMType
+		mountFlag          uint32
+		blockPathGenerator func(t *testing.T, dir string) string
+	}
+
+	tests := []testBlock{
+		{
+			name:      "single file",
+			blockType: BlockCIMTypeSingleFile,
+			mountFlag: CimMountSingleFileCim,
+			blockPathGenerator: func(t *testing.T, dir string) string {
+				t.Helper()
+				return filepath.Join(dir, "layer.bcim")
+			},
+		},
+		{
+			name:      "block device",
+			blockType: BlockCIMTypeDevice,
+			mountFlag: CimMountBlockDeviceCim,
+			blockPathGenerator: func(t *testing.T, dir string) string {
+				t.Helper()
+				return createBlockDevice(t, dir)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		rootT.Run(test.name, func(t *testing.T) {
+			sourceCIMs := make([]*BlockCIM, 0, nCIMs)
+			for i := 0; i < nCIMs; i++ {
+				root := t.TempDir()
+				blockPath := test.blockPathGenerator(t, root)
+				tc := &testVerifiedBlockCIM{
+					BlockCIM: BlockCIM{
+						Type:      test.blockType,
+						BlockPath: blockPath,
+						CimName:   "layer.cim",
+					}}
+				writer := openNewCIM(t, tc)
+				writeCIM(t, writer, testContents[i])
+				sourceCIMs = append(sourceCIMs, &tc.BlockCIM)
+			}
+
+			mergedBlockPath := test.blockPathGenerator(t, t.TempDir())
+			// prepare a merged CIM
+			mergedCIM := &BlockCIM{
+				Type:      test.blockType,
+				BlockPath: mergedBlockPath,
+				CimName:   "merged.cim",
+			}
+
+			if err := MergeBlockCIMsWithOpts(context.Background(), mergedCIM, sourceCIMs, WithDataIntegrity()); err != nil {
+				t.Fatalf("failed to merge block CIMs: %s", err)
+			}
+
+			rootHash, err := GetVerificationInfo(mergedBlockPath)
+			if err != nil {
+				t.Fatalf("failed to get verification info: %s", err)
+			}
+
+			// mount and read the contents of the cim
+			volumeGUID, err := guid.NewV4()
+			if err != nil {
+				t.Fatalf("generate cim mount GUID: %s", err)
+			}
+
+			mountvol, err := MountMergedVerifiedBlockCIMs(mergedCIM, sourceCIMs, test.mountFlag, volumeGUID, rootHash)
+			if err != nil {
+				t.Fatalf("failed to mount merged block CIMs: %s\n", err)
+			}
+			defer func() {
+				if err := Unmount(mountvol); err != nil {
+					t.Logf("CIM unmount failed: %s", err)
+				}
+			}()
+			// since we are merging, only 1 foo.txt (from the 1st CIM) should
+			// show up
+			compareContent(t, mountvol, []tuple{testContents[0][0], testContents[1][0]})
+		})
 	}
 }

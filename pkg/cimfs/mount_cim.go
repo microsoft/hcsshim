@@ -151,3 +151,63 @@ func MountVerifiedBlockCIM(bCIM *BlockCIM, mountFlags uint32, volumeGUID guid.GU
 	}
 	return fmt.Sprintf("\\\\?\\Volume{%s}\\", volumeGUID.String()), nil
 }
+
+// MountMergedVerifiedBlockCIMs mounts the given merged verified BlockCIM (usually created
+// with `MergeBlockCIMs`) at a volume with given GUID, with the given root hash. The
+// `sourceCIMs` MUST be identical to the `sourceCIMs` passed to `MergeBlockCIMs` when
+// creating this merged CIM. The root hash is usually returned when the CIM is sealed or
+// the root hash can be queried from a block CIM. In case of merged CIMs, the root hash of
+// the merged CIM should be passed here. Every read on the mounted volume will be verified
+// to match against the provided root hash if it doesn't, the read will fail.  The source
+// CIMs and the merged CIM MUST have been created with the verified creation flag.
+func MountMergedVerifiedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlags uint32, volumeGUID guid.GUID, rootHash []byte) (string, error) {
+	if !IsVerifiedCimSupported() {
+		return "", fmt.Errorf("verified CIMs aren't supported on this OS version")
+	} else if len(sourceCIMs) < 2 {
+		return "", fmt.Errorf("need at least 2 source CIMs, got %d: %w", len(sourceCIMs), os.ErrInvalid)
+	} else if len(rootHash) != cimHashSize {
+		return "", fmt.Errorf("unexpected root hash size %d, expected size is %d", len(rootHash), cimHashSize)
+	}
+
+	switch mergedCIM.Type {
+	case BlockCIMTypeDevice:
+		mountFlags |= CimMountBlockDeviceCim
+	case BlockCIMTypeSingleFile:
+		mountFlags |= CimMountSingleFileCim
+	default:
+		return "", fmt.Errorf("invalid block CIM type `%d`", mergedCIM.Type)
+	}
+
+	for _, sCIM := range sourceCIMs {
+		if sCIM.Type != mergedCIM.Type {
+			return "", fmt.Errorf("source CIM (%s) type doesn't match with merged CIM type: %w", sCIM.String(), os.ErrInvalid)
+		}
+	}
+
+	// win32 mount merged CIM API expects an array of all CIMs. 0th entry in the array
+	// should be the merged CIM. All remaining entries should be the source CIM paths
+	// in the same order that was used while creating the merged CIM.
+	allcims := append([]*BlockCIM{mergedCIM}, sourceCIMs...)
+	cimsToMerge := []winapi.CimFsImagePath{}
+	for _, bcim := range allcims {
+		// Trailing backslashes cause problems-remove those
+		imageDir, err := windows.UTF16PtrFromString(strings.TrimRight(bcim.BlockPath, `\`))
+		if err != nil {
+			return "", fmt.Errorf("convert string to utf16: %w", err)
+		}
+		cimName, err := windows.UTF16PtrFromString(bcim.CimName)
+		if err != nil {
+			return "", fmt.Errorf("convert string to utf16: %w", err)
+		}
+
+		cimsToMerge = append(cimsToMerge, winapi.CimFsImagePath{
+			ImageDir:  imageDir,
+			ImageName: cimName,
+		})
+	}
+
+	if err := winapi.CimMergeMountVerifiedImage(uint32(len(cimsToMerge)), &cimsToMerge[0], mountFlags, &volumeGUID, cimHashSize, &rootHash[0]); err != nil {
+		return "", &MountError{Cim: filepath.Join(mergedCIM.BlockPath, mergedCIM.CimName), Op: "MountMergedVerified", Err: err}
+	}
+	return fmt.Sprintf(VolumePathFormat, volumeGUID.String()), nil
+}

@@ -73,6 +73,7 @@ var (
 	procCimDismountImage                       = modcimfs.NewProc("CimDismountImage")
 	procCimGetVerificationInformation          = modcimfs.NewProc("CimGetVerificationInformation")
 	procCimMergeMountImage                     = modcimfs.NewProc("CimMergeMountImage")
+	procCimMergeMountVerifiedImage             = modcimfs.NewProc("CimMergeMountVerifiedImage")
 	procCimMountImage                          = modcimfs.NewProc("CimMountImage")
 	procCimMountVerifiedImage                  = modcimfs.NewProc("CimMountVerifiedImage")
 	procCimSealImage                           = modcimfs.NewProc("CimSealImage")
@@ -553,6 +554,17 @@ func CimMergeMountImage(numCimPaths uint32, backingImagePaths *CimFsImagePath, f
 		return
 	}
 	r0, _, _ := syscall.SyscallN(procCimMergeMountImage.Addr(), uintptr(numCimPaths), uintptr(unsafe.Pointer(backingImagePaths)), uintptr(flags), uintptr(unsafe.Pointer(volumeID)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *CimFsImagePath, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) {
+	r0, _, _ := syscall.SyscallN(procCimMergeMountVerifiedImage.Addr(), uintptr(numCimPaths), uintptr(unsafe.Pointer(backingImagePaths)), uintptr(flags), uintptr(unsafe.Pointer(volumeID)), uintptr(hashSize), uintptr(unsafe.Pointer(hash)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff

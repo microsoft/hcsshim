@@ -677,15 +677,14 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			}
 
 			if len(layerCIMs) > 1 {
-				// Get the topmost merge CIM and invoke the MountMergedBlockCIMs
-				_, err := cimfs.MountMergedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID)
+				_, err = cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
 				if err != nil {
 					return fmt.Errorf("error mounting multilayer block cims: %w", err)
 				}
 			} else {
-				_, err := cimfs.Mount(filepath.Join(layerCIMs[0].BlockPath, layerCIMs[0].CimName), wcowBlockCimMounts.VolumeGUID, wcowBlockCimMounts.MountFlags)
+				_, err = cimfs.MountVerifiedBlockCIM(layerCIMs[0], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
 				if err != nil {
-					return fmt.Errorf("error mounting merged block cims: %w", err)
+					return fmt.Errorf("error mounting verified block cim: %w", err)
 				}
 			}
 
