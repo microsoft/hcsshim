@@ -37,6 +37,7 @@ func initializeWCOWBootFiles(ctx context.Context, wopts *uvm.OptionsWCOW, rootfs
 	if s.Windows != nil {
 		layerFolders = s.Windows.LayerFolders
 	}
+	log.G(ctx).WithField("options", log.Format(ctx, *wopts)).Debug("initialize WCOW boot files")
 
 	wopts.BootFiles, err = layers.GetWCOWUVMBootFilesFromLayers(ctx, rootfs, layerFolders)
 	if err != nil {
@@ -50,6 +51,16 @@ func initializeWCOWBootFiles(ctx context.Context, wopts *uvm.OptionsWCOW, rootfs
 		// we use measured EFI & rootfs for confidential UVMs, use those instead of the ones passed in layers/rootfs
 		wopts.BootFiles.BlockCIMFiles.EFIVHDPath = uvm.GetDefaultConfidentialEFIPath()
 		wopts.BootFiles.BlockCIMFiles.BootCIMVHDPath = uvm.GetDefaultConfidentialBootCIMPath()
+
+		// make a copy of the vmgs file as the same vmgs can not be used by multiple pods in parallel
+		// TODO(ambarve): for C-LCOW we make a copy in the bundle directory, is it better
+		// to use the bundle directory instead of the snapshot directory?
+		vmgsCopyPath := filepath.Join(filepath.Dir(wopts.BootFiles.BlockCIMFiles.ScratchVHDPath), filepath.Base(wopts.GuestStateFilePath))
+		if err := copyfile.CopyFile(ctx, wopts.GuestStateFilePath, vmgsCopyPath, false); err != nil {
+			return fmt.Errorf("failed to make a copy of VMGS: %w", err)
+		}
+		wopts.GuestStateFilePath = vmgsCopyPath
+
 	} else if wopts.BootFiles.BootType == uvm.BlockCIMBoot {
 		// Supporting hyperv isolation with block CIM layers requires changes in
 		// the image pull path to prepare the EFI VHD. But more importantly, since both the
@@ -69,7 +80,7 @@ func initializeWCOWBootFiles(ctx context.Context, wopts *uvm.OptionsWCOW, rootfs
 		// UVM.
 		writableEFIVHDPath := filepath.Join(filepath.Dir(wopts.BootFiles.BlockCIMFiles.ScratchVHDPath), filepath.Base(wopts.BootFiles.BlockCIMFiles.EFIVHDPath))
 		if err := copyfile.CopyFile(ctx, wopts.BootFiles.BlockCIMFiles.EFIVHDPath, writableEFIVHDPath, false); err != nil {
-			return fmt.Errorf("failed to copy EFI VHD at %s: %w", writableEFIVHDPath, err)
+			return fmt.Errorf("failed to copy EFI VHD: %w", err)
 		}
 		wopts.BootFiles.BlockCIMFiles.EFIVHDPath = writableEFIVHDPath
 	}

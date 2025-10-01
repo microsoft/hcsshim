@@ -330,6 +330,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 		opts.NumaProcessorCounts)
 	opts.NumaMemoryBlocksCounts = ParseAnnotationCommaSeparatedUint64(ctx, s.Annotations, annotations.NumaCountOfMemoryBlocks,
 		opts.NumaMemoryBlocksCounts)
+	opts.ConsolePipe = ParseAnnotationsString(s.Annotations, iannotations.UVMConsolePipe, opts.ConsolePipe)
 
 	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
 
@@ -376,7 +377,6 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.UVMReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.LCOWReferenceInfoFile, lopts.UVMReferenceInfoFile)
 		lopts.KernelBootOptions = ParseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
-		lopts.ConsolePipe = ParseAnnotationsString(s.Annotations, iannotations.UVMConsolePipe, lopts.ConsolePipe)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
