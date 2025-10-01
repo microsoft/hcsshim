@@ -66,7 +66,7 @@ func defaultConfidentialWCOWOSBootFilesPath() string {
 }
 
 func GetDefaultConfidentialVMGSPath() string {
-	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "cwcow.vmgs")
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "cwcow.snp.vmgs")
 }
 
 func GetDefaultConfidentialBootCIMPath() string {
