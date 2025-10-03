@@ -11,15 +11,19 @@ import (
 
 	"github.com/containerd/console"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/memory"
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
 const (
+	annotationsArgName            = "annotation"
 	bootFilesPathArgName          = "boot-files-path"
 	consolePipeArgName            = "console-pipe"
 	kernelDirectArgName           = "kernel-direct"
@@ -48,6 +52,11 @@ var lcowCommand = cli.Command{
 	Name:  "lcow",
 	Usage: "Boot an LCOW UVM",
 	Flags: []cli.Flag{
+		cli.StringSliceFlag{
+			Name: annotationsArgName,
+			Usage: "Annotations in the form of `key=value` to apply to the uVM. Use repeat instances to add multiple. " +
+				"Annotations will be applied to uVM settings BEFORE all other settings.",
+		},
 		cli.StringFlag{
 			Name:  kernelArgsArgName,
 			Value: "",
@@ -113,7 +122,7 @@ var lcowCommand = cli.Command{
 		},
 		cli.StringFlag{
 			Name:  consolePipeArgName,
-			Usage: "Named pipe for serial console output (which will be enabled)",
+			Usage: "Named `pipe` for serial console output (which will be enabled)",
 		},
 		cli.BoolFlag{
 			Name:        "tty,t",
@@ -159,7 +168,21 @@ func init() {
 }
 
 func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.OptionsLCOW, error) {
-	options := uvm.NewDefaultOptionsLCOW(id, "")
+	opt, err := oci.SpecToUVMCreateOpts(ctx,
+		&specs.Spec{
+			Linux:       &specs.Linux{},
+			Annotations: parseAnnotations(ctx, c, annotationsArgName),
+		},
+		id, "",
+	)
+	if err != nil {
+		return nil, err
+	}
+	options, ok := opt.(*uvm.OptionsLCOW)
+	if !ok {
+		return nil, fmt.Errorf("unexpect uVM create options type: %T", opt)
+	}
+
 	setGlobalOptions(c, options.Options)
 
 	// boot
@@ -257,6 +280,37 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 	}
 
 	return options, nil
+}
+
+// parseAnnotations parses the annotations from the [cli.StringSliceFlag] specified by `name`.
+func parseAnnotations(ctx context.Context, c *cli.Context, name string) map[string]string {
+	ss := c.StringSlice(name)
+	annots := map[string]string{}
+
+	for _, s := range ss {
+		entry := log.G(ctx).WithField("flag-value", s)
+		k, v, found := strings.Cut(s, "=")
+
+		if !found {
+			entry.WithField(logrus.ErrorKey, "missing `=` in annotation").Warnf("invald %s flag value", name)
+		} else if k == "" || v == "" {
+			entry.WithField(logrus.ErrorKey, "empty annotation key or value").Warnf("invald %s flag value", name)
+		} else {
+			entry = entry.WithFields(logrus.Fields{
+				logfields.Key:   k,
+				logfields.Value: v,
+			})
+			entry.Debugf("parsed %s flag", name)
+
+			if vv, ok := annots[k]; ok {
+				entry.WithField(logfields.Value+"-existing", vv).Warn("overriding existing annotation")
+			}
+
+			annots[k] = v
+		}
+	}
+
+	return annots
 }
 
 func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) error {
