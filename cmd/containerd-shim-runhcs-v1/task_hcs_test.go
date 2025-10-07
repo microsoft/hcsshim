@@ -5,11 +5,13 @@ package main
 import (
 	"context"
 	"math/rand"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
@@ -317,4 +319,99 @@ func Test_hcsTask_DeleteExec_2ndExecID_ExitedState_Success(t *testing.T) {
 		t.Fatalf("expected nil err got: %v", err)
 	}
 	verifyDeleteSuccessValues(t, pid, status, at, second)
+}
+
+func Test_handleProcessArgsForIsolatedJobContainer(t *testing.T) {
+	tests := []struct {
+		name            string
+		specs           *specs.Process
+		expectedCmdLine string
+		expectedArgs    []string
+	}{
+		{
+			name:            "CommandLine starts with 'cmd' (lowercase) – unchanged",
+			specs:           &specs.Process{CommandLine: "cmd /c dir"},
+			expectedCmdLine: "cmd /c dir",
+			expectedArgs:    nil,
+		},
+		{
+			name:            "CommandLine starts with 'CMD' (uppercase) – unchanged",
+			specs:           &specs.Process{CommandLine: "CMD /C whoami"},
+			expectedCmdLine: "CMD /C whoami",
+			expectedArgs:    nil,
+		},
+		{
+			name:            "CommandLine starts with 'cmd.exe' – unchanged",
+			specs:           &specs.Process{CommandLine: "cmd.exe /c ipconfig"},
+			expectedCmdLine: "cmd.exe /c ipconfig",
+			expectedArgs:    nil,
+		},
+		{
+			name:            "CommandLine plain – gets prefixed with 'cmd /c '",
+			specs:           &specs.Process{CommandLine: "echo hello"},
+			expectedCmdLine: "cmd /c echo hello",
+			expectedArgs:    nil,
+		},
+		{
+			name:            "CommandLine mixed case 'CmD' – unchanged",
+			specs:           &specs.Process{CommandLine: "CmD /c ping 127.0.0.1"},
+			expectedCmdLine: "CmD /c ping 127.0.0.1",
+			expectedArgs:    nil,
+		},
+		{
+			name:            "Args plain – gets ['cmd','/c',...] prefix",
+			specs:           &specs.Process{Args: []string{"echo", "hello"}},
+			expectedCmdLine: "",
+			expectedArgs:    []string{"cmd", "/c", "echo", "hello"},
+		},
+		{
+			name:            "Args already start with 'CMD' (uppercase) – unchanged",
+			specs:           &specs.Process{Args: []string{"CMD", "/C", "echo", "hi"}},
+			expectedCmdLine: "",
+			expectedArgs:    []string{"CMD", "/C", "echo", "hi"},
+		},
+		{
+			name:            "Args already start with 'cmd' (lowercase) – unchanged",
+			specs:           &specs.Process{Args: []string{"cmd", "/c", "type", "file.txt"}},
+			expectedCmdLine: "",
+			expectedArgs:    []string{"cmd", "/c", "type", "file.txt"},
+		},
+		{
+			name:            "Empty CommandLine and empty Args – unchanged",
+			specs:           &specs.Process{},
+			expectedCmdLine: "",
+			expectedArgs:    nil,
+		},
+		{
+			name:            "Empty CommandLine and empty slice Args – unchanged (empty slice preserved)",
+			specs:           &specs.Process{Args: []string{}},
+			expectedCmdLine: "",
+			expectedArgs:    []string{},
+		},
+		{
+			name:            "CommandLine has leading spaces before 'cmd' – treated as not starting with cmd - unchanged",
+			specs:           &specs.Process{CommandLine: "  cmd /c echo spaced"},
+			expectedCmdLine: "  cmd /c echo spaced",
+			expectedArgs:    nil,
+		},
+		{
+			name:            "Args first element mixed case 'Cmd' – unchanged",
+			specs:           &specs.Process{Args: []string{"Cmd", "/c", "echo", "hi"}},
+			expectedCmdLine: "",
+			expectedArgs:    []string{"Cmd", "/c", "echo", "hi"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handleProcessArgsForIsolatedJobContainer(tt.specs)
+
+			if tt.specs.CommandLine != tt.expectedCmdLine {
+				t.Errorf("CommandLine mismatch:  got:  %q  want: %q", tt.specs.CommandLine, tt.expectedCmdLine)
+			}
+			if !reflect.DeepEqual(tt.specs.Args, tt.expectedArgs) {
+				t.Errorf("Args mismatch:  got:  %#v  want: %#v", tt.specs.Args, tt.expectedArgs)
+			}
+		})
+	}
 }

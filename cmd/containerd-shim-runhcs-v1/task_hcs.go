@@ -994,14 +994,11 @@ func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath st
 }
 
 func handleProcessArgsForIsolatedJobContainer(specs *specs.Process) {
-	if specs.CommandLine != "" {
-		if !strings.HasPrefix(strings.ToLower(specs.CommandLine), "cmd") {
-			specs.CommandLine = fmt.Sprintf("cmd /c %s", specs.CommandLine)
-		}
-	} else {
-		if strings.ToLower(specs.Args[0]) != "cmd" {
-			specs.Args = append([]string{"cmd", "/c"}, specs.Args...)
-		}
+	if specs.CommandLine != "" && !strings.HasPrefix(strings.TrimSpace(strings.ToLower(specs.CommandLine)), "cmd") {
+		specs.CommandLine = fmt.Sprintf("cmd /c %s", specs.CommandLine)
+	}
+	if len(specs.Args) > 0 && strings.TrimSpace(strings.ToLower(specs.Args[0])) != "cmd" {
+		specs.Args = append([]string{"cmd", "/c"}, specs.Args...)
 	}
 }
 
