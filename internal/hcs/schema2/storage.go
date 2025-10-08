@@ -20,5 +20,5 @@ type Storage struct {
 	QoS *StorageQoS `json:"QoS,omitempty"`
 
 	// Path to the root of the container's filesystem. This is useful in case of HostProcess containers where the container rootfs is different from C:\.
-	ContainerRootPath string `json:"ContainerRootPath,omitempty"`
+	PrivilegedContainerRootPath string `json:"PrivilegedContainerRootPath,omitempty"`
 }

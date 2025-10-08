@@ -496,7 +496,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 
 		// If the customer specified a custom rootfs path then use that instead of default c:\hpc.
 		if customRootFsPath, ok := coi.Spec.Annotations[annotations.HostProcessRootfsLocation]; ok {
-			v2Container.Storage.ContainerRootPath = customRootFsPath
+			v2Container.Storage.PrivilegedContainerRootPath = customRootFsPath
 		}
 	}
 
