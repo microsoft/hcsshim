@@ -87,23 +87,26 @@ type mount struct {
 	writable bool
 }
 
-// parseMounts parses the mounts stored under the cli StringSlice argument, `n`.
-func parseMounts(ctx context.Context, c *cli.Context, n string) []mount {
-	if c.IsSet(n) {
-		ss := c.StringSlice(n)
-		ms := make([]mount, 0, len(ss))
-		for _, s := range ss {
-			log.G(ctx).Debugf("parsing %q", s)
-
-			if m, err := mountFromString(s); err == nil {
-				ms = append(ms, m)
-			}
-		}
-
-		return ms
+// parseMounts parses the mounts from the [cli.StringSliceFlag] specified by `name`.
+func parseMounts(ctx context.Context, c *cli.Context, name string) []mount {
+	if !c.IsSet(name) {
+		return nil
 	}
 
-	return nil
+	ss := c.StringSlice(name)
+	ms := make([]mount, 0, len(ss))
+	for _, s := range ss {
+		entry := log.G(ctx).WithField("flag-value", s)
+
+		if m, err := mountFromString(s); err != nil {
+			entry.WithError(err).Warnf("invald %s flag value", name)
+		} else {
+			entry.Debugf("parsed %s flag", name)
+			ms = append(ms, m)
+		}
+	}
+
+	return ms
 }
 
 func mountFromString(s string) (m mount, _ error) {
