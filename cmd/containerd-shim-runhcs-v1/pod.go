@@ -516,18 +516,12 @@ func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
 		)
 	}
 
-	if isHypervisorIsolatedPrivilegedSandbox {
-		if isHypervisorIsolatedPrivilegedContainer && s.Annotations[annotations.HostProcessInheritUser] == "true" {
-			// For privileged containers within the sandbox, if the annotation to inherit user is set
-			// we will set the user to NT AUTHORITY\SYSTEM.
-			s.Process.User.Username = `NT AUTHORITY\SYSTEM`
-		}
-
-		if !isHypervisorIsolatedPrivilegedContainer && s.Annotations[annotations.HostProcessInheritUser] != "" {
-			// If the hypervisor isolated sandbox was privileged but the container is non-privileged, then
-			// we will explicitly disable the annotation which allows privileged user with the exec.
-			s.Annotations[annotations.HostProcessInheritUser] = "false"
-		}
+	if isHypervisorIsolatedPrivilegedSandbox &&
+		!isHypervisorIsolatedPrivilegedContainer &&
+		s.Annotations[annotations.HostProcessInheritUser] != "" {
+		// If the hypervisor isolated sandbox was privileged but the container is non-privileged, then
+		// we will explicitly disable the annotation which allows privileged user with the exec.
+		s.Annotations[annotations.HostProcessInheritUser] = "false"
 	}
 
 	return nil
