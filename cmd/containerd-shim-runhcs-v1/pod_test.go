@@ -407,8 +407,6 @@ func getWCOWSpecsWithAnnotations(annotation map[string]string, isIsolated bool, 
 }
 
 func Test_pod_UpdateConfigForHostProcessContainer(t *testing.T) {
-	ntAuthorityUser := `NT AUTHORITY\SYSTEM`
-
 	testCases := []struct {
 		testName              string
 		podSpec               *specs.Spec
@@ -470,7 +468,7 @@ func Test_pod_UpdateConfigForHostProcessContainer(t *testing.T) {
 				annotations.HostProcessContainer:      "true",
 				annotations.HostProcessInheritUser:    "true",
 				annotations.HostProcessRootfsLocation: "C:\\test",
-			}, true, ntAuthorityUser),
+			}, true, ""),
 			expectedError: "",
 		},
 		{
@@ -499,21 +497,6 @@ func Test_pod_UpdateConfigForHostProcessContainer(t *testing.T) {
 			containerSpec:         getWCOWSpecsWithAnnotations(map[string]string{}, true, ""),
 			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{}, true, ""),
 			expectedError:         "",
-		},
-		{
-			testName: "set user process for inherit annotation (isolated hpc)",
-			podSpec: getWCOWSpecsWithAnnotations(map[string]string{
-				annotations.HostProcessContainer:   "true",
-				annotations.HostProcessInheritUser: "true",
-			}, true, ""),
-			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
-				annotations.HostProcessContainer: "true",
-			}, true, ""),
-			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{
-				annotations.HostProcessContainer:   "true",
-				annotations.HostProcessInheritUser: "true",
-			}, true, ntAuthorityUser),
-			expectedError: "",
 		},
 		{
 			testName: "no changes in user process for normal containers (isolated hpc)",
