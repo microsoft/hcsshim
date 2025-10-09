@@ -84,6 +84,11 @@ func SandboxMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "sandboxMounts")
 }
 
+// SandboxTmpfsMountsDir returns sandbox tmpfs mounts directory inside UVM.
+func SandboxTmpfsMountsDir(sandboxID string) string {
+	return filepath.Join(SandboxRootDir(sandboxID), "sandboxTmpfsMounts")
+}
+
 // HugePagesMountsDir returns hugepages mounts directory inside UVM.
 func HugePagesMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "hugepages")
@@ -94,6 +99,13 @@ func SandboxMountSource(sandboxID, path string) string {
 	mountsDir := SandboxMountsDir(sandboxID)
 	subPath := strings.TrimPrefix(path, guestpath.SandboxMountPrefix)
 	return filepath.Join(mountsDir, subPath)
+}
+
+// SandboxTmpfsMountSource returns sandbox tmpfs mount path inside UVM
+func SandboxTmpfsMountSource(sandboxID, path string) string {
+	tmpfsMountDir := SandboxTmpfsMountsDir(sandboxID)
+	subPath := strings.TrimPrefix(path, guestpath.SandboxTmpfsMountPrefix)
+	return filepath.Join(tmpfsMountDir, subPath)
 }
 
 // HugePagesMountSource returns hugepages mount path inside UVM

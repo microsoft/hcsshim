@@ -10,6 +10,9 @@ const (
 	// SandboxMountPrefix is mount prefix used in container spec to mark a
 	// sandbox-mount
 	SandboxMountPrefix = "sandbox://"
+	// SandboxTmpfsMountPrefix is mount prefix used in container spec to mark a
+	// sandbox-tmp mount
+	SandboxTmpfsMountPrefix = "sandbox-tmp://"
 	// HugePagesMountPrefix is mount prefix used in container spec to mark a
 	// huge-pages mount
 	HugePagesMountPrefix = "hugepages://"
