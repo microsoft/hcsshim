@@ -34,15 +34,28 @@ func mkdirAllModePerm(target string) error {
 
 func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 	for i, m := range spec.Mounts {
-		if !strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
+		if !strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) &&
+			!strings.HasPrefix(m.Source, guestpath.SandboxTmpfsMountPrefix) {
 			continue
 		}
-		sandboxSource := specGuest.SandboxMountSource(sbid, m.Source)
 
-		// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
-		// Hence, we need to ensure that the resolved path is still under the correct directory
-		if !strings.HasPrefix(sandboxSource, specGuest.SandboxMountsDir(sbid)) {
-			return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
+		var sandboxSource string
+		// if using `sandbox-tmp://` prefix, we mount a tmpfs in sandboxTmpfsMountsDir
+		if strings.HasPrefix(m.Source, guestpath.SandboxTmpfsMountPrefix) {
+			sandboxSource = specGuest.SandboxTmpfsMountSource(sbid, m.Source)
+			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
+			// Hence, we need to ensure that the resolved path is still under the correct directory
+			if !strings.HasPrefix(sandboxSource, specGuest.SandboxTmpfsMountsDir(sbid)) {
+				return errors.Errorf("mount path %v for mount %v is not within sandboxTmpfsMountsDir", sandboxSource, m.Source)
+			}
+
+		} else {
+			sandboxSource = specGuest.SandboxMountSource(sbid, m.Source)
+			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
+			// Hence, we need to ensure that the resolved path is still under the correct directory
+			if !strings.HasPrefix(sandboxSource, specGuest.SandboxMountsDir(sbid)) {
+				return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
+			}
 		}
 
 		spec.Mounts[i].Source = sandboxSource

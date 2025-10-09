@@ -290,6 +290,31 @@ func setupSandboxMountsPath(id string) (err error) {
 	return storage.MountRShared(mountPath)
 }
 
+func setupSandboxTmpfsMountsPath(id string) error {
+	var err error
+	tmpfsDir := specGuest.SandboxTmpfsMountsDir(id)
+	if err := os.MkdirAll(tmpfsDir, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create sandbox tmpfs mounts dir in sandbox %v", id)
+	}
+
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(tmpfsDir)
+		}
+	}()
+
+	// mount a tmpfs at the tmpfsDir
+	// this ensures that the tmpfsDir is a mount point and not just a directory
+	// we don't care if it is already mounted, so ignore EBUSY
+	if err := unix.Mount("tmpfs", tmpfsDir, "tmpfs", 0, ""); err != nil && !errors.Is(err, unix.EBUSY) {
+		return errors.Wrapf(err, "failed to mount tmpfs at %s", tmpfsDir)
+	}
+
+	//TODO: should tmpfs be mounted as noexec?
+
+	return storage.MountRShared(tmpfsDir)
+}
+
 func setupSandboxHugePageMountsPath(id string) error {
 	mountPath := specGuest.HugePagesMountsDir(id)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
@@ -348,6 +373,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			}()
 
 			if err = setupSandboxMountsPath(id); err != nil {
+				return nil, err
+			}
+
+			if err = setupSandboxTmpfsMountsPath(id); err != nil {
 				return nil, err
 			}
 
