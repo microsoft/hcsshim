@@ -167,9 +167,9 @@ func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdta
 // returns if this instance of the UtilityVM is created with confidential policy
 func (uvm *UtilityVM) HasConfidentialPolicy() bool {
 	switch opts := uvm.createOpts.(type) {
-	case OptionsWCOW:
+	case *OptionsWCOW:
 		return opts.SecurityPolicyEnabled
-	case OptionsLCOW:
+	case *OptionsLCOW:
 		return opts.SecurityPolicyEnabled
 	default:
 		panic("unexpected options type")

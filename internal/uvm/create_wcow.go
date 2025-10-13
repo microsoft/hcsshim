@@ -505,7 +505,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		vsmbNoDirectMap:         opts.NoDirectMap,
 		noWritableFileShares:    opts.NoWritableFileShares,
-		createOpts:              *opts,
+		createOpts:              opts,
 		blockCIMMounts:          make(map[string]*UVMMountedBlockCIMs),
 	}
 

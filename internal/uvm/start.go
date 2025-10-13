@@ -339,8 +339,8 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 
 	if uvm.HasConfidentialPolicy() && uvm.OS() == "windows" {
 		copts := []WCOWConfidentialUVMOpt{
-			WithWCOWSecurityPolicy(uvm.createOpts.(OptionsWCOW).SecurityPolicy),
-			WithWCOWSecurityPolicyEnforcer(uvm.createOpts.(OptionsWCOW).SecurityPolicyEnforcer),
+			WithWCOWSecurityPolicy(uvm.createOpts.(*OptionsWCOW).SecurityPolicy),
+			WithWCOWSecurityPolicyEnforcer(uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer),
 		}
 		if err := uvm.SetWCOWConfidentialUVMOptions(ctx, copts...); err != nil {
 			return err
