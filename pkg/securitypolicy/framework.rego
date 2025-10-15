@@ -1488,11 +1488,13 @@ errors[mountError] {
 default signal_allowed := false
 
 signal_allowed {
+    input.isInitProcess
     some container in data.metadata.matches[input.containerID]
     signal_ok(container.signals)
 }
 
 signal_allowed {
+    not input.isInitProcess
     some container in data.metadata.matches[input.containerID]
     some process in container.exec_processes
     command_ok(process.command)
