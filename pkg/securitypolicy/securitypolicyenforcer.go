@@ -207,28 +207,14 @@ type OpenDoorSecurityPolicyEnforcer struct {
 }
 
 // createAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer
-// instance.  The provided base64EncodedPolicy must be either empty or contain
-// exactly the field "allow_all" set to true.
+// instance (used for non-confidential containers).  The provided
+// base64EncodedPolicy must be empty.
 func createOpenDoorEnforcer(base64EncodedPolicy string, _, _ []oci.Mount, _ int) (SecurityPolicyEnforcer, error) {
-	// This covers the case when an "open_door" enforcer was requested, but no
-	// actual security policy was passed. This can happen e.g. when a container
-	// scratch is created for the first time.
 	if base64EncodedPolicy == "" {
 		return &OpenDoorSecurityPolicyEnforcer{}, nil
 	}
 
-	securityPolicy, err := newSecurityPolicyFromBase64JSON(base64EncodedPolicy)
-	if err != nil {
-		return nil, ErrInvalidOpenDoorPolicy
-	}
-
-	policyContainers := securityPolicy.Containers
-	if !securityPolicy.AllowAll || policyContainers.Length > 0 || len(policyContainers.Elements) > 0 {
-		return nil, ErrInvalidOpenDoorPolicy
-	}
-	return &OpenDoorSecurityPolicyEnforcer{
-		encodedSecurityPolicy: base64EncodedPolicy,
-	}, nil
+	return nil, ErrInvalidOpenDoorPolicy
 }
 
 var _ SecurityPolicyEnforcer = (*OpenDoorSecurityPolicyEnforcer)(nil)
