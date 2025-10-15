@@ -124,12 +124,6 @@ func createRegoEnforcer(base64EncodedPolicy string,
 	code := string(rawPolicy)
 	regoPolicy, err := newRegoPolicy(code, defaultMounts, privilegedMounts, osType)
 	if err != nil {
-		if isValidJsonObject(code) {
-			// Return an user-friendly error message if we get a JSON policy.
-			// Previously such policy was supported, but we currently only
-			// support Rego.
-			return nil, fmt.Errorf("JSON policy is not supported.")
-		}
 		return nil, fmt.Errorf("error creating Rego policy: %w", err)
 	}
 	regoPolicy.base64policy = base64EncodedPolicy
