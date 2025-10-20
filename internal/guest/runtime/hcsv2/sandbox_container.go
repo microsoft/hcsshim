@@ -54,6 +54,9 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 
 	// Write the hostname
 	hostname := spec.Hostname
+	if err = network.ValidateHostname(hostname); err != nil {
+		return err
+	}
 	if hostname == "" {
 		var err error
 		hostname, err = os.Hostname()
