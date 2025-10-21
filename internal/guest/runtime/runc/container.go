@@ -78,9 +78,6 @@ func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 func (c *container) Kill(signal syscall.Signal) error {
 	logrus.WithField(logfields.ContainerID, c.id).Debug("runc::container::Kill")
 	args := []string{"kill"}
-	if signal == syscall.SIGTERM || signal == syscall.SIGKILL {
-		args = append(args, "--all")
-	}
 	args = append(args, c.id, strconv.Itoa(int(signal)))
 	cmd := runcCommand(args...)
 	out, err := cmd.CombinedOutput()
