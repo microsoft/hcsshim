@@ -24,6 +24,8 @@ const osType = "linux"
 // substituteUVMPath substitutes mount prefix to an appropriate path inside
 // UVM. At policy generation time, it's impossible to tell what the sandboxID
 // will be, so the prefix substitution needs to happen during runtime.
+//
+//nolint:unused // linting is wrong, this is used in rego_utils_test.go
 func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 	if strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
 		m.Source = specInternal.SandboxMountSource(sandboxID, m.Source)
