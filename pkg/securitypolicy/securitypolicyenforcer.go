@@ -2,8 +2,6 @@ package securitypolicy
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"syscall"
 
@@ -142,26 +140,6 @@ func (s stringSet) add(item string) {
 func (s stringSet) contains(item string) bool {
 	_, contains := s[item]
 	return contains
-}
-
-func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
-	// base64 decode the incoming policy string
-	// its base64 encoded because it is coming from an annotation
-	// annotations are a map of string to string
-	// we want to store a complex json object so.... base64 it is
-	jsonPolicy, err := base64.StdEncoding.DecodeString(base64EncodedPolicy)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to decode policy from Base64 format")
-	}
-
-	// json unmarshall the decoded to a SecurityPolicy
-	securityPolicy := new(SecurityPolicy)
-	err = json.Unmarshal(jsonPolicy, securityPolicy)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to unmarshal JSON policy")
-	}
-
-	return securityPolicy, nil
 }
 
 // CreateSecurityPolicyEnforcer returns an appropriate enforcer for input
