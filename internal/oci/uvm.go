@@ -318,6 +318,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 	opts.ProcessDumpLocation = ParseAnnotationsString(s.Annotations, annotations.ContainerProcessDumpLocation, opts.ProcessDumpLocation)
 	opts.NoWritableFileShares = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableWritableFileShares, opts.NoWritableFileShares)
 	opts.DumpDirectoryPath = ParseAnnotationsString(s.Annotations, annotations.DumpDirectoryPath, opts.DumpDirectoryPath)
+	opts.ConsolePipe = ParseAnnotationsString(s.Annotations, iannotations.UVMConsolePipe, opts.ConsolePipe)
 
 	// NUMA settings
 	opts.MaxProcessorsPerNumaNode = ParseAnnotationsUint32(ctx, s.Annotations, annotations.NumaMaximumProcessorsPerNode, opts.MaxProcessorsPerNumaNode)
@@ -330,7 +331,6 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 		opts.NumaProcessorCounts)
 	opts.NumaMemoryBlocksCounts = ParseAnnotationCommaSeparatedUint64(ctx, s.Annotations, annotations.NumaCountOfMemoryBlocks,
 		opts.NumaMemoryBlocksCounts)
-	opts.ConsolePipe = ParseAnnotationsString(s.Annotations, iannotations.UVMConsolePipe, opts.ConsolePipe)
 
 	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
 
@@ -377,6 +377,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.UVMReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.LCOWReferenceInfoFile, lopts.UVMReferenceInfoFile)
 		lopts.KernelBootOptions = ParseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
+		lopts.WritableOverlayDirs = ParseAnnotationsBool(ctx, s.Annotations, iannotations.WritableOverlayDirs, lopts.WritableOverlayDirs)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
