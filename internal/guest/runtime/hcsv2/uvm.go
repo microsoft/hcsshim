@@ -37,6 +37,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -468,6 +469,27 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		// stdio access isn't allow for this container. Switch to the /dev/null
 		// transport that will eat all input/ouput.
 		c.vsock = h.devNullTransport
+	}
+
+	logPath := settings.OCISpecification.Annotations[annotations.LCOWTeeLogPath]
+	if logPath != "" {
+		if !allowStdio {
+			return nil, errors.Errorf("teeing container stdio to log path %q denied due to policy not allowing stdio access", logPath)
+		}
+
+		if logPath, err = filepath.Abs(logPath); err != nil {
+			return nil, errors.Wrapf(err, "failed to evaluate log path: %s", logPath)
+		}
+
+		log.G(ctx).WithField(logfields.Path, logPath).Debug("creating container log file")
+		dir := filepath.Dir(logPath)
+		if err := mkdirAllModePerm(dir); err != nil {
+			return nil, errors.Wrapf(err, "failed to create log file parent directory: %s", dir)
+		}
+		// don't use [os.Create] since that truncates an existing file, which is not desired
+		if c.logFile, err = os.OpenFile(logPath, os.O_RDWR|os.O_CREATE, 0666); err != nil {
+			return nil, errors.Wrapf(err, "failed to create log file: %s", logPath)
+		}
 	}
 
 	if envToKeep != nil {
