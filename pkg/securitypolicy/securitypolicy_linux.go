@@ -8,10 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
-	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/moby/sys/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -19,19 +17,6 @@ import (
 
 //nolint:unused
 const osType = "linux"
-
-// This is being used by StandEnforcer.
-// substituteUVMPath substitutes mount prefix to an appropriate path inside
-// UVM. At policy generation time, it's impossible to tell what the sandboxID
-// will be, so the prefix substitution needs to happen during runtime.
-func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
-	if strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
-		m.Source = specInternal.SandboxMountSource(sandboxID, m.Source)
-	} else if strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
-		m.Source = specInternal.HugePagesMountSource(sandboxID, m.Source)
-	}
-	return m
-}
 
 // SandboxMountsDir returns sandbox mounts directory inside UVM/host.
 func SandboxMountsDir(sandboxID string) string {

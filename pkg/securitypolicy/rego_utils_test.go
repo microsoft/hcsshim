@@ -2218,40 +2218,6 @@ func (*generatedConstraints) Generate(r *rand.Rand, _ int) reflect.Value {
 	return reflect.ValueOf(c)
 }
 
-type testConfig struct {
-	container   *securityPolicyContainer
-	layers      []string
-	containerID string
-	policy      *StandardSecurityPolicyEnforcer
-}
-
-func setupContainerWithOverlay(gc *generatedConstraints, valid bool) (tc *testConfig, err error) {
-	sp := NewStandardSecurityPolicyEnforcer(gc.containers, ignoredEncodedPolicyString)
-
-	containerID := testDataGenerator.uniqueContainerID()
-	c := selectContainerFromContainerList(gc.containers, testRand)
-
-	var layerPaths []string
-	if valid {
-		layerPaths, err = testDataGenerator.createValidOverlayForContainer(sp, c)
-		if err != nil {
-			return nil, fmt.Errorf("error creating valid overlay: %w", err)
-		}
-	} else {
-		layerPaths, err = testDataGenerator.createInvalidOverlayForContainer(sp, c)
-		if err != nil {
-			return nil, fmt.Errorf("error creating invalid overlay: %w", err)
-		}
-	}
-
-	return &testConfig{
-		container:   c,
-		layers:      layerPaths,
-		containerID: containerID,
-		policy:      sp,
-	}, nil
-}
-
 func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraints {
 	var containers []*securityPolicyContainer
 
