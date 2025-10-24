@@ -5,17 +5,10 @@ package bridge
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sync"
-	"time"
 
-	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
-	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -75,61 +68,15 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer) *Host {
 // security policy (done in the regoby LoadFragment)
 func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
 	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
-
-	raw, err := base64.StdEncoding.DecodeString(fragment.Fragment)
+	issuer, feed, payloadString, err := securitypolicy.ExtractAndVerifyFragment(ctx, fragment)
 	if err != nil {
 		return err
 	}
-	blob := []byte(fragment.Fragment)
-	// keep a copy of the fragment, so we can manually figure out what went wrong
-	// will be removed eventually. Give it a unique name to avoid any potential
-	// race conditions.
-	sha := sha256.New()
-	sha.Write(blob)
-	timestamp := time.Now()
-	fragmentPath := fmt.Sprintf("fragment-%x-%d.blob", sha.Sum(nil), timestamp.UnixMilli())
-	_ = os.WriteFile(filepath.Join(os.TempDir(), fragmentPath), blob, 0644)
-
-	unpacked, err := cosesign1.UnpackAndValidateCOSE1CertChain(raw)
-	if err != nil {
-		return fmt.Errorf("InjectFragment failed COSE validation: %w", err)
-	}
-
-	payloadString := string(unpacked.Payload[:])
-	issuer := unpacked.Issuer
-	feed := unpacked.Feed
-	chainPem := unpacked.ChainPem
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"issuer":   issuer, // eg the DID:x509:blah....
-		"feed":     feed,
-		"cty":      unpacked.ContentType,
-		"chainPem": chainPem,
-	}).Debugf("unpacked COSE1 cert chain")
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"payload": payloadString,
-	}).Tracef("unpacked COSE1 payload")
-
-	if len(issuer) == 0 || len(feed) == 0 { // must both be present
-		return fmt.Errorf("either issuer and feed must both be provided in the COSE_Sign1 protected header")
-	}
-
-	// Resolve returns a did doc that we don't need
-	// we only care if there was an error or not
-	_, err = didx509resolver.Resolve(unpacked.ChainPem, issuer, true)
-	if err != nil {
-		log.G(ctx).Printf("Badly formed fragment - did resolver failed to match fragment did:x509 from chain with purported issuer %s, feed %s - err %s", issuer, feed, err.Error())
-		return err
-	}
-
 	// now offer the payload fragment to the policy
 	err = h.securityPolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
 	if err != nil {
-		return fmt.Errorf("InjectFragment failed policy load: %w", err)
+		return fmt.Errorf("error loading security policy fragment: %w", err)
 	}
-	log.G(ctx).Printf("passed fragment into the enforcer.")
-
 	return nil
 }
 
