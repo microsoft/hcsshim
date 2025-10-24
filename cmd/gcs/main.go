@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -67,7 +68,12 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 		}
 
 		count++
-		msg := "memory usage for cgroup exceeded threshold"
+		var msg string
+		if strings.HasPrefix(cgName, "/virtual-pods") {
+			msg = "memory usage for virtual pods cgroup exceeded threshold"
+		} else {
+			msg = "memory usage for cgroup exceeded threshold"
+		}
 		entry := logrus.WithFields(logrus.Fields{
 			"gcsStartTime":   startTime,
 			"time":           time.Now(),
@@ -294,40 +300,9 @@ func main() {
 	// Continuously log /dev/kmsg
 	go kmsg.ReadForever(kmsg.LogLevel(*kmsgLogLevel))
 
-	tport := &transport.VsockTransport{}
-	rtime, err := runc.NewRuntime(baseLogPath)
-	if err != nil {
-		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
-	}
-	mux := bridge.NewBridgeMux()
-	b := bridge.Bridge{
-		Handler:  mux,
-		EnableV4: *v4,
-	}
-	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
-	b.AssignHandlers(mux, h)
-
-	var bridgeIn io.ReadCloser
-	var bridgeOut io.WriteCloser
-	if *useInOutErr {
-		bridgeIn = os.Stdin
-		bridgeOut = os.Stdout
-	} else {
-		const commandPort uint32 = 0x40000000
-		bridgeCon, err := tport.Dial(commandPort)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"port":          commandPort,
-				logrus.ErrorKey: err,
-			}).Fatal("failed to dial host vsock connection")
-		}
-		bridgeIn = bridgeCon
-		bridgeOut = bridgeCon
-	}
-
 	// Setup the UVM cgroups to protect against a workload taking all available
-	// memory and causing the GCS to malfunction we create two cgroups: gcs,
-	// containers.
+	// memory and causing the GCS to malfunction we create cgroups: gcs,
+	// containers, and virtual-pods for multi-pod support.
 	//
 
 	// Write 1 to memory.use_hierarchy on the root cgroup to enable hierarchy
@@ -357,6 +332,18 @@ func main() {
 	}
 	defer containersControl.Delete() //nolint:errcheck
 
+	// Create virtual-pods cgroup hierarchy for multi-pod support
+	// This will be the parent for all virtual pod cgroups: /containers/virtual-pods/{virtualSandboxID}
+	virtualPodsControl, err := cgroups.New(cgroups.StaticPath("/containers/virtual-pods"), &oci.LinuxResources{
+		Memory: &oci.LinuxMemory{
+			Limit: &containersLimit, // Share the same limit as containers
+		},
+	})
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to create containers/virtual-pods cgroup")
+	}
+	defer virtualPodsControl.Delete() //nolint:errcheck
+
 	gcsControl, err := cgroups.New(cgroups.StaticPath("/gcs"), &oci.LinuxResources{})
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to create gcs cgroup")
@@ -364,6 +351,39 @@ func main() {
 	defer gcsControl.Delete() //nolint:errcheck
 	if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
 		logrus.WithError(err).Fatal("failed add gcs pid to gcs cgroup")
+	}
+
+	tport := &transport.VsockTransport{}
+	rtime, err := runc.NewRuntime(baseLogPath)
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
+	}
+	mux := bridge.NewBridgeMux()
+	b := bridge.Bridge{
+		Handler:  mux,
+		EnableV4: *v4,
+	}
+	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
+	// Initialize virtual pod support in the host
+	h.InitializeVirtualPodSupport(virtualPodsControl)
+	b.AssignHandlers(mux, h)
+
+	var bridgeIn io.ReadCloser
+	var bridgeOut io.WriteCloser
+	if *useInOutErr {
+		bridgeIn = os.Stdin
+		bridgeOut = os.Stdout
+	} else {
+		const commandPort uint32 = 0x40000000
+		bridgeCon, err := tport.Dial(commandPort)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"port":          commandPort,
+				logrus.ErrorKey: err,
+			}).Fatal("failed to dial host vsock connection")
+		}
+		bridgeIn = bridgeCon
+		bridgeOut = bridgeCon
 	}
 
 	event := cgroups.MemoryThresholdEvent(*gcsMemLimitBytes, false)
@@ -381,6 +401,14 @@ func main() {
 	oomFile := os.NewFile(oom, "cefd")
 	defer oomFile.Close()
 
+	// Setup OOM monitoring for virtual-pods cgroup
+	virtualPodsOom, err := virtualPodsControl.OOMEventFD()
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to retrieve the virtual-pods cgroups oom eventfd")
+	}
+	virtualPodsOomFile := os.NewFile(virtualPodsOom, "vp-oomfd")
+	defer virtualPodsOomFile.Close()
+
 	// time synchronization service
 	if !(*disableTimeSync) {
 		if err = startTimeSyncService(); err != nil {
@@ -390,6 +418,7 @@ func main() {
 
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
 	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
+	go readMemoryEvents(startTime, virtualPodsOomFile, "/containers/virtual-pods", containersLimit, virtualPodsControl)
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
