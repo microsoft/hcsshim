@@ -394,7 +394,7 @@ jobs:
         run: ${{ env.GO_BUILD_CMD }} -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
         working-directory: test
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: test_binaries_${{ matrix.name }}
@@ -675,7 +675,7 @@ jobs:
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
         name: Build zapdir.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: binaries
