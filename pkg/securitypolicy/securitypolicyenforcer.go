@@ -184,9 +184,9 @@ type OpenDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string
 }
 
-// createAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer
-// instance (used for non-confidential containers).  The provided
-// base64EncodedPolicy must be empty.
+// Creates and returns OpenDoorSecurityPolicyEnforcer instance (used for
+// non-confidential containers).  The provided base64EncodedPolicy must be
+// empty.
 func createOpenDoorEnforcer(base64EncodedPolicy string, _, _ []oci.Mount, _ int) (SecurityPolicyEnforcer, error) {
 	if base64EncodedPolicy == "" {
 		return &OpenDoorSecurityPolicyEnforcer{}, nil
