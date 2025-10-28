@@ -122,6 +122,19 @@ func SandboxTmpfsMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "sandboxTmpfsMounts")
 }
 
+// VirtualPodTmpfsMountsDir returns virtual pod tmpfs mounts directory inside UVM/host.
+func VirtualPodTmpfsMountsDir(virtualSandboxID string) string {
+	return filepath.Join(VirtualPodRootDir(virtualSandboxID), "sandboxTmpfsMounts")
+}
+
+// VirtualPodAwareSandboxTmpfsMountsDir returns the appropriate tmpfs mounts directory
+func VirtualPodAwareSandboxTmpfsMountsDir(sandboxID, virtualSandboxID string) string {
+	if virtualSandboxID != "" {
+		return VirtualPodTmpfsMountsDir(virtualSandboxID)
+	}
+	return SandboxTmpfsMountsDir(sandboxID)
+}
+
 // HugePagesMountsDir returns hugepages mounts directory inside UVM.
 func HugePagesMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "hugepages")
@@ -162,6 +175,16 @@ func SandboxTmpfsMountSource(sandboxID, path string) string {
 	tmpfsMountDir := SandboxTmpfsMountsDir(sandboxID)
 	subPath := strings.TrimPrefix(path, guestpath.SandboxTmpfsMountPrefix)
 	return filepath.Join(tmpfsMountDir, subPath)
+}
+
+// VirtualPodAwareSandboxTmpfsMountSource returns tmpfs mount source path for virtual pod aware containers
+func VirtualPodAwareSandboxTmpfsMountSource(sandboxID, virtualSandboxID, path string) string {
+	if virtualSandboxID != "" {
+		mountsDir := VirtualPodTmpfsMountsDir(virtualSandboxID)
+		subPath := strings.TrimPrefix(path, guestpath.SandboxTmpfsMountPrefix)
+		return filepath.Join(mountsDir, subPath)
+	}
+	return SandboxTmpfsMountSource(sandboxID, path)
 }
 
 // HugePagesMountSource returns hugepages mount path inside UVM

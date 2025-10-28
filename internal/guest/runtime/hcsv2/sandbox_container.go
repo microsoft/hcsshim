@@ -20,27 +20,15 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
-func getSandboxHostnamePath(id string) string {
-	return filepath.Join(specGuest.SandboxRootDir(id), "hostname")
-}
-
-func getVirtualPodAwareSandboxHostnamePath(id, virtualSandboxID string) string {
+func getSandboxHostnamePath(id, virtualSandboxID string) string {
 	return filepath.Join(specGuest.VirtualPodAwareSandboxRootDir(id, virtualSandboxID), "hostname")
 }
 
-func getSandboxHostsPath(id string) string {
-	return filepath.Join(specGuest.SandboxRootDir(id), "hosts")
-}
-
-func getVirtualPodAwareSandboxHostsPath(id, virtualSandboxID string) string {
+func getSandboxHostsPath(id, virtualSandboxID string) string {
 	return filepath.Join(specGuest.VirtualPodAwareSandboxRootDir(id, virtualSandboxID), "hosts")
 }
 
-func getSandboxResolvPath(id string) string {
-	return filepath.Join(specGuest.SandboxRootDir(id), "resolv.conf")
-}
-
-func getVirtualPodAwareSandboxResolvPath(id, virtualSandboxID string) string {
+func getSandboxResolvPath(id, virtualSandboxID string) string {
 	return filepath.Join(specGuest.VirtualPodAwareSandboxRootDir(id, virtualSandboxID), "resolv.conf")
 }
 
@@ -74,19 +62,18 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		}
 	}
 
-	sandboxHostnamePath := getVirtualPodAwareSandboxHostnamePath(id, virtualSandboxID)
+	sandboxHostnamePath := getSandboxHostnamePath(id, virtualSandboxID)
 	if err := os.WriteFile(sandboxHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
 		return errors.Wrapf(err, "failed to write hostname to %q", sandboxHostnamePath)
 	}
 
 	// Write the hosts
 	sandboxHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
-	sandboxHostsPath := getVirtualPodAwareSandboxHostsPath(id, virtualSandboxID)
+	sandboxHostsPath := getSandboxHostsPath(id, virtualSandboxID)
 	if err := os.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
 		return errors.Wrapf(err, "failed to write sandbox hosts to %q", sandboxHostsPath)
 	}
 
-	log.G(ctx).Debug("quick setup network namespace, cflick")
 	// Check if this is a virtual pod sandbox container by comparing container ID with virtual pod ID
 	isVirtualPodSandbox := virtualSandboxID != "" && id == virtualSandboxID
 	if strings.EqualFold(spec.Annotations[annotations.SkipPodNetworking], "true") || isVirtualPodSandbox {
@@ -97,7 +84,6 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		}
 	}
 	// Write resolv.conf
-	log.G(ctx).Debug("sandbox resolv.conf, cflick")
 	ns, err := getNetworkNamespace(specGuest.GetNetworkNamespaceID(spec))
 	if err != nil {
 		if !strings.EqualFold(spec.Annotations[annotations.SkipPodNetworking], "true") {
@@ -119,7 +105,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		if err != nil {
 			return errors.Wrap(err, "failed to generate sandbox resolv.conf content")
 		}
-		sandboxResolvPath := getVirtualPodAwareSandboxResolvPath(id, virtualSandboxID)
+		sandboxResolvPath := getSandboxResolvPath(id, virtualSandboxID)
 		if err := os.WriteFile(sandboxResolvPath, []byte(resolvContent), 0644); err != nil {
 			return errors.Wrap(err, "failed to write sandbox resolv.conf")
 		}

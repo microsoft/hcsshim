@@ -201,14 +201,17 @@ func (c *Container) Delete(ctx context.Context) error {
 		}
 
 		// remove user mounts in sandbox container - use virtual pod aware paths
-		mountsDir := specGuest.VirtualPodAwareSandboxMountsDir(c.id, virtualSandboxID)
-		if err := storage.UnmountAllInPath(ctx, mountsDir, true); err != nil {
+		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareSandboxMountsDir(c.id, virtualSandboxID), true); err != nil {
 			entity.WithError(err).Error("failed to unmount sandbox mounts")
 		}
 
+		// remove user mounts in tmpfs sandbox container - use virtual pod aware paths
+		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareSandboxTmpfsMountsDir(c.id, virtualSandboxID), true); err != nil {
+			entity.WithError(err).Error("failed to unmount tmpfs sandbox mounts")
+		}
+
 		// remove hugepages mounts in sandbox container - use virtual pod aware paths
-		hugePagesDir := specGuest.VirtualPodAwareHugePagesMountsDir(c.id, virtualSandboxID)
-		if err := storage.UnmountAllInPath(ctx, hugePagesDir, true); err != nil {
+		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareHugePagesMountsDir(c.id, virtualSandboxID), true); err != nil {
 			entity.WithError(err).Error("failed to unmount hugepages mounts")
 		}
 	}

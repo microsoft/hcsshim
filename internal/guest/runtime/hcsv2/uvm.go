@@ -322,8 +322,7 @@ func setupSandboxMountsPath(id string) (err error) {
 	return storage.MountRShared(mountPath)
 }
 
-func setupSandboxTmpfsMountsPath(id string) error {
-	var err error
+func setupSandboxTmpfsMountsPath(id string) (err error) {
 	tmpfsDir := specGuest.SandboxTmpfsMountsDir(id)
 	if err := os.MkdirAll(tmpfsDir, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create sandbox tmpfs mounts dir in sandbox %v", id)
@@ -473,16 +472,13 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 
 			if isVirtualPod {
 				// For virtual pods, create virtual pod specific paths
-				err = setupVirtualPodMountsPath(virtualPodID, id)
-				if err != nil {
+				if err = setupVirtualPodMountsPath(virtualPodID); err != nil {
 					return nil, err
 				}
-				// Create hugepages path for virtual pod
-				mountPath := specGuest.VirtualPodHugePagesMountsDir(virtualPodID)
-				if err := os.MkdirAll(mountPath, 0755); err != nil {
-					return nil, errors.Wrapf(err, "failed to create virtual pod hugepage mounts dir %v", virtualPodID)
+				if err = setupVirtualPodTmpfsMountsPath(virtualPodID); err != nil {
+					return nil, err
 				}
-				if err := storage.MountRShared(mountPath); err != nil {
+				if err = setupVirtualPodHugePageMountsPath(virtualPodID); err != nil {
 					return nil, err
 				}
 			} else {
@@ -507,8 +503,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			if !ok || sid == "" {
 				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
 			}
-			err = setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification, settings.OCIBundlePath)
-			if err != nil {
+			if err = setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification, settings.OCIBundlePath); err != nil {
 				return nil, err
 			}
 
@@ -672,9 +667,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		ns, err := getNetworkNamespace(namespaceID)
 		// skip network activity for sandbox containers marked with skip uvm networking annotation
 		if isCRI && err != nil && !strings.EqualFold(settings.OCISpecification.Annotations[annotations.SkipPodNetworking], "true") {
-			// return nil, err
 			return nil, err
 		}
+		// standalone is not required to have a networking namespace setup
 		if ns != nil {
 			if err := ns.AssignContainerPid(ctx, c.container.Pid()); err != nil {
 				return nil, err
@@ -1556,17 +1551,48 @@ func (h *Host) cleanupVirtualPod(virtualSandboxID string) {
 }
 
 // setupVirtualPodMountsPath creates mount directories for virtual pods
-func setupVirtualPodMountsPath(virtualSandboxID, masterSandboxID string) (err error) {
+func setupVirtualPodMountsPath(virtualSandboxID string) (err error) {
 	// Create virtual pod specific mount path using the new path generation functions
 	mountPath := specGuest.VirtualPodMountsDir(virtualSandboxID)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create virtual pod sandboxMounts dir %v", virtualSandboxID)
+		return errors.Wrapf(err, "failed to create virtual pod mounts dir in sandbox %v", virtualSandboxID)
 	}
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(mountPath)
 		}
 	}()
+
+	return storage.MountRShared(mountPath)
+}
+
+func setupVirtualPodTmpfsMountsPath(virtualSandboxID string) (err error) {
+	tmpfsDir := specGuest.VirtualPodTmpfsMountsDir(virtualSandboxID)
+	if err := os.MkdirAll(tmpfsDir, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create virtual pod tmpfs mounts dir in sandbox %v", virtualSandboxID)
+	}
+
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(tmpfsDir)
+		}
+	}()
+
+	// mount a tmpfs at the tmpfsDir
+	// this ensures that the tmpfsDir is a mount point and not just a directory
+	// we don't care if it is already mounted, so ignore EBUSY
+	if err := unix.Mount("tmpfs", tmpfsDir, "tmpfs", 0, ""); err != nil && !errors.Is(err, unix.EBUSY) {
+		return errors.Wrapf(err, "failed to mount tmpfs at %s", tmpfsDir)
+	}
+
+	return storage.MountRShared(tmpfsDir)
+}
+
+func setupVirtualPodHugePageMountsPath(virtualSandboxID string) error {
+	mountPath := specGuest.VirtualPodHugePagesMountsDir(virtualSandboxID)
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create virtual pod hugepage mounts dir %v", virtualSandboxID)
+	}
 
 	return storage.MountRShared(mountPath)
 }
