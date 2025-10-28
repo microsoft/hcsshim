@@ -53,6 +53,24 @@ func WithWCOWSecurityPolicyEnforcer(enforcer string) WCOWConfidentialUVMOpt {
 	}
 }
 
+// WithUVMReferenceInfo reads UVM reference info file and base64 encodes the
+// content before setting it for the resource. This is no-op if the
+// path is empty or the file doesn't exist.
+func WithWCOWUVMReferenceInfo(path string) WCOWConfidentialUVMOpt {
+	return func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error {
+		encoded, err := base64EncodeFileContents(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.G(ctx).WithField("filePath", path).Debug("UVM reference info file not found")
+				return nil
+			}
+			return fmt.Errorf("failed to read UVM reference info file: %w", err)
+		}
+		r.EncodedUVMReference = encoded
+		return nil
+	}
+}
+
 func (uvm *UtilityVM) SetWCOWConfidentialUVMOptions(ctx context.Context, opts ...WCOWConfidentialUVMOpt) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
