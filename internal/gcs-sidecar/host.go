@@ -182,6 +182,7 @@ func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicy
 
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
+	h.uvmReferenceInfo = securityPolicyRequest.EncodedUVMReference
 
 	return nil
 }

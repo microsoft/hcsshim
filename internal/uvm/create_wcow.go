@@ -49,6 +49,7 @@ type ConfidentialWCOWOptions struct {
 	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
 	SecurityPolicy         string // Optional security policy
 	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
+	UVMReferenceInfoFile   string // Path to the file that contains the signed UVM measurements
 
 	/* Below options are only included for testing/debugging purposes - shouldn't be used in regular scenarios */
 	IsolationType      string
@@ -88,6 +89,10 @@ func GetDefaultConfidentialBootCIMPath() string {
 
 func GetDefaultConfidentialEFIPath() string {
 	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "boot.vhd")
+}
+
+func GetDefaultReferenceInfoFilePath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "reference_info.cose")
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of

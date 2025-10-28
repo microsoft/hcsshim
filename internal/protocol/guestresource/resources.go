@@ -244,10 +244,5 @@ type LCOWSecurityPolicyFragment struct {
 type WCOWConfidentialOptions struct {
 	EnforcerType          string `json:"EnforcerType,omitempty"`
 	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
-	// Optional security policy
-	WCOWSecurityPolicy string
-	// Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	WCOWSecurityPolicyEnabled bool
-	// Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
-	WCOWSecurityPolicyEnforcer string
+	EncodedUVMReference   string `json:"EncodedUVMReference,omitempty"`
 }
