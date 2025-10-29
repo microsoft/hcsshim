@@ -26,7 +26,7 @@ var apiCodeTemplate string
 var APICode = strings.Replace(apiCodeTemplate, "@@API_VERSION@@", apiVersion, 1)
 var FrameworkCode = strings.Replace(frameworkCodeTemplate, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)
 
-var ErrInvalidOpenDoorPolicy = errors.New("allow_all cannot be set to 'true' when Containers are non-empty")
+var ErrInvalidOpenDoorPolicy = errors.New("Invalid policy for open-door enforcer")
 
 type EnvVarRule string
 

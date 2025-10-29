@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -29,7 +28,7 @@ func init() {
 	// are no race conditions. When multiple init functions are defined in a
 	// single package, the order of their execution is determined by the
 	// filename.
-	defaultEnforcer = regoEnforcerName
+	defaultConfidentialEnforcer = regoEnforcerName
 	defaultMarshaller = regoMarshaller
 }
 
@@ -102,6 +101,14 @@ func (a stringSet) intersect(b stringSet) stringSet {
 
 type inputData map[string]interface{}
 
+func isValidJsonObject(input string) bool {
+	type emptyStruct = struct{}
+
+	var body emptyStruct
+	err := json.Unmarshal([]byte(input), &body)
+	return err == nil
+}
+
 func createRegoEnforcer(base64EncodedPolicy string,
 	defaultMounts []oci.Mount,
 	privilegedMounts []oci.Mount,
@@ -114,87 +121,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 		return nil, fmt.Errorf("unable to decode policy from Base64 format: %w", err)
 	}
 
-	// Try to unmarshal the JSON
-
-	var code string
-	securityPolicy := new(SecurityPolicy)
-	err = json.Unmarshal(rawPolicy, securityPolicy)
-	if err == nil {
-		if securityPolicy.AllowAll {
-			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts, maxErrorMessageLength)
-		}
-
-		if osType == "linux" {
-			containers := make([]*Container, securityPolicy.Containers.Length)
-			for i := 0; i < securityPolicy.Containers.Length; i++ {
-				index := strconv.Itoa(i)
-				cConf, ok := securityPolicy.Containers.Elements[index]
-				if !ok {
-					return nil, fmt.Errorf("container constraint with index %q not found", index)
-				}
-				cConf.AllowStdioAccess = true
-				cConf.NoNewPrivileges = false
-				cConf.User = UserConfig{
-					UserIDName:   IDNameConfig{Strategy: IDNameStrategyAny},
-					GroupIDNames: []IDNameConfig{{Strategy: IDNameStrategyAny}},
-					Umask:        "0022",
-				}
-				cConf.SeccompProfileSHA256 = ""
-				containers[i] = &cConf
-			}
-
-			code, err = osAwareMarshalRego(
-				securityPolicy.AllowAll,
-				containers,
-				nil,
-				osType,
-				[]ExternalProcessConfig{},
-				[]FragmentConfig{},
-				true,
-				true,
-				true,
-				false,
-				true,
-				false,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
-			}
-		} else if osType == "windows" {
-			windows_containers := make([]*WindowsContainer, securityPolicy.Containers.Length)
-			for i := 0; i < securityPolicy.Containers.Length; i++ {
-				index := strconv.Itoa(i)
-				cConf, ok := securityPolicy.WindowsContainers.Elements[index]
-				if !ok {
-					return nil, fmt.Errorf("container constraint with index %q not found", index)
-				}
-				cConf.AllowStdioAccess = true
-				windows_containers[i] = &cConf
-			}
-
-			code, err = osAwareMarshalRego(
-				securityPolicy.AllowAll,
-				nil,
-				windows_containers,
-				osType,
-				[]ExternalProcessConfig{},
-				[]FragmentConfig{},
-				true,
-				true,
-				true,
-				false,
-				true,
-				false,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
-			}
-		}
-	} else {
-		// this is either a Rego policy or malformed JSON
-		code = string(rawPolicy)
-	}
-
+	code := string(rawPolicy)
 	regoPolicy, err := newRegoPolicy(code, defaultMounts, privilegedMounts, osType)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Rego policy: %w", err)
