@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -1239,7 +1238,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
+		// Generate a new random env var that will not be in the allowed list
+		envList := append(tc.envList, generateRandomEnvironmentVariable(testRand))
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
@@ -1247,7 +1247,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		return assertDecisionJSONContains(t, err, "invalid env list", envList[0])
+		problematicKey := strings.Split(envList[len(envList)-1], "=")[0]
+		return assertDecisionJSONContains(t, err, "invalid env list", problematicKey)
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1487,7 +1488,11 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
-		return err == nil
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		return true
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -3059,13 +3064,9 @@ exec_external := {
 	"env_list": ["%s"]
 }`
 
-	generateEnv := func(r *rand.Rand) string {
-		return randVariableString(r, maxGeneratedEnvironmentVariableRuleLength)
-	}
-
 	generateEnvs := func(envSet stringSet) []string {
 		numVars := atLeastOneAtMost(testRand, maxGeneratedEnvironmentVariableRules)
-		return envSet.randUniqueArray(testRand, generateEnv, numVars)
+		return envSet.randUniqueArray(testRand, generateRandomEnvironmentVariable, numVars)
 	}
 
 	testFunc := func(gc *generatedConstraints) bool {
@@ -3223,7 +3224,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 		// add a rule to re2 match
 		requiredRule := EnvRuleConfig{
 			Strategy: "string",
-			Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+			Rule:     generateRandomEnvironmentVariable(testRand),
 			Required: true,
 		}
 
@@ -7418,7 +7419,7 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 	container := selectContainerFromContainerList(constraints.containers, testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
-		Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+		Rule:     generateRandomEnvironmentVariable(testRand),
 		Required: true,
 	}
 
@@ -7672,7 +7673,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	container := selectContainerFromContainerList(constraints.containers, testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
@@ -7718,7 +7719,7 @@ func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testin
 func Test_Rego_ExecExternalProcessPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	process := generateExternalProcess(testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
