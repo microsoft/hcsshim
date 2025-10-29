@@ -191,7 +191,7 @@ func (gc *GuestConnection) ModifyServiceSettings(ctx context.Context, serviceTyp
 
 	req := prot.ServiceModificationRequest{
 		RequestBase:  makeRequest(ctx, nullContainerID),
-		PropertyType: serviceType.String(),
+		PropertyType: string(serviceType),
 		Settings:     settings,
 	}
 	var resp prot.ResponseBase

@@ -70,13 +70,11 @@ func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
 	if e.Fields["Source"] == "ETW" {
 		// Windows ETW log entry
 		// Original ETW Event Data may have "message" or "Message" field instead of "msg"
-
-		if e.Message == "" && e.Fields["message"] != nil {
-			e.Message = e.Fields["message"].(string)
+		if msg, ok := e.Fields["message"].(string); ok {
+			e.Message = msg
 			delete(e.Fields, "message")
-		}
-		if e.Message == "" && e.Fields["Message"] != nil {
-			e.Message = e.Fields["Message"].(string)
+		} else if msg, ok := e.Fields["Message"].(string); ok {
+			e.Message = msg
 			delete(e.Fields, "Message")
 		}
 	}

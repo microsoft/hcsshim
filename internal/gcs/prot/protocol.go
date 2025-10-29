@@ -124,20 +124,11 @@ const (
 	RPCModifyServiceSettings RPCProc = ComputeService | (iota+1)<<8 | 1
 )
 
-type ServiceModifyPropertyType uint32
+type ServiceModifyPropertyType string
 
 const (
-	LogForwardService ServiceModifyPropertyType = iota
+	LogForwardService = ServiceModifyPropertyType("LogForwardService")
 )
-
-func (m ServiceModifyPropertyType) String() string {
-	switch m {
-	case LogForwardService:
-		return "LogForwardService"
-	default:
-		return fmt.Sprintf("UnknownModifyServiceType(%d)", m)
-	}
-}
 
 func (rpc RPCProc) String() string {
 	switch rpc {
