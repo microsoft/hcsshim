@@ -73,7 +73,7 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer) *Host {
 // (ie fingerprint of a non leaf cert and the subject matches the leaf cert)
 // 3 - Check that this issuer/feed match the requirement of the user provided
 // security policy (done in the regoby LoadFragment)
-func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
+func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.SecurityPolicyFragment) (err error) {
 	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
 
 	raw, err := base64.StdEncoding.DecodeString(fragment.Fragment)
@@ -133,7 +133,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 	return nil
 }
 
-func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.WCOWConfidentialOptions, logWriter io.Writer) error {
+func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.ConfidentialOptions, logWriter io.Writer) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 
