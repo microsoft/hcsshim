@@ -266,11 +266,13 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 	}
 
 	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)
-	key := prot.WindowsLoggingHvsockServiceID.String()
-	doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable[key] = hcsschema.HvSocketServiceConfig{
-		AllowWildcardBinds:        true,
-		BindSecurityDescriptor:    "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
-		ConnectSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+	if opts.ForwardLogs {
+		key := prot.WindowsLoggingHvsockServiceID.String()
+		doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable[key] = hcsschema.HvSocketServiceConfig{
+			AllowWildcardBinds:        true,
+			BindSecurityDescriptor:    "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+			ConnectSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+		}
 	}
 
 	// Handle StorageQoS if set
@@ -551,14 +553,16 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
 
-	// Create a socket that the executed program can send to. This is usually
-	// used by Log Forward Service to send log data.
-	uvm.outputHandler = opts.OutputHandlerCreator(opts.Options)
-	uvm.outputProcessingDone = make(chan struct{})
-	uvm.outputListener, err = winio.ListenHvsock(&winio.HvsockAddr{
-		VMID:      uvm.RuntimeID(),
-		ServiceID: prot.WindowsLoggingHvsockServiceID,
-	})
+	if opts.ForwardLogs {
+		// Create a socket that the executed program can send to. This is usually
+		// used by Log Forward Service to send log data.
+		uvm.outputHandler = opts.OutputHandlerCreator(opts.Options)
+		uvm.outputProcessingDone = make(chan struct{})
+		uvm.outputListener, err = winio.ListenHvsock(&winio.HvsockAddr{
+			VMID:      uvm.RuntimeID(),
+			ServiceID: prot.WindowsLoggingHvsockServiceID,
+		})
+	}
 
 	gcsServiceID := prot.WindowsGcsHvsockServiceID
 	if opts.SecurityPolicyEnabled {

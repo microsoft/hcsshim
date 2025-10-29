@@ -70,13 +70,11 @@ func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
 	if e.Fields["Source"] == "ETW" {
 		// Windows ETW log entry
 		// Original ETW Event Data may have "message" or "Message" field instead of "msg"
-
-		if e.Message == "" && e.Fields["message"] != nil {
-			e.Message = e.Fields["message"].(string)
+		if msg, ok := e.Fields["message"].(string); ok {
+			e.Message = msg
 			delete(e.Fields, "message")
-		}
-		if e.Message == "" && e.Fields["Message"] != nil {
-			e.Message = e.Fields["Message"].(string)
+		} else if msg, ok := e.Fields["Message"].(string); ok {
+			e.Message = msg
 			delete(e.Fields, "Message")
 		}
 	}
@@ -220,33 +218,31 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			// For windows, the Listener can recieve a connection later, so we
 			// start the output handler in a goroutine with a non-timeout context.
 			// This allows the output handler to run independently of the UVM Create's
-			// lifecycle. This approach potentially allows to wait for reconnections,
+			// lifecycle. The approach potentially allows to wait for reconnections too,
 			// while limiting the number of concurrent connections to 1.
 			// This is useful for the case when logging service is restarted.
-			g.Go(func() error {
-				go func() {
-					var wg sync.WaitGroup
-					uvm.outputListener = netutil.LimitListener(uvm.outputListener, 1)
-					for {
-						conn, err := uvm.accept(context.Background(), uvm.outputListener, false)
-						if err != nil {
-							e.WithError(err).Error("failed to connect to log socket")
-							close(uvm.outputProcessingDone)
-							break
-						}
-						wg.Add(1)
-						go func() {
-							defer wg.Done()
-							e.Info("uvm output handler starting")
-							uvm.outputHandler(conn)
-						}()
-						e.Info("uvm output handler finished")
+			go func() {
+				var wg sync.WaitGroup
+				uvm.outputListener = netutil.LimitListener(uvm.outputListener, 1)
+				for {
+					conn, err := uvm.accept(context.WithoutCancel(ctx), uvm.outputListener, false)
+					if err != nil {
+						e.WithError(err).Error("failed to connect to log socket")
+						break
 					}
-					wg.Wait()
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						e.Info("uvm output handler starting")
+						uvm.outputHandler(conn)
+					}()
+					e.Info("uvm output handler finished")
+				}
+				wg.Wait()
+				if _, ok := <-uvm.outputProcessingDone; ok {
 					close(uvm.outputProcessingDone)
-				}()
-				return nil
-			})
+				}
+			}()
 		default:
 			// Default handling
 			g.Go(func() error {
