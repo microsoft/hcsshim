@@ -552,7 +552,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			log.G(ctx).Tracef("hcsschema.MappedDirectory { %v }", settings)
 
 		case guestresource.ResourceTypeSecurityPolicy:
-			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWConfidentialOptions)
+			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.ConfidentialOptions)
 			log.G(ctx).Tracef("WCOWConfidentialOptions: { %v}", securityPolicyRequest)
 			err := b.hostState.SetWCOWConfidentialUVMOptions(req.ctx, securityPolicyRequest, b.logWriter)
 			if err != nil {
@@ -569,10 +569,9 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			}
 			return nil
 		case guestresource.ResourceTypePolicyFragment:
-			//Note: Reusing the same type LCOWSecurityPolicyFragment for CWCOW.
-			r, ok := modifyGuestSettingsRequest.Settings.(*guestresource.LCOWSecurityPolicyFragment)
+			r, ok := modifyGuestSettingsRequest.Settings.(*guestresource.SecurityPolicyFragment)
 			if !ok {
-				return errors.New("the request settings are not of type LCOWSecurityPolicyFragment")
+				return errors.New("the request settings are not of type SecurityPolicyFragment")
 			}
 			return b.hostState.InjectFragment(ctx, r)
 		case guestresource.ResourceTypeWCOWBlockCims:
@@ -588,7 +587,6 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			// The block device takes some time to show up. Wait for a few seconds.
 			time.Sleep(2 * time.Second)
 
-			//TODO(Mahati) : test and verify CIM hashes
 			var layerCIMs []*cimfs.BlockCIM
 			layerHashes := make([]string, len(wcowBlockCimMounts.BlockCIMs))
 			layerDigests := make([][]byte, len(wcowBlockCimMounts.BlockCIMs))

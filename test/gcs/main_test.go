@@ -169,7 +169,7 @@ func getHostErr(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error)
 	h := hcsv2.NewHost(rt, tp, &securitypolicy.OpenDoorSecurityPolicyEnforcer{}, os.Stdout)
 	if err := h.SetConfidentialUVMOptions(
 		context.Background(),
-		&guestresource.LCOWConfidentialOptions{},
+		&guestresource.ConfidentialOptions{},
 	); err != nil {
 		return nil, fmt.Errorf("could not set host security policy: %w", err)
 	}

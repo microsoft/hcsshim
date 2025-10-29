@@ -114,13 +114,13 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 	}
 }
 
-// SetConfidentialUVMOptions takes guestresource.LCOWConfidentialOptions
+// SetConfidentialUVMOptions takes guestresource.ConfidentialOptions
 // to set up our internal data structures we use to store and enforce
 // security policy. The options can contain security policy enforcer type,
 // encoded security policy and signed UVM reference information The security
 // policy and uvm reference information can be further presented to workload
 // containers for validation and attestation purposes.
-func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
+func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.ConfidentialOptions) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 	if h.securityPolicyEnforcerSet {
@@ -182,7 +182,7 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 // (ie fingerprint of a non leaf cert and the subject matches the leaf cert)
 // 3 - Check that this issuer/feed match the requirement of the user provided
 // security policy (done in the regoby LoadFragment)
-func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
+func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.SecurityPolicyFragment) (err error) {
 	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
 	issuer, feed, payloadString, err := securitypolicy.ExtractAndVerifyFragment(ctx, fragment)
 	if err != nil {
@@ -787,15 +787,15 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	case guestresource.ResourceTypeSecurityPolicy:
-		r, ok := req.Settings.(*guestresource.LCOWConfidentialOptions)
+		r, ok := req.Settings.(*guestresource.ConfidentialOptions)
 		if !ok {
-			return errors.New("the request's settings are not of type LCOWConfidentialOptions")
+			return errors.New("the request's settings are not of type ConfidentialOptions")
 		}
 		return h.SetConfidentialUVMOptions(ctx, r)
 	case guestresource.ResourceTypePolicyFragment:
-		r, ok := req.Settings.(*guestresource.LCOWSecurityPolicyFragment)
+		r, ok := req.Settings.(*guestresource.SecurityPolicyFragment)
 		if !ok {
-			return errors.New("the request settings are not of type LCOWSecurityPolicyFragment")
+			return errors.New("the request settings are not of type SecurityPolicyFragment")
 		}
 		return h.InjectFragment(ctx, r)
 	default:
