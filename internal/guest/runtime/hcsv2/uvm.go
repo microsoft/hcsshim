@@ -502,23 +502,19 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			return nil, errors.Errorf("teeing container stdio to log path %q denied due to policy not allowing stdio access", logPath)
 		}
 
-		logPath = specGuest.SandboxLogPath(sandboxID, logPath)
+		c.logPath = specGuest.SandboxLogPath(sandboxID, logPath)
 		// verify the logpath is still under the correct directory
-		if !strings.HasPrefix(logPath, specGuest.SandboxLogsDir(sandboxID)) {
-			return nil, errors.Errorf("log path %v is not within sandbox's log dir", logPath)
+		if !strings.HasPrefix(c.logPath, specGuest.SandboxLogsDir(sandboxID)) {
+			return nil, errors.Errorf("log path %v is not within sandbox's log dir", c.logPath)
 		}
 
+		dir := filepath.Dir(c.logPath)
 		log.G(ctx).WithFields(logrus.Fields{
-			logfields.Path:        logPath,
+			logfields.Path:        dir,
 			logfields.ContainerID: id,
-		}).Debug("creating container log file in uVM")
-		dir := filepath.Dir(logPath)
+		}).Debug("creating container log file parent directory in uVM")
 		if err := mkdirAllModePerm(dir); err != nil {
 			return nil, errors.Wrapf(err, "failed to create log file parent directory: %s", dir)
-		}
-		// don't use [os.Create] since that truncates an existing file, which is not desired
-		if c.logFile, err = os.OpenFile(logPath, os.O_RDWR|os.O_CREATE, 0666); err != nil {
-			return nil, errors.Wrapf(err, "failed to create log file: %s", logPath)
 		}
 	}
 

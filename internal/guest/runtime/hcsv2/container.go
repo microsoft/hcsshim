@@ -48,7 +48,8 @@ type Container struct {
 	id string
 
 	vsock   transport.Transport
-	logFile *os.File
+	logPath string   // path to [logFile].
+	logFile *os.File // file to redirect container's stdio to.
 
 	spec          *oci.Spec
 	ociBundlePath string
@@ -77,14 +78,37 @@ type Container struct {
 	scratchDirPath string
 }
 
-func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
-	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::Start")
+func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (_ int, err error) {
+	entity := log.G(ctx).WithField(logfields.ContainerID, c.id)
+	entity.Info("opengcs::Container::Start")
 
 	// only use the logfile for the init process, since we don't want to tee stdio of execs
 	t := c.vsock
-	if c.logFile != nil {
+	if c.logPath != "" {
+		// don't use [os.Create] since that truncates an existing file, which is not desired
+		if c.logFile, err = os.OpenFile(c.logPath, os.O_RDWR|os.O_CREATE, 0666); err != nil {
+			return -1, fmt.Errorf("failed to open log file: %s: %w", c.logPath, err)
+		}
+		go func() {
+			// initProcess is already created in [(*Host).CreateContainer], and is, therefore, "waitable"
+			// wait in `writersWg`, which is closed after process is cleaned up (including io Relays)
+			//
+			// Note: [PipeRelay] and [TtyRelay] are not safe to call multiple times, so it is safer to wait
+			// on the parent (init) process.
+			c.initProcess.writersWg.Wait()
+
+			if lfErr := c.logFile.Close(); lfErr != nil {
+				entity.WithFields(logrus.Fields{
+					logrus.ErrorKey: lfErr,
+					logfields.Path:  c.logFile.Name(),
+				}).Warn("failed to close log file")
+			}
+			c.logFile = nil
+		}()
+
 		t = transport.NewMultiWriter(c.vsock, c.logFile)
 	}
+
 	stdioSet, err := stdio.Connect(t, conSettings)
 	if err != nil {
 		return -1, err
@@ -189,24 +213,12 @@ func (c *Container) GetAllProcessPids(ctx context.Context) ([]int, error) {
 
 // Kill sends 'signal' to the container process.
 func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
-	entity := log.G(ctx).WithField(logfields.ContainerID, c.id)
-	entity.Info("opengcs::Container::Kill")
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::Kill")
 	err := c.container.Kill(signal)
 	if err != nil {
 		return err
 	}
-
 	c.setExitType(signal)
-	if c.logFile != nil {
-		if err = c.logFile.Close(); err != nil {
-			entity.WithFields(logrus.Fields{
-				logrus.ErrorKey: err,
-				logfields.Path:  c.logFile.Name(),
-			}).Warn("failed to close log file")
-		}
-		c.logFile = nil
-	}
-
 	return nil
 }
 
