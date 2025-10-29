@@ -107,6 +107,14 @@ type EnvRuleConfig struct {
 	Strategy EnvVarRule `json:"strategy" toml:"strategy"`
 	Rule     string     `json:"rule" toml:"rule"`
 	Required bool       `json:"required" toml:"required"`
+
+	// If UseNameValue is true, the marshalled Rego will use rules with name and
+	// value separately, and ignore .Rule and .Strategy.
+	UseNameValue  bool
+	Name          string
+	NameStrategy  EnvVarRule
+	Value         string
+	ValueStrategy EnvVarRule
 }
 
 type IDNameConfig struct {
