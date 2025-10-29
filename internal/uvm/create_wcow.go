@@ -12,6 +12,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/go-winio/vhd"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -29,6 +30,18 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+)
+
+var (
+	// A predefined GUID for UtilityVMs to identify a scratch VHD that is completely empty/unformatted.
+	// This GUID is set in the metadata of the VHD and thus can be reliably used to identify the disk.
+	// a7b3c5d1-4e2f-4a8b-9c6d-1e3f5a7b9c2d
+	unformattedScratchIdentifier = &guid.GUID{
+		Data1: 0xa7b3c5d1,
+		Data2: 0x4e2f,
+		Data3: 0x4a8b,
+		Data4: [8]byte{0x9c, 0x6d, 0x1e, 0x3f, 0x5a, 0x7b, 0x9c, 0x2d},
+	}
 )
 
 type ConfidentialWCOWOptions struct {
@@ -404,6 +417,10 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 
 	if err := wclayer.GrantVmAccess(ctx, uvm.id, opts.BootFiles.BlockCIMFiles.ScratchVHDPath); err != nil {
 		return nil, errors.Wrap(err, "failed to grant vm access to scratch VHD")
+	}
+
+	if err = vhd.SetVirtualDiskIdentifier(opts.BootFiles.BlockCIMFiles.ScratchVHDPath, *unformattedScratchIdentifier); err != nil {
+		return nil, fmt.Errorf("set scratch VHD identifier: %w", err)
 	}
 
 	// boot depends on scratch being attached at LUN 0, it MUST ALWAYS remain at LUN 0

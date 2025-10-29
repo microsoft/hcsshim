@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/Microsoft/cosesign1go v1.4.0
 	github.com/Microsoft/didx509go v0.0.3
-	github.com/Microsoft/go-winio v0.6.2
+	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/containerd/cgroups/v3 v3.0.5
