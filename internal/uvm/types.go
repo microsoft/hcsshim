@@ -146,6 +146,9 @@ type UtilityVM struct {
 	// ref counting for block CIMs
 	blockCIMMounts    map[string]*UVMMountedBlockCIMs
 	blockCIMMountLock sync.Mutex
+
+	forwardLogs bool   // Indicates whether to forward logs from the UVM to the host
+	logSources  string // ETW providers to enable for log forwarding
 }
 
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
