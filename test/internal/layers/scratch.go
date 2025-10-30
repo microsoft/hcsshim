@@ -69,7 +69,7 @@ func WCOWScratchDir(ctx context.Context, tb testing.TB, dir string) string {
 	return dir
 }
 
-func newTestTempDir(ctx context.Context, tb testing.TB, name string) string {
+func newTestTempDir(_ context.Context, tb testing.TB, name string) string {
 	tb.Helper()
 	dir, err := tempDirOnce()
 	if err != nil {
@@ -77,7 +77,7 @@ func newTestTempDir(ctx context.Context, tb testing.TB, name string) string {
 	}
 
 	if name == "" {
-		name = util.CleanName(tb.Name())
+		name = util.CleanName(tb)
 	}
 	dir, err = os.MkdirTemp(dir, name)
 	if err != nil {

@@ -303,7 +303,7 @@ func defaultWCOWOptions(ctx context.Context, tb testing.TB) *uvm.OptionsWCOW {
 func testName(tb testing.TB, xs ...any) string {
 	tb.Helper()
 
-	return util.CleanName(tb.Name()) + util.RandNameSuffix(xs...)
+	return util.CleanName(tb) + util.RandNameSuffix(xs...)
 }
 
 // linuxImageLayers returns image layer paths appropriate for use as a container rootfs.
