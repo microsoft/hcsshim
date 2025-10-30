@@ -33,6 +33,9 @@ func mkdirAllModePerm(target string) error {
 }
 
 func updateSandboxMounts(sbid string, spec *oci.Spec) error {
+	// Check if this is a virtual pod
+	virtualSandboxID := spec.Annotations[annotations.VirtualPodID]
+
 	for i, m := range spec.Mounts {
 		if !strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) &&
 			!strings.HasPrefix(m.Source, guestpath.SandboxTmpfsMountPrefix) {
@@ -42,18 +45,23 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 		var sandboxSource string
 		// if using `sandbox-tmp://` prefix, we mount a tmpfs in sandboxTmpfsMountsDir
 		if strings.HasPrefix(m.Source, guestpath.SandboxTmpfsMountPrefix) {
-			sandboxSource = specGuest.SandboxTmpfsMountSource(sbid, m.Source)
-			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
-			// Hence, we need to ensure that the resolved path is still under the correct directory
-			if !strings.HasPrefix(sandboxSource, specGuest.SandboxTmpfsMountsDir(sbid)) {
-				return errors.Errorf("mount path %v for mount %v is not within sandboxTmpfsMountsDir", sandboxSource, m.Source)
-			}
+			// Use virtual pod aware mount source
+			sandboxSource = specGuest.VirtualPodAwareSandboxTmpfsMountSource(sbid, virtualSandboxID, m.Source)
+			expectedMountsDir := specGuest.VirtualPodAwareSandboxTmpfsMountsDir(sbid, virtualSandboxID)
 
-		} else {
-			sandboxSource = specGuest.SandboxMountSource(sbid, m.Source)
 			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
 			// Hence, we need to ensure that the resolved path is still under the correct directory
-			if !strings.HasPrefix(sandboxSource, specGuest.SandboxMountsDir(sbid)) {
+			if !strings.HasPrefix(sandboxSource, expectedMountsDir) {
+				return errors.Errorf("mount path %v for mount %v is not within sandbox's tmpfs mounts dir", sandboxSource, m.Source)
+			}
+		} else {
+			// Use virtual pod aware mount source
+			sandboxSource = specGuest.VirtualPodAwareSandboxMountSource(sbid, virtualSandboxID, m.Source)
+			expectedMountsDir := specGuest.VirtualPodAwareSandboxMountsDir(sbid, virtualSandboxID)
+
+			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
+			// Hence, we need to ensure that the resolved path is still under the correct directory
+			if !strings.HasPrefix(sandboxSource, expectedMountsDir) {
 				return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
 			}
 		}
@@ -71,11 +79,16 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 }
 
 func updateHugePageMounts(sbid string, spec *oci.Spec) error {
+	// Check if this is a virtual pod
+	virtualSandboxID := spec.Annotations[annotations.VirtualPodID]
+
 	for i, m := range spec.Mounts {
 		if !strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
 			continue
 		}
-		mountsDir := specGuest.HugePagesMountsDir(sbid)
+
+		// Use virtual pod aware hugepages directory
+		mountsDir := specGuest.VirtualPodAwareHugePagesMountsDir(sbid, virtualSandboxID)
 		subPath := strings.TrimPrefix(m.Source, guestpath.HugePagesMountPrefix)
 		pageSize := strings.Split(subPath, string(os.PathSeparator))[0]
 		hugePageMountSource := filepath.Join(mountsDir, subPath)
@@ -224,8 +237,17 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		}
 	}
 
-	// Force the parent cgroup into our /containers root
-	spec.Linux.CgroupsPath = "/containers/" + id
+	// Check if this is a virtual pod container
+	virtualPodID := spec.Annotations[annotations.VirtualPodID]
+
+	// Set cgroup path - check if this is a virtual pod container
+	if virtualPodID != "" {
+		// Virtual pod containers go under /containers/virtual-pods/virtualPodID/containerID
+		spec.Linux.CgroupsPath = "/containers/virtual-pods/" + virtualPodID + "/" + id
+	} else {
+		// Regular containers go under /containers
+		spec.Linux.CgroupsPath = "/containers/" + id
+	}
 
 	if spec.Windows != nil {
 		// we only support Nvidia gpus right now
