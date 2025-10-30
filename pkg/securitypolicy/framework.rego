@@ -242,12 +242,59 @@ command_ok(command) {
     }
 }
 
-env_ok(pattern, "string", value) {
+# An env rule can be of two forms:
+# {
+#   "pattern": "name=value",
+#   "strategy": "string" | "re2"
+# }
+# or
+# {
+#   "name": "name_pattern",
+#   "name_strategy": "string" | "re2",
+#   "value": "value_pattern",
+#   "value_strategy": "string" | "re2"
+# }
+
+# env_pattern_ok(pattern, strategy, value) tests whether the given string
+# pattern matches the input value.
+
+env_pattern_ok(pattern, "string", value) {
     pattern == value
 }
 
-env_ok(pattern, "re2", value) {
+env_pattern_ok(pattern, "re2", value) {
     regex.match(anchor_pattern(pattern), value)
+}
+
+# env_rule_ok accepts both forms of env rules described above, and matches it
+# against the given env string (of form name=value).
+
+env_rule_ok(rule, env) {
+    pattern := object.get(rule, "pattern", null)
+    strategy := object.get(rule, "strategy", null)
+    pattern != null
+    strategy != null
+    env_pattern_ok(pattern, strategy, env)
+}
+
+env_rule_ok(rule, env) {
+    rule_name := object.get(rule, "name", null)
+    name_strategy := object.get(rule, "name_strategy", null)
+    rule_value := object.get(rule, "value", null)
+    value_strategy := object.get(rule, "value_strategy", null)
+    rule_name != null
+    name_strategy != null
+    rule_value != null
+    value_strategy != null
+
+    # Split the env into name and value (value can contain '=', name cannot)
+    eq_idx := indexof(env, "=")
+    eq_idx >= 0
+    env_name := substring(env, 0, eq_idx)
+    env_value := substring(env, eq_idx + 1, -1)
+
+    env_pattern_ok(rule_name, name_strategy, env_name)
+    env_pattern_ok(rule_value, value_strategy, env_value)
 }
 
 rule_ok(rule, env) {
@@ -256,7 +303,7 @@ rule_ok(rule, env) {
 
 rule_ok(rule, env) {
     rule.required
-    env_ok(rule.pattern, rule.strategy, env)
+    env_rule_ok(rule, env)
 }
 
 envList_ok(env_rules, envList) {
@@ -267,7 +314,7 @@ envList_ok(env_rules, envList) {
 
     every env in envList {
         some rule in env_rules
-        env_ok(rule.pattern, rule.strategy, env)
+        env_rule_ok(rule, env)
     }
 }
 
@@ -275,7 +322,7 @@ valid_envs_subset(env_rules) := envs {
     envs := {env |
         some env in input.envList
         some rule in env_rules
-        env_ok(rule.pattern, rule.strategy, env)
+        env_rule_ok(rule, env)
     }
 }
 
@@ -1606,14 +1653,14 @@ env_matches(env) {
     input.rule in ["create_container", "exec_in_container"]
     some container in data.metadata.matches[input.containerID]
     some rule in container.env_rules
-    env_ok(rule.pattern, rule.strategy, env)
+    env_rule_ok(rule, env)
 }
 
 env_matches(env) {
     input.rule in ["exec_external"]
     some process in candidate_external_processes
     some rule in process.env_rules
-    env_ok(rule.pattern, rule.strategy, env)
+    env_rule_ok(rule, env)
 }
 
 errors[envError] {
@@ -1631,7 +1678,7 @@ errors[envError] {
 
 env_rule_matches(rule) {
     some env in input.envList
-    env_ok(rule.pattern, rule.strategy, env)
+    env_rule_ok(rule, env)
 }
 
 errors["missing required environment variable"] {
