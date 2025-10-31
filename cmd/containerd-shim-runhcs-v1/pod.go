@@ -171,7 +171,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 
 	var parent *uvm.UtilityVM
 	var lopts *uvm.OptionsLCOW
-	if oci.IsIsolated(s) || oci.IsIsolatedJobContainer(s) {
+	if oci.IsIsolated(s) {
 		// Create the UVM parent
 		opts, err := oci.SpecToUVMCreateOpts(ctx, s, fmt.Sprintf("%s@vm", req.ID), owner)
 		if err != nil {
