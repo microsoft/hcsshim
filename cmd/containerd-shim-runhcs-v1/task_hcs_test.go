@@ -332,7 +332,6 @@ func Test_handleProcessArgsForIsolatedJobContainer(t *testing.T) {
 		specs            *specs.Process
 		expectedCmdLine  string
 		expectedArgs     []string
-		initialUsername  string
 		expectedUsername string
 	}{
 		{
@@ -454,10 +453,6 @@ func Test_handleProcessArgsForIsolatedJobContainer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			taskSpec := &specs.Spec{Annotations: tt.taskAnnotations}
-			// Ensure initial Username is set if provided
-			if tt.initialUsername != "" {
-				tt.specs.User.Username = tt.initialUsername
-			}
 
 			handleProcessArgsForIsolatedJobContainer(taskSpec, tt.specs)
 
