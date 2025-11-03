@@ -26,14 +26,9 @@ import (
 )
 
 type Host struct {
+	securityOptions *securitypolicy.SecurityOptions
 	containersMutex sync.Mutex
 	containers      map[string]*Container
-
-	// state required for the security policy enforcement
-	policyMutex               sync.Mutex
-	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
-	securityPolicyEnforcerSet bool
-	uvmReferenceInfo          string
 }
 
 type Container struct {
@@ -55,10 +50,14 @@ type containerProcess struct {
 }
 
 func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer) *Host {
+	securityPolicyOptions := securitypolicy.NewSecurityOptions(
+		initialEnforcer,
+		false,
+		"",
+	)
 	return &Host{
-		containers:                make(map[string]*Container),
-		securityPolicyEnforcer:    initialEnforcer,
-		securityPolicyEnforcerSet: false,
+		containers:      make(map[string]*Container),
+		securityOptions: securityPolicyOptions,
 	}
 }
 
@@ -126,7 +125,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.Secur
 		return err
 	}
 	// now offer the payload fragment to the policy
-	err = h.securityPolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
+	err = h.securityOptions.PolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
 	if err != nil {
 		return fmt.Errorf("error loading security policy fragment: %w", err)
 	}
@@ -134,13 +133,6 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.Secur
 }
 
 func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.ConfidentialOptions, logWriter io.Writer) error {
-	h.policyMutex.Lock()
-	defer h.policyMutex.Unlock()
-
-	if h.securityPolicyEnforcerSet {
-		return errors.New("security policy has already been set")
-	}
-
 	if err := pspdriver.GetPspDriverError(); err != nil {
 		// For this case gcs-sidecar will keep initial deny policy.
 		return errors.Wrapf(err, "an error occurred while using PSP driver")
@@ -157,32 +149,19 @@ func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicy
 		return err
 	}
 
-	// This limit ensures messages are below the character truncation limit that
-	// can be imposed by an orchestrator
-	maxErrorMessageLength := 3 * 1024
-
-	// Initialize security policy enforcer for a given enforcer type and
-	// encoded security policy.
-	p, err := securitypolicy.CreateSecurityPolicyEnforcer(
+	if err := h.securityOptions.SetConfidentialOptions(ctx,
 		securityPolicyRequest.EnforcerType,
 		securityPolicyRequest.EncodedSecurityPolicy,
-		DefaultCRIMounts(),
-		DefaultCRIPrivilegedMounts(),
-		maxErrorMessageLength,
-	)
-	if err != nil {
-		return fmt.Errorf("error creating security policy enforcer: %w", err)
+		securityPolicyRequest.EncodedUVMReference,
+	); err != nil {
+		return errors.Wrapf(err, "SetWCOWConfidentialUVMOptions failed to set security options")
 	}
 
-	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
+	if err = h.securityOptions.PolicyEnforcer.EnforceRuntimeLoggingPolicy(ctx); err == nil {
 		logrus.SetOutput(logWriter)
 	} else {
 		logrus.SetOutput(io.Discard)
 	}
-
-	h.securityPolicyEnforcer = p
-	h.securityPolicyEnforcerSet = true
-	h.uvmReferenceInfo = securityPolicyRequest.EncodedUVMReference
 
 	return nil
 }
