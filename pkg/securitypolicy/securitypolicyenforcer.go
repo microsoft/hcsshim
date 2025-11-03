@@ -40,7 +40,6 @@ type CreateContainerOptions struct {
 	Capabilities         *oci.LinuxCapabilities
 	SeccompProfileSHA256 string
 }
-
 type SignalContainerOptions struct {
 	IsInitProcess bool
 	// One of these will be set depending on platform
