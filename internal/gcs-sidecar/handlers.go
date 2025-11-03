@@ -618,7 +618,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			if !ok {
 				return errors.New("the request settings are not of type SecurityPolicyFragment")
 			}
-			return b.hostState.InjectFragment(ctx, r)
+			return b.hostState.securityOptions.InjectFragment(ctx, r)
 		case guestresource.ResourceTypeWCOWBlockCims:
 			// This is request to mount the merged cim at given volumeGUID
 			if modifyGuestSettingsRequest.RequestType == guestrequest.RequestTypeRemove {
