@@ -5,7 +5,6 @@ package bridge
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,10 +14,8 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	oci "github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/pspdriver"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -60,77 +57,6 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 		containers:      make(map[string]*Container),
 		securityOptions: securityPolicyOptions,
 	}
-}
-
-// Write security policy, signed UVM reference and host AMD certificate to
-// container's rootfs, so that application and sidecar containers can have
-// access to it. The security policy is required by containers which need to
-// extract init-time claims found in the security policy. The directory path
-// containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
-// It may be an error to have a security policy but not expose it to the
-// container as in that case it can never be checked as correct by a verifier.
-func (h *Host) SetupSecurityContextDir(ctx context.Context, spec *specs.Spec) error {
-	if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-		encodedPolicy := h.securityPolicyEnforcer.EncodedSecurityPolicy()
-		hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-		if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(h.uvmReferenceInfo) > 0 {
-			// Use os.MkdirTemp to make sure that the directory is unique.
-			securityContextDir, err := os.MkdirTemp(spec.Root.Path, securitypolicy.SecurityContextDirTemplate)
-			if err != nil {
-				return fmt.Errorf("failed to create security context directory: %w", err)
-			}
-			// Make sure that files inside directory are readable
-			if err := os.Chmod(securityContextDir, 0755); err != nil {
-				return fmt.Errorf("failed to chmod security context directory: %w", err)
-			}
-
-			if len(encodedPolicy) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0777); err != nil {
-					return fmt.Errorf("failed to write security policy: %w", err)
-				}
-			}
-			if len(h.uvmReferenceInfo) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(h.uvmReferenceInfo), 0777); err != nil {
-					return fmt.Errorf("failed to write UVM reference info: %w", err)
-				}
-			}
-
-			if len(hostAMDCert) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0777); err != nil {
-					return fmt.Errorf("failed to write host AMD certificate: %w", err)
-				}
-			}
-
-			containerCtxDir := fmt.Sprintf("/%s", filepath.Base(securityContextDir))
-			secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
-			spec.Process.Env = append(spec.Process.Env, secCtxEnv)
-		}
-	}
-	return nil
-}
-
-// InjectFragment extends current security policy with additional constraints
-// from the incoming fragment. Note that it is base64 encoded over the bridge/
-//
-// There are three checking steps:
-// 1 - Unpack the cose document and check it was actually signed with the cert
-// chain inside its header
-// 2 - Check that the issuer field did:x509 identifier is for that cert chain
-// (ie fingerprint of a non leaf cert and the subject matches the leaf cert)
-// 3 - Check that this issuer/feed match the requirement of the user provided
-// security policy (done in the regoby LoadFragment)
-func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.SecurityPolicyFragment) (err error) {
-	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
-	issuer, feed, payloadString, err := securitypolicy.ExtractAndVerifyFragment(ctx, fragment)
-	if err != nil {
-		return err
-	}
-	// now offer the payload fragment to the policy
-	err = h.securityOptions.PolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
-	if err != nil {
-		return fmt.Errorf("error loading security policy fragment: %w", err)
-	}
-	return nil
 }
 
 func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.ConfidentialOptions) error {
