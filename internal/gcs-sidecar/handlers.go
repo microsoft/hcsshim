@@ -84,7 +84,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}
-		_, _, _, err := b.hostState.securityPolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
+		_, _, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
 
 		if err != nil {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
@@ -112,9 +112,9 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		// It may be an error to have a security policy but not expose it to the
 		// container as in that case it can never be checked as correct by a verifier.
 		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-			encodedPolicy := b.hostState.securityPolicyEnforcer.EncodedSecurityPolicy()
+			encodedPolicy := b.hostState.securityOptions.PolicyEnforcer.EncodedSecurityPolicy()
 			hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-			if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(b.hostState.uvmReferenceInfo) > 0 {
+			if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(b.hostState.securityOptions.UvmReferenceInfo) > 0 {
 				// Use os.MkdirTemp to make sure that the directory is unique.
 				securityContextDir, err := os.MkdirTemp(spec.Root.Path, securitypolicy.SecurityContextDirTemplate)
 				if err != nil {
@@ -130,8 +130,8 @@ func (b *Bridge) createContainer(req *request) (err error) {
 						return fmt.Errorf("failed to write security policy: %w", err)
 					}
 				}
-				if len(b.hostState.uvmReferenceInfo) > 0 {
-					if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(b.hostState.uvmReferenceInfo), 0777); err != nil {
+				if len(b.hostState.securityOptions.UvmReferenceInfo) > 0 {
+					if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(b.hostState.securityOptions.UvmReferenceInfo), 0777); err != nil {
 						return fmt.Errorf("failed to write UVM reference info: %w", err)
 					}
 				}
@@ -242,7 +242,7 @@ func (b *Bridge) shutdownGraceful(req *request) (err error) {
 		return fmt.Errorf("failed to unmarshal shutdownGraceful: %w", err)
 	}
 
-	err = b.hostState.securityPolicyEnforcer.EnforceShutdownContainerPolicy(req.ctx, r.ContainerID)
+	err = b.hostState.securityOptions.PolicyEnforcer.EnforceShutdownContainerPolicy(req.ctx, r.ContainerID)
 	if err != nil {
 		return fmt.Errorf("rpcShudownGraceful operation not allowed: %w", err)
 	}
@@ -295,7 +295,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 
 	if containerID == UVMContainerID {
 		log.G(req.ctx).Tracef("Enforcing policy on external exec process")
-		_, _, err := b.hostState.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
+		_, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
 			req.ctx,
 			commandLine,
 			processParamEnvToOCIEnv(processParams.Environment),
@@ -323,7 +323,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			}
 
 			log.G(req.ctx).Tracef("Enforcing policy on exec in container")
-			_, _, _, err = b.hostState.securityPolicyEnforcer.
+			_, _, _, err = b.hostState.securityOptions.PolicyEnforcer.
 				EnforceExecInContainerPolicyV2(
 					req.ctx,
 					containerID,
@@ -432,7 +432,7 @@ func (b *Bridge) signalProcess(req *request) (err error) {
 			WindowsSignal:  wcowOptions.Signal,
 			WindowsCommand: commandLine,
 		}
-		err = b.hostState.securityPolicyEnforcer.EnforceSignalContainerProcessPolicyV2(req.ctx, containerID, opts)
+		err = b.hostState.securityOptions.PolicyEnforcer.EnforceSignalContainerProcessPolicyV2(req.ctx, containerID, opts)
 		if err != nil {
 			return err
 		}
@@ -461,7 +461,7 @@ func (b *Bridge) getProperties(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	if err := b.hostState.securityPolicyEnforcer.EnforceGetPropertiesPolicy(req.ctx); err != nil {
+	if err := b.hostState.securityOptions.PolicyEnforcer.EnforceGetPropertiesPolicy(req.ctx); err != nil {
 		return errors.Wrapf(err, "get properties denied due to policy")
 	}
 
@@ -669,7 +669,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				hashesToVerify = layerHashes[1:]
 			}
 
-			err := b.hostState.securityPolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
+			err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
 			if err != nil {
 				return errors.Wrap(err, "CIM mount is denied by policy")
 			}
@@ -709,7 +709,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
 			//Since unencrypted scratch is not an option, always pass true
-			if err := b.hostState.securityPolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
+			if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
 				return fmt.Errorf("scratch mounting denied by policy: %w", err)
 			}
 			// The following two folders are expected to be present in the scratch.
