@@ -3,28 +3,28 @@ package securitypolicy
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type SecurityOptions struct {
 	// state required for the security policy enforcement
-	PolicyEnforcer        SecurityPolicyEnforcer
-	PolicyEnforcerSet     bool
-	UvmReferenceInfo      string
-	policyMutex           sync.Mutex
-	EnforcerType          string
-	EncodedSecurityPolicy string
+	PolicyEnforcer    SecurityPolicyEnforcer
+	PolicyEnforcerSet bool
+	UvmReferenceInfo  string
+	policyMutex       sync.Mutex
+	logWriter         io.Writer
 }
 
-func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string) *SecurityOptions {
+func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, logWriter io.Writer) *SecurityOptions {
 	return &SecurityOptions{
-		PolicyEnforcer:        enforcer,
-		PolicyEnforcerSet:     enforcerSet,
-		UvmReferenceInfo:      uvmReferenceInfo,
-		EnforcerType:          "",
-		EncodedSecurityPolicy: "",
+		PolicyEnforcer:    enforcer,
+		PolicyEnforcerSet: enforcerSet,
+		UvmReferenceInfo:  uvmReferenceInfo,
+		logWriter:         logWriter,
 	}
 }
 
@@ -50,6 +50,18 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	)
 	if err != nil {
 		return fmt.Errorf("error creating security policy enforcer: %w", err)
+	}
+
+	// This is one of two points at which we might change our logging.
+	// At this time, we now have a policy and can determine what the policy
+	// author put as policy around runtime logging.
+	// The other point is on startup where we take a flag to set the default
+	// policy enforcer to use before a policy arrives. After that flag is set,
+	// we use the enforcer in question to set up logging as well.
+	if err = s.PolicyEnforcer.EnforceRuntimeLoggingPolicy(ctx); err == nil {
+		logrus.SetOutput(s.logWriter)
+	} else {
+		logrus.SetOutput(io.Discard)
 	}
 
 	s.PolicyEnforcer = p
