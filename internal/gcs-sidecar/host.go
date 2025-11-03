@@ -49,11 +49,12 @@ type containerProcess struct {
 	pid uint32
 }
 
-func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer) *Host {
+func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
 	securityPolicyOptions := securitypolicy.NewSecurityOptions(
 		initialEnforcer,
 		false,
 		"",
+		logWriter,
 	)
 	return &Host{
 		containers:      make(map[string]*Container),
@@ -132,7 +133,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.Secur
 	return nil
 }
 
-func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.ConfidentialOptions, logWriter io.Writer) error {
+func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.ConfidentialOptions) error {
 	if err := pspdriver.GetPspDriverError(); err != nil {
 		// For this case gcs-sidecar will keep initial deny policy.
 		return errors.Wrapf(err, "an error occurred while using PSP driver")
@@ -155,12 +156,6 @@ func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicy
 		securityPolicyRequest.EncodedUVMReference,
 	); err != nil {
 		return errors.Wrapf(err, "SetWCOWConfidentialUVMOptions failed to set security options")
-	}
-
-	if err = h.securityOptions.PolicyEnforcer.EnforceRuntimeLoggingPolicy(ctx); err == nil {
-		logrus.SetOutput(logWriter)
-	} else {
-		logrus.SetOutput(io.Discard)
 	}
 
 	return nil

@@ -18,6 +18,17 @@ import (
 //nolint:unused
 const osType = "linux"
 
+func ExtendPolicyWithNetworkingMounts(sandboxID string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {
+	roSpec := &oci.Spec{
+		Root: spec.Root,
+	}
+	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
+	if err := enforcer.ExtendDefaultMounts(networkingMounts); err != nil {
+		return err
+	}
+	return nil
+}
+
 func DefaultCRIMounts() []oci.Mount {
 	return []oci.Mount{
 		{
