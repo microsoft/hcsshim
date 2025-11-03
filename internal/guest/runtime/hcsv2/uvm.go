@@ -139,30 +139,6 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.C
 	return nil
 }
 
-// InjectFragment extends current security policy with additional constraints
-// from the incoming fragment. Note that it is base64 encoded over the bridge/
-//
-// There are three checking steps:
-// 1 - Unpack the cose document and check it was actually signed with the cert
-// chain inside its header
-// 2 - Check that the issuer field did:x509 identifier is for that cert chain
-// (ie fingerprint of a non leaf cert and the subject matches the leaf cert)
-// 3 - Check that this issuer/feed match the requirement of the user provided
-// security policy (done in the regoby LoadFragment)
-func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.SecurityPolicyFragment) (err error) {
-	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
-	issuer, feed, payloadString, err := securitypolicy.ExtractAndVerifyFragment(ctx, fragment)
-	if err != nil {
-		return err
-	}
-	// now offer the payload fragment to the policy
-	err = h.securityOptions.PolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
-	if err != nil {
-		return fmt.Errorf("error loading security policy fragment: %w", err)
-	}
-	return nil
-}
-
 func (h *Host) SecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
 	return h.securityOptions.PolicyEnforcer
 }
@@ -764,7 +740,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		if !ok {
 			return errors.New("the request settings are not of type SecurityPolicyFragment")
 		}
-		return h.InjectFragment(ctx, r)
+		return h.securityOptions.InjectFragment(ctx, r)
 	default:
 		return errors.Errorf("the ResourceType %q is not supported for UVM", req.ResourceType)
 	}
