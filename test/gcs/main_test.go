@@ -22,7 +22,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 
 	"github.com/Microsoft/hcsshim/test/internal/util"
@@ -167,9 +166,9 @@ func getHost(_ context.Context, tb testing.TB, rt runtime.Runtime) *hcsv2.Host {
 
 func getHostErr(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error) {
 	h := hcsv2.NewHost(rt, tp, &securitypolicy.OpenDoorSecurityPolicyEnforcer{}, os.Stdout)
-	if err := h.SetConfidentialUVMOptions(
+	if err := h.SecurityOptions().SetConfidentialOptions(
 		context.Background(),
-		&guestresource.ConfidentialOptions{},
+		"", "", "",
 	); err != nil {
 		return nil, fmt.Errorf("could not set host security policy: %w", err)
 	}
