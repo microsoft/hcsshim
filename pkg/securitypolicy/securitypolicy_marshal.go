@@ -571,8 +571,18 @@ func addExternalProcesses(builder *strings.Builder, processes []*externalProcess
 
 func (f fragment) marshalRego() string {
 	includes := stringArray(f.includes).marshalRego()
-	return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s}`,
-		f.issuer, f.feed, f.minimumSVN, includes)
+
+	if len(f.parameters) == 0 {
+		return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s}`,
+			f.issuer, f.feed, f.minimumSVN, includes)
+	}
+
+	paramsJSON, err := json.Marshal(f.parameters)
+	if err != nil {
+		panic(fmt.Errorf("failed to marshal fragment parameters object to JSON: %w", err))
+	}
+	return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s, "parameters": %s}`,
+		f.issuer, f.feed, f.minimumSVN, includes, string(paramsJSON))
 }
 
 func addFragments(builder *strings.Builder, fragments []*fragment) {
