@@ -3,10 +3,28 @@
 
 package securitypolicy
 
-import oci "github.com/opencontainers/runtime-spec/specs-go"
+import (
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+)
 
 //nolint:unused
 const osType = "windows"
+
+// validateHostData fetches SNP report (if applicable) and validates `hostData` against
+// HostData set at UVM launch.
+func validateHostData(hostData []byte) error {
+	if err := GetPspDriverError(); err != nil {
+		// For this case gcs-sidecar will keep initial deny policy.
+		return errors.Wrapf(err, "an error occurred while using PSP driver")
+	}
+
+	if err := ValidateHostDataPSP(hostData[:]); err != nil {
+		// For this case gcs-sidecar will keep initial deny policy.
+		return err
+	}
+	return nil
+}
 
 // SandboxMountsDir returns sandbox mounts directory inside UVM/host.
 func SandboxMountsDir(sandboxID string) string {

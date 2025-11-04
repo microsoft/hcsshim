@@ -39,6 +39,12 @@ func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmRe
 	}
 }
 
+// SetConfidentialOptions takes guestresource.ConfidentialOptions
+// to set up our internal data structures we use to store and enforce
+// security policy. The options can contain security policy enforcer type,
+// encoded security policy and signed UVM reference information The security
+// policy and uvm reference information can be further presented to workload
+// containers for validation and attestation purposes.
 func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerType string, encodedSecurityPolicy string, encodedUVMReference string) error {
 	s.policyMutex.Lock()
 	defer s.policyMutex.Unlock()
@@ -46,6 +52,16 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	if s.PolicyEnforcerSet {
 		return errors.New("security policy has already been set")
 	}
+
+	hostData, err := NewSecurityPolicyDigest(encodedSecurityPolicy)
+	if err != nil {
+		return err
+	}
+
+	if err := validateHostData(hostData[:]); err != nil {
+		return err
+	}
+
 	// This limit ensures messages are below the character truncation limit that
 	// can be imposed by an orchestrator
 	maxErrorMessageLength := 3 * 1024

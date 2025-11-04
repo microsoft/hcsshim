@@ -88,9 +88,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
 		}
 
-		if err := b.hostState.SetupSecurityContextDir(ctx, &spec); err != nil {
-			return err
-		}
 		commandLine := len(spec.Process.Args) > 0
 		c := &Container{
 			id:              containerID,
@@ -549,9 +546,12 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeSecurityPolicy:
 			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.ConfidentialOptions)
 			log.G(ctx).Tracef("WCOWConfidentialOptions: { %v}", securityPolicyRequest)
-			err := b.hostState.SetWCOWConfidentialUVMOptions(req.ctx, securityPolicyRequest)
+			err := b.hostState.securityOptions.SetConfidentialOptions(ctx,
+				securityPolicyRequest.EnforcerType,
+				securityPolicyRequest.EncodedSecurityPolicy,
+				securityPolicyRequest.EncodedUVMReference)
 			if err != nil {
-				return errors.Wrap(err, "error creating enforcer")
+				return errors.Wrap(err, "Failed to set Confidentia UVM Options")
 			}
 			// Send response back to shim
 			resp := &prot.ResponseBase{
