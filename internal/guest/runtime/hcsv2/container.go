@@ -30,6 +30,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 // containerStatus has been introduced to enable parallel container creation
@@ -193,13 +194,24 @@ func (c *Container) Delete(ctx context.Context) error {
 	entity := log.G(ctx).WithField(logfields.ContainerID, c.id)
 	entity.Info("opengcs::Container::Delete")
 	if c.isSandbox {
-		// remove user mounts in sandbox container
-		if err := storage.UnmountAllInPath(ctx, specGuest.SandboxMountsDir(c.id), true); err != nil {
+		// Check if this is a virtual pod
+		virtualSandboxID := ""
+		if c.spec != nil && c.spec.Annotations != nil {
+			virtualSandboxID = c.spec.Annotations[annotations.VirtualPodID]
+		}
+
+		// remove user mounts in sandbox container - use virtual pod aware paths
+		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareSandboxMountsDir(c.id, virtualSandboxID), true); err != nil {
 			entity.WithError(err).Error("failed to unmount sandbox mounts")
 		}
 
-		// remove hugepages mounts in sandbox container
-		if err := storage.UnmountAllInPath(ctx, specGuest.HugePagesMountsDir(c.id), true); err != nil {
+		// remove user mounts in tmpfs sandbox container - use virtual pod aware paths
+		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareSandboxTmpfsMountsDir(c.id, virtualSandboxID), true); err != nil {
+			entity.WithError(err).Error("failed to unmount tmpfs sandbox mounts")
+		}
+
+		// remove hugepages mounts in sandbox container - use virtual pod aware paths
+		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareHugePagesMountsDir(c.id, virtualSandboxID), true); err != nil {
 			entity.WithError(err).Error("failed to unmount hugepages mounts")
 		}
 	}
