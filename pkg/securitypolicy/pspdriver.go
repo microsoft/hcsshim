@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-package pspdriver
+package securitypolicy
 
 import (
 	"bytes"
@@ -217,7 +217,7 @@ func GetPspDriverError() error {
 }
 
 // IsSNPMode() returns true if it's in SNP mode.
-func IsSNPMode(ctx context.Context) (bool, error) {
+func IsSNPMode() (bool, error) {
 
 	if pspDriverError != nil {
 		return false, pspDriverError
@@ -249,7 +249,7 @@ func IsSNPMode(ctx context.Context) (bool, error) {
 }
 
 // FetchRawSNPReport returns attestation report bytes.
-func FetchRawSNPReport(ctx context.Context, reportData []byte) ([]byte, error) {
+func FetchRawSNPReport(reportData []byte) ([]byte, error) {
 	if pspDriverError != nil {
 		return nil, pspDriverError
 	}
@@ -291,8 +291,8 @@ func FetchRawSNPReport(ctx context.Context, reportData []byte) ([]byte, error) {
 }
 
 // FetchParsedSNPReport parses raw attestation response into proper structs.
-func FetchParsedSNPReport(ctx context.Context, reportData []byte) (Report, error) {
-	rawBytes, err := FetchRawSNPReport(ctx, reportData)
+func FetchParsedSNPReport(reportData []byte) (Report, error) {
+	rawBytes, err := FetchRawSNPReport(reportData)
 	if err != nil {
 		return Report{}, err
 	}
@@ -305,19 +305,18 @@ func FetchParsedSNPReport(ctx context.Context, reportData []byte) (Report, error
 	return r.report(), nil
 }
 
-// TODO: Based on internal\guest\runtime\hcsv2\hostdata.go and it's duplicated.
 // ValidateHostData fetches SNP report (if applicable) and validates `hostData` against
 // HostData set at UVM launch.
-func ValidateHostData(ctx context.Context, hostData []byte) error {
+func ValidateHostDataPSP(hostData []byte) error {
 	// If the UVM is not SNP, then don't try to fetch an SNP report.
-	isSnpMode, err := IsSNPMode(ctx)
+	isSnpMode, err := IsSNPMode()
 	if err != nil {
 		return err
 	}
 	if !isSnpMode {
 		return nil
 	}
-	report, err := FetchParsedSNPReport(ctx, nil)
+	report, err := FetchParsedSNPReport(nil)
 	if err != nil {
 		return err
 	}

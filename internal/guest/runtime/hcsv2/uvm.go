@@ -112,35 +112,12 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 	}
 }
 
-// SetConfidentialUVMOptions takes guestresource.ConfidentialOptions
-// to set up our internal data structures we use to store and enforce
-// security policy. The options can contain security policy enforcer type,
-// encoded security policy and signed UVM reference information The security
-// policy and uvm reference information can be further presented to workload
-// containers for validation and attestation purposes.
-func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.ConfidentialOptions) error {
-	hostData, err := securitypolicy.NewSecurityPolicyDigest(r.EncodedSecurityPolicy)
-	if err != nil {
-		return err
-	}
-
-	if err := validateHostData(hostData[:]); err != nil {
-		return err
-	}
-
-	if err := h.securityOptions.SetConfidentialOptions(ctx,
-		r.EnforcerType,
-		r.EncodedSecurityPolicy,
-		r.EncodedUVMReference,
-	); err != nil {
-		return errors.Wrapf(err, "SetWCOWConfidentialUVMOptions failed to set security options")
-	}
-
-	return nil
-}
-
 func (h *Host) SecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
 	return h.securityOptions.PolicyEnforcer
+}
+
+func (h *Host) SecurityOptions() *securitypolicy.SecurityOptions {
+	return h.securityOptions
 }
 
 func (h *Host) Transport() transport.Transport {
@@ -696,7 +673,10 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		if !ok {
 			return errors.New("the request's settings are not of type ConfidentialOptions")
 		}
-		return h.SetConfidentialUVMOptions(ctx, r)
+		return h.securityOptions.SetConfidentialOptions(ctx,
+			r.EnforcerType,
+			r.EncodedSecurityPolicy,
+			r.EncodedUVMReference)
 	case guestresource.ResourceTypePolicyFragment:
 		r, ok := req.Settings.(*guestresource.SecurityPolicyFragment)
 		if !ok {

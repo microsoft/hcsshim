@@ -6,19 +6,14 @@ package bridge
 import (
 	"context"
 	"io"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/internal/pspdriver"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,7 +25,7 @@ type Host struct {
 
 type Container struct {
 	id              string
-	spec            specs.Spec
+	spec            oci.Spec
 	processesMutex  sync.Mutex
 	processes       map[uint32]*containerProcess
 	commandLine     bool
@@ -57,34 +52,6 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 		containers:      make(map[string]*Container),
 		securityOptions: securityPolicyOptions,
 	}
-}
-
-func (h *Host) SetWCOWConfidentialUVMOptions(ctx context.Context, securityPolicyRequest *guestresource.ConfidentialOptions) error {
-	if err := pspdriver.GetPspDriverError(); err != nil {
-		// For this case gcs-sidecar will keep initial deny policy.
-		return errors.Wrapf(err, "an error occurred while using PSP driver")
-	}
-
-	// Fetch report and validate host_data
-	hostData, err := securitypolicy.NewSecurityPolicyDigest(securityPolicyRequest.EncodedSecurityPolicy)
-	if err != nil {
-		return err
-	}
-
-	if err := pspdriver.ValidateHostData(ctx, hostData[:]); err != nil {
-		// For this case gcs-sidecar will keep initial deny policy.
-		return err
-	}
-
-	if err := h.securityOptions.SetConfidentialOptions(ctx,
-		securityPolicyRequest.EnforcerType,
-		securityPolicyRequest.EncodedSecurityPolicy,
-		securityPolicyRequest.EncodedUVMReference,
-	); err != nil {
-		return errors.Wrapf(err, "SetWCOWConfidentialUVMOptions failed to set security options")
-	}
-
-	return nil
 }
 
 func (h *Host) AddContainer(ctx context.Context, id string, c *Container) error {
