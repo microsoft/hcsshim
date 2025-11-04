@@ -15,6 +15,8 @@ import (
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -144,6 +146,66 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 	err = s.PolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
 	if err != nil {
 		return fmt.Errorf("error loading security policy fragment: %w", err)
+	}
+	return nil
+}
+
+func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) error {
+	st, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+
+	if !st.IsDir() {
+		return fmt.Errorf("not a directory %q", dir)
+	}
+
+	targetFilename := filepath.Join(dir, filename)
+	return os.WriteFile(targetFilename, data, perm)
+}
+
+// Write security policy, signed UVM reference and host AMD certificate to
+// container's rootfs, so that application and sidecar containers can have
+// access to it. The security policy is required by containers which need to
+// extract init-time claims found in the security policy. The directory path
+// containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
+// It may be an error to have a security policy but not expose it to the
+// container as in that case it can never be checked as correct by a verifier.
+func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) error {
+	encodedPolicy := s.PolicyEnforcer.EncodedSecurityPolicy()
+	hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
+	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 {
+		// Use os.MkdirTemp to make sure that the directory is unique.
+		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
+		if err != nil {
+			return fmt.Errorf("failed to create security context directory: %w", err)
+		}
+		// Make sure that files inside directory are readable
+		if err := os.Chmod(securityContextDir, 0755); err != nil {
+			return fmt.Errorf("failed to chmod security context directory: %w", err)
+		}
+
+		if len(encodedPolicy) > 0 {
+			if err := writeFileInDir(securityContextDir, PolicyFilename, []byte(encodedPolicy), 0777); err != nil {
+				return fmt.Errorf("failed to write security policy: %w", err)
+			}
+		}
+		if len(s.UvmReferenceInfo) > 0 {
+			if err := writeFileInDir(securityContextDir, ReferenceInfoFilename, []byte(s.UvmReferenceInfo), 0777); err != nil {
+				return fmt.Errorf("failed to write UVM reference info: %w", err)
+			}
+		}
+
+		if len(hostAMDCert) > 0 {
+			if err := writeFileInDir(securityContextDir, HostAMDCertFilename, []byte(hostAMDCert), 0777); err != nil {
+				return fmt.Errorf("failed to write host AMD certificate: %w", err)
+			}
+		}
+
+		containerCtxDir := fmt.Sprintf("/%s", filepath.Base(securityContextDir))
+		secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
+		spec.Process.Env = append(spec.Process.Env, secCtxEnv)
+
 	}
 	return nil
 }
