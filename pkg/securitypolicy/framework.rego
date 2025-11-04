@@ -1876,6 +1876,27 @@ errors["missing required environment variable"] {
     count(processes) > 0
 }
 
+# All environment variables matches some rule in some container, but there are
+# no containers with exactly the given combination of rules (i.e. for every
+# container, there is at least one mismatching rule).
+errors["invalid env list"] {
+    input.rule in ["create_container"]
+
+    every container in data.metadata.matches[input.containerID] {
+        noNewPrivileges_ok(container.no_new_privileges)
+        user_ok(container.user)
+        privileged_ok(container.allow_elevated)
+        workingDirectory_ok(container.working_dir)
+        command_ok(container.command)
+        mountList_ok(container.mounts, container.allow_elevated)
+
+        some env_in in input.envList
+        every rule in container.env_rules {
+            not env_rule_ok(rule, env_in)
+        }
+    }
+}
+
 default workingDirectory_matches := false
 
 workingDirectory_matches {
