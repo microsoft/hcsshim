@@ -105,6 +105,33 @@ const (
 
 	// LCOWPrivileged is used to specify that the container should be run in privileged mode.
 	LCOWPrivileged = "io.microsoft.virtualmachine.lcow.privileged"
+
+	// LCOWTeeLogPath specifies a path in the Linux uVM to write container's stdio to,
+	// in addition to the usual vsock pipes.
+	//
+	// Functionally, it is similar to `LogDirectory` and `LogPath` for CRI, but within the guest
+	// rather than on the host.
+	//
+	// See [LCOWTeeLogDirMount] for more info.
+	LCOWTeeLogPath = "io.microsoft.container.lcow.tee-log-path"
+
+	// LCOWLogPathMount is the destination to mount the log directory containing files specified
+	// by the [LCOWTeeLogPath] annotation in order to make them available within the container.
+	// The log directory is backed by the sandbox (pause container) scratch VHD, and can
+	// be considered a special case sandbox mount.
+	//
+	// For example, if container A has the annotation:
+	//
+	// 	"io.microsoft.container.lcow.tee-log-path" = "dir/a.logs"
+	//
+	// And container B has the annotation:
+	//
+	// 	"io.microsoft.container.lcow.tee-log-dir-mount" = "var/logs/containers"
+	//
+	// Then container B will be able to read the logs written to by container A at the path:
+	//
+	// 	/var/logs/containers/dir/a.logs
+	LCOWTeeLogDirMount = "io.microsoft.container.lcow.tee-log-dir-mount"
 )
 
 // LCOW multipod annotations enables multipod and warmpooling.
