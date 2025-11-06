@@ -61,6 +61,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		case MountTypeBind:
 		case MountTypePhysicalDisk:
 		case MountTypeVirtualDisk:
+		case MountTypeExtensibleVirtualDisk:
 		default:
 			// Unknown mount type
 			continue
@@ -124,6 +125,25 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				uvmPathForFile = scsiMount.GuestPath()
 				r.Add(scsiMount)
+				mt := "none"
+				if isBlockDev {
+					mt = "bind"
+				}
+				coi.Spec.Mounts[i].Type = mt
+			} else if mount.Type == MountTypeExtensibleVirtualDisk {
+				l.Debug("hcsshim::allocateLinuxResources Hot-adding ExtensbleVirtualDisk")
+				scsiMount, err := coi.HostingSystem.SCSIManager.AddExtensibleVirtualDisk(
+					ctx,
+					hostPath,
+					readOnly,
+					"",
+					&scsi.MountConfig{Options: mount.Options, BlockDev: isBlockDev},
+				)
+				if err != nil {
+					return fmt.Errorf("adding Extensible virtual disk mount %+v: %w", mount, err)
+				}
+				r.Add(scsiMount)
+				uvmPathForFile = scsiMount.GuestPath()
 				mt := "none"
 				if isBlockDev {
 					mt = "bind"
