@@ -1360,6 +1360,7 @@ env_rule_matches(rule) {
 }
 
 errors["missing required environment variable"] {
+    is_linux
     input.rule == "create_container"
 
     not container_started
