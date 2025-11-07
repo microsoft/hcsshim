@@ -32,6 +32,11 @@ type Host struct {
 	containersMutex sync.Mutex
 	containers      map[string]*Container
 
+	// mapping of volumeGUID to container layer hashes
+	blockCIMVolumeHashes map[string][]string
+	// mapping of volumeGUID to container IDs
+	blockCIMVolumeContainers map[string]map[string]struct{}
+
 	// state required for the security policy enforcement
 	policyMutex               sync.Mutex
 	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
@@ -58,6 +63,8 @@ type containerProcess struct {
 func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer) *Host {
 	return &Host{
 		containers:                make(map[string]*Container),
+		blockCIMVolumeHashes:      make(map[string][]string),
+		blockCIMVolumeContainers:  make(map[string]map[string]struct{}),
 		securityPolicyEnforcer:    initialEnforcer,
 		securityPolicyEnforcerSet: false,
 	}

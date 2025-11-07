@@ -585,6 +585,26 @@ func (r *RegoPolicyInterpreter) RawQuery(rule string, input map[string]interface
 	return resultSet, nil
 }
 
+// MetadataJSON returns the entire metadata object as a JSON string.
+// The returned JSON is a snapshot (deep-copied via marshal/unmarshal).
+func (r *RegoPolicyInterpreter) MetadataJSON() (string, error) {
+	r.dataAndModulesMutex.Lock()
+	defer r.dataAndModulesMutex.Unlock()
+
+	root, ok := r.data["metadata"].(regoMetadata)
+	if !ok {
+		return "", errors.New("incorrect interpreter state: invalid metadata object type")
+	}
+
+	// Deep copy to avoid callers modifying internal maps.
+	b, err := json.Marshal(root)
+	if err != nil {
+		return "", fmt.Errorf("unable to marshal metadata: %w", err)
+	}
+
+	return string(b), nil
+}
+
 // Query queries the policy with the given rule and input data and returns the result.
 func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{}) (RegoQueryResult, error) {
 	// this mutex ensures no other threads modify the data and compiledModules fields during query execution
