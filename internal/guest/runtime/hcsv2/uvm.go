@@ -61,20 +61,17 @@ const UVMContainerID = "00000000-0000-0000-0000-000000000000"
 // to check that sandbox IDs (which is also used in paths) are valid, which has
 // the same format.
 const validContainerIDRegexRaw = `[0-9a-fA-F]{64}`
+
 var validContainerIDRegex = regexp.MustCompile("^" + validContainerIDRegexRaw + "$")
 
-// isSandboxId just changes the error message
-func checkValidContainerID(id string, isSandboxId bool) error {
+// idType just changes the error message
+func checkValidContainerID(id string, idType string) error {
 	if id == UVMContainerID {
 		return nil
 	}
 
 	if !validContainerIDRegex.MatchString(id) {
-		idtype := "container"
-		if isSandboxId {
-			idtype = "sandbox"
-		}
-		return errors.Errorf("invalid %s id: %s (must match %s)", idtype, id, validContainerIDRegex.String())
+		return errors.Errorf("invalid %s id: %s (must match %s)", idType, id, validContainerIDRegex.String())
 	}
 
 	return nil
@@ -313,16 +310,21 @@ func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHost
 }
 
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
-	if h.HasSecurityPolicy() {
-		if err = checkValidContainerID(id, false); err != nil {
-			return nil, err
-		}
-	}
-
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 
 	// Check for virtual pod annotation
 	virtualPodID, isVirtualPod := settings.OCISpecification.Annotations[annotations.VirtualPodID]
+
+	if h.HasSecurityPolicy() {
+		if err = checkValidContainerID(id, "container"); err != nil {
+			return nil, err
+		}
+		if virtualPodID != "" {
+			if err = checkValidContainerID(virtualPodID, "virtual pod"); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	// Special handling for virtual pod sandbox containers:
 	// The first container in a virtual pod (containerID == virtualPodID) should be treated as a sandbox
@@ -467,7 +469,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 			sandboxID = sid
 			if h.HasSecurityPolicy() {
-				if err = checkValidContainerID(sid, true); err != nil {
+				if err = checkValidContainerID(sid, "sandbox"); err != nil {
 					return nil, err
 				}
 			}
@@ -690,7 +692,7 @@ func writeSpecToFile(ctx context.Context, configFile string, spec *specs.Spec) e
 
 func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) (retErr error) {
 	if h.HasSecurityPolicy() {
-		if err := checkValidContainerID(containerID, false); err != nil {
+		if err := checkValidContainerID(containerID, "container"); err != nil {
 			return err
 		}
 	}
@@ -780,7 +782,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 
 func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
 	if h.HasSecurityPolicy() {
-		if err := checkValidContainerID(containerID, false); err != nil {
+		if err := checkValidContainerID(containerID, "container"); err != nil {
 			return err
 		}
 	}
@@ -1306,7 +1308,7 @@ func modifyCombinedLayers(
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		if isConfidential {
-			if err := checkValidContainerID(containerID, false); err != nil {
+			if err := checkValidContainerID(containerID, "container"); err != nil {
 				return err
 			}
 
