@@ -1209,8 +1209,6 @@ candidate_fragments := fragments {
     fragments := array.concat(policy_fragments, fragment_fragments)
 }
 
-default load_fragment := {"allowed": false}
-
 svn_ok(svn, minimum_svn) {
     # deprecated
     semver.is_valid(svn)
@@ -1222,15 +1220,32 @@ svn_ok(svn, minimum_svn) {
     to_number(svn) >= to_number(minimum_svn)
 }
 
-fragment_ok(fragment) {
+fragment_issuer_feed_ok(fragment) {
     input.issuer == fragment.issuer
     input.feed == fragment.feed
-    svn_ok(data[input.namespace].svn, fragment.minimum_svn)
+}
+
+default load_fragment := {"allowed": false}
+
+# load_fragment gets called twice - first before loading the fragment as a Rego
+# module, with input.fragment_loaded set to false, in which case we do not yet
+# have access to anything under data[fragment.namespace] yet, and so we only
+# check that the fragment issuer and feed is valid, but does not actually load
+# the fragment into metadata.  It will then be called a second time, at which
+# point we can check the SVN defined in the fragment is valid, and if
+# successful, add the fragment to the metadata.
+
+load_fragment := {"allowed": true} {
+    not input.fragment_loaded
+    some fragment in candidate_fragments
+    fragment_issuer_feed_ok(fragment)
 }
 
 load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed": true} {
+    input.fragment_loaded
     some fragment in candidate_fragments
-    fragment_ok(fragment)
+    fragment_issuer_feed_ok(fragment)
+    svn_ok(data[input.namespace].svn, fragment.minimum_svn)
 
     issuer := update_issuer(fragment.includes)
     updateIssuer := {
@@ -1641,6 +1656,7 @@ default fragment_version_is_valid := false
 
 fragment_version_is_valid {
     some fragment in candidate_fragments
+    input.fragment_loaded
     fragment.issuer == input.issuer
     fragment.feed == input.feed
     svn_ok(data[input.namespace].svn, fragment.minimum_svn)
@@ -1652,6 +1668,7 @@ svn_mismatch {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
     fragment.feed == input.feed
+    input.fragment_loaded
     to_number(data[input.namespace].svn)
     semver.is_valid(fragment.minimum_svn)
 }
@@ -1660,6 +1677,7 @@ svn_mismatch {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
     fragment.feed == input.feed
+    input.fragment_loaded
     semver.is_valid(data[input.namespace].svn)
     to_number(fragment.minimum_svn)
 }
@@ -1667,6 +1685,7 @@ svn_mismatch {
 errors["fragment svn is below the specified minimum"] {
     input.rule == "load_fragment"
     fragment_feed_matches
+    input.fragment_loaded
     not svn_mismatch
     not fragment_version_is_valid
 }
@@ -1674,6 +1693,7 @@ errors["fragment svn is below the specified minimum"] {
 errors["fragment svn and the specified minimum are different types"] {
     input.rule == "load_fragment"
     fragment_feed_matches
+    input.fragment_loaded
     svn_mismatch
 }
 
@@ -1704,12 +1724,16 @@ errors[framework_version_error] {
 }
 
 errors[fragment_framework_version_error] {
+    input.rule == "load_fragment"
+    input.fragment_loaded
     input.namespace
     fragment_framework_version == null
     fragment_framework_version_error := concat(" ", ["fragment framework_version is missing. Current version:", version])
 }
 
 errors[fragment_framework_version_error] {
+    input.rule == "load_fragment"
+    input.fragment_loaded
     input.namespace
     semver.compare(fragment_framework_version, version) > 0
     fragment_framework_version_error := concat(" ", ["fragment framework_version is ahead of the current version:", fragment_framework_version, "is greater than", version])
