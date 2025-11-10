@@ -378,7 +378,7 @@ func Test_Rego_EnforceDeviceMountPolicy_InvalidMountTarget_PathTraversal(t *test
 	assertDecisionJSONContains(t, err, "mountpoint invalid")
 }
 
-func deviceMountUnmountTest(t *testing.T, p *generatedConstraints, policy *regoEnforcer, mountScratchFirst, unmountScratchFirst, testInvalidUnmount bool) bool {
+func deviceMountUnmountTest(t *testing.T, p *generatedConstraints, policy *regoEnforcer, mountScratchFirst, unmountScratchFirst, testDenials bool) bool {
 	container := selectContainerFromContainerList(p.containers, testRand)
 	containerID := testDataGenerator.uniqueContainerID()
 	rotarget := testDataGenerator.uniqueLayerMountTarget()
@@ -414,6 +414,18 @@ func deviceMountUnmountTest(t *testing.T, p *generatedConstraints, policy *regoE
 		}
 	}
 
+	if testDenials {
+		err = policy.EnforceRWDeviceMountPolicy(p.ctx, rwtarget, true, true, "xfs")
+		if !assertDecisionJSONContains(t, err, "device already mounted at path") {
+			return false
+		}
+
+		err = policy.EnforceDeviceMountPolicy(p.ctx, rotarget, container.Layers[0])
+		if !assertDecisionJSONContains(t, err, "device already mounted at path") {
+			return false
+		}
+	}
+
 	unmountScratch := func() bool {
 		err = policy.EnforceRWDeviceUnmountPolicy(p.ctx, rwtarget)
 		if err != nil {
@@ -442,7 +454,7 @@ func deviceMountUnmountTest(t *testing.T, p *generatedConstraints, policy *regoE
 		}
 	}
 
-	if testInvalidUnmount {
+	if testDenials {
 		err = policy.EnforceDeviceUnmountPolicy(p.ctx, rotarget)
 		if !assertDecisionJSONContains(t, err, "no device at path to unmount") {
 			return false
