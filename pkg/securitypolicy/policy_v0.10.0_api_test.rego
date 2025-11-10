@@ -3,6 +3,19 @@ package policy
 api_version := "0.10.0"
 framework_version := "0.3.0"
 
+fragments := [
+  {
+    "feed": "@@FRAGMENT_FEED@@",
+    "includes": [
+      "containers",
+      "fragments"
+    ],
+    "issuer": "@@FRAGMENT_ISSUER@@",
+    "minimum_svn": "0"
+  }
+]
+
+
 containers := [
   {
     "allow_elevated": false,
