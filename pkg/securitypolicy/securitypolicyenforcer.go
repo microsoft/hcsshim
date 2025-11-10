@@ -57,6 +57,14 @@ func init() {
 	registeredEnforcers[openDoorEnforcerName] = createOpenDoorEnforcer
 }
 
+// Represents an in-progress revertable section.  To ensure state is consistent,
+// Commit() and Rollback() must not fail, so they do not return anything, and if
+// an error does occur they should panic.
+type RevertableSectionHandle interface {
+	Commit()
+	Rollback()
+}
+
 type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(ctx context.Context, target string, deviceHash string) (err error)
 	EnforceRWDeviceMountPolicy(ctx context.Context, target string, encrypted, ensureFilesystem bool, filesystem string) (err error)
@@ -127,6 +135,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) (err error)
+	StartRevertableSection() (RevertableSectionHandle, error)
 }
 
 //nolint:unused
@@ -180,6 +189,11 @@ func CreateSecurityPolicyEnforcer(
 		return createEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts, maxErrorMessageLength)
 	}
 }
+
+type nopRevertableSectionHandle struct{}
+
+func (nopRevertableSectionHandle) Commit()   {}
+func (nopRevertableSectionHandle) Rollback() {}
 
 type OpenDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string
@@ -319,6 +333,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Cont
 	return nil
 }
 
+func (*OpenDoorSecurityPolicyEnforcer) StartRevertableSection() (RevertableSectionHandle, error) {
+	return nopRevertableSectionHandle{}, nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
@@ -442,4 +460,8 @@ func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath 
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) error {
 	return nil
+}
+
+func (*ClosedDoorSecurityPolicyEnforcer) StartRevertableSection() (RevertableSectionHandle, error) {
+	return nopRevertableSectionHandle{}, nil
 }
