@@ -1628,8 +1628,15 @@ var apiTestCode string
 //go:embed policy_v0.10.0_api_test.rego
 var policyWith_0_10_0_apiTestCode string
 
-func getPolicyCode_0_10_0(layerHash string) string {
-	return strings.Replace(policyWith_0_10_0_apiTestCode, "@@CONTAINER_LAYER_HASH@@", layerHash, 1)
+//go:embed policy_v0.10.0_api_test_allow_all.rego
+var policyWith_0_10_0_apiTestAllowAllCode string
+
+func getPolicyCode_0_10_0(layerHash, fragmentIssuer, fragmentFeed string) string {
+	s := policyWith_0_10_0_apiTestCode
+	s = strings.Replace(s, "@@CONTAINER_LAYER_HASH@@", layerHash, 1)
+	s = strings.Replace(s, "@@FRAGMENT_ISSUER@@", fragmentIssuer, 1)
+	s = strings.Replace(s, "@@FRAGMENT_FEED@@", fragmentFeed, 1)
+	return s
 }
 
 func (p *regoEnforcer) injectTestAPI() error {

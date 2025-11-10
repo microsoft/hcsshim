@@ -9,6 +9,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -1044,14 +1046,45 @@ func (policy *regoEnforcer) EnforceRuntimeLoggingPolicy(ctx context.Context) err
 	return err
 }
 
+// Rego identifier is a letter or underscore, followed by any number of letters,
+// underscores, or digits.  See open-policy-agent/opa
+// ast/internal/scanner/scanner.go :: scanIdentifier, isLetter
+// Technically it also allows other unicode digit characters (but not letters)
+// but we do not allow those, for simplicity.
+var validNamespaceRegex = `[a-zA-Z_][a-zA-Z0-9_]*`
+
+// First line of the fragment Rego source code must be a package definition
+// without any potential for confusion attacks.  We thus limit it to exactly
+// "package" followed by one or more spaces, then a valid Rego identifier, then
+// optionally more spaces.  We do not check if the namespace is a Rego keyword
+// (e.g. "in", "every" etc) but it would fail Rego compilation anyway.
+var validFirstLine = regexp.MustCompile(`^package +(` + validNamespaceRegex + `)\s*$`)
+
+// These namespaces must not be overridden by a fragment
+var reservedNamespaces []string = []string{
+	// Built-in modules
+	"framework",
+	"api",
+	"policy",
+	// This is not a module, but to prevent confusion since framework uses
+	// data.metadata to access those, we block it as well.
+	"metadata",
+}
+
 func parseNamespace(rego string) (string, error) {
 	lines := strings.Split(rego, "\n")
-	parts := strings.Split(lines[0], " ")
-	if parts[0] != "package" {
-		return "", errors.New("package definition required on first line")
+	if lines[0] == "" {
+		return "", errors.New("Fragment Rego is empty")
 	}
-
-	return strings.TrimSpace(parts[1]), nil
+	match := validFirstLine.FindStringSubmatch(lines[0])
+	if match == nil {
+		return "", errors.Errorf("valid package definition required on first line, got %q", lines[0])
+	}
+	namespace := match[1]
+	if slices.Contains(reservedNamespaces, namespace) {
+		return "", errors.Errorf("namespace %q is reserved and cannot be used for fragments", namespace)
+	}
+	return namespace, nil
 }
 
 func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, feed string, rego string) error {
@@ -1067,22 +1100,42 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, fee
 		Namespace: namespace,
 	}
 
-	policy.rego.AddModule(fragment.ID(), fragment)
-
 	input := inputData{
-		"issuer":    issuer,
-		"feed":      feed,
-		"namespace": namespace,
+		"issuer":          issuer,
+		"feed":            feed,
+		"namespace":       namespace,
+		"fragment_loaded": false,
 	}
 
+	// Check that the fragment is signed by the expected issuer before loading
+	// its Rego code.
+	_, err = policy.enforce(ctx, "load_fragment", input)
+	if err != nil {
+		return err
+	}
+
+	// At this point we need to add the fragment code as a new Rego module in
+	// order for the framework (or any user defined policies) to check the SVN,
+	// and potentially other information defined by its Rego code. We've already
+	// checked that the fragment is signed correctly, and the namespace is safe
+	// to load (won't override framework or other built-in modules). Once we
+	// added the module, we must make sure the module is removed if we return
+	// with error (or if add_module returned from Rego is false).
+	policy.rego.AddModule(fragment.ID(), fragment)
+	input["fragment_loaded"] = true
+
 	results, err := policy.enforce(ctx, "load_fragment", input)
+	if err != nil {
+		policy.rego.RemoveModule(fragment.ID())
+		return err
+	}
 
 	addModule, _ := results.Bool("add_module")
 	if !addModule {
 		policy.rego.RemoveModule(fragment.ID())
 	}
 
-	return err
+	return nil
 }
 
 func (policy *regoEnforcer) EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) error {

@@ -564,30 +564,7 @@ func Test_Rego_EnforceRWDeviceMountPolicy_InvalidFilesystem(t *testing.T) {
 // allowing enforcing rw mounts.
 func Test_Rego_EnforceRWDeviceMountPolicy_Compat_0_10_0_allow_all(t *testing.T) {
 	p := generateConstraints(testRand, 1)
-	regoPolicy := `
-package policy
-
-api_version := "0.10.0"
-framework_version := "0.3.0"
-
-mount_device := {"allowed": true}
-mount_overlay := {"allowed": true}
-create_container := {"allowed": true, "env_list": null, "allow_stdio_access": true}
-unmount_device := {"allowed": true}
-unmount_overlay := {"allowed": true}
-exec_in_container := {"allowed": true, "env_list": null}
-exec_external := {"allowed": true, "env_list": null, "allow_stdio_access": true}
-shutdown_container := {"allowed": true}
-signal_container_process := {"allowed": true}
-plan9_mount := {"allowed": true}
-plan9_unmount := {"allowed": true}
-get_properties := {"allowed": true}
-dump_stacks := {"allowed": true}
-runtime_logging := {"allowed": true}
-load_fragment := {"allowed": true}
-scratch_mount := {"allowed": true}
-scratch_unmount := {"allowed": true}
-`
+	regoPolicy := policyWith_0_10_0_apiTestAllowAllCode
 	for _, b1 := range []bool{true, false} {
 		for _, b2 := range []bool{true, false} {
 			policy, err := newRegoPolicy(regoPolicy, []oci.Mount{}, []oci.Mount{}, testOSType)
@@ -608,7 +585,7 @@ scratch_unmount := {"allowed": true}
 // enforcing rw mounts.
 func Test_Rego_EnforceRWDeviceMountPolicy_Compat_0_10_0(t *testing.T) {
 	p := generateConstraints(testRand, 1)
-	regoPolicy := getPolicyCode_0_10_0(p.containers[0].Layers[0])
+	regoPolicy := getPolicyCode_0_10_0(p.containers[0].Layers[0], testDataGenerator.uniqueFragmentIssuer(), testDataGenerator.uniqueFragmentFeed())
 	for _, b1 := range []bool{true, false} {
 		for _, b2 := range []bool{true, false} {
 			policy, err := newRegoPolicy(regoPolicy, []oci.Mount{}, []oci.Mount{}, testOSType)
@@ -4088,6 +4065,134 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 	}
 }
 
+// Make sure we don't break fragment loading for old policies
+func Test_Rego_LoadFragment_Container_Compat_0_10_0(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		container := tc.containers[0]
+		rego := getPolicyCode_0_10_0(container.container.Layers[0], fragment.info.issuer, fragment.info.feed)
+		policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("unable to create Rego policy: %v", err)
+		}
+		tc.policy = policy
+
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		containerID, err := mountImageForContainer(tc.policy, container.container)
+		if err != nil {
+			t.Error("unable to mount image for fragment container: %w", err)
+			return false
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
+			container.sandboxID,
+			containerID,
+			copyStrings(container.container.Command),
+			copyStrings(container.envList),
+			container.container.WorkingDir,
+			copyMounts(container.mounts),
+			false,
+			container.container.NoNewPrivileges,
+			container.user,
+			container.groups,
+			container.container.User.Umask,
+			container.capabilities,
+			container.seccomp,
+		)
+
+		if err != nil {
+			t.Error("unable to create container from fragment: %w", err)
+			return false
+		}
+
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_Container_Compat_0_10_0: %v", err)
+	}
+}
+
+// Make sure we don't break fragment loading for old allow all policies
+func Test_Rego_LoadFragment_Container_Compat_0_10_0_allow_all(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		rego := policyWith_0_10_0_apiTestAllowAllCode
+		policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("unable to create Rego policy: %v", err)
+		}
+		tc.policy = policy
+
+		fragment := tc.fragments[0]
+		container := tc.containers[0]
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		containerID, err := mountImageForContainer(tc.policy, container.container)
+		if err != nil {
+			t.Error("unable to mount image for fragment container: %w", err)
+			return false
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
+			container.sandboxID,
+			containerID,
+			copyStrings(container.container.Command),
+			copyStrings(container.envList),
+			container.container.WorkingDir,
+			copyMounts(container.mounts),
+			false,
+			container.container.NoNewPrivileges,
+			container.user,
+			container.groups,
+			container.container.User.Umask,
+			container.capabilities,
+			container.seccomp,
+		)
+
+		if err != nil {
+			t.Error("unable to create container from fragment: %w", err)
+			return false
+		}
+
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_Container_Compat_0_10_0: %v", err)
+	}
+}
+
 func Test_Rego_LoadFragment_Fragment(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"fragments"})
@@ -4236,6 +4341,173 @@ func Test_Rego_LoadFragment_BadFeed(t *testing.T) {
 	}
 }
 
+func Test_Rego_parseNamespace(t *testing.T) {
+	type testCase struct {
+		inputs     []string
+		expected   string
+		expectFail bool
+	}
+	testCases := []testCase{
+		{
+			inputs: []string{
+				"package a\nanything-else",
+				"package  a  \n\n",
+				"package a ",
+			},
+			expected: "a",
+		},
+		{
+			inputs: []string{
+				"package aaa",
+				"package  aaa ",
+				"package  aaa\n# anything",
+			},
+			expected: "aaa",
+		},
+		{
+			inputs: []string{
+				"package",
+				"package\n",
+				"package ",
+				"package  ",
+				"package$",
+				"package aa#bb\nframework",
+				"package\naa\n",
+			},
+			expectFail: true,
+		},
+		{
+			inputs: []string{
+				"package framework",
+				"package  api",
+			},
+			expectFail: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		for _, input := range tc.inputs {
+			result, err := parseNamespace(input)
+			if tc.expectFail && err == nil {
+				t.Errorf("Expected failure for input %q, but got success", input)
+			} else if !tc.expectFail && err != nil {
+				t.Errorf("Unexpected error for input %q: %v", input, err)
+			} else if !tc.expectFail && result != tc.expected {
+				t.Errorf("Expected to parse namespace %q for input %q, but got %q", tc.expected, input, result)
+			}
+		}
+	}
+}
+
+func expectFragmentNotLoaded(t *testing.T, policy *regoEnforcer, issuer, feed string) bool {
+	if policy.rego.IsModuleActive(rpi.ModuleID(issuer, feed)) {
+		t.Errorf("fragment module is present")
+		return false
+	}
+	mtdIssuer, err := policy.rego.GetMetadata("issuers", issuer)
+	if err != nil && !strings.Contains(err.Error(), "value not found") &&
+		!strings.Contains(err.Error(), "metadata not found for name issuers") {
+		t.Errorf("unexpected error when checking issuer metadata: %v", err)
+		return false
+	}
+	if mtdIssuer != nil || err == nil {
+		t.Errorf("fragment issuer metadata is present")
+		return false
+	}
+	return true
+}
+
+func Test_Rego_LoadFragment_BadNamespace(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		code := fmt.Sprintf(`package framework
+
+svn := "%s"
+framework_version := "%s"
+
+load_fragment := {"allowed": true, "add_module": true}
+enforcement_point_info := {
+    "available": true,
+    "unknown": false,
+    "invalid": false,
+    "version_missing": false,
+    "default_results": {"allowed": true},
+    "use_framework": true
+}
+`, fragment.info.minimumSVN, frameworkVersion)
+
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to bad namespace")
+			return false
+		}
+
+		if !strings.Contains(err.Error(), "namespace \"framework\" is reserved") {
+			t.Errorf("expected error string to contain 'namespace \"framework\" is reserved', but got %q", err.Error())
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadNamespace: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_BadNamespace2(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		code := fmt.Sprintf(`package #aa
+framework
+
+svn := "%s"
+framework_version := "%s"
+
+load_fragment := {"allowed": true, "add_module": true}
+`, fragment.info.minimumSVN, frameworkVersion)
+
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to invalid namespace")
+			return false
+		}
+
+		if !strings.Contains(err.Error(), "valid package definition required on first line") {
+			t.Errorf("expected error string to contain 'valid package definition required on first line', but got %q", err.Error())
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadNamespace: %v", err)
+	}
+}
+
 func Test_Rego_LoadFragment_InvalidSVN(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupRegoFragmentSVNErrorTestConfig(p)
@@ -4256,7 +4528,7 @@ func Test_Rego_LoadFragment_InvalidSVN(t *testing.T) {
 			return false
 		}
 
-		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
 			t.Error("module not removed upon failure")
 			return false
 		}
@@ -4369,7 +4641,7 @@ func Test_Rego_LoadFragment_SVNMismatch(t *testing.T) {
 			return false
 		}
 
-		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
 			t.Error("module not removed upon failure")
 			return false
 		}
@@ -4671,10 +4943,16 @@ framework_version := "%s"
 
 default load_fragment := {"allowed": false}
 
+check_svn_if_loaded {
+	not input.fragment_loaded
+} else {
+	data[input.namespace].svn >= 1
+}
+
 load_fragment := {"allowed": true, "add_module": true} {
 	input.issuer == "%s"
 	input.feed == "%s"
-	data[input.namespace].svn >= 1
+	check_svn_if_loaded
 }
 
 mount_device := data.fragment.mount_device
@@ -4702,6 +4980,207 @@ mount_device := data.fragment.mount_device
 		}
 	} else {
 		t.Errorf("unable to located metadata key stored by fragment: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_BadIssuer_AttemptOverrideFrameworkItems(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		expectedIssuer := fragment.info.issuer
+		actualIssuer := testDataGenerator.uniqueFragmentIssuer()
+		code := fmt.Sprintf(`package fragment
+
+svn := "%s"
+framework_version := "%s"
+
+load_fragment := {"allowed": true, "add_module": true}
+data.framework.load_fragment := {"allowed": true, "add_module": true}
+input.issuer := "%s"
+data.framework.input.issuer := "%s"
+`, fragment.info.minimumSVN, frameworkVersion, expectedIssuer, expectedIssuer)
+
+		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+
+		if !assertDecisionJSONContains(t, err, "invalid fragment issuer") {
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadIssuer_AttemptOverrideFrameworkItems: %v", err)
+	}
+}
+
+// The intent of this test is really to check that Rego module names are
+// case-sensitive, since we do not deny a fragment from having a namespace
+// "Framework" or the like.  We use svn mismatch here since otherwise the
+// enforcer will not even try to load the fragment module at all if issuer or
+// feed is wrong.  But in reality, if an attacker can sign fragments with the
+// correct issuer, they can make the fragment have any SVN they want.
+func Test_Rego_LoadFragment_BadSvn_FrameworkNamespaceCaseConfusion(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentSVNErrorTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		code := fmt.Sprintf(`package Framework
+
+svn := "%s"
+framework_version := "%s"
+
+load_fragment := {"allowed": true, "add_module": true}
+enforcement_point_info := {
+    "available": true,
+    "unknown": false,
+    "invalid": false,
+    "version_missing": false,
+    "default_results": {"allowed": true},
+    "use_framework": true
+}
+data.framework.load_fragment := load_fragment
+`, fragment.constraints.svn, frameworkVersion)
+
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+
+		if !assertDecisionJSONContains(t, err, "fragment svn is below the specified minimum") {
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadSvn_FrameworkNamespaceCaseConfusion: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		actualIssuer := testDataGenerator.uniqueFragmentIssuer()
+		code := "package fragment\n!invalid!rego"
+
+		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+
+		if strings.Contains(err.Error(), "error when compiling module") ||
+			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
+			t.Errorf("expected error to not contain 'error when compiling module', got: %s", err.Error())
+			return false
+		}
+		if !assertDecisionJSONDoesNotContain(t, err, "fragment framework_version is missing") {
+			return false
+		}
+		if !assertDecisionJSONContains(t, err, "invalid fragment issuer") {
+			return false
+		}
+		if !expectFragmentNotLoaded(t, tc.policy, actualIssuer, fragment.info.feed) {
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_BadFeed_MustNotTryToLoadRego(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		actualFeed := testDataGenerator.uniqueFragmentFeed()
+		code := "package fragment\n!invalid!rego"
+
+		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, actualFeed, code)
+
+		if strings.Contains(err.Error(), "error when compiling module") ||
+			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
+			t.Errorf("expected error to not contain 'error when compiling module', got: %s", err.Error())
+			return false
+		}
+		if !assertDecisionJSONDoesNotContain(t, err, "fragment framework_version is missing") {
+			return false
+		}
+		if !assertDecisionJSONContains(t, err, "invalid fragment feed") {
+			return false
+		}
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, actualFeed) {
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadFeed_MustNotTryToLoadRego: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		rego := getPolicyCode_0_10_0(tc.containers[0].container.Layers[0], tc.fragments[0].info.issuer, tc.fragments[0].info.feed)
+		policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("unable to create Rego policy: %v", err)
+		}
+		tc.policy = policy
+
+		fragment := tc.fragments[0]
+		actualIssuer := testDataGenerator.uniqueFragmentIssuer()
+		code := "package fragment\n!invalid!rego"
+
+		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+
+		if strings.Contains(err.Error(), "error when compiling module") ||
+			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
+			t.Errorf("expected error to not contain 'error when compiling module', got: %s", err.Error())
+			return false
+		}
+		if !assertDecisionJSONDoesNotContain(t, err, "fragment framework_version is missing") {
+			return false
+		}
+		if !assertDecisionJSONContains(t, err, "invalid fragment issuer") {
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0: %v", err)
 	}
 }
 
