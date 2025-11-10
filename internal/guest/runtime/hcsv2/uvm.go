@@ -1027,10 +1027,19 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 			// zero out [Blkio] sections, since:
 			//  1. (Az)CRI (currently) only looks at the CPU and memory sections; and
 			//  2. it can get very large for containers with many layers
-			cgroupMetrics.Blkio.Reset()
+			if cgroupMetrics.GetBlkio() != nil {
+				cgroupMetrics.Blkio.Reset()
+			}
 			// also preemptively zero out [Rdma] and [Network], since they could also grow untenable large
-			cgroupMetrics.Rdma.Reset()
-			cgroupMetrics.Network = []*cgroup1stats.NetworkStat{}
+			if cgroupMetrics.GetRdma() != nil {
+				cgroupMetrics.Rdma.Reset()
+			}
+			if len(cgroupMetrics.GetNetwork()) > 0 {
+				cgroupMetrics.Network = []*cgroup1stats.NetworkStat{}
+			}
+			if logrus.IsLevelEnabled(logrus.TraceLevel) {
+				log.G(ctx).WithField("stats", log.Format(ctx, cgroupMetrics)).Trace("queried cgroup statistics")
+			}
 			properties.Metrics = cgroupMetrics
 		default:
 			log.G(ctx).WithField("propertyType", requestedProperty).Warn("unknown or empty property type")
