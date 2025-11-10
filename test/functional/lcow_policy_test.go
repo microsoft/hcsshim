@@ -4,7 +4,9 @@ package functional
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"testing"
 
 	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
@@ -21,6 +23,15 @@ import (
 	policytest "github.com/Microsoft/hcsshim/test/pkg/securitypolicy"
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
 )
+
+func genValidContainerID(t *testing.T, rng *rand.Rand) string {
+	t.Helper()
+	randBytes := make([]byte, 32)
+	if _, err := rng.Read(randBytes); err != nil {
+		t.Fatalf("failed to generate random bytes for container ID: %v", err)
+	}
+	return hex.EncodeToString(randBytes)
+}
 
 func setupScratchTemplate(ctx context.Context, tb testing.TB) string {
 	tb.Helper()
@@ -43,6 +54,8 @@ func TestGetProperties_WithPolicy(t *testing.T) {
 	ctx := util.Context(namespacedContext(context.Background()), t)
 	scratchPath := setupScratchTemplate(ctx, t)
 
+	rng := rand.New(rand.NewSource(0))
+
 	ls := linuxImageLayers(ctx, t)
 	for _, allowProperties := range []bool{true, false} {
 		t.Run(fmt.Sprintf("AllowPropertiesAccess_%t", allowProperties), func(t *testing.T) {
@@ -61,21 +74,24 @@ func TestGetProperties_WithPolicy(t *testing.T) {
 			)
 			opts.SecurityPolicyEnforcer = "rego"
 			opts.SecurityPolicy = policy
+			// VPMem is not currently supported for C-LCOW.
+			opts.VPMemDeviceCount = 0
 
-			cleanName := util.CleanName(t)
+			containerID := genValidContainerID(t, rng)
 			vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 			spec := testoci.CreateLinuxSpec(
 				ctx,
 				t,
-				cleanName,
+				containerID,
 				testoci.DefaultLinuxSpecOpts(
 					"",
 					ctrdoci.WithProcessArgs("/bin/sh", "-c", testoci.TailNullArgs),
+					ctrdoci.WithEnv(testoci.DefaultUnixEnv),
 					testoci.WithWindowsLayerFolders(append(ls, scratchPath)),
 				)...,
 			)
 
-			c, _, cleanup := testcontainer.Create(ctx, t, vm, spec, cleanName, hcsOwner)
+			c, _, cleanup := testcontainer.Create(ctx, t, vm, spec, containerID, hcsOwner)
 			t.Cleanup(cleanup)
 
 			init := testcontainer.Start(ctx, t, c, nil)

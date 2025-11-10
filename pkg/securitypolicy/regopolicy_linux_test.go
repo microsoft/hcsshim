@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -106,7 +107,7 @@ func Test_MarshalRego_Policy(t *testing.T) {
 		_, err = newRegoPolicy(expected, defaultMounts, privilegedMounts, testOSType)
 
 		if err != nil {
-			t.Errorf("unable to convert policy to rego: %v", err)
+			t.Errorf("cannot make rego policy from constraints: %v", err)
 			return false
 		}
 
@@ -193,11 +194,11 @@ func Test_Rego_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
 
 		if err != nil {
-			t.Errorf("unable to convert policy to rego: %v", err)
+			t.Errorf("cannot make rego policy from constraints: %v", err)
 			return false
 		}
 
-		target := testDataGenerator.uniqueMountTarget()
+		target := testDataGenerator.uniqueLayerMountTarget()
 		rootHash := generateInvalidRootHash(testRand)
 
 		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
@@ -219,11 +220,11 @@ func Test_Rego_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
 
 		if err != nil {
-			t.Errorf("unable to convert policy to rego: %v", err)
+			t.Errorf("cannot make rego policy from constraints: %v", err)
 			return false
 		}
 
-		target := testDataGenerator.uniqueMountTarget()
+		target := testDataGenerator.uniqueLayerMountTarget()
 		rootHash := selectRootHashFromConstraints(p, testRand)
 
 		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
@@ -237,7 +238,7 @@ func Test_Rego_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 	}
 }
 
-func Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
+func Test_Rego_EnforceDeviceUnmountPolicy_Removes_Device_Entries(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		securityPolicy := p.toPolicy()
 		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
@@ -247,7 +248,7 @@ func Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 			return false
 		}
 
-		target := testDataGenerator.uniqueMountTarget()
+		target := testDataGenerator.uniqueLayerMountTarget()
 		rootHash := selectRootHashFromConstraints(p, testRand)
 
 		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
@@ -272,7 +273,36 @@ func Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
-		t.Errorf("Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries failed: %v", err)
+		t.Errorf("Test_Rego_EnforceDeviceUnmountPolicy_Removes_Device_Entries failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceDeviceUnmountPolicy_No_Matches(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		target := testDataGenerator.uniqueLayerMountTarget()
+		err = policy.EnforceDeviceUnmountPolicy(p.ctx, target)
+		if !assertDecisionJSONContains(t, err, "no device at path to unmount") {
+			return false
+		}
+
+		target = getScratchDiskMountTarget(testDataGenerator.uniqueContainerID())
+		err = policy.EnforceRWDeviceUnmountPolicy(p.ctx, target)
+		if !assertDecisionJSONContains(t, err, "no device at path to unmount") {
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceDeviceUnmountPolicy_No_Matches failed: %v", err)
 	}
 }
 
@@ -282,11 +312,11 @@ func Test_Rego_EnforceDeviceMountPolicy_Duplicate_Device_Target(t *testing.T) {
 		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
 
 		if err != nil {
-			t.Errorf("unable to convert policy to rego: %v", err)
+			t.Errorf("cannot make rego policy from constraints: %v", err)
 			return false
 		}
 
-		target := testDataGenerator.uniqueMountTarget()
+		target := testDataGenerator.uniqueLayerMountTarget()
 		rootHash := selectRootHashFromConstraints(p, testRand)
 		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
 		if err != nil {
@@ -309,6 +339,342 @@ func Test_Rego_EnforceDeviceMountPolicy_Duplicate_Device_Target(t *testing.T) {
 	}
 }
 
+func Test_Rego_EnforceDeviceMountPolicy_InvalidMountTarget(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		target := testDataGenerator.uniqueRandomMountTarget()
+		rootHash := selectRootHashFromConstraints(p, testRand)
+
+		err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
+
+		return assertDecisionJSONContains(t, err, "mountpoint invalid")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceDeviceMountPolicy_InvalidMountTarget failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceDeviceMountPolicy_InvalidMountTarget_PathTraversal(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	securityPolicy := p.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Errorf("cannot make rego policy from constraints: %v", err)
+		return
+	}
+
+	target := testDataGenerator.uniqueLayerMountTarget() + "/../../../../.."
+	rootHash := selectRootHashFromConstraints(p, testRand)
+
+	err = policy.EnforceDeviceMountPolicy(p.ctx, target, rootHash)
+
+	assertDecisionJSONContains(t, err, "mountpoint invalid")
+}
+
+func deviceMountUnmountTest(t *testing.T, p *generatedConstraints, policy *regoEnforcer, mountScratchFirst, unmountScratchFirst, testInvalidUnmount bool) bool {
+	container := selectContainerFromContainerList(p.containers, testRand)
+	containerID := testDataGenerator.uniqueContainerID()
+	rotarget := testDataGenerator.uniqueLayerMountTarget()
+	rwtarget := getScratchDiskMountTarget(containerID)
+
+	var err error
+
+	mountScratch := func() bool {
+		err = policy.EnforceRWDeviceMountPolicy(p.ctx, rwtarget, true, true, "xfs")
+		if err != nil {
+			t.Errorf("unable to mount rw device: %v", err)
+			return false
+		}
+		return true
+	}
+
+	mountLayer := func() bool {
+		err = policy.EnforceDeviceMountPolicy(p.ctx, rotarget, container.Layers[0])
+		if err != nil {
+			t.Errorf("unable to mount ro device: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if mountScratchFirst {
+		if !mountScratch() || !mountLayer() {
+			return false
+		}
+	} else {
+		if !mountLayer() || !mountScratch() {
+			return false
+		}
+	}
+
+	unmountScratch := func() bool {
+		err = policy.EnforceRWDeviceUnmountPolicy(p.ctx, rwtarget)
+		if err != nil {
+			t.Errorf("unable to unmount rw device: %v", err)
+			return false
+		}
+		return true
+	}
+
+	unmountLayer := func() bool {
+		err = policy.EnforceDeviceUnmountPolicy(p.ctx, rotarget)
+		if err != nil {
+			t.Errorf("unable to unmount ro device: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if unmountScratchFirst {
+		if !unmountScratch() || !unmountLayer() {
+			return false
+		}
+	} else {
+		if !unmountLayer() || !unmountScratch() {
+			return false
+		}
+	}
+
+	if testInvalidUnmount {
+		err = policy.EnforceDeviceUnmountPolicy(p.ctx, rotarget)
+		if !assertDecisionJSONContains(t, err, "no device at path to unmount") {
+			return false
+		}
+
+		err = policy.EnforceRWDeviceUnmountPolicy(p.ctx, rwtarget)
+		if !assertDecisionJSONContains(t, err, "no device at path to unmount") {
+			return false
+		}
+	}
+
+	return true
+}
+
+func Test_Rego_EnforceRWDeviceMountPolicy_MountAndUnmount(t *testing.T) {
+	f := func(p *generatedConstraints, mountScratchFirst, unmountScratchFirst bool) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		return deviceMountUnmountTest(t, p, policy, mountScratchFirst, unmountScratchFirst, true)
+	}
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceRWDeviceMountPolicy_MountAndUnmount failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceRWDeviceMountPolicy_InvalidTarget(t *testing.T) {
+	f := func(p *generatedConstraints, encrypted bool, ensureFileSystem bool) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		target := testDataGenerator.uniqueRandomMountTarget()
+		filesystem := "xfs"
+
+		err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, encrypted, ensureFileSystem, filesystem)
+
+		return assertDecisionJSONContains(t, err, "mountpoint invalid")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceRWDeviceMountPolicy_Matches failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceRWDeviceMountPolicy_MissingEnsureFilesystem(t *testing.T) {
+	f := func(p *generatedConstraints, encrypted bool) bool {
+		p.allowUnencryptedScratch = !encrypted
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		target := getScratchDiskMountTarget(testDataGenerator.uniqueContainerID())
+		filesystem := "xfs"
+
+		err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, encrypted, false, filesystem)
+
+		return assertDecisionJSONContains(t, err, "ensureFilesystem must be set on rw device mounts")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceRWDeviceMountPolicy_Matches failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceRWDeviceMountPolicy_DontAllowUnencrypted(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	p.allowUnencryptedScratch = false
+	securityPolicy := p.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Errorf("cannot make rego policy from constraints: %v", err)
+		return
+	}
+
+	target := getScratchDiskMountTarget(testDataGenerator.uniqueContainerID())
+	filesystem := "xfs"
+
+	err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, false, true, filesystem)
+
+	assertDecisionJSONContains(t, err, "unencrypted scratch not allowed, non-readonly mount request for SCSI disk must request encryption")
+}
+
+func Test_Rego_EnforceRWDeviceMountPolicy_InvalidFilesystem(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	securityPolicy := p.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Errorf("cannot make rego policy from constraints: %v", err)
+		return
+	}
+
+	target := getScratchDiskMountTarget(testDataGenerator.uniqueContainerID())
+	dangerousFilesystems := []string{
+		"9p",
+		"overlay",
+		"nfs",
+		"cifs",
+	}
+
+	for _, filesystem := range dangerousFilesystems {
+		err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, true, true, filesystem)
+		assertDecisionJSONContains(t, err, "rw device mounts uses a filesystem that is not allowed")
+	}
+}
+
+// Test that for an older allow all policy (api version < 0.11.0) that does not
+// have rw_mount_device, the use_framework passthrough is done correctly,
+// allowing enforcing rw mounts.
+func Test_Rego_EnforceRWDeviceMountPolicy_Compat_0_10_0_allow_all(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	regoPolicy := `
+package policy
+
+api_version := "0.10.0"
+framework_version := "0.3.0"
+
+mount_device := {"allowed": true}
+mount_overlay := {"allowed": true}
+create_container := {"allowed": true, "env_list": null, "allow_stdio_access": true}
+unmount_device := {"allowed": true}
+unmount_overlay := {"allowed": true}
+exec_in_container := {"allowed": true, "env_list": null}
+exec_external := {"allowed": true, "env_list": null, "allow_stdio_access": true}
+shutdown_container := {"allowed": true}
+signal_container_process := {"allowed": true}
+plan9_mount := {"allowed": true}
+plan9_unmount := {"allowed": true}
+get_properties := {"allowed": true}
+dump_stacks := {"allowed": true}
+runtime_logging := {"allowed": true}
+load_fragment := {"allowed": true}
+scratch_mount := {"allowed": true}
+scratch_unmount := {"allowed": true}
+`
+	for _, b1 := range []bool{true, false} {
+		for _, b2 := range []bool{true, false} {
+			policy, err := newRegoPolicy(regoPolicy, []oci.Mount{}, []oci.Mount{}, testOSType)
+			if err != nil {
+				t.Errorf("cannot compile rego policy: %v", err)
+				return
+			}
+
+			t.Run(fmt.Sprintf("mountScratchFirst=%t, unmountScratchFirst=%t", b1, b2), func(t *testing.T) {
+				deviceMountUnmountTest(t, p, policy, b1, b2, false)
+			})
+		}
+	}
+}
+
+// Test that for an older policy (api version < 0.11.0) that does not have
+// rw_mount_device, the use_framework passthrough is done correctly, allowing
+// enforcing rw mounts.
+func Test_Rego_EnforceRWDeviceMountPolicy_Compat_0_10_0(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	regoPolicy := getPolicyCode_0_10_0(p.containers[0].Layers[0])
+	for _, b1 := range []bool{true, false} {
+		for _, b2 := range []bool{true, false} {
+			policy, err := newRegoPolicy(regoPolicy, []oci.Mount{}, []oci.Mount{}, testOSType)
+			if err != nil {
+				t.Errorf("cannot compile rego policy: %v", err)
+				return
+			}
+
+			t.Run(fmt.Sprintf("mountScratchFirst=%t, unmountScratchFirst=%t", b1, b2), func(t *testing.T) {
+				deviceMountUnmountTest(t, p, policy, b1, b2, true)
+			})
+		}
+	}
+
+	policy, err := newRegoPolicy(regoPolicy, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Errorf("cannot compile rego policy: %v", err)
+		return
+	}
+
+	// Invalid mount target
+	target := testDataGenerator.uniqueRandomMountTarget()
+	filesystem := "xfs"
+	encrypted := true
+	ensureFileSystem := true
+	err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, encrypted, ensureFileSystem, filesystem)
+	assertDecisionJSONContains(t, err, "mountpoint invalid")
+
+	// Missing ensureFilesystem
+	ensureFileSystem = false
+	target = getScratchDiskMountTarget(testDataGenerator.uniqueContainerID())
+	err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, encrypted, ensureFileSystem, filesystem)
+	assertDecisionJSONContains(t, err, "ensureFilesystem must be set on rw device mounts")
+
+	// Unencrypted scratch not allowed
+	ensureFileSystem = true
+	encrypted = false
+	err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, encrypted, ensureFileSystem, filesystem)
+	assertDecisionJSONContains(t, err, "unencrypted scratch not allowed, non-readonly mount request for SCSI disk must request encryption")
+}
+
+func Test_Rego_EnforceRWDeviceMountPolicy_OpenDoor(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	policy, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Errorf("cannot compile open door rego policy: %v", err)
+		return
+	}
+
+	deviceMountUnmountTest(t, p, policy, true, true, false)
+
+	ensureFileSystem := false
+	encrypted := false
+	filesystem := "zfs"
+	target := "/bin"
+	err = policy.EnforceRWDeviceMountPolicy(p.ctx, target, encrypted, ensureFileSystem, filesystem)
+	if err != nil {
+		t.Errorf("unexpected error mounting rw device: %v", err)
+	}
+
+	err = policy.EnforceRWDeviceUnmountPolicy(p.ctx, target)
+	if err != nil {
+		t.Errorf("unexpected error unmounting rw device: %v", err)
+	}
+}
+
 // Verify that RegoSecurityPolicyEnforcer.EnforceOverlayMountPolicy will
 // return an error when there's no matching overlay targets.
 func Test_Rego_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
@@ -319,7 +685,8 @@ func Test_Rego_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
+		err = tc.policy.EnforceOverlayMountPolicy(
+			p.ctx, tc.containerID, tc.layers, getOverlayMountTarget(tc.containerID))
 
 		if err == nil {
 			return false
@@ -348,7 +715,8 @@ func Test_Rego_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
+		err = tc.policy.EnforceOverlayMountPolicy(
+			p.ctx, tc.containerID, tc.layers, getOverlayMountTarget(tc.containerID))
 
 		// getting an error means something is broken
 		return err == nil
@@ -388,7 +756,8 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_With_Same_Root_Hash(t *testing.T
 		t.Fatalf("error creating valid overlay: %v", err)
 	}
 
-	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, layers, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(
+		constraints.ctx, containerID, layers, getOverlayMountTarget(containerID))
 	if err != nil {
 		t.Fatalf("Unable to create an overlay where root hashes are the same")
 	}
@@ -428,7 +797,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 
 	sharedMount := ""
 	for i := 0; i < len(containerOne.Layers); i++ {
-		mount := testDataGenerator.uniqueMountTarget()
+		mount := testDataGenerator.uniqueLayerMountTarget()
 		err := policy.EnforceDeviceMountPolicy(constraints.ctx, mount, containerOne.Layers[i])
 		if err != nil {
 			t.Fatalf("Unexpected error mounting overlay device: %v", err)
@@ -440,13 +809,14 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 		containerOneOverlay[len(containerOneOverlay)-i-1] = mount
 	}
 
-	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, containerOneOverlay, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(
+		constraints.ctx, containerID, containerOneOverlay, getOverlayMountTarget(containerID))
 	if err != nil {
 		t.Fatalf("Unexpected error mounting overlay: %v", err)
 	}
 
 	//
-	// Mount our second contaniers overlay. This should all work.
+	// Mount our second container overlay. This should all work.
 	//
 	containerID = testDataGenerator.uniqueContainerID()
 
@@ -456,7 +826,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 	for i := 0; i < len(containerTwo.Layers); i++ {
 		var mount string
 		if i != sharedLayerIndex {
-			mount = testDataGenerator.uniqueMountTarget()
+			mount = testDataGenerator.uniqueLayerMountTarget()
 
 			err := policy.EnforceDeviceMountPolicy(constraints.ctx, mount, containerTwo.Layers[i])
 			if err != nil {
@@ -469,7 +839,8 @@ func Test_Rego_EnforceOverlayMountPolicy_Layers_Shared_Layers(t *testing.T) {
 		containerTwoOverlay[len(containerTwoOverlay)-i-1] = mount
 	}
 
-	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, containerTwoOverlay, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(
+		constraints.ctx, containerID, containerTwoOverlay, getOverlayMountTarget(containerID))
 	if err != nil {
 		t.Fatalf("Unexpected error mounting overlay: %v", err)
 	}
@@ -490,12 +861,16 @@ func Test_Rego_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testi
 			return false
 		}
 
-		if err := tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget()); err != nil {
+		overlayTarget := getOverlayMountTarget(tc.containerID)
+
+		if err := tc.policy.EnforceOverlayMountPolicy(
+			p.ctx, tc.containerID, tc.layers, overlayTarget); err != nil {
 			t.Errorf("expected nil error got: %v", err)
 			return false
 		}
 
-		if err := tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget()); err == nil {
+		if err := tc.policy.EnforceOverlayMountPolicy(
+			p.ctx, tc.containerID, tc.layers, overlayTarget); err == nil {
 			t.Errorf("able to create overlay for the same container twice")
 			return false
 		} else {
@@ -536,7 +911,8 @@ func Test_Rego_EnforceOverlayMountPolicy_Reusing_ID_Across_Overlays(t *testing.T
 		t.Fatalf("Unexpected error creating valid overlay: %v", err)
 	}
 
-	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(
+		constraints.ctx, containerID, layerPaths, getOverlayMountTarget(containerID))
 	if err != nil {
 		t.Fatalf("Unexpected error mounting overlay filesystem: %v", err)
 	}
@@ -547,7 +923,8 @@ func Test_Rego_EnforceOverlayMountPolicy_Reusing_ID_Across_Overlays(t *testing.T
 		t.Fatalf("Unexpected error creating valid overlay: %v", err)
 	}
 
-	err = policy.EnforceOverlayMountPolicy(constraints.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = policy.EnforceOverlayMountPolicy(
+		constraints.ctx, containerID, layerPaths, getOverlayMountTarget(containerID))
 	if err == nil {
 		t.Fatalf("Unexpected success mounting overlay filesystem")
 	}
@@ -588,7 +965,8 @@ func Test_Rego_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *te
 			}
 
 			id := testDataGenerator.uniqueContainerID()
-			err = policy.EnforceOverlayMountPolicy(constraints.ctx, id, layerPaths, testDataGenerator.uniqueMountTarget())
+			err = policy.EnforceOverlayMountPolicy(
+				constraints.ctx, id, layerPaths, getOverlayMountTarget(id))
 			if err != nil {
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}
@@ -604,7 +982,7 @@ func Test_Rego_EnforceOverlayUnmountPolicy(t *testing.T) {
 			return false
 		}
 
-		target := testDataGenerator.uniqueMountTarget()
+		target := getOverlayMountTarget(tc.containerID)
 		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, target)
 		if err != nil {
 			t.Errorf("Failure setting up overlay for testing: %v", err)
@@ -633,14 +1011,14 @@ func Test_Rego_EnforceOverlayUnmountPolicy_No_Matches(t *testing.T) {
 			return false
 		}
 
-		target := testDataGenerator.uniqueMountTarget()
+		target := getOverlayMountTarget(tc.containerID)
 		err = tc.policy.EnforceOverlayMountPolicy(p.ctx, tc.containerID, tc.layers, target)
 		if err != nil {
 			t.Errorf("Failure setting up overlay for testing: %v", err)
 			return false
 		}
 
-		badTarget := testDataGenerator.uniqueMountTarget()
+		badTarget := getOverlayMountTarget(generateContainerID(testRand))
 		err = tc.policy.EnforceOverlayUnmountPolicy(p.ctx, badTarget)
 		if err == nil {
 			t.Errorf("Unexpected policy enforcement success: %v", err)
@@ -771,6 +1149,125 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceEnvironmentVariablePolicy_RegexPatterns(t *testing.T) {
+	testCases := []struct {
+		rule             string
+		expectMatches    []string
+		expectNotMatches []string
+		skipAddAnchors   bool
+	}{
+		{
+			rule:             "PREFIX_.+=.+",
+			expectMatches:    []string{"PREFIX_FOO=BAR"},
+			expectNotMatches: []string{"PREFIX_FOO=", "SOMETHING=ELSE", "SOMETHING_PREFIX_FOO=BAR"},
+		},
+		{
+			rule:             "PREFIX_.+=.+BAR",
+			expectMatches:    []string{"PREFIX_FOO=FOO_BAR"},
+			expectNotMatches: []string{"PREFIX_FOO=BAR_FOO"},
+		},
+		{
+			rule:             "SIMPLE_VAR=.+",
+			expectMatches:    []string{"SIMPLE_VAR=FOO"},
+			expectNotMatches: []string{"SIMPLE_VAR=", "SOMETHING=ELSE", "SOMETHING=ELSE:SIMPLE_VAR=FOO", "SIMPLE_VAR_FOO=BAR", "SIMPLE_VAR"},
+		},
+		{
+			rule:             "SIMPLE_VAR=.*",
+			expectMatches:    []string{"SIMPLE_VAR=FOO", "SIMPLE_VAR="},
+			expectNotMatches: []string{"SIMPLE_VAR"},
+		},
+		{
+			rule:             "SIMPLE_VAR=",
+			expectMatches:    []string{"SIMPLE_VAR="},
+			expectNotMatches: []string{"SIMPLE_VAR", "SIMPLE_VAR=FOO"},
+		},
+		{
+			rule:             "",
+			expectMatches:    []string{},
+			expectNotMatches: []string{"ANYTHING", "ANYTHING=ELSE"},
+		},
+		{
+			rule:             "(^PREFIX1|^PREFIX2)=.+$",
+			expectMatches:    []string{"PREFIX1=FOO", "PREFIX2=BAR"},
+			expectNotMatches: []string{"PREFIX3_FOO=BAR", "PREFIX1=", "SOMETHING=ELSE", ""},
+			skipAddAnchors:   true,
+		},
+	}
+
+	testRule := func(rule string, expectMatches, expectNotMatches []string) {
+		testName := rule
+		if testName == "" {
+			testName = "(empty)"
+		}
+		t.Run(testName, func(t *testing.T) {
+			gc := generateConstraints(testRand, 1)
+			container := selectContainerFromContainerList(gc.containers, testRand)
+			container.EnvRules = append(container.EnvRules, EnvRuleConfig{
+				Strategy: EnvVarRuleRegex,
+				Rule:     rule,
+			})
+			gc.allowEnvironmentVariableDropping = false
+
+			for _, env := range expectMatches {
+				tc, err := setupRegoCreateContainerTest(gc, container, false)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+
+				tc.envList = append(tc.envList, env)
+				envsToKeep, _, _, err := tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+				// getting an error means something is broken
+				if err != nil {
+					t.Errorf("Expected container creation to be allowed for env %s. It wasn't: %v", env, err)
+					return
+				}
+
+				if !areStringArraysEqual(envsToKeep, tc.envList) {
+					t.Errorf("Expected env %s to be kept, but it was not in the returned envs: %v", env, envsToKeep)
+					return
+				}
+			}
+
+			for _, env := range expectNotMatches {
+				tc, err := setupRegoCreateContainerTest(gc, container, false)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+
+				tc.envList = append(tc.envList, env)
+				_, _, _, err = tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+				// not getting an error means something is broken
+				if err == nil {
+					t.Errorf("Expected container creation not to be allowed for env %s. It was allowed: %v", env, err)
+					return
+				}
+
+				envName := strings.Split(env, "=")[0]
+				assertDecisionJSONContains(t, err, "invalid env list", envName)
+			}
+		})
+	}
+
+	for _, testCase := range testCases {
+		if !testCase.skipAddAnchors {
+			for _, rule := range []string{
+				testCase.rule,
+				"^" + testCase.rule,
+				testCase.rule + "$",
+				"^" + testCase.rule + "$",
+			} {
+				testRule(rule, testCase.expectMatches, testCase.expectNotMatches)
+			}
+		} else {
+			testRule(testCase.rule, testCase.expectMatches, testCase.expectNotMatches)
+		}
 	}
 }
 
@@ -1880,8 +2377,8 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	input := make(map[string]interface{})
-	results, err := policy.applyDefaults("__fixture_for_allowed_test_false__", input)
+	results := make(rpi.RegoQueryResult)
+	results, err = policy.applyDefaults("__fixture_for_allowed_test_false__", nil, results)
 	if err != nil {
 		t.Fatalf("applied defaults for an enforcement point receieved an error: %v", err)
 	}
@@ -1896,8 +2393,8 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 		t.Fatal("result of allowed for an available enforcement point was not the specified default (false)")
 	}
 
-	input = make(map[string]interface{})
-	results, err = policy.applyDefaults("__fixture_for_allowed_test_true__", input)
+	results = make(rpi.RegoQueryResult)
+	results, err = policy.applyDefaults("__fixture_for_allowed_test_true__", nil, results)
 	if err != nil {
 		t.Fatalf("applied defaults for an enforcement point receieved an error: %v", err)
 	}
@@ -3326,9 +3823,7 @@ func Test_Rego_Plan9MountPolicy_No_Matches(t *testing.T) {
 		tc.seccomp,
 	)
 
-	if err == nil {
-		t.Fatal("Policy enforcement unexpectedly was allowed")
-	}
+	assertDecisionJSONContains(t, err, "invalid mount list")
 }
 
 func Test_Rego_Plan9MountPolicy_Invalid(t *testing.T) {
@@ -3340,6 +3835,21 @@ func Test_Rego_Plan9MountPolicy_Invalid(t *testing.T) {
 	}
 
 	mount := randString(testRand, maxGeneratedMountSourceLength)
+	err = tc.policy.EnforcePlan9MountPolicy(gc.ctx, mount)
+	if err == nil {
+		t.Fatal("Policy enforcement unexpectedly was allowed", err)
+	}
+}
+
+func Test_Rego_Plan9MountPolicy_Invalid_PathTraversal(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+
+	tc, err := setupPlan9MountTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	mount := tc.uvmPathForShare + "/../../bin"
 	err = tc.policy.EnforcePlan9MountPolicy(gc.ctx, mount)
 	if err == nil {
 		t.Fatal("Policy enforcement unexpectedly was allowed", err)
@@ -3381,9 +3891,7 @@ func Test_Rego_Plan9UnmountPolicy(t *testing.T) {
 		tc.seccomp,
 	)
 
-	if err == nil {
-		t.Fatal("Policy enforcement unexpectedly was allowed")
-	}
+	assertDecisionJSONContains(t, err, "invalid mount list")
 }
 
 func Test_Rego_Plan9UnmountPolicy_No_Matches(t *testing.T) {
@@ -3402,9 +3910,7 @@ func Test_Rego_Plan9UnmountPolicy_No_Matches(t *testing.T) {
 
 	badMount := randString(testRand, maxPlan9MountTargetLength)
 	err = tc.policy.EnforcePlan9UnmountPolicy(gc.ctx, badMount)
-	if err == nil {
-		t.Fatalf("Policy enforcement unexpectedly was allowed")
-	}
+	assertDecisionJSONContains(t, err, "no device at path to unmount")
 }
 
 func Test_Rego_GetPropertiesPolicy_On(t *testing.T) {
@@ -4226,6 +4732,9 @@ func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
 			failureExpected:    false,
 		},
 	} {
+
+		filesystem := "xfs"
+
 		t.Run(fmt.Sprintf("UnencryptedAllowed_%t_And_Encrypted_%t", tc.unencryptedAllowed, tc.encrypted), func(t *testing.T) {
 			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 			smConfig, err := setupRegoScratchMountTest(gc, tc.unencryptedAllowed)
@@ -4233,15 +4742,29 @@ func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
 				t.Fatalf("unable to setup test: %s", err)
 			}
 
-			scratchPath := generateMountTarget(testRand)
-			err = smConfig.policy.EnforceScratchMountPolicy(gc.ctx, scratchPath, tc.encrypted)
+			containerId := testDataGenerator.uniqueContainerID()
+			scratchDiskMount := getScratchDiskMountTarget(containerId)
+
+			err = smConfig.policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchDiskMount, tc.encrypted, true, filesystem)
 			if tc.failureExpected {
 				if err == nil {
-					t.Fatal("policy enforcement should've been denied")
+					t.Fatal("mounting should've been denied")
 				}
 			} else {
 				if err != nil {
-					t.Fatalf("policy enforcement unexpectedly was denied: %s", err)
+					t.Fatalf("mounting unexpectedly was denied: %s", err)
+				}
+			}
+
+			scratchPath := path.Join(scratchDiskMount, guestpath.ScratchDir, containerId)
+			err = smConfig.policy.EnforceScratchMountPolicy(gc.ctx, scratchPath, tc.encrypted)
+			if tc.failureExpected {
+				if err == nil {
+					t.Fatal("scratch mount should've been denied")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("scratch mount unexpectedly was denied: %s", err)
 				}
 			}
 		})
@@ -4280,7 +4803,15 @@ func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
 				t.Fatalf("unable to setup test: %s", err)
 			}
 
-			scratchPath := generateMountTarget(testRand)
+			containerId := testDataGenerator.uniqueContainerID()
+			scratchDiskMount := getScratchDiskMountTarget(containerId)
+
+			err = smConfig.policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchDiskMount, tc.encrypted, true, "xfs")
+			if err != nil {
+				t.Fatalf("mounting unexpectedly was denied: %s", err)
+			}
+
+			scratchPath := path.Join(scratchDiskMount, guestpath.ScratchDir, containerId)
 			err = smConfig.policy.EnforceScratchMountPolicy(gc.ctx, scratchPath, tc.encrypted)
 			if err != nil {
 				t.Fatalf("scratch_mount policy enforcement unexpectedly was denied: %s", err)
@@ -4289,6 +4820,11 @@ func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
 			err = smConfig.policy.EnforceScratchUnmountPolicy(gc.ctx, scratchPath)
 			if err != nil {
 				t.Fatalf("scratch_unmount policy enforcement unexpectedly was denied: %s", err)
+			}
+
+			err = smConfig.policy.EnforceRWDeviceUnmountPolicy(gc.ctx, scratchDiskMount)
+			if err != nil {
+				t.Fatalf("device_unmount policy enforcement unexpectedly was denied: %s", err)
 			}
 		})
 	}
@@ -4798,7 +5334,7 @@ func Test_FrameworkVersion_Missing(t *testing.T) {
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(tc.policy, c)
 
-	err = tc.policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = tc.policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layerPaths, testDataGenerator.uniqueLayerMountTarget())
 	if err == nil {
 		t.Error("unexpected success. Missing framework_version should trigger an error.")
 	}
@@ -4834,7 +5370,8 @@ func Test_FrameworkVersion_In_Future(t *testing.T) {
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(tc.policy, c)
 
-	err = tc.policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layerPaths, testDataGenerator.uniqueMountTarget())
+	err = tc.policy.EnforceOverlayMountPolicy(
+		gc.ctx, containerID, layerPaths, getOverlayMountTarget(containerID))
 	if err == nil {
 		t.Error("unexpected success. Future framework_version should trigger an error.")
 	}
@@ -5799,7 +6336,8 @@ func Test_Rego_ErrorTruncation_Unable(t *testing.T) {
 
 	maxErrorMessageLength := 32
 	tc.policy.maxErrorMessageLength = maxErrorMessageLength
-	err = tc.policy.EnforceOverlayMountPolicy(gc.ctx, tc.containerID, tc.layers, testDataGenerator.uniqueMountTarget())
+	err = tc.policy.EnforceOverlayMountPolicy(
+		gc.ctx, tc.containerID, tc.layers, getOverlayMountTarget(tc.containerID))
 
 	if err == nil {
 		t.Fatal("Policy did not throw the expected error")
