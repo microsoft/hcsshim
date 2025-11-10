@@ -5,8 +5,26 @@ import future.keywords.in
 
 version := "@@FRAMEWORK_VERSION@@"
 
+# Add ^ and $ to regex patterns that doesn't have them.
+# This forces the regex to match the entire string, which is safer.
+# Policies should include .* explicitly at the beginning or end if partial
+# matches are to be allowed.
+
+anchor_pattern(p) := p {
+    startswith(p, "^")
+    endswith(p, "$")
+} else := concat("", ["^", p]) {
+    endswith(p, "$")
+} else := concat("", [p, "$"]) {
+    startswith(p, "^")
+} else := concat("", ["^", p, "$"])
+
 device_mounted(target) {
     data.metadata.devices[target]
+}
+
+device_mounted(target) {
+    data.metadata.rw_devices[target]
 }
 
 default deviceHash_ok := false
@@ -27,9 +45,14 @@ deviceHash_ok {
 
 default mount_device := {"allowed": false}
 
+mount_target_ok {
+    regex.match(anchor_pattern(input.mountPathRegex), input.target)
+}
+
 mount_device := {"metadata": [addDevice], "allowed": true} {
     not device_mounted(input.target)
     deviceHash_ok
+    mount_target_ok
     addDevice := {
         "name": "devices",
         "action": "add",
@@ -38,12 +61,52 @@ mount_device := {"metadata": [addDevice], "allowed": true} {
     }
 }
 
+allowed_scratch_fs("ext4")
+allowed_scratch_fs("xfs")
+
+rwmount_device_encrypt_ok {
+    input.encrypted
+}
+
+rwmount_device_encrypt_ok {
+    allow_unencrypted_scratch
+}
+
+default rw_mount_device := {"allowed": false}
+
+rw_mount_device := {"metadata": [addDevice], "allowed": true} {
+    not device_mounted(input.target)
+    rwmount_device_encrypt_ok
+    input.ensureFilesystem
+    allowed_scratch_fs(input.filesystem)
+    mount_target_ok
+    addDevice := {
+        "name": "rw_devices",
+        "action": "add",
+        "key": input.target,
+        "value": true,
+    }
+}
+
 default unmount_device := {"allowed": false}
 
 unmount_device := {"metadata": [removeDevice], "allowed": true} {
-    device_mounted(input.unmountTarget)
+    data.metadata.devices[input.unmountTarget]
+
     removeDevice := {
         "name": "devices",
+        "action": "remove",
+        "key": input.unmountTarget,
+    }
+}
+
+default rw_unmount_device := {"allowed": false}
+
+rw_unmount_device := {"metadata": [removeRWDevice], "allowed": true} {
+    data.metadata.rw_devices[input.unmountTarget]
+
+    removeRWDevice := {
+        "name": "rw_devices",
         "action": "remove",
         "key": input.unmountTarget,
     }
@@ -127,6 +190,10 @@ default mount_overlay := {"allowed": false}
 mount_overlay := {"metadata": [addMatches, addOverlayTarget], "allowed": true} {
     not overlay_exists
 
+    # sanity check, but due to checks in the Go code, this should always pass if
+    # `not overlay_exists` passes.
+    not overlay_mounted(input.target)
+
     containers := [container |
         container := candidate_containers[_]
         layerPaths_ok(container.layers)
@@ -171,30 +238,7 @@ env_ok(pattern, "string", value) {
 }
 
 env_ok(pattern, "re2", value) {
-    anchored := anchor_pattern(pattern)
-    regex.match(anchored, value)
-}
-
-anchor_pattern(p) := anchored {
-    startswith_leading := startswith(p, "^")
-    endswith_trailing := endswith(p, "$")
-
-    anchored = sprintf("%s%s%s", [
-        add_leading_trailing_chars(startswith_leading, "", "^"),  # Add ^ only if missing
-        p,
-        add_leading_trailing_chars(endswith_trailing, "", "$")     # Add $ only if missing
-    ])
-}
-
-# Function to return one of two values depending on a boolean condition
-add_leading_trailing_chars(cond, ifTrue, ifFalse) := result {
-    cond
-    result = ifTrue
-}
-
-add_leading_trailing_chars(cond, ifTrue, ifFalse) := result {
-    not cond
-    result = ifFalse
+    regex.match(anchor_pattern(pattern), value)
 }
 
 rule_ok(rule, env) {
@@ -316,7 +360,7 @@ idName_ok(pattern, "name", value) {
 }
 
 idName_ok(pattern, "re2", value) {
-    regex.match(pattern, value.name)
+    regex.match(anchor_pattern(pattern), value.name)
 }
 
 user_ok(user) {
@@ -682,13 +726,13 @@ security_ok(current_container) {
 mountSource_ok(constraint, source) {
     startswith(constraint, data.sandboxPrefix)
     newConstraint := replace(constraint, data.sandboxPrefix, input.sandboxDir)
-    regex.match(newConstraint, source)
+    regex.match(anchor_pattern(newConstraint), source)
 }
 
 mountSource_ok(constraint, source) {
     startswith(constraint, data.hugePagesPrefix)
     newConstraint := replace(constraint, data.hugePagesPrefix, input.hugePagesDir)
-    regex.match(newConstraint, source)
+    regex.match(anchor_pattern(newConstraint), source)
 }
 
 mountSource_ok(constraint, source) {
@@ -918,7 +962,7 @@ default plan9_mount := {"allowed": false}
 plan9_mount := {"metadata": [addPlan9Target], "allowed": true} {
     not plan9_mounted(input.target)
     some containerID, _ in data.metadata.matches
-    pattern := concat("", [input.rootPrefix, "/", containerID, input.mountPathPrefix])
+    pattern := concat("", ["^", input.rootPrefix, "/", containerID, input.mountPathPrefix, "$"])
     regex.match(pattern, input.target)
     addPlan9Target := {
         "name": "p9mounts",
@@ -940,20 +984,28 @@ plan9_unmount := {"metadata": [removePlan9Target], "allowed": true} {
 }
 
 
-default enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": true, "invalid": false, "version_missing": false}
+default enforcement_point_info := {
+    "available": false,
+    "default_results": {"allow": false},
+    "unknown": true,
+    "invalid": false,
+    "version_missing": false,
+    "use_framework": false
+}
 
-enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": false, "version_missing": true} {
+enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": false, "version_missing": true, "use_framework": false} {
     policy_api_version == null
 }
 
-enforcement_point_info := {"available": available, "default_results": default_results, "unknown": false, "invalid": false, "version_missing": false} {
+enforcement_point_info := {"available": available, "default_results": default_results, "unknown": false, "invalid": false, "version_missing": false, "use_framework": use_framework} {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.version, enforcement_point.introducedVersion) >= 0
     available := semver.compare(policy_api_version, enforcement_point.introducedVersion) >= 0
     default_results := enforcement_point.default_results
+    use_framework := enforcement_point.use_framework
 }
 
-enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": true, "version_missing": false} {
+enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": true, "version_missing": false, "use_framework": false} {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.version, enforcement_point.introducedVersion) < 0
 }
@@ -1250,9 +1302,50 @@ errors["device already mounted at path"] {
     device_mounted(input.target)
 }
 
+errors["mountpoint invalid"] {
+    input.rule in ["mount_device", "rw_mount_device"]
+    not mount_target_ok
+}
+
 errors["no device at path to unmount"] {
     input.rule == "unmount_device"
-    not device_mounted(input.unmountTarget)
+    not data.metadata.devices[input.unmountTarget]
+    not data.metadata.rw_devices[input.unmountTarget]
+}
+
+errors["received read-only unmount request, but device provided is read-write"] {
+    input.rule == "unmount_device"
+    not data.metadata.devices[input.unmountTarget]
+    data.metadata.rw_devices[input.unmountTarget]
+}
+
+errors["no device at path to unmount"] {
+    input.rule == "rw_unmount_device"
+    not data.metadata.devices[input.unmountTarget]
+    not data.metadata.rw_devices[input.unmountTarget]
+}
+
+errors["received read-write unmount request, but device provided is read-only"] {
+    input.rule == "rw_unmount_device"
+    not data.metadata.rw_devices[input.unmountTarget]
+    data.metadata.devices[input.unmountTarget]
+}
+
+# Error string tested in azcri-containerd Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy
+errors["unencrypted scratch not allowed, non-readonly mount request for SCSI disk must request encryption"] {
+    input.rule == "rw_mount_device"
+    not allow_unencrypted_scratch
+    not input.encrypted
+}
+
+errors["ensureFilesystem must be set on rw device mounts"] {
+    input.rule == "rw_mount_device"
+    not input.ensureFilesystem
+}
+
+errors["rw device mounts uses a filesystem that is not allowed"] {
+    input.rule == "rw_mount_device"
+    not allowed_scratch_fs(input.filesystem)
 }
 
 errors["container already started"] {
