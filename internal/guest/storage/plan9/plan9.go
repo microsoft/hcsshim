@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
@@ -24,6 +25,19 @@ var (
 	osRemoveAll = os.RemoveAll
 	unixMount   = unix.Mount
 )
+
+// c.f. v9fs_parse_options in linux/fs/9p/v9fs.c - technically anything other
+// than ',' is ok (quoting is not handled), however, this name is generated from
+// a counter in AddPlan9 (internal/uvm/plan9.go), and therefore we expect only
+// digits from a normal hcsshim host.
+var validShareNameRegex = regexp.MustCompile(`^[0-9]+$`)
+
+func ValidateShareName(name string) error {
+	if !validShareNameRegex.MatchString(name) {
+		return fmt.Errorf("invalid plan9 share name %q: must match regex %q", name, validShareNameRegex.String())
+	}
+	return nil
+}
 
 // Mount dials a connection from `vsock` and mounts a Plan9 share to `target`.
 //
