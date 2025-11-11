@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -30,6 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/version"
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -414,6 +416,16 @@ func main() {
 
 	mux := bridge.NewBridgeMux()
 	b := bridge.New(mux, *v4)
+	// For confidential containers, we protect ourselves against attacks caused
+	// by concurrent modifications, by processing one request at a time.
+	sequential, err := amdsevsnp.IsSNP()
+	if err != nil {
+		// IsSNP cannot fail on LCOW
+		log.G(context.TODO()).WithError(err).Error("unexpected error from IsSNP")
+		// If it fails, we proceed with forceSequential enabled to be safe
+		sequential = true
+	}
+	b.Sequential = sequential
 	b.AssignHandlers(mux, h)
 
 	// Reconnect loop: dial the host, serve until the connection drops, then

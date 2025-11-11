@@ -177,6 +177,10 @@ type Bridge struct {
 	Handler Handler
 	// EnableV4 enables the v4+ bridge and the schema v2+ interfaces.
 	EnableV4 bool
+	// Setting Sequential to true will force the bridge to only process one
+	// request at a time, except for certain long-running operations (as defined
+	// in asyncMessages).
+	Sequential bool
 
 	// responseChan is the response channel used for both request/response
 	// and publish notification workflows.
@@ -256,6 +260,14 @@ func (b *Bridge) ShutdownRequested() bool {
 	return b.hasQuitPending.Load()
 }
 
+// Identify messages that will be processed asynchronously even in sequential
+// mode.  Note that in sequential mode, these messages will still wait for any
+// in-progress non-async messages to be handled before they are processed, but
+// once they are "acknowledged", the rest will be done asynchronously.
+func alwaysAsync(msgType prot.MessageIdentifier) bool {
+	return msgType == prot.ComputeSystemWaitForProcessV1
+}
+
 // AssignHandlers creates and assigns the appropriate bridge
 // events to be listen for and intercepted on `mux` before forwarding
 // to `gcs` for handling.
@@ -310,6 +322,10 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	defer close(responseErrChan)
 	defer b.disconnectNotifications()
 	defer close(b.quitChan)
+
+	if b.Sequential {
+		log.G(context.Background()).Info("bridge: ForceSequential enabled")
+	}
 
 	// Receive bridge requests and schedule them to be processed.
 	go func() {
@@ -413,30 +429,38 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	}()
 	// Process each bridge request async and create the response writer.
 	go func() {
+		doRequest := func(r *Request) {
+			br := bridgeResponse{
+				ctx: r.Context,
+				header: &prot.MessageHeader{
+					Type: prot.GetResponseIdentifier(r.Header.Type),
+					ID:   r.Header.ID,
+				},
+			}
+			resp, err := b.Handler.ServeMsg(r)
+			if resp == nil {
+				resp = &prot.MessageResponseBase{}
+			}
+			resp.Base().ActivityID = r.ActivityID
+			if err != nil {
+				span := trace.FromContext(r.Context)
+				if span != nil {
+					oc.SetSpanStatus(span, err)
+				}
+				setErrorForResponseBase(resp.Base(), err, "gcs" /* moduleName */)
+			}
+			br.response = resp
+			b.responseChan <- br
+		}
+
 		for req := range requestChan {
-			go func(r *Request) {
-				br := bridgeResponse{
-					ctx: r.Context,
-					header: &prot.MessageHeader{
-						Type: prot.GetResponseIdentifier(r.Header.Type),
-						ID:   r.Header.ID,
-					},
-				}
-				resp, err := b.Handler.ServeMsg(r)
-				if resp == nil {
-					resp = &prot.MessageResponseBase{}
-				}
-				resp.Base().ActivityID = r.ActivityID
-				if err != nil {
-					span := trace.FromContext(r.Context)
-					if span != nil {
-						oc.SetSpanStatus(span, err)
-					}
-					setErrorForResponseBase(resp.Base(), err, "gcs" /* moduleName */)
-				}
-				br.response = resp
-				b.responseChan <- br
-			}(req)
+			if b.Sequential && !alwaysAsync(req.Header.Type) {
+				// This will log warn after 5 seconds if the request is still
+				// being processed,
+				runSequentialRequest(req, doRequest)
+			} else {
+				go doRequest(req)
+			}
 		}
 	}()
 	// Process each bridge response sync. This channel is for request/response and publish workflows.
@@ -497,6 +521,32 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 		<-responseErrChan
 		return err
 	}
+}
+
+// Do handleFn(r), but prints a warning if handleFn does not, or takes too long
+// to return.
+func runSequentialRequest(r *Request, handleFn func(*Request)) {
+	// Note that this is only a context used for triggering the blockage
+	// warning, the request processing still uses r.Context.  We don't want to
+	// cancel the request handling itself when we reach the 5s timeout.
+	timeoutCtx, cancel := context.WithTimeout(r.Context, 5*time.Second)
+	go func() {
+		<-timeoutCtx.Done()
+		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+			log.G(timeoutCtx).WithFields(logrus.Fields{
+				// We want to log those even though we're providing r.Context, since if
+				// the request never finishes the span end log will never get written,
+				// and we may therefore not be able to find out about the following info
+				// otherwise:
+				"message-type": r.Header.Type.String(),
+				"message-id":   r.Header.ID,
+				"activity-id":  r.ActivityID,
+				"container-id": r.ContainerID,
+			}).Warnf("bridge: request processing thread in sequential mode blocked on the current request for more than 5 seconds")
+		}
+	}()
+	defer cancel()
+	handleFn(r)
 }
 
 // PublishNotification writes a specific notification to the bridge.
