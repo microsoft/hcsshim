@@ -1265,6 +1265,24 @@ func (h *Host) modifyMappedVirtualDisk(
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
+			if h.HasSecurityPolicy() {
+				// The only option we allow if there is policy enforcement is
+				// "ro", and it must match the readonly field in the request.
+				mountOptionHasRo := false
+				for _, opt := range mvd.Options {
+					if opt == "ro" {
+						mountOptionHasRo = true
+						continue
+					}
+					return errors.Errorf("mounting scsi device controller %d lun %d onto %s: mount option %q denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath, opt)
+				}
+				if mvd.ReadOnly != mountOptionHasRo {
+					return errors.Errorf(
+						"mounting scsi device controller %d lun %d onto %s with mount option %q failed due to mount option mismatch: mvd.ReadOnly=%t but mountOptionHasRo=%t",
+						mvd.Controller, mvd.Lun, mvd.MountPath, strings.Join(mvd.Options, ","), mvd.ReadOnly, mountOptionHasRo,
+					)
+				}
+			}
 			if mvd.ReadOnly {
 				var deviceHash string
 				if verityInfo != nil {
@@ -1427,6 +1445,12 @@ func (h *Host) modifyMappedDirectory(
 		err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
 		if err != nil {
 			return errors.Wrapf(err, "mounting plan9 device at %s denied by policy", md.MountPath)
+		}
+
+		if h.HasSecurityPolicy() {
+			if err = plan9.ValidateShareName(md.ShareName); err != nil {
+				return err
+			}
 		}
 
 		// Similar to the reasoning in modifyMappedVirtualDisk, since we're
