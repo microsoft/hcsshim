@@ -73,6 +73,9 @@ type Container struct {
 	// and deal with the extra pointer dereferencing overhead.
 	status atomic.Uint32
 
+	// Set to true when the init process for the container has exited
+	terminated atomic.Bool
+
 	// scratchDirPath represents the path inside the UVM where the scratch directory
 	// of this container is located. Usually, this is either `/run/gcs/c/<containerID>` or
 	// `/run/gcs/c/<UVMID>/container_<containerID>` if scratch is shared with UVM scratch.
