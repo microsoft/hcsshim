@@ -31,6 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/version"
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -362,6 +363,10 @@ func main() {
 	b := bridge.Bridge{
 		Handler:  mux,
 		EnableV4: *v4,
+
+		// For confidential containers, we protect ourselves against attacks caused
+		// by concurrent modifications, by processing one request at a time.
+		ForceSequential: amdsevsnp.IsSNP(),
 	}
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
 	// Initialize virtual pod support in the host
