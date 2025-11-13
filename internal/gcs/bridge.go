@@ -332,7 +332,7 @@ func (brdg *bridge) recvLoop() error {
 			}
 
 		case prot.MsgTypeNotify:
-			if typ != prot.NotifyContainer|prot.MsgTypeNotify {
+			if typ != prot.NotifyContainer|prot.ComputeSystem|prot.MsgTypeNotify {
 				return fmt.Errorf("bridge received unknown unknown notification message %s", typ)
 			}
 			var ntf prot.ContainerNotification

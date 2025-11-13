@@ -71,6 +71,15 @@ var WindowsGcsHvHostID = guid.GUID{
 	Data4: [8]uint8{0x93, 0xfe, 0x42, 0x96, 0x9a, 0xe6, 0xd8, 0xd1},
 }
 
+// WindowsLoggingHvsockServiceID is the hvsock service ID that the Windows log forward service
+// will connect to. 172dad59-976d-45f2-8b6c-6d1b13f2ac4d
+var WindowsLoggingHvsockServiceID = guid.GUID{
+	Data1: 0x172dad59,
+	Data2: 0x976d,
+	Data3: 0x45f2,
+	Data4: [8]uint8{0x8b, 0x6c, 0x6d, 0x1b, 0x13, 0xf2, 0xac, 0x4d},
+}
+
 type AnyInString struct {
 	Value interface{}
 }
@@ -83,10 +92,17 @@ func (a *AnyInString) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, &a.Value)
 }
 
+const (
+	// Message_Category for the GCS protocol.
+	ComputeSystem  = 0x00100000
+	ComputeService = 0x00200000
+)
+
 type RPCProc uint32
 
 const (
-	RPCCreate RPCProc = (iota+1)<<8 | 1
+	// Compute System RPCs
+	RPCCreate RPCProc = ComputeSystem | (iota+1)<<8 | 1
 	RPCStart
 	RPCShutdownGraceful
 	RPCShutdownForced
@@ -101,6 +117,17 @@ const (
 	RPCDeleteContainerState
 	RPCUpdateContainer
 	RPCLifecycleNotification
+)
+
+const (
+	// Compute Service RPCs
+	RPCModifyServiceSettings RPCProc = ComputeService | (iota+1)<<8 | 1
+)
+
+type ServiceModifyPropertyType string
+
+const (
+	LogForwardService = ServiceModifyPropertyType("LogForwardService")
 )
 
 func (rpc RPCProc) String() string {
@@ -135,6 +162,8 @@ func (rpc RPCProc) String() string {
 		return "UpdateContainer"
 	case RPCLifecycleNotification:
 		return "LifecycleNotification"
+	case RPCModifyServiceSettings:
+		return "ModifyServiceSettings"
 	default:
 		return "0x" + strconv.FormatUint(uint64(rpc), 16)
 	}
@@ -143,10 +172,10 @@ func (rpc RPCProc) String() string {
 type MsgType uint32
 
 const (
-	MsgTypeRequest  MsgType = 0x10100000
-	MsgTypeResponse MsgType = 0x20100000
-	MsgTypeNotify   MsgType = 0x30100000
-	MsgTypeMask     MsgType = 0xfff00000
+	MsgTypeRequest  MsgType = 0x10000000
+	MsgTypeResponse MsgType = 0x20000000
+	MsgTypeNotify   MsgType = 0x30000000
+	MsgTypeMask     MsgType = 0xf0000000
 
 	NotifyContainer = 1<<8 | 1
 )
@@ -160,7 +189,7 @@ func (typ MsgType) String() string {
 		s = "Response("
 	case MsgTypeNotify:
 		s = "Notify("
-		switch typ - MsgTypeNotify {
+		switch typ - (ComputeSystem | MsgTypeNotify) {
 		case NotifyContainer:
 			s += "Container"
 		default:
@@ -267,6 +296,12 @@ type ContainerNotification struct {
 	ResultInfo AnyInString `json:",omitempty"`
 }
 
+type ServiceModificationRequest struct {
+	RequestBase
+	PropertyType string      // ServiceModifyPropertyType
+	Settings     interface{} `json:",omitempty"`
+}
+
 type ContainerExecuteProcess struct {
 	RequestBase
 	Settings ExecuteProcessSettings
@@ -345,13 +380,14 @@ type ContainerModifySettings struct {
 }
 
 type GcsCapabilities struct {
-	SendHostCreateMessage      bool
-	SendHostStartMessage       bool
-	HvSocketConfigOnStartup    bool
-	SendLifecycleNotifications bool
-	SupportedSchemaVersions    []hcsschema.Version
-	RuntimeOsType              string
-	GuestDefinedCapabilities   json.RawMessage
+	SendHostCreateMessage          bool
+	SendHostStartMessage           bool
+	HvSocketConfigOnStartup        bool
+	SendLifecycleNotifications     bool
+	ModifyServiceSettingsSupported bool
+	SupportedSchemaVersions        []hcsschema.Version
+	RuntimeOsType                  string
+	GuestDefinedCapabilities       json.RawMessage
 }
 
 type ContainerCreateResponse struct {

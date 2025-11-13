@@ -179,7 +179,7 @@ func notifyThroughBridge(t *testing.T, typ prot.MsgType, msg interface{}, fn not
 func TestBridgeNotify(t *testing.T) {
 	ntf := &prot.ContainerNotification{Operation: "testing"}
 	recvd := false
-	err := notifyThroughBridge(t, prot.MsgTypeNotify|prot.NotifyContainer, ntf, func(nntf *prot.ContainerNotification) error {
+	err := notifyThroughBridge(t, prot.MsgTypeNotify|prot.ComputeSystem|prot.NotifyContainer, ntf, func(nntf *prot.ContainerNotification) error {
 		if !reflect.DeepEqual(ntf, nntf) {
 			t.Errorf("%+v != %+v", ntf, nntf)
 		}
@@ -197,7 +197,7 @@ func TestBridgeNotify(t *testing.T) {
 func TestBridgeNotifyFailure(t *testing.T) {
 	ntf := &prot.ContainerNotification{Operation: "testing"}
 	errMsg := "notify should have failed"
-	err := notifyThroughBridge(t, prot.MsgTypeNotify|prot.NotifyContainer, ntf, func(nntf *prot.ContainerNotification) error {
+	err := notifyThroughBridge(t, prot.MsgTypeNotify|prot.ComputeSystem|prot.NotifyContainer, ntf, func(nntf *prot.ContainerNotification) error {
 		return errors.New(errMsg)
 	})
 	if err == nil || !strings.Contains(err.Error(), errMsg) {

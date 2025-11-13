@@ -442,6 +442,36 @@ const (
 
 	// VSMBNoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM.
 	VSMBNoDirectMap = "io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap"
+
+	// LogSources specifies the ETW providers to be set for the logging service as a base64-encoded JSON string.
+	//
+	// For example:
+	//
+	//	{
+	//	  "logConfig": {
+	//	    "sources": [
+	//	      {
+	//	        "type": "ETW",
+	//	        "providers": [
+	//	          {
+	//	            "providerGuid": "80CE50DE-D264-4581-950D-ABADEEE0D340",
+	//	            "providerName": "Microsoft.Windows.HyperV.Compute",
+	//	            "level": "Information"
+	//	          }
+	//	        ]
+	//	      }
+	//	    ]
+	//	  }
+	//	}
+	//
+	// Would be encoded as:
+	//
+	// 	"io.microsoft.virtualmachine.wcow.logsources" =
+	// 		"eyJsb2dDb25maWciOnsic291cmNlcyI6W3sidHlwZSI6IkVUVyIsInByb3ZpZGVycyI6W3sicHJvdmlkZXJHdWlkIjoiODBDRTUwREUtRDI2NC00NTgxLTk1MEQtQUJBREVFRTBEMzQwIiwicHJvdmlkZXJOYW1lIjoiTWljcm9zb2Z0LldpbmRvd3MuSHlwZXJWLkNvbXB1dGUiLCJsZXZlbCI6IkluZm9ybWF0aW9uIn1dfV19fQ=="
+	LogSources = "io.microsoft.virtualmachine.wcow.logsources"
+
+	// ForwardLogs specifies whether to forward logs to the host or not.
+	ForwardLogs = "io.microsoft.virtualmachine.wcow.forwardlogs"
 )
 
 // LCOW uVM annotations.
