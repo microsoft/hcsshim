@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -19,15 +18,12 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/windevice"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/windows"
 )
 
 const (
@@ -89,11 +85,19 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		if err != nil {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
 		}
-		c := &Container{
-			id:        containerID,
-			spec:      spec,
-			processes: make(map[uint32]*containerProcess),
+
+		if err := b.hostState.SetupSecurityContextDir(ctx, &spec); err != nil {
+			return err
 		}
+		commandLine := len(spec.Process.Args) > 0
+		c := &Container{
+			id:              containerID,
+			spec:            spec,
+			processes:       make(map[uint32]*containerProcess),
+			commandLine:     commandLine,
+			commandLineExec: false,
+		}
+
 		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
 		if err := b.hostState.AddContainer(req.ctx, containerID, c); err != nil {
 			log.G(ctx).Tracef("Container exists in the map.")
@@ -104,49 +108,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 				b.hostState.RemoveContainer(ctx, containerID)
 			}
 		}(err)
-		// Write security policy, signed UVM reference and host AMD certificate to
-		// container's rootfs, so that application and sidecar containers can have
-		// access to it. The security policy is required by containers which need to
-		// extract init-time claims found in the security policy. The directory path
-		// containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
-		// It may be an error to have a security policy but not expose it to the
-		// container as in that case it can never be checked as correct by a verifier.
-		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-			encodedPolicy := b.hostState.securityPolicyEnforcer.EncodedSecurityPolicy()
-			hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-			if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(b.hostState.uvmReferenceInfo) > 0 {
-				// Use os.MkdirTemp to make sure that the directory is unique.
-				securityContextDir, err := os.MkdirTemp(spec.Root.Path, securitypolicy.SecurityContextDirTemplate)
-				if err != nil {
-					return fmt.Errorf("failed to create security context directory: %w", err)
-				}
-				// Make sure that files inside directory are readable
-				if err := os.Chmod(securityContextDir, 0755); err != nil {
-					return fmt.Errorf("failed to chmod security context directory: %w", err)
-				}
-
-				if len(encodedPolicy) > 0 {
-					if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0777); err != nil {
-						return fmt.Errorf("failed to write security policy: %w", err)
-					}
-				}
-				if len(b.hostState.uvmReferenceInfo) > 0 {
-					if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(b.hostState.uvmReferenceInfo), 0777); err != nil {
-						return fmt.Errorf("failed to write UVM reference info: %w", err)
-					}
-				}
-
-				if len(hostAMDCert) > 0 {
-					if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0777); err != nil {
-						return fmt.Errorf("failed to write host AMD certificate: %w", err)
-					}
-				}
-
-				containerCtxDir := fmt.Sprintf("/%s", filepath.Base(securityContextDir))
-				secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
-				spec.Process.Env = append(spec.Process.Env, secCtxEnv)
-			}
-		}
 
 		// Strip the spec field
 		hostedSystemBytes, err := json.Marshal(cwcowHostedSystem)
@@ -265,15 +226,6 @@ func (b *Bridge) shutdownForced(req *request) (err error) {
 	return nil
 }
 
-// escapeArgs makes a Windows-style escaped command line from a set of arguments.
-func escapeArgs(args []string) string {
-	escapedArgs := make([]string, len(args))
-	for i, a := range args {
-		escapedArgs[i] = windows.EscapeArg(a)
-	}
-	return strings.Join(escapedArgs, " ")
-}
-
 func (b *Bridge) executeProcess(req *request) (err error) {
 	_, span := oc.StartSpan(req.ctx, "sidecar::executeProcess")
 	defer span.End()
@@ -313,15 +265,19 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			return fmt.Errorf("failed to get created container: %w", err)
 		}
 
-		// if this is an exec of Container command line, then it's already enforced
-		// during container creation, hence skip it here
-		containerCommandLine := escapeArgs(c.spec.Process.Args)
-		if processParams.CommandLine != containerCommandLine {
+		c.processesMutex.Lock()
+		isCreateExec := c.commandLine && !c.commandLineExec
+		if isCreateExec {
+			// if this is an exec of Container command line, then it's already enforced
+			// during container creation, hence skip it here
+			c.commandLineExec = true
 
+		}
+		c.processesMutex.Unlock()
+		if !isCreateExec {
 			user := securitypolicy.IDName{
 				Name: processParams.User,
 			}
-
 			log.G(req.ctx).Tracef("Enforcing policy on exec in container")
 			_, _, _, err = b.hostState.securityPolicyEnforcer.
 				EnforceExecInContainerPolicyV2(
@@ -339,9 +295,10 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		}
 		headerID := req.header.ID
 
-		// initiate process ID
+		// initiate exec process response channel
+		procRespCh := make(chan *prot.ContainerExecuteProcessResponse, 1)
 		b.pendingMu.Lock()
-		b.pending[headerID] = nil // nil means not yet received
+		b.pending[headerID] = procRespCh
 		b.pendingMu.Unlock()
 
 		defer func() {
@@ -354,13 +311,8 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		b.forwardRequestToGcs(req)
 
 		// fetch the process ID from response
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			log.G(req.ctx).Tracef("waiting for exec resp")
-			b.pendingMu.Lock()
-			resp := b.pending[headerID]
-			b.pendingMu.Unlock()
-
+		select {
+		case resp := <-procRespCh:
 			// capture the Process details, so that we can later enforce
 			// on the allowed signals on the Process
 			if resp != nil {
@@ -374,10 +326,11 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				}
 				return nil
 			}
-			time.Sleep(10 * time.Millisecond) // backoff
+			// Channel closed or received nil, treat as error
+			return errors.New("received nil exec response")
+		case <-time.After(5 * time.Second):
+			return errors.New("timed out waiting for exec response")
 		}
-
-		return errors.Wrap(err, "timedout waiting for exec response")
 	}
 	return nil
 }
