@@ -182,6 +182,9 @@ func main() {
 		}
 	}
 
+	logrus.Println("Initializing VSMB redirector..")
+	sidecar.VsmbMain()
+
 	// 1. Start external server to connect with inbox GCS
 	listener, err := winio.ListenHvsock(&winio.HvsockAddr{
 		VMID:      prot.HvGUIDLoopback,

@@ -100,6 +100,7 @@ var (
 	procNetUserDel                             = modnetapi32.NewProc("NetUserDel")
 	procNtCreateFile                           = modntdll.NewProc("NtCreateFile")
 	procNtCreateJobObject                      = modntdll.NewProc("NtCreateJobObject")
+	procNtFsControlFile                        = modntdll.NewProc("NtFsControlFile")
 	procNtOpenDirectoryObject                  = modntdll.NewProc("NtOpenDirectoryObject")
 	procNtOpenJobObject                        = modntdll.NewProc("NtOpenJobObject")
 	procNtQueryDirectoryObject                 = modntdll.NewProc("NtQueryDirectoryObject")
@@ -860,6 +861,20 @@ func NtCreateFile(handle *uintptr, accessMask uint32, oa *ObjectAttributes, iosb
 
 func NtCreateJobObject(jobHandle *windows.Handle, desiredAccess uint32, objAttributes *ObjectAttributes) (status uint32) {
 	r0, _, _ := syscall.SyscallN(procNtCreateJobObject.Addr(), uintptr(unsafe.Pointer(jobHandle)), uintptr(desiredAccess), uintptr(unsafe.Pointer(objAttributes)))
+	status = uint32(r0)
+	return
+}
+
+func NtFsControlFile(file windows.Handle, event windows.Handle, apcRoutine uintptr, apcCtx uintptr, iosb *IOStatusBlock, fsControlCode uint32, in []byte, inLength uint32, out []byte, outLength uint32) (status uint32) {
+	var _p0 *byte
+	if len(in) > 0 {
+		_p0 = &in[0]
+	}
+	var _p1 *byte
+	if len(out) > 0 {
+		_p1 = &out[0]
+	}
+	r0, _, _ := syscall.SyscallN(procNtFsControlFile.Addr(), uintptr(file), uintptr(event), uintptr(apcRoutine), uintptr(apcCtx), uintptr(unsafe.Pointer(iosb)), uintptr(fsControlCode), uintptr(unsafe.Pointer(_p0)), uintptr(len(in)), uintptr(inLength), uintptr(unsafe.Pointer(_p1)), uintptr(len(out)), uintptr(outLength))
 	status = uint32(r0)
 	return
 }
