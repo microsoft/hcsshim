@@ -4,12 +4,14 @@
 package securitypolicy
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/moby/sys/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -17,6 +19,114 @@ import (
 
 //nolint:unused
 const osType = "linux"
+
+// validateHostData fetches SNP report (if applicable) and validates `hostData` against
+// HostData set at UVM launch.
+func validateHostData(hostData []byte) error {
+	// If the UVM is not SNP, then don't try to fetch an SNP report.
+	if !amdsevsnp.IsSNP() {
+		return nil
+	}
+	report, err := amdsevsnp.FetchParsedSNPReport(nil)
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Equal(hostData, report.HostData) {
+		return fmt.Errorf(
+			"security policy digest %q doesn't match HostData provided at launch %q",
+			hostData,
+			report.HostData,
+		)
+	}
+	return nil
+}
+
+func ExtendPolicyWithNetworkingMounts(sandboxID string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {
+	roSpec := &oci.Spec{
+		Root: spec.Root,
+	}
+	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
+	if err := enforcer.ExtendDefaultMounts(networkingMounts); err != nil {
+		return err
+	}
+	return nil
+}
+
+func DefaultCRIMounts() []oci.Mount {
+	return []oci.Mount{
+		{
+			Destination: "/proc",
+			Type:        "proc",
+			Source:      "proc",
+			Options:     []string{"nosuid", "noexec", "nodev"},
+		},
+		{
+			Destination: "/dev",
+			Type:        "tmpfs",
+			Source:      "tmpfs",
+			Options:     []string{"nosuid", "strictatime", "mode=755", "size=65536k"},
+		},
+		{
+			Destination: "/dev/pts",
+			Type:        "devpts",
+			Source:      "devpts",
+			Options:     []string{"nosuid", "noexec", "newinstance", "ptmxmode=0666", "mode=0620", "gid=5"},
+		},
+		{
+			Destination: "/dev/shm",
+			Type:        "tmpfs",
+			Source:      "shm",
+			Options:     []string{"nosuid", "noexec", "nodev", "mode=1777", "size=65536k"},
+		},
+		{
+			Destination: "/dev/mqueue",
+			Type:        "mqueue",
+			Source:      "mqueue",
+			Options:     []string{"nosuid", "noexec", "nodev"},
+		},
+		{
+			Destination: "/sys",
+			Type:        "sysfs",
+			Source:      "sysfs",
+			Options:     []string{"nosuid", "noexec", "nodev", "ro"},
+		},
+		{
+			Destination: "/run",
+			Type:        "tmpfs",
+			Source:      "tmpfs",
+			Options:     []string{"nosuid", "strictatime", "mode=755", "size=65536k"},
+		},
+		// cgroup mount is always added by default, regardless if it is present
+		// in the mount constraints or not. If the user chooses to override it,
+		// then a corresponding mount constraint should be present.
+		{
+			Source:      "cgroup",
+			Destination: "/sys/fs/cgroup",
+			Type:        "cgroup",
+			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "ro"},
+		},
+	}
+}
+
+// DefaultCRIPrivilegedMounts returns a slice of mounts which are added to the
+// linux container spec when a container runs in a privileged mode.
+func DefaultCRIPrivilegedMounts() []oci.Mount {
+	return []oci.Mount{
+		{
+			Source:      "cgroup",
+			Destination: "/sys/fs/cgroup",
+			Type:        "cgroup",
+			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "rw"},
+		},
+		{
+			Destination: "/sys",
+			Type:        "sysfs",
+			Source:      "sysfs",
+			Options:     []string{"nosuid", "noexec", "nodev", "rw"},
+		},
+	}
+}
 
 // SandboxMountsDir returns sandbox mounts directory inside UVM/host.
 func SandboxMountsDir(sandboxID string) string {

@@ -583,15 +583,15 @@ func UnmarshalContainerModifySettings(b []byte) (*containerModifySettings, error
 		}
 		msr.Settings = cc
 	case guestresource.ResourceTypeSecurityPolicy:
-		enforcer := &guestresource.LCOWConfidentialOptions{}
+		enforcer := &guestresource.ConfidentialOptions{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, enforcer); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWConfidentialOptions")
+			return &request, errors.Wrap(err, "failed to unmarshal settings as ConfidentialOptions")
 		}
 		msr.Settings = enforcer
 	case guestresource.ResourceTypePolicyFragment:
-		fragment := &guestresource.LCOWSecurityPolicyFragment{}
+		fragment := &guestresource.SecurityPolicyFragment{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, fragment); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWSecurityPolicyFragment")
+			return &request, errors.Wrap(err, "failed to unmarshal settings as SecurityPolicyFragment")
 		}
 		msr.Settings = fragment
 	default:

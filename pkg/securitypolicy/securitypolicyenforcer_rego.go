@@ -59,17 +59,6 @@ type regoEnforcer struct {
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
 
-//nolint:unused
-/*func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
-	policy := new(securityPolicyInternal)
-	var err error
-	if policy.Containers, err = sp.Containers.toInternal(); err != nil {
-		return nil, err
-	}
-
-	return policy, nil
-}*/
-
 func toStringSet(items []string) stringSet {
 	s := make(stringSet)
 	for _, item := range items {
