@@ -84,7 +84,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}
-		_, _, _, err := b.hostState.securityPolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
+		_, _, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
 
 		if err != nil {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
@@ -104,48 +104,12 @@ func (b *Bridge) createContainer(req *request) (err error) {
 				b.hostState.RemoveContainer(ctx, containerID)
 			}
 		}(err)
-		// Write security policy, signed UVM reference and host AMD certificate to
-		// container's rootfs, so that application and sidecar containers can have
-		// access to it. The security policy is required by containers which need to
-		// extract init-time claims found in the security policy. The directory path
-		// containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
-		// It may be an error to have a security policy but not expose it to the
-		// container as in that case it can never be checked as correct by a verifier.
+
 		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-			encodedPolicy := b.hostState.securityPolicyEnforcer.EncodedSecurityPolicy()
-			hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-			if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(b.hostState.uvmReferenceInfo) > 0 {
-				// Use os.MkdirTemp to make sure that the directory is unique.
-				securityContextDir, err := os.MkdirTemp(spec.Root.Path, securitypolicy.SecurityContextDirTemplate)
-				if err != nil {
-					return fmt.Errorf("failed to create security context directory: %w", err)
-				}
-				// Make sure that files inside directory are readable
-				if err := os.Chmod(securityContextDir, 0755); err != nil {
-					return fmt.Errorf("failed to chmod security context directory: %w", err)
-				}
-
-				if len(encodedPolicy) > 0 {
-					if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0777); err != nil {
-						return fmt.Errorf("failed to write security policy: %w", err)
-					}
-				}
-				if len(b.hostState.uvmReferenceInfo) > 0 {
-					if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(b.hostState.uvmReferenceInfo), 0777); err != nil {
-						return fmt.Errorf("failed to write UVM reference info: %w", err)
-					}
-				}
-
-				if len(hostAMDCert) > 0 {
-					if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0777); err != nil {
-						return fmt.Errorf("failed to write host AMD certificate: %w", err)
-					}
-				}
-
-				containerCtxDir := fmt.Sprintf("/%s", filepath.Base(securityContextDir))
-				secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
-				spec.Process.Env = append(spec.Process.Env, secCtxEnv)
+			if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
+				return fmt.Errorf("failed to write security context dir: %w", err)
 			}
+			cwcowHostedSystemConfig.Spec = spec
 		}
 
 		// Strip the spec field
@@ -190,20 +154,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	return nil
 }
 
-func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) error {
-	st, err := os.Stat(dir)
-	if err != nil {
-		return err
-	}
-
-	if !st.IsDir() {
-		return fmt.Errorf("not a directory %q", dir)
-	}
-
-	targetFilename := filepath.Join(dir, filename)
-	return os.WriteFile(targetFilename, data, perm)
-}
-
 // processParamEnvToOCIEnv converts an Environment field from ProcessParameters
 // (a map from environment variable to value) into an array of environment
 // variable assignments (where each is in the form "<variable>=<value>") which
@@ -242,7 +192,7 @@ func (b *Bridge) shutdownGraceful(req *request) (err error) {
 		return fmt.Errorf("failed to unmarshal shutdownGraceful: %w", err)
 	}
 
-	err = b.hostState.securityPolicyEnforcer.EnforceShutdownContainerPolicy(req.ctx, r.ContainerID)
+	err = b.hostState.securityOptions.PolicyEnforcer.EnforceShutdownContainerPolicy(req.ctx, r.ContainerID)
 	if err != nil {
 		return fmt.Errorf("rpcShudownGraceful operation not allowed: %w", err)
 	}
@@ -295,7 +245,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 
 	if containerID == UVMContainerID {
 		log.G(req.ctx).Tracef("Enforcing policy on external exec process")
-		_, _, err := b.hostState.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
+		_, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
 			req.ctx,
 			commandLine,
 			processParamEnvToOCIEnv(processParams.Environment),
@@ -323,7 +273,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			}
 
 			log.G(req.ctx).Tracef("Enforcing policy on exec in container")
-			_, _, _, err = b.hostState.securityPolicyEnforcer.
+			_, _, _, err = b.hostState.securityOptions.PolicyEnforcer.
 				EnforceExecInContainerPolicyV2(
 					req.ctx,
 					containerID,
@@ -432,7 +382,7 @@ func (b *Bridge) signalProcess(req *request) (err error) {
 			WindowsSignal:  wcowOptions.Signal,
 			WindowsCommand: commandLine,
 		}
-		err = b.hostState.securityPolicyEnforcer.EnforceSignalContainerProcessPolicyV2(req.ctx, containerID, opts)
+		err = b.hostState.securityOptions.PolicyEnforcer.EnforceSignalContainerProcessPolicyV2(req.ctx, containerID, opts)
 		if err != nil {
 			return err
 		}
@@ -461,7 +411,7 @@ func (b *Bridge) getProperties(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	if err := b.hostState.securityPolicyEnforcer.EnforceGetPropertiesPolicy(req.ctx); err != nil {
+	if err := b.hostState.securityOptions.PolicyEnforcer.EnforceGetPropertiesPolicy(req.ctx); err != nil {
 		return errors.Wrapf(err, "get properties denied due to policy")
 	}
 
@@ -599,11 +549,14 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			log.G(ctx).Tracef("hcsschema.MappedDirectory { %v }", settings)
 
 		case guestresource.ResourceTypeSecurityPolicy:
-			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWConfidentialOptions)
+			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.ConfidentialOptions)
 			log.G(ctx).Tracef("WCOWConfidentialOptions: { %v}", securityPolicyRequest)
-			err := b.hostState.SetWCOWConfidentialUVMOptions(req.ctx, securityPolicyRequest, b.logWriter)
+			err := b.hostState.securityOptions.SetConfidentialOptions(ctx,
+				securityPolicyRequest.EnforcerType,
+				securityPolicyRequest.EncodedSecurityPolicy,
+				securityPolicyRequest.EncodedUVMReference)
 			if err != nil {
-				return errors.Wrap(err, "error creating enforcer")
+				return errors.Wrap(err, "Failed to set Confidentia UVM Options")
 			}
 			// Send response back to shim
 			resp := &prot.ResponseBase{
@@ -616,12 +569,11 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			}
 			return nil
 		case guestresource.ResourceTypePolicyFragment:
-			//Note: Reusing the same type LCOWSecurityPolicyFragment for CWCOW.
-			r, ok := modifyGuestSettingsRequest.Settings.(*guestresource.LCOWSecurityPolicyFragment)
+			r, ok := modifyGuestSettingsRequest.Settings.(*guestresource.SecurityPolicyFragment)
 			if !ok {
-				return errors.New("the request settings are not of type LCOWSecurityPolicyFragment")
+				return errors.New("the request settings are not of type SecurityPolicyFragment")
 			}
-			return b.hostState.InjectFragment(ctx, r)
+			return b.hostState.securityOptions.InjectFragment(ctx, r)
 		case guestresource.ResourceTypeWCOWBlockCims:
 			// This is request to mount the merged cim at given volumeGUID
 			if modifyGuestSettingsRequest.RequestType == guestrequest.RequestTypeRemove {
@@ -635,7 +587,6 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			// The block device takes some time to show up. Wait for a few seconds.
 			time.Sleep(2 * time.Second)
 
-			//TODO(Mahati) : test and verify CIM hashes
 			var layerCIMs []*cimfs.BlockCIM
 			layerHashes := make([]string, len(wcowBlockCimMounts.BlockCIMs))
 			layerDigests := make([][]byte, len(wcowBlockCimMounts.BlockCIMs))
@@ -671,7 +622,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				hashesToVerify = layerHashes[1:]
 			}
 
-			err := b.hostState.securityPolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
+			err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
 			if err != nil {
 				return errors.Wrap(err, "CIM mount is denied by policy")
 			}
@@ -711,7 +662,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
 			//Since unencrypted scratch is not an option, always pass true
-			if err := b.hostState.securityPolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
+			if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
 				return fmt.Errorf("scratch mounting denied by policy: %w", err)
 			}
 			// The following two folders are expected to be present in the scratch.
