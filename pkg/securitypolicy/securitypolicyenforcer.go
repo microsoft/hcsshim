@@ -30,7 +30,6 @@ type CreateContainerOptions struct {
 	Capabilities         *oci.LinuxCapabilities
 	SeccompProfileSHA256 string
 }
-
 type SignalContainerOptions struct {
 	IsInitProcess bool
 	// One of these will be set depending on platform
@@ -121,7 +120,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceGetPropertiesPolicy(ctx context.Context) error
 	EnforceDumpStacksPolicy(ctx context.Context) error
 	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
-	LoadFragment(ctx context.Context, issuer string, feed string, code string) error
+	LoadFragment(ctx context.Context, issuer string, feed string, rego string) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
