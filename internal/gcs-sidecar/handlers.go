@@ -733,7 +733,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWCombinedLayers)
 			containerID := settings.ContainerID
-			log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
+			log.G(ctx).Tracef("cwcowCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
 				containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
 			// The layers size is only one, this is just defensive checking
@@ -741,19 +741,19 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				layerPath := settings.CombinedLayers.Layers[0].Path
 				if guidStr, ok := volumeGUIDFromLayerPath(layerPath); ok {
 					hashes, haveHashes := b.hostState.blockCIMVolumeHashes[guidStr]
+					// This must always be true for every container as the hashes are recorded during initial CIM mount in ResourceTypeWCOWBlockCims request
 					if haveHashes {
-						// Only do this if it wasn't already enforced by the ResourceTypeWCOWBlockCims request
 						containers := b.hostState.blockCIMVolumeContainers[guidStr]
 						if _, seen := containers[containerID]; !seen {
-							// This is a container with CIMs already mounted (container with similar layers as an existing container). Call EnforceVerifiedCIMsPolicy on this new container
-							log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", guidStr, containerID)
+							// This is a container with CIMs already mounted. Just Call EnforceVerifiedCIMsPolicy on this to record in policy metadata
+							log.G(ctx).Tracef("verified cim hashes for reused mount volume %s (container %s)", guidStr, containerID)
 							if err := b.hostState.securityPolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashes); err != nil {
-								return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
+								return fmt.Errorf("cim mount is denied by policy for this container: %w", err)
 							}
 							containers[containerID] = struct{}{}
 						}
 					} else {
-						log.G(ctx).Debugf("No cached CIM hashes found for volume %s", guidStr)
+						return fmt.Errorf("no cim hashes found for container ID %s", containerID)
 					}
 				}
 			}
