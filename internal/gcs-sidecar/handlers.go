@@ -740,27 +740,29 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
 					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
-				// The layers size is only one, this is just defensive checking
-				if len(settings.CombinedLayers.Layers) == 1 {
-					layerPath := settings.CombinedLayers.Layers[0].Path
-					if guidStr, ok := volumeGUIDFromLayerPath(layerPath); ok {
-						hashes, haveHashes := b.hostState.blockCIMVolumeHashes[guidStr]
-						if haveHashes {
-							// Only do this if it wasn't already enforced by the ResourceTypeWCOWBlockCims request
-							containers := b.hostState.blockCIMVolumeContainers[guidStr]
-							if _, seen := containers[containerID]; !seen {
-								// This is a container with CIMs already mounted (container with similar layers as an existing container). Call EnforceVerifiedCIMsPolicy on this new container
-								log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", guidStr, containerID)
-								if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashes); err != nil {
-									return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
-								}
-								containers[containerID] = struct{}{}
-							}
-						} else {
-							log.G(ctx).Debugf("No cached CIM hashes found for volume %s", guidStr)
+				// The layers size is only one, as this is the volume path
+				if len(settings.CombinedLayers.Layers) != 1 {
+					return fmt.Errorf("expected exactly one layer in CWCOWCombinedLayers, got %d", len(settings.CombinedLayers.Layers))
+				}
+				layerPath := settings.CombinedLayers.Layers[0].Path
+				guidStr, ok := volumeGUIDFromLayerPath(layerPath)
+				if !ok {
+					return fmt.Errorf("invalid volumeGUID %s", containerID)
+				}
+				hashes, haveHashes := b.hostState.blockCIMVolumeHashes[guidStr]
+				if haveHashes {
+					// Only do this if the ContainerID is not already seen for this volume
+					containers := b.hostState.blockCIMVolumeContainers[guidStr]
+					if _, seen := containers[containerID]; !seen {
+						// This is container with similar layers as an existing container, hence already mounted. Call EnforceVerifiedCIMsPolicy on this new container
+						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", guidStr, containerID)
+						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashes); err != nil {
+							return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
 						}
+						containers[containerID] = struct{}{}
 					}
 				}
+
 				//Since unencrypted scratch is not an option, always pass true
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
 					return fmt.Errorf("scratch mounting denied by policy: %w", err)
