@@ -168,7 +168,18 @@ candidate_containers := containers {
         c := fragment.containers[_]
     ]
 
-    containers := array.concat(policy_containers, fragment_containers)
+    containers_raw := array.concat(policy_containers, fragment_containers)
+
+    # Each container definition applied with platform_rules might turn into
+    # multiple containers if multiple platforms are allowed.  We flatten the
+    # result here.
+    after_platform_rules := [c2 |
+        c1 := containers_raw[_]
+        applied := apply_platform_rules("container", c1)
+        c2 := applied[_]
+    ]
+
+    containers := after_platform_rules
 }
 
 default mount_cims := {"allowed": false}
@@ -1196,17 +1207,24 @@ runtime_logging := {"allowed": true} {
     allow_runtime_logging
 }
 
-default fragment_containers := []
+# Helpers to get data from the fragment that is currently being loaded.  Since
+# input.namespace is the package name the fragment loaded as,
+# data[input.namespace] can be used to access the fragment.  This is only valid
+# during a load_fragment call - the content exported by the fragment needs to be
+# persisted into the metadata for later enforcement use.  (c.f.
+# extract_fragment_includes)
 
+default fragment_containers := []
 fragment_containers := data[input.namespace].containers
 
 default fragment_fragments := []
-
 fragment_fragments := data[input.namespace].fragments
 
 default fragment_external_processes := []
-
 fragment_external_processes := data[input.namespace].external_processes
+
+default fragment_platform_rules := []
+fragment_platform_rules := data[input.namespace].platform_rules
 
 apply_defaults(name, raw_values, framework_version) := values {
     semver.compare(framework_version, version) == 0
@@ -1237,6 +1255,22 @@ apply_defaults("fragment", raw_values, framework_version) := values {
     ]
 }
 
+# platform_rules is introduced in framework version 0.5.0.  If an old policy has it,
+# silently ignore as it might be using the name for something else.
+
+apply_defaults("platform_rules", raw_values, framework_version) := values {
+    semver.compare(framework_version, version) < 0
+    semver.compare(framework_version, "0.5.0") >= 0
+    # This is currently unreachable, otherwise we would call something like
+    # check_platform_rule here, like above (not defined yet).
+    values := raw_values
+}
+
+apply_defaults("platform_rules", raw_values, framework_version) := values {
+    semver.compare(framework_version, "0.5.0") < 0
+    values := []
+}
+
 default fragment_framework_version := null
 fragment_framework_version := data[input.namespace].framework_version
 
@@ -1245,7 +1279,8 @@ extract_fragment_includes(includes) := fragment {
     objects := {
         "containers": apply_defaults("container", fragment_containers, framework_version),
         "fragments": apply_defaults("fragment", fragment_fragments, framework_version),
-        "external_processes": apply_defaults("external_process", fragment_external_processes, framework_version)
+        "external_processes": apply_defaults("external_process", fragment_external_processes, framework_version),
+        "platform_rules": apply_defaults("platform_rules", fragment_platform_rules, framework_version),
     }
 
     fragment := {
@@ -1508,6 +1543,65 @@ registry_changes := {"allowed": true} {
     result := {
         "AddValues": matched_values
     }
+}
+
+default policy_platform_rules := []
+
+policy_platform_rules := platform_rules {
+    semver.compare(policy_framework_version, version) == 0
+    platform_rules := data.policy.platform_rules
+}
+
+# For policy with framework_version < 0.5.0, apply_defaults will ignore
+# platform_rules and return [].
+
+policy_platform_rules := platform_rules {
+    semver.compare(policy_framework_version, version) < 0
+    platform_rules := apply_defaults("platform_rules", data.policy.platform_rules, policy_framework_version)
+}
+
+default candidate_platform_rules := []
+
+candidate_platform_rules := platform_rules {
+    fragment_platform_rules := [r |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        r := fragment.platform_rules[_]
+    ]
+
+    platform_rules := array.concat(policy_platform_rules, fragment_platform_rules)
+}
+
+# apply_platform_rules("container", c) applies "platform_rules" to the container
+# object c, and returns a list of containers which are the input container with
+# platform rules applied.  The return value may contain more than one container
+# if multiple platform rules are defined.
+
+# No platform rules - return as-is.
+apply_platform_rules("container", container) := updated_containers {
+    count(candidate_platform_rules) == 0
+    updated_containers := [container]
+}
+
+apply_platform_rules("container", container) := updated_containers {
+    count(candidate_platform_rules) > 0
+    updated_containers := [updated_container |
+        platform_rule := candidate_platform_rules[_]
+        updated_container := apply_single_platform_rule("container", container, platform_rule)
+    ]
+}
+
+apply_single_platform_rule("container", container, platform_rule) := updated_container {
+    container_env_rules := object.get(container, "env_rules", [])
+    updated_env_rules := array.concat(container_env_rules, object.get(platform_rule, "env_rules", []))
+
+    container_mounts := object.get(container, "mounts", [])
+    updated_mounts := array.concat(container_mounts, object.get(platform_rule, "mounts", []))
+
+    updated_container := object.union(container, {
+        "env_rules": updated_env_rules,
+        "mounts": updated_mounts,
+    })
 }
 
 reason := {
