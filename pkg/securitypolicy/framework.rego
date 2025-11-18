@@ -297,21 +297,26 @@ env_rule_ok(rule, env) {
     env_pattern_ok(rule_value, value_strategy, env_value)
 }
 
-rule_ok(rule, env) {
-    not rule.required
-}
-
-rule_ok(rule, env) {
+# For a required env rule, check that envList contains a matching env var for
+# it.
+env_required_rule_ok(rule, envList) {
     rule.required
+    some env in envList
     env_rule_ok(rule, env)
 }
 
+# If it's not required, skip the check
+env_required_rule_ok(rule, envList) {
+    not rule.required
+}
+
 envList_ok(env_rules, envList) {
+    # Check that all required rules are satisfied
     every rule in env_rules {
-        some env in envList
-        rule_ok(rule, env)
+        env_required_rule_ok(rule, envList)
     }
 
+    # Check that any env provided is allowed
     every env in envList {
         some rule in env_rules
         env_rule_ok(rule, env)
