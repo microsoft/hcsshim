@@ -146,25 +146,22 @@ overlay_mounted(target) {
     data.metadata.overlayTargets[target]
 }
 
-default candidate_containers := []
+# Note that a valid policy might not even define (data.policy.)containers, if
+# all its containers are coming from fragments.  This default rule prevents
+# breaking other rules in this case.
+default policy_containers := []
 
-candidate_containers := containers {
+policy_containers := pc {
     semver.compare(policy_framework_version, version) == 0
+    pc := data.policy.containers
+}
 
-    policy_containers := [c | c := data.policy.containers[_]]
-    fragment_containers := [c |
-        feed := data.metadata.issuers[_].feeds[_]
-        fragment := feed[_]
-        c := fragment.containers[_]
-    ]
-
-    containers := array.concat(policy_containers, fragment_containers)
+policy_containers := pc {
+    semver.compare(policy_framework_version, version) < 0
+    pc := apply_defaults("container", data.policy.containers, policy_framework_version)
 }
 
 candidate_containers := containers {
-    semver.compare(policy_framework_version, version) < 0
-
-    policy_containers := apply_defaults("container", data.policy.containers, policy_framework_version)
     fragment_containers := [c |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
