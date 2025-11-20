@@ -655,6 +655,8 @@ jobs:
         name: Build tar2ext4.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/wclayer
         name: Build wclayer.exe
+      - run: ${{ env.GO_BUILD_CMD }} ./cmd/gcs-sidecar
+        name: Build gcs-sidecar.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/grantvmgroupaccess
         name: Build grantvmgroupaccess.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/hvsocketaddr
@@ -684,6 +686,7 @@ jobs:
             runhcs.exe
             tar2ext4.exe
             wclayer.exe
+            gcs-sidecar.exe
             device-util.exe
             ncproxy.exe
             hvsocketaddr.exe
