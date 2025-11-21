@@ -876,6 +876,30 @@ func setupRegoFragmentSVNMismatchTestConfig(gc *generatedConstraints) (*regoFrag
 	return setupRegoFragmentTestConfig(gc, 2, []string{"containers"}, []string{}, false, false, false, true)
 }
 
+func makeContainerFromGeneratedFragment(fragment *regoFragment) *regoFragmentContainer {
+	container := fragment.selectContainer()
+
+	envList := buildEnvironmentVariablesFromEnvRules(container.EnvRules, testRand)
+	sandboxID := testDataGenerator.uniqueSandboxID()
+	user := buildIDNameFromConfig(container.User.UserIDName, testRand)
+	groups := buildGroupIDNamesFromUser(container.User, testRand)
+	capabilities := copyLinuxCapabilities(container.Capabilities.toExternal())
+	seccomp := container.SeccompProfileSHA256
+
+	mounts := container.Mounts
+	mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
+	return &regoFragmentContainer{
+		container:    container,
+		envList:      envList,
+		sandboxID:    sandboxID,
+		mounts:       mountSpec.Mounts,
+		user:         user,
+		groups:       groups,
+		capabilities: &capabilities,
+		seccomp:      seccomp,
+	}
+}
+
 func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, includes []string, excludes []string, svnError bool, sameIssuer bool, sameFeed bool, svnMismatch bool) (tc *regoFragmentTestConfig, err error) {
 	gc.fragments = generateFragments(testRand, int32(numFragments))
 
@@ -899,27 +923,7 @@ func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, inc
 	externalProcesses := make([]*externalProcess, numFragments)
 	plan9Mounts := make([]string, numFragments)
 	for i, fragment := range fragments {
-		container := fragment.selectContainer()
-
-		envList := buildEnvironmentVariablesFromEnvRules(container.EnvRules, testRand)
-		sandboxID := testDataGenerator.uniqueSandboxID()
-		user := buildIDNameFromConfig(container.User.UserIDName, testRand)
-		groups := buildGroupIDNamesFromUser(container.User, testRand)
-		capabilities := copyLinuxCapabilities(container.Capabilities.toExternal())
-		seccomp := container.SeccompProfileSHA256
-
-		mounts := container.Mounts
-		mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
-		containers[i] = &regoFragmentContainer{
-			container:    container,
-			envList:      envList,
-			sandboxID:    sandboxID,
-			mounts:       mountSpec.Mounts,
-			user:         user,
-			groups:       groups,
-			capabilities: &capabilities,
-			seccomp:      seccomp,
-		}
+		containers[i] = makeContainerFromGeneratedFragment(fragment)
 
 		for _, include := range fragment.info.includes {
 			switch include {
