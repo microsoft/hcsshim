@@ -92,7 +92,7 @@ func unmarshalContainerModifySettings(req *request) (_ *prot.ContainerModifySett
 			modifyGuestSettingsRequest.Settings = settings
 
 		case guestresource.ResourceTypeSecurityPolicy:
-			securityPolicyRequest := &guestresource.WCOWConfidentialOptions{}
+			securityPolicyRequest := &guestresource.ConfidentialOptions{}
 			if err := commonutils.UnmarshalJSONWithHresult(rawGuestRequest, securityPolicyRequest); err != nil {
 				return nil, fmt.Errorf("invalid ResourceTypeSecurityPolicy request: %w", err)
 			}
