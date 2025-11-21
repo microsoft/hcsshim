@@ -34,5 +34,5 @@ type Container struct {
 
 	AdditionalDeviceNamespace *ContainerDefinitionDevice `json:"AdditionalDeviceNamespace,omitempty"`
 
-	ContainerType string `json:"ContainerType,omitempty"`
+	IsolationType string `json:"IsolationType,omitempty"`
 }
