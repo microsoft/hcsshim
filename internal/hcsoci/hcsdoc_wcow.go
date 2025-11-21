@@ -493,7 +493,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 
 	if oci.IsIsolatedJobContainer(coi.Spec) {
-		v2Container.ContainerType = "HostProcess"
+		v2Container.IsolationType = "HostProcess"
 
 		// If the customer specified a custom rootfs path then use that instead of default c:\hpc.
 		if customRootFsPath, ok := coi.Spec.Annotations[annotations.HostProcessRootfsLocation]; ok {
