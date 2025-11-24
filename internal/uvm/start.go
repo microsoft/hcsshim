@@ -19,6 +19,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -310,9 +311,9 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	} else {
 		gb = scsi.NewHCSGuestBackend(uvm.hcsSystem, uvm.OS())
 	}
-	guestMountFmt := `c:\mounts\scsi\m%d`
+	guestMountFmt := guestpath.WCOWGlobalScsiMountPrefixFmt
 	if uvm.OS() == "linux" {
-		guestMountFmt = "/run/mounts/scsi/m%d"
+		guestMountFmt = guestpath.LCOWGlobalScsiMountPrefixFmt
 	}
 	mgr, err := scsi.NewManager(
 		scsi.NewHCSHostBackend(uvm.hcsSystem),
@@ -326,24 +327,25 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}
 	uvm.SCSIManager = mgr
 
-	if uvm.confidentialUVMOptions != nil && uvm.OS() == "linux" {
+	var policy, enforcer, referenceInfoFileRoot, referenceInfoFilePath string
+
+	if uvm.confidentialUVMOptions != nil || uvm.HasConfidentialPolicy() {
+		if uvm.confidentialUVMOptions != nil && uvm.OS() == "linux" {
+			policy = uvm.confidentialUVMOptions.SecurityPolicy
+			enforcer = uvm.confidentialUVMOptions.SecurityPolicyEnforcer
+			referenceInfoFilePath = uvm.confidentialUVMOptions.UVMReferenceInfoFile
+			referenceInfoFileRoot = defaultLCOWOSBootFilesPath()
+		} else if uvm.HasConfidentialPolicy() && uvm.OS() == "windows" {
+			policy = uvm.createOpts.(*OptionsWCOW).SecurityPolicy
+			enforcer = uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer
+			referenceInfoFilePath = uvm.createOpts.(*OptionsWCOW).UVMReferenceInfoFile
+		}
 		copts := []ConfidentialUVMOpt{
-			WithSecurityPolicy(uvm.confidentialUVMOptions.SecurityPolicy),
-			WithSecurityPolicyEnforcer(uvm.confidentialUVMOptions.SecurityPolicyEnforcer),
-			WithUVMReferenceInfo(defaultLCOWOSBootFilesPath(), uvm.confidentialUVMOptions.UVMReferenceInfoFile),
+			WithSecurityPolicy(policy),
+			WithSecurityPolicyEnforcer(enforcer),
+			WithUVMReferenceInfo(referenceInfoFileRoot, referenceInfoFilePath),
 		}
 		if err := uvm.SetConfidentialUVMOptions(ctx, copts...); err != nil {
-			return err
-		}
-	}
-
-	if uvm.HasConfidentialPolicy() && uvm.OS() == "windows" {
-		copts := []WCOWConfidentialUVMOpt{
-			WithWCOWSecurityPolicy(uvm.createOpts.(*OptionsWCOW).SecurityPolicy),
-			WithWCOWSecurityPolicyEnforcer(uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer),
-			WithWCOWUVMReferenceInfo(uvm.createOpts.(*OptionsWCOW).UVMReferenceInfoFile),
-		}
-		if err := uvm.SetWCOWConfidentialUVMOptions(ctx, copts...); err != nil {
 			return err
 		}
 	}
