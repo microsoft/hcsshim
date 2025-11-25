@@ -415,8 +415,9 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 	}
 
 	doc.SchemaVersion = schemaversion.SchemaV25()
+	// VM Version 12 is the min version that supports the various SNP features.
 	doc.VirtualMachine.Version = &hcsschema.Version{
-		Major: 11,
+		Major: 12,
 		Minor: 0,
 	}
 
