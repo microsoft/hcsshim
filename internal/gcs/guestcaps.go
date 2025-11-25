@@ -100,3 +100,7 @@ func (w *WCOWGuestDefinedCapabilities) IsDumpStacksSupported() bool {
 func (w *WCOWGuestDefinedCapabilities) IsDeleteContainerStateSupported() bool {
 	return w.DeleteContainerStateSupported
 }
+
+func (w *WCOWGuestDefinedCapabilities) IsLogForwardingSupported() bool {
+	return w.LogForwardingSupported
+}

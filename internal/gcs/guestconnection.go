@@ -184,6 +184,20 @@ func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (er
 	return gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
 }
 
+func (gc *GuestConnection) ModifyServiceSettings(ctx context.Context, serviceType prot.ServiceModifyPropertyType, settings interface{}) (err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::ModifyServiceSettings", oc.WithClientSpanKind)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	req := prot.ServiceModificationRequest{
+		RequestBase:  makeRequest(ctx, nullContainerID),
+		PropertyType: string(serviceType),
+		Settings:     settings,
+	}
+	var resp prot.ResponseBase
+	return gc.brdg.RPC(ctx, prot.RPCModifyServiceSettings, &req, &resp, false)
+}
+
 func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err error) {
 	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::DumpStacks", oc.WithClientSpanKind)
 	defer span.End()

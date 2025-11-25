@@ -131,7 +131,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 				return err
 			}
 			time.Sleep(50 * time.Millisecond)
-			err = sendJSON(t, rw, prot.MsgType(prot.MsgTypeNotify|prot.NotifyContainer), 0, &prot.ContainerNotification{
+			err = sendJSON(t, rw, prot.MsgType(prot.MsgTypeNotify|prot.ComputeSystem|prot.NotifyContainer), 0, &prot.ContainerNotification{
 				RequestBase: prot.RequestBase{
 					ContainerID: req.ContainerID,
 				},
