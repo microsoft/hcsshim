@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           show-progress: false
 
@@ -59,7 +59,7 @@ jobs:
       # protobuild requires the code to be in $GOPATH to translate from github.com/Microsoft/hcsshim
       # to the correct path on disk
       - name: Checkout hcsshim
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
           show-progress: false
@@ -117,7 +117,7 @@ jobs:
       GOPROXY: "https://proxy.golang.org,direct"
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           show-progress: false
 
@@ -182,7 +182,7 @@ jobs:
     runs-on: "windows-2022"
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           show-progress: false
 
@@ -237,7 +237,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           show-progress: false
 
@@ -276,7 +276,7 @@ jobs:
             runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           show-progress: false
 
@@ -415,7 +415,7 @@ jobs:
 
     steps:
       - name: Checkout hcsshim
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: src/github.com/Microsoft/hcsshim
           show-progress: false
@@ -447,7 +447,7 @@ jobs:
         working-directory: src/github.com/Microsoft/hcsshim
 
       - name: Checkout containerd
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: src/github.com/containerd/containerd
           repository: "containerd/containerd"
@@ -618,7 +618,7 @@ jobs:
     runs-on: "windows-2022"
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           show-progress: false
 
@@ -702,7 +702,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           show-progress: false
 
