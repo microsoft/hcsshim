@@ -3,7 +3,7 @@ package fragment
 svn := "1"
 framework_version := "0.5.0"
 
-parameters := {
+parameters_api := {
   "command_param": {
     "default": [
       "init"
