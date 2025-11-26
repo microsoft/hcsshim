@@ -146,14 +146,13 @@
 package edittree
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"math/big"
 	"sort"
 	"strings"
 
-	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/edittree/bitvector"
+	"github.com/open-policy-agent/opa/v1/ast"
 )
 
 // Deletions are encoded with a nil value pointer.
@@ -203,89 +202,13 @@ func NewEditTree(term *ast.Term) *EditTree {
 // it was found in the table already.
 func (e *EditTree) getKeyHash(key *ast.Term) (int, bool) {
 	hash := key.Hash()
-	// This `equal` utility is duplicated and manually inlined a number of
-	// time in this file.  Inlining it avoids heap allocations, so it makes
-	// a big performance difference: some operations like lookup become twice
-	// as slow without it.
-	var equal func(v ast.Value) bool
-
-	switch x := key.Value.(type) {
-	case ast.Null, ast.Boolean, ast.String, ast.Var:
-		equal = func(y ast.Value) bool { return x == y }
-	case ast.Number:
-		if xi, err := json.Number(x).Int64(); err == nil {
-			equal = func(y ast.Value) bool {
-				if y, ok := y.(ast.Number); ok {
-					if yi, err := json.Number(y).Int64(); err == nil {
-						return xi == yi
-					}
-				}
-
-				return false
-			}
-			break
-		}
-
-		// We use big.Rat for comparing big numbers.
-		// It replaces big.Float due to following reason:
-		// big.Float comes with a default precision of 64, and setting a
-		// larger precision results in more memory being allocated
-		// (regardless of the actual number we are parsing with SetString).
-		//
-		// Note: If we're so close to zero that big.Float says we are zero, do
-		// *not* big.Rat).SetString on the original string it'll potentially
-		// take very long.
-		var a *big.Rat
-		fa, ok := new(big.Float).SetString(string(x))
-		if !ok {
-			panic("illegal value")
-		}
-		if fa.IsInt() {
-			if i, _ := fa.Int64(); i == 0 {
-				a = new(big.Rat).SetInt64(0)
-			}
-		}
-		if a == nil {
-			a, ok = new(big.Rat).SetString(string(x))
-			if !ok {
-				panic("illegal value")
-			}
-		}
-
-		equal = func(b ast.Value) bool {
-			if bNum, ok := b.(ast.Number); ok {
-				var b *big.Rat
-				fb, ok := new(big.Float).SetString(string(bNum))
-				if !ok {
-					panic("illegal value")
-				}
-				if fb.IsInt() {
-					if i, _ := fb.Int64(); i == 0 {
-						b = new(big.Rat).SetInt64(0)
-					}
-				}
-				if b == nil {
-					b, ok = new(big.Rat).SetString(string(bNum))
-					if !ok {
-						panic("illegal value")
-					}
-				}
-
-				return a.Cmp(b) == 0
-			}
-			return false
-		}
-
-	default:
-		equal = func(y ast.Value) bool { return ast.Compare(x, y) == 0 }
-	}
 
 	// Look through childKeys, looking up the original hash
 	// value first, and then use linear-probing to iter
 	// through the keys until we either find the Term we're
 	// after, or run out of candidates.
 	for curr, ok := e.childKeys[hash]; ok; {
-		if equal(curr.Value) {
+		if ast.KeyHashEqual(curr.Value, key.Value) {
 			return hash, true
 		}
 
@@ -336,13 +259,13 @@ func (e *EditTree) deleteChildValue(hash int) {
 // Insert creates a new child of e, and returns the new child EditTree node.
 func (e *EditTree) Insert(key, value *ast.Term) (*EditTree, error) {
 	if e.value == nil {
-		return nil, fmt.Errorf("deleted node encountered during insert operation")
+		return nil, errors.New("deleted node encountered during insert operation")
 	}
 	if key == nil {
-		return nil, fmt.Errorf("nil key provided for insert operation")
+		return nil, errors.New("nil key provided for insert operation")
 	}
 	if value == nil {
-		return nil, fmt.Errorf("nil value provided for insert operation")
+		return nil, errors.New("nil value provided for insert operation")
 	}
 
 	switch x := e.value.Value.(type) {
@@ -368,7 +291,7 @@ func (e *EditTree) Insert(key, value *ast.Term) (*EditTree, error) {
 			return nil, err
 		}
 		if idx < 0 || idx > e.insertions.Length() {
-			return nil, fmt.Errorf("index for array insertion out of bounds")
+			return nil, errors.New("index for array insertion out of bounds")
 		}
 		return e.unsafeInsertArray(idx, value), nil
 	default:
@@ -458,10 +381,10 @@ func (e *EditTree) unsafeInsertArray(idx int, value *ast.Term) *EditTree {
 // already present in e. It then returns the deleted child EditTree node.
 func (e *EditTree) Delete(key *ast.Term) (*EditTree, error) {
 	if e.value == nil {
-		return nil, fmt.Errorf("deleted node encountered during delete operation")
+		return nil, errors.New("deleted node encountered during delete operation")
 	}
 	if key == nil {
-		return nil, fmt.Errorf("nil key provided for delete operation")
+		return nil, errors.New("nil key provided for delete operation")
 	}
 
 	switch e.value.Value.(type) {
@@ -532,7 +455,7 @@ func (e *EditTree) Delete(key *ast.Term) (*EditTree, error) {
 			return nil, err
 		}
 		if idx < 0 || idx > e.insertions.Length()-1 {
-			return nil, fmt.Errorf("index for array delete out of bounds")
+			return nil, errors.New("index for array delete out of bounds")
 		}
 
 		// Collect insertion indexes above the delete site for rewriting.
@@ -553,14 +476,14 @@ func (e *EditTree) Delete(key *ast.Term) (*EditTree, error) {
 		}
 		// Do rewrites to clear out the newly-removed element.
 		e.deleteChildValue(idx)
-		for i := 0; i < len(rewritesScalars); i++ {
+		for i := range rewritesScalars {
 			originalIdx := rewritesScalars[i]
 			rewriteIdx := rewritesScalars[i] - 1
 			v := e.childScalarValues[originalIdx]
 			e.deleteChildValue(originalIdx)
 			e.setChildScalarValue(rewriteIdx, v)
 		}
-		for i := 0; i < len(rewritesComposites); i++ {
+		for i := range rewritesComposites {
 			originalIdx := rewritesComposites[i]
 			rewriteIdx := rewritesComposites[i] - 1
 			v := e.childCompositeValues[originalIdx]
@@ -592,7 +515,7 @@ func (e *EditTree) Delete(key *ast.Term) (*EditTree, error) {
 //gcassert:inline
 func sumZeroesBelowIndex(index int, bv *bitvector.BitVector) int {
 	zeroesSeen := 0
-	for i := 0; i < index; i++ {
+	for i := range index {
 		if bv.Element(i) == 0 {
 			zeroesSeen++
 		}
@@ -602,7 +525,7 @@ func sumZeroesBelowIndex(index int, bv *bitvector.BitVector) int {
 
 func findIndexOfNthZero(n int, bv *bitvector.BitVector) (int, bool) {
 	zeroesSeen := 0
-	for i := 0; i < bv.Length(); i++ {
+	for i := range bv.Length() {
 		if bv.Element(i) == 0 {
 			zeroesSeen++
 		}
@@ -638,7 +561,7 @@ func (e *EditTree) Unfold(path ast.Ref) (*EditTree, error) {
 	}
 	// 1+ path segment case.
 	if e.value == nil {
-		return nil, fmt.Errorf("nil value encountered where composite value was expected")
+		return nil, errors.New("nil value encountered where composite value was expected")
 	}
 
 	// Switch behavior based on types.
@@ -723,15 +646,17 @@ func (e *EditTree) Unfold(path ast.Ref) (*EditTree, error) {
 			return child.Unfold(path[1:])
 		}
 
+		idxt := ast.InternedTerm(idx)
+
 		// Fall back to looking up the key in e.value.
 		// Extend the tree if key is present. Error otherwise.
-		if v, err := x.Find(ast.Ref{ast.IntNumberTerm(idx)}); err == nil {
+		if v, err := x.Find(ast.Ref{idxt}); err == nil {
 			// TODO: Consider a more efficient "Replace" function that special-cases this for arrays instead?
-			_, err := e.Delete(ast.IntNumberTerm(idx))
+			_, err := e.Delete(idxt)
 			if err != nil {
 				return nil, err
 			}
-			child, err := e.Insert(ast.IntNumberTerm(idx), ast.NewTerm(v))
+			child, err := e.Insert(idxt, ast.NewTerm(v))
 			if err != nil {
 				return nil, err
 			}
@@ -832,7 +757,7 @@ func (e *EditTree) Render() *ast.Term {
 		// original array. We build a new Array with modified/deleted keys.
 		out := make([]*ast.Term, 0, e.insertions.Length())
 		eIdx := 0
-		for i := 0; i < e.insertions.Length(); i++ {
+		for i := range e.insertions.Length() {
 			// If the index == 0, that indicates we should look up the next
 			// surviving original element.
 			// If the index == 1, that indicates we should look up that
@@ -880,7 +805,7 @@ func (e *EditTree) Render() *ast.Term {
 // Returns the inserted EditTree node.
 func (e *EditTree) InsertAtPath(path ast.Ref, value *ast.Term) (*EditTree, error) {
 	if value == nil {
-		return nil, fmt.Errorf("cannot insert nil value into EditTree")
+		return nil, errors.New("cannot insert nil value into EditTree")
 	}
 
 	if len(path) == 0 {
@@ -911,7 +836,7 @@ func (e *EditTree) DeleteAtPath(path ast.Ref) (*EditTree, error) {
 	// Root document case:
 	if len(path) == 0 {
 		if e.value == nil {
-			return nil, fmt.Errorf("deleted node encountered during delete operation")
+			return nil, errors.New("deleted node encountered during delete operation")
 		}
 		e.value = nil
 		e.childKeys = nil
@@ -1026,8 +951,7 @@ func (e *EditTree) Exists(path ast.Ref) bool {
 			}
 			// Fallback if child lookup failed.
 			// We have to ensure that the lookup term is a number here, or Find will fail.
-			k := ast.Ref{ast.IntNumberTerm(idx)}.Concat(path[1:])
-			_, err = x.Find(k)
+			_, err = x.Find(ast.Ref{ast.InternedTerm(idx)}.Concat(path[1:]))
 			return err == nil
 		default:
 			// Catch all primitive types.
@@ -1048,7 +972,7 @@ func toIndex(arrayLength int, term *ast.Term) (int, error) {
 	switch v := term.Value.(type) {
 	case ast.Number:
 		if i, ok = v.Int(); !ok {
-			return 0, fmt.Errorf("invalid number type for indexing")
+			return 0, errors.New("invalid number type for indexing")
 		}
 	case ast.String:
 		if v == "-" {
@@ -1056,13 +980,13 @@ func toIndex(arrayLength int, term *ast.Term) (int, error) {
 		}
 		num := ast.Number(v)
 		if i, ok = num.Int(); !ok {
-			return 0, fmt.Errorf("invalid string for indexing")
+			return 0, errors.New("invalid string for indexing")
 		}
 		if v != "0" && strings.HasPrefix(string(v), "0") {
-			return 0, fmt.Errorf("leading zeros are not allowed in JSON paths")
+			return 0, errors.New("leading zeros are not allowed in JSON paths")
 		}
 	default:
-		return 0, fmt.Errorf("invalid type for indexing")
+		return 0, errors.New("invalid type for indexing")
 	}
 
 	return i, nil
@@ -1181,5 +1105,5 @@ func (e *EditTree) Filter(paths []ast.Ref) *ast.Term {
 type termSlice []*ast.Term
 
 func (s termSlice) Less(i, j int) bool { return ast.Compare(s[i].Value, s[j].Value) < 0 }
-func (s termSlice) Swap(i, j int)      { x := s[i]; s[i] = s[j]; s[j] = x }
+func (s termSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s termSlice) Len() int           { return len(s) }
