@@ -260,6 +260,7 @@ func (m *Manager) AddExtensibleVirtualDisk(
 			options:          mc.Options,
 			ensureFilesystem: mc.EnsureFilesystem,
 			filesystem:       mc.Filesystem,
+			blockDev:         mc.BlockDev,
 		}
 	}
 	return m.add(ctx,
