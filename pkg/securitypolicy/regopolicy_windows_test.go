@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
@@ -312,6 +313,45 @@ func Test_Rego_EnforceCreateContainer_Same_Container_Twice_Windows(t *testing.T)
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceCreateContainer_Same_Container_Twice: %v", err)
+	}
+}
+
+func Test_Rego_EnforceVerifiedCIMSPolicy_Multiple_Instances_Same_Container(t *testing.T) {
+	for containersToCreate := 5; containersToCreate <= maxContainersInGeneratedConstraints; containersToCreate++ {
+		constraints := new(generatedWindowsConstraints)
+		constraints.ctx = context.Background()
+		constraints.externalProcesses = generateExternalProcesses(testRand)
+
+		for i := 1; i <= containersToCreate; i++ {
+			arg := "command " + strconv.Itoa(i)
+			c := &securityPolicyWindowsContainer{
+				Command: []string{arg},
+				Layers:  []string{"1", "2"},
+			}
+
+			constraints.containers = append(constraints.containers, c)
+		}
+
+		securityPolicy := constraints.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalWindowsRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+
+		if err != nil {
+			t.Fatalf("failed create enforcer")
+		}
+
+		for _, container := range constraints.containers {
+			// Reverse container.Layers to satisfy layerHashes_ok ordering
+			layerHashes := make([]string, len(container.Layers))
+			for i, layer := range container.Layers {
+				layerHashes[len(container.Layers)-1-i] = layer
+			}
+
+			id := testDataGenerator.uniqueContainerID()
+			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes)
+			if err != nil {
+				t.Fatalf("failed with %d containers", containersToCreate)
+			}
+		}
 	}
 }
 
