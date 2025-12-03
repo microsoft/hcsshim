@@ -106,9 +106,16 @@ out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/ho
 	tar -zcf $@ -C rootfs .
 	rm -rf rootfs
 
-bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths bin/cmd/tar2ext4 bin/internal/tools/snp-report:
+# Use force target to always call `go build` per make invocation and rely on Go's build cache
+# to decide if binaries should be (re)built.
+# Note: don't use `.PHONY` since the targets are actual files.
+#
+# www.gnu.org/software/make/manual/html_node/Force-Targets.html
+bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths bin/cmd/tar2ext4 bin/internal/tools/snp-report: FORCE
 	@mkdir -p $(dir $@)
 	GOOS=linux $(GO_BUILD) -o $@ $(SRCROOT)/$(@:bin/%=%)
+
+FORCE:
 
 bin/vsockexec: vsockexec/vsockexec.o vsockexec/vsock.o
 	@mkdir -p bin
