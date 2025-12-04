@@ -8,9 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 var (
@@ -99,46 +103,83 @@ type ErrorEvent struct {
 	EventID    uint16 `json:"EventId,omitempty"`
 	Flags      uint32 `json:"Flags,omitempty"`
 	Source     string `json:"Source,omitempty"`
-	//Data       []EventData `json:"Data,omitempty"`  // Omit this as HCS doesn't encode this well. It's more confusing to include. It is however logged in debug mode (see processHcsResult function)
+
+	// Omit this as HCS doesn't encode this well. It's more confusing to include.
+	// It is however logged in during [processHcsResult] errors.
+	//Data       []EventData `json:"Data,omitempty"`
+}
+
+func (ev *ErrorEvent) String() string {
+	sb := strings.Builder{}
+	ev.writeTo(&sb)
+	return sb.String()
+}
+
+func (ev *ErrorEvent) writeTo(b *strings.Builder) {
+	// rough wag at needed length
+	b.Grow(64 + len(ev.Message) + len(ev.StackTrace) + len(ev.Provider) + len(ev.Source))
+
+	// [strings.Builder] Write* functions always return nil errors
+	_, _ = b.WriteString("[Event Detail: " + ev.Message)
+	if ev.StackTrace != "" {
+		_, _ = b.WriteString(" Stack Trace: " + ev.StackTrace)
+	}
+	if ev.Provider != "" {
+		_, _ = b.WriteString(" Provider: " + ev.Provider)
+	}
+	if ev.EventID != 0 {
+		fmt.Fprintf(b, " EventID: %d", ev.EventID)
+	}
+	if ev.Flags != 0 {
+		fmt.Fprintf(b, " flags: %d", ev.Flags)
+	}
+	if ev.Source != "" {
+		_, _ = b.WriteString(" Source: " + ev.Source)
+	}
+	_ = b.WriteByte(']')
 }
 
 type hcsResult struct {
 	Error        int32
 	ErrorMessage string
 	ErrorEvents  []ErrorEvent `json:"ErrorEvents,omitempty"`
-}
-
-func (ev *ErrorEvent) String() string {
-	evs := "[Event Detail: " + ev.Message
-	if ev.StackTrace != "" {
-		evs += " Stack Trace: " + ev.StackTrace
-	}
-	if ev.Provider != "" {
-		evs += " Provider: " + ev.Provider
-	}
-	if ev.EventID != 0 {
-		evs = fmt.Sprintf("%s EventID: %d", evs, ev.EventID)
-	}
-	if ev.Flags != 0 {
-		evs = fmt.Sprintf("%s flags: %d", evs, ev.Flags)
-	}
-	if ev.Source != "" {
-		evs += " Source: " + ev.Source
-	}
-	evs += "]"
-	return evs
+	// TODO: AttributionRecords
 }
 
 func processHcsResult(ctx context.Context, resultJSON string) []ErrorEvent {
 	if resultJSON != "" {
 		result := &hcsResult{}
 		if err := json.Unmarshal([]byte(resultJSON), result); err != nil {
-			log.G(ctx).WithError(err).Warning("Could not unmarshal HCS result")
+			log.G(ctx).WithFields(logrus.Fields{
+				logfields.JSON:  resultJSON,
+				logrus.ErrorKey: err,
+			}).Warn("Could not unmarshal HCS result")
 			return nil
 		}
 		return result.ErrorEvents
 	}
 	return nil
+}
+
+// resultError allows passing the events along with the error from [notificationWatcher]
+// so they can both be including in the resulting [makeSystemError]/[makeProcessError] call.
+//
+// errorMessage **should** be the same as err.Error(), so it can safely be ignored.
+type resultError struct {
+	Err    error
+	Events []ErrorEvent
+}
+
+func (e *resultError) Error() string {
+	return appendErrorEvents(e.Err.Error(), e.Events)
+}
+
+func (e *resultError) Is(target error) bool {
+	return errors.Is(e.Err, target)
+}
+
+func (e *resultError) Unwrap() error {
+	return e.Err
 }
 
 type HcsError struct {
@@ -150,11 +191,7 @@ type HcsError struct {
 var _ net.Error = &HcsError{}
 
 func (e *HcsError) Error() string {
-	s := e.Op + ": " + e.Err.Error()
-	for _, ev := range e.Events {
-		s += "\n" + ev.String()
-	}
-	return s
+	return appendErrorEvents(e.Op+": "+e.Err.Error(), e.Events)
 }
 
 func (e *HcsError) Is(target error) bool {
@@ -194,11 +231,7 @@ type SystemError struct {
 var _ net.Error = &SystemError{}
 
 func (e *SystemError) Error() string {
-	s := e.Op + " " + e.ID + ": " + e.Err.Error()
-	for _, ev := range e.Events {
-		s += "\n" + ev.String()
-	}
-	return s
+	return appendErrorEvents(e.Op+" "+e.ID+": "+e.Err.Error(), e.Events)
 }
 
 func makeSystemError(system *System, op string, err error, events []ErrorEvent) error {
@@ -208,6 +241,7 @@ func makeSystemError(system *System, op string, err error, events []ErrorEvent) 
 		return err
 	}
 
+	events, err = getEvents(events, err)
 	return &SystemError{
 		ID: system.ID(),
 		HcsError: HcsError{
@@ -228,11 +262,7 @@ type ProcessError struct {
 var _ net.Error = &ProcessError{}
 
 func (e *ProcessError) Error() string {
-	s := fmt.Sprintf("%s %s:%d: %s", e.Op, e.SystemID, e.Pid, e.Err.Error())
-	for _, ev := range e.Events {
-		s += "\n" + ev.String()
-	}
-	return s
+	return appendErrorEvents(fmt.Sprintf("%s %s:%d: %s", e.Op, e.SystemID, e.Pid, e.Err.Error()), e.Events)
 }
 
 func makeProcessError(process *Process, op string, err error, events []ErrorEvent) error {
@@ -241,6 +271,8 @@ func makeProcessError(process *Process, op string, err error, events []ErrorEven
 	if errors.As(err, &e) {
 		return err
 	}
+
+	events, err = getEvents(events, err)
 	return &ProcessError{
 		Pid:      process.Pid(),
 		SystemID: process.SystemID(),
@@ -250,6 +282,32 @@ func makeProcessError(process *Process, op string, err error, events []ErrorEven
 			Events: events,
 		},
 	}
+}
+
+// getEvents checks to see if err has events associated with it, and if so, returns those.
+// This is used to flatten an [HceError], [SystemError], or [ProcessError] that wraps a [resultError]
+func getEvents(events []ErrorEvent, err error) ([]ErrorEvent, error) {
+	// only return nested events if the original events is empty.
+	// don't use [errors.As], since that will unwrap the error chain and drop the parents.
+	if resErr, ok := err.(*resultError); err != nil && ok && len(events) == 0 { //nolint:errorlint
+		return resErr.Events, resErr.Err
+	}
+	return events, err
+}
+
+func appendErrorEvents(s string, events []ErrorEvent) string {
+	if len(events) == 0 {
+		return s
+	}
+
+	sb := &strings.Builder{}
+	_, _ = sb.WriteString(s)
+	for _, ev := range events {
+		// don't join with newlines since those are ... awkward within error strings
+		_, _ = sb.WriteString(": ")
+		ev.writeTo(sb)
+	}
+	return sb.String()
 }
 
 // IsNotExist checks if an error is caused by the Container or Process not existing.
