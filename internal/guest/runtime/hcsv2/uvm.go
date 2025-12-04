@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -643,18 +644,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)
 	}
-	configFile := path.Join(settings.OCIBundlePath, "config.json")
-	f, err := os.Create(configFile)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create config.json at: '%s'", configFile)
-	}
-	defer f.Close()
-	writer := bufio.NewWriter(f)
-	if err := json.NewEncoder(writer).Encode(settings.OCISpecification); err != nil {
-		return nil, errors.Wrapf(err, "failed to write OCISpecification to config.json at: '%s'", configFile)
-	}
-	if err := writer.Flush(); err != nil {
-		return nil, errors.Wrapf(err, "failed to flush writer for config.json at: '%s'", configFile)
+
+	if err := writeSpecToFile(ctx, path.Join(settings.OCIBundlePath, "config.json"), settings.OCISpecification); err != nil {
+		return nil, err
 	}
 
 	con, err := h.rtime.CreateContainer(id, settings.OCIBundlePath, nil)
@@ -689,6 +681,45 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 
 	c.setStatus(containerCreated)
 	return c, nil
+}
+
+func writeSpecToFile(ctx context.Context, configFile string, spec *specs.Spec) error {
+	f, err := os.Create(configFile)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create config.json at: '%s'", configFile)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+	// capture what we write to the config file in a byte buffer so we can log it later
+	var w io.Writer = writer
+	buf := &bytes.Buffer{}
+	if logrus.IsLevelEnabled(logrus.TraceLevel) {
+		w = io.MultiWriter(writer, buf)
+	}
+
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false) // not embedding JSON into HTML, so no need to escape
+	if err := enc.Encode(spec); err != nil {
+		return errors.Wrapf(err, "failed to write OCISpecification to config.json at: '%s'", configFile)
+	}
+	if err := writer.Flush(); err != nil {
+		return errors.Wrapf(err, "failed to flush writer for config.json at: '%s'", configFile)
+	}
+
+	if logrus.IsLevelEnabled(logrus.TraceLevel) {
+		entry := log.G(ctx).WithField(logfields.Path, configFile)
+
+		if b, err := log.ScrubOCISpec(buf.Bytes()); err != nil {
+			entry.WithError(err).Warning("could not scrub OCI spec written to config.json")
+		} else {
+			log.G(ctx).WithField(
+				"config", string(bytes.TrimSpace(b)),
+			).Trace("wrote OCI spec to config.json")
+		}
+	}
+
+	return nil
 }
 
 func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) (retErr error) {
