@@ -35,6 +35,7 @@ func (umb *UVMMountedBlockCIMs) MountedVolumePath() string {
 }
 
 func (umb *UVMMountedBlockCIMs) Release(ctx context.Context) error {
+	log.G(ctx).Tracef("UVMWCOWBlockCIMs : Release")
 	umb.host.blockCIMMountLock.Lock()
 	defer umb.host.blockCIMMountLock.Unlock()
 
