@@ -708,10 +708,15 @@ func writeSpecToFile(ctx context.Context, configFile string, spec *specs.Spec) e
 	}
 
 	if logrus.IsLevelEnabled(logrus.TraceLevel) {
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.Path: configFile,
-			"config":       strings.TrimSpace(buf.String()),
-		}).Trace("wrote OCI spec to config.json file")
+		entry := log.G(ctx).WithField(logfields.Path, configFile)
+
+		if b, err := log.ScrubOCISpec(buf.Bytes()); err != nil {
+			entry.WithError(err).Warning("could not scrub OCI spec written to config.json")
+		} else {
+			log.G(ctx).WithField(
+				"config", string(bytes.TrimSpace(b)),
+			).Trace("wrote OCI spec to config.json")
+		}
 	}
 
 	return nil
