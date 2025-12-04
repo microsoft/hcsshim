@@ -47,9 +47,6 @@ type Bridge struct {
 	// and send responses back to hcsshim respectively.
 	sendToGCSCh  chan request
 	sendToShimCh chan bridgeResponse
-
-	// logging target
-	logWriter io.Writer
 }
 
 // SequenceID is used to correlate requests and responses.
@@ -81,7 +78,7 @@ type request struct {
 }
 
 func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Bridge {
-	hostState := NewHost(initialEnforcer)
+	hostState := NewHost(initialEnforcer, logWriter)
 	return &Bridge{
 		pending:        make(map[sequenceID]chan *prot.ContainerExecuteProcessResponse),
 		rpcHandlerList: make(map[prot.RPCProc]HandlerFunc),
@@ -90,7 +87,6 @@ func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser, ini
 		inboxGCSConn:   inboxGCSConn,
 		sendToGCSCh:    make(chan request),
 		sendToShimCh:   make(chan bridgeResponse),
-		logWriter:      logWriter,
 	}
 }
 

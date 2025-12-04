@@ -373,38 +373,40 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}
 	uvm.SCSIManager = mgr
 
-	if uvm.confidentialUVMOptions != nil && uvm.OS() == "linux" {
+	var policy, enforcer, referenceInfoFileRoot, referenceInfoFilePath string
+
+	if uvm.confidentialUVMOptions != nil || uvm.HasConfidentialPolicy() {
+		if uvm.confidentialUVMOptions != nil && uvm.OS() == "linux" {
+			policy = uvm.confidentialUVMOptions.SecurityPolicy
+			enforcer = uvm.confidentialUVMOptions.SecurityPolicyEnforcer
+			referenceInfoFilePath = uvm.confidentialUVMOptions.UVMReferenceInfoFile
+			referenceInfoFileRoot = defaultLCOWOSBootFilesPath()
+		} else if uvm.HasConfidentialPolicy() && uvm.OS() == "windows" {
+			policy = uvm.createOpts.(*OptionsWCOW).SecurityPolicy
+			enforcer = uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer
+			referenceInfoFilePath = uvm.createOpts.(*OptionsWCOW).UVMReferenceInfoFile
+		}
 		copts := []ConfidentialUVMOpt{
-			WithSecurityPolicy(uvm.confidentialUVMOptions.SecurityPolicy),
-			WithSecurityPolicyEnforcer(uvm.confidentialUVMOptions.SecurityPolicyEnforcer),
-			WithUVMReferenceInfo(defaultLCOWOSBootFilesPath(), uvm.confidentialUVMOptions.UVMReferenceInfoFile),
+			WithSecurityPolicy(policy),
+			WithSecurityPolicyEnforcer(enforcer),
+			WithUVMReferenceInfo(referenceInfoFileRoot, referenceInfoFilePath),
 		}
 		if err := uvm.SetConfidentialUVMOptions(ctx, copts...); err != nil {
 			return err
 		}
+
+		if uvm.OS() == "windows" && uvm.forwardLogs {
+			// If the UVM is Windows and log forwarding is enabled, set the log sources
+			// and start the log forwarding service.
+			if err := uvm.SetLogSources(ctx); err != nil {
+				e.WithError(err).Error("failed to set log sources")
+			}
+			if err := uvm.StartLogForwarding(ctx); err != nil {
+				e.WithError(err).Error("failed to start log forwarding")
+			}
+		}
 	}
 
-	if uvm.HasConfidentialPolicy() && uvm.OS() == "windows" {
-		copts := []WCOWConfidentialUVMOpt{
-			WithWCOWSecurityPolicy(uvm.createOpts.(*OptionsWCOW).SecurityPolicy),
-			WithWCOWSecurityPolicyEnforcer(uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer),
-			WithWCOWUVMReferenceInfo(uvm.createOpts.(*OptionsWCOW).UVMReferenceInfoFile),
-		}
-		if err := uvm.SetWCOWConfidentialUVMOptions(ctx, copts...); err != nil {
-			return err
-		}
-	}
-
-	if uvm.OS() == "windows" && uvm.forwardLogs {
-		// If the UVM is Windows and log forwarding is enabled, set the log sources
-		// and start the log forwarding service.
-		if err := uvm.SetLogSources(ctx); err != nil {
-			e.WithError(err).Error("failed to set log sources")
-		}
-		if err := uvm.StartLogForwarding(ctx); err != nil {
-			e.WithError(err).Error("failed to start log forwarding")
-		}
-	}
 	return nil
 }
 
