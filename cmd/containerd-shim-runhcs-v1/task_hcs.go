@@ -446,7 +446,7 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	if signal == 0x9 && eid == "" && ht.host != nil {
 		// If this is a SIGKILL against the init process we start a background
 		// timer and wait on either the timer expiring or the process exiting
-		// cleanly. If the timer exires first we forcibly close the UVM as we
+		// cleanly. If the timer expires first we forcibly close the UVM as we
 		// assume the guest is misbehaving for some reason.
 		go func() {
 			t := time.NewTimer(30 * time.Second)

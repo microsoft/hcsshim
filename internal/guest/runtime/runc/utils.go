@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/opencontainers/runc/libcontainer"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
@@ -124,20 +125,19 @@ func (l *standardLogEntry) asError() (err error) {
 }
 
 func parseRuncError(s string) (err error) {
-	// TODO (helsaawy): match with errors from
-	// https://github.com/opencontainers/runc/blob/master/libcontainer/error.go
 	if strings.HasPrefix(s, "container") && strings.HasSuffix(s, "does not exist") {
-		// currently: "container <container id> does not exist"
+		// match "container %q does not exist" and [libcontainer.ErrNotExist]
 		err = runtime.ErrContainerDoesNotExist
-	} else if strings.Contains(s, "container with id exists") ||
-		strings.Contains(s, "container with given ID already exists") {
+	} else if strings.Contains(s, "container with id exists") || strings.Contains(s, libcontainer.ErrExist.Error()) {
 		err = runtime.ErrContainerAlreadyExists
-	} else if strings.Contains(s, "invalid id format") ||
-		strings.Contains(s, "invalid container ID format") {
+	} else if strings.Contains(s, "invalid id format") || strings.Contains(s, libcontainer.ErrInvalidID.Error()) {
 		err = runtime.ErrInvalidContainerID
-	} else if strings.Contains(s, "container") &&
-		strings.Contains(s, "that is not stopped") {
+	} else if strings.Contains(s, "container") && strings.Contains(s, "that is not stopped") {
 		err = runtime.ErrContainerNotStopped
+	} else if strings.Contains(s, libcontainer.ErrRunning.Error()) {
+		err = runtime.ErrContainerStillRunning
+	} else if strings.Contains(s, libcontainer.ErrNotRunning.Error()) {
+		err = runtime.ErrContainerNotRunning
 	} else {
 		err = errors.New(s)
 	}
