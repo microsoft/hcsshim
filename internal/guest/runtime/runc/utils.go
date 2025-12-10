@@ -119,7 +119,7 @@ type standardLogEntry struct {
 func (l *standardLogEntry) asError() (err error) {
 	err = parseRuncError(l.Message)
 	if l.Err != nil {
-		err = errors.Wrapf(err, l.Err.Error())
+		err = errors.Wrap(err, l.Err.Error())
 	}
 	return
 }
