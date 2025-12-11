@@ -13,9 +13,9 @@ version := "@@FRAMEWORK_VERSION@@"
 anchor_pattern(p) := p if {
     startswith(p, "^")
     endswith(p, "$")
-} else := concat("", ["^", p]) {
+} else := concat("", ["^", p]) if {
     endswith(p, "$")
-} else := concat("", [p, "$"]) {
+} else := concat("", [p, "$"]) if {
     startswith(p, "^")
 } else := concat("", ["^", p, "$"])
 
@@ -1842,7 +1842,7 @@ registry_changes := {"allowed": true} if {
 
 extract_parameter(name, fragment_parameters_obj, parameters_metadata) := fragment_parameters_obj[name] if {
 	name in object.keys(fragment_parameters_obj)
-} else := parameters_metadata[name]["default"] {
+} else := parameters_metadata[name]["default"] if {
 	"default" in object.keys(parameters_metadata[name])
 }
 
