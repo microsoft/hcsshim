@@ -108,12 +108,14 @@ func GetDefaultReferenceInfoFilePath() string {
 // executable files name.
 func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 	return &OptionsWCOW{
-		Options:                 newDefaultOptions(id, owner),
-		AdditionalRegistryKeys:  []hcsschema.RegistryValue{},
-		ConfidentialWCOWOptions: &ConfidentialWCOWOptions{},
-		OutputHandlerCreator:    parseLogrus,
-		ForwardLogs:             true, // Default to true for WCOW, and set to false for CWCOW in internal/oci/uvm.go SpecToUVMCreateOpts
-		LogSources:              "",
+		Options:                newDefaultOptions(id, owner),
+		AdditionalRegistryKeys: []hcsschema.RegistryValue{},
+		ConfidentialWCOWOptions: &ConfidentialWCOWOptions{
+			SecurityPolicyEnabled: false,
+		},
+		OutputHandlerCreator: parseLogrus,
+		ForwardLogs:          true, // Default to true for WCOW, and set to false for CWCOW in internal/oci/uvm.go SpecToUVMCreateOpts
+		LogSources:           "",
 	}
 }
 

@@ -323,8 +323,8 @@ func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
 		_ = uvm.WaitCtx(ctx)
 	}
 
-	if uvm.confidentialUVMOptions != nil && uvm.confidentialUVMOptions.GuestStateFile != "" {
-		vmgsFullPath := filepath.Join(uvm.confidentialUVMOptions.BundleDirectory, uvm.confidentialUVMOptions.GuestStateFile)
+	if uvm.HasConfidentialPolicy() && uvm.createOpts.(*OptionsLCOW).GuestStateFile != "" {
+		vmgsFullPath := filepath.Join(uvm.createOpts.(*OptionsLCOW).BundleDirectory, uvm.createOpts.(*OptionsLCOW).GuestStateFile)
 		e := log.G(ctx).WithField("VMGS file", vmgsFullPath)
 		e.Debug("removing VMGS file")
 		if err := os.Remove(vmgsFullPath); err != nil {

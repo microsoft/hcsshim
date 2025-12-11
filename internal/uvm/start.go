@@ -373,15 +373,14 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	}
 	uvm.SCSIManager = mgr
 
-	var policy, enforcer, referenceInfoFileRoot, referenceInfoFilePath string
-
-	if uvm.confidentialUVMOptions != nil || uvm.HasConfidentialPolicy() {
-		if uvm.confidentialUVMOptions != nil && uvm.OS() == "linux" {
-			policy = uvm.confidentialUVMOptions.SecurityPolicy
-			enforcer = uvm.confidentialUVMOptions.SecurityPolicyEnforcer
-			referenceInfoFilePath = uvm.confidentialUVMOptions.UVMReferenceInfoFile
+	if uvm.HasConfidentialPolicy() {
+		var policy, enforcer, referenceInfoFileRoot, referenceInfoFilePath string
+		if uvm.OS() == "linux" {
+			policy = uvm.createOpts.(*OptionsLCOW).SecurityPolicy
+			enforcer = uvm.createOpts.(*OptionsLCOW).SecurityPolicyEnforcer
+			referenceInfoFilePath = uvm.createOpts.(*OptionsLCOW).UVMReferenceInfoFile
 			referenceInfoFileRoot = defaultLCOWOSBootFilesPath()
-		} else if uvm.HasConfidentialPolicy() && uvm.OS() == "windows" {
+		} else if uvm.OS() == "windows" {
 			policy = uvm.createOpts.(*OptionsWCOW).SecurityPolicy
 			enforcer = uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer
 			referenceInfoFilePath = uvm.createOpts.(*OptionsWCOW).UVMReferenceInfoFile
@@ -394,16 +393,16 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		if err := uvm.SetConfidentialUVMOptions(ctx, copts...); err != nil {
 			return err
 		}
+	}
 
-		if uvm.OS() == "windows" && uvm.forwardLogs {
-			// If the UVM is Windows and log forwarding is enabled, set the log sources
-			// and start the log forwarding service.
-			if err := uvm.SetLogSources(ctx); err != nil {
-				e.WithError(err).Error("failed to set log sources")
-			}
-			if err := uvm.StartLogForwarding(ctx); err != nil {
-				e.WithError(err).Error("failed to start log forwarding")
-			}
+	if uvm.OS() == "windows" && uvm.forwardLogs {
+		// If the UVM is Windows and log forwarding is enabled, set the log sources
+		// and start the log forwarding service.
+		if err := uvm.SetLogSources(ctx); err != nil {
+			e.WithError(err).Error("failed to set log sources")
+		}
+		if err := uvm.StartLogForwarding(ctx); err != nil {
+			e.WithError(err).Error("failed to start log forwarding")
 		}
 	}
 
