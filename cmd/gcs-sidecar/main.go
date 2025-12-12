@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	shimlog "github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -216,7 +217,7 @@ func main() {
 		return
 	}
 
-	if err := securitypolicy.StartPSPDriver(ctx); err != nil {
+	if err := amdsevsnp.StartPSPDriver(ctx); err != nil {
 		// When error happens, pspdriver.GetPspDriverError() returns true.
 		// In that case, gcs-sidecar should keep the initial "deny" policy
 		// and reject all requests from the host.

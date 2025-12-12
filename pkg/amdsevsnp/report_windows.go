@@ -1,13 +1,11 @@
 //go:build windows
 // +build windows
 
-package securitypolicy
+package amdsevsnp
 
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -42,107 +40,6 @@ const (
 type SNPPSPGuestRequestResult struct {
 	DriverStatus uint32
 	PspStatus    uint64
-}
-
-// Type used by FetchParsedSNPReport.
-// This it converted to the public type `Report`
-// by `func (sr *report) report() Report`.
-type report struct {
-	Version          uint32
-	GuestSVN         uint32
-	Policy           uint64
-	FamilyID         [16]byte
-	ImageID          [16]byte
-	VMPL             uint32
-	SignatureAlgo    uint32
-	PlatformVersion  uint64
-	PlatformInfo     uint64
-	AuthorKeyEn      uint32
-	Reserved1        uint32
-	ReportData       [SnpPspReportDataSize]byte
-	Measurement      [48]byte
-	HostData         [SnpPspReportHostDataSize]byte
-	IDKeyDigest      [48]byte
-	AuthorKeyDigest  [48]byte
-	ReportID         [32]byte
-	ReportIDMA       [32]byte
-	ReportTCB        uint64
-	Reserved2        [24]byte
-	ChipID           [64]byte
-	CommittedSVN     [8]byte
-	CommittedVersion [8]byte
-	LaunchSVN        [8]byte
-	Reserved3        [168]byte
-	Signature        [512]byte
-}
-
-// Report represents parsed attestation report.
-// Fields with string type is hex-encoded values of the corresponding byte arrays.
-// Based on Table 23 of 'SEV-ES Guest-Hypervisor Communication Block Standardization'.
-//
-//	https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56421.pdf
-type Report struct {
-	Version          uint32
-	GuestSVN         uint32
-	Policy           uint64
-	FamilyID         string
-	ImageID          string
-	VMPL             uint32
-	SignatureAlgo    uint32
-	PlatformVersion  uint64
-	PlatformInfo     uint64
-	AuthorKeyEn      uint32
-	ReportData       string
-	Measurement      string
-	HostData         []byte
-	IDKeyDigest      string
-	AuthorKeyDigest  string
-	ReportID         string
-	ReportIDMA       string
-	ReportTCB        uint64
-	ChipID           string
-	CommittedSVN     string
-	CommittedVersion string
-	LaunchSVN        string
-	Signature        string
-}
-
-func (sr *report) report() Report {
-	return Report{
-		Version:          sr.Version,
-		GuestSVN:         sr.GuestSVN,
-		Policy:           sr.Policy,
-		FamilyID:         hex.EncodeToString(mirrorBytes(sr.FamilyID[:])[:]),
-		ImageID:          hex.EncodeToString(mirrorBytes(sr.ImageID[:])[:]),
-		VMPL:             sr.VMPL,
-		SignatureAlgo:    sr.SignatureAlgo,
-		PlatformVersion:  sr.PlatformVersion,
-		PlatformInfo:     sr.PlatformInfo,
-		AuthorKeyEn:      sr.AuthorKeyEn,
-		ReportData:       hex.EncodeToString(sr.ReportData[:]),
-		Measurement:      hex.EncodeToString(sr.Measurement[:]),
-		HostData:         sr.HostData[:],
-		IDKeyDigest:      hex.EncodeToString(sr.IDKeyDigest[:]),
-		AuthorKeyDigest:  hex.EncodeToString(sr.AuthorKeyDigest[:]),
-		ReportID:         hex.EncodeToString(sr.ReportID[:]),
-		ReportIDMA:       hex.EncodeToString(sr.ReportIDMA[:]),
-		ReportTCB:        sr.ReportTCB,
-		ChipID:           hex.EncodeToString(sr.ChipID[:]),
-		CommittedSVN:     hex.EncodeToString(sr.CommittedSVN[:]),
-		CommittedVersion: hex.EncodeToString(sr.CommittedVersion[:]),
-		LaunchSVN:        hex.EncodeToString(sr.LaunchSVN[:]),
-		Signature:        hex.EncodeToString(sr.Signature[:]),
-	}
-}
-
-// mirrorBytes mirrors the byte ordering so that hex-encoding little endian
-// ordered bytes come out in the readable order.
-func mirrorBytes(b []byte) []byte {
-	for i := 0; i < len(b)/2; i++ {
-		mirrorIndex := len(b) - i - 1
-		b[i], b[mirrorIndex] = b[mirrorIndex], b[i]
-	}
-	return b
 }
 
 var (
@@ -212,12 +109,12 @@ func IsPspDriverStarted() bool {
 // Return an error from the PSP driver dll
 // when it fails to use the dll at all.
 // Otherwise it returns nil.
-func GetPspDriverError() error {
+func CheckDriverError() error {
 	return pspDriverError
 }
 
-// IsSNPMode() returns true if it's in SNP mode.
-func IsSNPMode() (bool, error) {
+// IsSNP() returns true if it's in SNP mode.
+func IsSNP() (bool, error) {
 
 	if pspDriverError != nil {
 		return false, pspDriverError
@@ -290,26 +187,11 @@ func FetchRawSNPReport(reportData []byte) ([]byte, error) {
 	return report[:], nil
 }
 
-// FetchParsedSNPReport parses raw attestation response into proper structs.
-func FetchParsedSNPReport(reportData []byte) (Report, error) {
-	rawBytes, err := FetchRawSNPReport(reportData)
-	if err != nil {
-		return Report{}, err
-	}
-
-	var r report
-	buf := bytes.NewBuffer(rawBytes)
-	if err := binary.Read(buf, binary.LittleEndian, &r); err != nil {
-		return Report{}, err
-	}
-	return r.report(), nil
-}
-
 // ValidateHostData fetches SNP report (if applicable) and validates `hostData` against
 // HostData set at UVM launch.
 func ValidateHostDataPSP(hostData []byte) error {
 	// If the UVM is not SNP, then don't try to fetch an SNP report.
-	isSnpMode, err := IsSNPMode()
+	isSnpMode, err := IsSNP()
 	if err != nil {
 		return err
 	}

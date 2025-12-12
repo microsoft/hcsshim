@@ -15,6 +15,7 @@ import (
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -58,7 +59,7 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 		return err
 	}
 
-	if err := validateHostData(hostData[:]); err != nil {
+	if err := amdsevsnp.ValidateHostData(hostData[:]); err != nil {
 		return err
 	}
 
