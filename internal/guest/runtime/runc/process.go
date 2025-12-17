@@ -4,8 +4,6 @@
 package runc
 
 import (
-	"syscall"
-
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -65,7 +63,7 @@ func (p *process) Wait() (int, error) {
 		// If the init process of a pid namespace terminates, the kernel
 		// terminates all other processes in the namespace with SIGKILL. We
 		// simulate the same behavior.
-		if err := p.c.Kill(syscall.SIGKILL); err != nil {
+		if err := p.c.killAll(); err != nil {
 			l.WithError(err).Error("failed to terminate container after process wait")
 		}
 	}

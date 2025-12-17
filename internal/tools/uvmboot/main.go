@@ -97,7 +97,7 @@ func main() {
 
 	app.Before = func(c *cli.Context) error {
 		if !winapi.IsElevated() {
-			return fmt.Errorf(c.App.Name + " must be run in an elevated context")
+			return fmt.Errorf("%s must be run in an elevated context", c.App.Name)
 		}
 
 		lvl := logrus.WarnLevel

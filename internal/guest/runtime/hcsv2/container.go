@@ -214,7 +214,10 @@ func (c *Container) GetAllProcessPids(ctx context.Context) ([]int, error) {
 
 // Kill sends 'signal' to the container process.
 func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
-	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::Kill")
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.ContainerID: c.id,
+		"signal":              signal.String(),
+	}).Info("opengcs::Container::Kill")
 	err := c.container.Kill(signal)
 	if err != nil {
 		return err

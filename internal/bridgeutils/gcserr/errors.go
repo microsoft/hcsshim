@@ -10,6 +10,7 @@ import (
 // Hresult is a type corresponding to the HRESULT error type used on Windows.
 type Hresult int32
 
+// ! Must match error values in internal\hcs\errors.go
 // from
 // - https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/705fb797-2175-4a90-b5a3-3918024b10b8
 // - https://docs.microsoft.com/en-us/virtualization/api/hcs/reference/hcshresult
@@ -51,7 +52,7 @@ const (
 	//
 	// The virtual machine or container with the specified identifier is not
 	// running.
-	HrVmcomputeSystemAlreadyStopped = Hresult(-2143878896) // 0x80370110
+	HrVmcomputeSystemAlreadyStopped = Hresult(-1070137072) // 0xC0370110
 )
 
 // TODO: update implementation to use go1.13 style errors with `errors.As` and co.

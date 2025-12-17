@@ -76,14 +76,40 @@ func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 
 // Kill sends the specified signal to the container's init process.
 func (c *container) Kill(signal syscall.Signal) error {
-	logrus.WithField(logfields.ContainerID, c.id).Debug("runc::container::Kill")
+	logrus.WithFields(logrus.Fields{
+		logfields.ContainerID: c.id,
+		"signal":              signal.String(),
+	}).Debug("runc::container::Kill")
+	return c.kill(signal, false)
+}
+
+// killAll terminates all processes started in the container.
+//
+// Note: [runc deprecated] the `kill --all` flag starting in v1.2, but, prior to that, it was required
+// to kill all processes within the container after the init exits.
+// Until we can guarantee that the runc version is greater than 1.1 and runc explicitly removes the option,
+// keep using it here.
+// This mirrors how upstream containerd's runc handles [init exit] via [kill all].
+//
+// [runc deprecated]: https://github.com/opencontainers/runc/pull/3825
+// [init exit]: https://github.com/containerd/containerd/blob/48baa31a0ad1ca1121ddaf968d3b8aa68c40bf84/cmd/containerd-shim-runc-v2/task/service.go#L725
+// [kill all]: https://github.com/containerd/containerd/blob/48baa31a0ad1ca1121ddaf968d3b8aa68c40bf84/cmd/containerd-shim-runc-v2/process/init.go#L375
+func (c *container) killAll() error {
+	logrus.WithField(logfields.ContainerID, c.id).Debug("runc::container::killAll")
+	return c.kill(syscall.SIGKILL, true)
+}
+
+func (c *container) kill(signal syscall.Signal, all bool) error {
 	args := []string{"kill"}
+	if all {
+		args = append(args, "--all")
+	}
 	args = append(args, c.id, strconv.Itoa(int(signal)))
 	cmd := runcCommand(args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
-		return errors.Wrapf(runcErr, "unknown runc error after kill %v: %s", err, string(out))
+		return errors.Wrapf(runcErr, "runc kill failed with %v: %s", err, string(out))
 	}
 	return nil
 }
