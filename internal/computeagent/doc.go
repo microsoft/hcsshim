@@ -5,4 +5,4 @@
 // used for ncproxy.
 package computeagent
 
-//go:generate go run go.uber.org/mock/mockgen -source=computeagent_ttrpc.pb.go -package=computeagent_mock -destination=mock\computeagent_mock.pb.go
+//go:generate go tool go.uber.org/mock/mockgen -source=computeagent_ttrpc.pb.go -package=computeagent_mock -destination=mock\computeagent_mock.pb.go

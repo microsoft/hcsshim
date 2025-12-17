@@ -20,7 +20,7 @@ import (
 )
 
 // Add a manifest to get proper Windows version detection.
-//go:generate go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
+//go:generate go tool github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
 
 // `-ldflags '-X ...'` only works if the variable is uninitialized or set to a constant value.
 // keep empty and override with data from [internal/version] only if empty to allow
