@@ -59,7 +59,12 @@ func (c *container) Start() error {
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
 		c.r.cleanupContainer(c.id) //nolint:errcheck
-		return errors.Wrapf(runcErr, "runc start failed with %v: %s", err, string(out))
+		if runcErr != nil {
+			return errors.Wrapf(runcErr, "runc start failed with %v: %s", err, string(out))
+		} else {
+			logrus.Warn("runc start failed without writing error to log file")
+			return errors.Wrapf(err, "runc start failed: %s", string(out))
+		}
 	}
 	return nil
 }
@@ -145,8 +150,12 @@ func (c *container) Resume() error {
 	cmd := runcCommandLog(logPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		runcErr := getRuncLogError(logPath)
-		return errors.Wrapf(runcErr, "runc resume failed with %v: %s", err, string(out))
+		if runcErr := getRuncLogError(logPath); runcErr != nil {
+			return errors.Wrapf(runcErr, "runc resume failed with %v: %s", err, string(out))
+		} else {
+			logrus.Warn("runc resume failed without writing error to log file")
+			return errors.Wrapf(err, "runc resume failed: %s", string(out))
+		}
 	}
 	return nil
 }
@@ -361,7 +370,7 @@ func (c *container) startProcess(
 	tempProcessDir string,
 	hasTerminal bool,
 	stdioSet *stdio.ConnectionSet, initialArgs ...string,
-) (p *process, err error) {
+) (_ *process, err error) {
 	args := initialArgs
 
 	if err := setSubreaper(1); err != nil {
@@ -413,8 +422,13 @@ func (c *container) startProcess(
 	}
 
 	if err := cmd.Run(); err != nil {
-		runcErr := getRuncLogError(logPath)
-		return nil, errors.Wrapf(runcErr, "failed to run runc create/exec call for container %s with %v", c.id, err)
+		if runcErr := getRuncLogError(logPath); runcErr != nil {
+			return nil, errors.Wrapf(runcErr, "runc create/exec call for container %s failed: %v", c.id, err)
+		} else {
+			logrus.Warn("runc create/exec call failed without writing error to log file")
+			return nil, errors.Wrapf(err, "runc create/exec call for container %s failed", c.id)
+		}
+
 	}
 
 	var ttyRelay *stdio.TtyRelay
