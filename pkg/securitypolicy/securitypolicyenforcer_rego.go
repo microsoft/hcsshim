@@ -718,6 +718,13 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 			"seccompProfileSHA256": opts.SeccompProfileSHA256,
 		}
 	case "windows":
+		// Dump full interpreter metadata for debugging diagnostics.
+		if mdJSON, err := policy.rego.MetadataJSON(); err == nil {
+			log.G(ctx).Debugf("Current policy metadata: %s", mdJSON)
+		} else {
+			log.G(ctx).WithError(err).Warn("failed to obtain policy metadata snapshot")
+		}
+
 		input = inputData{
 			"containerID": containerID,
 			"argList":     argList,
@@ -775,18 +782,6 @@ func appendMountData(mountData []interface{}, mounts []oci.Mount) []interface{} 
 			"source":      mount.Source,
 			"options":     mount.Options,
 			"type":        mount.Type,
-		})
-	}
-
-	return mountData
-}
-
-func appendMountDataWindows(mountData []interface{}, mounts []oci.Mount) []interface{} {
-	for _, mount := range mounts {
-		mountData = append(mountData, inputData{
-			"destination": mount.Destination,
-			"source":      mount.Source,
-			"options":     mount.Options,
 		})
 	}
 
