@@ -360,13 +360,22 @@ func main() {
 		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
 	}
 	mux := bridge.NewBridgeMux()
+
+	forceSequential, err := amdsevsnp.IsSNP()
+	if err != nil {
+		// IsSNP cannot fail on LCOW
+		logrus.Errorf("Got unexpected error from IsSNP(): %v", err)
+		// If it fails, we proceed with forceSequential enabled to be safe
+		forceSequential = true
+	}
+
 	b := bridge.Bridge{
 		Handler:  mux,
 		EnableV4: *v4,
 
 		// For confidential containers, we protect ourselves against attacks caused
 		// by concurrent modifications, by processing one request at a time.
-		ForceSequential: amdsevsnp.IsSNP(),
+		ForceSequential: forceSequential,
 	}
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
 	// Initialize virtual pod support in the host
