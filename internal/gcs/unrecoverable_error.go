@@ -1,6 +1,3 @@
-//go:build linux
-// +build linux
-
 package gcs
 
 import (
@@ -28,7 +25,14 @@ func UnrecoverableError(err error) {
 		"Unrecoverable error in GCS: %v\n%s",
 		err, stackTrace,
 	)
-	isSnp := amdsevsnp.IsSNP()
+
+	isSnp, err := amdsevsnp.IsSNP()
+	if err != nil {
+		// IsSNP() cannot fail on LCOW
+		// but if it does, we proceed as if we're on SNP to be safe.
+		isSnp = true
+	}
+
 	if isSnp {
 		errPrint += "\nThis thread will now enter an infinite loop."
 	}
