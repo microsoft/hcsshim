@@ -417,7 +417,14 @@ func main() {
 	b := bridge.New(mux, *v4)
 	// For confidential containers, we protect ourselves against attacks caused
 	// by concurrent modifications, by processing one request at a time.
-	b.ForceSequential = amdsevsnp.IsSNP()
+	forceSequential, err := amdsevsnp.IsSNP()
+	if err != nil {
+		// IsSNP cannot fail on LCOW
+		logrus.Errorf("Got unexpected error from IsSNP(): %v", err)
+		// If it fails, we proceed with forceSequential enabled to be safe
+		forceSequential = true
+	}
+	b.ForceSequential = forceSequential
 	b.AssignHandlers(mux, h)
 
 	// Reconnect loop: dial the host, serve until the connection drops, then
