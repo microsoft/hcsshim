@@ -29,7 +29,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/debug"
-	"github.com/Microsoft/hcsshim/internal/guest/policy"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
@@ -86,118 +85,39 @@ type Host struct {
 	devNullTransport transport.Transport
 
 	// state required for the security policy enforcement
-	policyMutex               sync.Mutex
-	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
-	securityPolicyEnforcerSet bool
-	uvmReferenceInfo          string
+	securityOptions *securitypolicy.SecurityOptions
 
-	// logging target
-	logWriter io.Writer
 	// hostMounts keeps the state of currently mounted devices and file systems,
 	// which is used for GCS hardening.
 	hostMounts *hostMounts
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
-	return &Host{
-		containers:                make(map[string]*Container),
-		externalProcesses:         make(map[int]*externalProcess),
-		virtualPods:               make(map[string]*VirtualPod),
-		containerToVirtualPod:     make(map[string]string),
-		rtime:                     rtime,
-		vsock:                     vsock,
-		devNullTransport:          &transport.DevNullTransport{},
-		securityPolicyEnforcerSet: false,
-		securityPolicyEnforcer:    initialEnforcer,
-		logWriter:                 logWriter,
-		hostMounts:                newHostMounts(),
-	}
-}
-
-// SetConfidentialUVMOptions takes guestresource.LCOWConfidentialOptions
-// to set up our internal data structures we use to store and enforce
-// security policy. The options can contain security policy enforcer type,
-// encoded security policy and signed UVM reference information The security
-// policy and uvm reference information can be further presented to workload
-// containers for validation and attestation purposes.
-func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
-	h.policyMutex.Lock()
-	defer h.policyMutex.Unlock()
-	if h.securityPolicyEnforcerSet {
-		return errors.New("security policy has already been set")
-	}
-
-	// this limit ensures messages are below the character truncation limit that
-	// can be imposed by an orchestrator
-	maxErrorMessageLength := 3 * 1024
-
-	// Initialize security policy enforcer for a given enforcer type and
-	// encoded security policy.
-	p, err := securitypolicy.CreateSecurityPolicyEnforcer(
-		r.EnforcerType,
-		r.EncodedSecurityPolicy,
-		policy.DefaultCRIMounts(),
-		policy.DefaultCRIPrivilegedMounts(),
-		maxErrorMessageLength,
+	securityPolicyOptions := securitypolicy.NewSecurityOptions(
+		initialEnforcer,
+		false,
+		"",
+		logWriter,
 	)
-	if err != nil {
-		return err
+	return &Host{
+		containers:            make(map[string]*Container),
+		externalProcesses:     make(map[int]*externalProcess),
+		virtualPods:           make(map[string]*VirtualPod),
+		containerToVirtualPod: make(map[string]string),
+		rtime:                 rtime,
+		vsock:                 vsock,
+		devNullTransport:      &transport.DevNullTransport{},
+		hostMounts:            newHostMounts(),
+		securityOptions:       securityPolicyOptions,
 	}
-
-	// This is one of two points at which we might change our logging.
-	// At this time, we now have a policy and can determine what the policy
-	// author put as policy around runtime logging.
-	// The other point is on startup where we take a flag to set the default
-	// policy enforcer to use before a policy arrives. After that flag is set,
-	// we use the enforcer in question to set up logging as well.
-	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
-		logrus.SetOutput(h.logWriter)
-	} else {
-		logrus.SetOutput(io.Discard)
-	}
-
-	hostData, err := securitypolicy.NewSecurityPolicyDigest(r.EncodedSecurityPolicy)
-	if err != nil {
-		return err
-	}
-
-	if err := validateHostData(hostData[:]); err != nil {
-		return err
-	}
-
-	h.securityPolicyEnforcer = p
-	h.securityPolicyEnforcerSet = true
-	h.uvmReferenceInfo = r.EncodedUVMReference
-
-	return nil
-}
-
-// InjectFragment extends current security policy with additional constraints
-// from the incoming fragment. Note that it is base64 encoded over the bridge/
-//
-// There are three checking steps:
-// 1 - Unpack the cose document and check it was actually signed with the cert
-// chain inside its header
-// 2 - Check that the issuer field did:x509 identifier is for that cert chain
-// (ie fingerprint of a non leaf cert and the subject matches the leaf cert)
-// 3 - Check that this issuer/feed match the requirement of the user provided
-// security policy (done in the regoby LoadFragment)
-func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
-	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
-	issuer, feed, payloadString, err := securitypolicy.ExtractAndVerifyFragment(ctx, fragment)
-	if err != nil {
-		return err
-	}
-	// now offer the payload fragment to the policy
-	err = h.securityPolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
-	if err != nil {
-		return fmt.Errorf("error loading security policy fragment: %w", err)
-	}
-	return nil
 }
 
 func (h *Host) SecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
-	return h.securityPolicyEnforcer
+	return h.securityOptions.PolicyEnforcer
+}
+
+func (h *Host) SecurityOptions() *securitypolicy.SecurityOptions {
+	return h.securityOptions
 }
 
 func (h *Host) Transport() transport.Transport {
@@ -467,7 +387,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 
-			if err := policy.ExtendPolicyWithNetworkingMounts(id, h.securityPolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 		case "container":
@@ -482,7 +402,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 
 			// Add SEV device when security policy is not empty, except when privileged annotation is
 			// set to "true", in which case all UVMs devices are added.
-			if len(h.securityPolicyEnforcer.EncodedSecurityPolicy()) > 0 && !oci.ParseAnnotationsBool(ctx,
+			if len(h.securityOptions.PolicyEnforcer.EncodedSecurityPolicy()) > 0 && !oci.ParseAnnotationsBool(ctx,
 				settings.OCISpecification.Annotations, annotations.LCOWPrivileged, false) {
 				if err := specGuest.AddDevSev(ctx, settings.OCISpecification); err != nil {
 					log.G(ctx).WithError(err).Debug("failed to add SEV device")
@@ -494,7 +414,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					_ = os.RemoveAll(settings.OCIBundlePath)
 				}
 			}()
-			if err := policy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityPolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 		default:
@@ -511,7 +431,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				_ = os.RemoveAll(settings.OCIBundlePath)
 			}
 		}()
-		if err := policy.ExtendPolicyWithNetworkingMounts(id, h.securityPolicyEnforcer,
+		if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer,
 			settings.OCISpecification); err != nil {
 			return nil, err
 		}
@@ -528,7 +448,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		})
 	}
 
-	user, groups, umask, err := h.securityPolicyEnforcer.GetUserInfo(settings.OCISpecification.Process, settings.OCISpecification.Root.Path)
+	user, groups, umask, err := h.securityOptions.PolicyEnforcer.GetUserInfo(settings.OCISpecification.Process, settings.OCISpecification.Root.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +458,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, err
 	}
 
-	envToKeep, capsToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+	envToKeep, capsToKeep, allowStdio, err := h.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicy(
 		ctx,
 		sandboxID,
 		id,
@@ -596,47 +516,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Process.Capabilities = capsToKeep
 	}
 
-	// Write security policy, signed UVM reference and host AMD certificate to
-	// container's rootfs, so that application and sidecar containers can have
-	// access to it. The security policy is required by containers which need to
-	// extract init-time claims found in the security policy. The directory path
-	// containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
-	// It may be an error to have a security policy but not expose it to the
-	// container as in that case it can never be checked as correct by a verifier.
 	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.LCOWSecurityPolicyEnv, true) {
-		encodedPolicy := h.securityPolicyEnforcer.EncodedSecurityPolicy()
-		hostAMDCert := settings.OCISpecification.Annotations[annotations.LCOWHostAMDCertificate]
-		if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(h.uvmReferenceInfo) > 0 {
-			// Use os.MkdirTemp to make sure that the directory is unique.
-			securityContextDir, err := os.MkdirTemp(settings.OCISpecification.Root.Path, securitypolicy.SecurityContextDirTemplate)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create security context directory: %w", err)
-			}
-			// Make sure that files inside directory are readable
-			if err := os.Chmod(securityContextDir, 0755); err != nil {
-				return nil, fmt.Errorf("failed to chmod security context directory: %w", err)
-			}
-
-			if len(encodedPolicy) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.PolicyFilename, []byte(encodedPolicy), 0744); err != nil {
-					return nil, fmt.Errorf("failed to write security policy: %w", err)
-				}
-			}
-			if len(h.uvmReferenceInfo) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.ReferenceInfoFilename, []byte(h.uvmReferenceInfo), 0744); err != nil {
-					return nil, fmt.Errorf("failed to write UVM reference info: %w", err)
-				}
-			}
-
-			if len(hostAMDCert) > 0 {
-				if err := writeFileInDir(securityContextDir, securitypolicy.HostAMDCertFilename, []byte(hostAMDCert), 0744); err != nil {
-					return nil, fmt.Errorf("failed to write host AMD certificate: %w", err)
-				}
-			}
-
-			containerCtxDir := fmt.Sprintf("/%s", filepath.Base(securityContextDir))
-			secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
-			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secCtxEnv)
+		if err := h.securityOptions.WriteSecurityContextDir(settings.OCISpecification); err != nil {
+			return nil, fmt.Errorf("failed to write security context dir: %w", err)
 		}
 	}
 
@@ -764,18 +646,18 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 				}()
 			}
 		}
-		return modifyMappedVirtualDisk(ctx, req.RequestType, mvd, h.securityPolicyEnforcer)
+		return modifyMappedVirtualDisk(ctx, req.RequestType, mvd, h.securityOptions.PolicyEnforcer)
 	case guestresource.ResourceTypeMappedDirectory:
-		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory), h.securityPolicyEnforcer)
+		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory), h.securityOptions.PolicyEnforcer)
 	case guestresource.ResourceTypeVPMemDevice:
-		return modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice), h.securityPolicyEnforcer)
+		return modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice), h.securityOptions.PolicyEnforcer)
 	case guestresource.ResourceTypeCombinedLayers:
 		cl := req.Settings.(*guestresource.LCOWCombinedLayers)
 		// when cl.ScratchPath == "", we mount overlay as read-only, in which case
 		// we don't really care about scratch encryption, since the host already
 		// knows about the layers and the overlayfs.
 		encryptedScratch := cl.ScratchPath != "" && h.hostMounts.IsEncrypted(cl.ScratchPath)
-		return modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), encryptedScratch, h.securityPolicyEnforcer)
+		return modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), encryptedScratch, h.securityOptions.PolicyEnforcer)
 	case guestresource.ResourceTypeNetwork:
 		return modifyNetwork(ctx, req.RequestType, req.Settings.(*guestresource.LCOWNetworkAdapter))
 	case guestresource.ResourceTypeVPCIDevice:
@@ -787,17 +669,20 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	case guestresource.ResourceTypeSecurityPolicy:
-		r, ok := req.Settings.(*guestresource.LCOWConfidentialOptions)
+		r, ok := req.Settings.(*guestresource.ConfidentialOptions)
 		if !ok {
-			return errors.New("the request's settings are not of type LCOWConfidentialOptions")
+			return errors.New("the request's settings are not of type ConfidentialOptions")
 		}
-		return h.SetConfidentialUVMOptions(ctx, r)
+		return h.securityOptions.SetConfidentialOptions(ctx,
+			r.EnforcerType,
+			r.EncodedSecurityPolicy,
+			r.EncodedUVMReference)
 	case guestresource.ResourceTypePolicyFragment:
-		r, ok := req.Settings.(*guestresource.LCOWSecurityPolicyFragment)
+		r, ok := req.Settings.(*guestresource.SecurityPolicyFragment)
 		if !ok {
-			return errors.New("the request settings are not of type LCOWSecurityPolicyFragment")
+			return errors.New("the request settings are not of type SecurityPolicyFragment")
 		}
-		return h.InjectFragment(ctx, r)
+		return h.securityOptions.InjectFragment(ctx, r)
 	default:
 		return errors.Errorf("the ResourceType %q is not supported for UVM", req.ResourceType)
 	}
@@ -837,7 +722,7 @@ func (h *Host) ShutdownContainer(ctx context.Context, containerID string, gracef
 		return err
 	}
 
-	err = h.securityPolicyEnforcer.EnforceShutdownContainerPolicy(ctx, containerID)
+	err = h.securityOptions.PolicyEnforcer.EnforceShutdownContainerPolicy(ctx, containerID)
 	if err != nil {
 		return err
 	}
@@ -864,7 +749,7 @@ func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, p
 	signalingInitProcess := processID == c.initProcess.pid
 
 	startupArgList := p.(*containerProcess).spec.Args
-	err = h.securityPolicyEnforcer.EnforceSignalContainerProcessPolicy(ctx, containerID, signal, signalingInitProcess, startupArgList)
+	err = h.securityOptions.PolicyEnforcer.EnforceSignalContainerProcessPolicy(ctx, containerID, signal, signalingInitProcess, startupArgList)
 	if err != nil {
 		return err
 	}
@@ -879,7 +764,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	if params.IsExternal || containerID == UVMContainerID {
 		var envToKeep securitypolicy.EnvList
 		var allowStdioAccess bool
-		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
+		envToKeep, allowStdioAccess, err = h.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
 			ctx,
 			params.CommandArgs,
 			processParamEnvToOCIEnv(params.Environment),
@@ -921,12 +806,12 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			var umask string
 			var allowStdioAccess bool
 
-			user, groups, umask, err = h.securityPolicyEnforcer.GetUserInfo(params.OCIProcess, c.spec.Root.Path)
+			user, groups, umask, err = h.securityOptions.PolicyEnforcer.GetUserInfo(params.OCIProcess, c.spec.Root.Path)
 			if err != nil {
 				return 0, err
 			}
 
-			envToKeep, capsToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(
+			envToKeep, capsToKeep, allowStdioAccess, err = h.securityOptions.PolicyEnforcer.EnforceExecInContainerPolicy(
 				ctx,
 				containerID,
 				params.OCIProcess.Args,
@@ -975,7 +860,7 @@ func (h *Host) GetExternalProcess(pid int) (Process, error) {
 }
 
 func (h *Host) GetProperties(ctx context.Context, containerID string, query prot.PropertyQuery) (*prot.PropertiesV2, error) {
-	err := h.securityPolicyEnforcer.EnforceGetPropertiesPolicy(ctx)
+	err := h.securityOptions.PolicyEnforcer.EnforceGetPropertiesPolicy(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get properties denied due to policy")
 	}
@@ -1031,7 +916,7 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 }
 
 func (h *Host) GetStacks(ctx context.Context) (string, error) {
-	err := h.securityPolicyEnforcer.EnforceDumpStacksPolicy(ctx)
+	err := h.securityOptions.PolicyEnforcer.EnforceDumpStacksPolicy(ctx)
 	if err != nil {
 		return "", errors.Wrapf(err, "dump stacks denied due to policy")
 	}
@@ -1406,20 +1291,6 @@ func processOCIEnvToParam(envs []string) map[string]string {
 // creation request would create a privileged container
 func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec) bool {
 	return oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false)
-}
-
-func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) error {
-	st, err := os.Stat(dir)
-	if err != nil {
-		return err
-	}
-
-	if !st.IsDir() {
-		return fmt.Errorf("not a directory %q", dir)
-	}
-
-	targetFilename := filepath.Join(dir, filename)
-	return os.WriteFile(targetFilename, data, perm)
 }
 
 // Virtual Pod Management Methods

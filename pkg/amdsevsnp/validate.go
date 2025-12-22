@@ -1,23 +1,29 @@
-//go:build linux
-// +build linux
-
-package hcsv2
+package amdsevsnp
 
 import (
 	"bytes"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
+	"github.com/pkg/errors"
 )
 
 // validateHostData fetches SNP report (if applicable) and validates `hostData` against
 // HostData set at UVM launch.
-func validateHostData(hostData []byte) error {
+func ValidateHostData(hostData []byte) error {
+
+	if err := CheckDriverError(); err != nil {
+		// For this case gcs-sidecar will keep initial deny policy.
+		return errors.Wrapf(err, "an error occurred while using PSP driver")
+	}
 	// If the UVM is not SNP, then don't try to fetch an SNP report.
-	if !amdsevsnp.IsSNP() {
+	isSNP, err := IsSNP()
+	if err != nil {
+		return err
+	}
+	if !isSNP {
 		return nil
 	}
-	report, err := amdsevsnp.FetchParsedSNPReport(nil)
+	report, err := FetchParsedSNPReport(nil)
 	if err != nil {
 		return err
 	}

@@ -89,7 +89,7 @@ const (
 	UVMReferenceInfoFile = "reference_info.cose"
 )
 
-type ConfidentialOptions struct {
+type ConfidentialLCOWOptions struct {
 	GuestStateFile         string // The vmgs file to load
 	UseGuestStateFile      bool   // Use a vmgs file that contains a kernel and initrd, required for SNP
 	SecurityPolicy         string // Optional security policy
@@ -105,7 +105,7 @@ type ConfidentialOptions struct {
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
 type OptionsLCOW struct {
 	*Options
-	*ConfidentialOptions
+	*ConfidentialLCOWOptions
 
 	// Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers.
 	//
@@ -176,7 +176,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		VPCIEnabled:             false,
 		EnableScratchEncryption: false,
 		DisableTimeSyncService:  false,
-		ConfidentialOptions: &ConfidentialOptions{
+		ConfidentialLCOWOptions: &ConfidentialLCOWOptions{
 			SecurityPolicyEnabled: false,
 			UVMReferenceInfoFile:  UVMReferenceInfoFile,
 		},
@@ -951,7 +951,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		vpmemMultiMapping:       !opts.VPMemNoMultiMapping,
 		encryptScratch:          opts.EnableScratchEncryption,
 		noWritableFileShares:    opts.NoWritableFileShares,
-		confidentialUVMOptions:  opts.ConfidentialOptions,
 		policyBasedRouting:      opts.PolicyBasedRouting,
 	}
 

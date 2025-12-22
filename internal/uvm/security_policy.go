@@ -16,11 +16,11 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 )
 
-type ConfidentialUVMOpt func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error
+type ConfidentialUVMOpt func(ctx context.Context, r *guestresource.ConfidentialOptions) error
 
 // WithSecurityPolicy sets the desired security policy for the resource.
 func WithSecurityPolicy(policy string) ConfidentialUVMOpt {
-	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
+	return func(ctx context.Context, r *guestresource.ConfidentialOptions) error {
 		r.EncodedSecurityPolicy = policy
 		return nil
 	}
@@ -28,73 +28,10 @@ func WithSecurityPolicy(policy string) ConfidentialUVMOpt {
 
 // WithSecurityPolicyEnforcer sets the desired enforcer type for the resource.
 func WithSecurityPolicyEnforcer(enforcer string) ConfidentialUVMOpt {
-	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
+	return func(ctx context.Context, r *guestresource.ConfidentialOptions) error {
 		r.EnforcerType = enforcer
 		return nil
 	}
-}
-
-// TODO (Mahati): Move this block out later
-type WCOWConfidentialUVMOpt func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error
-
-// WithSecurityPolicy sets the desired security policy for the resource.
-func WithWCOWSecurityPolicy(policy string) WCOWConfidentialUVMOpt {
-	return func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error {
-		r.EncodedSecurityPolicy = policy
-		return nil
-	}
-}
-
-// WithSecurityPolicyEnforcer sets the desired enforcer type for the resource.
-func WithWCOWSecurityPolicyEnforcer(enforcer string) WCOWConfidentialUVMOpt {
-	return func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error {
-		r.EnforcerType = enforcer
-		return nil
-	}
-}
-
-// WithUVMReferenceInfo reads UVM reference info file and base64 encodes the
-// content before setting it for the resource. This is no-op if the
-// path is empty or the file doesn't exist.
-func WithWCOWUVMReferenceInfo(path string) WCOWConfidentialUVMOpt {
-	return func(ctx context.Context, r *guestresource.WCOWConfidentialOptions) error {
-		encoded, err := base64EncodeFileContents(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				log.G(ctx).WithField("filePath", path).Debug("UVM reference info file not found")
-				return nil
-			}
-			return fmt.Errorf("failed to read UVM reference info file: %w", err)
-		}
-		r.EncodedUVMReference = encoded
-		return nil
-	}
-}
-
-func (uvm *UtilityVM) SetWCOWConfidentialUVMOptions(ctx context.Context, opts ...WCOWConfidentialUVMOpt) error {
-	if uvm.operatingSystem != "windows" {
-		return errNotSupported
-	}
-	uvm.m.Lock()
-	defer uvm.m.Unlock()
-	confOpts := &guestresource.WCOWConfidentialOptions{}
-	for _, o := range opts {
-		if err := o(ctx, confOpts); err != nil {
-			return err
-		}
-	}
-	modification := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		GuestRequest: guestrequest.ModificationRequest{
-			ResourceType: guestresource.ResourceTypeSecurityPolicy,
-			RequestType:  guestrequest.RequestTypeAdd,
-			Settings:     *confOpts,
-		},
-	}
-	if err := uvm.modify(ctx, modification); err != nil {
-		return fmt.Errorf("uvm::Policy: failed to modify utility VM configuration: %w", err)
-	}
-	return nil
 }
 
 func base64EncodeFileContents(filePath string) (string, error) {
@@ -112,7 +49,7 @@ func base64EncodeFileContents(filePath string) (string, error) {
 // content before setting it for the resource. This is no-op if the
 // `referenceName` is empty or the file doesn't exist.
 func WithUVMReferenceInfo(referenceRoot string, referenceName string) ConfidentialUVMOpt {
-	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
+	return func(ctx context.Context, r *guestresource.ConfidentialOptions) error {
 		if referenceName == "" {
 			return nil
 		}
@@ -137,14 +74,10 @@ func WithUVMReferenceInfo(referenceRoot string, referenceName string) Confidenti
 // This has to happen before we start mounting things or generally changing
 // the state of the UVM after is has been measured at startup
 func (uvm *UtilityVM) SetConfidentialUVMOptions(ctx context.Context, opts ...ConfidentialUVMOpt) error {
-	if uvm.operatingSystem != "linux" {
-		return errNotSupported
-	}
-
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
-	confOpts := &guestresource.LCOWConfidentialOptions{}
+	confOpts := &guestresource.ConfidentialOptions{}
 	for _, o := range opts {
 		if err := o(ctx, confOpts); err != nil {
 			return err
@@ -174,7 +107,7 @@ func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdta
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypePolicyFragment,
 			RequestType:  guestrequest.RequestTypeAdd,
-			Settings: guestresource.LCOWSecurityPolicyFragment{
+			Settings: guestresource.SecurityPolicyFragment{
 				Fragment: fragment.Fragment,
 			},
 		},
