@@ -2,6 +2,9 @@ module github.com/Microsoft/hcsshim/test
 
 go 1.24.0
 
+// create syso files for manifesting
+tool github.com/josephspurrier/goversioninfo/cmd/goversioninfo
+
 require (
 	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29
 	github.com/Microsoft/hcsshim v0.13.0
@@ -14,7 +17,6 @@ require (
 	github.com/containerd/ttrpc v1.2.7
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.1
-	github.com/josephspurrier/goversioninfo v1.5.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/opencontainers/runtime-spec v1.2.1
@@ -71,6 +73,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/josephspurrier/goversioninfo v1.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
