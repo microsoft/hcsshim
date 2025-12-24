@@ -159,7 +159,9 @@ func MountLCOWLayers(
 	// handles the case where we want to share a scratch disk for multiple containers instead
 	// of mounting a new one. Pass a unique value for `ScratchPath` to avoid container upper and
 	// work directories colliding in the UVM.
-	containerScratchPathInUVM := ospath.Join("linux", scsiMount.GuestPath(), "scratch", containerID)
+	// Note that in the shared scratch case, AddVirtualDisk above is a no-op and
+	// will return the existing mount.
+	containerScratchPathInUVM := ospath.Join("linux", scsiMount.GuestPath(), guestpath.ScratchDir, containerID)
 
 	defer func() {
 		if err != nil {
