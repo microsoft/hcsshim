@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	_ "github.com/containerd/containerd/api/runtime/sandbox/v1"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/ttrpc"
 	typeurl "github.com/containerd/typeurl/v2"
