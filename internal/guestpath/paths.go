@@ -27,15 +27,17 @@ const (
 	// LCOWMountPathPrefixFmt is the path format in the LCOW UVM where
 	// non-global mounts, such as Plan9 mounts are added
 	LCOWMountPathPrefixFmt = "/mounts/m%d"
-	// LCOWGlobalMountPrefixFmt is the path format in the LCOW UVM where global
-	// mounts are added
-	LCOWGlobalMountPrefixFmt = "/run/mounts/m%d"
+	// LCOWGlobalScsiMountPrefixFmt is the path format in the LCOW UVM where
+	// global desk mounts are added
+	LCOWGlobalScsiMountPrefixFmt = "/run/mounts/scsi/m%d"
 	// LCOWGlobalDriverPrefixFmt is the path format in the LCOW UVM where drivers
 	// are mounted as read/write
 	LCOWGlobalDriverPrefixFmt = "/run/drivers/%s"
-	// WCOWGlobalMountPrefixFmt is the path prefix format in the WCOW UVM where
-	// mounts are added
-	WCOWGlobalMountPrefixFmt = "C:\\mounts\\m%d"
+	// WCOWGlobalScsiMountPrefixFmt is the path prefix format in the WCOW UVM
+	// where global desk mounts are added
+	WCOWGlobalScsiMountPrefixFmt = `c:\mounts\scsi\m%d`
 	// RootfsPath is part of the container's rootfs path
 	RootfsPath = "rootfs"
+	// ScratchDir is the name of the directory used for overlay upper and work
+	ScratchDir = "scratch"
 )
