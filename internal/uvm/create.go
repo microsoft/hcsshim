@@ -131,6 +131,14 @@ type Options struct {
 	ConsolePipe           string // The named pipe path to use for the serial console (COM1).  eg \\.\pipe\vmpipe
 }
 
+type ConfidentialCommonOptions struct {
+	GuestStateFilePath     string // The vmgs file path to load
+	SecurityPolicy         string // Optional security policy
+	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
+	UVMReferenceInfoFile   string // Path to the file that contains the signed UVM measurements
+}
+
 func verifyWCOWBootFiles(bootFiles *WCOWBootFiles) error {
 	if bootFiles == nil {
 		return fmt.Errorf("boot files is nil")
@@ -323,8 +331,8 @@ func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
 		_ = uvm.WaitCtx(ctx)
 	}
 
-	if lopts, ok := uvm.createOpts.(*OptionsLCOW); ok && uvm.HasConfidentialPolicy() && lopts.GuestStateFile != "" {
-		vmgsFullPath := filepath.Join(lopts.BundleDirectory, lopts.GuestStateFile)
+	if lopts, ok := uvm.createOpts.(*OptionsLCOW); ok && uvm.HasConfidentialPolicy() && lopts.GuestStateFilePath != "" {
+		vmgsFullPath := filepath.Join(lopts.BundleDirectory, lopts.GuestStateFilePath)
 		e := log.G(ctx).WithField("VMGS file", vmgsFullPath)
 		e.Debug("removing VMGS file")
 		if err := os.Remove(vmgsFullPath); err != nil {
