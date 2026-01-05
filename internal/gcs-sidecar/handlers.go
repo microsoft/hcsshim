@@ -646,33 +646,37 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			return nil
 
 		case guestresource.ResourceTypeCWCOWCombinedLayers:
-
-			if modifyGuestSettingsRequest.RequestType == guestrequest.RequestTypeRemove {
-				return fmt.Errorf("not implemented")
-			}
-
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWCombinedLayers)
-			containerID := settings.ContainerID
-			log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
-				containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
+			switch modifyGuestSettingsRequest.RequestType {
+			case guestrequest.RequestTypeAdd:
+				containerID := settings.ContainerID
+				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
+					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
-			//Since unencrypted scratch is not an option, always pass true
-			if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
-				return fmt.Errorf("scratch mounting denied by policy: %w", err)
-			}
-			// The following two folders are expected to be present in the scratch.
-			// But since we have just formatted the scratch we would need to
-			// create them manually.
-			sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
-			err = os.Mkdir(sandboxStateDirectory, 0777)
-			if err != nil {
-				return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
-			}
+				//Since unencrypted scratch is not an option, always pass true
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
+					return fmt.Errorf("scratch mounting denied by policy: %w", err)
+				}
+				// The following two folders are expected to be present in the scratch.
+				// But since we have just formatted the scratch we would need to
+				// create them manually.
+				sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
+				err = os.Mkdir(sandboxStateDirectory, 0777)
+				if err != nil {
+					return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
+				}
 
-			hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
-			err = os.Mkdir(hivesDirectory, 0777)
-			if err != nil {
-				return fmt.Errorf("failed to create hivesDirectory: %w", err)
+				hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
+				err = os.Mkdir(hivesDirectory, 0777)
+				if err != nil {
+					return fmt.Errorf("failed to create hivesDirectory: %w", err)
+				}
+
+			case guestrequest.RequestTypeRemove:
+				log.G(ctx).Tracef("CWCOWCombinedLayers: Remove")
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchUnmountPolicy(ctx, settings.CombinedLayers.ContainerRootPath); err != nil {
+					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
+				}
 			}
 
 			// Reconstruct WCOWCombinedLayers{} req before forwarding to GCS
