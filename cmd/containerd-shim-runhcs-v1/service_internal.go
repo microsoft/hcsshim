@@ -107,7 +107,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 
 	spec = oci.UpdateSpecFromOptions(spec, shimOpts)
 	// expand annotations after defaults have been loaded in from options
-	err = oci.ProcessAnnotations(ctx, &spec)
+	err = oci.ProcessAnnotations(ctx, spec.Annotations)
 	// since annotation expansion is used to toggle security features
 	// raise it rather than suppress and move on
 	if err != nil {
