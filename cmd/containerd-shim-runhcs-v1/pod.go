@@ -309,7 +309,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 		// LCOW (and WCOW Process Isolated for the time being) requires a real
 		// task for the sandbox.
-		lt, err := newHcsTask(ctx, events, parent, true, req, s)
+		lt, err := newHcsTask(ctx, events, parent, true, req, s, req.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -408,7 +408,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 			sid)
 	}
 
-	st, err := newHcsTask(ctx, p.events, p.host, false, req, s)
+	st, err := newHcsTask(ctx, p.events, p.host, false, req, s, p.id)
 	if err != nil {
 		return nil, err
 	}

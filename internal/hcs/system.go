@@ -37,6 +37,7 @@ type System struct {
 	exitError      error
 	os, typ, owner string
 	startTime      time.Time
+	stopTime       time.Time
 }
 
 var _ cow.Container = &System{}
@@ -291,6 +292,7 @@ func (computeSystem *System) waitBackground() {
 		err = makeSystemError(computeSystem, operation, err, nil)
 	}
 	computeSystem.closedWaitOnce.Do(func() {
+		computeSystem.stopTime = time.Now()
 		computeSystem.waitError = err
 		close(computeSystem.waitBlock)
 	})
@@ -331,6 +333,21 @@ func (computeSystem *System) stopped() bool {
 	default:
 	}
 	return false
+}
+
+// Stopped returns true if the compute system is in stopped state.
+func (computeSystem *System) Stopped() bool {
+	return computeSystem.stopped()
+}
+
+// StartTime returns the time at which the compute system started.
+func (computeSystem *System) StartTime() time.Time {
+	return computeSystem.startTime
+}
+
+// StopTime returns the time at which the compute system stopped.
+func (computeSystem *System) StopTime() time.Time {
+	return computeSystem.stopTime
 }
 
 // ExitError returns an error describing the reason the compute system terminated.

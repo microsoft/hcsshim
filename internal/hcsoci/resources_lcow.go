@@ -35,11 +35,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 			return errors.Wrap(err, "failed to mount container storage")
 		}
 		coi.Spec.Root.Path = rootPath
-		// If this is the pause container in a hypervisor-isolated pod, we can skip cleanup of
-		// layers, as that happens automatically when the UVM is terminated.
-		if !isSandbox || coi.HostingSystem == nil {
-			r.SetLayers(closer)
-		}
+		r.SetLayers(closer)
 		r.SetLcowScratchPath(scratchPath)
 	} else if coi.Spec.Root.Path != "" {
 		// This is the "Plan 9" root filesystem.

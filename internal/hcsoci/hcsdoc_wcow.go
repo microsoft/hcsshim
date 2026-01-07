@@ -73,7 +73,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 			continue
 		} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 			// Convert to the path in the guest that was asked for.
-			mdv2.HostPath = convertToWCOWSandboxMountPath(mount.Source)
+			mdv2.HostPath = convertToWCOWSandboxMountPath(coi.SandboxID, mount.Source)
 		} else {
 			// vsmb mount
 			uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
