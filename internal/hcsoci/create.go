@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	lcowRootInUVM = guestpath.LCOWRootPrefixInUVM + "/%s"
+	lcowRootInUVM = guestpath.LCOWRootPrefixInUVM + "/%s/%s"
 	wcowRootInUVM = guestpath.WCOWRootPrefixInUVM + "/%s"
 )
 
@@ -43,6 +43,7 @@ var (
 type CreateOptions struct {
 	// Common parameters
 	ID               string             // Identifier for the container
+	SandboxID        string             // Identifier for the pod of this container.
 	Owner            string             // Specifies the owner. Defaults to executable name.
 	Spec             *specs.Spec        // Definition of the container or utility VM being created
 	SchemaVersion    *hcsschema.Version // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
@@ -205,7 +206,9 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 
 	if coi.HostingSystem != nil {
 		if coi.Spec.Linux != nil {
-			r.SetContainerRootInUVM(fmt.Sprintf(lcowRootInUVM, coi.ID))
+			// The container root within the UVM would be as below-
+			// <Root Dir>/pods/<PodID>/<ContainerID>
+			r.SetContainerRootInUVM(fmt.Sprintf(lcowRootInUVM, coi.SandboxID, coi.ID))
 		} else {
 			n := coi.HostingSystem.ContainerCounter()
 			r.SetContainerRootInUVM(fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16)))
