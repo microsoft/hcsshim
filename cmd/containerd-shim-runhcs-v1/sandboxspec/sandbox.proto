@@ -1,0 +1,439 @@
+syntax = "proto3";
+
+package containerd.runhcs.sandbox.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/sandboxspec";
+
+// ----------------------------------------------------------------------------
+// High-level proto structure for sandbox options
+// These options are used to define a sandbox for all types of pods.
+// ----------------------------------------------------------------------------
+//
+// Specs
+//   ├─ isolation_level (oneof)
+//   │    ├─ ProcessIsolated
+//   │    └─ HypervisorIsolated
+//   │          ├─ platform (oneof)
+//   │          │    ├─ LinuxHyperVOptions
+//   │          │    └─ WindowsHyperVOptions
+//   │          ├─ CPUConfig
+//   │          ├─ MemoryConfig
+//   │          ├─ StorageConfig
+//   │          ├─ NUMAConfig
+//   │          └─ AdditionalConfig
+//   │          └─ cpu_group_id
+//   │          └─ resource_partition_id
+//
+// LinuxHyperVOptions
+//   ├─ LinuxBootOptions
+//   ├─ LinuxGuestOptions
+//   ├─ LinuxDeviceOptions
+//   └─ LCOWConfidentialOptions
+//
+// WindowsHyperVOptions
+//   ├─ WindowsBootOptions
+//   ├─ WindowsGuestOptions
+//   └─ WCOWConfidentialOptions
+//
+// AdditionalConfig
+//   └─ HvSocketServiceConfig (map)
+//
+// Confidential options
+//   ├─ LCOWConfidentialOptions → ConfidentialOptions
+//   └─ WCOWConfidentialOptions → ConfidentialOptions
+//
+
+// ----------------------------------------------------------------------------
+// Top-level Sandbox specification
+// ----------------------------------------------------------------------------
+
+message Specs {
+  // Sandbox isolation mode.
+  oneof isolation_level {
+    // Process-isolated sandbox (no UVM).
+    ProcessIsolated     process    = 1;
+    // Hypervisor-isolated sandbox (UVM-backed).
+    HypervisorIsolated  hypervisor = 2;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Process-isolated sandbox
+// ----------------------------------------------------------------------------
+
+message ProcessIsolated {
+  // No options for process isolation as of now;
+}
+
+// ----------------------------------------------------------------------------
+// Hypervisor-isolated sandbox (UVM-backed)
+// ----------------------------------------------------------------------------
+
+message HypervisorIsolated {
+  // Platform-specific UVM options.
+  oneof platform {
+    // Linux UVM options.
+    LinuxHyperVOptions    lcow = 1;
+    // Windows UVM options.
+    WindowsHyperVOptions  wcow = 2;
+  }
+
+  // UVM CPU topology.
+  CPUConfig         cpuConfig         = 3;
+
+  // UVM memory sizing and commit policy; MMIO aperture tuning.
+  MemoryConfig      memoryConfig      = 4;
+
+  // UVM storage QoS caps and file-share hardening.
+  StorageConfig     storageConfig     = 5;
+
+  // UVM vNUMA hints (implicit/explicit topology).
+  NUMAConfig        numaConfig        = 6;
+
+  // Misc sandbox controls: networking proxy, dump paths, HvSocket services, console pipe.
+  AdditionalConfig  additionalConfig  = 7;
+
+  // Assign the UVM to a CPU group. Mutually exclusive with resource_partition_id.
+  optional string cpu_group_id           = 8;
+
+  // Resource partition GUID to associate the UVM with (has its own CPU group).
+  // Mutually exclusive with cpu_group_id.
+  optional string resource_partition_id  = 9;
+}
+
+// ----------------------------------------------------------------------------
+// CPU configuration
+// ----------------------------------------------------------------------------
+
+message CPUConfig {
+  // vCPU count override for the UVM. On UVM, count/limit/weight may be combined.
+  optional int32  processor_count        = 1;
+
+  // vCPU percentage cap: 1..100000 (100000 = 100%). Omitted => platform default.
+  optional int32  processor_limit        = 2;
+
+  // vCPU scheduling weight: 0..10000 (100 default). Omitted => default.
+  optional int32  processor_weight       = 3;
+
+  // architecture represents the architecture of the platform.
+  optional string architecture           = 4;
+}
+
+// ----------------------------------------------------------------------------
+// Memory configuration
+// ----------------------------------------------------------------------------
+
+message MemoryConfig {
+  // Total UVM memory size in MB (MB units; OCI uses bytes).
+  optional uint64   memory_size_in_mb      = 1;
+
+  // MMIO aperture tuning (low gap/base/high gap in MB).
+  optional uint64   low_mmio_gap_in_mb     = 2;
+  optional uint64   high_mmio_base_in_mb   = 3;
+  optional uint64   high_mmio_gap_in_mb    = 4;
+
+  // Allow virtual memory overcommit (true by default). Set false for fully physical backing.
+  optional bool     allow_overcommit       = 5;
+
+  // Enforce fully physically backed memory, including future device additions.
+  optional bool     fully_physically_backed = 6;
+
+  // Enable deferred commit for virtual memory (defaults to false).
+  optional bool     enable_deferred_commit = 7;
+}
+
+// ----------------------------------------------------------------------------
+// Storage configuration
+// ----------------------------------------------------------------------------
+
+message StorageConfig {
+  // Max storage IOPS; 0/omitted => platform default.
+  optional int32   storage_qos_iops_maximum      = 1;
+
+  // Max storage bandwidth in bytes/sec; 0/omitted => platform default.
+  optional int32   storage_qos_bandwidth_maximum = 2;
+
+  // Disallow any writable file shares (e.g., VSMB/Plan9) to the UVM.
+  optional bool    no_writable_file_shares       = 3;
+}
+
+// ----------------------------------------------------------------------------
+// NUMA configuration
+// ----------------------------------------------------------------------------
+
+message NUMAConfig {
+  // Implicit vNUMA: max memory per node (MB).
+  optional uint64         max_memory_size_per_numa_node   = 1;
+
+  // Implicit vNUMA: max processors per node.
+  optional uint32         max_processors_per_numa_node    = 2;
+
+  // Implicit vNUMA: preferred physical NUMA nodes.
+  repeated uint32 preferred_physical_numa_nodes  = 3;
+
+  // Explicit vNUMA: pNUMA -> vNUMA mapping by index.
+  repeated uint32 numa_mapped_physical_nodes     = 4;
+
+  // Explicit vNUMA: processor counts per vNUMA index.
+  repeated uint32 numa_processor_counts          = 5;
+
+  // Explicit vNUMA: memory block counts per vNUMA index.
+  repeated uint64 numa_memory_blocks_counts      = 6;
+}
+
+// ----------------------------------------------------------------------------
+// Additional sandbox controls
+// ----------------------------------------------------------------------------
+
+message AdditionalConfig {
+  // ncproxy service address for network setup; when set, use ncproxy.
+  optional string network_config_proxy        = 1;
+
+  // In-guest path for container process dumps; prefer a mounted volume over scratch.
+  optional string process_dump_location       = 2;
+
+  // Host directory to collect UVM crash dumps.
+  optional string dump_directory_path         = 3;
+
+  // HvSocket per-service configuration (bind/connect SDDL, wildcard, disabled).
+  map<string, HvSocketServiceConfig> additional_hyperv_config = 4;
+
+  // Serial console named pipe (e.g., \\.\pipe\<name>) for the UVM console.
+  optional string console_pipe                = 5;
+}
+
+message HvSocketServiceConfig {
+  // Host bind permission SDDL.
+  optional string bind_security_descriptor    = 1;
+
+  // Host connect permission SDDL.
+  optional string connect_security_descriptor = 2;
+
+  // Allow wildcard binds per policy.
+  optional bool   allow_wildcard_binds        = 3;
+
+  // Disable service (refuse new, cancel existing connections).
+  optional bool   disabled                    = 4;
+}
+
+// ----------------------------------------------------------------------------
+// Windows Hyper-V (WCOW) configuration
+// ----------------------------------------------------------------------------
+
+message WindowsHyperVOptions {
+  // Boot configuration for WCOW UVM.
+  WindowsBootOptions        windowsBootOptions  = 1;
+
+  // Guest configuration for WCOW UVM.
+  WindowsGuestOptions       windowsGuestOptions = 2;
+
+  // Confidential computing options for WCOW.
+  WCOWConfidentialOptions   confidentialOptions = 3;
+}
+
+message WindowsBootOptions {
+  // Disable network compartment namespacing in the WCOW UVM.
+  optional bool             disable_compartment_namespace  = 1;
+
+  // Disable direct mapping for VSMB shares in the WCOW UVM.
+  optional bool             no_direct_map                  = 2;
+}
+
+message WindowsGuestOptions {
+  // Do not inherit host timezone; default WCOW UVM time is UTC.
+  optional bool        no_inherit_host_timezone = 1;
+
+  // Additional registry entries to apply in the guest.
+  repeated RegistryValue additional_registry_keys = 2;
+
+  // Specifies whether to forward logs to the host or not.
+  optional bool forward_logs = 3;
+
+  // Specifies the log sources to be forwarded to the host.
+  optional string log_sources = 4;
+}
+
+// ----------------------------------------------------------------------------
+// Registry
+// ----------------------------------------------------------------------------
+
+enum RegistryHive {
+  REGISTRY_HIVE_SYSTEM   = 0;
+  REGISTRY_HIVE_SOFTWARE = 1;
+  REGISTRY_HIVE_SECURITY = 2;
+  REGISTRY_HIVE_SAM      = 3;
+}
+
+message RegistryKey {
+  // Target hive.
+  RegistryHive hive   = 1;
+
+  // Key path.
+  string       name   = 2;
+
+  // Volatile key flag.
+  bool         volatile = 3;
+}
+
+enum RegistryValueType {
+  REGISTRY_VALUE_TYPE_NONE            = 0;
+  REGISTRY_VALUE_TYPE_STRING          = 1;
+  REGISTRY_VALUE_TYPE_EXPANDED_STRING = 2;
+  REGISTRY_VALUE_TYPE_MULTI_STRING    = 3;
+  REGISTRY_VALUE_TYPE_BINARY          = 4;
+  REGISTRY_VALUE_TYPE_D_WORD          = 5;
+  REGISTRY_VALUE_TYPE_Q_WORD          = 6;
+  REGISTRY_VALUE_TYPE_CUSTOM_TYPE     = 7;
+}
+
+message RegistryValue {
+  // Value location (hive + key path).
+  RegistryKey        key          = 1;
+
+  // Value name.
+  string             name         = 2;
+
+  // Value type.
+  RegistryValueType  type         = 3;
+
+  // Typed payloads (one populated per type).
+  string             string_value = 4;
+  string             binary_value = 5;
+  int32              dword_value  = 6;
+  int32              qword_value  = 7;
+  int32              custom_type  = 8;
+}
+
+// ----------------------------------------------------------------------------
+// Linux Hyper-V (LCOW) configuration
+// ----------------------------------------------------------------------------
+
+message LinuxHyperVOptions {
+  // Boot configuration for LCOW UVM.
+  LinuxBootOptions        linuxBootOptions      = 1;
+
+  // Guest configuration for LCOW UVM.
+  LinuxGuestOptions       linuxGuestOptions     = 2;
+
+  // Device configuration for LCOW UVM.
+  LinuxDeviceOptions      linuxDeviceOptions    = 3;
+
+  // Confidential computing options for LCOW.
+  LCOWConfidentialOptions confidentialOptions   = 4;
+}
+
+message LinuxBootOptions {
+  // Root path for LCOW boot files.
+  optional string boot_files_path        = 1;
+
+  // Boot directly to kernel (skip UEFI).
+  optional bool   kernel_direct          = 2;
+
+  // Extra kernel cmdline options.
+  optional string kernel_boot_options    = 3;
+
+  // Preferred rootfs type selection (INITRD/VHD).
+  optional PreferredRootFSType preferred_root_fs_type = 4;
+
+  // Enable cold discard hint for trimming non‑zeroed pages.
+  optional bool   enable_cold_discard_hint = 5;
+
+  // Host Compatibility Layer toggle (presence-aware).
+  optional bool   hcl_enabled            = 6;
+}
+
+message LinuxGuestOptions {
+  // Disable LCOW time-sync service.
+  optional bool   disable_time_sync_service = 1;
+
+  // Extra vsock ports to expose.
+  repeated uint32 extra_vsock_ports         = 2;
+
+  // Enable policy-based routing in guest.
+  optional bool   policy_based_routing      = 3;
+
+  // Allow writable overlays for /var and /etc.
+  optional bool   writable_overlay_dirs     = 4;
+}
+
+message LinuxDeviceOptions {
+  // Max vPMem device count.
+  optional uint32 vp_mem_device_count     = 1;
+
+  // vPMem device size (bytes).
+  optional uint64 vp_mem_size_bytes       = 2;
+
+  // Disable LCOW vPMem layer multi-mapping.
+  optional bool   vp_mem_no_multi_mapping = 3;
+
+  // Enable PCI support in LCOW kernel.
+  optional bool   vpci_enabled            = 4;
+
+  // Assigned devices (e.g., SR-IOV).
+  repeated Device assigned_devices    = 5;
+}
+
+enum PreferredRootFSType {
+  PREFERRED_ROOT_FS_TYPE_INITRD = 0;
+  PREFERRED_ROOT_FS_TYPE_VHD    = 1;
+}
+
+message Device {
+  // Device identifier: interface class GUID, etc.
+  string id    = 1;
+
+  // Device identifier type: "class", etc.
+  string id_type = 2;
+}
+
+// ----------------------------------------------------------------------------
+// Confidential computing options
+// ----------------------------------------------------------------------------
+
+message ConfidentialOptions {
+  // Guest state file (VMGS) path used by confidential UVM modes.
+  optional string guest_state_file           = 1;
+
+  // Security policy to enforce inside the guest.
+  optional string security_policy            = 2;
+
+  // Security policy enforcer selection ("open-door", "standard", "rego").
+  optional string security_policy_enforcer   = 3;
+
+  // Signed UVM reference info file passed to guest.
+  optional string uvm_reference_info_file    = 4;
+
+  // no_security_hardware allows to do testing and development without requiring SNP hardware.
+  optional bool no_security_hardware         = 5;
+}
+
+message LCOWConfidentialOptions {
+  // LCOW common confidential options.
+  ConfidentialOptions options                = 1;
+
+  // Rootfs VHD path with dm-verity metadata (SNP mode).
+  optional string dm_verity_root_fs_vhd      = 2;
+
+  // Enable dm-verity presentation of rootfs (standalone SCSI attachment).
+  optional bool   dm_verity_mode             = 3;
+
+  // dm-mod.create parameters for rootfs integrity.
+  optional string dm_verity_create_args      = 4;
+
+  // Encrypt LCOW scratch disks.
+  optional bool   enable_scratch_encryption = 5;
+}
+
+message WCOWConfidentialOptions {
+  // WCOW common confidential options.
+  ConfidentialOptions options = 1;
+
+  // Disable secure boot (WCOW-only; testing/debugging).
+  optional bool   disable_secure_boot = 2;
+
+  // Attach EFI/boot VHD in writable mode (capture boot traces).
+  optional bool   writable_efi = 3;
+
+  // allows overriding isolation type of a confidential pod.
+  optional string isolation_type = 4;
+}
