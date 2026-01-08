@@ -38,6 +38,19 @@ func createLCOWSpec(ctx context.Context, coi *createOptionsInternal) (*specs.Spe
 	// Hooks are not supported (they should be run in the host)
 	spec.Hooks = nil
 
+	// Set default CPU period and quota if not set for LCOW containers.
+	if spec.Linux != nil &&
+		spec.Linux.Resources != nil &&
+		spec.Linux.Resources.CPU != nil {
+
+		if spec.Linux.Resources.CPU.Period != nil && *spec.Linux.Resources.CPU.Period == 0 {
+			*spec.Linux.Resources.CPU.Period = 100000 // Default CPU period
+		}
+		if spec.Linux.Resources.CPU.Quota != nil && *spec.Linux.Resources.CPU.Quota == 0 {
+			*spec.Linux.Resources.CPU.Quota = -1 // No CPU limit
+		}
+	}
+
 	// Clear unsupported features
 	spec.Linux.CgroupsPath = "" // GCS controls its cgroups hierarchy on its own.
 	if spec.Linux.Resources != nil {

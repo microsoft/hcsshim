@@ -303,26 +303,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					networkNamespace = fmt.Sprintf("virtual-pod-%s", virtualPodID)
 				}
 
-				// Extract memory limit from sandbox container spec
-				var memoryLimit *int64
-				if settings.OCISpecification.Linux != nil &&
-					settings.OCISpecification.Linux.Resources != nil &&
-					settings.OCISpecification.Linux.Resources.Memory != nil &&
-					settings.OCISpecification.Linux.Resources.Memory.Limit != nil {
-					memoryLimit = settings.OCISpecification.Linux.Resources.Memory.Limit
-					logrus.WithFields(logrus.Fields{
-						"containerID":  id,
-						"virtualPodID": virtualPodID,
-						"memoryLimit":  *memoryLimit,
-					}).Info("Extracted memory limit from sandbox container spec")
-				} else {
-					logrus.WithFields(logrus.Fields{
-						"containerID":  id,
-						"virtualPodID": virtualPodID,
-					}).Info("No memory limit found in sandbox container spec")
-				}
-
-				if err := h.CreateVirtualPod(ctx, virtualPodID, virtualPodID, networkNamespace, memoryLimit); err != nil {
+				if err := h.CreateVirtualPod(ctx, virtualPodID, virtualPodID, networkNamespace, settings.OCISpecification); err != nil {
 					return nil, errors.Wrapf(err, "failed to create virtual pod %s", virtualPodID)
 				}
 			}
@@ -1305,7 +1286,7 @@ func (h *Host) InitializeVirtualPodSupport(virtualPodsCgroup cgroups.Cgroup) {
 }
 
 // CreateVirtualPod creates a new virtual pod with its own cgroup and network namespace
-func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string, memoryLimit *int64) error {
+func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string, pSpec *specs.Spec) error {
 	h.virtualPodsMutex.Lock()
 	defer h.virtualPodsMutex.Unlock()
 
@@ -1327,18 +1308,15 @@ func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSan
 	}
 	cgroupPath := path.Join(parentPath, virtualSandboxID)
 
-	// Create the cgroup for this virtual pod with memory limit if provided
+	// Create the cgroup for this virtual pod with resource limits if provided
 	resources := &specs.LinuxResources{}
-	if memoryLimit != nil {
-		resources.Memory = &specs.LinuxMemory{
-			Limit: memoryLimit,
-		}
+	if pSpec != nil && pSpec.Linux != nil && pSpec.Linux.Resources != nil {
+		resources = pSpec.Linux.Resources
 		logrus.WithFields(logrus.Fields{
 			"virtualSandboxID": virtualSandboxID,
-			"memoryLimit":      *memoryLimit,
-		}).Info("Creating virtual pod with memory limit")
+		}).Info("Creating virtual pod with specified resources")
 	} else {
-		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Creating virtual pod without memory limit")
+		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Creating pod cgroup with default resources as none were specified")
 	}
 
 	cgroupControl, err := cgroups.New(cgroups.StaticPath(cgroupPath), resources)
