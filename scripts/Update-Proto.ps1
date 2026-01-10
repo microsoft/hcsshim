@@ -19,7 +19,12 @@ function run([string]$cmd, [string[]]$params) {
 
 # Install protobuild and co.
 # calling `go install` without a version will install current module (ie., the vendor directory)
-# this relies on `./tools.go` to vendor correct dependencies
+# this relies on go.mod tool directives to vendor correct dependencies
+#
+# Note: we cannot use `go tool <cmd>` to install them since it builds the binaries in a temp dir and
+# they, therefore, are not available from $PATH.
+#
+# See: https://go.dev/ref/mod#go-mod-file-tool
 @(
     'github.com/containerd/protobuild',
     'github.com/containerd/protobuild/cmd/go-fix-acronym',
