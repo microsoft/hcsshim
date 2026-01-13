@@ -3,60 +3,140 @@
 package winapi
 
 import (
-	"unsafe"
-
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/hcsshim/internal/winapi/cimfs"
+	"github.com/Microsoft/hcsshim/internal/winapi/cimwriter"
+	"github.com/Microsoft/hcsshim/internal/winapi/types"
 )
 
 type g = guid.GUID
-type FsHandle uintptr
-type StreamHandle uintptr
 
-type CimFsFileMetadata struct {
-	Attributes uint32
-	FileSize   int64
-
-	CreationTime   windows.Filetime
-	LastWriteTime  windows.Filetime
-	ChangeTime     windows.Filetime
-	LastAccessTime windows.Filetime
-
-	SecurityDescriptorBuffer unsafe.Pointer
-	SecurityDescriptorSize   uint32
-
-	ReparseDataBuffer unsafe.Pointer
-	ReparseDataSize   uint32
-
-	ExtendedAttributes unsafe.Pointer
-	EACount            uint32
+func CimMountImage(imagePath string, fsName string, flags uint32, volumeID *guid.GUID) error {
+	return cimfs.CimMountImage(imagePath, fsName, flags, volumeID)
 }
 
-type CimFsImagePath struct {
-	ImageDir  *uint16
-	ImageName *uint16
+func CimDismountImage(volumeID *guid.GUID) error {
+	return cimfs.CimDismountImage(volumeID)
 }
 
-//sys CimMountImage(imagePath string, fsName string, flags uint32, volumeID *g) (hr error) = cimfs.CimMountImage?
-//sys CimDismountImage(volumeID *g) (hr error) = cimfs.CimDismountImage?
+func CimCreateImage(imagePath string, oldFSName *uint16, newFSName *uint16, cimFSHandle *types.FsHandle) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCreateImage(imagePath, oldFSName, newFSName, cimFSHandle)
+	}
+	return cimfs.CimCreateImage(imagePath, oldFSName, newFSName, cimFSHandle)
+}
 
-//sys CimCreateImage(imagePath string, oldFSName *uint16, newFSName *uint16, cimFSHandle *FsHandle) (hr error) = cimwriter.CimCreateImage?
-//sys CimCreateImage2(imagePath string, flags uint32, oldFSName *uint16, newFSName *uint16, cimFSHandle *FsHandle) (hr error) = cimwriter.CimCreateImage2?
-//sys CimCloseImage(cimFSHandle FsHandle) = cimwriter.CimCloseImage?
-//sys CimCommitImage(cimFSHandle FsHandle) (hr error) = cimwriter.CimCommitImage?
+func CimCreateImage2(imagePath string, flags uint32, oldFSName *uint16, newFSName *uint16, cimFSHandle *types.FsHandle) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCreateImage2(imagePath, flags, oldFSName, newFSName, cimFSHandle)
+	}
+	return cimfs.CimCreateImage2(imagePath, flags, oldFSName, newFSName, cimFSHandle)
+}
 
-//sys CimCreateFile(cimFSHandle FsHandle, path string, file *CimFsFileMetadata, cimStreamHandle *StreamHandle) (hr error) = cimwriter.CimCreateFile?
-//sys CimCloseStream(cimStreamHandle StreamHandle) (hr error) = cimwriter.CimCloseStream?
-//sys CimWriteStream(cimStreamHandle StreamHandle, buffer uintptr, bufferSize uint32) (hr error) = cimwriter.CimWriteStream?
-//sys CimDeletePath(cimFSHandle FsHandle, path string) (hr error) = cimwriter.CimDeletePath?
-//sys CimCreateHardLink(cimFSHandle FsHandle, newPath string, oldPath string) (hr error) = cimwriter.CimCreateHardLink?
-//sys CimCreateAlternateStream(cimFSHandle FsHandle, path string, size uint64, cimStreamHandle *StreamHandle) (hr error) = cimwriter.CimCreateAlternateStream?
-//sys CimAddFsToMergedImage(cimFSHandle FsHandle, path string) (hr error) = cimwriter.CimAddFsToMergedImage?
-//sys CimAddFsToMergedImage2(cimFSHandle FsHandle, path string, flags uint32) (hr error) = cimwriter.CimAddFsToMergedImage2?
-//sys CimMergeMountImage(numCimPaths uint32, backingImagePaths *CimFsImagePath, flags uint32, volumeID *g) (hr error) = cimfs.CimMergeMountImage?
-//sys CimTombstoneFile(cimFSHandle FsHandle, path string) (hr error) = cimwriter.CimTombstoneFile?
-//sys CimCreateMergeLink(cimFSHandle FsHandle, newPath string, oldPath string) (hr error) = cimwriter.CimCreateMergeLink?
-//sys CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) = cimwriter.CimSealImage?
-//sys CimGetVerificationInformation(blockCimPath string, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) = cimfs.CimGetVerificationInformation?
-//sys CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) = cimfs.CimMountVerifiedImage?
-//sys CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *CimFsImagePath, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) = cimfs.CimMergeMountVerifiedImage
+func CimCloseImage(cimFSHandle types.FsHandle) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCloseImage(cimFSHandle)
+	}
+	return cimfs.CimCloseImage(cimFSHandle)
+}
+
+func CimCommitImage(cimFSHandle types.FsHandle) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCommitImage(cimFSHandle)
+	}
+	return cimfs.CimCommitImage(cimFSHandle)
+}
+
+func CimCreateFile(cimFSHandle types.FsHandle, path string, file *types.CimFsFileMetadata, cimStreamHandle *types.StreamHandle) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCreateFile(cimFSHandle, path, file, cimStreamHandle)
+	}
+	return cimfs.CimCreateFile(cimFSHandle, path, file, cimStreamHandle)
+}
+
+func CimCloseStream(cimStreamHandle types.StreamHandle) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCloseStream(cimStreamHandle)
+	}
+	return cimfs.CimCloseStream(cimStreamHandle)
+}
+
+func CimWriteStream(cimStreamHandle types.StreamHandle, buffer uintptr, bufferSize uint32) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimWriteStream(cimStreamHandle, buffer, bufferSize)
+	}
+	return cimfs.CimWriteStream(cimStreamHandle, buffer, bufferSize)
+}
+
+func CimDeletePath(cimFSHandle types.FsHandle, path string) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimDeletePath(cimFSHandle, path)
+	}
+	return cimfs.CimDeletePath(cimFSHandle, path)
+}
+
+func CimCreateHardLink(cimFSHandle types.FsHandle, newPath string, oldPath string) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCreateHardLink(cimFSHandle, newPath, oldPath)
+	}
+	return cimfs.CimCreateHardLink(cimFSHandle, newPath, oldPath)
+}
+
+func CimCreateAlternateStream(cimFSHandle types.FsHandle, path string, size uint64, cimStreamHandle *types.StreamHandle) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCreateAlternateStream(cimFSHandle, path, size, cimStreamHandle)
+	}
+	return cimfs.CimCreateAlternateStream(cimFSHandle, path, size, cimStreamHandle)
+}
+
+func CimAddFsToMergedImage(cimFSHandle types.FsHandle, path string) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimAddFsToMergedImage(cimFSHandle, path)
+	}
+	return cimfs.CimAddFsToMergedImage(cimFSHandle, path)
+}
+
+func CimAddFsToMergedImage2(cimFSHandle types.FsHandle, path string, flags uint32) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimAddFsToMergedImage2(cimFSHandle, path, flags)
+	}
+	return cimfs.CimAddFsToMergedImage2(cimFSHandle, path, flags)
+}
+
+func CimMergeMountImage(numCimPaths uint32, backingImagePaths *types.CimFsImagePath, flags uint32, volumeID *guid.GUID) error {
+	return cimfs.CimMergeMountImage(numCimPaths, backingImagePaths, flags, volumeID)
+}
+
+func CimTombstoneFile(cimFSHandle types.FsHandle, path string) error {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimTombstoneFile(cimFSHandle, path)
+	}
+	return cimfs.CimTombstoneFile(cimFSHandle, path)
+}
+
+func CimCreateMergeLink(cimFSHandle types.FsHandle, newPath string, oldPath string) (hr error) {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimCreateMergeLink(cimFSHandle, newPath, oldPath)
+	}
+	return cimfs.CimCreateMergeLink(cimFSHandle, newPath, oldPath)
+}
+
+func CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) {
+	if cimwriter.CimWriterSupported() {
+		return cimwriter.CimSealImage(blockCimPath, hashSize, fixedHeaderSize, hash)
+	}
+	return cimfs.CimSealImage(blockCimPath, hashSize, fixedHeaderSize, hash)
+}
+
+func CimGetVerificationInformation(blockCimPath string, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) {
+	return cimfs.CimGetVerificationInformation(blockCimPath, isSealed, hashSize, signatureSize, fixedHeaderSize, hash, signature)
+}
+
+func CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *guid.GUID, hashSize uint16, hash *byte) error {
+	return cimfs.CimMountVerifiedImage(imagePath, fsName, flags, volumeID, hashSize, hash)
+}
+
+func CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *types.CimFsImagePath, flags uint32, volumeID *guid.GUID, hashSize uint16, hash *byte) error {
+	return cimfs.CimMergeMountVerifiedImage(numCimPaths, backingImagePaths, flags, volumeID, hashSize, hash)
+}
