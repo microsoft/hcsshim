@@ -1488,11 +1488,13 @@ errors[mountError] {
 default signal_allowed := false
 
 signal_allowed {
+    input.isInitProcess
     some container in data.metadata.matches[input.containerID]
     signal_ok(container.signals)
 }
 
 signal_allowed {
+    not input.isInitProcess
     some container in data.metadata.matches[input.containerID]
     some process in container.exec_processes
     command_ok(process.command)
@@ -1960,7 +1962,7 @@ check_container(raw_container, framework_version) := container {
         "allow_elevated": raw_container.allow_elevated,
         "working_dir": raw_container.working_dir,
         "exec_processes": raw_container.exec_processes,
-        "signals": raw_container.signals,
+        "signals": check_signals(raw_container, framework_version),
         "allow_stdio_access": raw_container.allow_stdio_access,
         # Additional fields need to have default logic applied
         "no_new_privileges": check_no_new_privileges(raw_container, framework_version),
@@ -2024,6 +2026,16 @@ check_seccomp_profile_sha256(raw_container, framework_version) := seccomp_profil
 check_seccomp_profile_sha256(raw_container, framework_version) := seccomp_profile_sha256 {
     semver.compare(framework_version, "0.2.3") < 0
     seccomp_profile_sha256 := ""
+}
+
+check_signals(raw_container, framework_version) := signals {
+    semver.compare(framework_version, "0.4.1") >= 0
+    signals := raw_container.signals
+}
+
+check_signals(raw_container, framework_version) := signals {
+    semver.compare(framework_version, "0.4.1") < 0
+    signals := array.concat(raw_container.signals, [9, 15])
 }
 
 check_external_process(raw_process, framework_version) := process {
