@@ -2,6 +2,27 @@ module github.com/Microsoft/hcsshim
 
 go 1.24.0
 
+// protobuf/gRPC/ttrpc generation
+tool (
+	github.com/containerd/protobuild
+	github.com/containerd/protobuild/cmd/go-fix-acronym
+	github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc
+	google.golang.org/protobuf/cmd/protoc-gen-go
+)
+
+// used in go:generate directives
+tool (
+	// generate Win32 API code
+	github.com/Microsoft/go-winio/tools/mkwinsyscall
+
+	// create syso files for manifesting
+	github.com/josephspurrier/goversioninfo/cmd/goversioninfo
+
+	// mock gRPC client and servers
+	go.uber.org/mock/mockgen
+)
+
 require (
 	github.com/Microsoft/cosesign1go v1.4.0
 	github.com/Microsoft/didx509go v0.0.3
@@ -16,12 +37,10 @@ require (
 	github.com/containerd/errdefs/pkg v0.3.0
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/platforms v1.0.0-rc.1
-	github.com/containerd/protobuild v0.3.0
 	github.com/containerd/ttrpc v1.2.7
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.1
-	github.com/josephspurrier/goversioninfo v1.5.0
 	github.com/linuxkit/virtsock v0.0.0-20241009230534-cb6a20cc0422
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/moby/sys/user v0.4.0
@@ -43,7 +62,6 @@ require (
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.39.0
 	google.golang.org/grpc v1.75.0
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
 	google.golang.org/protobuf v1.36.7
 )
 
@@ -59,6 +77,7 @@ require (
 	github.com/containerd/fifo v1.1.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/plugin v1.0.0 // indirect
+	github.com/containerd/protobuild v0.3.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
@@ -81,6 +100,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/josephspurrier/goversioninfo v1.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
@@ -124,6 +144,7 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
