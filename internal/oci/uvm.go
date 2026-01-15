@@ -206,7 +206,7 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 		// VPMem not supported by the enlightened kernel for SNP so set count to zero.
 		lopts.VPMemDeviceCount = 0
 		// set the default GuestState filename.
-		lopts.GuestStateFile = uvm.GuestStateFile
+		lopts.GuestStateFilePath = uvm.GuestStateFile
 		lopts.KernelBootOptions = ""
 		lopts.AllowOvercommit = false
 		lopts.SecurityPolicyEnabled = true
@@ -388,7 +388,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		handleLCOWSecurityPolicy(ctx, s.Annotations, lopts)
 
 		// override the default GuestState and DmVerityRootFs filenames if specified
-		lopts.GuestStateFile = ParseAnnotationsString(s.Annotations, annotations.LCOWGuestStateFile, lopts.GuestStateFile)
+		lopts.GuestStateFilePath = ParseAnnotationsString(s.Annotations, annotations.LCOWGuestStateFile, lopts.GuestStateFilePath)
 		lopts.DmVerityRootFsVhd = ParseAnnotationsString(s.Annotations, annotations.DmVerityRootFsVhd, lopts.DmVerityRootFsVhd)
 		lopts.DmVerityMode = ParseAnnotationsBool(ctx, s.Annotations, annotations.DmVerityMode, lopts.DmVerityMode)
 		lopts.DmVerityCreateArgs = ParseAnnotationsString(s.Annotations, annotations.DmVerityCreateArgs, lopts.DmVerityCreateArgs)

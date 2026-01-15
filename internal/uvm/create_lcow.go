@@ -90,16 +90,12 @@ const (
 )
 
 type ConfidentialLCOWOptions struct {
-	GuestStateFile         string // The vmgs file to load
-	UseGuestStateFile      bool   // Use a vmgs file that contains a kernel and initrd, required for SNP
-	SecurityPolicy         string // Optional security policy
-	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
-	UVMReferenceInfoFile   string // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
-	BundleDirectory        string // pod bundle directory
-	DmVerityRootFsVhd      string // The VHD file (bound to the vmgs file via embedded dmverity hash data file) to load.
-	DmVerityMode           bool   // override to be able to turn off dmverity for debugging
-	DmVerityCreateArgs     string // set dm-verity args when booting with verity in non-SNP mode
+	*ConfidentialCommonOptions
+	UseGuestStateFile  bool   // Use a vmgs file that contains a kernel and initrd, required for SNP
+	BundleDirectory    string // pod bundle directory
+	DmVerityRootFsVhd  string // The VHD file (bound to the vmgs file via embedded dmverity hash data file) to load.
+	DmVerityMode       bool   // override to be able to turn off dmverity for debugging
+	DmVerityCreateArgs string // set dm-verity args when booting with verity in non-SNP mode
 }
 
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
@@ -177,8 +173,10 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		EnableScratchEncryption: false,
 		DisableTimeSyncService:  false,
 		ConfidentialLCOWOptions: &ConfidentialLCOWOptions{
-			SecurityPolicyEnabled: false,
-			UVMReferenceInfoFile:  UVMReferenceInfoFile,
+			ConfidentialCommonOptions: &ConfidentialCommonOptions{
+				SecurityPolicyEnabled: false,
+				UVMReferenceInfoFile:  UVMReferenceInfoFile,
+			},
 		},
 	}
 
@@ -350,7 +348,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	// The kernel and minimal initrd are combined into a single vmgs file.
-	vmgsTemplatePath := filepath.Join(opts.BootFilesPath, opts.GuestStateFile)
+	vmgsTemplatePath := filepath.Join(opts.BootFilesPath, opts.GuestStateFilePath)
 	if _, err := os.Stat(vmgsTemplatePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("the GuestState vmgs file '%s' was not found", vmgsTemplatePath)
 	}
@@ -367,7 +365,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		return nil, err
 	}
 
-	vmgsFileFullPath := filepath.Join(opts.BundleDirectory, opts.GuestStateFile)
+	vmgsFileFullPath := filepath.Join(opts.BundleDirectory, opts.GuestStateFilePath)
 	if err := copyfile.CopyFile(ctx, vmgsTemplatePath, vmgsFileFullPath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy VMGS template file: %w", err)
 	}
