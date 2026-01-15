@@ -497,7 +497,6 @@ func mountHypervIsolatedBlockCIMLayers(ctx context.Context, l *wcowBlockCIMLayer
 		return nil, nil, fmt.Errorf("failed to add SCSI scratch VHD: %w", err)
 	}
 	containerScratchPathInUVM := scsiMount.GuestPath()
-	rcl.Add(scsiMount)
 
 	log.G(ctx).WithFields(logrus.Fields{
 		"hostPath": hostPath,
