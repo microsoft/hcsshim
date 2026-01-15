@@ -18,6 +18,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 const (
@@ -37,34 +38,48 @@ const (
 // into the resulting container by the runtime.
 //
 // GPU devices are skipped, since they are handled in [addNvidiaDeviceHook].
-func AddAssignedDevice(ctx context.Context, spec *oci.Spec) error {
+func AddAssignedDevice(ctx context.Context, spec *oci.Spec) (err error) {
+	ctx, span := oc.StartSpan(ctx, "AddAssignedDevice")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
 	// Add an explicit timeout before we try to find the dev nodes so we
 	// aren't waiting forever.
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	for _, d := range spec.Windows.Devices {
+		entry := log.G(ctx).WithField("windows-device", log.Format(ctx, d))
+
 		switch d.IDType {
 		case vpciDeviceIDTypeLegacy, vpciDeviceIDType:
+			entry.Trace("adding vPCI device")
 			// validate that the device is available
 			fullPCIPath, err := pci.FindDeviceFullPath(ctx, d.ID)
 			if err != nil {
 				return errors.Wrapf(err, "failed to find device pci path for device %v", d)
 			}
+
+			entry.WithField("path", fullPCIPath).Trace("found PCI path for Windows device")
 			// find the device nodes that link to the pci path we just got
 			devs, err := devicePathsFromPCIPath(ctx, fullPCIPath)
 			if err != nil {
-				return errors.Wrapf(err, "failed to find dev node for device %v", d)
+				return errors.Wrapf(err, "failed to find dev node for device %v with path %q", d, fullPCIPath)
+			}
+
+			if logrus.IsLevelEnabled(logrus.DebugLevel) {
+				entry.WithFields(logrus.Fields{
+					"pci-path":     fullPCIPath,
+					"host-devices": log.Format(ctx, devs),
+				}).Debug("adding host devices associated with Windows device")
 			}
 			for _, dev := range devs {
 				AddLinuxDeviceToSpec(ctx, dev, spec, true)
 			}
 		case gpuDeviceIDType:
+			entry.Trace("skipping GPU device")
 		default:
-			log.G(ctx).WithFields(logrus.Fields{
-				"type": d.IDType,
-				"id":   d.ID,
-			}).Warn("unknown device type")
+			entry.Warn("unknown device type")
 		}
 	}
 
@@ -98,10 +113,11 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*config.Devi
 
 		// find corresponding entries in sysfs
 		for _, d := range hostDevices {
+			entry := log.G(ctx).WithField("host-device", log.Format(ctx, d))
+			entry.Trace("looking at host device")
+
 			major := d.Major
 			minor := d.Minor
-
-			log.G(ctx).WithField("device", d).Infof("looking at device: %+v", d)
 
 			deviceTypeString := ""
 			switch d.Type {
@@ -118,7 +134,7 @@ func devicePathsFromPCIPath(ctx context.Context, pciPath string) ([]*config.Devi
 			if err != nil {
 				// Some drivers will make dev nodes that do not have a matching block or
 				// char device -- skip those.
-				log.G(ctx).WithError(err).Debugf("failed to find sysfs path for device %s", d.Path)
+				entry.WithError(err).Debugf("failed to find sysfs path for device %s", d.Path)
 				continue
 			}
 			if strings.HasPrefix(sysfsFullPath, pciFullPath) {

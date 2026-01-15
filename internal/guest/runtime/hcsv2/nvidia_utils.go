@@ -13,10 +13,12 @@ import (
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
 	"github.com/Microsoft/hcsshim/internal/hooks"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
@@ -69,6 +71,9 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec, ociBundlePath stri
 	hookEnv := append(updateEnvWithNvidiaVariables(), hookLogDebugFileEnvOpt)
 
 	nvidiaHook := hooks.NewOCIHook(genericHookPath, args, hookEnv)
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		log.G(ctx).WithField("hook", log.Format(ctx, nvidiaHook)).Debug("adding nvidia device runtime hook")
+	}
 	return hooks.AddOCIHook(spec, hooks.CreateRuntime, nvidiaHook)
 }
 
