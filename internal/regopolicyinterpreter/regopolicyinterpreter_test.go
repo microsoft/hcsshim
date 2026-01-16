@@ -72,6 +72,37 @@ func Test_copyValue(t *testing.T) {
 	}
 }
 
+func Test_copyRegoMetadata(t *testing.T) {
+	f := func(orig testRegoMetadata) bool {
+		copy, err := copyRegoMetadata(regoMetadata(orig))
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		if len(orig) != len(copy) {
+			t.Errorf("original and copy have different number of objects: %d != %d", len(orig), len(copy))
+			return false
+		}
+
+		for name, origObject := range orig {
+			if copyObject, ok := copy[name]; ok {
+				if !assertObjectsEqual(origObject, copyObject) {
+					t.Errorf("original and copy differ on key %s", name)
+				}
+			} else {
+				t.Errorf("copy missing object %s", name)
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 30, Rand: testRand}); err != nil {
+		t.Errorf("Test_copyRegoMetadata: %v", err)
+	}
+}
+
 //go:embed test.rego
 var testCode string
 
@@ -364,6 +395,107 @@ func Test_Metadata_Remove(t *testing.T) {
 	}
 }
 
+func Test_Metadata_SaveRestore(t *testing.T) {
+	rego, err := setupRego()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f := func(pairs1before, pairs1after intPairArray, name1 metadataName, pairs2before, pairs2after intPairArray, name2 metadataName) bool {
+		if name1 == name2 {
+			t.Fatalf("generated two identical names: %s", name1)
+		}
+
+		err := appendAll(rego, pairs1before, name1)
+		if err != nil {
+			t.Errorf("error appending pairs1before: %v", err)
+			return false
+		}
+		err = appendAll(rego, pairs2before, name2)
+		if err != nil {
+			t.Errorf("error appending pairs2before: %v", err)
+			return false
+		}
+
+		saved, err := rego.SaveMetadata()
+		if err != nil {
+			t.Errorf("unable to save metadata: %v", err)
+			return false
+		}
+
+		beforeSum1 := getExpectedGapFromPairs(pairs1before)
+		err = computeGap(rego, name1, beforeSum1)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		beforeSum2 := getExpectedGapFromPairs(pairs2before)
+		err = computeGap(rego, name2, beforeSum2)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// computeGap would have cleared the list, so we restore it.
+		err = rego.RestoreMetadata(saved)
+		if err != nil {
+			t.Errorf("unable to restore metadata: %v", err)
+			return false
+		}
+
+		err = appendAll(rego, pairs1after, name1)
+		if err != nil {
+			t.Errorf("error appending pairs1after: %v", err)
+			return false
+		}
+
+		err = appendAll(rego, pairs2after, name2)
+		if err != nil {
+			t.Errorf("error appending pairs2after: %v", err)
+			return false
+		}
+
+		afterSum1 := beforeSum1 + getExpectedGapFromPairs(pairs1after)
+		err = computeGap(rego, name1, afterSum1)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		afterSum2 := beforeSum2 + getExpectedGapFromPairs(pairs2after)
+		err = computeGap(rego, name2, afterSum2)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		err = rego.RestoreMetadata(saved)
+		if err != nil {
+			t.Errorf("unable to restore metadata: %v", err)
+			return false
+		}
+
+		err = computeGap(rego, name1, beforeSum1)
+		if err != nil {
+			t.Errorf("computeGap failed for name1 after restore: %v", err)
+			return false
+		}
+
+		err = computeGap(rego, name2, beforeSum2)
+		if err != nil {
+			t.Errorf("computeGap failed for name2 after restore: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 100, Rand: testRand}); err != nil {
+		t.Errorf("Test_Metadata_SaveRestore: %v", err)
+	}
+}
+
 //go:embed module.rego
 var moduleCode string
 
@@ -508,6 +640,7 @@ type testValue struct {
 }
 type testArray []interface{}
 type testObject map[string]interface{}
+type testRegoMetadata regoMetadata
 
 type testValueType int
 
@@ -580,6 +713,16 @@ func (testObject) Generate(r *rand.Rand, _ int) reflect.Value {
 	return reflect.ValueOf(value)
 }
 
+func (testRegoMetadata) Generate(r *rand.Rand, _ int) reflect.Value {
+	numObjects := r.Intn(maxNumberOfFields)
+	metadata := make(testRegoMetadata)
+	for i := 0; i < numObjects; i++ {
+		name := uniqueString(r)
+		metadata[name] = generateObject(r, 0)
+	}
+	return reflect.ValueOf(metadata)
+}
+
 func getResult(r *RegoPolicyInterpreter, p intPair, rule string) (RegoQueryResult, error) {
 	input := map[string]interface{}{"a": p.a, "b": p.b}
 	result, err := r.Query("data.test."+rule, input)
@@ -638,6 +781,27 @@ func appendLists(r *RegoPolicyInterpreter, p intPair, name metadataName) error {
 	}
 
 	return nil
+}
+
+func appendAll(r *RegoPolicyInterpreter, pairs intPairArray, name metadataName) error {
+	for _, pair := range pairs {
+		if err := appendLists(r, pair, name); err != nil {
+			return fmt.Errorf("error appending pair %v: %w", pair, err)
+		}
+	}
+	return nil
+}
+
+func getExpectedGapFromPairs(pairs intPairArray) int {
+	expected := 0
+	for _, pair := range pairs {
+		if pair.a >= pair.b {
+			expected += pair.a - pair.b
+		} else {
+			expected += pair.b - pair.a
+		}
+	}
+	return expected
 }
 
 func computeGap(r *RegoPolicyInterpreter, name metadataName, expected int) error {

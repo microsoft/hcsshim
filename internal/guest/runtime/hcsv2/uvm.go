@@ -14,8 +14,10 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
@@ -40,8 +43,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pmem"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -53,6 +58,27 @@ import (
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
 // for V2 where the specific message is targeted at the UVM itself.
 const UVMContainerID = "00000000-0000-0000-0000-000000000000"
+
+// Prevent path traversal via malformed container / sandbox IDs.  Container IDs
+// can be either UVMContainerID, or a 64 character hex string. This is also used
+// to check that sandbox IDs (which is also used in paths) are valid, which has
+// the same format.
+const validContainerIDRegexRaw = `[0-9a-fA-F]{64}`
+
+var validContainerIDRegex = regexp.MustCompile("^" + validContainerIDRegexRaw + "$")
+
+// idType just changes the error message
+func checkValidContainerID(id string, idType string) error {
+	if id == UVMContainerID {
+		return nil
+	}
+
+	if !validContainerIDRegex.MatchString(id) {
+		return errors.Errorf("invalid %s id: %s (must match %s)", idType, id, validContainerIDRegex.String())
+	}
+
+	return nil
+}
 
 // VirtualPod represents a virtual pod that shares a UVM/Sandbox with other pods
 type VirtualPod struct {
@@ -88,8 +114,20 @@ type Host struct {
 	securityOptions *securitypolicy.SecurityOptions
 
 	// hostMounts keeps the state of currently mounted devices and file systems,
-	// which is used for GCS hardening.
+	// which is used for GCS hardening.  It is only used for confidential
+	// containers, and is initialized in SetConfidentialUVMOptions.  If this is
+	// nil, we do not do add any special restrictions on mounts / unmounts.
 	hostMounts *hostMounts
+	// A permanent flag to indicate that further mounts, unmounts and container
+	// creation should not be allowed.  This is set when, because of a failure
+	// during an unmount operation, we end up in a state where the policy
+	// enforcer's state is out of sync with what we have actually done, but we
+	// cannot safely revert its state.
+	//
+	// Not used in non-confidential mode.
+	mountsBroken atomic.Bool
+	// A user-friendly error message for why mountsBroken was set.
+	mountsBrokenCausedBy string
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
@@ -107,8 +145,9 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		rtime:                 rtime,
 		vsock:                 vsock,
 		devNullTransport:      &transport.DevNullTransport{},
-		hostMounts:            newHostMounts(),
+		hostMounts:            nil,
 		securityOptions:       securityPolicyOptions,
+		mountsBroken:          atomic.Bool{},
 	}
 }
 
@@ -245,11 +284,104 @@ func setupSandboxLogDir(sandboxID, virtualSandboxID string) error {
 // TODO: unify workload and standalone logic for non-sandbox features (e.g., block devices, huge pages, uVM mounts)
 // TODO(go1.24): use [os.Root] instead of `!strings.HasPrefix(<path>, <root>)`
 
+// Returns whether this host has a security policy set, i.e. if it's running
+// confidential containers.
+func (h *Host) HasSecurityPolicy() bool {
+	return len(h.securityOptions.PolicyEnforcer.EncodedSecurityPolicy()) > 0
+}
+
+// For confidential containers, make sure that the host can't use unexpected
+// bundle paths / scratch dir / rootfs
+func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHostedContainerSettingsV2) error {
+	if settings.OCISpecification == nil {
+		return errors.Errorf("OCISpecification is nil")
+	}
+	if settings.OCISpecification.Root == nil {
+		return errors.Errorf("OCISpecification.Root is nil")
+	}
+
+	// matches with CreateContainer / createLinuxContainerDocument in internal/hcsoci
+	containerRootInUVM := path.Join(guestpath.LCOWRootPrefixInUVM, containerID)
+	if settings.OCIBundlePath != containerRootInUVM {
+		return errors.Errorf("OCIBundlePath %q must equal expected %q",
+			settings.OCIBundlePath, containerRootInUVM)
+	}
+	expectedContainerRootfs := path.Join(containerRootInUVM, guestpath.RootfsPath)
+	if settings.OCISpecification.Root.Path != expectedContainerRootfs {
+		return errors.Errorf("OCISpecification.Root.Path %q must equal expected %q",
+			settings.OCISpecification.Root.Path, expectedContainerRootfs)
+	}
+
+	// matches with MountLCOWLayers
+	scratchDirPath := settings.ScratchDirPath
+	expectedScratchDirPathNonShared := path.Join(containerRootInUVM, guestpath.ScratchDir, containerID)
+	expectedScratchDirPathShared := path.Join(guestpath.LCOWRootPrefixInUVM, sandboxID, guestpath.ScratchDir, containerID)
+	if scratchDirPath != expectedScratchDirPathNonShared &&
+		scratchDirPath != expectedScratchDirPathShared {
+		return errors.Errorf("ScratchDirPath %q must be either %q or %q",
+			scratchDirPath, expectedScratchDirPathNonShared, expectedScratchDirPathShared)
+	}
+
+	if settings.OCISpecification.Hooks != nil {
+		return errors.Errorf("OCISpecification.Hooks must be nil.")
+	}
+
+	return nil
+}
+
+// Returns an error if h.mountsBroken is set (and we're in a confidential
+// container host)
+func (h *Host) checkMountsNotBroken() error {
+	if h.HasSecurityPolicy() && h.mountsBroken.Load() {
+		return errors.Errorf(
+			"Mount, unmount, container creation and deletion has been disabled in this UVM due to a previous error (%q)",
+			h.mountsBrokenCausedBy,
+		)
+	}
+	return nil
+}
+
+func (h *Host) setMountsBrokenIfConfidential(cause string) {
+	if !h.HasSecurityPolicy() {
+		return
+	}
+	h.mountsBroken.Store(true)
+	h.mountsBrokenCausedBy = cause
+	log.G(context.Background()).WithFields(logrus.Fields{
+		"cause": cause,
+	}).Error("Host::mountsBroken set to true. All further mounts/unmounts, container creation and deletion will fail.")
+}
+
+func checkExists(path string) (error, bool) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, false
+		}
+		return errors.Wrapf(err, "failed to determine if path '%s' exists", path), false
+	}
+	return nil, true
+}
+
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
+	if err = h.checkMountsNotBroken(); err != nil {
+		return nil, err
+	}
+
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 
 	// Check for virtual pod annotation
 	virtualPodID, isVirtualPod := settings.OCISpecification.Annotations[annotations.VirtualPodID]
+
+	if h.HasSecurityPolicy() {
+		if err = checkValidContainerID(id, "container"); err != nil {
+			return nil, err
+		}
+		if virtualPodID != "" {
+			if err = checkValidContainerID(virtualPodID, "virtual pod"); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	// Special handling for virtual pod sandbox containers:
 	// The first container in a virtual pod (containerID == virtualPodID) should be treated as a sandbox
@@ -272,6 +404,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		isSandbox:      criType == "sandbox",
 		exitType:       prot.NtUnexpectedExit,
 		processes:      make(map[uint32]*containerProcess),
+		terminated:     atomic.Bool{},
 		scratchDirPath: settings.ScratchDirPath,
 	}
 	c.setStatus(containerCreating)
@@ -374,6 +507,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		case "container":
 			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 			sandboxID = sid
+			if h.HasSecurityPolicy() {
+				if err = checkValidContainerID(sid, "sandbox"); err != nil {
+					return nil, err
+				}
+			}
 			if !ok || sid == "" {
 				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
 			}
@@ -383,7 +521,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 
 			// Add SEV device when security policy is not empty, except when privileged annotation is
 			// set to "true", in which case all UVMs devices are added.
-			if len(h.securityOptions.PolicyEnforcer.EncodedSecurityPolicy()) > 0 && !oci.ParseAnnotationsBool(ctx,
+			if h.HasSecurityPolicy() && !oci.ParseAnnotationsBool(ctx,
 				settings.OCISpecification.Annotations, annotations.LCOWPrivileged, false) {
 				if err := specGuest.AddDevSev(ctx, settings.OCISpecification); err != nil {
 					log.G(ctx).WithError(err).Debug("failed to add SEV device")
@@ -427,6 +565,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			Source:      specGuest.SandboxLogsDir(sandboxID, virtualPodID),
 			Options:     []string{"bind"},
 		})
+	}
+
+	if h.HasSecurityPolicy() {
+		if err = checkContainerSettings(sandboxID, id, settings); err != nil {
+			return nil, err
+		}
 	}
 
 	user, groups, umask, err := h.securityOptions.PolicyEnforcer.GetUserInfo(settings.OCISpecification.Process, settings.OCISpecification.Root.Path)
@@ -585,11 +729,40 @@ func writeSpecToFile(ctx context.Context, configFile string, spec *specs.Spec) e
 	return nil
 }
 
+// Returns whether there is a running container that is currently using the
+// given overlay (as its rootfs).
+func (h *Host) IsOverlayInUse(overlayPath string) bool {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	for _, c := range h.containers {
+		if c.terminated.Load() {
+			continue
+		}
+
+		if c.spec.Root.Path == overlayPath {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) (retErr error) {
+	if h.HasSecurityPolicy() {
+		if err := checkValidContainerID(containerID, "container"); err != nil {
+			return err
+		}
+	}
+
 	switch req.ResourceType {
 	case guestresource.ResourceTypeSCSIDevice:
 		return modifySCSIDevice(ctx, req.RequestType, req.Settings.(*guestresource.SCSIDevice))
 	case guestresource.ResourceTypeMappedVirtualDisk:
+		if err := h.checkMountsNotBroken(); err != nil {
+			return err
+		}
+
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
 		// find the actual controller number on the bus and update the incoming request.
 		var cNum uint8
@@ -598,47 +771,25 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 			return err
 		}
 		mvd.Controller = cNum
-		// first we try to update the internal state for read-write attachments.
-		if !mvd.ReadOnly {
-			localCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-			defer cancel()
-			source, err := scsi.GetDevicePath(localCtx, mvd.Controller, mvd.Lun, mvd.Partition)
-			if err != nil {
-				return err
-			}
-			switch req.RequestType {
-			case guestrequest.RequestTypeAdd:
-				if err := h.hostMounts.AddRWDevice(mvd.MountPath, source, mvd.Encrypted); err != nil {
-					return err
-				}
-				defer func() {
-					if retErr != nil {
-						_ = h.hostMounts.RemoveRWDevice(mvd.MountPath, source)
-					}
-				}()
-			case guestrequest.RequestTypeRemove:
-				if err := h.hostMounts.RemoveRWDevice(mvd.MountPath, source); err != nil {
-					return err
-				}
-				defer func() {
-					if retErr != nil {
-						_ = h.hostMounts.AddRWDevice(mvd.MountPath, source, mvd.Encrypted)
-					}
-				}()
-			}
-		}
-		return modifyMappedVirtualDisk(ctx, req.RequestType, mvd, h.securityOptions.PolicyEnforcer)
+		return h.modifyMappedVirtualDisk(ctx, req.RequestType, mvd)
 	case guestresource.ResourceTypeMappedDirectory:
-		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory), h.securityOptions.PolicyEnforcer)
+		if err := h.checkMountsNotBroken(); err != nil {
+			return err
+		}
+
+		return h.modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory))
 	case guestresource.ResourceTypeVPMemDevice:
-		return modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice), h.securityOptions.PolicyEnforcer)
+		if err := h.checkMountsNotBroken(); err != nil {
+			return err
+		}
+
+		return h.modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice))
 	case guestresource.ResourceTypeCombinedLayers:
-		cl := req.Settings.(*guestresource.LCOWCombinedLayers)
-		// when cl.ScratchPath == "", we mount overlay as read-only, in which case
-		// we don't really care about scratch encryption, since the host already
-		// knows about the layers and the overlayfs.
-		encryptedScratch := cl.ScratchPath != "" && h.hostMounts.IsEncrypted(cl.ScratchPath)
-		return modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), encryptedScratch, h.securityOptions.PolicyEnforcer)
+		if err := h.checkMountsNotBroken(); err != nil {
+			return err
+		}
+
+		return h.modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers))
 	case guestresource.ResourceTypeNetwork:
 		return modifyNetwork(ctx, req.RequestType, req.Settings.(*guestresource.LCOWNetworkAdapter))
 	case guestresource.ResourceTypeVPCIDevice:
@@ -654,10 +805,22 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		if !ok {
 			return errors.New("the request's settings are not of type ConfidentialOptions")
 		}
-		return h.securityOptions.SetConfidentialOptions(ctx,
+		err := h.securityOptions.SetConfidentialOptions(ctx,
 			r.EnforcerType,
 			r.EncodedSecurityPolicy,
 			r.EncodedUVMReference)
+		if err != nil {
+			return err
+		}
+
+		// Start tracking mounts and restricting unmounts on confidential containers.
+		// As long as we started off with the ClosedDoorSecurityPolicyEnforcer, no
+		// mounts should have been allowed until this point.
+		if h.HasSecurityPolicy() {
+			log.G(ctx).Debug("hostMounts initialized")
+			h.hostMounts = newHostMounts()
+		}
+		return nil
 	case guestresource.ResourceTypePolicyFragment:
 		r, ok := req.Settings.(*guestresource.SecurityPolicyFragment)
 		if !ok {
@@ -670,6 +833,12 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 }
 
 func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
+	if h.HasSecurityPolicy() {
+		if err := checkValidContainerID(containerID, "container"); err != nil {
+			return err
+		}
+	}
+
 	c, err := h.GetCreatedContainer(containerID)
 	if err != nil {
 		return err
@@ -1020,34 +1189,81 @@ func modifySCSIDevice(
 	}
 }
 
-func modifyMappedVirtualDisk(
+func (h *Host) modifyMappedVirtualDisk(
 	ctx context.Context,
 	rt guestrequest.RequestType,
 	mvd *guestresource.LCOWMappedVirtualDisk,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::Host::modifyMappedVirtualDisk")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("requestType", string(rt)),
+		trace.BoolAttribute("hasHostMounts", h.hostMounts != nil),
+		trace.Int64Attribute("controller", int64(mvd.Controller)),
+		trace.Int64Attribute("lun", int64(mvd.Lun)),
+		trace.Int64Attribute("partition", int64(mvd.Partition)),
+		trace.BoolAttribute("readOnly", mvd.ReadOnly),
+		trace.StringAttribute("mountPath", mvd.MountPath),
+	)
+
 	var verityInfo *guestresource.DeviceVerityInfo
+	securityPolicy := h.securityOptions.PolicyEnforcer
+	devPath, err := scsi.GetDevicePath(ctx, mvd.Controller, mvd.Lun, mvd.Partition)
+	if err != nil {
+		return err
+	}
+	span.AddAttributes(trace.StringAttribute("devicePath", devPath))
+
 	if mvd.ReadOnly {
 		// The only time the policy is empty, and we want it to be empty
 		// is when no policy is provided, and we default to open door
 		// policy. In any other case, e.g. explicit open door or any
 		// other rego policy we would like to mount layers with verity.
-		if len(securityPolicy.EncodedSecurityPolicy()) > 0 {
-			devPath, err := scsi.GetDevicePath(ctx, mvd.Controller, mvd.Lun, mvd.Partition)
-			if err != nil {
-				return err
-			}
+		if h.HasSecurityPolicy() {
 			verityInfo, err = verity.ReadVeritySuperBlock(ctx, devPath)
 			if err != nil {
 				return err
 			}
+			if mvd.Filesystem != "" && mvd.Filesystem != "ext4" {
+				return errors.Errorf("filesystem must be ext4 for read-only scsi mounts")
+			}
 		}
 	}
+
+	// For confidential containers, we revert the policy metadata on both mount
+	// and unmount errors, but if we've actually called Unmount and it fails we
+	// permanently block further device operations.
+	var rev securitypolicy.RevertableSectionHandle
+	rev, err = securityPolicy.StartRevertableSection()
+	if err != nil {
+		return errors.Wrapf(err, "failed to start revertable section on security policy enforcer")
+	}
+	defer h.commitOrRollbackPolicyRevSection(ctx, rev, &err)
+
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
+			if h.HasSecurityPolicy() {
+				// The only option we allow if there is policy enforcement is
+				// "ro", and it must match the readonly field in the request.
+				mountOptionHasRo := false
+				for _, opt := range mvd.Options {
+					if opt == "ro" {
+						mountOptionHasRo = true
+						continue
+					}
+					return errors.Errorf("mounting scsi device controller %d lun %d onto %s: mount option %q denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath, opt)
+				}
+				if mvd.ReadOnly != mountOptionHasRo {
+					return errors.Errorf(
+						"mounting scsi device controller %d lun %d onto %s with mount option %q failed due to mount option mismatch: mvd.ReadOnly=%t but mountOptionHasRo=%t",
+						mvd.Controller, mvd.Lun, mvd.MountPath, strings.Join(mvd.Options, ","), mvd.ReadOnly, mountOptionHasRo,
+					)
+				}
+			}
 			if mvd.ReadOnly {
 				var deviceHash string
 				if verityInfo != nil {
@@ -1057,23 +1273,41 @@ func modifyMappedVirtualDisk(
 				if err != nil {
 					return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
 				}
-			}
-			config := &scsi.Config{
-				Encrypted:        mvd.Encrypted,
-				VerityInfo:       verityInfo,
-				EnsureFilesystem: mvd.EnsureFilesystem,
-				Filesystem:       mvd.Filesystem,
-				BlockDev:         mvd.BlockDev,
-			}
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
-				mvd.ReadOnly, mvd.Options, config)
-		}
-		return nil
-	case guestrequest.RequestTypeRemove:
-		if mvd.MountPath != "" {
-			if mvd.ReadOnly {
-				if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
-					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
+				if h.hostMounts != nil {
+					h.hostMounts.Lock()
+					defer h.hostMounts.Unlock()
+
+					err = h.hostMounts.AddRODevice(mvd.MountPath, devPath)
+					if err != nil {
+						return err
+					}
+					// Note: "When a function returns, its deferred calls are
+					// executed in last-in-first-out order." - so we are safe to
+					// call RemoveRODevice in this defer.
+					defer func() {
+						if err != nil {
+							_ = h.hostMounts.RemoveRODevice(mvd.MountPath, devPath)
+						}
+					}()
+				}
+			} else {
+				err = securityPolicy.EnforceRWDeviceMountPolicy(ctx, mvd.MountPath, mvd.Encrypted, mvd.EnsureFilesystem, mvd.Filesystem)
+				if err != nil {
+					return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
+				}
+				if h.hostMounts != nil {
+					h.hostMounts.Lock()
+					defer h.hostMounts.Unlock()
+
+					err = h.hostMounts.AddRWDevice(mvd.MountPath, devPath, mvd.Encrypted)
+					if err != nil {
+						return err
+					}
+					defer func() {
+						if err != nil {
+							_ = h.hostMounts.RemoveRWDevice(mvd.MountPath, devPath, mvd.Encrypted)
+						}
+					}()
 				}
 			}
 			config := &scsi.Config{
@@ -1083,8 +1317,84 @@ func modifyMappedVirtualDisk(
 				Filesystem:       mvd.Filesystem,
 				BlockDev:         mvd.BlockDev,
 			}
-			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition,
-				mvd.MountPath, config); err != nil {
+			// Since we're rolling back the policy metadata (via the revertable
+			// section) on failure, we need to ensure that we have reverted all
+			// the side effects from this failed mount attempt, otherwise the
+			// Rego metadata is technically still inconsistent with reality.
+			// Mount cleans up the created directory and dm devices on failure,
+			// so we're good.
+			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
+				mvd.ReadOnly, mvd.Options, config)
+		}
+		return nil
+	case guestrequest.RequestTypeRemove:
+		if mvd.MountPath != "" {
+			if mvd.ReadOnly {
+				if err = securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
+					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
+				}
+				if h.hostMounts != nil {
+					h.hostMounts.Lock()
+					defer h.hostMounts.Unlock()
+
+					if err = h.hostMounts.RemoveRODevice(mvd.MountPath, devPath); err != nil {
+						return err
+					}
+					defer func() {
+						if err != nil {
+							_ = h.hostMounts.AddRODevice(mvd.MountPath, devPath)
+						}
+					}()
+				}
+			} else {
+				if err = securityPolicy.EnforceRWDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
+					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
+				}
+				if h.hostMounts != nil {
+					h.hostMounts.Lock()
+					defer h.hostMounts.Unlock()
+
+					if err = h.hostMounts.RemoveRWDevice(mvd.MountPath, devPath, mvd.Encrypted); err != nil {
+						return err
+					}
+					defer func() {
+						if err != nil {
+							_ = h.hostMounts.AddRWDevice(mvd.MountPath, devPath, mvd.Encrypted)
+						}
+					}()
+				}
+			}
+			// Check that the directory actually exists first, and if it does
+			// not then we just refuse to do anything, without closing the dm
+			// device or setting the mountsBroken flag.  Policy metadata is
+			// still reverted to reflect the fact that we have not done
+			// anything.
+			//
+			// Note: we should not do this check before calling the policy
+			// enforcer, as otherwise we might inadvertently allow the host to
+			// find out whether an arbitrary path (which may point to sensitive
+			// data within a container rootfs) exists or not
+			if h.HasSecurityPolicy() {
+				err, exists := checkExists(mvd.MountPath)
+				if err != nil {
+					return err
+				}
+				if !exists {
+					return errors.Errorf("unmounting scsi device at %s failed: directory does not exist", mvd.MountPath)
+				}
+			}
+			config := &scsi.Config{
+				Encrypted:        mvd.Encrypted,
+				VerityInfo:       verityInfo,
+				EnsureFilesystem: mvd.EnsureFilesystem,
+				Filesystem:       mvd.Filesystem,
+				BlockDev:         mvd.BlockDev,
+			}
+			err = scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath, config)
+			if err != nil {
+				h.setMountsBrokenIfConfidential(
+					fmt.Sprintf("unmounting scsi device at %s failed: %v", mvd.MountPath, err),
+				)
 				return err
 			}
 		}
@@ -1094,13 +1404,23 @@ func modifyMappedVirtualDisk(
 	}
 }
 
-func modifyMappedDirectory(
+func (h *Host) modifyMappedDirectory(
 	ctx context.Context,
 	vsock transport.Transport,
 	rt guestrequest.RequestType,
 	md *guestresource.LCOWMappedDirectory,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
+	securityPolicy := h.securityOptions.PolicyEnforcer
+	// For confidential containers, we revert the policy metadata on both mount
+	// and unmount errors, but if we've actually called Unmount and it fails we
+	// permanently block further device operations.
+	var rev securitypolicy.RevertableSectionHandle
+	rev, err = securityPolicy.StartRevertableSection()
+	if err != nil {
+		return errors.Wrapf(err, "failed to start revertable section on security policy enforcer")
+	}
+	defer h.commitOrRollbackPolicyRevSection(ctx, rev, &err)
+
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
@@ -1108,6 +1428,15 @@ func modifyMappedDirectory(
 			return errors.Wrapf(err, "mounting plan9 device at %s denied by policy", md.MountPath)
 		}
 
+		if h.HasSecurityPolicy() {
+			if err = plan9.ValidateShareName(md.ShareName); err != nil {
+				return err
+			}
+		}
+
+		// Similar to the reasoning in modifyMappedVirtualDisk, since we're
+		// rolling back the policy metadata, plan9.Mount here must clean up
+		// everything if it fails, which it does do.
 		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
 	case guestrequest.RequestTypeRemove:
 		err = securityPolicy.EnforcePlan9UnmountPolicy(ctx, md.MountPath)
@@ -1115,20 +1444,28 @@ func modifyMappedDirectory(
 			return errors.Wrapf(err, "unmounting plan9 device at %s denied by policy", md.MountPath)
 		}
 
-		return storage.UnmountPath(ctx, md.MountPath, true)
+		// Note: storage.UnmountPath is nop if path does not exist.
+		err = storage.UnmountPath(ctx, md.MountPath, true)
+		if err != nil {
+			h.setMountsBrokenIfConfidential(
+				fmt.Sprintf("unmounting plan9 device at %s failed: %v", md.MountPath, err),
+			)
+			return err
+		}
+		return nil
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
 }
 
-func modifyMappedVPMemDevice(ctx context.Context,
+func (h *Host) modifyMappedVPMemDevice(ctx context.Context,
 	rt guestrequest.RequestType,
 	vpd *guestresource.LCOWMappedVPMemDevice,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	var verityInfo *guestresource.DeviceVerityInfo
+	securityPolicy := h.securityOptions.PolicyEnforcer
 	var deviceHash string
-	if len(securityPolicy.EncodedSecurityPolicy()) > 0 {
+	if h.HasSecurityPolicy() {
 		if vpd.MappingInfo != nil {
 			return fmt.Errorf("multi mapping is not supported with verity")
 		}
@@ -1138,6 +1475,17 @@ func modifyMappedVPMemDevice(ctx context.Context,
 		}
 		deviceHash = verityInfo.RootDigest
 	}
+
+	// For confidential containers, we revert the policy metadata on both mount
+	// and unmount errors, but if we've actually called Unmount and it fails we
+	// permanently block further device operations.
+	var rev securitypolicy.RevertableSectionHandle
+	rev, err = securityPolicy.StartRevertableSection()
+	if err != nil {
+		return errors.Wrapf(err, "failed to start revertable section on security policy enforcer")
+	}
+	defer h.commitOrRollbackPolicyRevSection(ctx, rev, &err)
+
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		err = securityPolicy.EnforceDeviceMountPolicy(ctx, vpd.MountPath, deviceHash)
@@ -1145,13 +1493,39 @@ func modifyMappedVPMemDevice(ctx context.Context,
 			return errors.Wrapf(err, "mounting pmem device %d onto %s denied by policy", vpd.DeviceNumber, vpd.MountPath)
 		}
 
+		// Similar to the reasoning in modifyMappedVirtualDisk, since we're
+		// rolling back the policy metadata, pmem.Mount here must clean up
+		// everything if it fails, which it does do.
 		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
 	case guestrequest.RequestTypeRemove:
-		if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, vpd.MountPath); err != nil {
+		if err = securityPolicy.EnforceDeviceUnmountPolicy(ctx, vpd.MountPath); err != nil {
 			return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", vpd.MountPath)
 		}
 
-		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
+		// Check that the directory actually exists first, and if it does not
+		// then we just refuse to do anything, without closing the dm-linear or
+		// dm-verity device or setting the mountsBroken flag.
+		//
+		// Similar to the reasoning in modifyMappedVirtualDisk, we should not do
+		// this check before calling the policy enforcer.
+		if h.HasSecurityPolicy() {
+			err, exists := checkExists(vpd.MountPath)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return errors.Errorf("unmounting pmem device at %s failed: directory does not exist", vpd.MountPath)
+			}
+		}
+
+		err = pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
+		if err != nil {
+			h.setMountsBrokenIfConfidential(
+				fmt.Sprintf("unmounting pmem device at %s failed: %v", vpd.MountPath, err),
+			)
+			return err
+		}
+		return nil
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
@@ -1166,15 +1540,73 @@ func modifyMappedVPCIDevice(ctx context.Context, rt guestrequest.RequestType, vp
 	}
 }
 
-func modifyCombinedLayers(
+func (h *Host) modifyCombinedLayers(
 	ctx context.Context,
 	rt guestrequest.RequestType,
 	cl *guestresource.LCOWCombinedLayers,
-	scratchEncrypted bool,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::Host::modifyCombinedLayers")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("requestType", string(rt)),
+		trace.BoolAttribute("hasHostMounts", h.hostMounts != nil),
+		trace.StringAttribute("containerRootPath", cl.ContainerRootPath),
+		trace.StringAttribute("scratchPath", cl.ScratchPath),
+	)
+
+	securityPolicy := h.securityOptions.PolicyEnforcer
+	containerID := cl.ContainerID
+
+	// For confidential containers, we revert the policy metadata on both mount
+	// and unmount errors, but if we've actually called Unmount and it fails we
+	// permanently block further device operations.
+	var rev securitypolicy.RevertableSectionHandle
+	rev, err = securityPolicy.StartRevertableSection()
+	if err != nil {
+		return errors.Wrapf(err, "failed to start revertable section on security policy enforcer")
+	}
+	defer h.commitOrRollbackPolicyRevSection(ctx, rev, &err)
+
+	if h.hostMounts != nil {
+		// We will need this in multiple places, let's take the lock once here.
+		h.hostMounts.Lock()
+		defer h.hostMounts.Unlock()
+	}
+
 	switch rt {
 	case guestrequest.RequestTypeAdd:
+		if h.HasSecurityPolicy() {
+			if err := checkValidContainerID(containerID, "container"); err != nil {
+				return err
+			}
+
+			// We check this regardless of what the policy says, as long as we're in
+			// confidential mode.  This matches with checkContainerSettings called for
+			// container creation request.
+			expectedContainerRootfs := path.Join(guestpath.LCOWRootPrefixInUVM, containerID, guestpath.RootfsPath)
+			if cl.ContainerRootPath != expectedContainerRootfs {
+				return fmt.Errorf("combined layers target %q does not match expected path %q",
+					cl.ContainerRootPath, expectedContainerRootfs)
+			}
+
+			if cl.ScratchPath != "" {
+				// At this point, we do not know what the sandbox ID would be yet, so we
+				// have to allow anything reasonable.
+				scratchDirRegexStr := fmt.Sprintf(
+					"^%s/%s/%s/%s$",
+					guestpath.LCOWRootPrefixInUVM,
+					validContainerIDRegexRaw,
+					guestpath.ScratchDir,
+					containerID,
+				)
+				scratchDirRegex := regexp.MustCompile(scratchDirRegexStr)
+				if !scratchDirRegex.MatchString(cl.ScratchPath) {
+					return fmt.Errorf("scratch path %q must match regex %q",
+						cl.ScratchPath, scratchDirRegexStr)
+				}
+			}
+		}
 		layerPaths := make([]string, len(cl.Layers))
 		for i, layer := range cl.Layers {
 			layerPaths[i] = layer.Path
@@ -1189,23 +1621,68 @@ func modifyCombinedLayers(
 		} else {
 			upperdirPath = filepath.Join(cl.ScratchPath, "upper")
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
+			scratchEncrypted := false
+			if h.hostMounts != nil {
+				scratchEncrypted = h.hostMounts.IsEncrypted(cl.ScratchPath)
+			}
 
 			if err := securityPolicy.EnforceScratchMountPolicy(ctx, cl.ScratchPath, scratchEncrypted); err != nil {
 				return fmt.Errorf("scratch mounting denied by policy: %w", err)
 			}
 		}
 
-		if err := securityPolicy.EnforceOverlayMountPolicy(ctx, cl.ContainerID, layerPaths, cl.ContainerRootPath); err != nil {
+		if err = securityPolicy.EnforceOverlayMountPolicy(ctx, containerID, layerPaths, cl.ContainerRootPath); err != nil {
 			return fmt.Errorf("overlay creation denied by policy: %w", err)
 		}
+		if h.hostMounts != nil {
+			if err = h.hostMounts.AddOverlay(cl.ContainerRootPath, layerPaths, cl.ScratchPath); err != nil {
+				return err
+			}
+			defer func() {
+				if err != nil {
+					_, _ = h.hostMounts.RemoveOverlay(cl.ContainerRootPath)
+				}
+			}()
+		}
 
+		// Correctness for policy revertable section:
+		// MountLayer does two things - mkdir, then mount. On mount failure, the
+		// target directory is cleaned up.  Therefore we're clean in terms of
+		// side effects.
 		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
 	case guestrequest.RequestTypeRemove:
-		if err := securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath); err != nil {
+		// cl.ContainerID is not set on remove requests, but rego checks that we can
+		// only umount previously mounted targets anyway
+		if err = securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath); err != nil {
 			return errors.Wrap(err, "overlay removal denied by policy")
 		}
 
-		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
+		// Check that no running container is using this overlay as its rootfs.
+		if h.HasSecurityPolicy() && h.IsOverlayInUse(cl.ContainerRootPath) {
+			return fmt.Errorf("overlay %q is in use by a running container", cl.ContainerRootPath)
+		}
+
+		if h.hostMounts != nil {
+			var undoRemoveOverlay func()
+			if undoRemoveOverlay, err = h.hostMounts.RemoveOverlay(cl.ContainerRootPath); err != nil {
+				return err
+			}
+			defer func() {
+				if err != nil && undoRemoveOverlay != nil {
+					undoRemoveOverlay()
+				}
+			}()
+		}
+
+		// Note: storage.UnmountPath is a no-op if the path does not exist.
+		err = storage.UnmountPath(ctx, cl.ContainerRootPath, true)
+		if err != nil {
+			h.setMountsBrokenIfConfidential(
+				fmt.Sprintf("unmounting overlay at %s failed: %v", cl.ContainerRootPath, err),
+			)
+			return err
+		}
+		return nil
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
@@ -1491,4 +1968,60 @@ func setupVirtualPodHugePageMountsPath(virtualSandboxID string) error {
 	}
 
 	return storage.MountRShared(mountPath)
+}
+
+// If *err is not nil, the section is rolled back, otherwise it is committed.
+func (h *Host) commitOrRollbackPolicyRevSection(
+	ctx context.Context,
+	rev securitypolicy.RevertableSectionHandle,
+	err *error,
+) {
+	if !h.HasSecurityPolicy() {
+		// Don't produce bogus log entries if we aren't in confidential mode,
+		// even though rev.Rollback would have been no-op.
+		return
+	}
+	if *err != nil {
+		rev.Rollback()
+		logrus.WithContext(ctx).WithError(*err).Warn("rolling back security policy revertable section due to error")
+	} else {
+		rev.Commit()
+	}
+}
+
+func (h *Host) DeleteContainerState(ctx context.Context, containerID string) error {
+	if h.HasSecurityPolicy() {
+		if err := checkValidContainerID(containerID, "container"); err != nil {
+			return err
+		}
+	}
+
+	if err := h.checkMountsNotBroken(); err != nil {
+		return err
+	}
+
+	c, err := h.GetCreatedContainer(containerID)
+	if err != nil {
+		return err
+	}
+	if h.HasSecurityPolicy() {
+		if !c.terminated.Load() {
+			return errors.Errorf("Denied deleting state of a running container %q", containerID)
+		}
+		overlay := c.spec.Root.Path
+		h.hostMounts.Lock()
+		defer h.hostMounts.Unlock()
+		if h.hostMounts.HasOverlayMountedAt(overlay) {
+			return errors.Errorf("Denied deleting state of a container with a overlay mount still active")
+		}
+	}
+
+	// remove container state regardless of delete's success
+	defer h.RemoveContainer(containerID)
+
+	if err = c.Delete(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }

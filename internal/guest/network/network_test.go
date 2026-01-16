@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -119,6 +120,40 @@ func Test_MergeValues(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func Test_ValidateHostname(t *testing.T) {
+	validNames := []string{
+		"localhost",
+		"my-hostname",
+		"my.hostname",
+		"my-host-name123",
+		"_underscores.are.allowed.too",
+		"", // Allow not specifying a hostname
+	}
+
+	invalidNames := []string{
+		"localhost\n13.104.0.1 ip6-localhost ip6-loopback localhost",
+		"localhost\n2603:1000::1 ip6-localhost ip6-loopback",
+		"hello@microsoft.com",
+		"has space",
+		"has,comma",
+		"\x00",
+		"a\nb",
+		strings.Repeat("a", 1000),
+	}
+
+	for _, n := range validNames {
+		if err := ValidateHostname(n); err != nil {
+			t.Fatalf("expected %q to be valid, got: %v", n, err)
+		}
+	}
+
+	for _, n := range invalidNames {
+		if err := ValidateHostname(n); err == nil {
+			t.Fatalf("expected %q to be invalid, but got nil error", n)
+		}
 	}
 }
 
