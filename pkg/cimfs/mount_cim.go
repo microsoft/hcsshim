@@ -11,6 +11,7 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/winapi"
+	winapitypes "github.com/Microsoft/hcsshim/internal/winapi/types"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
@@ -99,7 +100,7 @@ func MountMergedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlag
 	// should be the merged CIM. All remaining entries should be the source CIM paths
 	// in the same order that was used while creating the merged CIM.
 	allcims := append([]*BlockCIM{mergedCIM}, sourceCIMs...)
-	cimsToMerge := []winapi.CimFsImagePath{}
+	cimsToMerge := []winapitypes.CimFsImagePath{}
 	for _, bcim := range allcims {
 		// Trailing backslashes cause problems-remove those
 		imageDir, err := windows.UTF16PtrFromString(strings.TrimRight(bcim.BlockPath, `\`))
@@ -111,7 +112,7 @@ func MountMergedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlag
 			return "", fmt.Errorf("convert string to utf16: %w", err)
 		}
 
-		cimsToMerge = append(cimsToMerge, winapi.CimFsImagePath{
+		cimsToMerge = append(cimsToMerge, winapitypes.CimFsImagePath{
 			ImageDir:  imageDir,
 			ImageName: cimName,
 		})
@@ -188,7 +189,7 @@ func MountMergedVerifiedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, m
 	// should be the merged CIM. All remaining entries should be the source CIM paths
 	// in the same order that was used while creating the merged CIM.
 	allcims := append([]*BlockCIM{mergedCIM}, sourceCIMs...)
-	cimsToMerge := []winapi.CimFsImagePath{}
+	cimsToMerge := []winapitypes.CimFsImagePath{}
 	for _, bcim := range allcims {
 		// Trailing backslashes cause problems-remove those
 		imageDir, err := windows.UTF16PtrFromString(strings.TrimRight(bcim.BlockPath, `\`))
@@ -200,7 +201,7 @@ func MountMergedVerifiedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, m
 			return "", fmt.Errorf("convert string to utf16: %w", err)
 		}
 
-		cimsToMerge = append(cimsToMerge, winapi.CimFsImagePath{
+		cimsToMerge = append(cimsToMerge, winapitypes.CimFsImagePath{
 			ImageDir:  imageDir,
 			ImageName: cimName,
 		})
