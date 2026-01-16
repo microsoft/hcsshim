@@ -569,71 +569,80 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				return errors.New("the request settings are not of type SecurityPolicyFragment")
 			}
 			return b.hostState.securityOptions.InjectFragment(ctx, r)
+
 		case guestresource.ResourceTypeWCOWBlockCims:
 			// This is request to mount the merged cim at given volumeGUID
-			if modifyGuestSettingsRequest.RequestType == guestrequest.RequestTypeRemove {
-				return fmt.Errorf("not implemented")
-			}
+			switch modifyGuestSettingsRequest.RequestType {
+			case guestrequest.RequestTypeAdd:
+				wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWBlockCIMMounts)
+				containerID := wcowBlockCimMounts.ContainerID
+				log.G(ctx).Tracef("WCOWBlockCIMMounts Add { %v}", wcowBlockCimMounts)
 
-			wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWBlockCIMMounts)
-			containerID := wcowBlockCimMounts.ContainerID
-			log.G(ctx).Tracef("WCOWBlockCIMMounts { %v}", wcowBlockCimMounts)
+				// The block device takes some time to show up. Wait for a few seconds.
+				time.Sleep(2 * time.Second)
 
-			// The block device takes some time to show up. Wait for a few seconds.
-			time.Sleep(2 * time.Second)
+				var layerCIMs []*cimfs.BlockCIM
+				layerHashes := make([]string, len(wcowBlockCimMounts.BlockCIMs))
+				layerDigests := make([][]byte, len(wcowBlockCimMounts.BlockCIMs))
+				for i, blockCimDevice := range wcowBlockCimMounts.BlockCIMs {
+					// Get the scsi device path for the blockCim lun
+					devNumber, err := windevice.GetDeviceNumberFromControllerLUN(
+						req.ctx,
+						0, /* controller is always 0 for wcow */
+						uint8(blockCimDevice.Lun))
+					if err != nil {
+						return fmt.Errorf("err getting scsiDevPath: %w", err)
+					}
+					physicalDevPath := fmt.Sprintf(devPathFormat, devNumber)
+					layerCim := cimfs.BlockCIM{
+						Type:      cimfs.BlockCIMTypeDevice,
+						BlockPath: physicalDevPath,
+						CimName:   blockCimDevice.CimName,
+					}
+					cimRootDigestBytes, err := cimfs.GetVerificationInfo(physicalDevPath)
+					if err != nil {
+						return fmt.Errorf("failed to get CIM verification info: %w", err)
+					}
+					layerDigests[i] = cimRootDigestBytes
+					layerHashes[i] = base64.URLEncoding.EncodeToString(cimRootDigestBytes)
+					layerCIMs = append(layerCIMs, &layerCim)
 
-			var layerCIMs []*cimfs.BlockCIM
-			layerHashes := make([]string, len(wcowBlockCimMounts.BlockCIMs))
-			layerDigests := make([][]byte, len(wcowBlockCimMounts.BlockCIMs))
-			for i, blockCimDevice := range wcowBlockCimMounts.BlockCIMs {
-				// Get the scsi device path for the blockCim lun
-				devNumber, err := windevice.GetDeviceNumberFromControllerLUN(
-					req.ctx,
-					0, /* controller is always 0 for wcow */
-					uint8(blockCimDevice.Lun))
+					log.G(ctx).Debugf("block CIM layer digest %s, path: %s\n", layerHashes[i], physicalDevPath)
+				}
+
+				// skip the merged cim and verify individual layer hashes
+				hashesToVerify := layerHashes
+				if len(layerHashes) > 1 {
+					hashesToVerify = layerHashes[1:]
+				}
+
+				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
 				if err != nil {
-					return fmt.Errorf("err getting scsiDevPath: %w", err)
+					return errors.Wrap(err, "CIM mount is denied by policy")
 				}
-				physicalDevPath := fmt.Sprintf(devPathFormat, devNumber)
-				layerCim := cimfs.BlockCIM{
-					Type:      cimfs.BlockCIMTypeDevice,
-					BlockPath: physicalDevPath,
-					CimName:   blockCimDevice.CimName,
+
+				if len(layerCIMs) > 1 {
+					_, err = cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
+					if err != nil {
+						return fmt.Errorf("error mounting multilayer block cims: %w", err)
+					}
+				} else {
+					_, err = cimfs.MountVerifiedBlockCIM(layerCIMs[0], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
+					if err != nil {
+						return fmt.Errorf("error mounting verified block cim: %w", err)
+					}
 				}
-				cimRootDigestBytes, err := cimfs.GetVerificationInfo(physicalDevPath)
+
+			case guestrequest.RequestTypeRemove:
+				log.G(ctx).Tracef("WCOWBlockCIMMounts: Remove")
+				wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWBlockCIMMounts)
+				volumePath := fmt.Sprintf(cimfs.VolumePathFormat, wcowBlockCimMounts.VolumeGUID.String())
+				err := cimfs.Unmount(volumePath)
+
 				if err != nil {
-					return fmt.Errorf("failed to get CIM verification info: %w", err)
-				}
-				layerDigests[i] = cimRootDigestBytes
-				layerHashes[i] = base64.URLEncoding.EncodeToString(cimRootDigestBytes)
-				layerCIMs = append(layerCIMs, &layerCim)
-
-				log.G(ctx).Debugf("block CIM layer digest %s, path: %s\n", layerHashes[i], physicalDevPath)
-			}
-
-			// skip the merged cim and verify individual layer hashes
-			hashesToVerify := layerHashes
-			if len(layerHashes) > 1 {
-				hashesToVerify = layerHashes[1:]
-			}
-
-			err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
-			if err != nil {
-				return errors.Wrap(err, "CIM mount is denied by policy")
-			}
-
-			if len(layerCIMs) > 1 {
-				_, err = cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
-				if err != nil {
-					return fmt.Errorf("error mounting multilayer block cims: %w", err)
-				}
-			} else {
-				_, err = cimfs.MountVerifiedBlockCIM(layerCIMs[0], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
-				if err != nil {
-					return fmt.Errorf("error mounting verified block cim: %w", err)
+					return fmt.Errorf("error unmounting block cim: %w", err)
 				}
 			}
-
 			// Send response back to shim
 			resp := &prot.ResponseBase{
 				Result:     0, // 0 means success
@@ -644,56 +653,6 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				return fmt.Errorf("error sending response to hcsshim: %w", err)
 			}
 			return nil
-
-		case guestresource.ResourceTypeCWCOWCombinedLayers:
-			settings := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWCombinedLayers)
-			switch modifyGuestSettingsRequest.RequestType {
-			case guestrequest.RequestTypeAdd:
-				containerID := settings.ContainerID
-				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
-					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
-
-				//Since unencrypted scratch is not an option, always pass true
-				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
-					return fmt.Errorf("scratch mounting denied by policy: %w", err)
-				}
-				// The following two folders are expected to be present in the scratch.
-				// But since we have just formatted the scratch we would need to
-				// create them manually.
-				sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
-				err = os.Mkdir(sandboxStateDirectory, 0777)
-				if err != nil {
-					return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
-				}
-
-				hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
-				err = os.Mkdir(hivesDirectory, 0777)
-				if err != nil {
-					return fmt.Errorf("failed to create hivesDirectory: %w", err)
-				}
-
-			case guestrequest.RequestTypeRemove:
-				log.G(ctx).Tracef("CWCOWCombinedLayers: Remove")
-				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchUnmountPolicy(ctx, settings.CombinedLayers.ContainerRootPath); err != nil {
-					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
-				}
-			}
-
-			// Reconstruct WCOWCombinedLayers{} req before forwarding to GCS
-			// as GCS does not understand ResourceTypeCWCOWCombinedLayers
-			modifyGuestSettingsRequest.ResourceType = guestresource.ResourceTypeCombinedLayers
-			modifyGuestSettingsRequest.Settings = settings.CombinedLayers
-			modifyRequest.Request = modifyGuestSettingsRequest
-			buf, err := json.Marshal(modifyRequest)
-			if err != nil {
-				return fmt.Errorf("failed to marshal rpcModifySettings: %w", err)
-			}
-			var newRequest request
-			newRequest.ctx = req.ctx
-			newRequest.header = req.header
-			newRequest.header.Size = uint32(len(buf)) + prot.HdrSize
-			newRequest.message = buf
-			req = &newRequest
 
 		case guestresource.ResourceTypeMappedVirtualDiskForContainerScratch:
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
@@ -740,6 +699,55 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			buf, err := json.Marshal(modifyRequest)
 			if err != nil {
 				return fmt.Errorf("failed to marshal WCOWMappedVirtualDisk: %w", err)
+			}
+			var newRequest request
+			newRequest.ctx = req.ctx
+			newRequest.header = req.header
+			newRequest.header.Size = uint32(len(buf)) + prot.HdrSize
+			newRequest.message = buf
+			req = &newRequest
+		case guestresource.ResourceTypeCWCOWCombinedLayers:
+			settings := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWCombinedLayers)
+			switch modifyGuestSettingsRequest.RequestType {
+			case guestrequest.RequestTypeAdd:
+				containerID := settings.ContainerID
+				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
+					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
+
+				//Since unencrypted scratch is not an option, always pass true
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
+					return fmt.Errorf("scratch mounting denied by policy: %w", err)
+				}
+				// The following two folders are expected to be present in the scratch.
+				// But since we have just formatted the scratch we would need to
+				// create them manually.
+				sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
+				err = os.Mkdir(sandboxStateDirectory, 0777)
+				if err != nil {
+					return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
+				}
+
+				hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
+				err = os.Mkdir(hivesDirectory, 0777)
+				if err != nil {
+					return fmt.Errorf("failed to create hivesDirectory: %w", err)
+				}
+
+			case guestrequest.RequestTypeRemove:
+				log.G(ctx).Tracef("CWCOWCombinedLayers: Remove")
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchUnmountPolicy(ctx, settings.CombinedLayers.ContainerRootPath); err != nil {
+					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
+				}
+			}
+
+			// Reconstruct WCOWCombinedLayers{} req before forwarding to GCS
+			// as GCS does not understand ResourceTypeCWCOWCombinedLayers
+			modifyGuestSettingsRequest.ResourceType = guestresource.ResourceTypeCombinedLayers
+			modifyGuestSettingsRequest.Settings = settings.CombinedLayers
+			modifyRequest.Request = modifyGuestSettingsRequest
+			buf, err := json.Marshal(modifyRequest)
+			if err != nil {
+				return fmt.Errorf("failed to marshal rpcModifySettings: %w", err)
 			}
 			var newRequest request
 			newRequest.ctx = req.ctx
