@@ -3,20 +3,23 @@
 package cimfs
 
 import (
+	"sync"
+
 	"github.com/Microsoft/go-winio/pkg/guid"
 
 	"github.com/Microsoft/hcsshim/internal/winapi/types"
 )
 
 // Type aliases
-type g = guid.GUID
+
+type GUID = guid.GUID
 type FsHandle = types.FsHandle
 type StreamHandle = types.StreamHandle
 type FileMetadata = types.CimFsFileMetadata
 type ImagePath = types.CimFsImagePath
 
-//sys CimMountImage(imagePath string, fsName string, flags uint32, volumeID *g) (hr error) = cimfs.CimMountImage?
-//sys CimDismountImage(volumeID *g) (hr error) = cimfs.CimDismountImage?
+//sys CimMountImage(imagePath string, fsName string, flags uint32, volumeID *GUID) (hr error) = cimfs.CimMountImage?
+//sys CimDismountImage(volumeID *GUID) (hr error) = cimfs.CimDismountImage?
 
 //sys CimCreateImage(imagePath string, oldFSName *uint16, newFSName *uint16, cimFSHandle *FsHandle) (hr error) = cimfs.CimCreateImage?
 //sys CimCreateImage2(imagePath string, flags uint32, oldFSName *uint16, newFSName *uint16, cimFSHandle *FsHandle) (hr error) = cimfs.CimCreateImage2?
@@ -31,15 +34,19 @@ type ImagePath = types.CimFsImagePath
 //sys CimCreateAlternateStream(cimFSHandle FsHandle, path string, size uint64, cimStreamHandle *StreamHandle) (hr error) = cimfs.CimCreateAlternateStream?
 //sys CimAddFsToMergedImage(cimFSHandle FsHandle, path string) (hr error) = cimfs.CimAddFsToMergedImage?
 //sys CimAddFsToMergedImage2(cimFSHandle FsHandle, path string, flags uint32) (hr error) = cimfs.CimAddFsToMergedImage2?
-//sys CimMergeMountImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *g) (hr error) = cimfs.CimMergeMountImage?
+//sys CimMergeMountImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *GUID) (hr error) = cimfs.CimMergeMountImage?
 //sys CimTombstoneFile(cimFSHandle FsHandle, path string) (hr error) = cimfs.CimTombstoneFile?
 //sys CimCreateMergeLink(cimFSHandle FsHandle, newPath string, oldPath string) (hr error) = cimfs.CimCreateMergeLink?
 //sys CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) = cimfs.CimSealImage?
 //sys CimGetVerificationInformation(blockCimPath string, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) = cimfs.CimGetVerificationInformation?
-//sys CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) = cimfs.CimMountVerifiedImage?
-//sys CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) = cimfs.CimMergeMountVerifiedImage
+//sys CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *GUID, hashSize uint16, hash *byte) (hr error) = cimfs.CimMountVerifiedImage?
+//sys CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *GUID, hashSize uint16, hash *byte) (hr error) = cimfs.CimMergeMountVerifiedImage?
 
-// CimFsSupported checks if cimfs.dll is present on the system.
-func CimFsSupported() bool {
-	return modcimfs.Load() == nil
+var load = sync.OnceValue(func() error {
+	return modcimfs.Load()
+})
+
+// Supported checks if cimwriter.dll is present on the system.
+func Supported() bool {
+	return load() == nil
 }

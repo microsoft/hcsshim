@@ -327,7 +327,7 @@ func _CimDeletePath(cimFSHandle FsHandle, path *uint16) (hr error) {
 	return
 }
 
-func CimDismountImage(volumeID *g) (hr error) {
+func CimDismountImage(volumeID *GUID) (hr error) {
 	hr = procCimDismountImage.Find()
 	if hr != nil {
 		return
@@ -366,7 +366,7 @@ func _CimGetVerificationInformation(blockCimPath *uint16, isSealed *uint32, hash
 	return
 }
 
-func CimMergeMountImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *g) (hr error) {
+func CimMergeMountImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *GUID) (hr error) {
 	hr = procCimMergeMountImage.Find()
 	if hr != nil {
 		return
@@ -381,7 +381,11 @@ func CimMergeMountImage(numCimPaths uint32, backingImagePaths *ImagePath, flags 
 	return
 }
 
-func CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) {
+func CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *GUID, hashSize uint16, hash *byte) (hr error) {
+	hr = procCimMergeMountVerifiedImage.Find()
+	if hr != nil {
+		return
+	}
 	r0, _, _ := syscall.SyscallN(procCimMergeMountVerifiedImage.Addr(), uintptr(numCimPaths), uintptr(unsafe.Pointer(backingImagePaths)), uintptr(flags), uintptr(unsafe.Pointer(volumeID)), uintptr(hashSize), uintptr(unsafe.Pointer(hash)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
@@ -392,7 +396,7 @@ func CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *ImagePath
 	return
 }
 
-func CimMountImage(imagePath string, fsName string, flags uint32, volumeID *g) (hr error) {
+func CimMountImage(imagePath string, fsName string, flags uint32, volumeID *GUID) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(imagePath)
 	if hr != nil {
@@ -406,7 +410,7 @@ func CimMountImage(imagePath string, fsName string, flags uint32, volumeID *g) (
 	return _CimMountImage(_p0, _p1, flags, volumeID)
 }
 
-func _CimMountImage(imagePath *uint16, fsName *uint16, flags uint32, volumeID *g) (hr error) {
+func _CimMountImage(imagePath *uint16, fsName *uint16, flags uint32, volumeID *GUID) (hr error) {
 	hr = procCimMountImage.Find()
 	if hr != nil {
 		return
@@ -421,7 +425,7 @@ func _CimMountImage(imagePath *uint16, fsName *uint16, flags uint32, volumeID *g
 	return
 }
 
-func CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) {
+func CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *GUID, hashSize uint16, hash *byte) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(imagePath)
 	if hr != nil {
@@ -435,7 +439,7 @@ func CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volume
 	return _CimMountVerifiedImage(_p0, _p1, flags, volumeID, hashSize, hash)
 }
 
-func _CimMountVerifiedImage(imagePath *uint16, fsName *uint16, flags uint32, volumeID *g, hashSize uint16, hash *byte) (hr error) {
+func _CimMountVerifiedImage(imagePath *uint16, fsName *uint16, flags uint32, volumeID *GUID, hashSize uint16, hash *byte) (hr error) {
 	hr = procCimMountVerifiedImage.Find()
 	if hr != nil {
 		return

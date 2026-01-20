@@ -181,7 +181,7 @@ func CMGetDeviceIDListSize(pulLen *uint32, pszFilter *byte, uFlags uint32) (hr e
 	return
 }
 
-func CMGetDeviceInterfaceList(classGUID *g, deviceID *uint16, buffer *uint16, bufLen uint32, ulFlags uint32) (hr error) {
+func CMGetDeviceInterfaceList(classGUID *GUID, deviceID *uint16, buffer *uint16, bufLen uint32, ulFlags uint32) (hr error) {
 	r0, _, _ := syscall.SyscallN(procCM_Get_Device_Interface_ListW.Addr(), uintptr(unsafe.Pointer(classGUID)), uintptr(unsafe.Pointer(deviceID)), uintptr(unsafe.Pointer(buffer)), uintptr(bufLen), uintptr(ulFlags))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
@@ -192,7 +192,7 @@ func CMGetDeviceInterfaceList(classGUID *g, deviceID *uint16, buffer *uint16, bu
 	return
 }
 
-func CMGetDeviceInterfaceListSize(listlen *uint32, classGUID *g, deviceID *uint16, ulFlags uint32) (hr error) {
+func CMGetDeviceInterfaceListSize(listlen *uint32, classGUID *GUID, deviceID *uint16, ulFlags uint32) (hr error) {
 	r0, _, _ := syscall.SyscallN(procCM_Get_Device_Interface_List_SizeW.Addr(), uintptr(unsafe.Pointer(listlen)), uintptr(unsafe.Pointer(classGUID)), uintptr(unsafe.Pointer(deviceID)), uintptr(ulFlags))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
