@@ -92,7 +92,6 @@ const (
 type ConfidentialLCOWOptions struct {
 	*ConfidentialCommonOptions
 	UseGuestStateFile  bool   // Use a vmgs file that contains a kernel and initrd, required for SNP
-	BundleDirectory    string // pod bundle directory
 	DmVerityRootFsVhd  string // The VHD file (bound to the vmgs file via embedded dmverity hash data file) to load.
 	DmVerityMode       bool   // override to be able to turn off dmverity for debugging
 	DmVerityCreateArgs string // set dm-verity args when booting with verity in non-SNP mode

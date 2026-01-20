@@ -466,6 +466,30 @@ func prepareSecurityConfigDoc(ctx context.Context, uvm *UtilityVM, opts *Options
 		scsi.Slot{Controller: 0, LUN: 1},
 		scsi.Slot{Controller: 0, LUN: 2})
 
+	vsmbOpts := &hcsschema.VirtualSmbShareOptions{
+		ReadOnly:  true,
+		ShareRead: true,
+		NoOplocks: true,
+	}
+
+	// Construct a per-VM share directory relative to the bundle. The directory EmptyDoNotModify should be left empty.
+	sharePath := filepath.Join(opts.BundleDirectory, "EmptyDoNotModify")
+
+	// Ensure the directory exists.
+	if err := os.MkdirAll(sharePath, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to create VSMB default empty share directory %q: %w", sharePath, err)
+	}
+
+	if err := wclayer.GrantVmAccess(ctx, uvm.id, sharePath); err != nil {
+		return nil, errors.Wrap(err, "failed to grant vm access to VSMB default empty share directory")
+	}
+
+	doc.VirtualMachine.Devices.VirtualSmb.Shares = []hcsschema.VirtualSmbShare{{
+		Name:    "defaultEmptyShare",
+		Path:    sharePath,
+		Options: vsmbOpts,
+	}}
+
 	return doc, nil
 }
 
