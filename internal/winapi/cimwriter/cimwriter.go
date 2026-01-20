@@ -3,6 +3,8 @@
 package cimwriter
 
 import (
+	"sync"
+
 	"github.com/Microsoft/hcsshim/internal/winapi/types"
 )
 
@@ -29,7 +31,11 @@ type ImagePath = types.CimFsImagePath
 //sys CimCreateMergeLink(cimFSHandle FsHandle, newPath string, oldPath string) (hr error) = cimwriter.CimCreateMergeLink?
 //sys CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) = cimwriter.CimSealImage?
 
-// CimWriterSupported checks if cimwriter.dll is present on the system.
-func CimWriterSupported() bool {
-	return modcimwriter.Load() == nil
+var load = sync.OnceValue(func() error {
+	return modcimwriter.Load()
+})
+
+// Supported checks if cimwriter.dll is present on the system.
+func Supported() bool {
+	return load() == nil
 }

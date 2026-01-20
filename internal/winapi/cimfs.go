@@ -10,7 +10,13 @@ import (
 	"github.com/Microsoft/hcsshim/internal/winapi/types"
 )
 
-type g = guid.GUID
+// pickSupported makes sure we use appropriate syscalls depending on which DLLs are present.
+func pickSupported[F any](cimWriterFunc, cimfsFunc F) F {
+	if cimwriter.Supported() {
+		return cimWriterFunc
+	}
+	return cimfsFunc
+}
 
 func CimMountImage(imagePath string, fsName string, flags uint32, volumeID *guid.GUID) error {
 	return cimfs.CimMountImage(imagePath, fsName, flags, volumeID)
@@ -21,87 +27,87 @@ func CimDismountImage(volumeID *guid.GUID) error {
 }
 
 func CimCreateImage(imagePath string, oldFSName *uint16, newFSName *uint16, cimFSHandle *types.FsHandle) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCreateImage(imagePath, oldFSName, newFSName, cimFSHandle)
-	}
-	return cimfs.CimCreateImage(imagePath, oldFSName, newFSName, cimFSHandle)
+	return pickSupported(
+		cimwriter.CimCreateImage,
+		cimfs.CimCreateImage,
+	)(imagePath, oldFSName, newFSName, cimFSHandle)
 }
 
 func CimCreateImage2(imagePath string, flags uint32, oldFSName *uint16, newFSName *uint16, cimFSHandle *types.FsHandle) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCreateImage2(imagePath, flags, oldFSName, newFSName, cimFSHandle)
-	}
-	return cimfs.CimCreateImage2(imagePath, flags, oldFSName, newFSName, cimFSHandle)
+	return pickSupported(
+		cimwriter.CimCreateImage2,
+		cimfs.CimCreateImage2,
+	)(imagePath, flags, oldFSName, newFSName, cimFSHandle)
 }
 
 func CimCloseImage(cimFSHandle types.FsHandle) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCloseImage(cimFSHandle)
-	}
-	return cimfs.CimCloseImage(cimFSHandle)
+	return pickSupported(
+		cimwriter.CimCloseImage,
+		cimfs.CimCloseImage,
+	)(cimFSHandle)
 }
 
 func CimCommitImage(cimFSHandle types.FsHandle) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCommitImage(cimFSHandle)
-	}
-	return cimfs.CimCommitImage(cimFSHandle)
+	return pickSupported(
+		cimwriter.CimCommitImage,
+		cimfs.CimCommitImage,
+	)(cimFSHandle)
 }
 
 func CimCreateFile(cimFSHandle types.FsHandle, path string, file *types.CimFsFileMetadata, cimStreamHandle *types.StreamHandle) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCreateFile(cimFSHandle, path, file, cimStreamHandle)
-	}
-	return cimfs.CimCreateFile(cimFSHandle, path, file, cimStreamHandle)
+	return pickSupported(
+		cimwriter.CimCreateFile,
+		cimfs.CimCreateFile,
+	)(cimFSHandle, path, file, cimStreamHandle)
 }
 
 func CimCloseStream(cimStreamHandle types.StreamHandle) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCloseStream(cimStreamHandle)
-	}
-	return cimfs.CimCloseStream(cimStreamHandle)
+	return pickSupported(
+		cimwriter.CimCloseStream,
+		cimfs.CimCloseStream,
+	)(cimStreamHandle)
 }
 
 func CimWriteStream(cimStreamHandle types.StreamHandle, buffer uintptr, bufferSize uint32) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimWriteStream(cimStreamHandle, buffer, bufferSize)
-	}
-	return cimfs.CimWriteStream(cimStreamHandle, buffer, bufferSize)
+	return pickSupported(
+		cimwriter.CimWriteStream,
+		cimfs.CimWriteStream,
+	)(cimStreamHandle, buffer, bufferSize)
 }
 
 func CimDeletePath(cimFSHandle types.FsHandle, path string) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimDeletePath(cimFSHandle, path)
-	}
-	return cimfs.CimDeletePath(cimFSHandle, path)
+	return pickSupported(
+		cimwriter.CimDeletePath,
+		cimfs.CimDeletePath,
+	)(cimFSHandle, path)
 }
 
 func CimCreateHardLink(cimFSHandle types.FsHandle, newPath string, oldPath string) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCreateHardLink(cimFSHandle, newPath, oldPath)
-	}
-	return cimfs.CimCreateHardLink(cimFSHandle, newPath, oldPath)
+	return pickSupported(
+		cimwriter.CimCreateHardLink,
+		cimfs.CimCreateHardLink,
+	)(cimFSHandle, newPath, oldPath)
 }
 
 func CimCreateAlternateStream(cimFSHandle types.FsHandle, path string, size uint64, cimStreamHandle *types.StreamHandle) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCreateAlternateStream(cimFSHandle, path, size, cimStreamHandle)
-	}
-	return cimfs.CimCreateAlternateStream(cimFSHandle, path, size, cimStreamHandle)
+	return pickSupported(
+		cimwriter.CimCreateAlternateStream,
+		cimfs.CimCreateAlternateStream,
+	)(cimFSHandle, path, size, cimStreamHandle)
 }
 
 func CimAddFsToMergedImage(cimFSHandle types.FsHandle, path string) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimAddFsToMergedImage(cimFSHandle, path)
-	}
-	return cimfs.CimAddFsToMergedImage(cimFSHandle, path)
+	return pickSupported(
+		cimwriter.CimAddFsToMergedImage,
+		cimfs.CimAddFsToMergedImage,
+	)(cimFSHandle, path)
 }
 
 func CimAddFsToMergedImage2(cimFSHandle types.FsHandle, path string, flags uint32) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimAddFsToMergedImage2(cimFSHandle, path, flags)
-	}
-	return cimfs.CimAddFsToMergedImage2(cimFSHandle, path, flags)
+	return pickSupported(
+		cimwriter.CimAddFsToMergedImage2,
+		cimfs.CimAddFsToMergedImage2,
+	)(cimFSHandle, path, flags)
 }
 
 func CimMergeMountImage(numCimPaths uint32, backingImagePaths *types.CimFsImagePath, flags uint32, volumeID *guid.GUID) error {
@@ -109,24 +115,24 @@ func CimMergeMountImage(numCimPaths uint32, backingImagePaths *types.CimFsImageP
 }
 
 func CimTombstoneFile(cimFSHandle types.FsHandle, path string) error {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimTombstoneFile(cimFSHandle, path)
-	}
-	return cimfs.CimTombstoneFile(cimFSHandle, path)
+	return pickSupported(
+		cimwriter.CimTombstoneFile,
+		cimfs.CimTombstoneFile,
+	)(cimFSHandle, path)
 }
 
 func CimCreateMergeLink(cimFSHandle types.FsHandle, newPath string, oldPath string) (hr error) {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimCreateMergeLink(cimFSHandle, newPath, oldPath)
-	}
-	return cimfs.CimCreateMergeLink(cimFSHandle, newPath, oldPath)
+	return pickSupported(
+		cimwriter.CimCreateMergeLink,
+		cimfs.CimCreateMergeLink,
+	)(cimFSHandle, newPath, oldPath)
 }
 
 func CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) {
-	if cimwriter.CimWriterSupported() {
-		return cimwriter.CimSealImage(blockCimPath, hashSize, fixedHeaderSize, hash)
-	}
-	return cimfs.CimSealImage(blockCimPath, hashSize, fixedHeaderSize, hash)
+	return pickSupported(
+		cimwriter.CimSealImage,
+		cimfs.CimSealImage,
+	)(blockCimPath, hashSize, fixedHeaderSize, hash)
 }
 
 func CimGetVerificationInformation(blockCimPath string, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) {
