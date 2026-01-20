@@ -29,7 +29,7 @@ type ImagePath = types.CimFsImagePath
 //sys CimCreateMergeLink(cimFSHandle FsHandle, newPath string, oldPath string) (hr error) = cimwriter.CimCreateMergeLink?
 //sys CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) = cimwriter.CimSealImage?
 
-// CimWriterSupported checks if cimwriter.dll is present on the system.
-func CimWriterSupported() bool {
+// Supported checks if cimwriter.dll is present on the system.
+func Supported() bool {
 	return modcimwriter.Load() == nil
 }

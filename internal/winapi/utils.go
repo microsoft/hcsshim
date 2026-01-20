@@ -86,5 +86,5 @@ func ParseUtf16LE(b []byte) string {
 
 // CimFsSupported checks if CIM FS dll is present on the system.
 func CimFsSupported() bool {
-	return cimfs.CimFsSupported()
+	return cimfs.Supported()
 }
