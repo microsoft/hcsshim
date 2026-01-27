@@ -15,11 +15,6 @@ var (
 	ErrUnknownGuestOS     = errors.New("unknown guest operating system supplied")
 )
 
-const (
-	HCS      = "hcs"
-	RemoteVM = "remotevm"
-)
-
 // UVM is an abstraction around a lightweight virtual machine. It houses core lifecycle methods such as Create
 // Start, and Stop and also several optional nested interfaces that can be used to determine what the virtual machine
 // supports and to configure these resources.
