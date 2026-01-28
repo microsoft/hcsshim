@@ -14,7 +14,7 @@ const (
 	MCRWindowsImageRepo = "mcr.microsoft.com/windows"
 
 	ImageLinuxAlpineLatest = "docker.io/library/alpine:latest"
-	ImageLinuxPause31      = "k8s.gcr.io/pause:3.1"
+	ImageLinuxPause31      = "registry.k8s.io/pause:3.1"
 	ImageMCRLinuxPause     = "mcr.microsoft.com/oss/kubernetes/pause:3.1"
 )
 

@@ -543,8 +543,8 @@ jobs:
         working-directory: src/github.com/containerd/containerd
         env:
           TEST_IMAGE_LIST: ${{github.workspace}}/repolist.toml
-          BUSYBOX_TESTING_IMAGE_REF: "k8s.gcr.io/e2e-test-images/busybox:1.29-2"
-          RESOURCE_CONSUMER_TESTING_IMAGE_REF: "k8s.gcr.io/e2e-test-images/resource-consumer:1.10"
+          BUSYBOX_TESTING_IMAGE_REF: "registry.k8s.io/e2e-test-images/busybox:1.29-2"
+          RESOURCE_CONSUMER_TESTING_IMAGE_REF: "registry.k8s.io/e2e-test-images/resource-consumer:1.10"
           CGO_ENABLED: 1
         run: |
           cat > "${{ env.TEST_IMAGE_LIST }}" << EOF
