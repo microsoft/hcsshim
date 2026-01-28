@@ -7,7 +7,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"context"
-	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -98,7 +98,7 @@ func WithParentLayers(parentLayers []*cimfs.BlockCIM) BlockCIMLayerImportOpt {
 
 func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string) error {
 	log.G(ctx).Debugf("writing integrity checksum file for block CIM `%s`", blockPath)
-	// for convenience write a file that has the base64 encoded root digest of the generated verified CIM.
+	// for convenience write a file that has the hex encoded root digest of the generated verified CIM.
 	// this same base64 string can be used in the confidential policy.
 	digest, err := cimfs.GetVerificationInfo(blockPath)
 	if err != nil {
@@ -111,7 +111,7 @@ func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string) error
 	}
 	defer digestFile.Close()
 
-	digestStr := base64.URLEncoding.EncodeToString(digest)
+	digestStr := hex.EncodeToString(digest)
 	if wn, err := digestFile.WriteString(digestStr); err != nil {
 		return fmt.Errorf("failed to write verification info: %w", err)
 	} else if wn != len(digestStr) {

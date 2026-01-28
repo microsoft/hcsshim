@@ -578,20 +578,40 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				containerID := wcowBlockCimMounts.ContainerID
 				log.G(ctx).Tracef("WCOWBlockCIMMounts Add { %v}", wcowBlockCimMounts)
 
-				// The block device takes some time to show up. Wait for a few seconds.
-				time.Sleep(2 * time.Second)
-
 				var layerCIMs []*cimfs.BlockCIM
 				layerHashes := make([]string, len(wcowBlockCimMounts.BlockCIMs))
 				layerDigests := make([][]byte, len(wcowBlockCimMounts.BlockCIMs))
 				for i, blockCimDevice := range wcowBlockCimMounts.BlockCIMs {
 					// Get the scsi device path for the blockCim lun
-					devNumber, err := windevice.GetDeviceNumberFromControllerLUN(
-						req.ctx,
-						0, /* controller is always 0 for wcow */
-						uint8(blockCimDevice.Lun))
-					if err != nil {
-						return fmt.Errorf("err getting scsiDevPath: %w", err)
+					// The block device takes some time to show up. Retry for up to 2 seconds.
+					var devNumber uint32
+					waitStartTime := time.Now()
+					logTime := waitStartTime.Add(time.Second)
+					logged := false
+					for {
+						devNumber, err = windevice.GetDeviceNumberFromControllerLUN(
+							req.ctx,
+							0, /* controller is always 0 for wcow */
+							uint8(blockCimDevice.Lun))
+						if err == nil {
+							break
+						}
+
+						// Check if we've exceeded max wait time
+						if time.Since(waitStartTime) >= 2*time.Second {
+							return fmt.Errorf("err getting scsiDevPath after 2s: %w", err)
+						}
+
+						// Log if taking longer than expected
+						if !logged && logTime.Before(time.Now()) {
+							log.G(ctx).WithFields(map[string]interface{}{
+								"lun":     blockCimDevice.Lun,
+								"elapsed": time.Since(waitStartTime),
+							}).Warn("waiting for block CIM device to show up")
+							logged = true
+						}
+
+						time.Sleep(10 * time.Millisecond)
 					}
 					physicalDevPath := fmt.Sprintf(devPathFormat, devNumber)
 					layerCim := cimfs.BlockCIM{
