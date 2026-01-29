@@ -99,7 +99,7 @@ func WithParentLayers(parentLayers []*cimfs.BlockCIM) BlockCIMLayerImportOpt {
 func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string) error {
 	log.G(ctx).Debugf("writing integrity checksum file for block CIM `%s`", blockPath)
 	// for convenience write a file that has the hex encoded root digest of the generated verified CIM.
-	// this same base64 string can be used in the confidential policy.
+	// this same hex string can be used in the confidential policy.
 	digest, err := cimfs.GetVerificationInfo(blockPath)
 	if err != nil {
 		return fmt.Errorf("failed to query verified info of the CIM layer: %w", err)

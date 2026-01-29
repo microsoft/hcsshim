@@ -4,7 +4,7 @@
 package bridge
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -624,7 +624,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 						return fmt.Errorf("failed to get CIM verification info: %w", err)
 					}
 					layerDigests[i] = cimRootDigestBytes
-					layerHashes[i] = base64.URLEncoding.EncodeToString(cimRootDigestBytes)
+					layerHashes[i] = hex.EncodeToString(cimRootDigestBytes)
 					layerCIMs = append(layerCIMs, &layerCim)
 
 					log.G(ctx).Debugf("block CIM layer digest %s, path: %s\n", layerHashes[i], physicalDevPath)
