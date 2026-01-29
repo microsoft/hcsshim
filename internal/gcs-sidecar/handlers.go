@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"regexp"
-
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	"github.com/Microsoft/hcsshim/internal/fsformatter"
@@ -36,8 +36,6 @@ const (
 	devPathFormat       = "\\\\.\\PHYSICALDRIVE%d"
 	UVMContainerID      = "00000000-0000-0000-0000-000000000000"
 )
-
-var volumeGUIDRe = regexp.MustCompile(`^\\\\\?\\Volume\{([0-9A-Fa-f\-]+)\}\\Files$`)
 
 // - Handler functions handle the incoming message requests. It
 // also enforces security policy for confidential cwcow containers.
@@ -493,12 +491,13 @@ func (b *Bridge) lifecycleNotification(req *request) (err error) {
 	return nil
 }
 
-func volumeGUIDFromLayerPath(p string) (string, bool) {
-	m := volumeGUIDRe.FindStringSubmatch(p)
-	if len(m) != 2 {
-		return "", false
+func volumeGUIDFromLayerPath(path string) (string, bool) {
+	if p, ok := strings.CutPrefix(path, `\\?\Volume{`); ok {
+		if q, ok := strings.CutSuffix(p, `}\Files`); ok {
+			return q, true
+		}
 	}
-	return m[1], true
+	return "", false
 }
 
 func (b *Bridge) modifySettings(req *request) (err error) {
@@ -634,7 +633,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				}
 
 				// Volume GUID from request
-				volGUID := wcowBlockCimMounts.VolumeGUID.String()
+				volGUID := wcowBlockCimMounts.VolumeGUID
 
 				// Cache hashes along with volGUID
 				b.hostState.blockCIMVolumeHashes[volGUID] = hashesToVerify
@@ -749,13 +748,18 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				if !ok {
 					return fmt.Errorf("invalid volumeGUID %s", containerID)
 				}
-				hashes, haveHashes := b.hostState.blockCIMVolumeHashes[guidStr]
+				volGUID, err := guid.FromString(guidStr)
+				if err != nil {
+					return fmt.Errorf("failed to parse volume GUID %s: %w", guidStr, err)
+				}
+				hashes, haveHashes := b.hostState.blockCIMVolumeHashes[volGUID]
 				if haveHashes {
 					// Only do this if the ContainerID is not already seen for this volume
-					containers := b.hostState.blockCIMVolumeContainers[guidStr]
+					containers := b.hostState.blockCIMVolumeContainers[volGUID]
 					if _, seen := containers[containerID]; !seen {
-						// This is container with similar layers as an existing container, hence already mounted. Call EnforceVerifiedCIMsPolicy on this new container
-						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", guidStr, containerID)
+						// This is a container with similar layers as an existing container, hence already mounted.
+						// Call EnforceVerifiedCIMsPolicy on this new container.
+						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
 						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashes); err != nil {
 							return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
 						}
