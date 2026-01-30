@@ -581,7 +581,16 @@ func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint, policyBasedR
 		req.Routes = append(req.Routes, newRoute)
 	}
 
-	req.DNSSuffix = endpoint.Dns.Domain
+	// !NOTE:
+	// the `DNSSuffix` field is explicitly used as the search list for host-name lookup in
+	// the guest's `resolv.conf`, and not as the DNS suffix.
+	// The name is a legacy hold over.
+
+	// get the non-empty DNS search names, using the domain as the first (default) value
+	searches := slices.DeleteFunc(
+		append([]string{endpoint.Dns.Domain}, endpoint.Dns.Search...),
+		func(s string) bool { return s == "" })
+	req.DNSSuffix = strings.Join(searches, ",")
 	req.DNSServerList = strings.Join(endpoint.Dns.ServerList, ",")
 
 	for _, p := range endpoint.Policies {

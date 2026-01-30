@@ -227,6 +227,7 @@ github.com/golang/protobuf/protoc-gen-go/descriptor
 # github.com/google/go-cmp v0.7.0
 ## explicit; go 1.21
 github.com/google/go-cmp/cmp
+github.com/google/go-cmp/cmp/cmpopts
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
@@ -500,6 +501,13 @@ github.com/rcrowley/go-metrics
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
+# github.com/samber/lo v1.52.0
+## explicit; go 1.18
+github.com/samber/lo
+github.com/samber/lo/internal/constraints
+github.com/samber/lo/internal/xrand
+github.com/samber/lo/internal/xtime
+github.com/samber/lo/mutable
 # github.com/seccomp/libseccomp-golang v0.10.0
 ## explicit; go 1.14
 github.com/seccomp/libseccomp-golang
@@ -639,6 +647,12 @@ golang.org/x/sys/windows/svc/debug
 golang.org/x/sys/windows/svc/mgr
 # golang.org/x/text v0.28.0
 ## explicit; go 1.23.0
+golang.org/x/text/cases
+golang.org/x/text/internal
+golang.org/x/text/internal/language
+golang.org/x/text/internal/language/compact
+golang.org/x/text/internal/tag
+golang.org/x/text/language
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi

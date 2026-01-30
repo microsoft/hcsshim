@@ -6,11 +6,13 @@ package hcsv2
 import (
 	"context"
 	"fmt"
+	"iter"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/vishvananda/netns"
 	"go.opencensus.io/trace"
 
@@ -129,19 +131,6 @@ func (n *namespace) AssignContainerPid(ctx context.Context, pid int) (err error)
 	return nil
 }
 
-// Adapters returns a copy of the adapters assigned to `n` at the time of the
-// call.
-func (n *namespace) Adapters() []*guestresource.LCOWNetworkAdapter {
-	n.m.Lock()
-	defer n.m.Unlock()
-
-	adps := make([]*guestresource.LCOWNetworkAdapter, len(n.nics))
-	for i, nin := range n.nics {
-		adps[i] = nin.adapter
-	}
-	return adps
-}
-
 // AddAdapter adds `adp` to `n` but does NOT move the adapter into the network
 // namespace assigned to `n`. A user must call `Sync()` to complete this
 // operation.
@@ -189,6 +178,7 @@ func (n *namespace) RemoveAdapter(ctx context.Context, id string) (err error) {
 	defer n.m.Unlock()
 
 	// TODO: do we need to remove anything guestside from a sandbox namespace?
+	// TODO: use [slices.DeleteFunc], since we can delete in place
 
 	i := -1
 	for j, nic := range n.nics {
@@ -225,6 +215,41 @@ func (n *namespace) Sync(ctx context.Context) (err error) {
 		}
 	}
 	return nil
+}
+
+func (n *namespace) dnsConfig(_ context.Context) (searches []string, servers []string) {
+	for _, nic := range n.allNICs() {
+		if len(nic.DNSSuffix) > 0 {
+			searches = append(searches, strings.Split(nic.DNSSuffix, ",")...)
+		}
+		if len(nic.DNSServerList) > 0 {
+			servers = append(servers, strings.Split(nic.DNSServerList, ",")...)
+		}
+	}
+
+	// TODO: parse values as [net/netip.Addr] to avoid duplicates in server list due to IP formatting
+	cancoc := func(s string, _ int) string {
+		// trim in case a space is added between values when joining (e.g., "a.b, a.b")
+		// zone identifiers in IPv6 addresses really, really shouldn't be case sensitive, but ... *shrug*
+		return strings.ToLower(strings.TrimSpace(s))
+	}
+
+	return lo.UniqMap(searches, cancoc), lo.UniqMap(servers, cancoc)
+}
+
+// allNICs iterates over NICs in the namespace.
+//
+// NOTE: the namespace's mutex, n.m, is held during iteration.
+func (n *namespace) allNICs() iter.Seq2[int, *guestresource.LCOWNetworkAdapter] {
+	return func(yield func(int, *guestresource.LCOWNetworkAdapter) bool) {
+		n.m.Lock()
+		defer n.m.Unlock()
+		for i, nic := range n.nics {
+			if !yield(i, nic.adapter) {
+				return
+			}
+		}
+	}
 }
 
 // nicInNamespace represents a single network adapter that has been added to the
