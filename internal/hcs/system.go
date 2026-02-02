@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -206,7 +207,7 @@ func (computeSystem *System) Start(ctx context.Context) (err error) {
 
 	// prevent starting an exited system because waitblock we do not recreate waitBlock
 	// or rerun waitBackground, so we have no way to be notified of it closing again
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -232,7 +233,7 @@ func (computeSystem *System) Shutdown(ctx context.Context) error {
 
 	operation := "hcs::System::Shutdown"
 
-	if computeSystem.handle == 0 || computeSystem.stopped() {
+	if winapi.IsInvalidHandle(computeSystem.handle) || computeSystem.stopped() {
 		return nil
 	}
 
@@ -254,7 +255,7 @@ func (computeSystem *System) Terminate(ctx context.Context) error {
 
 	operation := "hcs::System::Terminate"
 
-	if computeSystem.handle == 0 || computeSystem.stopped() {
+	if winapi.IsInvalidHandle(computeSystem.handle) || computeSystem.stopped() {
 		return nil
 	}
 
@@ -351,7 +352,7 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 
 	operation := "hcs::System::Properties"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -492,7 +493,7 @@ func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcssch
 func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []hcsschema.PropertyType) (*hcsschema.Properties, error) {
 	operation := "hcs::System::PropertiesV2"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -586,7 +587,7 @@ func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -614,7 +615,7 @@ func (computeSystem *System) Resume(ctx context.Context) (err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -647,7 +648,7 @@ func (computeSystem *System) Save(ctx context.Context, options interface{}) (err
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -665,7 +666,7 @@ func (computeSystem *System) createProcess(ctx context.Context, operation string
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -727,7 +728,7 @@ func (computeSystem *System) OpenProcess(ctx context.Context, pid int) (*Process
 
 	operation := "hcs::System::OpenProcess"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -766,7 +767,7 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 	defer computeSystem.handleLock.Unlock()
 
 	// Don't double free this
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil
 	}
 
@@ -789,14 +790,19 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 }
 
 func (computeSystem *System) registerCallback(ctx context.Context) error {
+	callbackNumber := nextCallback.Inc()
+
+	log.G(ctx).WithFields(logrus.Fields{
+		"cid":            computeSystem.id,
+		"callbackNumber": callbackNumber,
+	}).Debug("register computer system callback")
+
 	callbackContext := &notificationWatcherContext{
 		channels: newSystemChannels(),
 		systemID: computeSystem.id,
 	}
 
 	callbackMapLock.Lock()
-	callbackNumber := nextCallback
-	nextCallback++
 	callbackMap[callbackNumber] = callbackContext
 	callbackMapLock.Unlock()
 
@@ -814,6 +820,11 @@ func (computeSystem *System) registerCallback(ctx context.Context) error {
 func (computeSystem *System) unregisterCallback(ctx context.Context) error {
 	callbackNumber := computeSystem.callbackNumber
 
+	log.G(ctx).WithFields(logrus.Fields{
+		"cid":            computeSystem.id,
+		"callbackNumber": callbackNumber,
+	}).Debug("unregister computer system callback")
+
 	callbackMapLock.RLock()
 	callbackContext := callbackMap[callbackNumber]
 	callbackMapLock.RUnlock()
@@ -824,7 +835,7 @@ func (computeSystem *System) unregisterCallback(ctx context.Context) error {
 
 	handle := callbackContext.handle
 
-	if handle == 0 {
+	if winapi.IsInvalidHandle(handle) {
 		return nil
 	}
 
@@ -853,7 +864,7 @@ func (computeSystem *System) Modify(ctx context.Context, config interface{}) err
 
 	operation := "hcs::System::Modify"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 

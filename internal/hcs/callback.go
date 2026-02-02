@@ -18,7 +18,23 @@ import (
 )
 
 var (
-	nextCallback    uintptr
+	// TODO: refactor callback number to be a uint and not a uintptr
+
+	nextCallback callbackCounter
+
+	// `callbackMapLock` is used to protect the map itself, and not the values in the map.
+	// This causes a race condition with `(*notificationWatcherContext).handle`,
+	// where, if a computeSystem or process is closed immediately after it is opened, then
+	// the handle may not be updated with the result from
+	// `vmcompute.HcsRegister[ComputeSystem|Process]Callback` in `registerCallback` when
+	// `unregisterCallback` is called.
+	// Similarly with `(*notificationWatcherContext).channels`, if a `unregisterCallback`
+	// is called while `waitForNotification` or `notificationWatcher` are processing a notification,
+	// then the former may close the notification channels after the latter two have read
+	// (and retain a pointer to) the `notificationWatcherContext`, resulting in a send on a closed channel.
+	// TODO: use a per-context [RW]Mutex to fix the above scenarios.
+
+	// protected by [callbackMapLock].
 	callbackMap     = map[uintptr]*notificationWatcherContext{}
 	callbackMapLock = sync.RWMutex{}
 
@@ -156,7 +172,7 @@ func notificationWatcher(
 	callbackMapLock.RUnlock()
 
 	if callbackCtx == nil {
-		entry.WithField("callbackNumber", callbackNumber).Warn("Received notification for unknown callback number")
+		entry.WithField("callbackNumber", callbackNumber).Warn("received notification for unknown callback number")
 		return 0
 	}
 
