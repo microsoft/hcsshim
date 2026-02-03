@@ -775,9 +775,6 @@ int main(int argc, char** argv) {
 #endif
     init_network("lo", AF_INET);
     init_network("lo", AF_INET6);
-    if (entropy_port != 0) {
-        init_entropy(entropy_port);
-    }
 
 #ifdef MODULES
 #ifdef DEBUG
@@ -785,6 +782,10 @@ int main(int argc, char** argv) {
 #endif
     load_all_modules();
 #endif
+
+    if (entropy_port != 0) {
+        init_entropy(entropy_port);
+    }
 
     start_services();
 
