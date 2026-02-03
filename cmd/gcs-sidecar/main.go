@@ -26,6 +26,8 @@ import (
 	sidecar "github.com/Microsoft/hcsshim/internal/gcs-sidecar"
 )
 
+var vsmbKeepAliveHandle windows.Handle
+
 var (
 	defaultLogFile  = "C:\\gcs-sidecar-logs.log"
 	defaultLogLevel = "trace"
@@ -182,8 +184,13 @@ func main() {
 		}
 	}
 
-	logrus.Println("Initializing VSMB redirector..")
-	sidecar.VsmbMain()
+	logrus.Println("Initializing VSMB redirector!!!")
+	var vsmbError error
+	vsmbKeepAliveHandle, vsmbError = sidecar.VsmbMain()
+	// For now just log the error again instead of failing.
+	if (vsmbError != nil) || (vsmbKeepAliveHandle == windows.InvalidHandle) {
+		logrus.WithError(vsmbError).Errorf("VSMB redirector initialization failed.")
+	}
 
 	// 1. Start external server to connect with inbox GCS
 	listener, err := winio.ListenHvsock(&winio.HvsockAddr{

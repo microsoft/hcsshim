@@ -137,6 +137,7 @@ type ConfidentialCommonOptions struct {
 	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
 	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
 	UVMReferenceInfoFile   string // Path to the file that contains the signed UVM measurements
+	BundleDirectory        string // This allows paths to be constructed relative to a per-VM bundle directory.
 }
 
 func verifyWCOWBootFiles(bootFiles *WCOWBootFiles) error {

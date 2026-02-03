@@ -187,6 +187,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			}
 		case *uvm.OptionsWCOW:
 			wopts := (opts).(*uvm.OptionsWCOW)
+			wopts.BundleDirectory = req.Bundle
 			err = initializeWCOWBootFiles(ctx, wopts, req.Rootfs, s)
 			if err != nil {
 				return nil, err

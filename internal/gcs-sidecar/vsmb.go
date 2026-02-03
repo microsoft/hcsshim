@@ -27,6 +27,9 @@ const (
 	LmrInstanceFlagAllowGuestAuth         = 0x8
 	LmrInstanceFlagSupportsDirectmappedIo = 0x10
 	SmbCeTransportTypeVmbus               = 3
+
+	FileReadAttributes      = 0x00000080
+	FileFlagBackupSemantics = 0x02000000
 )
 
 type IOStatusBlock struct {
@@ -166,13 +169,13 @@ func isLanmanWorkstationRunning() (bool, error) {
 	return status.State == svc.Running, nil
 }
 
-func VsmbMain() {
+func VsmbMain() (windows.Handle, error) {
 	logrus.Info("Starting VSMB initialization...")
 
 	logrus.Debug("Configuring LanmanWorkstation service...")
 	if err := configureAndStartLanmanWorkstation(); err != nil {
 		logrus.Errorf("LanmanWorkstation setup failed: %v", err)
-		return
+		return windows.InvalidHandle, err
 	}
 
 	time.Sleep(3 * time.Second) // TODO: This needs to be better logic.
@@ -187,13 +190,13 @@ func VsmbMain() {
 
 	if err := winio.EnableProcessPrivileges([]string{SeLoadDriverName}); err != nil {
 		logrus.Errorf("Failed to enable privilege: %v", err)
-		return
+		return windows.InvalidHandle, err
 	}
 	// Open LanmanRedirector
 	namePtr, nerr := windows.UTF16PtrFromString(GlobalRdrDeviceName)
 	if nerr != nil {
 		logrus.WithError(nerr).Errorf("invalid device name %q", GlobalRdrDeviceName)
-		return
+		return windows.InvalidHandle, nerr
 	}
 
 	lmrHandle, err := windows.CreateFile(
@@ -207,7 +210,7 @@ func VsmbMain() {
 	)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to open redirector")
-		return
+		return windows.InvalidHandle, err
 	}
 	defer func() {
 		if derr := windows.CloseHandle(lmrHandle); derr != nil {
@@ -221,7 +224,7 @@ func VsmbMain() {
 	instanceNameUTF16, nerr := windows.UTF16FromString(GlobalVsmbInstanceName)
 	if nerr != nil {
 		logrus.WithError(nerr).Errorf("invalid instance name %q", GlobalVsmbInstanceName)
-		return
+		return windows.InvalidHandle, nerr
 	}
 	structSize := int(unsafe.Sizeof(LMRStartInstanceRequest{}))
 	bufferSize := structSize + (len(instanceNameUTF16)-1)*2
@@ -276,7 +279,7 @@ func VsmbMain() {
 	namePtr, nerr = windows.UTF16PtrFromString(GlobalVsmbDeviceName)
 	if nerr != nil {
 		logrus.WithError(nerr).Errorf("invalid device name %q", GlobalVsmbDeviceName)
-		return
+		return windows.InvalidHandle, nerr
 	}
 	vmsmbHandle, err := windows.CreateFile(
 		namePtr,
@@ -286,7 +289,7 @@ func VsmbMain() {
 	)
 	if err != nil {
 		logrus.Errorf("Failed to open VMSMB device: %v", err)
-		return
+		return windows.InvalidHandle, err
 	}
 	defer func() {
 		if derr := windows.CloseHandle(vmsmbHandle); derr != nil {
@@ -297,7 +300,7 @@ func VsmbMain() {
 	transportNameUTF16, nerr := windows.UTF16FromString(GlobalVsmbTransportName)
 	if nerr != nil {
 		logrus.WithError(nerr).Errorf("invalid instance name %q", GlobalVsmbTransportName)
-		return
+		return windows.InvalidHandle, nerr
 	}
 
 	bindStructSize := int(unsafe.Sizeof(LMRBindUnbindTransportRequest{}))
@@ -329,4 +332,31 @@ func VsmbMain() {
 	} else {
 		logrus.Errorf("NtFsControlFile failed: 0x%08X", status)
 	}
+
+	const (
+		device = `\\?\GLOBALROOT\Device\vmsmb\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\defaultEmptyShare`
+	)
+
+	devicePtr, nerr := windows.UTF16PtrFromString(device)
+	if nerr != nil {
+		logrus.WithError(nerr).Errorf("invalid device name %q", device)
+		return windows.InvalidHandle, nerr
+	}
+	vsmbHandle, err := windows.CreateFile(
+		devicePtr,
+		FileReadAttributes,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		FileFlagBackupSemantics,
+		0,
+	)
+
+	if err != nil {
+		logrus.WithError(err).Errorf("Failed to open %s", device)
+		return windows.InvalidHandle, err
+	}
+
+	logrus.Infof("VSMB connection will be alive...")
+	return vsmbHandle, nil
 }
