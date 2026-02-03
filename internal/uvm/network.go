@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -586,12 +587,22 @@ func convertToLCOWReq(id string, endpoint *hcn.HostComputeEndpoint, policyBasedR
 	// the guest's `resolv.conf`, and not as the DNS suffix.
 	// The name is a legacy hold over.
 
-	// get the non-empty DNS search names, using the domain as the first (default) value
-	searches := slices.DeleteFunc(
-		append([]string{endpoint.Dns.Domain}, endpoint.Dns.Search...),
-		func(s string) bool { return s == "" })
+	// use DNS domain as the first (default) search value, if it is provided
+	searches := endpoint.Dns.Search
+	if endpoint.Dns.Domain != "" {
+		searches = append([]string{endpoint.Dns.Domain}, searches...)
+	}
+
+	// canonicalize the DNS config
+	canon := func(s string, _ int) string {
+		// zone identifiers in IPv6 addresses really, really shouldn't be case sensitive, but ... *shrug*
+		return strings.ToLower(s)
+	}
+	servers := lo.Map(endpoint.Dns.ServerList, canon)
+	searches = lo.Map(searches, canon)
+
 	req.DNSSuffix = strings.Join(searches, ",")
-	req.DNSServerList = strings.Join(endpoint.Dns.ServerList, ",")
+	req.DNSServerList = strings.Join(servers, ",")
 
 	for _, p := range endpoint.Policies {
 		if p.Type == hcn.EncapOverhead {

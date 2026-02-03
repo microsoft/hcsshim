@@ -228,24 +228,25 @@ func (n *namespace) dnsConfig(_ context.Context) (searches []string, servers []s
 	}
 
 	// TODO: parse values as [net/netip.Addr] to avoid duplicates in server list due to IP formatting
-	cancoc := func(s string, _ int) string {
+	canon := func(s string, _ int) string {
 		// trim in case a space is added between values when joining (e.g., "a.b, a.b")
 		// zone identifiers in IPv6 addresses really, really shouldn't be case sensitive, but ... *shrug*
 		return strings.ToLower(strings.TrimSpace(s))
 	}
 
-	return lo.UniqMap(searches, cancoc), lo.UniqMap(servers, cancoc)
+	// canonicalize the DNS config, then return the unique values
+	return lo.UniqMap(searches, canon), lo.UniqMap(servers, canon)
 }
 
 // allNICs iterates over NICs in the namespace.
 //
 // NOTE: the namespace's mutex, n.m, is held during iteration.
 func (n *namespace) allNICs() iter.Seq2[int, *guestresource.LCOWNetworkAdapter] {
-	return func(yield func(int, *guestresource.LCOWNetworkAdapter) bool) {
+	return func(f func(int, *guestresource.LCOWNetworkAdapter) bool) {
 		n.m.Lock()
 		defer n.m.Unlock()
 		for i, nic := range n.nics {
-			if !yield(i, nic.adapter) {
+			if !f(i, nic.adapter) {
 				return
 			}
 		}
