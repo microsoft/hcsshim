@@ -8,6 +8,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -21,6 +22,11 @@ type Host struct {
 	securityOptions *securitypolicy.SecurityOptions
 	containersMutex sync.Mutex
 	containers      map[string]*Container
+
+	// mapping of volumeGUID to container layer hashes
+	blockCIMVolumeHashes map[guid.GUID][]string
+	// mapping of volumeGUID to container IDs
+	blockCIMVolumeContainers map[guid.GUID]map[string]struct{}
 }
 
 type Container struct {
@@ -49,8 +55,10 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 		logWriter,
 	)
 	return &Host{
-		containers:      make(map[string]*Container),
-		securityOptions: securityPolicyOptions,
+		containers:               make(map[string]*Container),
+		blockCIMVolumeHashes:     make(map[guid.GUID][]string),
+		blockCIMVolumeContainers: make(map[guid.GUID]map[string]struct{}),
+		securityOptions:          securityPolicyOptions,
 	}
 }
 

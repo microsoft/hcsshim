@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	"github.com/Microsoft/hcsshim/internal/fsformatter"
@@ -489,6 +491,15 @@ func (b *Bridge) lifecycleNotification(req *request) (err error) {
 	return nil
 }
 
+func volumeGUIDFromLayerPath(path string) (string, bool) {
+	if p, ok := strings.CutPrefix(path, `\\?\Volume{`); ok {
+		if q, ok := strings.CutSuffix(p, `}\Files`); ok {
+			return q, true
+		}
+	}
+	return "", false
+}
+
 func (b *Bridge) modifySettings(req *request) (err error) {
 	ctx, span := oc.StartSpan(req.ctx, "sidecar::modifySettings")
 	defer span.End()
@@ -621,6 +632,20 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					return errors.Wrap(err, "CIM mount is denied by policy")
 				}
 
+				// Volume GUID from request
+				volGUID := wcowBlockCimMounts.VolumeGUID
+
+				// Cache hashes along with volGUID
+				b.hostState.blockCIMVolumeHashes[volGUID] = hashesToVerify
+
+				// Store the containerID (associated with volGUID) to mark that hashes are verified for this container
+				if _, ok := b.hostState.blockCIMVolumeContainers[volGUID]; !ok {
+					b.hostState.blockCIMVolumeContainers[volGUID] = make(map[string]struct{})
+				}
+				b.hostState.blockCIMVolumeContainers[volGUID][containerID] = struct{}{}
+
+				log.G(ctx).Tracef("Cached %d verified CIM layer hashes for volume %s (container %s)", len(hashesToVerify), volGUID, containerID)
+
 				if len(layerCIMs) > 1 {
 					_, err = cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
 					if err != nil {
@@ -713,6 +738,34 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				containerID := settings.ContainerID
 				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
 					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
+
+				// The layers size is only one, as this is the volume path
+				if len(settings.CombinedLayers.Layers) != 1 {
+					return fmt.Errorf("expected exactly one layer in CWCOWCombinedLayers, got %d", len(settings.CombinedLayers.Layers))
+				}
+				layerPath := settings.CombinedLayers.Layers[0].Path
+				guidStr, ok := volumeGUIDFromLayerPath(layerPath)
+				if !ok {
+					return fmt.Errorf("invalid volumeGUID %s", containerID)
+				}
+				volGUID, err := guid.FromString(guidStr)
+				if err != nil {
+					return fmt.Errorf("failed to parse volume GUID %s: %w", guidStr, err)
+				}
+				hashes, haveHashes := b.hostState.blockCIMVolumeHashes[volGUID]
+				if haveHashes {
+					// Only do this if the ContainerID is not already seen for this volume
+					containers := b.hostState.blockCIMVolumeContainers[volGUID]
+					if _, seen := containers[containerID]; !seen {
+						// This is a container with similar layers as an existing container, hence already mounted.
+						// Call EnforceVerifiedCIMsPolicy on this new container.
+						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
+						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashes); err != nil {
+							return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
+						}
+						containers[containerID] = struct{}{}
+					}
+				}
 
 				//Since unencrypted scratch is not an option, always pass true
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
