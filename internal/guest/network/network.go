@@ -85,31 +85,6 @@ func GenerateResolvConfContent(ctx context.Context, searches, servers, options [
 	return content, nil
 }
 
-// MergeValues merges `first` and `second` maintaining order `first, second`.
-func MergeValues(first, second []string) []string {
-	if len(first) == 0 {
-		return second
-	}
-	if len(second) == 0 {
-		return first
-	}
-	values := make([]string, len(first), len(first)+len(second))
-	copy(values, first)
-	for _, v := range second {
-		found := false
-		for i := 0; i < len(values); i++ {
-			if v == values[i] {
-				found = true
-				break
-			}
-		}
-		if !found {
-			values = append(values, v)
-		}
-	}
-	return values
-}
-
 // InstanceIDToName converts from the given instance ID (a GUID generated on the
 // Windows host) to its corresponding interface name (e.g. "eth0").
 //

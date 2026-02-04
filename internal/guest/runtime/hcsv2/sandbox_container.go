@@ -92,15 +92,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		// Networking is skipped, do not error out
 		log.G(ctx).Infof("setupSandboxContainerSpec: Did not find NS spec %v, err %v", spec, err)
 	} else {
-		var searches, servers []string
-		for _, n := range ns.Adapters() {
-			if len(n.DNSSuffix) > 0 {
-				searches = network.MergeValues(searches, strings.Split(n.DNSSuffix, ","))
-			}
-			if len(n.DNSServerList) > 0 {
-				servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
-			}
-		}
+		searches, servers := ns.dnsConfig(ctx)
 		resolvContent, err := network.GenerateResolvConfContent(ctx, searches, servers, nil)
 		if err != nil {
 			return errors.Wrap(err, "failed to generate sandbox resolv.conf content")

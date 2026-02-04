@@ -7,7 +7,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -111,15 +110,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 	// Write resolv.conf
 	if !specGuest.MountPresent("/etc/resolv.conf", spec.Mounts) {
 		ns := GetOrAddNetworkNamespace(specGuest.GetNetworkNamespaceID(spec))
-		var searches, servers []string
-		for _, n := range ns.Adapters() {
-			if len(n.DNSSuffix) > 0 {
-				searches = network.MergeValues(searches, strings.Split(n.DNSSuffix, ","))
-			}
-			if len(n.DNSServerList) > 0 {
-				servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
-			}
-		}
+		searches, servers := ns.dnsConfig(ctx)
 		resolvContent, err := network.GenerateResolvConfContent(ctx, searches, servers, nil)
 		if err != nil {
 			return errors.Wrap(err, "failed to generate standalone resolv.conf content")

@@ -50,6 +50,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.2.1
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
+	github.com/samber/lo v1.52.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.6

@@ -70,58 +70,6 @@ func Test_GenerateResolvConfContent(t *testing.T) {
 	}
 }
 
-func Test_MergeValues(t *testing.T) {
-	type testcase struct {
-		name string
-
-		first  []string
-		second []string
-
-		expected []string
-	}
-	testcases := []*testcase{
-		{
-			name: "BothEmpty",
-		},
-		{
-			name:     "FirstEmpty",
-			second:   []string{"a", "b"},
-			expected: []string{"a", "b"},
-		},
-		{
-			name:     "SecondEmpty",
-			first:    []string{"a", "b"},
-			expected: []string{"a", "b"},
-		},
-		{
-			name:     "AllUnique",
-			first:    []string{"a", "c", "d"},
-			second:   []string{"b", "e"},
-			expected: []string{"a", "c", "d", "b", "e"},
-		},
-		{
-			name:     "NonUnique",
-			first:    []string{"a", "c", "d"},
-			second:   []string{"a", "b", "c", "d"},
-			expected: []string{"a", "c", "d", "b"},
-		},
-	}
-	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
-			m := MergeValues(tc.first, tc.second)
-			if len(m) != len(tc.expected) {
-				t.Fatalf("expected %d entries got: %d", len(tc.expected), len(m))
-			}
-			for i := 0; i < len(tc.expected); i++ {
-				if tc.expected[i] != m[i] {
-					t.Logf("%v :: %v", tc.expected, m)
-					t.Fatalf("expected value: %q at index: %d got: %q", tc.expected[i], i, m[i])
-				}
-			}
-		})
-	}
-}
-
 func Test_GenerateEtcHostsContent(t *testing.T) {
 	type testcase struct {
 		name string
