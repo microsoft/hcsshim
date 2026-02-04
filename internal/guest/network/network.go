@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -31,6 +32,18 @@ var (
 
 // maxDNSSearches is limited to 6 in `man 5 resolv.conf`
 const maxDNSSearches = 6
+
+var validHostnameRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]{0,255}$`)
+
+// Check that the hostname is safe. This function is less strict than
+// technically allowed, but ensures that when the hostname is inserted to
+// /etc/hosts, it cannot lead to injection attacks.
+func ValidateHostname(hostname string) error {
+	if !validHostnameRegex.MatchString(hostname) {
+		return errors.Errorf("hostname %q invalid: must match %s", hostname, validHostnameRegex.String())
+	}
+	return nil
+}
 
 // GenerateEtcHostsContent generates a /etc/hosts file based on `hostname`.
 func GenerateEtcHostsContent(ctx context.Context, hostname string) string {

@@ -56,8 +56,7 @@ func processErrNoSpace(ctx context.Context, path string, err error) {
 	}).WithError(err).Warn("got ENOSPC, gathering diagnostics")
 }
 
-// MountLayer first enforces the security policy for the container's layer paths
-// and then calls Mount to mount the layer paths as an overlayfs.
+// MountLayer calls Mount to mount the layer paths as an overlayfs.
 func MountLayer(
 	ctx context.Context,
 	layerPaths []string,

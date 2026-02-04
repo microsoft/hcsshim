@@ -63,6 +63,9 @@ type RegoModule struct {
 
 type regoMetadata map[string]map[string]interface{}
 
+const metadataRootKey = "metadata"
+const metadataOperationsKey = "metadata"
+
 type regoMetadataAction string
 
 const (
@@ -80,6 +83,11 @@ type regoMetadataOperation struct {
 
 // The result from a policy query
 type RegoQueryResult map[string]interface{}
+
+// An immutable, saved copy of the metadata state.
+type SavedMetadata struct {
+	metadataRoot regoMetadata
+}
 
 // deep copy for an object
 func copyObject(data map[string]interface{}) (map[string]interface{}, error) {
@@ -113,6 +121,24 @@ func copyValue(value interface{}) (interface{}, error) {
 	return valueCopy, nil
 }
 
+// deep copy for regoMetadata.
+// We cannot use copyObject for this due to the fact that map[string]interface{}
+// is a concrete type and a map of it cannot be used as a map of interface{}.
+func copyRegoMetadata(value regoMetadata) (regoMetadata, error) {
+	valueJSON, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+
+	var valueCopy regoMetadata
+	err = json.Unmarshal(valueJSON, &valueCopy)
+	if err != nil {
+		return nil, err
+	}
+
+	return valueCopy, nil
+}
+
 // NewRegoPolicyInterpreter creates a new RegoPolicyInterpreter, using the code provided.
 // inputData is the Rego data which should be used as the initial state
 // of the interpreter. A deep copy is performed on it such that it will
@@ -123,8 +149,8 @@ func NewRegoPolicyInterpreter(code string, inputData map[string]interface{}) (*R
 		return nil, fmt.Errorf("unable to copy the input data: %w", err)
 	}
 
-	if _, ok := data["metadata"]; !ok {
-		data["metadata"] = make(regoMetadata)
+	if _, ok := data[metadataRootKey]; !ok {
+		data[metadataRootKey] = make(regoMetadata)
 	}
 
 	policy := &RegoPolicyInterpreter{
@@ -207,7 +233,7 @@ func (r *RegoPolicyInterpreter) GetMetadata(name string, key string) (interface{
 	r.dataAndModulesMutex.Lock()
 	defer r.dataAndModulesMutex.Unlock()
 
-	metadataRoot, ok := r.data["metadata"].(regoMetadata)
+	metadataRoot, ok := r.data[metadataRootKey].(regoMetadata)
 	if !ok {
 		return nil, errors.New("illegal interpreter state: invalid metadata object type")
 	}
@@ -226,6 +252,32 @@ func (r *RegoPolicyInterpreter) GetMetadata(name string, key string) (interface{
 	} else {
 		return nil, fmt.Errorf("metadata not found for name %s", name)
 	}
+}
+
+// Saves a copy of the internal policy metadata state.
+func (r *RegoPolicyInterpreter) SaveMetadata() (s SavedMetadata, err error) {
+	r.dataAndModulesMutex.Lock()
+	defer r.dataAndModulesMutex.Unlock()
+
+	metadataRoot, ok := r.data[metadataRootKey].(regoMetadata)
+	if !ok {
+		return SavedMetadata{}, errors.New("illegal interpreter state: invalid metadata object type")
+	}
+	s.metadataRoot, err = copyRegoMetadata(metadataRoot)
+	return s, err
+}
+
+// Restores a previously saved metadata state.
+func (r *RegoPolicyInterpreter) RestoreMetadata(m SavedMetadata) error {
+	r.dataAndModulesMutex.Lock()
+	defer r.dataAndModulesMutex.Unlock()
+
+	copied, err := copyRegoMetadata(m.metadataRoot)
+	if err != nil {
+		return fmt.Errorf("unable to copy metadata: %w", err)
+	}
+	r.data[metadataRootKey] = copied
+	return nil
 }
 
 func newRegoMetadataOperation(operation interface{}) (*regoMetadataOperation, error) {
@@ -286,7 +338,7 @@ func (r *RegoPolicyInterpreter) UpdateOSType(os string) error {
 func (r *RegoPolicyInterpreter) updateMetadata(ops []*regoMetadataOperation) error {
 	// dataAndModulesMutex must be held before calling this
 
-	metadataRoot, ok := r.data["metadata"].(regoMetadata)
+	metadataRoot, ok := r.data[metadataRootKey].(regoMetadata)
 	if !ok {
 		return errors.New("illegal interpreter state: invalid metadata object type")
 	}
@@ -431,7 +483,7 @@ func (r *RegoPolicyInterpreter) logMetadata() {
 		return
 	}
 
-	contents, err := json.Marshal(r.data["metadata"])
+	contents, err := json.Marshal(r.data[metadataRootKey])
 	if err != nil {
 		r.metadataLogger.Printf("error marshaling metadata: %v\n", err.Error())
 	} else {
@@ -637,7 +689,7 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 	r.logResult(rule, resultSet)
 
 	ops := []*regoMetadataOperation{}
-	if rawMetadata, ok := resultSet["metadata"]; ok {
+	if rawMetadata, ok := resultSet[metadataOperationsKey]; ok {
 		metadata, ok := rawMetadata.([]interface{})
 		if !ok {
 			return nil, errors.New("error loading metadata array: invalid type")
@@ -660,7 +712,7 @@ func (r *RegoPolicyInterpreter) Query(rule string, input map[string]interface{})
 	}
 
 	for name, value := range resultSet {
-		if name == "metadata" {
+		if name == metadataOperationsKey {
 			continue
 		} else {
 			result[name] = value

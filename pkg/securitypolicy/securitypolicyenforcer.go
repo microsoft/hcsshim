@@ -57,9 +57,19 @@ func init() {
 	registeredEnforcers[openDoorEnforcerName] = createOpenDoorEnforcer
 }
 
+// Represents an in-progress revertable section.  To ensure state is consistent,
+// Commit() and Rollback() must not fail, so they do not return anything, and if
+// an error does occur they should panic.
+type RevertableSectionHandle interface {
+	Commit()
+	Rollback()
+}
+
 type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(ctx context.Context, target string, deviceHash string) (err error)
+	EnforceRWDeviceMountPolicy(ctx context.Context, target string, encrypted, ensureFilesystem bool, filesystem string) (err error)
 	EnforceDeviceUnmountPolicy(ctx context.Context, unmountTarget string) (err error)
+	EnforceRWDeviceUnmountPolicy(ctx context.Context, unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(ctx context.Context, containerID string, layerPaths []string, target string) (err error)
 	EnforceOverlayUnmountPolicy(ctx context.Context, target string) (err error)
 	EnforceCreateContainerPolicy(
@@ -125,6 +135,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) (err error)
+	StartRevertableSection() (RevertableSectionHandle, error)
 }
 
 //nolint:unused
@@ -179,6 +190,11 @@ func CreateSecurityPolicyEnforcer(
 	}
 }
 
+type nopRevertableSectionHandle struct{}
+
+func (nopRevertableSectionHandle) Commit()   {}
+func (nopRevertableSectionHandle) Rollback() {}
+
 type OpenDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string
 }
@@ -200,7 +216,15 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(context.Context, 
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceRWDeviceMountPolicy(context.Context, string, bool, bool, string) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(context.Context, string) error {
+	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceRWDeviceUnmountPolicy(context.Context, string) error {
 	return nil
 }
 
@@ -309,6 +333,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Cont
 	return nil
 }
 
+func (*OpenDoorSecurityPolicyEnforcer) StartRevertableSection() (RevertableSectionHandle, error) {
+	return nopRevertableSectionHandle{}, nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
@@ -317,8 +345,16 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(context.Context
 	return errors.New("mounting is denied by policy")
 }
 
+func (ClosedDoorSecurityPolicyEnforcer) EnforceRWDeviceMountPolicy(context.Context, string, bool, bool, string) error {
+	return errors.New("Read-write device mounting is denied by policy")
+}
+
 func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(context.Context, string) error {
 	return errors.New("unmounting is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceRWDeviceUnmountPolicy(context.Context, string) error {
+	return errors.New("Read-write device unmounting is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(context.Context, string, []string, string) error {
@@ -424,4 +460,8 @@ func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath 
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) error {
 	return nil
+}
+
+func (*ClosedDoorSecurityPolicyEnforcer) StartRevertableSection() (RevertableSectionHandle, error) {
+	return nopRevertableSectionHandle{}, nil
 }

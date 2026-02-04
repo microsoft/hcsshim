@@ -6,7 +6,9 @@ framework_version := "@@FRAMEWORK_VERSION@@"
 @@OBJECTS@@
 
 mount_device := data.framework.mount_device
+rw_mount_device := data.framework.rw_mount_device
 unmount_device := data.framework.unmount_device
+rw_unmount_device := data.framework.rw_unmount_device
 mount_overlay := data.framework.mount_overlay
 unmount_overlay := data.framework.unmount_overlay
 mount_cims:= data.framework.mount_cims

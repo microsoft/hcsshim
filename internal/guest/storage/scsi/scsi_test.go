@@ -999,6 +999,12 @@ func Test_Mount_EncryptDevice_Mkfs_Error(t *testing.T) {
 		}
 		return expectedDevicePath, nil
 	}
+	cleanupCryptDevice = func(_ context.Context, dmCryptName string) error {
+		if dmCryptName != expectedCryptTarget {
+			t.Fatalf("expected cleanupCryptDevice name %q got %q", expectedCryptTarget, dmCryptName)
+		}
+		return nil
+	}
 	osStat = osStatNoop
 
 	xfsFormat = func(arg string) error {

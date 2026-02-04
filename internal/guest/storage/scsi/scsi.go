@@ -121,8 +121,9 @@ type Config struct {
 // Mount creates a mount from the SCSI device on `controller` index `lun` to
 // `target`
 //
-// `target` will be created. On mount failure the created `target` will be
-// automatically cleaned up.
+// `target` will be created. On mount failure the created `target`, as well as
+// any associated dm-crypt or dm-verify devices will be automatically cleaned
+// up.
 //
 // If the config has `encrypted` is set to true, the SCSI device will be
 // encrypted using dm-crypt.
@@ -200,7 +201,8 @@ func Mount(
 	var deviceFS string
 	if config.Encrypted {
 		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun, partition)
-		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)
+		var encryptedSource string
+		encryptedSource, err = encryptDevice(spnCtx, source, cryptDeviceName)
 		if err != nil {
 			// todo (maksiman): add better retry logic, similar to how SCSI device mounts are
 			// retried on unix.ENOENT and unix.ENXIO. The retry should probably be on an
@@ -211,6 +213,13 @@ func Mount(
 			}
 		}
 		source = encryptedSource
+		defer func() {
+			if err != nil {
+				if err := cleanupCryptDevice(spnCtx, cryptDeviceName); err != nil {
+					log.G(spnCtx).WithError(err).WithField("cryptDeviceName", cryptDeviceName).Debug("failed to cleanup dm-crypt device after mount failure")
+				}
+			}
+		}()
 	} else {
 		// Get the filesystem that is already on the device (if any) and use that
 		// as the mountType unless `Filesystem` was given.
