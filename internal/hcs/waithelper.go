@@ -32,13 +32,14 @@ func waitForNotification(
 	timeout *time.Duration,
 ) error {
 	callbackMapLock.RLock()
-	if _, ok := callbackMap[callbackNumber]; !ok {
-		callbackMapLock.RUnlock()
+	callbackCtx, ok := callbackMap[callbackNumber]
+	callbackMapLock.RUnlock()
+
+	if !ok {
 		log.G(ctx).WithField("callbackNumber", callbackNumber).Error("failed to waitForNotification: callbackNumber does not exist in callbackMap")
 		return ErrHandleClose
 	}
-	channels := callbackMap[callbackNumber].channels
-	callbackMapLock.RUnlock()
+	channels := callbackCtx.channels
 
 	expectedChannel := channels[expectedNotification]
 	if expectedChannel == nil {
