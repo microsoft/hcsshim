@@ -49,6 +49,44 @@ func MountWCOWLayers(ctx context.Context, containerID string, vm *uvm.UtilityVM,
 	}
 }
 
+// MakeMountedWCOWLayers creates a MountedWCOWLayers structure from wl, like
+// [MountWCOWLayers], without actually mounting anything.
+func MakeMountedWCOWLayers(ctx context.Context, wl WCOWLayers, mountPath string) (*MountedWCOWLayers, error) {
+	switch l := wl.(type) {
+	case *wcowWCIFSLayers:
+		layersWithID := []MountedWCOWLayer{}
+		for _, l := range l.layerPaths {
+			layerID, err := wclayer.LayerID(ctx, l)
+			if err != nil {
+				return nil, err
+			}
+			layersWithID = append(layersWithID, MountedWCOWLayer{
+				LayerID:     layerID.String(),
+				MountedPath: l,
+			})
+		}
+
+		return &MountedWCOWLayers{
+			RootFS:            mountPath,
+			MountedLayerPaths: layersWithID,
+		}, nil
+	case *wcowForkedCIMLayers, *wcowBlockCIMLayers:
+		layerID, err := cimlayer.LayerID(mountPath)
+		if err != nil {
+			return nil, err
+		}
+		return &MountedWCOWLayers{
+			RootFS: mountPath,
+			MountedLayerPaths: []MountedWCOWLayer{{
+				LayerID:     layerID,
+				MountedPath: mountPath,
+			}},
+		}, nil
+	default:
+		return nil, fmt.Errorf("invalid layer type %T", wl)
+	}
+}
+
 // Represents a single layer that is mounted and ready to use. Depending on the type of
 // layers each individual layer may or may not be mounted. However, HCS still needs paths
 // of individual layers and a unique ID for each layer.
