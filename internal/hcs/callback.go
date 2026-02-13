@@ -3,18 +3,38 @@
 package hcs
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
-	"github.com/sirupsen/logrus"
 )
 
 var (
-	nextCallback    uintptr
+	// TODO: refactor callback number to be a uint and not a uintptr
+
+	nextCallback callbackCounter
+
+	// `callbackMapLock` is used to protect the map itself, and not the values in the map.
+	// This causes a race condition with `(*notificationWatcherContext).handle`,
+	// where, if a computeSystem or process is closed immediately after it is opened, then
+	// the handle may not be updated with the result from
+	// `vmcompute.HcsRegister[ComputeSystem|Process]Callback` in `registerCallback` when
+	// `unregisterCallback` is called.
+	// Similarly with `(*notificationWatcherContext).channels`, if a `unregisterCallback`
+	// is called while `waitForNotification` or `notificationWatcher` are processing a notification,
+	// then the former may close the notification channels after the latter two have read
+	// (and retain a pointer to) the `notificationWatcherContext`, resulting in a send on a closed channel.
+	// TODO: use a per-context [RW]Mutex to fix the above scenarios.
+
+	// protected by [callbackMapLock].
 	callbackMap     = map[uintptr]*notificationWatcherContext{}
 	callbackMapLock = sync.RWMutex{}
 
@@ -132,32 +152,78 @@ func closeChannels(channels notificationChannels) {
 	}
 }
 
-func notificationWatcher(notificationType hcsNotification, callbackNumber uintptr, notificationStatus uintptr, notificationData *uint16) uintptr {
-	var result error
-	if int32(notificationStatus) < 0 {
-		result = interop.Win32FromHresult(notificationStatus)
+func notificationWatcher(
+	notificationType hcsNotification,
+	callbackNumber uintptr,
+	notificationStatus uintptr,
+	notificationData *uint16,
+) uintptr {
+	ctx, entry := log.SetEntry(context.Background(), logrus.Fields{
+		"notification-type": notificationType.String(),
+	})
+
+	result := processNotification(ctx, notificationStatus, notificationData)
+	if result != nil {
+		entry.Data[logrus.ErrorKey] = result
 	}
 
 	callbackMapLock.RLock()
-	context := callbackMap[callbackNumber]
+	callbackCtx := callbackMap[callbackNumber]
 	callbackMapLock.RUnlock()
 
-	if context == nil {
+	if callbackCtx == nil {
+		entry.WithField("callbackNumber", callbackNumber).Warn("received notification for unknown callback number")
 		return 0
 	}
 
-	log := logrus.WithFields(logrus.Fields{
-		"notification-type": notificationType.String(),
-		"system-id":         context.systemID,
-	})
-	if context.processID != 0 {
-		log.Data[logfields.ProcessID] = context.processID
+	entry.Data["system-id"] = callbackCtx.systemID
+	if callbackCtx.processID != 0 {
+		entry.Data[logfields.ProcessID] = callbackCtx.processID
 	}
-	log.Debug("HCS notification")
+	entry.Debug("HCS notification")
 
-	if channel, ok := context.channels[notificationType]; ok {
+	if channel, ok := callbackCtx.channels[notificationType]; ok {
 		channel <- result
 	}
 
 	return 0
+}
+
+// processNotification parses and validates HCS notifications and returns the result as an error.
+func processNotification(ctx context.Context, notificationStatus uintptr, notificationData *uint16) (err error) {
+	// TODO: merge/unify with [processHcsResult]
+	status := int32(notificationStatus)
+	if status < 0 {
+		err = interop.Win32FromHresult(notificationStatus)
+	}
+
+	if notificationData == nil {
+		return err
+	}
+
+	resultJSON := interop.ConvertAndFreeCoTaskMemString(notificationData)
+	result := &hcsResult{}
+	if jsonErr := json.Unmarshal([]byte(resultJSON), result); jsonErr != nil {
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.JSON:  resultJSON,
+			logrus.ErrorKey: err,
+		}).Warn("Could not unmarshal HCS result")
+		return err
+	}
+
+	// the HResult and data payload should have the same error value
+	if result.Error < 0 && status < 0 && status != result.Error {
+		log.G(ctx).WithFields(logrus.Fields{
+			"status": status,
+			"data":   result.Error,
+		}).Warn("Mismatched status and data HResult values")
+	}
+
+	if len(result.ErrorEvents) > 0 {
+		return &resultError{
+			Err:    err,
+			Events: result.ErrorEvents,
+		}
+	}
+	return err
 }

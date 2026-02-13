@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
@@ -20,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 type Process struct {
@@ -97,7 +99,7 @@ func (process *Process) Signal(ctx context.Context, options interface{}) (bool, 
 
 	operation := "hcs::Process::Signal"
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -122,7 +124,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 
 	operation := "hcs::Process::Kill"
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -287,7 +289,7 @@ func (process *Process) ResizeConsole(ctx context.Context, width, height uint16)
 
 	operation := "hcs::Process::ResizeConsole"
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 	modifyRequest := hcsschema.ProcessModifyRequest{
@@ -339,7 +341,7 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -388,7 +390,7 @@ func (process *Process) CloseStdin(ctx context.Context) (err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -434,7 +436,7 @@ func (process *Process) CloseStdout(ctx context.Context) (err error) {
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil
 	}
 
@@ -458,7 +460,7 @@ func (process *Process) CloseStderr(ctx context.Context) (err error) {
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil
 	}
 
@@ -486,7 +488,7 @@ func (process *Process) Close() (err error) {
 	defer process.handleLock.Unlock()
 
 	// Don't double free this
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil
 	}
 
@@ -524,6 +526,14 @@ func (process *Process) Close() (err error) {
 }
 
 func (process *Process) registerCallback(ctx context.Context) error {
+	callbackNumber := nextCallback.Inc()
+
+	log.G(ctx).WithFields(logrus.Fields{
+		"cid":            process.SystemID(),
+		"pid":            process.processID,
+		"callbackNumber": callbackNumber,
+	}).Debug("register process callback")
+
 	callbackContext := &notificationWatcherContext{
 		channels:  newProcessChannels(),
 		systemID:  process.SystemID(),
@@ -531,8 +541,6 @@ func (process *Process) registerCallback(ctx context.Context) error {
 	}
 
 	callbackMapLock.Lock()
-	callbackNumber := nextCallback
-	nextCallback++
 	callbackMap[callbackNumber] = callbackContext
 	callbackMapLock.Unlock()
 
@@ -549,6 +557,12 @@ func (process *Process) registerCallback(ctx context.Context) error {
 func (process *Process) unregisterCallback(ctx context.Context) error {
 	callbackNumber := process.callbackNumber
 
+	log.G(ctx).WithFields(logrus.Fields{
+		"cid":            process.SystemID(),
+		"pid":            process.processID,
+		"callbackNumber": callbackNumber,
+	}).Debug("unregister process callback")
+
 	callbackMapLock.RLock()
 	callbackContext := callbackMap[callbackNumber]
 	callbackMapLock.RUnlock()
@@ -559,7 +573,7 @@ func (process *Process) unregisterCallback(ctx context.Context) error {
 
 	handle := callbackContext.handle
 
-	if handle == 0 {
+	if winapi.IsInvalidHandle(handle) {
 		return nil
 	}
 
