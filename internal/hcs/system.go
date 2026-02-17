@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -21,8 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 type System struct {
@@ -63,7 +65,7 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", id))
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, id))
 
 	computeSystem := newSystem(id)
 
@@ -83,7 +85,7 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 	if createError == nil || IsPending(createError) {
 		defer func() {
 			if err != nil {
-				computeSystem.Close()
+				computeSystem.CloseCtx(context.WithoutCancel(ctx)) //nolint:errcheck
 			}
 		}()
 		if err = computeSystem.registerCallback(ctx); err != nil {
@@ -115,6 +117,8 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 func OpenComputeSystem(ctx context.Context, id string) (*System, error) {
 	operation := "hcs::OpenComputeSystem"
 
+	log.G(ctx).WithField(logfields.SystemID, id).Trace(operation)
+
 	computeSystem := newSystem(id)
 	handle, resultJSON, err := vmcompute.HcsOpenComputeSystem(ctx, id)
 	events := processHcsResult(ctx, resultJSON)
@@ -124,7 +128,7 @@ func OpenComputeSystem(ctx context.Context, id string) (*System, error) {
 	computeSystem.handle = handle
 	defer func() {
 		if err != nil {
-			computeSystem.Close()
+			computeSystem.CloseCtx(context.WithoutCancel(ctx)) //nolint:errcheck
 		}
 	}()
 	if err = computeSystem.registerCallback(ctx); err != nil {
@@ -199,14 +203,14 @@ func (computeSystem *System) Start(ctx context.Context) (err error) {
 	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
 	// prevent starting an exited system because waitblock we do not recreate waitBlock
 	// or rerun waitBackground, so we have no way to be notified of it closing again
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -232,7 +236,7 @@ func (computeSystem *System) Shutdown(ctx context.Context) error {
 
 	operation := "hcs::System::Shutdown"
 
-	if computeSystem.handle == 0 || computeSystem.stopped() {
+	if winapi.IsInvalidHandle(computeSystem.handle) || computeSystem.stopped() {
 		return nil
 	}
 
@@ -254,7 +258,7 @@ func (computeSystem *System) Terminate(ctx context.Context) error {
 
 	operation := "hcs::System::Terminate"
 
-	if computeSystem.handle == 0 || computeSystem.stopped() {
+	if winapi.IsInvalidHandle(computeSystem.handle) || computeSystem.stopped() {
 		return nil
 	}
 
@@ -278,7 +282,7 @@ func (computeSystem *System) waitBackground() {
 	operation := "hcs::System::waitBackground"
 	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
 
 	err := waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	if err == nil {
@@ -351,7 +355,7 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 
 	operation := "hcs::System::Properties"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -489,10 +493,12 @@ func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcssch
 }
 
 // hcsPropertiesV2Query is a helper to make a HcsGetComputeSystemProperties call using the V2 schema property types.
+//
+// Requires holding [System.handleLock].
 func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []hcsschema.PropertyType) (*hcsschema.Properties, error) {
 	operation := "hcs::System::PropertiesV2"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -581,12 +587,12 @@ func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -609,12 +615,12 @@ func (computeSystem *System) Resume(ctx context.Context) (err error) {
 	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -637,7 +643,7 @@ func (computeSystem *System) Save(ctx context.Context, options interface{}) (err
 	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
 
 	saveOptions, err := json.Marshal(options)
 	if err != nil {
@@ -647,7 +653,7 @@ func (computeSystem *System) Save(ctx context.Context, options interface{}) (err
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -665,7 +671,7 @@ func (computeSystem *System) createProcess(ctx context.Context, operation string
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -686,7 +692,7 @@ func (computeSystem *System) createProcess(ctx context.Context, operation string
 		return nil, nil, makeSystemError(computeSystem, operation, err, events)
 	}
 
-	log.G(ctx).WithField("pid", processInfo.ProcessId).Debug("created process pid")
+	log.G(ctx).WithField(logfields.ProcessID, processInfo.ProcessId).Debug("created process pid")
 	return newProcess(processHandle, int(processInfo.ProcessId), computeSystem), &processInfo, nil
 }
 
@@ -727,7 +733,7 @@ func (computeSystem *System) OpenProcess(ctx context.Context, pid int) (*Process
 
 	operation := "hcs::System::OpenProcess"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -760,13 +766,13 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
 
 	// Don't double free this
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return nil
 	}
 
@@ -824,7 +830,7 @@ func (computeSystem *System) unregisterCallback(ctx context.Context) error {
 
 	handle := callbackContext.handle
 
-	if handle == 0 {
+	if winapi.IsInvalidHandle(handle) {
 		return nil
 	}
 
@@ -853,7 +859,7 @@ func (computeSystem *System) Modify(ctx context.Context, config interface{}) err
 
 	operation := "hcs::System::Modify"
 
-	if computeSystem.handle == 0 {
+	if winapi.IsInvalidHandle(computeSystem.handle) {
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
