@@ -43,6 +43,18 @@ func networkingMountPaths() []string {
 func GenerateWorkloadContainerNetworkMounts(sandboxID string, spec *oci.Spec) []oci.Mount {
 	var nMounts []oci.Mount
 
+	// In multipod mode, the sandbox writes networking files (resolv.conf, hostname, hosts)
+	// under the virtual pod root directory. Use VirtualPodAwareSandboxRootDir to ensure
+	// workload containers mount from the correct path.
+	virtualSandboxID := spec.Annotations[annotations.VirtualPodID]
+	rootDir := VirtualPodAwareSandboxRootDir(sandboxID, virtualSandboxID)
+
+	logrus.WithFields(logrus.Fields{
+		"sandboxID":        sandboxID,
+		"virtualSandboxID": virtualSandboxID,
+		"rootDir":          rootDir,
+	}).Info("GenerateWorkloadContainerNetworkMounts: resolved mount source root directory")
+
 	for _, mountPath := range networkingMountPaths() {
 		// Don't override if the mount is present in the spec
 		if MountPresent(mountPath, spec.Mounts) {
@@ -56,7 +68,7 @@ func GenerateWorkloadContainerNetworkMounts(sandboxID string, spec *oci.Spec) []
 		mt := oci.Mount{
 			Destination: mountPath,
 			Type:        "bind",
-			Source:      filepath.Join(SandboxRootDir(sandboxID), trimmedMountPath),
+			Source:      filepath.Join(rootDir, trimmedMountPath),
 			Options:     options,
 		}
 		nMounts = append(nMounts, mt)
