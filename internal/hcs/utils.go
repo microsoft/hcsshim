@@ -5,7 +5,6 @@ package hcs
 import (
 	"context"
 	"io"
-	"sync/atomic"
 	"syscall"
 
 	"github.com/pkg/errors"

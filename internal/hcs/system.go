@@ -31,7 +31,7 @@ type System struct {
 	handleLock     sync.RWMutex
 	handle         vmcompute.HcsSystem
 	id             string
-	callbackNumber uintptr
+	callbackNumber callbackNumber
 
 	closedWaitOnce sync.Once
 	waitBlock      chan struct{}
@@ -794,34 +794,46 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 	return nil
 }
 
+// Requires holding [System.handleLock].
 func (computeSystem *System) registerCallback(ctx context.Context) error {
+	callbackNum := nextCallback()
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.SystemID:       computeSystem.id,
+		logfields.CallbackNumber: callbackNum,
+	}).Trace("register computer system callback")
+
 	callbackContext := &notificationWatcherContext{
 		channels: newSystemChannels(),
 		systemID: computeSystem.id,
 	}
 
 	callbackMapLock.Lock()
-	callbackNumber := nextCallback
-	nextCallback++
-	callbackMap[callbackNumber] = callbackContext
+	callbackMap[callbackNum] = callbackContext
 	callbackMapLock.Unlock()
 
 	callbackHandle, err := vmcompute.HcsRegisterComputeSystemCallback(ctx, computeSystem.handle,
-		notificationWatcherCallback, callbackNumber)
+		notificationWatcherCallback, uintptr(callbackNum))
 	if err != nil {
 		return err
 	}
 	callbackContext.handle = callbackHandle
-	computeSystem.callbackNumber = callbackNumber
+	computeSystem.callbackNumber = callbackNum
 
 	return nil
 }
 
+// Requires holding [System.handleLock].
 func (computeSystem *System) unregisterCallback(ctx context.Context) error {
-	callbackNumber := computeSystem.callbackNumber
+	callbackNum := computeSystem.callbackNumber
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.SystemID:       computeSystem.id,
+		logfields.CallbackNumber: callbackNum,
+	}).Trace("unregister computer system callback")
 
 	callbackMapLock.RLock()
-	callbackContext := callbackMap[callbackNumber]
+	callbackContext := callbackMap[callbackNum]
 	callbackMapLock.RUnlock()
 
 	if callbackContext == nil {
@@ -844,7 +856,7 @@ func (computeSystem *System) unregisterCallback(ctx context.Context) error {
 	closeChannels(callbackContext.channels)
 
 	callbackMapLock.Lock()
-	delete(callbackMap, callbackNumber)
+	delete(callbackMap, callbackNum)
 	callbackMapLock.Unlock()
 
 	handle = 0 //nolint:ineffassign

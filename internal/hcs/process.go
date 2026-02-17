@@ -35,7 +35,7 @@ type Process struct {
 	stdin               io.WriteCloser
 	stdout              io.ReadCloser
 	stderr              io.ReadCloser
-	callbackNumber      uintptr
+	callbackNumber      callbackNumber
 	killSignalDelivered bool
 
 	closedWaitOnce sync.Once
@@ -545,7 +545,16 @@ func (process *Process) CloseCtx(ctx context.Context) (err error) {
 	return nil
 }
 
+// Requires holding [Process.handleLock].
 func (process *Process) registerCallback(ctx context.Context) error {
+	callbackNum := nextCallback()
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.SystemID:       process.SystemID(),
+		logfields.ProcessID:      process.processID,
+		logfields.CallbackNumber: callbackNum,
+	}).Trace("register process callback")
+
 	callbackContext := &notificationWatcherContext{
 		channels:  newProcessChannels(),
 		systemID:  process.SystemID(),
@@ -553,26 +562,31 @@ func (process *Process) registerCallback(ctx context.Context) error {
 	}
 
 	callbackMapLock.Lock()
-	callbackNumber := nextCallback
-	nextCallback++
-	callbackMap[callbackNumber] = callbackContext
+	callbackMap[callbackNum] = callbackContext
 	callbackMapLock.Unlock()
 
-	callbackHandle, err := vmcompute.HcsRegisterProcessCallback(ctx, process.handle, notificationWatcherCallback, callbackNumber)
+	callbackHandle, err := vmcompute.HcsRegisterProcessCallback(ctx, process.handle, notificationWatcherCallback, uintptr(callbackNum))
 	if err != nil {
 		return err
 	}
 	callbackContext.handle = callbackHandle
-	process.callbackNumber = callbackNumber
+	process.callbackNumber = callbackNum
 
 	return nil
 }
 
+// Requires holding [Process.handleLock].
 func (process *Process) unregisterCallback(ctx context.Context) error {
-	callbackNumber := process.callbackNumber
+	callbackNum := process.callbackNumber
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.SystemID:       process.SystemID(),
+		logfields.ProcessID:      process.processID,
+		logfields.CallbackNumber: callbackNum,
+	}).Trace("unregister process callback")
 
 	callbackMapLock.RLock()
-	callbackContext := callbackMap[callbackNumber]
+	callbackContext := callbackMap[callbackNum]
 	callbackMapLock.RUnlock()
 
 	if callbackContext == nil {
@@ -595,7 +609,7 @@ func (process *Process) unregisterCallback(ctx context.Context) error {
 	closeChannels(callbackContext.channels)
 
 	callbackMapLock.Lock()
-	delete(callbackMap, callbackNumber)
+	delete(callbackMap, callbackNum)
 	callbackMapLock.Unlock()
 
 	handle = 0 //nolint:ineffassign
