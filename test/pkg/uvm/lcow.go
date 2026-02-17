@@ -77,6 +77,13 @@ func CreateAndStartLCOWFromOpts(ctx context.Context, tb testing.TB, opts *uvm.Op
 
 func CreateLCOW(ctx context.Context, tb testing.TB, opts *uvm.OptionsLCOW) (*uvm.UtilityVM, CleanupFn) {
 	tb.Helper()
+
+	if opts == nil {
+		tb.Fatalf("opts cannot be nil bet set with BootFiles")
+	}
+
+	tb.Logf("create LCOW uVM: %q", opts.ID)
+
 	vm, err := uvm.CreateLCOW(ctx, opts)
 	if err != nil {
 		tb.Fatalf("could not create LCOW UVM: %v", err)

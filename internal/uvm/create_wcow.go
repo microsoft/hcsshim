@@ -69,7 +69,7 @@ type OptionsWCOW struct {
 	// AdditionalRegistryKeys are Registry keys and their values to additionally add to the uVM.
 	AdditionalRegistryKeys []hcsschema.RegistryValue
 
-	OutputHandlerCreator OutputHandlerCreator // Creates an [OutputHandler] that controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as ETW Log events
+	OutputHandlerCreator OutputHandlerCreator `json:"-"` // Creates an [OutputHandler] that controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as ETW Log events
 	LogSources           string               // ETW providers to be set for the logging service
 	ForwardLogs          bool                 // Whether to forward logs to the host or not
 }

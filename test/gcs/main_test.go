@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 
@@ -109,6 +110,7 @@ func TestMain(m *testing.M) {
 func setup() (err error) {
 	_ = os.MkdirAll(guestpath.LCOWRootPrefixInUVM, 0755)
 
+	logrus.AddHook(log.NewHook())
 	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
 	trace.RegisterExporter(&oc.LogrusExporter{})
 
