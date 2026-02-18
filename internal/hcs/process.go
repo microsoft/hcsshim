@@ -232,16 +232,15 @@ func (process *Process) waitBackground() {
 		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	var (
-		err            error
 		exitCode       = -1
 		propertiesJSON string
 		resultJSON     string
 	)
 
-	err = waitForNotification(ctx, process.callbackNumber, hcsNotificationProcessExited, nil)
+	events, err := waitForNotification(ctx, process.callbackNumber, hcsNotificationProcessExited, nil)
 	if err != nil {
-		err = makeProcessError(process, operation, err, nil)
-		log.G(ctx).WithError(err).Error("failed wait")
+		err = makeProcessError(process, operation, err, events)
+		log.G(ctx).WithError(err).Error("failed wait on process exit")
 	} else {
 		process.handleLock.RLock()
 		defer process.handleLock.RUnlock()

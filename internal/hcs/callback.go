@@ -4,6 +4,7 @@ package hcs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -18,6 +19,8 @@ import (
 )
 
 var (
+	// TODO: don't delete notification contexts on close, so callback can handle delayed notifications
+
 	// used to lock [callbackMap].
 	callbackMapLock = sync.RWMutex{}
 	callbackMap     = map[callbackNumber]*notificationWatcherContext{}
@@ -167,14 +170,14 @@ func notificationWatcher(
 	notificationStatus uintptr,
 	notificationData *uint16,
 ) uintptr {
-	entry := log.G(context.Background()).WithFields(logrus.Fields{
+	ctx, entry := log.SetEntry(context.Background(), logrus.Fields{
 		logfields.CallbackNumber: callbackNum,
 		"notification-type":      notificationType.String(),
 	})
 
-	var result error
-	if int32(notificationStatus) < 0 {
-		result = interop.Win32FromHresult(notificationStatus)
+	result := processNotification(ctx, notificationStatus, notificationData)
+	if result != nil {
+		entry.Data[logrus.ErrorKey] = result
 	}
 
 	callbackMapLock.RLock()
@@ -197,4 +200,45 @@ func notificationWatcher(
 	}
 
 	return 0
+}
+
+// processNotification parses and validates HCS notifications and returns the result as an error.
+func processNotification(ctx context.Context, notificationStatus uintptr, notificationData *uint16) (err error) {
+	// TODO: merge/unify with [processHcsResult]
+	status := int32(notificationStatus)
+	if status < 0 {
+		err = interop.Win32FromHresult(notificationStatus)
+	}
+
+	if notificationData == nil {
+		return err
+	}
+
+	// don't call CoTaskMemFree since HCS_NOTIFICATION_CALLBACK's notificationData is PCWSTR.
+	resultJSON := interop.ConvertString(notificationData)
+	result := &hcsResult{}
+	if jsonErr := json.Unmarshal([]byte(resultJSON), result); jsonErr != nil {
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.JSON:  resultJSON,
+			logrus.ErrorKey: jsonErr,
+		}).Warn("could not unmarshal HCS result")
+		return err
+	}
+	log.G(ctx).WithField("result", result).Trace("parsed notification data")
+
+	// the HResult and data payload should have the same error value
+	if result.Error < 0 && status < 0 && status != result.Error {
+		log.G(ctx).WithFields(logrus.Fields{
+			"status": status,
+			"data":   result.Error,
+		}).Warn("mismatched notification status and data HResult values")
+	}
+
+	if len(result.ErrorEvents) > 0 {
+		return &resultError{
+			Err:    err,
+			Events: result.ErrorEvents,
+		}
+	}
+	return err
 }

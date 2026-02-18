@@ -180,7 +180,7 @@ func GetComputeSystems(ctx context.Context, q schema1.ComputeSystemQuery) ([]sch
 	computeSystemsJSON, resultJSON, err := vmcompute.HcsEnumerateComputeSystems(ctx, string(queryb))
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
-		return nil, &HcsError{Op: operation, Err: err, Events: events}
+		return nil, makeHCSError(operation, err, events)
 	}
 
 	if computeSystemsJSON == "" {
@@ -284,7 +284,7 @@ func (computeSystem *System) waitBackground() {
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
 
-	err := waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
+	events, err := waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	if err == nil {
 		log.G(ctx).Debug("system exited")
 	} else if errors.Is(err, ErrVmcomputeUnexpectedExit) {
@@ -292,7 +292,8 @@ func (computeSystem *System) waitBackground() {
 		computeSystem.exitError = makeSystemError(computeSystem, operation, err, nil)
 		err = nil
 	} else {
-		err = makeSystemError(computeSystem, operation, err, nil)
+		log.G(ctx).WithError(err).Error("failed wait on system exit")
+		err = makeSystemError(computeSystem, operation, err, events)
 	}
 	computeSystem.closedWaitOnce.Do(func() {
 		computeSystem.waitError = err
