@@ -148,6 +148,8 @@ func createContainer(
 		return nil, nil, err
 	}
 
+	// For Job Container which runs on host, we create the same using shim logic.
+	// If the request was for job container within UVM, then the request is passed along to GCS.
 	if oci.IsJobContainer(s) {
 		opts := jobcontainers.CreateOptions{WCOWLayers: wcowLayers}
 		container, resources, err = jobcontainers.Create(ctx, id, s, opts)
@@ -207,6 +209,12 @@ func newHcsTask(
 			return nil, err
 		}
 		shimOpts = v.(*runhcsopts.Options)
+	}
+
+	// For Isolated Job containers, we need special handling wherein if the command line
+	// is not specified, then we add 'cmd /C' by default.
+	if oci.IsIsolatedJobContainer(s) {
+		handleProcessArgsForIsolatedJobContainer(s, s.Process)
 	}
 
 	// Default to an infinite timeout (zero value)
@@ -359,6 +367,10 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 
 	if ht.init.State() != shimExecStateRunning {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
+	}
+
+	if oci.IsIsolatedJobContainer(ht.taskSpec) {
+		handleProcessArgsForIsolatedJobContainer(ht.taskSpec, spec)
 	}
 
 	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal, ht.ioRetryTimeout)
@@ -979,6 +991,22 @@ func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath st
 		Settings:     settings,
 	}
 	return ht.c.Modify(ctx, modification)
+}
+
+func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, specs *specs.Process) {
+	if specs.CommandLine != "" && !strings.HasPrefix(strings.TrimSpace(strings.ToLower(specs.CommandLine)), "cmd") {
+		specs.CommandLine = fmt.Sprintf("cmd /c %s", specs.CommandLine)
+	}
+	if len(specs.Args) > 0 && strings.TrimSpace(strings.ToLower(specs.Args[0])) != "cmd" {
+		specs.Args = append([]string{"cmd", "/c"}, specs.Args...)
+	}
+
+	// HostProcessInheritUser is set to explicit true or false during container create.
+	if taskSpec.Annotations[annotations.HostProcessInheritUser] == "true" {
+		// For privileged containers within the sandbox, if the annotation to inherit user is set
+		// we will set the user to NT AUTHORITY\SYSTEM.
+		specs.User.Username = `NT AUTHORITY\SYSTEM`
+	}
 }
 
 func isMountTypeSupported(hostPath, mountType string) bool {

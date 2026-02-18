@@ -21,6 +21,19 @@ func IsIsolated(s *specs.Spec) bool {
 }
 
 // IsJobContainer checks if `s` is asking for a Windows job container.
+// This request is for a shim based process isolated HPCs.
 func IsJobContainer(s *specs.Spec) bool {
-	return IsWCOW(s) && s.Annotations[annotations.HostProcessContainer] == "true"
+	return s.Linux == nil &&
+		s.Windows != nil &&
+		s.Windows.HyperV == nil &&
+		s.Annotations[annotations.HostProcessContainer] == "true"
+}
+
+// IsIsolatedJobContainer checks if `s` is asking for a Windows job container.
+// This request is for running HPC within guest.
+func IsIsolatedJobContainer(s *specs.Spec) bool {
+	return s.Linux == nil &&
+		s.Windows != nil &&
+		s.Windows.HyperV != nil &&
+		s.Annotations[annotations.HostProcessContainer] == "true"
 }

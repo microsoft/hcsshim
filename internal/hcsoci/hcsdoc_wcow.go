@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/fs"
+	"github.com/Microsoft/hcsshim/internal/ospath"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 
@@ -490,6 +491,21 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v2Container.RegistryChanges = &hcsschema.RegistryChanges{
 		AddValues: registryAdd,
 	}
+
+	if oci.IsIsolatedJobContainer(coi.Spec) {
+		v2Container.IsolationType = "HostProcess"
+
+		// If the customer specified a custom rootfs path then use that instead of default c:\hpc.
+		if customRootFsPath, ok := coi.Spec.Annotations[annotations.HostProcessRootfsLocation]; ok {
+			customRootFsPathSanitized, err := ospath.Sanitize(customRootFsPath, ospath.DisallowedUVMMountPrefixes)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			v2Container.Storage.PrivilegedContainerRootPath = customRootFsPathSanitized
+		}
+	}
+
 	return v1, v2Container, nil
 }
 
