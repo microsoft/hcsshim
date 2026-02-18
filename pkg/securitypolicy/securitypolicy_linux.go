@@ -20,7 +20,8 @@ const osType = "linux"
 
 func ExtendPolicyWithNetworkingMounts(sandboxID string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {
 	roSpec := &oci.Spec{
-		Root: spec.Root,
+		Root:        spec.Root,
+		Annotations: spec.Annotations,
 	}
 	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
 	if err := enforcer.ExtendDefaultMounts(networkingMounts); err != nil {
