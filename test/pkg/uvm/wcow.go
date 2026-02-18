@@ -34,10 +34,18 @@ func CreateWCOWUVM(ctx context.Context, tb testing.TB, id, image string) (*uvm.U
 }
 
 // CreateWCOW creates a WCOW utility VM with the passed opts.
+//
+//nolint:staticcheck // SA5011: staticcheck thinks `opts` may be nil, even though we fail if it is
 func CreateWCOW(ctx context.Context, tb testing.TB, opts *uvm.OptionsWCOW) (*uvm.UtilityVM, CleanupFn) {
 	tb.Helper()
 
-	if opts == nil || opts.BootFiles == nil {
+	if opts == nil {
+		tb.Fatalf("opts cannot be nil bet set with BootFiles")
+	}
+
+	tb.Logf("create WCOW uVM: %q", opts.ID)
+
+	if opts.BootFiles == nil {
 		tb.Fatalf("opts must bet set with BootFiles")
 	}
 

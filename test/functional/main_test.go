@@ -164,6 +164,7 @@ func runTests(m *testing.M) error {
 		return fmt.Errorf("tests must be run in an elevated context")
 	}
 
+	logrus.AddHook(log.NewHook())
 	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
 	trace.RegisterExporter(&oc.LogrusExporter{})
 

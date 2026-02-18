@@ -7,11 +7,14 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/Microsoft/go-winio"
-	diskutil "github.com/Microsoft/go-winio/vhd"
-	"github.com/Microsoft/hcsshim/computestorage"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/go-winio"
+	diskutil "github.com/Microsoft/go-winio/vhd"
+
+	"github.com/Microsoft/hcsshim/computestorage"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 // makeOpenFiles calls winio.NewOpenFile for each handle in a slice but closes all the handles
@@ -19,7 +22,7 @@ import (
 func makeOpenFiles(hs []syscall.Handle) (_ []io.ReadWriteCloser, err error) {
 	fs := make([]io.ReadWriteCloser, len(hs))
 	for i, h := range hs {
-		if h != syscall.Handle(0) {
+		if !winapi.IsInvalidHandle(h) {
 			if err == nil {
 				fs[i], err = winio.NewOpenFile(windows.Handle(h))
 			}

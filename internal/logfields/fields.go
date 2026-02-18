@@ -14,6 +14,9 @@ const (
 	ProcessID   = "pid"
 	TaskID      = "tid"
 	UVMID       = "uvm-id"
+	SystemID    = "system-id"
+
+	CallbackNumber = "callback-number"
 
 	// networking and IO
 
