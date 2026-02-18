@@ -75,8 +75,16 @@ func CreateAndStartLCOWFromOpts(ctx context.Context, tb testing.TB, opts *uvm.Op
 	return vm
 }
 
+//nolint:staticcheck // SA5011: staticcheck thinks `opts` may be nil, even though we fail if it is
 func CreateLCOW(ctx context.Context, tb testing.TB, opts *uvm.OptionsLCOW) (*uvm.UtilityVM, CleanupFn) {
 	tb.Helper()
+
+	if opts == nil {
+		tb.Fatalf("opts cannot be nil bet set with BootFiles")
+	}
+
+	tb.Logf("create LCOW uVM: %q", opts.ID)
+
 	vm, err := uvm.CreateLCOW(ctx, opts)
 	if err != nil {
 		tb.Fatalf("could not create LCOW UVM: %v", err)

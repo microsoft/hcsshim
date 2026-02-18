@@ -12,14 +12,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 type Process struct {
@@ -32,7 +35,7 @@ type Process struct {
 	stdin               io.WriteCloser
 	stdout              io.ReadCloser
 	stderr              io.ReadCloser
-	callbackNumber      uintptr
+	callbackNumber      callbackNumber
 	killSignalDelivered bool
 
 	closedWaitOnce sync.Once
@@ -97,7 +100,7 @@ func (process *Process) Signal(ctx context.Context, options interface{}) (bool, 
 
 	operation := "hcs::Process::Signal"
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -116,13 +119,21 @@ func (process *Process) Signal(ctx context.Context, options interface{}) (bool, 
 }
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
-func (process *Process) Kill(ctx context.Context) (bool, error) {
+func (process *Process) Kill(ctx context.Context) (_ bool, err error) {
+	operation := "hcs::Process::Kill"
+	ctx, span := oc.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
+	ctxNoCancel := context.WithoutCancel(ctx)
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
-	operation := "hcs::Process::Kill"
-
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -139,6 +150,9 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
+	// NOTE: this re-registers callbacks for the same underlying compute system and process,
+	// but with a different handle, which is ... excessive.
+
 	// HCS serializes the signals sent to a target pid per compute system handle.
 	// To avoid SIGKILL being serialized behind other signals, we open a new compute
 	// system handle to deliver the kill signal.
@@ -154,10 +168,10 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 			log.G(ctx).WithField("err", err).Error("Terminate() call failed")
 			return false, err
 		}
-		process.system.Close()
+		process.system.CloseCtx(ctxNoCancel) //nolint:errcheck
 		return true, nil
 	}
-	defer hcsSystem.Close()
+	defer hcsSystem.CloseCtx(ctxNoCancel) //nolint:errcheck
 
 	newProcessHandle, err := hcsSystem.OpenProcess(ctx, process.Pid())
 	if err != nil {
@@ -169,7 +183,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 			return false, err
 		}
 	}
-	defer newProcessHandle.Close()
+	defer newProcessHandle.CloseCtx(ctxNoCancel) //nolint:errcheck
 
 	resultJSON, err := vmcompute.HcsTerminateProcess(ctx, newProcessHandle.handle)
 	if err != nil {
@@ -214,20 +228,19 @@ func (process *Process) waitBackground() {
 	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
 	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	var (
-		err            error
 		exitCode       = -1
 		propertiesJSON string
 		resultJSON     string
 	)
 
-	err = waitForNotification(ctx, process.callbackNumber, hcsNotificationProcessExited, nil)
+	events, err := waitForNotification(ctx, process.callbackNumber, hcsNotificationProcessExited, nil)
 	if err != nil {
-		err = makeProcessError(process, operation, err, nil)
-		log.G(ctx).WithError(err).Error("failed wait")
+		err = makeProcessError(process, operation, err, events)
+		log.G(ctx).WithError(err).Error("failed wait on process exit")
 	} else {
 		process.handleLock.RLock()
 		defer process.handleLock.RUnlock()
@@ -287,7 +300,7 @@ func (process *Process) ResizeConsole(ctx context.Context, width, height uint16)
 
 	operation := "hcs::Process::ResizeConsole"
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 	modifyRequest := hcsschema.ProcessModifyRequest{
@@ -333,13 +346,13 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -382,13 +395,13 @@ func (process *Process) CloseStdin(ctx context.Context) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
@@ -428,13 +441,13 @@ func (process *Process) CloseStdout(ctx context.Context) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil
 	}
 
@@ -452,13 +465,13 @@ func (process *Process) CloseStderr(ctx context.Context) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
 
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil
 	}
 
@@ -473,20 +486,28 @@ func (process *Process) CloseStderr(ctx context.Context) (err error) {
 
 // Close cleans up any state associated with the process but does not kill
 // or wait on it.
-func (process *Process) Close() (err error) {
+func (process *Process) Close() error {
+	return process.CloseCtx(context.Background())
+}
+
+// CloseCtx is similar to [System.Close], but accepts a context.
+//
+// The context is used for all operations, including waits, so timeouts/cancellations may prevent
+// proper system cleanup.
+func (process *Process) CloseCtx(ctx context.Context) (err error) {
 	operation := "hcs::Process::Close"
-	ctx, span := oc.StartSpan(context.Background(), operation)
+	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
 
 	// Don't double free this
-	if process.handle == 0 {
+	if winapi.IsInvalidHandle(process.handle) {
 		return nil
 	}
 
@@ -523,7 +544,16 @@ func (process *Process) Close() (err error) {
 	return nil
 }
 
+// Requires holding [Process.handleLock].
 func (process *Process) registerCallback(ctx context.Context) error {
+	callbackNum := nextCallback()
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.SystemID:       process.SystemID(),
+		logfields.ProcessID:      process.processID,
+		logfields.CallbackNumber: callbackNum,
+	}).Trace("register process callback")
+
 	callbackContext := &notificationWatcherContext{
 		channels:  newProcessChannels(),
 		systemID:  process.SystemID(),
@@ -531,26 +561,31 @@ func (process *Process) registerCallback(ctx context.Context) error {
 	}
 
 	callbackMapLock.Lock()
-	callbackNumber := nextCallback
-	nextCallback++
-	callbackMap[callbackNumber] = callbackContext
+	callbackMap[callbackNum] = callbackContext
 	callbackMapLock.Unlock()
 
-	callbackHandle, err := vmcompute.HcsRegisterProcessCallback(ctx, process.handle, notificationWatcherCallback, callbackNumber)
+	callbackHandle, err := vmcompute.HcsRegisterProcessCallback(ctx, process.handle, notificationWatcherCallback, uintptr(callbackNum))
 	if err != nil {
 		return err
 	}
 	callbackContext.handle = callbackHandle
-	process.callbackNumber = callbackNumber
+	process.callbackNumber = callbackNum
 
 	return nil
 }
 
+// Requires holding [Process.handleLock].
 func (process *Process) unregisterCallback(ctx context.Context) error {
-	callbackNumber := process.callbackNumber
+	callbackNum := process.callbackNumber
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.SystemID:       process.SystemID(),
+		logfields.ProcessID:      process.processID,
+		logfields.CallbackNumber: callbackNum,
+	}).Trace("unregister process callback")
 
 	callbackMapLock.RLock()
-	callbackContext := callbackMap[callbackNumber]
+	callbackContext := callbackMap[callbackNum]
 	callbackMapLock.RUnlock()
 
 	if callbackContext == nil {
@@ -559,7 +594,7 @@ func (process *Process) unregisterCallback(ctx context.Context) error {
 
 	handle := callbackContext.handle
 
-	if handle == 0 {
+	if winapi.IsInvalidHandle(handle) {
 		return nil
 	}
 
@@ -573,7 +608,7 @@ func (process *Process) unregisterCallback(ctx context.Context) error {
 	closeChannels(callbackContext.channels)
 
 	callbackMapLock.Lock()
-	delete(callbackMap, callbackNumber)
+	delete(callbackMap, callbackNum)
 	callbackMapLock.Unlock()
 
 	handle = 0 //nolint:ineffassign

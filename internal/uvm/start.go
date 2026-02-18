@@ -172,7 +172,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	// save parent context, without timeout to use in terminate
 	pCtx := ctx
 	ctx, cancel := context.WithTimeout(pCtx, timeout.GCSConnectionTimeout)
-	log.G(ctx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
+	log.G(ctx).Debugf("using gcs connection timeout: %s", timeout.GCSConnectionTimeout)
 
 	g, gctx := errgroup.WithContext(ctx)
 	defer func() {
@@ -215,7 +215,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		switch uvm.operatingSystem {
 		case "windows":
 			// Windows specific handling
-			// For windows, the Listener can recieve a connection later, so we
+			// For windows, the Listener can receive a connection later, so we
 			// start the output handler in a goroutine with a non-timeout context.
 			// This allows the output handler to run independently of the UVM Create's
 			// lifecycle. The approach potentially allows to wait for reconnections too,

@@ -21,7 +21,7 @@ func GetServiceProperties(ctx context.Context, q hcsschema.PropertyQuery) (*hcss
 	propertiesJSON, resultJSON, err := vmcompute.HcsGetServiceProperties(ctx, string(queryb))
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
-		return nil, &HcsError{Op: operation, Err: err, Events: events}
+		return nil, makeHCSError(operation, err, events)
 	}
 
 	if propertiesJSON == "" {
@@ -45,7 +45,7 @@ func ModifyServiceSettings(ctx context.Context, settings hcsschema.ModificationR
 	resultJSON, err := vmcompute.HcsModifyServiceSettings(ctx, string(settingsJSON))
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
-		return &HcsError{Op: operation, Err: err, Events: events}
+		return makeHCSError(operation, err, events)
 	}
 	return nil
 }
