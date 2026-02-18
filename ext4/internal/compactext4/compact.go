@@ -31,6 +31,9 @@ type Writer struct {
 	initialized          bool
 	supportInlineData    bool
 	maxDiskSize          int64
+	readWrite            bool
+	uuid                 [16]byte
+	volumeName           [16]byte
 	gdBlocks             uint32
 }
 
@@ -1142,6 +1145,25 @@ func MaximumDiskSize(size int64) Option {
 	}
 }
 
+// ReadWrite instructs the writer to not mark the file system as write-protected.
+func ReadWrite(w *Writer) {
+	w.readWrite = true
+}
+
+// UUID instructs the writer to set the UUID.
+func UUID(uuid [16]byte) Option {
+	return func(w *Writer) {
+		w.uuid = uuid
+	}
+}
+
+// VolumeName instructs the writer to set the volume name.
+func VolumeName(volumeName [16]byte) Option {
+	return func(w *Writer) {
+		w.volumeName = volumeName
+	}
+}
+
 func (w *Writer) init() error {
 	// Skip the defective block inode.
 	w.inodes = make([]*inode, 1, 32)
@@ -1312,6 +1334,10 @@ func (w *Writer) Close() error {
 	// Write the super block
 	var blk [BlockSize]byte
 	b := bytes.NewBuffer(blk[:1024])
+	featureRoCompat := format.RoCompatLargeFile | format.RoCompatHugeFile | format.RoCompatExtraIsize
+	if !w.readWrite {
+		featureRoCompat |= format.RoCompatReadonly
+	}
 	sb := &format.SuperBlock{
 		InodesCount:        inodesPerGroup * groups,
 		BlocksCountLow:     diskSize,
@@ -1333,10 +1359,12 @@ func (w *Writer) Close() error {
 		InodeSize:          inodeSize,
 		FeatureCompat:      format.CompatSparseSuper2 | format.CompatExtAttr,
 		FeatureIncompat:    format.IncompatFiletype | format.IncompatExtents | format.IncompatFlexBg,
-		FeatureRoCompat:    format.RoCompatLargeFile | format.RoCompatHugeFile | format.RoCompatExtraIsize | format.RoCompatReadonly,
+		FeatureRoCompat:    featureRoCompat,
 		MinExtraIsize:      extraIsize,
 		WantExtraIsize:     extraIsize,
 		LogGroupsPerFlex:   31,
+		UUID:               w.uuid,
+		VolumeName:         w.volumeName,
 	}
 	if w.supportInlineData {
 		sb.FeatureIncompat |= format.IncompatInlineData
