@@ -4,11 +4,23 @@ package winapi
 
 import (
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/winapi/cimfs"
 	"github.com/Microsoft/hcsshim/internal/winapi/cimwriter"
 	"github.com/Microsoft/hcsshim/internal/winapi/types"
 )
+
+// LogCimDLLSupport logs which DLL is being used for CIM write operations.
+func LogCimDLLSupport() {
+	if cimwriter.Supported() {
+		logrus.Info("using cimwriter.dll for CIM write operations")
+	} else if cimfs.Supported() {
+		logrus.Info("using cimfs.dll for CIM write operations")
+	} else {
+		logrus.Warn("no CIM DLL available for write operations")
+	}
+}
 
 // pickSupported makes sure we use appropriate syscalls depending on which DLLs are present.
 func pickSupported[F any](cimWriterFunc, cimfsFunc F) F {

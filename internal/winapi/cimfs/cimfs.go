@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/winapi/types"
 )
@@ -43,7 +45,15 @@ type ImagePath = types.CimFsImagePath
 //sys CimMergeMountVerifiedImage(numCimPaths uint32, backingImagePaths *ImagePath, flags uint32, volumeID *GUID, hashSize uint16, hash *byte) (hr error) = cimfs.CimMergeMountVerifiedImage?
 
 var load = sync.OnceValue(func() error {
-	return modcimfs.Load()
+	if err := modcimfs.Load(); err != nil {
+		return err
+	}
+	var buf [windows.MAX_PATH]uint16
+	n, _ := windows.GetModuleFileName(windows.Handle(modcimfs.Handle()), &buf[0], uint32(len(buf)))
+	if n > 0 {
+		logrus.WithField("path", windows.UTF16ToString(buf[:n])).Info("loaded cimfs.dll")
+	}
+	return nil
 })
 
 // Supported checks if cimwriter.dll is present on the system.

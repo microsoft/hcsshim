@@ -144,6 +144,8 @@ func CreateBlockCIMWithOptions(ctx context.Context, bCIM *BlockCIM, options ...B
 		return nil, fmt.Errorf("invalid block CIM type `%d`: %w", bCIM.Type, os.ErrInvalid)
 	}
 
+	winapi.LogCimDLLSupport()
+
 	var newNameUTF16 *uint16
 	newNameUTF16, err = windows.UTF16PtrFromString(bCIM.CimName)
 	if err != nil {

@@ -7,8 +7,6 @@ package cimwriter
 import (
 	"syscall"
 	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 var _ unsafe.Pointer
@@ -37,7 +35,7 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
-	modcimwriter = windows.NewLazySystemDLL("cimwriter.dll")
+	modcimwriter = syscall.NewLazyDLL("cimwriter.dll")
 
 	procCimAddFsToMergedImage    = modcimwriter.NewProc("CimAddFsToMergedImage")
 	procCimAddFsToMergedImage2   = modcimwriter.NewProc("CimAddFsToMergedImage2")

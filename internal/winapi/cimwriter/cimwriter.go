@@ -5,6 +5,9 @@ package cimwriter
 import (
 	"sync"
 
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
+
 	"github.com/Microsoft/hcsshim/internal/winapi/types"
 )
 
@@ -32,7 +35,15 @@ type ImagePath = types.CimFsImagePath
 //sys CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) = cimwriter.CimSealImage?
 
 var load = sync.OnceValue(func() error {
-	return modcimwriter.Load()
+	if err := modcimwriter.Load(); err != nil {
+		return err
+	}
+	var buf [windows.MAX_PATH]uint16
+	n, _ := windows.GetModuleFileName(windows.Handle(modcimwriter.Handle()), &buf[0], uint32(len(buf)))
+	if n > 0 {
+		logrus.WithField("path", windows.UTF16ToString(buf[:n])).Info("loaded cimwriter.dll")
+	}
+	return nil
 })
 
 // Supported checks if cimwriter.dll is present on the system.
