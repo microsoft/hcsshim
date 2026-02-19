@@ -198,6 +198,15 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 	// this is not a security issue as the attestation will fail without a genuine report
 	noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false)
 
+	HandleLCOWSecurityPolicyWithNoSecurityHardware(noSecurityHardware, lopts)
+
+	if len(lopts.SecurityPolicy) > 0 {
+		// will only be false if explicitly set false by the annotation. We will otherwise default to true when there is a security policy
+		lopts.EnableScratchEncryption = ParseAnnotationsBool(ctx, a, annotations.LCOWEncryptedScratchDisk, true)
+	}
+}
+
+func HandleLCOWSecurityPolicyWithNoSecurityHardware(noSecurityHardware bool, lopts *uvm.OptionsLCOW) {
 	// if there is a security policy (and SNP) we currently boot in a way that doesn't support any boot options
 	// this might change if the building of the vmgs file were to be done on demand but that is likely
 	// much slower and noy very useful. We do respect the filename of the vmgs file so if it is necessary to
@@ -221,11 +230,6 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 		lopts.RootFSFile = ""
 		lopts.DmVerityRootFsVhd = uvm.DefaultDmVerityRootfsVhd
 		lopts.DmVerityMode = true
-	}
-
-	if len(lopts.SecurityPolicy) > 0 {
-		// will only be false if explicitly set false by the annotation. We will otherwise default to true when there is a security policy
-		lopts.EnableScratchEncryption = ParseAnnotationsBool(ctx, a, annotations.LCOWEncryptedScratchDisk, true)
 	}
 }
 
@@ -253,15 +257,18 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	if noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false); noSecurityHardware {
 		wopts.IsolationType = "GuestStateOnly"
 	}
-	if err := handleWCOWIsolationType(ctx, a, wopts); err != nil {
+
+	if err := HandleWCOWIsolationType(
+		ParseAnnotationsString(a, annotations.WCOWIsolationType, wopts.IsolationType),
+		wopts,
+	); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func handleWCOWIsolationType(ctx context.Context, a map[string]string, wopts *uvm.OptionsWCOW) error {
-	isolationType := ParseAnnotationsString(a, annotations.WCOWIsolationType, wopts.IsolationType)
+func HandleWCOWIsolationType(isolationType string, wopts *uvm.OptionsWCOW) error {
 	switch isolationType {
 	case "SecureNestedPaging", "SNP": // Allow VBS & SNP shorthands
 		wopts.IsolationType = "SecureNestedPaging"
@@ -279,12 +286,22 @@ func handleWCOWIsolationType(ctx context.Context, a map[string]string, wopts *uv
 	return nil
 }
 
-func parseDevices(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDeviceID {
+func parseDevicesFromSpec(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDeviceID {
 	if specWindows == nil || specWindows.Devices == nil {
 		return nil
 	}
-	extraDevices := []uvm.VPCIDeviceID{}
-	for _, d := range specWindows.Devices {
+
+	extraDevices := ParseDevices(ctx, specWindows.Devices)
+
+	// nil out the devices on the spec so that they aren't re-added to the
+	// pause container.
+	specWindows.Devices = nil
+	return extraDevices
+}
+
+func ParseDevices(ctx context.Context, windowsDevices []specs.WindowsDevice) []uvm.VPCIDeviceID {
+	var extraDevices []uvm.VPCIDeviceID
+	for _, d := range windowsDevices {
 		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
 		if uvm.IsValidDeviceType(d.IDType) {
 			key := uvm.NewVPCIDeviceID(pciID, index)
@@ -295,9 +312,6 @@ func parseDevices(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDev
 			}).Warnf("device type %s invalid, skipping", d.IDType)
 		}
 	}
-	// nil out the devices on the spec so that they aren't re-added to the
-	// pause container.
-	specWindows.Devices = nil
 	return extraDevices
 }
 
@@ -333,7 +347,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 	opts.NumaMemoryBlocksCounts = ParseAnnotationCommaSeparatedUint64(ctx, s.Annotations, annotations.NumaCountOfMemoryBlocks,
 		opts.NumaMemoryBlocksCounts)
 
-	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
+	maps.Copy(opts.AdditionalHyperVConfig, ParseHVSocketServiceTable(ctx, s.Annotations))
 
 	// parse error yielding annotations
 	var err error
@@ -396,7 +410,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.HclEnabled = ParseAnnotationsNullableBool(ctx, s.Annotations, annotations.LCOWHclEnabled)
 
 		// Add devices on the spec to the UVM's options
-		lopts.AssignedDevices = parseDevices(ctx, s.Windows)
+		lopts.AssignedDevices = parseDevicesFromSpec(ctx, s.Windows)
 		lopts.PolicyBasedRouting = ParseAnnotationsBool(ctx, s.Annotations, iannotations.NetworkingPolicyBasedRouting, lopts.PolicyBasedRouting)
 		return lopts, nil
 	} else if IsWCOW(s) {
@@ -408,7 +422,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.DisableCompartmentNamespace = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
 		wopts.NoDirectMap = ParseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)
 		wopts.NoInheritHostTimezone = ParseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
-		wopts.AdditionalRegistryKeys = append(wopts.AdditionalRegistryKeys, parseAdditionalRegistryValues(ctx, s.Annotations)...)
+		wopts.AdditionalRegistryKeys = append(wopts.AdditionalRegistryKeys, ParseAdditionalRegistryValues(ctx, s.Annotations)...)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 
 		// Writable EFI is valid for both confidential and regular Hyper-V isolated WCOW.
