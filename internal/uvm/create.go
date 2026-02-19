@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
@@ -384,6 +385,25 @@ func (uvm *UtilityVM) Terminate(ctx context.Context) error {
 // ExitError returns an error if the utility VM has terminated unexpectedly.
 func (uvm *UtilityVM) ExitError() error {
 	return uvm.hcsSystem.ExitError()
+}
+
+// StartTime returns the time at which the utility VM was started.
+func (uvm *UtilityVM) StartTime() (time.Time, error) {
+	startTime := uvm.hcsSystem.StartTime()
+	if startTime.IsZero() {
+		return startTime, fmt.Errorf("uvm is not in started state")
+	}
+
+	return startTime, nil
+}
+
+// StopTime returns the time at which the utility VM was stopped.
+func (uvm *UtilityVM) StopTime() (time.Time, error) {
+	if !uvm.IsStopped() {
+		return time.Time{}, fmt.Errorf("uvm is not in stopped state")
+	}
+
+	return uvm.hcsSystem.StopTime(), nil
 }
 
 func defaultProcessorCount() int32 {

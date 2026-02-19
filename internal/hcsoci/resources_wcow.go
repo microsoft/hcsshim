@@ -27,7 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
-const wcowSandboxMountPath = "C:\\SandboxMounts"
+const wcowSandboxMountPath = "C:\\SandboxMounts\\%s"
 
 func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, isSandbox bool) error {
 	if coi.Spec.Root == nil {
@@ -193,7 +193,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 			//   - sandbox:///a/dirInUvm destination:C:\\dirInContainer.
 			//
 			// so first convert to a path in the sandboxmounts path itself.
-			sandboxPath := convertToWCOWSandboxMountPath(mount.Source)
+			sandboxPath := convertToWCOWSandboxMountPath(coi.SandboxID, mount.Source)
 
 			// Now we need to exec a process in the vm that will make these directories as theres
 			// no functionality in the Windows gcs to create an arbitrary directory.
@@ -238,7 +238,8 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 	return nil
 }
 
-func convertToWCOWSandboxMountPath(source string) string {
+func convertToWCOWSandboxMountPath(sandboxID string, source string) string {
 	subPath := strings.TrimPrefix(source, guestpath.SandboxMountPrefix)
-	return filepath.Join(wcowSandboxMountPath, subPath)
+	wcowSandboxMountPathPrefix := fmt.Sprintf(wcowSandboxMountPath, sandboxID)
+	return filepath.Join(wcowSandboxMountPathPrefix, subPath)
 }

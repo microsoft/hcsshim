@@ -105,7 +105,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}
 
-	shim, err := newHcsTask(ctx, events, parent, true, req, s)
+	shim, err := newHcsTask(ctx, events, parent, true, req, s, req.ID)
 	if err != nil {
 		if parent != nil {
 			parent.Close()
@@ -126,6 +126,7 @@ func createContainer(
 	parent *uvm.UtilityVM,
 	shimOpts *runhcsopts.Options,
 	rootfs []*types.Mount,
+	sandboxID string,
 ) (cow.Container, *resources.Resources, error) {
 	var (
 		err       error
@@ -157,6 +158,7 @@ func createContainer(
 	} else {
 		opts := &hcsoci.CreateOptions{
 			ID:               id,
+			SandboxID:        sandboxID,
 			Owner:            owner,
 			Spec:             s,
 			HostingSystem:    parent,
@@ -186,7 +188,9 @@ func newHcsTask(
 	parent *uvm.UtilityVM,
 	ownsParent bool,
 	req *task.CreateTaskRequest,
-	s *specs.Spec) (_ shimTask, err error) {
+	s *specs.Spec,
+	sandboxID string,
+) (_ shimTask, err error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"tid":        req.ID,
 		"ownsParent": ownsParent,
@@ -219,7 +223,7 @@ func newHcsTask(
 		return nil, err
 	}
 
-	container, resources, err := createContainer(ctx, req.ID, owner, netNS, s, parent, shimOpts, req.Rootfs)
+	container, resources, err := createContainer(ctx, req.ID, owner, netNS, s, parent, shimOpts, req.Rootfs, sandboxID)
 	if err != nil {
 		return nil, err
 	}

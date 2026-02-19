@@ -444,3 +444,8 @@ func (uvm *UtilityVM) accept(ctx context.Context, l net.Listener, closeListener 
 	}
 	return nil, err
 }
+
+// IsStopped returns true if the utility VM is in the stopped state.
+func (uvm *UtilityVM) IsStopped() bool {
+	return uvm.hcsSystem.Stopped()
+}

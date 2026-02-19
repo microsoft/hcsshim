@@ -3,7 +3,7 @@ package guestpath
 const (
 	// LCOWRootPrefixInUVM is the path inside UVM where LCOW container's root
 	// file system will be mounted
-	LCOWRootPrefixInUVM = "/run/gcs/c"
+	LCOWRootPrefixInUVM = "/run/gcs/pods"
 	// WCOWRootPrefixInUVM is the path inside UVM where WCOW container's root
 	// file system will be mounted
 	WCOWRootPrefixInUVM = `C:\c`
