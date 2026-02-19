@@ -5,23 +5,17 @@ package vmmanager
 import (
 	"context"
 	"fmt"
-	"net"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/pkg/errors"
 )
 
 // VMSocketManager manages configuration for a hypervisor socket transport. This includes sockets such as
 // HvSocket and Vsock.
 type VMSocketManager interface {
-	// VMSocketListen will create the requested HvSocket and listen on the address specified by `connID`.
-	VMSocketListen(connID guid.GUID) (net.Listener, error)
-
 	// UpdateHvSocketService will update the configuration for the HvSocket service with the specified `serviceID`.
 	UpdateHvSocketService(ctx context.Context, serviceID string, config *hcsschema.HvSocketServiceConfig) error
 
@@ -30,13 +24,6 @@ type VMSocketManager interface {
 }
 
 var _ VMSocketManager = (*UtilityVM)(nil)
-
-func (uvm *UtilityVM) VMSocketListen(connID guid.GUID) (net.Listener, error) {
-	return winio.ListenHvsock(&winio.HvsockAddr{
-		VMID:      uvm.vmID,
-		ServiceID: connID,
-	})
-}
 
 // UpdateHvSocketService calls HCS to update/create the hvsocket service for
 // the UVM. Takes in a service ID and the hvsocket service configuration. If there is no

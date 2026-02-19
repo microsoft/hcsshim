@@ -27,7 +27,6 @@ func (uvmb *UtilityVM) AddSCSIDisk(controller string, lun string, disk hcsschema
 	}
 
 	ctrl.Attachments[lun] = disk
-	uvmb.doc.VirtualMachine.Devices.Scsi[controller] = ctrl
 
 	return nil
 }

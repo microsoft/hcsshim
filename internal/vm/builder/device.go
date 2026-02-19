@@ -28,7 +28,7 @@ type vPCIDevice struct {
 type DeviceOptions interface {
 	// AddVPCIDevice adds a PCI device to the Utility VM.
 	// If the device is already added, we return an error.
-	AddVPCIDevice(device hcsschema.VirtualPciFunction, numaAffinity bool) error
+	AddVPCIDevice(vmbusGUID guid.GUID, device hcsschema.VirtualPciFunction, numaAffinity bool) error
 	// AddSCSIController adds a SCSI controller to the Utility VM with the specified ID.
 	AddSCSIController(id string)
 	// AddSCSIDisk adds a SCSI disk to the Utility VM under the specified controller and LUN.
@@ -37,6 +37,8 @@ type DeviceOptions interface {
 	AddVPMemController(maximumDevices uint32, maximumSizeBytes uint64)
 	// AddVPMemDevice adds a VPMem device to the Utility VM under the VPMem controller.
 	AddVPMemDevice(id string, device hcsschema.VirtualPMemDevice) error
+	// AddVSMB initializes the VSMB settings for the Utility VM.
+	AddVSMB(settings hcsschema.VirtualSmb)
 	// AddVSMBShare adds a VSMB share to the Utility VM.
 	AddVSMBShare(share hcsschema.VirtualSmbShare) error
 	// SetSerialConsole sets up a serial console for `port`. Output will be relayed to the listener specified
@@ -48,15 +50,10 @@ type DeviceOptions interface {
 
 var _ DeviceOptions = (*UtilityVM)(nil)
 
-func (uvmb *UtilityVM) AddVPCIDevice(device hcsschema.VirtualPciFunction, numaAffinity bool) error {
+func (uvmb *UtilityVM) AddVPCIDevice(vmbusGUID guid.GUID, device hcsschema.VirtualPciFunction, numaAffinity bool) error {
 	_, ok := uvmb.assignedDevices[device]
 	if ok {
 		return errors.Wrapf(errAlreadySet, "device %v already assigned to utility VM", device)
-	}
-
-	vmbusGUID, err := guid.NewV4()
-	if err != nil {
-		return errors.Wrap(err, "failed to generate VMBus GUID for device")
 	}
 
 	var propagateAffinity *bool
@@ -85,8 +82,12 @@ func (uvmb *UtilityVM) AddVPCIDevice(device hcsschema.VirtualPciFunction, numaAf
 	return nil
 }
 
+const (
+	pipePrefix = `\\.\pipe\`
+)
+
 func (uvmb *UtilityVM) SetSerialConsole(port uint32, listenerPath string) error {
-	if !strings.HasPrefix(listenerPath, `\\.\pipe\`) {
+	if !strings.HasPrefix(listenerPath, pipePrefix) {
 		return errors.New("listener for serial console is not a named pipe")
 	}
 

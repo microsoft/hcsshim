@@ -25,13 +25,8 @@ var _ SCSIManager = (*UtilityVM)(nil)
 
 func (uvm *UtilityVM) AddSCSIDisk(ctx context.Context, disk hcsschema.Attachment, controller uint, lun uint) error {
 	request := &hcsschema.ModifySettingRequest{
-		RequestType: guestrequest.RequestTypeAdd,
-		Settings: hcsschema.Attachment{
-			Path:                      disk.Path,
-			Type_:                     disk.Type_,
-			ReadOnly:                  disk.ReadOnly,
-			ExtensibleVirtualDiskType: disk.ExtensibleVirtualDiskType,
-		},
+		RequestType:  guestrequest.RequestTypeAdd,
+		Settings:     disk,
 		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, guestrequest.ScsiControllerGuids[controller], lun),
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
