@@ -7,11 +7,10 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func TestVSMB(t *testing.T) {
-	b, cs := newBuilder(t, vm.Windows)
+	b, cs := newBuilder(t)
 	var devices DeviceOptions = b
 	opts := &hcsschema.VirtualSmbShareOptions{ReadOnly: true}
 	share1 := hcsschema.VirtualSmbShare{

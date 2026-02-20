@@ -12,6 +12,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	pipePrefix = `\\.\pipe\`
+)
+
 // vPCIDevice represents a vpci device.
 type vPCIDevice struct {
 	// vmbusGUID is the instance ID for this device when it is exposed via VMBus
@@ -41,6 +45,8 @@ type DeviceOptions interface {
 	AddVSMB(settings hcsschema.VirtualSmb)
 	// AddVSMBShare adds a VSMB share to the Utility VM.
 	AddVSMBShare(share hcsschema.VirtualSmbShare) error
+	// AddPlan9 adds a Plan9 device to the Utility VM with the specified settings.
+	AddPlan9(settings *hcsschema.Plan9)
 	// SetSerialConsole sets up a serial console for `port`. Output will be relayed to the listener specified
 	// by `listenerPath`. For HCS `listenerPath` this is expected to be a path to a named pipe.
 	SetSerialConsole(port uint32, listenerPath string) error
@@ -82,10 +88,6 @@ func (uvmb *UtilityVM) AddVPCIDevice(vmbusGUID guid.GUID, device hcsschema.Virtu
 	return nil
 }
 
-const (
-	pipePrefix = `\\.\pipe\`
-)
-
 func (uvmb *UtilityVM) SetSerialConsole(port uint32, listenerPath string) error {
 	if !strings.HasPrefix(listenerPath, pipePrefix) {
 		return errors.New("listener for serial console is not a named pipe")
@@ -103,4 +105,8 @@ func (uvmb *UtilityVM) EnableGraphicsConsole() {
 	uvmb.doc.VirtualMachine.Devices.Keyboard = &hcsschema.Keyboard{}
 	uvmb.doc.VirtualMachine.Devices.EnhancedModeVideo = &hcsschema.EnhancedModeVideo{}
 	uvmb.doc.VirtualMachine.Devices.VideoMonitor = &hcsschema.VideoMonitor{}
+}
+
+func (uvmb *UtilityVM) AddPlan9(settings *hcsschema.Plan9) {
+	uvmb.doc.VirtualMachine.Devices.Plan9 = settings
 }

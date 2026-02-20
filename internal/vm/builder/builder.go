@@ -5,21 +5,18 @@ package builder
 import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
-	"github.com/Microsoft/hcsshim/internal/vm"
 
 	"github.com/pkg/errors"
 )
 
 var (
-	errAlreadySet     = errors.New("field has already been set")
-	errUnknownGuestOS = errors.New("unknown guest operating system supplied")
+	errAlreadySet = errors.New("field has already been set")
 )
 
 // UtilityVM is used to build a schema document for creating a Utility VM.
 // It provides methods for configuring various aspects of the Utility VM
 // such as memory, processors, devices, boot options, and storage QoS settings.
 type UtilityVM struct {
-	guestOS         vm.GuestOS
 	doc             *hcsschema.ComputeSystem
 	assignedDevices map[hcsschema.VirtualPciFunction]*vPCIDevice
 }
@@ -27,7 +24,7 @@ type UtilityVM struct {
 // New returns the concrete builder, and callers are expected to use the
 // interface views (for example, NumaOptions, MemoryOptions) as needed.
 // This follows the "accept interfaces, return structs" convention.
-func New(owner string, guestOS vm.GuestOS) (*UtilityVM, error) {
+func New(owner string) (*UtilityVM, error) {
 	doc := &hcsschema.ComputeSystem{
 		Owner:         owner,
 		SchemaVersion: schemaversion.SchemaV21(),
@@ -54,24 +51,10 @@ func New(owner string, guestOS vm.GuestOS) (*UtilityVM, error) {
 		},
 	}
 
-	switch guestOS {
-	case vm.Windows:
-		doc.VirtualMachine.Devices.VirtualSmb = &hcsschema.VirtualSmb{}
-	case vm.Linux:
-		doc.VirtualMachine.Devices.Plan9 = &hcsschema.Plan9{}
-	default:
-		return nil, errUnknownGuestOS
-	}
-
 	return &UtilityVM{
-		guestOS:         guestOS,
 		doc:             doc,
 		assignedDevices: make(map[hcsschema.VirtualPciFunction]*vPCIDevice),
 	}, nil
-}
-
-func (uvmb *UtilityVM) GuestOS() vm.GuestOS {
-	return uvmb.guestOS
 }
 
 func (uvmb *UtilityVM) Get() *hcsschema.ComputeSystem {

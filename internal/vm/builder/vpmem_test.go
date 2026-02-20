@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func TestVPMem(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var devices DeviceOptions = b
 	if err := devices.AddVPMemDevice("0", hcsschema.VirtualPMemDevice{HostPath: "pmem.img", ReadOnly: true, ImageFormat: "raw"}); err == nil {
 		t.Fatal("AddVPMemDevice should fail when controller missing")

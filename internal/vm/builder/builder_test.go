@@ -6,14 +6,11 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
-
-	"github.com/pkg/errors"
 )
 
-func newBuilder(t *testing.T, guestOS vm.GuestOS) (*UtilityVM, *hcsschema.ComputeSystem) {
+func newBuilder(t *testing.T) (*UtilityVM, *hcsschema.ComputeSystem) {
 	t.Helper()
-	b, err := New("owner", guestOS)
+	b, err := New("owner")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -21,26 +18,15 @@ func newBuilder(t *testing.T, guestOS vm.GuestOS) (*UtilityVM, *hcsschema.Comput
 	return b, b.Get()
 }
 
-func TestNewBuilder_InvalidGuestOS(t *testing.T) {
-	if _, err := New("owner", vm.GuestOS("unknown")); !errors.Is(err, errUnknownGuestOS) {
-		t.Fatalf("New() error = %v, want %v", err, errUnknownGuestOS)
+func TestNewBuilder_DefaultFields(t *testing.T) {
+	_, cs := newBuilder(t)
+	if cs.VirtualMachine == nil {
+		t.Fatal("VirtualMachine should be initialized")
 	}
-}
-
-func TestNewBuilder_DefaultDevices(t *testing.T) {
-	_, cs := newBuilder(t, vm.Windows)
-	if cs.VirtualMachine.Devices.VirtualSmb == nil {
-		t.Fatal("VirtualSmb should be initialized for Windows")
+	if cs.VirtualMachine.Devices == nil {
+		t.Fatal("Devices should be initialized")
 	}
-	if cs.VirtualMachine.Devices.Plan9 != nil {
-		t.Fatal("Plan9 should be nil for Windows")
-	}
-
-	_, cs = newBuilder(t, vm.Linux)
-	if cs.VirtualMachine.Devices.Plan9 == nil {
-		t.Fatal("Plan9 should be initialized for Linux")
-	}
-	if cs.VirtualMachine.Devices.VirtualSmb != nil {
-		t.Fatal("VirtualSmb should be nil for Linux")
+	if cs.VirtualMachine.Devices.HvSocket == nil {
+		t.Fatal("HvSocket should be initialized")
 	}
 }

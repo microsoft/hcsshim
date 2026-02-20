@@ -7,7 +7,6 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 	"github.com/pkg/errors"
 )
 
@@ -19,9 +18,6 @@ type LifetimeManager interface {
 	//
 	// Only valid after the utility VM has been created.
 	RuntimeID() guid.GUID
-
-	// OS will return the operating system type of the Utility VM. This is typically either "windows" or "linux".
-	OS() vm.GuestOS
 
 	// Start will power on the Utility VM and put it into a running state. This will boot the guest OS and start all of the
 	// devices configured on the machine.
@@ -66,11 +62,6 @@ func (uvm *UtilityVM) ID() string {
 // RuntimeID returns the runtime ID of the utility VM.
 func (uvm *UtilityVM) RuntimeID() guid.GUID {
 	return uvm.vmID
-}
-
-// OS returns the operating system of the utility VM.
-func (uvm *UtilityVM) OS() vm.GuestOS {
-	return uvm.guestOS
 }
 
 // Start starts the utility VM.

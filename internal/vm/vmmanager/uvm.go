@@ -8,7 +8,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/vm"
 	"github.com/Microsoft/hcsshim/internal/vm/builder"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -21,10 +20,9 @@ import (
 // also several optional methods that can be used to determine what the virtual machine
 // supports and to configure these resources.
 type UtilityVM struct {
-	id      string
-	guestOS vm.GuestOS
-	vmID    guid.GUID
-	cs      *hcs.System
+	id   string
+	vmID guid.GUID
+	cs   *hcs.System
 }
 
 // Create creates a new utility VM with the given ID and builder configuration.
@@ -48,8 +46,7 @@ func Create(ctx context.Context, id string, builder *builder.UtilityVM) (*Utilit
 	}()
 
 	uvm := &UtilityVM{
-		id:      id,
-		guestOS: builder.GuestOS(),
+		id: id,
 	}
 
 	// Cache the VM ID of the utility VM.

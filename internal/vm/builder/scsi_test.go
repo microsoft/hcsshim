@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func TestSCSI(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var devices DeviceOptions = b
 
 	if err := devices.AddSCSIDisk("0", "1", hcsschema.Attachment{Path: "disk.vhdx", Type_: "VirtualDisk", ReadOnly: false}); err == nil {

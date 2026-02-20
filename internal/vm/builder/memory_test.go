@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func TestMemoryConfig(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var memory MemoryOptions = b
 
 	backingVirtual := hcsschema.MemoryBackingType_VIRTUAL
@@ -64,7 +63,7 @@ func TestMemoryConfig(t *testing.T) {
 }
 
 func TestMemoryHintsNilBacking(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var memory MemoryOptions = b
 
 	defer func() {

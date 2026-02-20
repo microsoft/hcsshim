@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func TestNUMASettings(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var numaManager NumaOptions = b
 	virtualNodeCount := uint8(2)
 	maxSizePerNode := uint64(4096)

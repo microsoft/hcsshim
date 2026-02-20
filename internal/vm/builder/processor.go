@@ -8,19 +8,18 @@ import (
 
 // ProcessorOptions configures processor settings for the Utility VM.
 type ProcessorOptions interface {
-	// SetProcessorLimits applies Count, Limit, and Weight from the provided config.
-	SetProcessorLimits(config *hcsschema.VirtualMachineProcessor)
+	// SetProcessor sets processor related options for the Utility VM
+	SetProcessor(config *hcsschema.VirtualMachineProcessor)
 	// SetCPUGroup sets the CPU group that the Utility VM will belong to on a Windows host.
 	SetCPUGroup(cpuGroup *hcsschema.CpuGroup)
 }
 
 var _ ProcessorOptions = (*UtilityVM)(nil)
 
-func (uvmb *UtilityVM) SetProcessorLimits(config *hcsschema.VirtualMachineProcessor) {
-	processor := uvmb.doc.VirtualMachine.ComputeTopology.Processor
-	processor.Count = config.Count
-	processor.Limit = config.Limit
-	processor.Weight = config.Weight
+func (uvmb *UtilityVM) SetProcessor(config *hcsschema.VirtualMachineProcessor) {
+	if config != nil {
+		uvmb.doc.VirtualMachine.ComputeTopology.Processor = config
+	}
 }
 
 func (uvmb *UtilityVM) SetCPUGroup(cpuGroup *hcsschema.CpuGroup) {

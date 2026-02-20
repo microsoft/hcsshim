@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
 func TestStorageQoS(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var storage StorageQoSOptions = b
 
 	storage.SetStorageQoS(&hcsschema.StorageQoS{

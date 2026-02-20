@@ -11,8 +11,6 @@ configuration, host-side management, and guest-side actions distinct so each lay
 
 ## Packages and Responsibilities
 
-- `internal/vm`
-  - Shared types used across layers (for example, `GuestOS`, `SCSIDisk`).
 - `internal/vm/builder`
   - Interface definitions for shaping the VM configuration (`Builder` interface).
   - Concrete implementation of `Builder` for building `hcsschema.ComputeSystem` documents.
@@ -38,7 +36,7 @@ configuration, host-side management, and guest-side actions distinct so each lay
 ## Example (High Level)
 
 ```
-builder, _ := builder.New("owner", vm.Linux)
+builder, _ := builder.New("owner")
 
 // Configure the VM document.
 builder.Memory().SetMemoryLimit(1024)

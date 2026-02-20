@@ -8,7 +8,6 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vm"
 	"github.com/pkg/errors"
 )
 
@@ -17,7 +16,7 @@ import (
 const administratorsPipePrefix = `\\.\pipe\ProtectedPrefix\Administrators\`
 
 func TestVPCIDevice(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var devices DeviceOptions = b
 	device := hcsschema.VirtualPciFunction{DeviceInstancePath: "PCI\\VEN_1234", VirtualFunction: 2}
 
@@ -57,7 +56,7 @@ func TestVPCIDevice(t *testing.T) {
 }
 
 func TestSerialConsoleAndGraphics(t *testing.T) {
-	b, cs := newBuilder(t, vm.Linux)
+	b, cs := newBuilder(t)
 	var devices DeviceOptions = b
 	if err := devices.SetSerialConsole(1, "not-a-pipe"); err == nil {
 		t.Fatal("SetSerialConsole should reject non-pipe path")
@@ -83,5 +82,44 @@ func TestSerialConsoleAndGraphics(t *testing.T) {
 	devices.EnableGraphicsConsole()
 	if cs.VirtualMachine.Devices.Keyboard == nil || cs.VirtualMachine.Devices.EnhancedModeVideo == nil || cs.VirtualMachine.Devices.VideoMonitor == nil {
 		t.Fatal("graphics console devices not enabled")
+	}
+}
+
+func TestAddPlan9(t *testing.T) {
+	b, cs := newBuilder(t)
+	var devices DeviceOptions = b
+
+	share := hcsschema.Plan9Share{
+		Name:       "data",
+		AccessName: "data",
+		Path:       "/host/path",
+		Port:       564,
+		ReadOnly:   true,
+	}
+	settings := &hcsschema.Plan9{Shares: []hcsschema.Plan9Share{share}}
+	devices.AddPlan9(settings)
+
+	if cs.VirtualMachine.Devices.Plan9 == nil {
+		t.Fatal("Plan9 should be set")
+	}
+	if len(cs.VirtualMachine.Devices.Plan9.Shares) != 1 {
+		t.Fatalf("Plan9 Shares = %d, want 1", len(cs.VirtualMachine.Devices.Plan9.Shares))
+	}
+	got := cs.VirtualMachine.Devices.Plan9.Shares[0]
+	if got.Name != share.Name || got.AccessName != share.AccessName || got.Path != share.Path || got.Port != share.Port || got.ReadOnly != share.ReadOnly {
+		t.Fatalf("Plan9 share not applied as expected: got %+v, want %+v", got, share)
+	}
+}
+
+func TestAddPlan9_Nil(t *testing.T) {
+	b, cs := newBuilder(t)
+	var devices DeviceOptions = b
+
+	// First set a Plan9 config, then overwrite with nil.
+	devices.AddPlan9(&hcsschema.Plan9{Shares: []hcsschema.Plan9Share{{Name: "tmp"}}})
+	devices.AddPlan9(nil)
+
+	if cs.VirtualMachine.Devices.Plan9 != nil {
+		t.Fatal("Plan9 should be nil after AddPlan9(nil)")
 	}
 }
