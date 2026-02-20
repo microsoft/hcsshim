@@ -9,11 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
-	"syscall"
-
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -21,7 +20,16 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	vhd "github.com/Microsoft/go-winio/vhd"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/hcsshim/internal/winapi/cimfs"
+	"github.com/Microsoft/hcsshim/internal/winapi/cimwriter"
 )
+
+func TestMain(m *testing.M) {
+	fmt.Printf("cimfs.dll supported: %v\n", cimfs.Supported())
+	fmt.Printf("cimwriter.dll supported: %v\n", cimwriter.Supported())
+	os.Exit(m.Run())
+}
 
 // A simple tuple type used to hold information about a file/directory that is created
 // during a test.
