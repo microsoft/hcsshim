@@ -81,6 +81,45 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		containerID := createContainerRequest.ContainerID
 		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %v}}", string(req.message), schemaVersion, container)
 
+		// Enforce registry changes policy
+		if container != nil && container.RegistryChanges != nil {
+			log.G(ctx).Trace("Container has registry changes, validating against policy")
+
+			// First, separate default values from non-default values
+			var defaultValues []hcsschema.RegistryValue
+			var nonDefaultValues []hcsschema.RegistryValue
+
+			if container.RegistryChanges.AddValues != nil {
+				for _, value := range container.RegistryChanges.AddValues {
+					if isDefaultRegistryValue(value) {
+						defaultValues = append(defaultValues, value)
+						log.G(ctx).WithField("name", value.Name).Trace("Registry value matches default, accepting without policy check")
+					} else {
+						nonDefaultValues = append(nonDefaultValues, value)
+					}
+				}
+			}
+
+			// If there are non-default values, validate them against policy
+			if len(nonDefaultValues) > 0 {
+				log.G(ctx).Tracef("Validating %d registry values against policy", len(nonDefaultValues))
+
+				nonDefaultChanges := &hcsschema.RegistryChanges{
+					AddValues: nonDefaultValues,
+				}
+
+				err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
+				if err != nil {
+					log.G(ctx).WithError(err).Warn("Registry changes validation failed - rejecting")
+					return fmt.Errorf("registry entry operation is denied by policy: %w", err)
+				}
+				log.G(ctx).Tracef("All container registry values validated successfully")
+			}
+
+			log.G(ctx).Infof("Registry validation complete: %d total values (%d defaults + %d validated)",
+				len(container.RegistryChanges.AddValues), len(defaultValues), len(nonDefaultValues))
+		}
+
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}

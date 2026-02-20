@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -1067,6 +1068,25 @@ func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, conta
 	}
 
 	_, err := policy.enforce(ctx, "mount_cims", input)
+	return err
+}
+
+func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
+	log.G(ctx).Trace("Enforcing registry changes policy")
+
+	// Import the schema type for proper conversion
+	regChanges, ok := registryValues.(*hcsschema.RegistryChanges)
+	if !ok {
+		log.G(ctx).Warn("Input registry values are not of expected type")
+		return errors.New("invalid registry values type")
+	}
+
+	input := inputData{
+		"containerID":     containerID,
+		"registryChanges": regChanges,
+	}
+
+	_, err := policy.enforce(ctx, "registry_changes", input)
 	return err
 }
 

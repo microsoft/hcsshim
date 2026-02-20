@@ -90,12 +90,17 @@ func ParseAnnotationsDisableGMSA(ctx context.Context, s *specs.Spec) bool {
 //
 // Like the [parseAnnotation*] functions, this logs errors but does not return them.
 func parseAdditionalRegistryValues(ctx context.Context, a map[string]string) []hcsschema.RegistryValue {
+	return parseRegistryValues(ctx, a, iannotations.AdditionalRegistryValues)
+}
+
+// parseRegistryValues is a generic function to parse registry values from annotations.
+func parseRegistryValues(ctx context.Context, a map[string]string, annotationKey string) []hcsschema.RegistryValue {
 	// rather than have users deal with nil vs []hcsschema.RegistryValue as returns, always
 	// return the latter.
 	// this is mostly to make testing easier, since its awkward to have to differentiate between
 	// situations where one is returned vs the other.
 
-	k := iannotations.AdditionalRegistryValues
+	k := annotationKey
 	v := a[k]
 	if v == "" {
 		return []hcsschema.RegistryValue{}
@@ -204,7 +209,13 @@ func parseAdditionalRegistryValues(ctx context.Context, a map[string]string) []h
 	return slices.Clip(rvs)
 }
 
-// ParseHVSocketServiceTable extracts any additional Hyper-V socket service configurations from annotations.
+// ParseTestAnnotationRegistryValues extracts registry values from the WCOW test annotation.
+// This is for testing and debugging purposes only.
+func ParseTestAnnotationRegistryValues(ctx context.Context, a map[string]string) []hcsschema.RegistryValue {
+	return parseRegistryValues(ctx, a, iannotations.WCOWAnnotationsTest)
+}
+
+// parseHVSocketServiceTable extracts any additional Hyper-V socket service configurations from annotations.
 //
 // Like the [parseAnnotation*] functions, this logs errors but does not return them.
 func ParseHVSocketServiceTable(ctx context.Context, a map[string]string) map[string]hcsschema.HvSocketServiceConfig {

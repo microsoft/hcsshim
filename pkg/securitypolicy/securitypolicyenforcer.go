@@ -125,6 +125,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) (err error)
+	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error
 }
 
 //nolint:unused
@@ -309,6 +310,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Cont
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
+	return nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
@@ -424,4 +429,8 @@ func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath 
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) error {
 	return nil
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
+	return errors.New("registry changes are denied by policy")
 }

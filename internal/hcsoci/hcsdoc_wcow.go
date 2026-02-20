@@ -487,6 +487,15 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		}...)
 	}
 
+	// Parse and add test annotation registry values if present (for testing/debugging)
+	testAnnotationValues := oci.ParseTestAnnotationRegistryValues(ctx, coi.Spec.Annotations)
+	if len(testAnnotationValues) > 0 {
+		log.G(ctx).WithField("count", len(testAnnotationValues)).Info("adding test annotation registry values to container")
+		registryAdd = append(registryAdd, testAnnotationValues...)
+	} else {
+		log.G(ctx).Debug("no test annotation registry values found in container annotations")
+	}
+
 	v2Container.RegistryChanges = &hcsschema.RegistryChanges{
 		AddValues: registryAdd,
 	}

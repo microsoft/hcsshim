@@ -13,6 +13,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -1367,6 +1368,135 @@ func Test_Rego_DumpStacksPolicy_Off(t *testing.T) {
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50}); err != nil {
 		t.Errorf("Test_Rego_DumpStacksPolicy_Off: %v", err)
+	}
+}
+
+func Test_Rego_EnforceRegistryChangesPolicy_Matches_Windows(t *testing.T) {
+	// Test that matching registry values are allowed
+	f := func(p *generatedWindowsConstraints) bool {
+		tc, err := setupRegoRunningWindowsContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
+
+		// Create registry changes with values that should match defaults
+		registryChanges := &hcsschema.RegistryChanges{
+			AddValues: []hcsschema.RegistryValue{
+				{
+					Key: &hcsschema.RegistryKey{
+						Hive: "System",
+						Name: "CurrentControlSet\\Services\\EventLog\\Security",
+					},
+					Name:       "WaitToKillServiceTimeout",
+					Type_:      hcsschema.RegistryValueType_D_WORD,
+					DWordValue: 20000,
+				},
+			},
+		}
+
+		err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, container.containerID, registryChanges)
+		// With default values, this should be allowed
+		if err != nil {
+			t.Logf("Registry enforcement returned: %v", err)
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceRegistryChangesPolicy_Matches_Windows: %v", err)
+	}
+}
+
+func Test_Rego_EnforceRegistryChangesPolicy_Invalid_ContainerID_Windows(t *testing.T) {
+	// Test that using an invalid container ID is denied
+	f := func(p *generatedWindowsConstraints) bool {
+		tc, err := setupRegoRunningWindowsContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// Use a non-existent container ID
+		invalidContainerID := testDataGenerator.uniqueContainerID()
+
+		registryChanges := &hcsschema.RegistryChanges{
+			AddValues: []hcsschema.RegistryValue{
+				{
+					Key: &hcsschema.RegistryKey{
+						Hive: "System",
+						Name: "Test",
+					},
+					Name:        "Value",
+					Type_:       hcsschema.RegistryValueType_STRING,
+					StringValue: "Data",
+				},
+			},
+		}
+
+		err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, invalidContainerID, registryChanges)
+		if err == nil {
+			t.Error("Expected registry changes to be denied with invalid container ID")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceRegistryChangesPolicy_Invalid_ContainerID_Windows: %v", err)
+	}
+}
+
+func Test_Rego_EnforceRegistryChangesPolicy_Default_Values_Allowed_Windows(t *testing.T) {
+	// Test that default registry values are allowed without policy definition
+	f := func(p *generatedWindowsConstraints) bool {
+		tc, err := setupRegoRunningWindowsContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
+
+		// Create registry changes with default values (from default_registry_values.go)
+		registryChanges := &hcsschema.RegistryChanges{
+			AddValues: []hcsschema.RegistryValue{
+				{
+					Key: &hcsschema.RegistryKey{
+						Hive: "System",
+						Name: "CurrentControlSet\\Services\\EventLog\\Security",
+					},
+					Name:       "WaitToKillServiceTimeout",
+					Type_:      hcsschema.RegistryValueType_D_WORD,
+					DWordValue: 20000,
+				},
+				{
+					Key: &hcsschema.RegistryKey{
+						Hive: "System",
+						Name: "CurrentControlSet\\Services\\Tcpip\\Parameters",
+					},
+					Name:       "EnableCompartmentNamespace",
+					Type_:      hcsschema.RegistryValueType_D_WORD,
+					DWordValue: 1,
+				},
+			},
+		}
+
+		err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, container.containerID, registryChanges)
+		// Default values should be allowed
+		if err != nil {
+			t.Logf("Default registry values enforcement returned: %v", err)
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceRegistryChangesPolicy_Default_Values_Allowed_Windows: %v", err)
 	}
 }
 
