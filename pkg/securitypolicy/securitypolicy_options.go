@@ -86,7 +86,7 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	// The other point is on startup where we take a flag to set the default
 	// policy enforcer to use before a policy arrives. After that flag is set,
 	// we use the enforcer in question to set up logging as well.
-	if err = s.PolicyEnforcer.EnforceRuntimeLoggingPolicy(ctx); err == nil {
+	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
 		logrus.SetOutput(s.logWriter)
 	} else {
 		logrus.SetOutput(io.Discard)
