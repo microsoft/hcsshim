@@ -56,7 +56,7 @@ var load = sync.OnceValue(func() error {
 	return nil
 })
 
-// Supported checks if cimwriter.dll is present on the system.
+// Supported checks if cimfs.dll is present on the system.
 func Supported() bool {
 	return load() == nil
 }
