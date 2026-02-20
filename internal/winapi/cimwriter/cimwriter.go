@@ -35,7 +35,17 @@ type ImagePath = types.CimFsImagePath
 //sys CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) = cimwriter.CimSealImage?
 
 var load = sync.OnceValue(func() error {
+	// Pre-load the DLL with a restricted search path (System32 + application directory only)
+	// to prevent loading from untrusted locations (e.g., CWD or arbitrary PATH entries).
+	// The subsequent modcimwriter.Load() will reuse the already-loaded module.
+	h, err := windows.LoadLibraryEx("cimwriter.dll", 0, windows.LOAD_LIBRARY_SEARCH_SYSTEM32|windows.LOAD_LIBRARY_SEARCH_APPLICATION_DIR)
+	if err != nil {
+		return err
+	}
 	if err := modcimwriter.Load(); err != nil {
+		if freeErr := windows.FreeLibrary(h); freeErr != nil {
+			logrus.WithError(freeErr).Warn("failed to free cimwriter.dll after load failure")
+		}
 		return err
 	}
 	var buf [windows.MAX_PATH]uint16
