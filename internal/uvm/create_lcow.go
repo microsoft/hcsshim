@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
@@ -152,6 +153,11 @@ func defaultLCOWOSBootFilesPath() string {
 func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	// Use KernelDirect boot by default on all builds that support it.
 	kernelDirectSupported := osversion.Build() >= 18286
+	var vPmemCount uint32 = DefaultVPMEMCount
+	if runtime.GOARCH == "arm64" {
+		kernelDirectSupported = false
+		vPmemCount = 0
+	}
 	opts := &OptionsLCOW{
 		Options:                 newDefaultOptions(id, owner),
 		KernelFile:              KernelFile,
@@ -163,7 +169,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		ForwardStdout:           false,
 		ForwardStderr:           true,
 		OutputHandlerCreator:    parseLogrus,
-		VPMemDeviceCount:        DefaultVPMEMCount,
+		VPMemDeviceCount:        vPmemCount,
 		VPMemSizeBytes:          DefaultVPMemSizeBytes,
 		VPMemNoMultiMapping:     osversion.Get().Build < osversion.V19H1,
 		PreferredRootFSType:     PreferredRootFSTypeInitRd,
@@ -180,7 +186,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	}
 
 	opts.UpdateBootFilesPath(context.TODO(), defaultLCOWOSBootFilesPath())
-
 	return opts
 }
 
@@ -807,14 +812,20 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	vmDebugging := false
 	if opts.ConsolePipe != "" {
 		vmDebugging = true
-		kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1 console=ttyS0,115200"
+		if runtime.GOARCH == "arm64" {
+			kernelArgs += " console=ttyAMA0,115200"
+		} else {
+			kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1 console=ttyS0,115200"
+		}
 		doc.VirtualMachine.Devices.ComPorts = map[string]hcsschema.ComPort{
 			"0": { // Which is actually COM1
 				NamedPipe: opts.ConsolePipe,
 			},
 		}
 	} else {
-		kernelArgs += " 8250_core.nr_uarts=0"
+		if runtime.GOARCH != "arm64" {
+			kernelArgs += " 8250_core.nr_uarts=0"
+		}
 	}
 
 	if opts.EnableGraphicsConsole {
@@ -835,7 +846,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		kernelArgs += " " + opts.KernelBootOptions
 	}
 
-	if !opts.VPCIEnabled {
+	if runtime.GOARCH != "arm64" && !opts.VPCIEnabled {
 		kernelArgs += ` pci=off`
 	}
 
