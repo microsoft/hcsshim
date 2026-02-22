@@ -6,9 +6,9 @@ import (
 	"context"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/vm/builder"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/pkg/errors"
@@ -25,14 +25,12 @@ type UtilityVM struct {
 	cs   *hcs.System
 }
 
-// Create creates a new utility VM with the given ID and builder configuration.
+// Create creates a new utility VM with the given ID and compute system configuration.
 //
-// This method returns the concrete UtilityVM and Callers
-// can use the interface views (for example, LifetimeManager, NetworkManager)
-// as needed. This follows the "accept interfaces, return structs" convention.
-func Create(ctx context.Context, id string, builder *builder.UtilityVM) (*UtilityVM, error) {
-	config := builder.Get()
-
+// This method returns the concrete UtilityVM. Callers
+// can use the manager interfaces (for example, LifetimeManager, NetworkManager)
+// as needed.
+func Create(ctx context.Context, id string, config *hcsschema.ComputeSystem) (*UtilityVM, error) {
 	cs, err := hcs.CreateComputeSystem(ctx, id, config)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create compute system")
