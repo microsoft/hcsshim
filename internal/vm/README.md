@@ -39,8 +39,8 @@ configuration, host-side management, and guest-side actions distinct so each lay
 builder, _ := builder.New("owner")
 
 // Configure the VM document.
-builder.Memory().SetMemoryLimit(1024)
-builder.Processor().SetProcessorConfig(&vm.ProcessorConfig{Count: 2})
+builder.SetMemory(&hcsschema.VirtualMachineMemory{SizeInMB: 1024})
+builder.SetProcessor(&hcsschema.VirtualMachineProcessor{Count: 2})
 // ... other builder configuration
 
 // Create and start the VM.

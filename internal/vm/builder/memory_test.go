@@ -13,15 +13,17 @@ func TestMemoryConfig(t *testing.T) {
 	var memory MemoryOptions = b
 
 	backingVirtual := hcsschema.MemoryBackingType_VIRTUAL
-	backingPhysical := hcsschema.MemoryBackingType_PHYSICAL
 
-	memory.SetMemoryLimit(512)
-	memory.SetMemoryHints(&hcsschema.VirtualMachineMemory{
+	memory.SetMemory(&hcsschema.VirtualMachineMemory{
+		SizeInMB:              512,
 		Backing:               &backingVirtual,
 		EnableDeferredCommit:  true,
 		EnableHotHint:         true,
 		EnableColdHint:        false,
 		EnableColdDiscardHint: true,
+		LowMMIOGapInMB:        64,
+		HighMMIOBaseInMB:      128,
+		HighMMIOGapInMB:       256,
 	})
 
 	mem := cs.VirtualMachine.ComputeTopology.Memory
@@ -31,11 +33,16 @@ func TestMemoryConfig(t *testing.T) {
 	if mem.Backing == nil || *mem.Backing != hcsschema.MemoryBackingType_VIRTUAL {
 		t.Fatal("Backing not set to VIRTUAL")
 	}
-	if !mem.AllowOvercommit || !mem.EnableDeferredCommit || !mem.EnableHotHint || mem.EnableColdHint || !mem.EnableColdDiscardHint {
+	if !mem.EnableDeferredCommit || !mem.EnableHotHint || mem.EnableColdHint || !mem.EnableColdDiscardHint {
 		t.Fatal("memory hints not applied as expected")
 	}
+	if mem.LowMMIOGapInMB != 64 || mem.HighMMIOBaseInMB != 128 || mem.HighMMIOGapInMB != 256 {
+		t.Fatal("MMIO config not applied as expected")
+	}
 
-	memory.SetMemoryHints(&hcsschema.VirtualMachineMemory{
+	backingPhysical := hcsschema.MemoryBackingType_PHYSICAL
+	memory.SetMemory(&hcsschema.VirtualMachineMemory{
+		SizeInMB:              1024,
 		Backing:               &backingPhysical,
 		EnableDeferredCommit:  true,
 		EnableHotHint:         true,
@@ -44,16 +51,14 @@ func TestMemoryConfig(t *testing.T) {
 	})
 
 	mem = cs.VirtualMachine.ComputeTopology.Memory
+	if mem.SizeInMB != 1024 {
+		t.Fatalf("SizeInMB = %d, want %d", mem.SizeInMB, 1024)
+	}
 	if mem.Backing == nil || *mem.Backing != hcsschema.MemoryBackingType_PHYSICAL {
 		t.Fatal("Backing not set to PHYSICAL")
 	}
-	if mem.AllowOvercommit || !mem.EnableDeferredCommit || !mem.EnableHotHint || mem.EnableColdHint || !mem.EnableColdDiscardHint {
+	if !mem.EnableDeferredCommit || !mem.EnableHotHint || mem.EnableColdHint || !mem.EnableColdDiscardHint {
 		t.Fatal("memory hints not applied as expected")
-	}
-
-	memory.SetMMIOConfig(64, 128, 256)
-	if mem.LowMMIOGapInMB != 64 || mem.HighMMIOBaseInMB != 128 || mem.HighMMIOGapInMB != 256 {
-		t.Fatal("MMIO config not applied as expected")
 	}
 
 	memory.SetFirmwareFallbackMeasuredSlit()
@@ -62,24 +67,21 @@ func TestMemoryConfig(t *testing.T) {
 	}
 }
 
-func TestMemoryHintsNilBacking(t *testing.T) {
+func TestMemoryNilConfig(t *testing.T) {
 	b, cs := newBuilder(t)
 	var memory MemoryOptions = b
 
 	defer func() {
 		if r := recover(); r != nil {
-			t.Fatalf("SetMemoryHints panicked: %v", r)
+			t.Fatalf("SetMemory panicked: %v", r)
 		}
 	}()
 
-	memory.SetMemoryHints(nil)
-	memory.SetMemoryHints(&hcsschema.VirtualMachineMemory{})
+	memory.SetMemory(nil)
+	memory.SetMemory(&hcsschema.VirtualMachineMemory{})
 
 	mem := cs.VirtualMachine.ComputeTopology.Memory
 	if mem.Backing != nil {
 		t.Fatal("Backing should remain nil when not provided")
-	}
-	if mem.AllowOvercommit {
-		t.Fatal("AllowOvercommit should remain false when Backing is nil")
 	}
 }
