@@ -1,3 +1,5 @@
+//go:build windows
+
 /*
    Copyright The containerd Authors.
 
@@ -18,6 +20,7 @@ package shim
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -157,7 +160,7 @@ func (l *RemoteEventsPublisher) forwardRequest(ctx context.Context, req *v1.Forw
 		}
 	}
 
-	if err != ttrpc.ErrClosed {
+	if !errors.Is(err, ttrpc.ErrClosed) {
 		return err
 	}
 

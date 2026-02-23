@@ -1,3 +1,5 @@
+//go:build windows
+
 /*
    Copyright The containerd Authors.
 
@@ -21,16 +23,20 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/pkg/errors"
 )
 
 const shimBinaryFormat = "containerd-shim-%s-%s.exe"
 
 func getSysProcAttr() *syscall.SysProcAttr {
-	return nil
+	return &syscall.SysProcAttr{
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+	}
 }
 
 // AnonReconnectDialer returns a dialer for an existing npipe on containerd reconnection
@@ -38,10 +44,14 @@ func AnonReconnectDialer(address string, timeout time.Duration) (net.Conn, error
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	if !strings.HasPrefix(address, `\\.\pipe`) {
+		return nil, fmt.Errorf("invalid pipe address: %s", address)
+	}
+
 	c, err := winio.DialPipeContext(ctx, address)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("npipe not found on reconnect: %w", os.ErrNotExist)
-	} else if err == context.DeadlineExceeded {
+	} else if errors.Is(err, context.DeadlineExceeded) {
 		return nil, fmt.Errorf("timed out waiting for npipe %s: %w", address, err)
 	} else if err != nil {
 		return nil, err
@@ -53,6 +63,10 @@ func AnonReconnectDialer(address string, timeout time.Duration) (net.Conn, error
 func AnonDialer(address string, timeout time.Duration) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	if !strings.HasPrefix(address, `\\.\pipe`) {
+		return nil, fmt.Errorf("invalid pipe address: %s", address)
+	}
 
 	// If there is nobody serving the pipe we limit the timeout for this case to
 	// 5 seconds because any shim that would serve this endpoint should serve it
@@ -71,7 +85,7 @@ func AnonDialer(address string, timeout time.Duration) (net.Conn, error) {
 					time.Sleep(10 * time.Millisecond)
 					continue
 				}
-			} else if err == context.DeadlineExceeded {
+			} else if errors.Is(err, context.DeadlineExceeded) {
 				return nil, fmt.Errorf("timed out waiting for npipe %s: %w", address, err)
 			}
 			return nil, err
@@ -80,14 +94,6 @@ func AnonDialer(address string, timeout time.Duration) (net.Conn, error) {
 	}
 }
 
-// RemoveSocket removes the socket at the specified address if
-// it exists on the filesystem
-func RemoveSocket(address string) error {
-	return nil
-}
-
-func cleanupSockets(context.Context) {
-	if address, err := ReadAddress("address"); err == nil {
-		_ = RemoveSocket(address)
-	}
+func cleanupSockets(_ context.Context) {
+	// On Windows, named pipes are automatically cleaned up when closed.
 }

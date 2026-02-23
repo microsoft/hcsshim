@@ -1,3 +1,5 @@
+//go:build windows
+
 /*
    Copyright The containerd Authors.
 
@@ -263,7 +265,9 @@ func run(ctx context.Context, manager Manager, config Config) error {
 		if debugFlag {
 			logger.Logger.SetLevel(log.DebugLevel)
 		}
-		go reap(ctx, logger, signals)
+		go func() {
+			_ = reap(ctx, logger, signals)
+		}()
 		ss, err := manager.Stop(ctx, id)
 		if err != nil {
 			return err
@@ -453,12 +457,24 @@ func serve(ctx context.Context, server *ttrpc.Server, signals chan os.Signal, sh
 	if err != nil {
 		return err
 	}
+
+	serrs := make(chan error, 1)
+	defer close(serrs)
 	go func() {
 		defer l.Close()
 		if err := server.Serve(ctx, l); err != nil && !errors.Is(err, net.ErrClosed) {
 			log.G(ctx).WithError(err).Fatal("containerd-shim: ttrpc server failure")
+			serrs <- err
+			return
 		}
+		serrs <- nil
 	}()
+
+	// Notify the parent process that the shim is ready.
+	// On Windows this signals a named event; on Unix this is a no-op.
+	if err = notifyReady(ctx, serrs); err != nil {
+		return err
+	}
 
 	if debugFlag && pprof != nil {
 		if err := setupPprof(ctx, pprof); err != nil {

@@ -1,3 +1,5 @@
+//go:build windows
+
 /*
    Copyright The containerd Authors.
 
@@ -132,7 +134,7 @@ func WritePidFile(path string, pid int) error {
 	}
 	_, err = fmt.Fprintf(f, "%d", pid)
 	if err != nil {
-		f.Cancel()
+		_ = f.Cancel()
 		return err
 	}
 	return f.Close()
