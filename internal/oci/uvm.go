@@ -333,7 +333,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 	opts.NumaMemoryBlocksCounts = ParseAnnotationCommaSeparatedUint64(ctx, s.Annotations, annotations.NumaCountOfMemoryBlocks,
 		opts.NumaMemoryBlocksCounts)
 
-	maps.Copy(opts.AdditionalHyperVConfig, parseHVSocketServiceTable(ctx, s.Annotations))
+	maps.Copy(opts.AdditionalHyperVConfig, ParseHVSocketServiceTable(ctx, s.Annotations))
 
 	// parse error yielding annotations
 	var err error

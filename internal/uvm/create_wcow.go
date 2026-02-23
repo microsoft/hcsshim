@@ -27,6 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/security"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
@@ -146,10 +147,10 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 
 	// To maintain compatibility with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
-	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+	uvm.processorCount = vmutils.NormalizeProcessorCount(ctx, uvm.id, opts.ProcessorCount, processorTopology)
 
 	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+	memorySizeInMB := vmutils.NormalizeMemorySize(ctx, uvm.id, opts.MemorySizeInMB)
 
 	var registryChanges hcsschema.RegistryChanges
 	// We're getting asked to setup local dump collection for WCOW. We need to:
@@ -209,7 +210,14 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 		Weight: uint64(opts.ProcessorWeight),
 	}
 
-	numa, numaProcessors, err := prepareVNumaTopology(ctx, opts.Options)
+	numa, numaProcessors, err := vmutils.PrepareVNumaTopology(ctx, &vmutils.NumaConfig{
+		MaxProcessorsPerNumaNode:   opts.MaxProcessorsPerNumaNode,
+		MaxMemorySizePerNumaNode:   opts.MaxMemorySizePerNumaNode,
+		PreferredPhysicalNumaNodes: opts.PreferredPhysicalNumaNodes,
+		NumaMappedPhysicalNodes:    opts.NumaMappedPhysicalNodes,
+		NumaProcessorCounts:        opts.NumaProcessorCounts,
+		NumaMemoryBlocksCounts:     opts.NumaMemoryBlocksCounts,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +226,7 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 		if opts.AllowOvercommit {
 			return nil, fmt.Errorf("vNUMA supports only Physical memory backing type")
 		}
-		if err := validateNumaForVM(numa, processor.Count, memorySizeInMB); err != nil {
+		if err := vmutils.ValidateNumaForVM(numa, processor.Count, memorySizeInMB); err != nil {
 			return nil, fmt.Errorf("failed to validate vNUMA settings: %w", err)
 		}
 	}

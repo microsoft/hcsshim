@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/memory"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 const bytesPerPage = 4096
@@ -18,7 +19,7 @@ const bytesPerPage = 4096
 // pages to numa nodes evenly
 func (uvm *UtilityVM) UpdateMemory(ctx context.Context, sizeInBytes uint64) error {
 	requestedSizeInMB := sizeInBytes / memory.MiB
-	actual := uvm.normalizeMemorySize(ctx, requestedSizeInMB)
+	actual := vmutils.NormalizeMemorySize(ctx, uvm.id, requestedSizeInMB)
 	req := &hcsschema.ModifySettingRequest{
 		ResourcePath: resourcepaths.MemoryResourcePath,
 		Settings:     actual,

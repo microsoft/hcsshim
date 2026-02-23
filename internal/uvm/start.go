@@ -30,6 +30,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 // entropyBytes is the number of bytes of random data to send to a Linux UVM
@@ -379,7 +380,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			policy = uvm.createOpts.(*OptionsLCOW).SecurityPolicy
 			enforcer = uvm.createOpts.(*OptionsLCOW).SecurityPolicyEnforcer
 			referenceInfoFilePath = uvm.createOpts.(*OptionsLCOW).UVMReferenceInfoFile
-			referenceInfoFileRoot = defaultLCOWOSBootFilesPath()
+			referenceInfoFileRoot = vmutils.DefaultLCOWOSBootFilesPath()
 		} else if uvm.OS() == "windows" {
 			policy = uvm.createOpts.(*OptionsWCOW).SecurityPolicy
 			enforcer = uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer

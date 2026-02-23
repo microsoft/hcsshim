@@ -1,6 +1,6 @@
 //go:build windows
 
-package uvm
+package vmutils
 
 import (
 	"context"
@@ -13,7 +13,34 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
-// prepareVNumaTopology creates vNUMA settings for implicit (platform) or explicit (user-defined) topology.
+const (
+	wildcardPhysicalNodeNumber = 0xFF
+	numaTopologyNodeCountMax   = 64
+	numaChildNodeCountMax      = 64
+)
+
+// NumaConfig holds vNUMA topology configuration.
+// This is a decoupled representation that can be constructed from
+// various sources (uvm.Options, specs.SandboxSpec, etc.)
+type NumaConfig struct {
+	// MaxProcessorsPerNumaNode is the maximum number of processors per vNUMA node.
+	MaxProcessorsPerNumaNode uint32
+	// MaxMemorySizePerNumaNode is the maximum size of memory (in MiB) per vNUMA node.
+	MaxMemorySizePerNumaNode uint64
+	// PreferredPhysicalNumaNodes are the preferred physical NUMA nodes to map to vNUMA nodes.
+	PreferredPhysicalNumaNodes []uint32
+	// NumaMappedPhysicalNodes are the physical NUMA nodes mapped to vNUMA nodes.
+	// The value at index i represents the physical node for virtual node i.
+	NumaMappedPhysicalNodes []uint32
+	// NumaProcessorCounts are the number of processors per vNUMA node.
+	// The value at index i represents the processor count for virtual node i.
+	NumaProcessorCounts []uint32
+	// NumaMemoryBlocksCounts are the number of memory blocks (in MiB) per vNUMA node.
+	// The value at index i represents the memory blocks for virtual node i.
+	NumaMemoryBlocksCounts []uint64
+}
+
+// PrepareVNumaTopology creates vNUMA settings for implicit (platform) or explicit (user-defined) topology.
 //
 // For implicit topology we look for `MaxProcessorsPerNumaNode`, `MaxMemorySizePerNumaNode` and
 // `PreferredPhysicalNumaNodes` create options.
@@ -31,7 +58,7 @@ import (
 //   - only `hcsschema.MemoryBackingType_PHYSICAL` is supported
 //   - `PhysicalNumaNodes` values at index `i` will be mapped to virtual node number `i`
 //   - client is responsible for setting wildcard physical node numbers
-func prepareVNumaTopology(ctx context.Context, opts *Options) (*hcsschema.Numa, *hcsschema.NumaProcessors, error) {
+func PrepareVNumaTopology(ctx context.Context, opts *NumaConfig) (*hcsschema.Numa, *hcsschema.NumaProcessors, error) {
 	if opts.MaxProcessorsPerNumaNode == 0 && len(opts.NumaMappedPhysicalNodes) == 0 {
 		// warn if vNUMA settings are partially specified, since its likely an error on the client's side
 		if opts.MaxMemorySizePerNumaNode > 0 || len(opts.PreferredPhysicalNumaNodes) > 0 {
@@ -114,12 +141,6 @@ func prepareVNumaTopology(ctx context.Context, opts *Options) (*hcsschema.Numa, 
 	return numa, nil, validate(numa)
 }
 
-const (
-	wildcardPhysicalNodeNumber = 0xFF
-	numaTopologyNodeCountMax   = 64
-	numaChildNodeCountMax      = 64
-)
-
 // validate validates self-contained fields within the given NUMA settings.
 func validate(n *hcsschema.Numa) error {
 	if len(n.Settings) == 0 {
@@ -173,9 +194,9 @@ func validate(n *hcsschema.Numa) error {
 	return nil
 }
 
-// validateNumaForVM validates the NUMA settings for a VM with the given memory settings `memorySettings`,
+// ValidateNumaForVM validates the NUMA settings for a VM with the given memory settings `memorySettings`,
 // processor count `procCount`, and total memory in MB `memInMb`.
-func validateNumaForVM(numa *hcsschema.Numa, procCount uint32, memInMb uint64) error {
+func ValidateNumaForVM(numa *hcsschema.Numa, procCount uint32, memInMb uint64) error {
 	var totalMemoryInMb uint64
 	var totalProcessorCount uint32
 

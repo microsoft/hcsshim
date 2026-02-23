@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
@@ -22,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -226,7 +226,7 @@ func newDefaultOptions(id, owner string) *Options {
 		MemorySizeInMB:         1024,
 		AllowOvercommit:        true,
 		EnableDeferredCommit:   false,
-		ProcessorCount:         defaultProcessorCount(),
+		ProcessorCount:         vmutils.DefaultProcessorCountForUVM(),
 		FullyPhysicallyBacked:  false,
 		NoWritableFileShares:   false,
 		SCSIControllerCount:    1,
@@ -395,36 +395,6 @@ func (uvm *UtilityVM) ExitError() error {
 	return uvm.hcsSystem.ExitError()
 }
 
-func defaultProcessorCount() int32 {
-	if runtime.NumCPU() == 1 {
-		return 1
-	}
-	return 2
-}
-
-// normalizeProcessorCount sets `uvm.processorCount` to `Min(requested,
-// logical CPU count)`.
-func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32, processorTopology *hcsschema.ProcessorTopology) int32 {
-	// Use host processor information retrieved from HCS instead of runtime.NumCPU,
-	// GetMaximumProcessorCount or other OS level calls for two reasons.
-	// 1. Go uses GetProcessAffinityMask and falls back to GetSystemInfo both of
-	// which will not return LPs in another processor group.
-	// 2. GetMaximumProcessorCount will return all processors on the system
-	// but in configurations where the host partition doesn't see the full LP count
-	// i.e "Minroot" scenarios this won't be sufficient.
-	// (https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/manage/manage-hyper-v-minroot-2016)
-	hostCount := int32(processorTopology.LogicalProcessorCount)
-	if requested > hostCount {
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.UVMID: uvm.id,
-			"requested":     requested,
-			"assigned":      hostCount,
-		}).Warn("Changing user requested CPUCount to current number of processors")
-		return hostCount
-	}
-	return requested
-}
-
 // ProcessorCount returns the number of processors actually assigned to the UVM.
 func (uvm *UtilityVM) ProcessorCount() int32 {
 	return uvm.processorCount
@@ -440,18 +410,6 @@ func (uvm *UtilityVM) PhysicallyBacked() bool {
 // in the UVM.
 func (uvm *UtilityVM) ProcessDumpLocation() string {
 	return uvm.processDumpLocation
-}
-
-func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested uint64) uint64 {
-	actual := (requested + 1) &^ 1 // align up to an even number
-	if requested != actual {
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.UVMID: uvm.id,
-			"requested":     requested,
-			"assigned":      actual,
-		}).Warn("Changing user requested MemorySizeInMB to align to 2MB")
-	}
-	return actual
 }
 
 // DevicesPhysicallyBacked describes if additional devices added to the UVM

@@ -117,11 +117,10 @@ func TestProccessAnnotations_HostProcessContainer(t *testing.T) {
 	for _, tt := range testAnnotations {
 		t.Run(tt.name, func(t *testing.T) {
 			spec := specs.Spec{
-				Windows:     &specs.Windows{},
 				Annotations: tt.an,
 			}
 
-			err := ProcessAnnotations(ctx, &spec)
+			err := ProcessAnnotations(ctx, spec.Annotations)
 			if err != nil && len(tt.errs) == 0 {
 				t.Fatalf("ProcessAnnotations should have succeeded, instead got %v", err)
 			}
@@ -181,7 +180,7 @@ func TestProccessAnnotations_Expansion(t *testing.T) {
 					annotations.DisableUnsafeOperations: v,
 				}
 
-				err := ProcessAnnotations(ctx, &tt.spec)
+				err := ProcessAnnotations(ctx, tt.spec.Annotations)
 				if err != nil {
 					subtest.Fatalf("could not update spec from options: %v", err)
 				}
@@ -206,7 +205,7 @@ func TestProccessAnnotations_Expansion(t *testing.T) {
 				annotations.DisableUnsafeOperations,
 				annotations.DisableWritableFileShares)
 
-			err := ProcessAnnotations(ctx, &tt.spec)
+			err := ProcessAnnotations(ctx, tt.spec.Annotations)
 			if !errors.Is(err, ErrAnnotationExpansionConflict) {
 				t.Fatalf("UpdateSpecFromOptions should have failed with %q, actual was %v", errExp, err)
 			}
@@ -460,7 +459,7 @@ func TestParseHVSocketServiceTable(t *testing.T) {
 			maps.Copy(annots, tt.give)
 			t.Logf("annotations:\n%v", annots)
 
-			rvs := parseHVSocketServiceTable(ctx, annots)
+			rvs := ParseHVSocketServiceTable(ctx, annots)
 			t.Logf("got %v", rvs)
 			want := tt.want
 			if want == nil {

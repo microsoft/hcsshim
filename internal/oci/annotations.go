@@ -24,7 +24,7 @@ var ErrAnnotationExpansionConflict = errors.New("annotation expansion conflict")
 var ErrGenericAnnotationConflict = errors.New("specified annotations conflict")
 
 // ProcessAnnotations expands annotations into their corresponding annotation groups.
-func ProcessAnnotations(ctx context.Context, s *specs.Spec) error {
+func ProcessAnnotations(ctx context.Context, specAnnotations map[string]string) error {
 	// Named `Process` and not `Expand` since this function may be expanded (pun intended) to
 	// deal with other annotation issues and validation.
 
@@ -36,11 +36,11 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) error {
 	var errs []error
 	for key, exps := range annotations.AnnotationExpansionMap() {
 		// check if annotation is present
-		if val, ok := s.Annotations[key]; ok {
+		if val, ok := specAnnotations[key]; ok {
 			// ideally, some normalization would occur here (ie, "True" -> "true")
 			// but strings may be case-sensitive
 			for _, k := range exps {
-				if v, ok := s.Annotations[k]; ok && val != v {
+				if v, ok := specAnnotations[k]; ok && val != v {
 					err := fmt.Errorf("%w: %q = %q and %q = %q", ErrAnnotationExpansionConflict, key, val, k, v)
 					errs = append(errs, err)
 					log.G(ctx).WithFields(logrus.Fields{
@@ -51,26 +51,26 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) error {
 					}).WithError(err).Warning("annotation expansion would overwrite conflicting value")
 					continue
 				}
-				s.Annotations[k] = val
+				specAnnotations[k] = val
 			}
 		}
 	}
 
 	// validate host process containers annotations are not conflicting
-	disableHPC := ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableHostProcessContainer, false)
-	enableHPC := ParseAnnotationsBool(ctx, s.Annotations, annotations.HostProcessContainer, false)
+	disableHPC := ParseAnnotationsBool(ctx, specAnnotations, annotations.DisableHostProcessContainer, false)
+	enableHPC := ParseAnnotationsBool(ctx, specAnnotations, annotations.HostProcessContainer, false)
 	if disableHPC && enableHPC {
 		err := fmt.Errorf("%w: host process container annotations %q = %q and %q = %q",
 			ErrGenericAnnotationConflict,
-			annotations.DisableHostProcessContainer, s.Annotations[annotations.DisableHostProcessContainer],
-			annotations.HostProcessContainer, s.Annotations[annotations.HostProcessContainer])
+			annotations.DisableHostProcessContainer, specAnnotations[annotations.DisableHostProcessContainer],
+			annotations.HostProcessContainer, specAnnotations[annotations.HostProcessContainer])
 		errs = append(errs, err)
 
 		log.G(ctx).WithFields(logrus.Fields{
 			logfields.OCIAnnotation:               annotations.DisableHostProcessContainer,
-			logfields.Value:                       s.Annotations[annotations.DisableHostProcessContainer],
+			logfields.Value:                       specAnnotations[annotations.DisableHostProcessContainer],
 			logfields.OCIAnnotation + "-conflict": annotations.HostProcessContainer,
-			logfields.Value + "-conflict":         s.Annotations[annotations.HostProcessContainer],
+			logfields.Value + "-conflict":         specAnnotations[annotations.HostProcessContainer],
 		}).WithError(err).Warning("Host process container and disable host process container cannot both be true")
 	}
 
@@ -204,10 +204,10 @@ func parseAdditionalRegistryValues(ctx context.Context, a map[string]string) []h
 	return slices.Clip(rvs)
 }
 
-// parseHVSocketServiceTable extracts any additional Hyper-V socket service configurations from annotations.
+// ParseHVSocketServiceTable extracts any additional Hyper-V socket service configurations from annotations.
 //
 // Like the [parseAnnotation*] functions, this logs errors but does not return them.
-func parseHVSocketServiceTable(ctx context.Context, a map[string]string) map[string]hcsschema.HvSocketServiceConfig {
+func ParseHVSocketServiceTable(ctx context.Context, a map[string]string) map[string]hcsschema.HvSocketServiceConfig {
 	sc := make(map[string]hcsschema.HvSocketServiceConfig)
 	// TODO(go1.23) use range over functions to implement a functional `filter | map $ a`
 	for k, v := range a {

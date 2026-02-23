@@ -30,6 +30,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/security"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -130,18 +131,6 @@ type OptionsLCOW struct {
 	WritableOverlayDirs     bool                 // Whether init should create writable overlay mounts for /var and /etc
 }
 
-// defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
-// OS kernel and root FS files. This default is the subdirectory
-// `LinuxBootFiles` in the directory of the executable that started the current
-// process; or, if it does not exist, `%ProgramFiles%\Linux Containers`.
-func defaultLCOWOSBootFilesPath() string {
-	localDirPath := filepath.Join(filepath.Dir(os.Args[0]), "LinuxBootFiles")
-	if _, err := os.Stat(localDirPath); err == nil {
-		return localDirPath
-	}
-	return filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
-}
-
 // NewDefaultOptionsLCOW creates the default options for a bootable version of
 // LCOW.
 //
@@ -179,7 +168,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		},
 	}
 
-	opts.UpdateBootFilesPath(context.TODO(), defaultLCOWOSBootFilesPath())
+	opts.UpdateBootFilesPath(context.TODO(), vmutils.DefaultLCOWOSBootFilesPath())
 
 	return opts
 }
@@ -243,7 +232,7 @@ func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hc
 
 	// To maintain compatibility with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
-	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+	uvm.processorCount = vmutils.NormalizeProcessorCount(ctx, uvm.id, opts.ProcessorCount, processorTopology)
 
 	processor := &hcsschema.VirtualMachineProcessor{
 		Count:  uint32(uvm.processorCount),
@@ -394,7 +383,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+	memorySizeInMB := vmutils.NormalizeMemorySize(ctx, uvm.id, opts.MemorySizeInMB)
 
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
@@ -596,19 +585,26 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		return nil, err
 	}
 
-	numa, numaProcessors, err := prepareVNumaTopology(ctx, opts.Options)
+	numa, numaProcessors, err := vmutils.PrepareVNumaTopology(ctx, &vmutils.NumaConfig{
+		MaxProcessorsPerNumaNode:   opts.MaxProcessorsPerNumaNode,
+		MaxMemorySizePerNumaNode:   opts.MaxMemorySizePerNumaNode,
+		PreferredPhysicalNumaNodes: opts.PreferredPhysicalNumaNodes,
+		NumaMappedPhysicalNodes:    opts.NumaMappedPhysicalNodes,
+		NumaProcessorCounts:        opts.NumaProcessorCounts,
+		NumaMemoryBlocksCounts:     opts.NumaMemoryBlocksCounts,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+	memorySizeInMB := vmutils.NormalizeMemorySize(ctx, uvm.id, opts.MemorySizeInMB)
 
 	if numa != nil {
 		if opts.AllowOvercommit {
 			return nil, fmt.Errorf("vNUMA supports only Physical memory backing type")
 		}
-		if err := validateNumaForVM(numa, processor.Count, memorySizeInMB); err != nil {
+		if err := vmutils.ValidateNumaForVM(numa, processor.Count, memorySizeInMB); err != nil {
 			return nil, fmt.Errorf("failed to validate vNUMA settings: %w", err)
 		}
 	}
