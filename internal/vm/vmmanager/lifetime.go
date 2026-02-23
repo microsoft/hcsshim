@@ -4,10 +4,10 @@ package vmmanager
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/pkg/errors"
 )
 
 type LifetimeManager interface {
@@ -67,7 +67,7 @@ func (uvm *UtilityVM) RuntimeID() guid.GUID {
 // Start starts the utility VM.
 func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	if err := uvm.cs.Start(ctx); err != nil {
-		return errors.Wrap(err, "failed to start utility VM")
+		return fmt.Errorf("failed to start utility VM: %w", err)
 	}
 	return nil
 }
@@ -75,7 +75,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 // Terminate terminates the utility VM.
 func (uvm *UtilityVM) Terminate(ctx context.Context) error {
 	if err := uvm.cs.Terminate(ctx); err != nil {
-		return errors.Wrap(err, "failed to terminate utility VM")
+		return fmt.Errorf("failed to terminate utility VM: %w", err)
 	}
 	return nil
 }
@@ -83,7 +83,7 @@ func (uvm *UtilityVM) Terminate(ctx context.Context) error {
 // Close closes the utility VM and releases all associated resources.
 func (uvm *UtilityVM) Close(ctx context.Context) error {
 	if err := uvm.cs.CloseCtx(ctx); err != nil {
-		return errors.Wrap(err, "failed to close utility VM")
+		return fmt.Errorf("failed to close utility VM: %w", err)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func (uvm *UtilityVM) Close(ctx context.Context) error {
 // Pause pauses the utility VM.
 func (uvm *UtilityVM) Pause(ctx context.Context) error {
 	if err := uvm.cs.Pause(ctx); err != nil {
-		return errors.Wrap(err, "failed to pause utility VM")
+		return fmt.Errorf("failed to pause utility VM: %w", err)
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func (uvm *UtilityVM) Pause(ctx context.Context) error {
 // Resume resumes the utility VM.
 func (uvm *UtilityVM) Resume(ctx context.Context) error {
 	if err := uvm.cs.Resume(ctx); err != nil {
-		return errors.Wrap(err, "failed to resume utility VM")
+		return fmt.Errorf("failed to resume utility VM: %w", err)
 	}
 	return nil
 }
@@ -107,7 +107,7 @@ func (uvm *UtilityVM) Resume(ctx context.Context) error {
 // Save saves the state of the utility VM as a template.
 func (uvm *UtilityVM) Save(ctx context.Context, options hcsschema.SaveOptions) error {
 	if err := uvm.cs.Save(ctx, options); err != nil {
-		return errors.Wrap(err, "failed to save utility VM state")
+		return fmt.Errorf("failed to save utility VM state: %w", err)
 	}
 	return nil
 }
@@ -121,7 +121,7 @@ func (uvm *UtilityVM) Wait(ctx context.Context) error {
 func (uvm *UtilityVM) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error) {
 	props, err := uvm.cs.PropertiesV2(ctx, types...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get properties from HCS")
+		return nil, fmt.Errorf("failed to get properties from HCS: %w", err)
 	}
 
 	return props, nil

@@ -4,11 +4,11 @@ package vmmanager
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/pkg/errors"
 )
 
 // VSMBManager manages adding virtual smb shares to a Utility VM.
@@ -29,7 +29,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, settings hcsschema.VirtualSmb
 		ResourcePath: resourcepaths.VSMBShareResourcePath,
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to add VSMB share %s", settings.Name)
+		return fmt.Errorf("failed to add VSMB share %s: %w", settings.Name, err)
 	}
 	return nil
 }
@@ -41,7 +41,7 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, settings hcsschema.Virtual
 		ResourcePath: resourcepaths.VSMBShareResourcePath,
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to remove VSMB share %s", settings.Name)
+		return fmt.Errorf("failed to remove VSMB share %s: %w", settings.Name, err)
 	}
 	return nil
 }

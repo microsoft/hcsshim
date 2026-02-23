@@ -4,12 +4,12 @@ package vmmanager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/pkg/errors"
 )
 
 // NetworkManager manages adding and removing network adapters for a Utility VM.
@@ -35,7 +35,7 @@ func (uvm *UtilityVM) AddNIC(ctx context.Context, nicID string, settings *hcssch
 		Settings:     settings,
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to add NIC %s", nicID)
+		return fmt.Errorf("failed to add NIC %s: %w", nicID, err)
 	}
 	return nil
 }
@@ -47,7 +47,7 @@ func (uvm *UtilityVM) RemoveNIC(ctx context.Context, nicID string, settings *hcs
 		Settings:     settings,
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to remove NIC %s", nicID)
+		return fmt.Errorf("failed to remove NIC %s: %w", nicID, err)
 	}
 	return nil
 }
@@ -62,7 +62,7 @@ func (uvm *UtilityVM) UpdateNIC(ctx context.Context, nicID string, settings *hcs
 		Settings:     settings,
 	}
 	if err := uvm.cs.Modify(ctx, req); err != nil {
-		return errors.Wrapf(err, "failed to update NIC %s", nicID)
+		return fmt.Errorf("failed to update NIC %s: %w", nicID, err)
 	}
 	return nil
 }

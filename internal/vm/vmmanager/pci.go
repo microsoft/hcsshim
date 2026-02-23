@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/pkg/errors"
 )
 
 // PCIManager manages assiging pci devices to a Utility VM. This is Windows specific at the moment.
@@ -30,7 +29,7 @@ func (uvm *UtilityVM) AddDevice(ctx context.Context, vmbusGUID string, settings 
 		Settings:     settings,
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to add PCI device %s", vmbusGUID)
+		return fmt.Errorf("failed to add PCI device %s: %w", vmbusGUID, err)
 	}
 	return nil
 }
@@ -41,7 +40,7 @@ func (uvm *UtilityVM) RemoveDevice(ctx context.Context, vmbusGUID string) error 
 		RequestType:  guestrequest.RequestTypeRemove,
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to remove PCI device %s", vmbusGUID)
+		return fmt.Errorf("failed to remove PCI device %s: %w", vmbusGUID, err)
 	}
 	return nil
 }

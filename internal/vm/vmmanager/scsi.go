@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/pkg/errors"
 )
 
 // SCSIManager manages adding and removing SCSI devices for a Utility VM.
@@ -30,7 +29,7 @@ func (uvm *UtilityVM) AddSCSIDisk(ctx context.Context, disk hcsschema.Attachment
 		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, guestrequest.ScsiControllerGuids[controller], lun),
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to add SCSI disk %s", disk.Path)
+		return fmt.Errorf("failed to add SCSI disk %s: %w", disk.Path, err)
 	}
 
 	return nil
@@ -43,7 +42,7 @@ func (uvm *UtilityVM) RemoveSCSIDisk(ctx context.Context, controller uint, lun u
 	}
 
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to remove SCSI disk %s", request.ResourcePath)
+		return fmt.Errorf("failed to remove SCSI disk %s: %w", request.ResourcePath, err)
 	}
 	return nil
 }

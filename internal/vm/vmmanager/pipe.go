@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/pkg/errors"
 )
 
 // PipeManager manages adding and removing named pipes for a Utility VM.
@@ -29,7 +28,7 @@ func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) error {
 		ResourcePath: fmt.Sprintf(resourcepaths.MappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to add pipe %s to uvm", hostPath)
+		return fmt.Errorf("failed to add pipe %s to uvm: %w", hostPath, err)
 	}
 
 	return nil
@@ -41,7 +40,7 @@ func (uvm *UtilityVM) RemovePipe(ctx context.Context, hostPath string) error {
 		ResourcePath: fmt.Sprintf(resourcepaths.MappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to remove pipe %s from uvm", hostPath)
+		return fmt.Errorf("failed to remove pipe %s from uvm: %w", hostPath, err)
 	}
 
 	return nil

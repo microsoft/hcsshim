@@ -4,11 +4,11 @@ package vmmanager
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/pkg/errors"
 )
 
 // Plan9Manager manages adding plan 9 shares to a Utility VM.
@@ -29,7 +29,7 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, settings hcsschema.Plan9Shar
 		ResourcePath: resourcepaths.Plan9ShareResourcePath,
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to add Plan9 share %s", settings.Name)
+		return fmt.Errorf("failed to add Plan9 share %s: %w", settings.Name, err)
 	}
 	return nil
 }
@@ -41,7 +41,7 @@ func (uvm *UtilityVM) RemovePlan9(ctx context.Context, settings hcsschema.Plan9S
 		ResourcePath: resourcepaths.Plan9ShareResourcePath,
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to remove Plan9 share %s", settings.Name)
+		return fmt.Errorf("failed to remove Plan9 share %s: %w", settings.Name, err)
 	}
 	return nil
 }

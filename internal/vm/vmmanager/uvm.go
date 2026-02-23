@@ -4,6 +4,7 @@ package vmmanager
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -11,7 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,7 +33,7 @@ type UtilityVM struct {
 func Create(ctx context.Context, id string, config *hcsschema.ComputeSystem) (*UtilityVM, error) {
 	cs, err := hcs.CreateComputeSystem(ctx, id, config)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create compute system")
+		return nil, fmt.Errorf("failed to create compute system: %w", err)
 	}
 
 	defer func() {
@@ -50,7 +50,7 @@ func Create(ctx context.Context, id string, config *hcsschema.ComputeSystem) (*U
 	// Cache the VM ID of the utility VM.
 	properties, err := cs.Properties(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get compute system properties")
+		return nil, fmt.Errorf("failed to get compute system properties: %w", err)
 	}
 	uvm.vmID = properties.RuntimeID
 	uvm.cs = cs

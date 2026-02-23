@@ -9,8 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-
-	"github.com/pkg/errors"
 )
 
 // VMSocketManager manages configuration for a hypervisor socket transport. This includes sockets such as
@@ -48,7 +46,7 @@ func (uvm *UtilityVM) UpdateHvSocketService(ctx context.Context, serviceID strin
 		Settings:     config,
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to update HvSocket service %s", serviceID)
+		return fmt.Errorf("failed to update HvSocket service %s: %w", serviceID, err)
 	}
 	return nil
 }
@@ -60,7 +58,7 @@ func (uvm *UtilityVM) RemoveHvSocketService(ctx context.Context, serviceID strin
 		ResourcePath: fmt.Sprintf(resourcepaths.HvSocketConfigResourceFormat, serviceID),
 	}
 	if err := uvm.cs.Modify(ctx, modification); err != nil {
-		return errors.Wrapf(err, "failed to remove HvSocket service %s", serviceID)
+		return fmt.Errorf("failed to remove HvSocket service %s: %w", serviceID, err)
 	}
 	return nil
 }

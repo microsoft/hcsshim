@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/pkg/errors"
 )
 
 // VPMemManager manages adding and removing virtual persistent memory devices for a Utility VM.
@@ -30,7 +29,7 @@ func (uvm *UtilityVM) AddVPMemDevice(ctx context.Context, id uint32, settings hc
 		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, id),
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to add VPMem device %d", id)
+		return fmt.Errorf("failed to add VPMem device %d: %w", id, err)
 	}
 	return nil
 }
@@ -41,7 +40,7 @@ func (uvm *UtilityVM) RemoveVPMemDevice(ctx context.Context, id uint32) error {
 		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, id),
 	}
 	if err := uvm.cs.Modify(ctx, request); err != nil {
-		return errors.Wrapf(err, "failed to remove VPMem device %d", id)
+		return fmt.Errorf("failed to remove VPMem device %d: %w", id, err)
 	}
 	return nil
 }
