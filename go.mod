@@ -36,7 +36,9 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/errdefs/pkg v0.3.0
 	github.com/containerd/go-runc v1.1.0
+	github.com/containerd/log v0.1.0
 	github.com/containerd/platforms v1.0.0-rc.1
+	github.com/containerd/plugin v1.0.0
 	github.com/containerd/ttrpc v1.2.7
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/google/go-cmp v0.7.0
@@ -76,8 +78,6 @@ require (
 	github.com/checkpoint-restore/go-criu/v6 v6.3.0 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
-	github.com/containerd/log v0.1.0 // indirect
-	github.com/containerd/plugin v1.0.0 // indirect
 	github.com/containerd/protobuild v0.3.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
