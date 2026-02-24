@@ -148,7 +148,10 @@ func CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64
 }
 
 func CimGetVerificationInformation(blockCimPath string, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) {
-	return cimfs.CimGetVerificationInformation(blockCimPath, isSealed, hashSize, signatureSize, fixedHeaderSize, hash, signature)
+	return pickSupported(
+		cimwriter.CimGetVerificationInformation,
+		cimfs.CimGetVerificationInformation,
+	)(blockCimPath, isSealed, hashSize, signatureSize, fixedHeaderSize, hash, signature)
 }
 
 func CimMountVerifiedImage(imagePath string, fsName string, flags uint32, volumeID *guid.GUID, hashSize uint16, hash *byte) error {
