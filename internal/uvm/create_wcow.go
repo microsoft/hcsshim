@@ -70,9 +70,9 @@ type OptionsWCOW struct {
 	// AdditionalRegistryKeys are Registry keys and their values to additionally add to the uVM.
 	AdditionalRegistryKeys []hcsschema.RegistryValue
 
-	OutputHandlerCreator OutputHandlerCreator // Creates an [OutputHandler] that controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as ETW Log events
-	LogSources           string               // ETW providers to be set for the logging service
-	ForwardLogs          bool                 // Whether to forward logs to the host or not
+	OutputHandlerCreator vmutils.OutputHandlerCreator // Creates an [OutputHandler] that controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as ETW Log events
+	LogSources           string                       // ETW providers to be set for the logging service
+	ForwardLogs          bool                         // Whether to forward logs to the host or not
 }
 
 func defaultConfidentialWCOWOSBootFilesPath() string {
@@ -111,7 +111,7 @@ func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 				SecurityPolicyEnabled: false,
 			},
 		},
-		OutputHandlerCreator: parseLogrus,
+		OutputHandlerCreator: vmutils.ParseGCSLogrus,
 		ForwardLogs:          true, // Default to true for WCOW, and set to false for CWCOW in internal/oci/uvm.go SpecToUVMCreateOpts
 		LogSources:           "",
 	}
@@ -620,7 +620,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	if opts.ForwardLogs {
 		// Create a socket that the executed program can send to. This is usually
 		// used by Log Forward Service to send log data.
-		uvm.outputHandler = opts.OutputHandlerCreator(opts.Options)
+		uvm.outputHandler = opts.OutputHandlerCreator(opts.ID)
 		uvm.outputProcessingDone = make(chan struct{})
 		uvm.outputListener, err = winio.ListenHvsock(&winio.HvsockAddr{
 			VMID:      uvm.RuntimeID(),

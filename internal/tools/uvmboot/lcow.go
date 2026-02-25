@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 const (
@@ -247,7 +248,7 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 		if c.IsSet(outputHandlingArgName) {
 			switch strings.ToLower(c.String(outputHandlingArgName)) {
 			case "stdout":
-				options.OutputHandlerCreator = func(*uvm.Options) uvm.OutputHandler {
+				options.OutputHandlerCreator = func(string) vmutils.OutputHandler {
 					return func(r io.Reader) {
 						_, _ = io.Copy(os.Stdout, r)
 					}
