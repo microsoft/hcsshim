@@ -4,7 +4,9 @@
 package cimfs
 
 import (
-	"github.com/Microsoft/hcsshim/internal/winapi"
+	"github.com/Microsoft/hcsshim/internal/winapi/cimfs"
+	"github.com/Microsoft/hcsshim/internal/winapi/cimwriter"
+
 	"path/filepath"
 
 	"github.com/Microsoft/hcsshim/osversion"
@@ -19,7 +21,7 @@ func IsCimFSSupported() bool {
 	build := osversion.Build()
 	// CimFS support is backported to LTSC2022 starting with revision 2031 and should
 	// otherwise be available on all builds >= V25H1Server
-	return (build >= osversion.V25H1Server || (build == osversion.V21H2Server && rv >= 2031)) && winapi.CimFsSupported()
+	return (build >= osversion.V25H1Server || (build == osversion.V21H2Server && rv >= 2031)) && cimfs.Supported()
 }
 
 // IsBlockCimSupported returns true if block formatted CIMs (i.e block device CIM &
@@ -29,7 +31,27 @@ func IsBlockCimSupported() bool {
 	// TODO(ambarve): Currently we are checking against a higher build number since there is no
 	// official build with block CIM support yet. Once we have that build, we should
 	// update the build number here.
-	return build >= 27766 && winapi.CimFsSupported()
+	return build >= 27766 && cimfs.Supported()
+}
+
+// IsBlockCimWriteSupported returns true if block formatted CIMs (i.e block device CIM &
+// single file CIM) are supported on the current OS build or if CimWriter is present.
+func IsBlockCimWriteSupported() bool {
+	build := osversion.Build()
+	// TODO(ambarve): Currently we are checking against a higher build number since there is no
+	// official build with block CIM support yet. Once we have that build, we should
+	// update the build number here.
+	return (build >= 27766 && cimfs.Supported()) || cimwriter.Supported()
+}
+
+// IsBlockCimMountSupported returns true if block formatted CIMs (i.e block device CIM &
+// single file CIM) are supported on the current OS build.
+func IsBlockCimMountSupported() bool {
+	build := osversion.Build()
+	// TODO(ambarve): Currently we are checking against a higher build number since there is no
+	// official build with block CIM support yet. Once we have that build, we should
+	// update the build number here.
+	return build >= 27766 && cimfs.Supported()
 }
 
 // IsVerifiedCimSupported returns true if block CIM format supports also writing verification information in the CIM.
@@ -38,7 +60,26 @@ func IsVerifiedCimSupported() bool {
 	// TODO(ambarve): Currently we are checking against a higher build number since there is no
 	// official build with block CIM support yet. Once we have that build, we should
 	// update the build number here.
-	return build >= 27800 && winapi.CimFsSupported()
+	return build >= 27800 && cimfs.Supported()
+}
+
+
+// IsVerifiedCimWriteSupported returns true if block CIM format supports also writing verification information in the CIM.
+func IsVerifiedCimWriteSupported() bool {
+	build := osversion.Build()
+	// TODO(ambarve): Currently we are checking against a higher build number since there is no
+	// official build with block CIM support yet. Once we have that build, we should
+	// update the build number here.
+	return (build >= 27800 && cimfs.Supported()) || cimwriter.Supported()
+}
+
+// IsVerifiedCimMountSupported returns true if block CIM format supports mounting.
+func IsVerifiedCimMountSupported() bool {
+	build := osversion.Build()
+	// TODO(ambarve): Currently we are checking against a higher build number since there is no
+	// official build with block CIM support yet. Once we have that build, we should
+	// update the build number here.
+	return build >= 27800 && cimfs.Supported()
 }
 
 func IsMergedCimSupported() bool {
@@ -48,6 +89,19 @@ func IsMergedCimSupported() bool {
 	return IsBlockCimSupported()
 }
 
+func IsMergedCimWriteSupported() bool {
+	// The merged CIM support was originally added before block CIM support.  However,
+	// some of the merged CIM features that we use (e.g. merged hard links) were added
+	// later along with block CIM support. So use the same check as block CIM here.
+	return IsBlockCimWriteSupported()
+}
+
+func IsMergedCimMountSupported() bool {
+	// The merged CIM support was originally added before block CIM support.  However,
+	// some of the merged CIM features that we use (e.g. merged hard links) were added
+	// later along with block CIM support. So use the same check as block CIM here.
+	return IsBlockCimMountSupported()
+}
 type BlockCIMType uint32
 
 const (

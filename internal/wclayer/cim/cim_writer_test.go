@@ -11,7 +11,7 @@ import (
 )
 
 func TestSingleFileWriterTypeMismatch(t *testing.T) {
-	if !cimfs.IsBlockCimSupported() {
+	if !cimfs.IsBlockCimWriteSupported() {
 		t.Skipf("BlockCIM not supported")
 	}
 
@@ -34,7 +34,7 @@ func TestSingleFileWriterTypeMismatch(t *testing.T) {
 }
 
 func TestSingleFileWriterInvalidBlockType(t *testing.T) {
-	if !cimfs.IsBlockCimSupported() {
+	if !cimfs.IsBlockCimWriteSupported() {
 		t.Skipf("BlockCIM not supported")
 	}
 
