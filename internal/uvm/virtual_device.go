@@ -16,12 +16,9 @@ import (
 )
 
 const (
-	GPUDeviceIDType         = "gpu"
 	VPCILocationPathIDType  = "vpci-location-path"
 	VPCIClassGUIDTypeLegacy = "class"
 	VPCIClassGUIDType       = "vpci-class-guid"
-	VPCIDeviceIDTypeLegacy  = "vpci"
-	VPCIDeviceIDType        = "vpci-instance-id"
 )
 
 // this is the well known channel type GUID defined by VMBUS for all assigned devices
@@ -78,12 +75,6 @@ func (vpci *VPCIDevice) Release(ctx context.Context) error {
 		return fmt.Errorf("failed to remove VPCI device: %w", err)
 	}
 	return nil
-}
-
-func IsValidDeviceType(deviceType string) bool {
-	return (deviceType == VPCIDeviceIDType) ||
-		(deviceType == VPCIDeviceIDTypeLegacy) ||
-		(deviceType == GPUDeviceIDType)
 }
 
 // AssignDevice assigns a vpci device to a uvm.

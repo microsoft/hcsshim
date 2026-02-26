@@ -14,6 +14,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	testcmd "github.com/Microsoft/hcsshim/test/internal/cmd"
@@ -58,12 +59,12 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 				opts.VPMemDeviceCount = 0
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
-				opts.RootFSFile = uvm.InitrdFile
+				opts.RootFSFile = vmutils.InitrdFile
 
 				opts.KernelDirect = false
-				opts.KernelFile = uvm.KernelFile
+				opts.KernelFile = vmutils.KernelFile
 			},
-			wantArgs: []string{fmt.Sprintf(`initrd=/%s`, uvm.InitrdFile),
+			wantArgs: []string{fmt.Sprintf(`initrd=/%s`, vmutils.InitrdFile),
 				`8250_core.nr_uarts=0`, fmt.Sprintf(`nr_cpus=%d`, numCPU), `panic=-1`, `quiet`, `pci=off`},
 			notWantArgs: []string{`root=`, `rootwait`, `init=`, `/dev/pmem`, `/dev/sda`, `console=`},
 			wantDmesg:   []string{`initrd`, `initramfs`},
@@ -75,10 +76,10 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 				opts.VPMemDeviceCount = 0
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
-				opts.RootFSFile = uvm.InitrdFile
+				opts.RootFSFile = vmutils.InitrdFile
 
 				opts.KernelDirect = true
-				opts.KernelFile = uvm.UncompressedKernelFile
+				opts.KernelFile = vmutils.UncompressedKernelFile
 			},
 			wantArgs:    []string{`8250_core.nr_uarts=0`, fmt.Sprintf(`nr_cpus=%d`, numCPU), `panic=-1`, `quiet`, `pci=off`},
 			notWantArgs: []string{`root=`, `rootwait`, `init=`, `/dev/pmem`, `/dev/sda`, `console=`},
@@ -96,10 +97,10 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 				opts.VPMemDeviceCount = 1
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 
 				opts.KernelDirect = false
-				opts.KernelFile = uvm.KernelFile
+				opts.KernelFile = vmutils.KernelFile
 			},
 			wantArgs: []string{`root=/dev/pmem0`, `rootwait`, `init=/init`,
 				`8250_core.nr_uarts=0`, fmt.Sprintf(`nr_cpus=%d`, numCPU), `panic=-1`, `quiet`, `pci=off`},
@@ -113,10 +114,10 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 				opts.VPMemDeviceCount = 0
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 
 				opts.KernelDirect = false
-				opts.KernelFile = uvm.KernelFile
+				opts.KernelFile = vmutils.KernelFile
 			},
 			wantArgs: []string{`root=/dev/sda`, `rootwait`, `init=/init`,
 				`8250_core.nr_uarts=0`, fmt.Sprintf(`nr_cpus=%d`, numCPU), `panic=-1`, `quiet`, `pci=off`},
@@ -130,10 +131,10 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 				opts.VPMemDeviceCount = 1
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 
 				opts.KernelDirect = true
-				opts.KernelFile = uvm.UncompressedKernelFile
+				opts.KernelFile = vmutils.UncompressedKernelFile
 			},
 			wantArgs: []string{`root=/dev/pmem0`, `rootwait`, `init=/init`,
 				`8250_core.nr_uarts=0`, fmt.Sprintf(`nr_cpus=%d`, numCPU), `panic=-1`, `quiet`, `pci=off`},
@@ -147,10 +148,10 @@ func TestLCOW_UVM_KernelArgs(t *testing.T) {
 				opts.VPMemDeviceCount = 0
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 
 				opts.KernelDirect = true
-				opts.KernelFile = uvm.UncompressedKernelFile
+				opts.KernelFile = vmutils.UncompressedKernelFile
 			},
 			wantArgs: []string{`root=/dev/sda`, `rootwait`, `init=/init`,
 				`8250_core.nr_uarts=0`, fmt.Sprintf(`nr_cpus=%d`, numCPU), `panic=-1`, `quiet`, `pci=off`},
@@ -210,9 +211,9 @@ func TestLCOW_UVM_Boot(t *testing.T) {
 			name: "vPMEM no kernel direct initrd",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = false
-				opts.KernelFile = uvm.KernelFile
+				opts.KernelFile = vmutils.KernelFile
 
-				opts.RootFSFile = uvm.InitrdFile
+				opts.RootFSFile = vmutils.InitrdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 
 				opts.VPMemDeviceCount = 32
@@ -222,36 +223,36 @@ func TestLCOW_UVM_Boot(t *testing.T) {
 			name: "vPMEM kernel direct initrd",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = true
-				opts.KernelFile = uvm.UncompressedKernelFile
+				opts.KernelFile = vmutils.UncompressedKernelFile
 
-				opts.RootFSFile = uvm.InitrdFile
+				opts.RootFSFile = vmutils.InitrdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 
-				opts.VPMemDeviceCount = uvm.DefaultVPMEMCount
+				opts.VPMemDeviceCount = vmutils.DefaultVPMEMCount
 			},
 		},
 		{
 			name: "vPMEM no kernel direct VHD",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = false
-				opts.KernelFile = uvm.KernelFile
+				opts.KernelFile = vmutils.KernelFile
 
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 
-				opts.VPMemDeviceCount = uvm.DefaultVPMEMCount
+				opts.VPMemDeviceCount = vmutils.DefaultVPMEMCount
 			},
 		},
 		{
 			name: "vPMEM kernel direct VHD",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = true
-				opts.KernelFile = uvm.UncompressedKernelFile
+				opts.KernelFile = vmutils.UncompressedKernelFile
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 
-				opts.VPMemDeviceCount = uvm.DefaultVPMEMCount
+				opts.VPMemDeviceCount = vmutils.DefaultVPMEMCount
 			},
 		},
 	} {
@@ -299,9 +300,9 @@ func TestLCOW_UVM_WritableOverlay(t *testing.T) {
 			name: "no kernel direct initrd",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = false
-				opts.KernelFile = uvm.KernelFile
+				opts.KernelFile = vmutils.KernelFile
 
-				opts.RootFSFile = uvm.InitrdFile
+				opts.RootFSFile = vmutils.InitrdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 			},
 		},
@@ -309,9 +310,9 @@ func TestLCOW_UVM_WritableOverlay(t *testing.T) {
 			name: "kernel direct initrd",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = true
-				opts.KernelFile = uvm.UncompressedKernelFile
+				opts.KernelFile = vmutils.UncompressedKernelFile
 
-				opts.RootFSFile = uvm.InitrdFile
+				opts.RootFSFile = vmutils.InitrdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 			},
 		},
@@ -319,9 +320,9 @@ func TestLCOW_UVM_WritableOverlay(t *testing.T) {
 			name: "no kernel direct VHD",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = false
-				opts.KernelFile = uvm.KernelFile
+				opts.KernelFile = vmutils.KernelFile
 
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 			},
 		},
@@ -329,10 +330,10 @@ func TestLCOW_UVM_WritableOverlay(t *testing.T) {
 			name: "kernel direct VHD",
 			optsFn: func(opts *uvm.OptionsLCOW) {
 				opts.KernelDirect = true
-				opts.KernelFile = uvm.UncompressedKernelFile
+				opts.KernelFile = vmutils.UncompressedKernelFile
 
 				opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-				opts.RootFSFile = uvm.VhdFile
+				opts.RootFSFile = vmutils.VhdFile
 			},
 		},
 	} {

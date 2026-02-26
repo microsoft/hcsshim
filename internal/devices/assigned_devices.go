@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/pkg/errors"
 )
 
@@ -40,7 +41,7 @@ func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID string, 
 		}
 	}()
 
-	if uvm.IsValidDeviceType(idType) {
+	if vmutils.IsValidDeviceType(idType) {
 		vpci, err = vm.AssignDevice(ctx, deviceID, index, "")
 		if err != nil {
 			return vpci, nil, errors.Wrapf(err, "failed to assign device %s of type %s to pod %s", deviceID, idType, vm.ID())

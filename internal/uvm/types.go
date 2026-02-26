@@ -83,8 +83,8 @@ type UtilityVM struct {
 	vpmemMaxCount           uint32 // The max number of VPMem devices.
 	vpmemMaxSizeBytes       uint64 // The max size of the layer in bytes per vPMem device.
 	vpmemMultiMapping       bool   // Enable mapping multiple VHDs onto a single VPMem device
-	vpmemDevicesDefault     [MaxVPMEMCount]*vPMemInfoDefault
-	vpmemDevicesMultiMapped [MaxVPMEMCount]*vPMemInfoMulti
+	vpmemDevicesDefault     [vmutils.MaxVPMEMCount]*vPMemInfoDefault
+	vpmemDevicesMultiMapped [vmutils.MaxVPMEMCount]*vPMemInfoMulti
 
 	// SCSI devices that are mapped into a Windows or Linux utility VM
 	SCSIManager         *scsi.Manager

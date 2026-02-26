@@ -18,6 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
@@ -174,7 +175,7 @@ func handleAssignedDevicesLCOW(
 
 	// assign device into UVM and create corresponding spec windows devices
 	for _, d := range specDevs {
-		if !uvm.IsValidDeviceType(d.IDType) {
+		if !vmutils.IsValidDeviceType(d.IDType) {
 			return resultDevs, closers, errors.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
 

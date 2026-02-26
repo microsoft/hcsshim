@@ -26,15 +26,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// entropyBytes is the number of bytes of random data to send to a Linux UVM
-// during boot to seed the CRNG. There is not much point in making this too
-// large since the random data collected from the host is likely computed from a
-// relatively small key (256 bits?), so additional bytes would not actually
-// increase the entropy of the guest's pool. However, send enough to convince
-// containers that there is a large amount of entropy since this idea is
-// generally misunderstood.
-const entropyBytes = 512
-
 // When using an external GCS connection it is necessary to send a ModifySettings request
 // for HvSocket so that the GCS can setup some registry keys that are required for running
 // containers inside the UVM. In non external GCS connection scenarios this is done by the
@@ -101,7 +92,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 				return fmt.Errorf("failed to connect to entropy socket: %w", err)
 			}
 			defer conn.Close()
-			_, err = io.CopyN(conn, rand.Reader, entropyBytes)
+			_, err = io.CopyN(conn, rand.Reader, vmutils.LinuxEntropyBytes)
 			if err != nil {
 				e.WithError(err).Error("failed to write entropy")
 				return fmt.Errorf("failed to write entropy: %w", err)

@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 const (
@@ -53,7 +54,7 @@ func newVPMemMappedDevice(hostPath, uvmPath string, sizeBytes uint64, memReg mem
 func newPackedVPMemDevice() *vPMemInfoMulti {
 	return &vPMemInfoMulti{
 		PoolAllocator:        memory.NewPoolMemoryAllocator(),
-		maxSize:              DefaultVPMemSizeBytes,
+		maxSize:              vmutils.DefaultVPMemSizeBytes,
 		mappings:             make(map[string]*mappedDeviceInfo),
 		maxMappedDeviceCount: MaxMappedDeviceCount,
 	}
