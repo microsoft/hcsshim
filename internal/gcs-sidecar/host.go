@@ -75,17 +75,18 @@ func (h *Host) AddContainer(ctx context.Context, id string, c *Container) error 
 	return nil
 }
 
-func (h *Host) RemoveContainer(ctx context.Context, id string) {
+func (h *Host) RemoveContainer(ctx context.Context, id string) error {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
 	_, ok := h.containers[id]
 	if !ok {
 		log.G(ctx).Tracef("RemoveContainer: Container not found: ID: %v", id)
-		return
+		return gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 
 	delete(h.containers, id)
+	return nil
 }
 
 func (h *Host) GetCreatedContainer(ctx context.Context, id string) (*Container, error) {
