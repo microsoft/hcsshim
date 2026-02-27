@@ -4,6 +4,7 @@ package main
 
 import (
 	gcontext "context"
+	"runtime"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
@@ -70,6 +71,13 @@ var createScratchCommand = cli.Command{
 		sizeGB := uint32(context.Uint("sizeGB"))
 		if sizeGB == 0 {
 			sizeGB = lcow.DefaultScratchSizeGB
+		}
+
+		if runtime.GOARCH == "arm64" {
+			// Direct-boot is not supported on ARM64, so disable KernelDirect even if the flag is set.
+			opts.KernelDirect = false
+			// ARM64 doesn't support VPMem yet, so disable it even if the flag is set.
+			opts.VPMemDeviceCount = 0
 		}
 
 		convertUVM, err := uvm.CreateLCOW(ctx, opts)

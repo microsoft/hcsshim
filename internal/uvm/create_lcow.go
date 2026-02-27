@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
@@ -170,6 +171,12 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 
 	opts.UpdateBootFilesPath(context.TODO(), vmutils.DefaultLCOWOSBootFilesPath())
 
+	if runtime.GOARCH == "arm64" {
+		// ARM64 doesn't support KernelDirect, so disable it even if the flag is set.
+		opts.KernelDirect = false
+		// ARM64 doesn't support VPMem yet, so disable it even if the flag is set.
+		opts.VPMemDeviceCount = 0
+	}
 	return opts
 }
 
@@ -207,11 +214,12 @@ func (opts *OptionsLCOW) UpdateBootFilesPath(ctx context.Context, path string) {
 		}).Debug("updated LCOW root filesystem to " + VhdFile)
 	}
 
-	if opts.KernelDirect {
+	if opts.KernelDirect && runtime.GOARCH != "arm64" {
 		// KernelDirect supports uncompressed kernel if the kernel is present.
 		// Default to uncompressed if on box. NOTE: If `kernel` is already
 		// uncompressed and simply named 'kernel' it will still be used
 		// uncompressed automatically.
+		// ARM64 doesn't support KernelDirect, so skip this logic in that case.
 		if _, err := os.Stat(filepath.Join(opts.BootFilesPath, UncompressedKernelFile)); err == nil {
 			opts.KernelFile = UncompressedKernelFile
 
@@ -803,14 +811,20 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	vmDebugging := false
 	if opts.ConsolePipe != "" {
 		vmDebugging = true
-		kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1 console=ttyS0,115200"
+		if runtime.GOARCH == "arm64" {
+			kernelArgs += " console=ttyAMA0,115200"
+		} else {
+			kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1 console=ttyS0,115200"
+		}
 		doc.VirtualMachine.Devices.ComPorts = map[string]hcsschema.ComPort{
 			"0": { // Which is actually COM1
 				NamedPipe: opts.ConsolePipe,
 			},
 		}
 	} else {
-		kernelArgs += " 8250_core.nr_uarts=0"
+		if runtime.GOARCH != "arm64" {
+			kernelArgs += " 8250_core.nr_uarts=0"
+		}
 	}
 
 	if opts.EnableGraphicsConsole {
@@ -831,7 +845,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		kernelArgs += " " + opts.KernelBootOptions
 	}
 
-	if !opts.VPCIEnabled {
+	if runtime.GOARCH != "arm64" && !opts.VPCIEnabled {
 		kernelArgs += ` pci=off`
 	}
 
@@ -961,6 +975,12 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 
 	if err = verifyOptions(ctx, opts); err != nil {
 		return nil, errors.Wrap(err, errBadUVMOpts.Error())
+	}
+
+	// KernelDirect and VPMem devices are not supported by Hyper-V on ARM64.
+	if runtime.GOARCH == "arm64" {
+		opts.KernelDirect = false
+		opts.VPMemDeviceCount = 0
 	}
 
 	// HCS config for SNP isolated vm is quite different to the usual case
