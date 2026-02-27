@@ -8,13 +8,15 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+
+	"github.com/Microsoft/go-winio/pkg/guid"
 )
 
 // Manager provides access to guest operations over the GCS connection.
 // Call CreateConnection before invoking other methods.
 type Manager interface {
 	// CreateConnection accepts the GCS connection and performs initial setup.
-	CreateConnection(ctx context.Context, opts ...ConfigOption) error
+	CreateConnection(ctx context.Context, GCSServiceID guid.GUID, opts ...ConfigOption) error
 	// CloseConnection closes the GCS connection and listener.
 	CloseConnection() error
 	// Capabilities returns the guest's declared capabilities.
