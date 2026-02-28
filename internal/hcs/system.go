@@ -877,3 +877,7 @@ func (computeSystem *System) Modify(ctx context.Context, config interface{}) err
 func (computeSystem *System) StoppedTime() time.Time {
 	return computeSystem.stopTime
 }
+
+func (computeSystem *System) StartedTime() time.Time {
+	return computeSystem.startTime
+}

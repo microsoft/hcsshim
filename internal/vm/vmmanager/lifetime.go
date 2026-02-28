@@ -49,6 +49,9 @@ type LifetimeManager interface {
 	// PropertiesV2 returns the properties of the Utility VM.
 	PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error)
 
+	// StartedTime returns the time when the Utility VM entered the running state.
+	StartedTime() time.Time
+
 	// StoppedTime returns the time when the Utility VM entered the stopped state.
 	StoppedTime() time.Time
 
@@ -133,6 +136,11 @@ func (uvm *UtilityVM) PropertiesV2(ctx context.Context, types ...hcsschema.Prope
 	}
 
 	return props, nil
+}
+
+// StartedTime returns the time when the utility VM entered the running state.
+func (uvm *UtilityVM) StartedTime() time.Time {
+	return uvm.cs.StartedTime()
 }
 
 // StoppedTime returns the time when the utility VM entered the stopped state.
