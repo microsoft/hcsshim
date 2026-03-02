@@ -189,6 +189,15 @@ func verifyOptions(_ context.Context, options interface{}) error {
 				return errors.New("resource partition ID and CPU group ID cannot be set at the same time")
 			}
 		}
+		if runtime.GOARCH == "arm64" {
+			// ARM64 specific checks for currently unsupported features. These can be removed when the features are supported on ARM64.
+			if opts.VPMemDeviceCount > 0 {
+				return errors.New("VPMem devices are not supported on ARM64")
+			}
+			if opts.KernelDirect {
+				return errors.New("KernelDirectBoot is not supported on ARM64")
+			}
+		}
 	case *OptionsWCOW:
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
 			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
