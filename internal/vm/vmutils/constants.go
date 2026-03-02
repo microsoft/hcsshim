@@ -60,6 +60,9 @@ const (
 	// containers that there is a large amount of entropy since this idea is
 	// generally misunderstood.
 	LinuxEntropyBytes = 512
+
+	// Plan9Port is the default port number for the 9p service in LCOW.
+	Plan9Port = 564
 )
 
 var (
