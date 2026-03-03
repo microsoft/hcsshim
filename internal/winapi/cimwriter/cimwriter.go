@@ -34,6 +34,8 @@ type ImagePath = types.CimFsImagePath
 //sys CimCreateMergeLink(cimFSHandle FsHandle, newPath string, oldPath string) (hr error) = cimwriter.CimCreateMergeLink?
 //sys CimSealImage(blockCimPath string, hashSize *uint64, fixedHeaderSize *uint64, hash *byte) (hr error) = cimwriter.CimSealImage?
 
+//sys CimGetVerificationInformation(blockCimPath string, isSealed *uint32, hashSize *uint64, signatureSize *uint64, fixedHeaderSize *uint64, hash *byte, signature *byte) (hr error) = cimwriter.CimGetVerificationInformation?
+
 var load = sync.OnceValue(func() error {
 	// Pre-load the DLL with a restricted search path (System32 + application directory only)
 	// to prevent loading from untrusted locations (e.g., CWD or arbitrary PATH entries).
