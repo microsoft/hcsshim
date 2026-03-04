@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 
@@ -33,6 +34,8 @@ type Manager interface {
 	DumpStacks(ctx context.Context) (string, error)
 	// DeleteContainerState removes persisted state for the container identified by `cid` from the guest.
 	DeleteContainerState(ctx context.Context, cid string) error
+	// ExecIntoUVM executes commands specified in the requests in the utility VM.
+	ExecIntoUVM(ctx context.Context, request *cmd.CmdProcessRequest) (int, error)
 }
 
 var _ Manager = (*Guest)(nil)
@@ -80,4 +83,9 @@ func (gm *Guest) DeleteContainerState(ctx context.Context, cid string) error {
 	}
 
 	return nil
+}
+
+// ExecIntoUVM executes commands specified in the requests in the utility VM.
+func (gm *Guest) ExecIntoUVM(ctx context.Context, request *cmd.CmdProcessRequest) (int, error) {
+	return cmd.ExecInUvm(ctx, gm.gc, request)
 }

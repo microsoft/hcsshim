@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -253,6 +254,8 @@ func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.Ex
 	if wpst.host == nil {
 		return 0, errTaskNotIsolated
 	}
+
+	ctx, _ = log.WithContext(ctx, log.G(ctx).WithField(logfields.UVMID, wpst.host.ID()))
 	return cmd.ExecInUvm(ctx, wpst.host, cmdReq)
 }
 

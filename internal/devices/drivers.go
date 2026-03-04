@@ -17,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
-// InstallDriver mounts a share from the host into the UVM, installs any kernel drivers in the share,
+// InstallDrivers mounts a share from the host into the UVM, installs any kernel drivers in the share,
 // and configures the environment for library files and/or binaries in the share.
 //
 // InstallDriver mounts a specified kernel driver, then installs it in the UVM.

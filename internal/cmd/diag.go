@@ -7,13 +7,12 @@ import (
 	"errors"
 	"os/exec"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
 // ExecInUvm is a helper function used to execute commands specified in `req` inside the given UVM.
-func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (int, error) {
+func ExecInUvm(ctx context.Context, vm cow.ProcessHost, req *CmdProcessRequest) (int, error) {
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}
@@ -33,7 +32,7 @@ func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (
 	cmd.Stdin = np.Stdin()
 	cmd.Stdout = np.Stdout()
 	cmd.Stderr = np.Stderr()
-	cmd.Log = log.G(ctx).WithField(logfields.UVMID, vm.ID())
+	cmd.Log = log.G(ctx)
 	err = cmd.Run()
 	return cmd.ExitState.ExitCode(), err
 }
