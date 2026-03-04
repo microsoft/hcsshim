@@ -32,6 +32,7 @@ type CreateContainerOptions struct {
 	// IsSandboxContainer is true when the container being created is the cri
 	// pod sandbox container (usually it is the "pause" image).
 	IsSandboxContainer bool
+	LinuxDevices       []oci.LinuxDevice
 }
 type SignalContainerOptions struct {
 	IsInitProcess bool
