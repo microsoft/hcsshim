@@ -2127,6 +2127,39 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Drop_NoMatches(t *testing.T) 
 	}
 }
 
+func Test_Regi_EnforceCreateContainer_RequireNoDevices(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoCreateContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		privileged := false
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, tc.user, &CreateContainerOptions{
+			SandboxID: tc.sandboxID,
+			Privileged: &privileged,
+			NoNewPrivileges: &tc.noNewPrivileges,
+			Groups: tc.groups,
+			Umask: tc.umask,
+			Capabilities: tc.capabilities,
+			SeccompProfileSHA256: tc.seccomp,
+			LinuxDevices: []oci.LinuxDevice{
+				{
+					Path: "/test",
+				},
+			},
+		})
+
+		return assertDecisionJSONContains(t, err, "devices not supported")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Regi_EnforceCreateContainer_RequireNoDevices: %v", err)
+	}
+}
+
 func Test_Rego_ExtendDefaultMounts(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupSimpleRegoCreateContainerTest(p)

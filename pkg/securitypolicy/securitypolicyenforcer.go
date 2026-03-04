@@ -29,6 +29,7 @@ type CreateContainerOptions struct {
 	Umask                string
 	Capabilities         *oci.LinuxCapabilities
 	SeccompProfileSHA256 string
+	LinuxDevices         []oci.LinuxDevice
 }
 type SignalContainerOptions struct {
 	IsInitProcess bool
