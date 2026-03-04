@@ -95,6 +95,10 @@ func GetDefaultReferenceInfoFilePath() string {
 	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "reference_info.cose")
 }
 
+func GetDefaultHashEnvelopeReferenceInfoFilePath() string {
+	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "hash_envelope_reference_info.cose")
+}
+
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
 // WCOW. The caller `MUST` set the `BootFiles` on the returned value.
 //

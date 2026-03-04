@@ -249,6 +249,7 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
 	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
 	wopts.UVMReferenceInfoFile = ParseAnnotationsString(a, annotations.WCOWReferenceInfoFile, uvm.GetDefaultReferenceInfoFilePath())
+	wopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(a, annotations.UVMHashEnvelopeReferenceInfoFile, uvm.GetDefaultHashEnvelopeReferenceInfoFilePath())
 	wopts.IsolationType = "SecureNestedPaging"
 	if noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false); noSecurityHardware {
 		wopts.IsolationType = "GuestStateOnly"
@@ -376,6 +377,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.SecurityPolicy = ParseAnnotationsString(s.Annotations, annotations.LCOWSecurityPolicy, lopts.SecurityPolicy)
 		lopts.SecurityPolicyEnforcer = ParseAnnotationsString(s.Annotations, annotations.LCOWSecurityPolicyEnforcer, lopts.SecurityPolicyEnforcer)
 		lopts.UVMReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.LCOWReferenceInfoFile, lopts.UVMReferenceInfoFile)
+		lopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.UVMHashEnvelopeReferenceInfoFile, lopts.UVMHashEnvelopeReferenceInfoFile)
 		lopts.KernelBootOptions = ParseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 		lopts.WritableOverlayDirs = ParseAnnotationsBool(ctx, s.Annotations, iannotations.WritableOverlayDirs, lopts.WritableOverlayDirs)

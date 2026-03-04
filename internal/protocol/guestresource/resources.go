@@ -232,9 +232,10 @@ type SignalProcessOptionsWCOW struct {
 // ConfidentialOptions is used to set various confidential container specific
 // options.
 type ConfidentialOptions struct {
-	EnforcerType          string `json:"EnforcerType,omitempty"`
-	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
-	EncodedUVMReference   string `json:"EncodedUVMReference,omitempty"`
+	EnforcerType                    string `json:"EnforcerType,omitempty"`
+	EncodedSecurityPolicy           string `json:"EncodedSecurityPolicy,omitempty"`
+	EncodedUVMReference             string `json:"EncodedUVMReference,omitempty"`
+	EncodedUVMHashEnvelopeReference string `json:"EncodedUVMHashEnvelopeReference,omitempty"`
 }
 
 type SecurityPolicyFragment struct {

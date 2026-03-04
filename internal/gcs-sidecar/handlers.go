@@ -560,7 +560,8 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			err := b.hostState.securityOptions.SetConfidentialOptions(ctx,
 				securityPolicyRequest.EnforcerType,
 				securityPolicyRequest.EncodedSecurityPolicy,
-				securityPolicyRequest.EncodedUVMReference)
+				securityPolicyRequest.EncodedUVMReference,
+				securityPolicyRequest.EncodedUVMHashEnvelopeReference)
 			if err != nil {
 				return errors.Wrap(err, "Failed to set Confidentia UVM Options")
 			}
