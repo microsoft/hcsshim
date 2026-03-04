@@ -143,8 +143,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		DisableTimeSyncService:  false,
 		ConfidentialLCOWOptions: &ConfidentialLCOWOptions{
 			ConfidentialCommonOptions: &ConfidentialCommonOptions{
-				SecurityPolicyEnabled: false,
-				UVMReferenceInfoFile:  vmutils.DefaultUVMReferenceInfoFile,
+				SecurityPolicyEnabled:            false,
+				UVMReferenceInfoFile:             vmutils.DefaultUVMReferenceInfoFile,
+				UVMHashEnvelopeReferenceInfoFile: vmutils.DefaultUVMHashEnvelopeReferenceInfoFile,
 			},
 		},
 	}

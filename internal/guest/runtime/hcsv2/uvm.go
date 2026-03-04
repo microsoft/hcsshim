@@ -123,6 +123,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		initialEnforcer,
 		false,
 		"",
+		"",
 		logWriter,
 	)
 	return &Host{
@@ -805,7 +806,8 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		return h.securityOptions.SetConfidentialOptions(ctx,
 			r.EnforcerType,
 			r.EncodedSecurityPolicy,
-			r.EncodedUVMReference)
+			r.EncodedUVMReference,
+			r.EncodedUVMHashEnvelopeReference)
 	case guestresource.ResourceTypePolicyFragment:
 		r, ok := req.Settings.(*guestresource.SecurityPolicyFragment)
 		if !ok {
