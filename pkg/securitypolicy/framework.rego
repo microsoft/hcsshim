@@ -388,6 +388,14 @@ seccomp_ok(seccomp_profile_sha256) {
     is_windows
 }
 
+devices_ok(expected_devices, actual_devices) {
+    # Allow out of order but not duplicates
+    set_expected := {dev | dev := expected_devices[_]}
+    set_actual := {dev | dev := actual_devices[_]}
+    set_expected == set_actual
+    count(set_actual) == count(actual_devices)
+}
+
 default container_started := false
 
 container_started {
@@ -599,6 +607,8 @@ create_container := {"metadata": [updateMatches, addStarted],
         command_ok(container.command)
         mountList_ok(container.mounts, container.allow_elevated)
         seccomp_ok(container.seccomp_profile_sha256)
+        # We do not support adding device nodes to the policy yet
+        devices_ok([], input.devices)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -2088,6 +2098,12 @@ errors["capabilities don't match"] {
     ]
 
     count(possible_after_caps_containers) == 0
+}
+
+errors["devices not supported"] {
+    is_linux
+    input.rule == "create_container"
+    not devices_ok([], input.devices)
 }
 
 # covers exec_in_container as well. it shouldn't be possible to ever get
