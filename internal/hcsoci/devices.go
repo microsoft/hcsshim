@@ -131,7 +131,7 @@ func handleAssignedDevicesWindows(
 
 	// assign device into UVM and create corresponding spec windows devices
 	for _, d := range specDevs {
-		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
+		pciID, index := vmutils.GetDeviceInfoFromPath(d.ID)
 		vpciCloser, locationPaths, err := devices.AddDevice(ctx, vm, d.IDType, pciID, index, deviceUtilPath)
 		if err != nil {
 			return nil, nil, err
@@ -179,7 +179,7 @@ func handleAssignedDevicesLCOW(
 			return resultDevs, closers, errors.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
 
-		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
+		pciID, index := vmutils.GetDeviceInfoFromPath(d.ID)
 		vpci, err := vm.AssignDevice(ctx, pciID, index, "")
 		if err != nil {
 			return resultDevs, closers, errors.Wrapf(err, "failed to assign device %s, function %d to pod %s", pciID, index, vm.ID())

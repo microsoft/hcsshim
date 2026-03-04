@@ -6,8 +6,6 @@ package devices
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -107,17 +105,4 @@ func createDeviceUtilChildrenCommand(deviceUtilPath string, vmBusInstanceID stri
 	parentIDsFlag := fmt.Sprintf("--parentID=%s", vmBusInstanceID)
 	args := []string{deviceUtilPath, "children", parentIDsFlag, "--property=location"}
 	return args
-}
-
-// GetDeviceInfoFromPath takes a device path and parses it into the PCI ID and
-// virtual function index if one is specified.
-func GetDeviceInfoFromPath(rawDevicePath string) (string, uint16) {
-	indexString := filepath.Base(rawDevicePath)
-	index, err := strconv.ParseUint(indexString, 10, 16)
-	if err == nil {
-		// we have a vf index
-		return filepath.Dir(rawDevicePath), uint16(index)
-	}
-	// otherwise, just use default index and full device ID given
-	return rawDevicePath, 0
 }
