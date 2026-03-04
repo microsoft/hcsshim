@@ -96,7 +96,7 @@ func WithParentLayers(parentLayers []*cimfs.BlockCIM) BlockCIMLayerImportOpt {
 	}
 }
 
-func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string) error {
+func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string, pathName string) error {
 	log.G(ctx).Debugf("writing integrity checksum file for block CIM `%s`", blockPath)
 	// for convenience write a file that has the hex encoded root digest of the generated verified CIM.
 	// this same hex string can be used in the confidential policy.
@@ -105,7 +105,7 @@ func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string) error
 		return fmt.Errorf("failed to query verified info of the CIM layer: %w", err)
 	}
 
-	digestFile, err := os.Create(filepath.Join(filepath.Dir(blockPath), "integrity_checksum"))
+	digestFile, err := os.Create(filepath.Join(filepath.Dir(blockPath), pathName))
 	if err != nil {
 		return fmt.Errorf("failed to create verification info file: %w", err)
 	}
@@ -118,6 +118,18 @@ func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string) error
 		return fmt.Errorf("incomplete write of verification info: %w", err)
 	}
 	return nil
+}
+
+func GetIntegrityChecksum(ctx context.Context, blockPath string) (string, error) {
+	log.G(ctx).Debugf("Getting integrity checksum for block CIM `%s`", blockPath)
+	digest, err := cimfs.GetVerificationInfo(blockPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to query verified info of the CIM layer: %w", err)
+	}
+
+	digestStr := hex.EncodeToString(digest)
+
+	return digestStr, nil
 }
 
 func ImportBlockCIMLayerWithOpts(ctx context.Context, r io.Reader, layer *cimfs.BlockCIM, opts ...BlockCIMLayerImportOpt) (_ int64, err error) {
@@ -164,7 +176,7 @@ func ImportBlockCIMLayerWithOpts(ctx context.Context, r io.Reader, layer *cimfs.
 	}
 
 	if config.dataIntegrity {
-		if err = writeIntegrityChecksumInfoFile(ctx, layer.BlockPath); err != nil {
+		if err = writeIntegrityChecksumInfoFile(ctx, layer.BlockPath, "integrity_checksum"); err != nil {
 			return 0, err
 		}
 	}
@@ -356,6 +368,11 @@ func MergeBlockCIMLayersWithOpts(ctx context.Context, sourceCIMs []*cimfs.BlockC
 		log.G(ctx).Debugf("appending VHD footer to block CIM at `%s`", mergedCIM.BlockPath)
 		if err = tar2ext4.ConvertFileToVhd(mergedCIM.BlockPath); err != nil {
 			return fmt.Errorf("append VHD footer to block CIM: %w", err)
+		}
+	}
+	if config.dataIntegrity {
+		if err = writeIntegrityChecksumInfoFile(ctx, mergedCIM.BlockPath, "merged_integrity_checksum"); err != nil {
+			return err
 		}
 	}
 	return nil

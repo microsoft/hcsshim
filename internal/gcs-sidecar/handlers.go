@@ -641,11 +641,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					log.G(ctx).Debugf("block CIM layer digest %s, path: %s\n", layerHashes[i], physicalDevPath)
 				}
 
-				// skip the merged cim and verify individual layer hashes
 				hashesToVerify := layerHashes
-				if len(layerHashes) > 1 {
-					hashesToVerify = layerHashes[1:]
-				}
 
 				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
 				if err != nil {
