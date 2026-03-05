@@ -37,21 +37,19 @@ func IsBlockCimSupported() bool {
 // IsBlockCimWriteSupported returns true if block formatted CIMs (i.e block device CIM &
 // single file CIM) are supported on the current OS build or if CimWriter is present.
 func IsBlockCimWriteSupported() bool {
-	build := osversion.Build()
 	// TODO(ambarve): Currently we are checking against a higher build number since there is no
 	// official build with block CIM support yet. Once we have that build, we should
 	// update the build number here.
-	return (build >= 27766 && cimfs.Supported()) || cimwriter.Supported()
+	return IsBlockCimSupported() || cimwriter.Supported()
 }
 
 // IsBlockCimMountSupported returns true if block formatted CIMs (i.e block device CIM &
 // single file CIM) are supported on the current OS build.
 func IsBlockCimMountSupported() bool {
-	build := osversion.Build()
 	// TODO(ambarve): Currently we are checking against a higher build number since there is no
 	// official build with block CIM support yet. Once we have that build, we should
 	// update the build number here.
-	return build >= 27766 && cimfs.Supported()
+	return IsBlockCimSupported()
 }
 
 // IsVerifiedCimSupported returns true if block CIM format supports also writing verification information in the CIM.
@@ -63,23 +61,20 @@ func IsVerifiedCimSupported() bool {
 	return build >= 27800 && cimfs.Supported()
 }
 
-
 // IsVerifiedCimWriteSupported returns true if block CIM format supports also writing verification information in the CIM.
 func IsVerifiedCimWriteSupported() bool {
-	build := osversion.Build()
 	// TODO(ambarve): Currently we are checking against a higher build number since there is no
 	// official build with block CIM support yet. Once we have that build, we should
 	// update the build number here.
-	return (build >= 27800 && cimfs.Supported()) || cimwriter.Supported()
+	return IsVerifiedCimSupported() || cimwriter.Supported()
 }
 
 // IsVerifiedCimMountSupported returns true if block CIM format supports mounting.
 func IsVerifiedCimMountSupported() bool {
-	build := osversion.Build()
 	// TODO(ambarve): Currently we are checking against a higher build number since there is no
 	// official build with block CIM support yet. Once we have that build, we should
 	// update the build number here.
-	return build >= 27800 && cimfs.Supported()
+	return IsVerifiedCimSupported()
 }
 
 func IsMergedCimSupported() bool {
@@ -102,6 +97,7 @@ func IsMergedCimMountSupported() bool {
 	// later along with block CIM support. So use the same check as block CIM here.
 	return IsBlockCimMountSupported()
 }
+
 type BlockCIMType uint32
 
 const (

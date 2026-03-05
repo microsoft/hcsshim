@@ -781,6 +781,10 @@ func TestMergedVerifiedBlockCIMs(rootT *testing.T) {
 		rootT.Skipf("verified BlockCIMs are not supported")
 	}
 
+	if !IsVerifiedCimMountSupported() {
+		rootT.Skipf("verified BlockCIMs are not supported")
+	}
+
 	// A slice of 3 slices, 1 slice for contents of each CIM
 	testContents := [][]tuple{
 		{{"foo.txt", []byte("foo1"), false}},
