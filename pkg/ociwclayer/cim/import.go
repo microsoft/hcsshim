@@ -96,32 +96,11 @@ func WithParentLayers(parentLayers []*cimfs.BlockCIM) BlockCIMLayerImportOpt {
 	}
 }
 
-func writeIntegrityChecksumInfoFile(ctx context.Context, blockPath string, pathName string) error {
+func GetIntegrityChecksum(ctx context.Context, blockPath string, pathName string) (string, error) {
 	log.G(ctx).Debugf("writing integrity checksum file for block CIM `%s`", blockPath)
 	// for convenience write a file that has the hex encoded root digest of the generated verified CIM.
 	// this same hex string can be used in the confidential policy.
-	digest, err := cimfs.GetVerificationInfo(blockPath)
-	if err != nil {
-		return fmt.Errorf("failed to query verified info of the CIM layer: %w", err)
-	}
-
-	digestFile, err := os.Create(filepath.Join(filepath.Dir(blockPath), pathName))
-	if err != nil {
-		return fmt.Errorf("failed to create verification info file: %w", err)
-	}
-	defer digestFile.Close()
-
-	digestStr := hex.EncodeToString(digest)
-	if wn, err := digestFile.WriteString(digestStr); err != nil {
-		return fmt.Errorf("failed to write verification info: %w", err)
-	} else if wn != len(digestStr) {
-		return fmt.Errorf("incomplete write of verification info: %w", err)
-	}
-	return nil
-}
-
-func GetIntegrityChecksum(ctx context.Context, blockPath string) (string, error) {
-	log.G(ctx).Debugf("Getting integrity checksum for block CIM `%s`", blockPath)
+	// also return the integrity checksum as a string for integrity-vhd tooling.
 	digest, err := cimfs.GetVerificationInfo(blockPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to query verified info of the CIM layer: %w", err)
@@ -129,6 +108,20 @@ func GetIntegrityChecksum(ctx context.Context, blockPath string) (string, error)
 
 	digestStr := hex.EncodeToString(digest)
 
+	// only create a file if a path name is provided
+	if pathName != "" {
+		digestFile, err := os.Create(filepath.Join(filepath.Dir(blockPath), pathName))
+		if err != nil {
+			return "", fmt.Errorf("failed to create verification info file: %w", err)
+		}
+		defer digestFile.Close()
+
+		if wn, err := digestFile.WriteString(digestStr); err != nil {
+			return "", fmt.Errorf("failed to write verification info: %w", err)
+		} else if wn != len(digestStr) {
+			return "", fmt.Errorf("incomplete write of verification info: %w", err)
+		}
+	}
 	return digestStr, nil
 }
 
@@ -176,7 +169,7 @@ func ImportBlockCIMLayerWithOpts(ctx context.Context, r io.Reader, layer *cimfs.
 	}
 
 	if config.dataIntegrity {
-		if err = writeIntegrityChecksumInfoFile(ctx, layer.BlockPath, "integrity_checksum"); err != nil {
+		if _, err = GetIntegrityChecksum(ctx, layer.BlockPath, "integrity_checksum"); err != nil {
 			return 0, err
 		}
 	}
@@ -371,7 +364,7 @@ func MergeBlockCIMLayersWithOpts(ctx context.Context, sourceCIMs []*cimfs.BlockC
 		}
 	}
 	if config.dataIntegrity {
-		if err = writeIntegrityChecksumInfoFile(ctx, mergedCIM.BlockPath, "merged_integrity_checksum"); err != nil {
+		if _, err = GetIntegrityChecksum(ctx, mergedCIM.BlockPath, "merged_integrity_checksum"); err != nil {
 			return err
 		}
 	}
