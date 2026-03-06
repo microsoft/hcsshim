@@ -12,9 +12,14 @@ import (
 //sys coTaskMemFree(buffer unsafe.Pointer) = api_ms_win_core_com_l1_1_0.CoTaskMemFree
 
 func ConvertAndFreeCoTaskMemString(buffer *uint16) string {
-	str := syscall.UTF16ToString((*[1 << 29]uint16)(unsafe.Pointer(buffer))[:])
+	str := ConvertString(buffer)
 	coTaskMemFree(unsafe.Pointer(buffer))
 	return str
+}
+
+// Converts a PWSTR to a string, duplicating the underlying data and leaving the original unmodified.
+func ConvertString(buffer *uint16) string {
+	return syscall.UTF16ToString((*[1 << 29]uint16)(unsafe.Pointer(buffer))[:])
 }
 
 func Win32FromHresult(hr uintptr) syscall.Errno {

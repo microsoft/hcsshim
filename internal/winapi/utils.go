@@ -12,6 +12,11 @@ import (
 	"github.com/Microsoft/hcsshim/internal/winapi/cimfs"
 )
 
+// IsInvalidHandle returns true if the Handle is zero or [windows.InvalidHandle].
+func IsInvalidHandle[H ~uintptr](h H) bool {
+	return h == 0 || uintptr(h) == uintptr(windows.InvalidHandle)
+}
+
 // Uint16BufferToSlice wraps a uint16 pointer-and-length into a slice
 // for easier interop with Go APIs
 func Uint16BufferToSlice(buffer *uint16, bufferLength int) (result []uint16) {

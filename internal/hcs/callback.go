@@ -3,20 +3,27 @@
 package hcs
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
-	"github.com/sirupsen/logrus"
 )
 
 var (
-	nextCallback    uintptr
-	callbackMap     = map[uintptr]*notificationWatcherContext{}
+	// TODO: don't delete notification contexts on close, so callback can handle delayed notifications
+
+	// used to lock [callbackMap].
 	callbackMapLock = sync.RWMutex{}
+	callbackMap     = map[callbackNumber]*notificationWatcherContext{}
 
 	notificationWatcherCallback = syscall.NewCallback(notificationWatcher)
 
@@ -87,6 +94,31 @@ func (hn hcsNotification) String() string {
 	}
 }
 
+// HCS callbacks take the form:
+//
+//	typedef void (CALLBACK *HCS_NOTIFICATION_CALLBACK)(
+//		_In_ DWORD notificationType,
+//		_In_opt_ void*  context,
+//		_In_ HRESULT notificationStatus,
+//		_In_opt_ PCWSTR notificationData
+//		);
+//
+// where the context is a pointer to the data that is associated with a particular notification.
+//
+// However, since Golang can freely move structs, pointer values are not stable.
+// Therefore, interpret the pointer as the unique ID of a [notificationWatcherContext]
+// stored in [callbackMap].
+//
+// Note: Pointer stability via converting to [unsafe.Pointer] for syscalls is only guaranteed
+// until the syscall returns, and the same pointer value is therefore invalid across different
+// syscall invocations.
+// See point (4) of the [unsafe.Pointer] documentation.
+type callbackNumber uintptr
+
+var callbackCounter atomic.Uintptr
+
+func nextCallback() callbackNumber { return callbackNumber(callbackCounter.Add(1)) }
+
 type notificationChannel chan error
 
 type notificationWatcherContext struct {
@@ -132,32 +164,81 @@ func closeChannels(channels notificationChannels) {
 	}
 }
 
-func notificationWatcher(notificationType hcsNotification, callbackNumber uintptr, notificationStatus uintptr, notificationData *uint16) uintptr {
-	var result error
-	if int32(notificationStatus) < 0 {
-		result = interop.Win32FromHresult(notificationStatus)
+func notificationWatcher(
+	notificationType hcsNotification,
+	callbackNum callbackNumber,
+	notificationStatus uintptr,
+	notificationData *uint16,
+) uintptr {
+	ctx, entry := log.SetEntry(context.Background(), logrus.Fields{
+		logfields.CallbackNumber: callbackNum,
+		"notification-type":      notificationType.String(),
+	})
+
+	result := processNotification(ctx, notificationStatus, notificationData)
+	if result != nil {
+		entry.Data[logrus.ErrorKey] = result
 	}
 
 	callbackMapLock.RLock()
-	context := callbackMap[callbackNumber]
+	callbackCtx := callbackMap[callbackNum]
 	callbackMapLock.RUnlock()
 
-	if context == nil {
+	if callbackCtx == nil {
+		entry.Warn("received HCS notification for unknown callback number")
 		return 0
 	}
 
-	log := logrus.WithFields(logrus.Fields{
-		"notification-type": notificationType.String(),
-		"system-id":         context.systemID,
-	})
-	if context.processID != 0 {
-		log.Data[logfields.ProcessID] = context.processID
+	entry.Data[logfields.SystemID] = callbackCtx.systemID
+	if callbackCtx.processID != 0 {
+		entry.Data[logfields.ProcessID] = callbackCtx.processID
 	}
-	log.Debug("HCS notification")
+	entry.Debug("received HCS notification")
 
-	if channel, ok := context.channels[notificationType]; ok {
+	if channel, ok := callbackCtx.channels[notificationType]; ok {
 		channel <- result
 	}
 
 	return 0
+}
+
+// processNotification parses and validates HCS notifications and returns the result as an error.
+func processNotification(ctx context.Context, notificationStatus uintptr, notificationData *uint16) (err error) {
+	// TODO: merge/unify with [processHcsResult]
+	status := int32(notificationStatus)
+	if status < 0 {
+		err = interop.Win32FromHresult(notificationStatus)
+	}
+
+	if notificationData == nil {
+		return err
+	}
+
+	// don't call CoTaskMemFree since HCS_NOTIFICATION_CALLBACK's notificationData is PCWSTR.
+	resultJSON := interop.ConvertString(notificationData)
+	result := &hcsResult{}
+	if jsonErr := json.Unmarshal([]byte(resultJSON), result); jsonErr != nil {
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.JSON:  resultJSON,
+			logrus.ErrorKey: jsonErr,
+		}).Warn("could not unmarshal HCS result")
+		return err
+	}
+	log.G(ctx).WithField("result", result).Trace("parsed notification data")
+
+	// the HResult and data payload should have the same error value
+	if result.Error < 0 && status < 0 && status != result.Error {
+		log.G(ctx).WithFields(logrus.Fields{
+			"status": status,
+			"data":   result.Error,
+		}).Warn("mismatched notification status and data HResult values")
+	}
+
+	if len(result.ErrorEvents) > 0 {
+		return &resultError{
+			Err:    err,
+			Events: result.ErrorEvents,
+		}
+	}
+	return err
 }

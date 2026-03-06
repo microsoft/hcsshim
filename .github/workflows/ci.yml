@@ -36,7 +36,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1
+          version: v2.4
           args: >-
             --verbose
             --max-issues-per-linter=0

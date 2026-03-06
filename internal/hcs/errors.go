@@ -8,9 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 var (
@@ -102,43 +106,95 @@ type ErrorEvent struct {
 	//Data       []EventData `json:"Data,omitempty"`  // Omit this as HCS doesn't encode this well. It's more confusing to include. It is however logged in debug mode (see processHcsResult function)
 }
 
-type hcsResult struct {
-	Error        int32
-	ErrorMessage string
-	ErrorEvents  []ErrorEvent `json:"ErrorEvents,omitempty"`
+func (ev *ErrorEvent) String() string {
+	sb := new(strings.Builder)
+	ev.writeTo(sb)
+	return sb.String()
 }
 
-func (ev *ErrorEvent) String() string {
-	evs := "[Event Detail: " + ev.Message
+func (ev *ErrorEvent) writeTo(b *strings.Builder) {
+	// rough wag at needed length
+	b.Grow(64 + len(ev.Message) + len(ev.StackTrace) + len(ev.Provider) + len(ev.Source))
+
+	// [strings.Builder] Write* functions always return nil errors
+	_, _ = b.WriteString("[Event Detail: " + ev.Message)
 	if ev.StackTrace != "" {
-		evs += " Stack Trace: " + ev.StackTrace
+		_, _ = b.WriteString(" Stack Trace: " + ev.StackTrace)
 	}
 	if ev.Provider != "" {
-		evs += " Provider: " + ev.Provider
+		_, _ = b.WriteString(" Provider: " + ev.Provider)
 	}
 	if ev.EventID != 0 {
-		evs = fmt.Sprintf("%s EventID: %d", evs, ev.EventID)
+		fmt.Fprintf(b, " EventID: %d", ev.EventID)
 	}
 	if ev.Flags != 0 {
-		evs = fmt.Sprintf("%s flags: %d", evs, ev.Flags)
+		fmt.Fprintf(b, " flags: %d", ev.Flags)
 	}
 	if ev.Source != "" {
-		evs += " Source: " + ev.Source
+		_, _ = b.WriteString(" Source: " + ev.Source)
 	}
-	evs += "]"
-	return evs
+	_ = b.WriteByte(']')
+}
+
+type hcsResult struct {
+	Error        int32
+	ErrorMessage string       // ErrorMessage should be the same as `windows.Errno(Err).Error()`.
+	ErrorEvents  []ErrorEvent `json:"ErrorEvents,omitempty"`
+	// TODO: AttributionRecords
 }
 
 func processHcsResult(ctx context.Context, resultJSON string) []ErrorEvent {
-	if resultJSON != "" {
-		result := &hcsResult{}
-		if err := json.Unmarshal([]byte(resultJSON), result); err != nil {
-			log.G(ctx).WithError(err).Warning("Could not unmarshal HCS result")
-			return nil
-		}
-		return result.ErrorEvents
+	if resultJSON == "" {
+		return nil
 	}
-	return nil
+
+	result := &hcsResult{}
+	if err := json.Unmarshal([]byte(resultJSON), result); err != nil {
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.JSON:  resultJSON,
+			logrus.ErrorKey: err,
+		}).Warn("Could not unmarshal HCS result")
+		return nil
+	}
+	return result.ErrorEvents
+}
+
+// TODO: move [resultError] and [ErrorEvent] to schema2 and handle parsing results/data directly in vmcompute
+// See: https://learn.microsoft.com/en-us/virtualization/api/hcs/schemareference#ResultError
+
+// resultError describes an HCS operation result and allows retaining the ErrorEvents
+// when an [error] is expected but an [HcsError] is not appropriate (i.e., the operation is not known).
+//
+// It is used in [notificationWatcher] to send the [ErrorEvent]s in a callback's notification data
+// to the corresponding [waitForNotification] via a [notificationChannel].
+type resultError struct {
+	Err    error
+	Events []ErrorEvent
+}
+
+func (e *resultError) Error() string {
+	return appendErrorEvents(e.Err.Error(), e.Events)
+}
+
+func (e *resultError) Is(target error) bool {
+	return errors.Is(e.Err, target)
+}
+
+func (e *resultError) Unwrap() error {
+	return e.Err
+}
+
+// getEvents checks to see if err is a [resultError], and if so, returns the unwrapped error
+// and [ErrorEvent]s.
+//
+// Currently, only [notificationWatcher] creates [resultError]s, and they are subsequently
+// handled in [waitForNotification].
+func getEvents(err error) ([]ErrorEvent, error) {
+	var rErr *resultError
+	if errors.As(err, &rErr) {
+		return rErr.Events, rErr.Err
+	}
+	return nil, err
 }
 
 type HcsError struct {
@@ -149,12 +205,22 @@ type HcsError struct {
 
 var _ net.Error = &HcsError{}
 
-func (e *HcsError) Error() string {
-	s := e.Op + ": " + e.Err.Error()
-	for _, ev := range e.Events {
-		s += "\n" + ev.String()
+func makeHCSError(op string, err error, events []ErrorEvent) error {
+	// Don't double wrap errors
+	var e *HcsError
+	if errors.As(err, &e) {
+		return err
 	}
-	return s
+
+	return &HcsError{
+		Op:     op,
+		Err:    err,
+		Events: events,
+	}
+}
+
+func (e *HcsError) Error() string {
+	return appendErrorEvents(e.Op+": "+e.Err.Error(), e.Events)
 }
 
 func (e *HcsError) Is(target error) bool {
@@ -194,11 +260,7 @@ type SystemError struct {
 var _ net.Error = &SystemError{}
 
 func (e *SystemError) Error() string {
-	s := e.Op + " " + e.ID + ": " + e.Err.Error()
-	for _, ev := range e.Events {
-		s += "\n" + ev.String()
-	}
-	return s
+	return appendErrorEvents(fmt.Sprintf("%s %s: %s", e.Op, e.ID, e.Err.Error()), e.Events)
 }
 
 func makeSystemError(system *System, op string, err error, events []ErrorEvent) error {
@@ -228,11 +290,7 @@ type ProcessError struct {
 var _ net.Error = &ProcessError{}
 
 func (e *ProcessError) Error() string {
-	s := fmt.Sprintf("%s %s:%d: %s", e.Op, e.SystemID, e.Pid, e.Err.Error())
-	for _, ev := range e.Events {
-		s += "\n" + ev.String()
-	}
-	return s
+	return appendErrorEvents(fmt.Sprintf("%s %s:%d: %s", e.Op, e.SystemID, e.Pid, e.Err.Error()), e.Events)
 }
 
 func makeProcessError(process *Process, op string, err error, events []ErrorEvent) error {
@@ -241,6 +299,7 @@ func makeProcessError(process *Process, op string, err error, events []ErrorEven
 	if errors.As(err, &e) {
 		return err
 	}
+
 	return &ProcessError{
 		Pid:      process.Pid(),
 		SystemID: process.SystemID(),
@@ -250,6 +309,22 @@ func makeProcessError(process *Process, op string, err error, events []ErrorEven
 			Events: events,
 		},
 	}
+}
+
+// common formatting for error strings followed by event data,
+func appendErrorEvents(s string, events []ErrorEvent) string {
+	if len(events) == 0 {
+		return s
+	}
+
+	sb := new(strings.Builder)
+	_, _ = sb.WriteString(s)
+	for _, ev := range events {
+		// don't join with newlines since those are ... awkward within error strings
+		_, _ = sb.WriteString(": ")
+		ev.writeTo(sb)
+	}
+	return sb.String()
 }
 
 // IsNotExist checks if an error is caused by the Container or Process not existing.

@@ -41,6 +41,8 @@ type Hook struct {
 
 	// AddSpanContext adds [logfields.TraceID] and [logfields.SpanID] fields to
 	// the entry from the span context stored in [logrus.Entry.Context], if it exists.
+	//
+	// Default is true.
 	AddSpanContext bool
 }
 
