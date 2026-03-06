@@ -129,7 +129,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		return nil, fmt.Errorf("invalid runtime sandbox isolation (%s) for hypervisor isolated OCI spec", isolation.String())
 	}
 
-	if !emptyShimOpts {
+	if !emptyShimOpts && shimOpts.GetSandboxPlatform() != "" {
 		// validate runtime platform
 		plat, err := platforms.Parse(shimOpts.GetSandboxPlatform())
 		if err != nil {
