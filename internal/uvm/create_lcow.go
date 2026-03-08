@@ -155,6 +155,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	kernelDirectSupported := osversion.Build() >= 18286
 	var vPmemCount uint32 = DefaultVPMEMCount
 	if runtime.GOARCH == "arm64" {
+		// Todo: Add a conditional check for osversion once KernelDirect
+		// becomes available on ARM64, and enable it for supported versions.
+		// This is used by create-scratch and cannot be overriden by annotations
 		kernelDirectSupported = false
 		vPmemCount = 0
 	}

@@ -194,9 +194,6 @@ func verifyOptions(_ context.Context, options interface{}) error {
 			if opts.VPMemDeviceCount > 0 {
 				return errors.New("VPMem devices are not supported on ARM64")
 			}
-			if opts.KernelDirect {
-				return errors.New("KernelDirectBoot is not supported on ARM64")
-			}
 		}
 	case *OptionsWCOW:
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
