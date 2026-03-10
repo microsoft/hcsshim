@@ -287,7 +287,7 @@ func parseDevices(ctx context.Context, specWindows *specs.Windows) []uvm.VPCIDev
 	extraDevices := []uvm.VPCIDeviceID{}
 	for _, d := range specWindows.Devices {
 		pciID, index := devices.GetDeviceInfoFromPath(d.ID)
-		if vmutils.IsValidDeviceType(d.IDType) {
+		if uvm.IsValidDeviceType(d.IDType) {
 			key := uvm.NewVPCIDeviceID(pciID, index)
 			extraDevices = append(extraDevices, key)
 		} else {
