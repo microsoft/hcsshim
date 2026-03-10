@@ -118,11 +118,11 @@ func CreateBlockCIMWithOptions(ctx context.Context, bCIM *BlockCIM, options ...B
 	}
 
 	// Check OS support
-	if !IsBlockCimSupported() {
+	if !IsBlockCimWriteSupported() {
 		return nil, fmt.Errorf("block CIM not supported on this OS version")
 	}
 
-	if config.dataIntegrity && !IsVerifiedCimSupported() {
+	if config.dataIntegrity && !IsVerifiedCimWriteSupported() {
 		return nil, fmt.Errorf("verified CIMs are not supported on this OS version")
 	}
 
@@ -436,7 +436,7 @@ func GetCimUsage(ctx context.Context, cimPath string) (uint64, error) {
 // files with the same path at all other CIMs) When mounting this merged CIM the source
 // CIMs MUST be provided in the exact same order.
 func MergeBlockCIMsWithOpts(ctx context.Context, mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, opts ...BlockCIMOpt) (err error) {
-	if !IsMergedCimSupported() {
+	if !IsMergedCimWriteSupported() {
 		return fmt.Errorf("merged CIMs aren't supported on this OS version")
 	} else if len(sourceCIMs) < 2 {
 		return fmt.Errorf("need at least 2 source CIMs, got %d: %w", len(sourceCIMs), os.ErrInvalid)

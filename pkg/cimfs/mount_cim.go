@@ -75,7 +75,7 @@ func Unmount(volumePath string) error {
 // `MergeBlockCIMs`) at a volume with given GUID. The `sourceCIMs` MUST be identical
 // to the `sourceCIMs` passed to `MergeBlockCIMs` when creating this merged CIM.
 func MountMergedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlags uint32, volumeGUID guid.GUID) (string, error) {
-	if !IsMergedCimSupported() {
+	if !IsMergedCimMountSupported() {
 		return "", fmt.Errorf("merged CIMs aren't supported on this OS version")
 	} else if len(sourceCIMs) < 2 {
 		return "", fmt.Errorf("need at least 2 source CIMs, got %d: %w", len(sourceCIMs), os.ErrInvalid)
@@ -162,7 +162,7 @@ func MountVerifiedBlockCIM(bCIM *BlockCIM, mountFlags uint32, volumeGUID guid.GU
 // to match against the provided root hash if it doesn't, the read will fail.  The source
 // CIMs and the merged CIM MUST have been created with the verified creation flag.
 func MountMergedVerifiedBlockCIMs(mergedCIM *BlockCIM, sourceCIMs []*BlockCIM, mountFlags uint32, volumeGUID guid.GUID, rootHash []byte) (string, error) {
-	if !IsVerifiedCimSupported() {
+	if !IsVerifiedCimMountSupported() {
 		return "", fmt.Errorf("verified CIMs aren't supported on this OS version")
 	} else if len(sourceCIMs) < 2 {
 		return "", fmt.Errorf("need at least 2 source CIMs, got %d: %w", len(sourceCIMs), os.ErrInvalid)

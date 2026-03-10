@@ -153,7 +153,7 @@ func extractAndVerifyTarToCIM(t *testing.T, tarContents []testFile, contentsToVe
 }
 
 func TestTarUtilityVMExtract(t *testing.T) {
-	if !cimfs.IsVerifiedCimSupported() {
+	if !cimfs.IsVerifiedCimMountSupported() {
 		t.Skip("block CIMs are not supported on this build")
 	}
 

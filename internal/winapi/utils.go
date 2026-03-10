@@ -8,8 +8,6 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
-
-	"github.com/Microsoft/hcsshim/internal/winapi/cimfs"
 )
 
 // Uint16BufferToSlice wraps a uint16 pointer-and-length into a slice
@@ -82,9 +80,4 @@ func ConvertStringSetToSlice(buf []byte) ([]string, error) {
 // through a uint16 or rune array).
 func ParseUtf16LE(b []byte) string {
 	return windows.UTF16PtrToString((*uint16)(unsafe.Pointer(&b[0])))
-}
-
-// CimFsSupported checks if either CIMFS dll is present on the system.
-func CimFsSupported() bool {
-	return cimfs.Supported()
 }
