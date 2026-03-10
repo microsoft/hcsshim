@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	typeurl.Register(&Spec{}, "sandbox-spec-v2/vm/Spec", "Spec")
+	typeurl.Register(&Spec{}, "sandbox-spec/vm/v2/Spec", "Spec")
 }
 
 // Spec holds the subset of PodSandboxConfig that the VM sandbox
