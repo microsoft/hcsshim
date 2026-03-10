@@ -6,15 +6,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+
+	"github.com/Microsoft/go-winio/pkg/guid"
 )
 
 // Manager provides access to guest operations over the GCS connection.
 // Call CreateConnection before invoking other methods.
 type Manager interface {
 	// CreateConnection accepts the GCS connection and performs initial setup.
-	CreateConnection(ctx context.Context, opts ...ConfigOption) error
+	CreateConnection(ctx context.Context, GCSServiceID guid.GUID, opts ...ConfigOption) error
 	// CloseConnection closes the GCS connection and listener.
 	CloseConnection() error
 	// Capabilities returns the guest's declared capabilities.
@@ -31,6 +34,8 @@ type Manager interface {
 	DumpStacks(ctx context.Context) (string, error)
 	// DeleteContainerState removes persisted state for the container identified by `cid` from the guest.
 	DeleteContainerState(ctx context.Context, cid string) error
+	// ExecIntoUVM executes commands specified in the requests in the utility VM.
+	ExecIntoUVM(ctx context.Context, request *cmd.CmdProcessRequest) (int, error)
 }
 
 var _ Manager = (*Guest)(nil)
@@ -78,4 +83,9 @@ func (gm *Guest) DeleteContainerState(ctx context.Context, cid string) error {
 	}
 
 	return nil
+}
+
+// ExecIntoUVM executes commands specified in the requests in the utility VM.
+func (gm *Guest) ExecIntoUVM(ctx context.Context, request *cmd.CmdProcessRequest) (int, error) {
+	return cmd.ExecInUvm(ctx, gm.gc, request)
 }

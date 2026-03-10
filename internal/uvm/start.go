@@ -3,25 +3,15 @@
 package uvm
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"sync"
-	"time"
-
-	"github.com/sirupsen/logrus"
-	"golang.org/x/net/netutil"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -31,111 +21,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
+
+	"golang.org/x/net/netutil"
+	"golang.org/x/sync/errgroup"
 )
-
-// entropyBytes is the number of bytes of random data to send to a Linux UVM
-// during boot to seed the CRNG. There is not much point in making this too
-// large since the random data collected from the host is likely computed from a
-// relatively small key (256 bits?), so additional bytes would not actually
-// increase the entropy of the guest's pool. However, send enough to convince
-// containers that there is a large amount of entropy since this idea is
-// generally misunderstood.
-const entropyBytes = 512
-
-type gcsLogEntryStandard struct {
-	Time    time.Time    `json:"time"`
-	Level   logrus.Level `json:"level"`
-	Message string       `json:"msg"`
-}
-
-type gcsLogEntry struct {
-	gcsLogEntryStandard
-	Fields map[string]interface{}
-}
-
-// FUTURE-jstarks: Change the GCS log format to include type information
-// (e.g. by using a different encoding such as protobuf).
-func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
-	// Default the log level to info.
-	e.Level = logrus.InfoLevel
-	if err := json.Unmarshal(b, &e.gcsLogEntryStandard); err != nil {
-		return err
-	}
-	if err := json.Unmarshal(b, &e.Fields); err != nil {
-		return err
-	}
-	// Do not allow fatal or panic level errors to propagate.
-	if e.Level < logrus.ErrorLevel {
-		e.Level = logrus.ErrorLevel
-	}
-	if e.Fields["Source"] == "ETW" {
-		// Windows ETW log entry
-		// Original ETW Event Data may have "message" or "Message" field instead of "msg"
-		if msg, ok := e.Fields["message"].(string); ok {
-			e.Message = msg
-			delete(e.Fields, "message")
-		} else if msg, ok := e.Fields["Message"].(string); ok {
-			e.Message = msg
-			delete(e.Fields, "Message")
-		}
-	}
-	// Clear special fields.
-	delete(e.Fields, "time")
-	delete(e.Fields, "level")
-	delete(e.Fields, "msg")
-	// Normalize floats to integers.
-	for k, v := range e.Fields {
-		if d, ok := v.(float64); ok && float64(int64(d)) == d {
-			e.Fields[k] = int64(d)
-		}
-	}
-	return nil
-}
-
-func isDisconnectError(err error) bool {
-	return hcs.IsAny(err, windows.WSAECONNABORTED, windows.WSAECONNRESET)
-}
-
-func parseLogrus(o *Options) OutputHandler {
-	vmid := ""
-	if o != nil {
-		vmid = o.ID
-	}
-	return func(r io.Reader) {
-		j := json.NewDecoder(r)
-		e := log.L.Dup()
-		fields := e.Data
-		for {
-			for k := range fields {
-				delete(fields, k)
-			}
-			gcsEntry := gcsLogEntry{Fields: e.Data}
-			err := j.Decode(&gcsEntry)
-			if err != nil {
-				// Something went wrong. Read the rest of the data as a single
-				// string and log it at once -- it's probably a GCS panic stack.
-				if !errors.Is(err, io.EOF) && !isDisconnectError(err) {
-					logrus.WithFields(logrus.Fields{
-						logfields.UVMID: vmid,
-						logrus.ErrorKey: err,
-					}).Error("gcs log read")
-				}
-				rest, _ := io.ReadAll(io.MultiReader(j.Buffered(), r))
-				rest = bytes.TrimSpace(rest)
-				if len(rest) != 0 {
-					logrus.WithFields(logrus.Fields{
-						logfields.UVMID: vmid,
-						"stderr":        string(rest),
-					}).Error("gcs terminated")
-				}
-				break
-			}
-			fields[logfields.UVMID] = vmid
-			fields["vm.time"] = gcsEntry.Time
-			e.Log(gcsEntry.Level, gcsEntry.Message)
-		}
-	}
-}
 
 // When using an external GCS connection it is necessary to send a ModifySettings request
 // for HvSocket so that the GCS can setup some registry keys that are required for running
@@ -203,7 +92,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 				return fmt.Errorf("failed to connect to entropy socket: %w", err)
 			}
 			defer conn.Close()
-			_, err = io.CopyN(conn, rand.Reader, entropyBytes)
+			_, err = io.CopyN(conn, rand.Reader, vmutils.LinuxEntropyBytes)
 			if err != nil {
 				e.WithError(err).Error("failed to write entropy")
 				return fmt.Errorf("failed to write entropy: %w", err)

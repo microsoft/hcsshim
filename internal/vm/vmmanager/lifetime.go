@@ -5,6 +5,7 @@ package vmmanager
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -24,6 +25,7 @@ type LifetimeManager interface {
 	Start(ctx context.Context) error
 
 	// Terminate will forcefully power off the Utility VM.
+	// It waits for the UVM to exit and returns any encountered errors.
 	Terminate(ctx context.Context) error
 
 	// Close terminates and releases resources associated with the utility VM.
@@ -46,6 +48,12 @@ type LifetimeManager interface {
 
 	// PropertiesV2 returns the properties of the Utility VM.
 	PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error)
+
+	// StartedTime returns the time when the Utility VM entered the running state.
+	StartedTime() time.Time
+
+	// StoppedTime returns the time when the Utility VM entered the stopped state.
+	StoppedTime() time.Time
 
 	// ExitError will return any error if the Utility VM exited unexpectedly, or if the Utility VM experienced an
 	// error after Wait returned, it will return the wait error.
@@ -72,10 +80,13 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-// Terminate terminates the utility VM.
+// Terminate terminates the utility VM and waits for it to exit.
 func (uvm *UtilityVM) Terminate(ctx context.Context) error {
 	if err := uvm.cs.Terminate(ctx); err != nil {
 		return fmt.Errorf("failed to terminate utility VM: %w", err)
+	}
+	if err := uvm.Wait(ctx); err != nil {
+		return fmt.Errorf("failed to wait for utility VM termination: %w", err)
 	}
 	return nil
 }
@@ -125,6 +136,16 @@ func (uvm *UtilityVM) PropertiesV2(ctx context.Context, types ...hcsschema.Prope
 	}
 
 	return props, nil
+}
+
+// StartedTime returns the time when the utility VM entered the running state.
+func (uvm *UtilityVM) StartedTime() time.Time {
+	return uvm.cs.StartedTime()
+}
+
+// StoppedTime returns the time when the utility VM entered the stopped state.
+func (uvm *UtilityVM) StoppedTime() time.Time {
+	return uvm.cs.StoppedTime()
 }
 
 // ExitError returns the exit error of the utility VM, if it has exited.

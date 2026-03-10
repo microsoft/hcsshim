@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 const (
@@ -196,10 +197,10 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 	}
 	if c.IsSet(kernelFileArgName) {
 		switch strings.ToLower(c.String(kernelFileArgName)) {
-		case uvm.KernelFile:
-			options.KernelFile = uvm.KernelFile
-		case uvm.UncompressedKernelFile:
-			options.KernelFile = uvm.UncompressedKernelFile
+		case vmutils.KernelFile:
+			options.KernelFile = vmutils.KernelFile
+		case vmutils.UncompressedKernelFile:
+			options.KernelFile = vmutils.UncompressedKernelFile
 		default:
 			return nil, unrecognizedError(c.String(kernelFileArgName), kernelFileArgName)
 		}
@@ -212,10 +213,10 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 	if c.IsSet(rootFSTypeArgName) {
 		switch strings.ToLower(c.String(rootFSTypeArgName)) {
 		case "initrd":
-			options.RootFSFile = uvm.InitrdFile
+			options.RootFSFile = vmutils.InitrdFile
 			options.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 		case "vhd":
-			options.RootFSFile = uvm.VhdFile
+			options.RootFSFile = vmutils.VhdFile
 			options.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 		case "none":
 			options.RootFSFile = ""
@@ -247,7 +248,7 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 		if c.IsSet(outputHandlingArgName) {
 			switch strings.ToLower(c.String(outputHandlingArgName)) {
 			case "stdout":
-				options.OutputHandlerCreator = func(*uvm.Options) uvm.OutputHandler {
+				options.OutputHandlerCreator = func(string) vmutils.OutputHandler {
 					return func(r io.Reader) {
 						_, _ = io.Copy(os.Stdout, r)
 					}
@@ -274,7 +275,7 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 		options.SecurityPolicyEnforcer = c.String(securityPolicyEnforcerArgName)
 	}
 	if c.IsSet(securityHardwareFlag) {
-		options.GuestStateFilePath = uvm.GuestStateFile
+		options.GuestStateFilePath = vmutils.DefaultGuestStateFile
 		options.SecurityPolicyEnabled = true
 		options.AllowOvercommit = false
 	}

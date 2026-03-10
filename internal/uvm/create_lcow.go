@@ -60,34 +60,6 @@ const (
 	PreferredRootFSTypeInitRd PreferredRootFSType = iota
 	PreferredRootFSTypeVHD
 	PreferredRootFSTypeNA
-
-	entropyVsockPort  = 1
-	linuxLogVsockPort = 109
-)
-
-const (
-	// InitrdFile is the default file name for an initrd.img used to boot LCOW.
-	InitrdFile = "initrd.img"
-	// VhdFile is the default file name for a rootfs.vhd used to boot LCOW.
-	VhdFile = "rootfs.vhd"
-	// DefaultDmVerityRootfsVhd is the default file name for a dmverity_rootfs.vhd,
-	// which is mounted by the GuestStateFile during boot and used as the root file
-	// system when booting in the SNP case. Similar to layer VHDs, the Merkle tree
-	// is appended after ext4 filesystem ends.
-	DefaultDmVerityRootfsVhd = "rootfs.vhd"
-	// KernelFile is the default file name for a kernel used to boot LCOW.
-	KernelFile = "kernel"
-	// UncompressedKernelFile is the default file name for an uncompressed
-	// kernel used to boot LCOW with KernelDirect.
-	UncompressedKernelFile = "vmlinux"
-	// GuestStateFile is the default file name for a vmgs (VM Guest State) file
-	// which contains the kernel and kernel command which mounts DmVerityVhdFile
-	// when booting in the SNP case.
-	GuestStateFile = "kernel.vmgs"
-	// UVMReferenceInfoFile is the default file name for a COSE_Sign1
-	// reference UVM info, which can be made available to workload containers
-	// and can be used for validation purposes.
-	UVMReferenceInfoFile = "reference_info.cose"
 )
 
 type ConfidentialLCOWOptions struct {
@@ -107,28 +79,28 @@ type OptionsLCOW struct {
 	//
 	// It is preferred to use [UpdateBootFilesPath] to change this value and update associated fields.
 	BootFilesPath           string
-	KernelFile              string               // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
-	KernelDirect            bool                 // Skip UEFI and boot directly to `kernel`
-	RootFSFile              string               // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
-	KernelBootOptions       string               // Additional boot options for the kernel
-	UseGuestConnection      bool                 // Whether the HCS should connect to the UVM's GCS. Defaults to true
-	ExecCommandLine         string               // The command line to exec from init. Defaults to GCS
-	ForwardStdout           bool                 // Whether stdout will be forwarded from the executed program. Defaults to false
-	ForwardStderr           bool                 // Whether stderr will be forwarded from the executed program. Defaults to true
-	OutputHandlerCreator    OutputHandlerCreator `json:"-"` // Creates an [OutputHandler] that controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
-	VPMemDeviceCount        uint32               // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
-	VPMemSizeBytes          uint64               // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
-	VPMemNoMultiMapping     bool                 // Disables LCOW layer multi mapping
-	PreferredRootFSType     PreferredRootFSType  // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
-	EnableColdDiscardHint   bool                 // Whether the HCS should use cold discard hints. Defaults to false
-	VPCIEnabled             bool                 // Whether the kernel should enable pci
-	EnableScratchEncryption bool                 // Whether the scratch should be encrypted
-	DisableTimeSyncService  bool                 // Disables the time synchronization service
-	HclEnabled              *bool                // Whether to enable the host compatibility layer
-	ExtraVSockPorts         []uint32             // Extra vsock ports to allow
-	AssignedDevices         []VPCIDeviceID       // AssignedDevices are devices to add on pod boot
-	PolicyBasedRouting      bool                 // Whether we should use policy based routing when configuring net interfaces in guest
-	WritableOverlayDirs     bool                 // Whether init should create writable overlay mounts for /var and /etc
+	KernelFile              string                       // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
+	KernelDirect            bool                         // Skip UEFI and boot directly to `kernel`
+	RootFSFile              string                       // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
+	KernelBootOptions       string                       // Additional boot options for the kernel
+	UseGuestConnection      bool                         // Whether the HCS should connect to the UVM's GCS. Defaults to true
+	ExecCommandLine         string                       // The command line to exec from init. Defaults to GCS
+	ForwardStdout           bool                         // Whether stdout will be forwarded from the executed program. Defaults to false
+	ForwardStderr           bool                         // Whether stderr will be forwarded from the executed program. Defaults to true
+	OutputHandlerCreator    vmutils.OutputHandlerCreator `json:"-"` // Creates an [OutputHandler] that controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
+	VPMemDeviceCount        uint32                       // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
+	VPMemSizeBytes          uint64                       // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
+	VPMemNoMultiMapping     bool                         // Disables LCOW layer multi mapping
+	PreferredRootFSType     PreferredRootFSType          // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
+	EnableColdDiscardHint   bool                         // Whether the HCS should use cold discard hints. Defaults to false
+	VPCIEnabled             bool                         // Whether the kernel should enable pci
+	EnableScratchEncryption bool                         // Whether the scratch should be encrypted
+	DisableTimeSyncService  bool                         // Disables the time synchronization service
+	HclEnabled              *bool                        // Whether to enable the host compatibility layer
+	ExtraVSockPorts         []uint32                     // Extra vsock ports to allow
+	AssignedDevices         []VPCIDeviceID               // AssignedDevices are devices to add on pod boot
+	PolicyBasedRouting      bool                         // Whether we should use policy based routing when configuring net interfaces in guest
+	WritableOverlayDirs     bool                         // Whether init should create writable overlay mounts for /var and /etc
 }
 
 // NewDefaultOptionsLCOW creates the default options for a bootable version of
@@ -143,17 +115,17 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	kernelDirectSupported := osversion.Build() >= 18286
 	opts := &OptionsLCOW{
 		Options:                 newDefaultOptions(id, owner),
-		KernelFile:              KernelFile,
+		KernelFile:              vmutils.KernelFile,
 		KernelDirect:            kernelDirectSupported,
-		RootFSFile:              InitrdFile,
+		RootFSFile:              vmutils.InitrdFile,
 		KernelBootOptions:       "",
 		UseGuestConnection:      true,
 		ExecCommandLine:         fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
 		ForwardStdout:           false,
 		ForwardStderr:           true,
-		OutputHandlerCreator:    parseLogrus,
-		VPMemDeviceCount:        DefaultVPMEMCount,
-		VPMemSizeBytes:          DefaultVPMemSizeBytes,
+		OutputHandlerCreator:    vmutils.ParseGCSLogrus,
+		VPMemDeviceCount:        vmutils.DefaultVPMEMCount,
+		VPMemSizeBytes:          vmutils.DefaultVPMemSizeBytes,
 		VPMemNoMultiMapping:     osversion.Get().Build < osversion.V19H1,
 		PreferredRootFSType:     PreferredRootFSTypeInitRd,
 		EnableColdDiscardHint:   false,
@@ -163,7 +135,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		ConfidentialLCOWOptions: &ConfidentialLCOWOptions{
 			ConfidentialCommonOptions: &ConfidentialCommonOptions{
 				SecurityPolicyEnabled: false,
-				UVMReferenceInfoFile:  UVMReferenceInfoFile,
+				UVMReferenceInfoFile:  vmutils.DefaultUVMReferenceInfoFile,
 			},
 		},
 	}
@@ -196,15 +168,15 @@ func (opts *OptionsLCOW) UpdateBootFilesPath(ctx context.Context, path string) {
 
 	opts.BootFilesPath = path
 
-	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
+	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, vmutils.VhdFile)); err == nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
-		opts.RootFSFile = VhdFile
+		opts.RootFSFile = vmutils.VhdFile
 		opts.PreferredRootFSType = PreferredRootFSTypeVHD
 
 		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: opts.ID,
-			VhdFile:         filepath.Join(opts.BootFilesPath, VhdFile),
-		}).Debug("updated LCOW root filesystem to " + VhdFile)
+			vmutils.VhdFile: filepath.Join(opts.BootFilesPath, vmutils.VhdFile),
+		}).Debug("updated LCOW root filesystem to " + vmutils.VhdFile)
 	}
 
 	if opts.KernelDirect {
@@ -212,13 +184,13 @@ func (opts *OptionsLCOW) UpdateBootFilesPath(ctx context.Context, path string) {
 		// Default to uncompressed if on box. NOTE: If `kernel` is already
 		// uncompressed and simply named 'kernel' it will still be used
 		// uncompressed automatically.
-		if _, err := os.Stat(filepath.Join(opts.BootFilesPath, UncompressedKernelFile)); err == nil {
-			opts.KernelFile = UncompressedKernelFile
+		if _, err := os.Stat(filepath.Join(opts.BootFilesPath, vmutils.UncompressedKernelFile)); err == nil {
+			opts.KernelFile = vmutils.UncompressedKernelFile
 
 			log.G(ctx).WithFields(logrus.Fields{
-				logfields.UVMID:        opts.ID,
-				UncompressedKernelFile: filepath.Join(opts.BootFilesPath, UncompressedKernelFile),
-			}).Debug("updated LCOW kernel file to " + UncompressedKernelFile)
+				logfields.UVMID:                opts.ID,
+				vmutils.UncompressedKernelFile: filepath.Join(opts.BootFilesPath, vmutils.UncompressedKernelFile),
+			}).Debug("updated LCOW kernel file to " + vmutils.UncompressedKernelFile)
 		}
 	}
 }
@@ -242,7 +214,7 @@ func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hc
 	// We can set a cpu group for the VM at creation time in recent builds.
 	if opts.CPUGroupID != "" {
 		if osversion.Build() < osversion.V21H1 {
-			return nil, errCPUGroupCreateNotSupported
+			return nil, vmutils.ErrCPUGroupCreateNotSupported
 		}
 		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}
 	}
@@ -363,7 +335,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 		}
 	}()
 
-	dmVerityRootFsFullPath := filepath.Join(opts.BundleDirectory, DefaultDmVerityRootfsVhd)
+	dmVerityRootFsFullPath := filepath.Join(opts.BundleDirectory, vmutils.DefaultDmVerityRootfsVhd)
 	if err := copyfile.CopyFile(ctx, dmVerityRootfsTemplatePath, dmVerityRootFsFullPath, true); err != nil {
 		return nil, fmt.Errorf("failed to copy DM Verity rootfs template file: %w", err)
 	}
@@ -425,7 +397,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	//		entropyVsockPort - 1 is the entropy port,
 	//		linuxLogVsockPort - 109 used by vsockexec to log stdout/stderr logging,
 	//		0x40000000 + 1 (LinuxGcsVsockPort + 1) is the bridge (see guestconnectiuon.go)
-	hvSockets := []uint32{entropyVsockPort, linuxLogVsockPort, prot.LinuxGcsVsockPort, prot.LinuxGcsVsockPort + 1}
+	hvSockets := []uint32{vmutils.LinuxEntropyVsockPort, vmutils.LinuxLogVsockPort, prot.LinuxGcsVsockPort, prot.LinuxGcsVsockPort + 1}
 	hvSockets = append(hvSockets, opts.ExtraVSockPorts...)
 	for _, whichSocket := range hvSockets {
 		key := winio.VsockServiceID(whichSocket).String()
@@ -836,18 +808,18 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	// Inject initial entropy over vsock during init launch.
-	entropyArgs := fmt.Sprintf("-e %d", entropyVsockPort)
+	entropyArgs := fmt.Sprintf("-e %d", vmutils.LinuxEntropyVsockPort)
 
 	// With default options, run GCS with stderr pointing to the vsock port
 	// created below in order to forward guest logs to logrus.
 	execCmdArgs := "/bin/vsockexec"
 
 	if opts.ForwardStdout {
-		execCmdArgs += fmt.Sprintf(" -o %d", linuxLogVsockPort)
+		execCmdArgs += fmt.Sprintf(" -o %d", vmutils.LinuxLogVsockPort)
 	}
 
 	if opts.ForwardStderr {
-		execCmdArgs += fmt.Sprintf(" -e %d", linuxLogVsockPort)
+		execCmdArgs += fmt.Sprintf(" -e %d", vmutils.LinuxLogVsockPort)
 	}
 
 	if opts.DisableTimeSyncService {
@@ -927,7 +899,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 
 	// We don't serialize OutputHandlerCreator so if it is missing we need to put it back to the default.
 	if opts.OutputHandlerCreator == nil {
-		opts.OutputHandlerCreator = parseLogrus
+		opts.OutputHandlerCreator = vmutils.ParseGCSLogrus
 	}
 
 	uvm := &UtilityVM{
@@ -994,7 +966,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	// Create a socket to inject entropy during boot.
-	uvm.entropyListener, err = uvm.listenVsock(entropyVsockPort)
+	uvm.entropyListener, err = uvm.listenVsock(vmutils.LinuxEntropyVsockPort)
 	if err != nil {
 		return nil, err
 	}
@@ -1002,9 +974,9 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	// Create a socket that the executed program can send to. This is usually
 	// used by GCS to send log data.
 	if opts.ForwardStdout || opts.ForwardStderr {
-		uvm.outputHandler = opts.OutputHandlerCreator(opts.Options)
+		uvm.outputHandler = opts.OutputHandlerCreator(opts.ID)
 		uvm.outputProcessingDone = make(chan struct{})
-		uvm.outputListener, err = uvm.listenVsock(linuxLogVsockPort)
+		uvm.outputListener, err = uvm.listenVsock(vmutils.LinuxLogVsockPort)
 		if err != nil {
 			return nil, err
 		}

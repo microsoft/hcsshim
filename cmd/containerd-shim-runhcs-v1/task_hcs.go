@@ -37,6 +37,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -768,7 +769,9 @@ func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequ
 	if ht.host == nil {
 		return cmd.ExecInShimHost(ctx, cmdReq)
 	}
-	return cmd.ExecInUvm(ctx, ht.host, cmdReq)
+
+	ctx, _ = log.SetEntry(ctx, logrus.Fields{logfields.UVMID: ht.host.ID()})
+	return ht.host.ExecInUVM(ctx, cmdReq)
 }
 
 func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {

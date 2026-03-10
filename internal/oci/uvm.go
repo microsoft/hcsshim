@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -156,7 +157,7 @@ func handleAnnotationBootFilesPath(ctx context.Context, a map[string]string, lop
 func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
 	lopts.KernelDirect = ParseAnnotationsBool(ctx, a, annotations.KernelDirectBoot, lopts.KernelDirect)
 	if !lopts.KernelDirect {
-		lopts.KernelFile = uvm.KernelFile
+		lopts.KernelFile = vmutils.KernelFile
 	}
 }
 
@@ -166,9 +167,9 @@ func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]strin
 	lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, a, annotations.PreferredRootFSType, lopts.PreferredRootFSType)
 	switch lopts.PreferredRootFSType {
 	case uvm.PreferredRootFSTypeInitRd:
-		lopts.RootFSFile = uvm.InitrdFile
+		lopts.RootFSFile = vmutils.InitrdFile
 	case uvm.PreferredRootFSTypeVHD:
-		lopts.RootFSFile = uvm.VhdFile
+		lopts.RootFSFile = vmutils.VhdFile
 	}
 }
 
@@ -206,7 +207,7 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 		// VPMem not supported by the enlightened kernel for SNP so set count to zero.
 		lopts.VPMemDeviceCount = 0
 		// set the default GuestState filename.
-		lopts.GuestStateFilePath = uvm.GuestStateFile
+		lopts.GuestStateFilePath = vmutils.DefaultGuestStateFile
 		lopts.KernelBootOptions = ""
 		lopts.AllowOvercommit = false
 		lopts.SecurityPolicyEnabled = true
@@ -219,7 +220,7 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 		// The default behavior is to use kernel.vmgs and a rootfs-verity.vhd file with Merkle tree appended to ext4 filesystem.
 		lopts.PreferredRootFSType = uvm.PreferredRootFSTypeNA
 		lopts.RootFSFile = ""
-		lopts.DmVerityRootFsVhd = uvm.DefaultDmVerityRootfsVhd
+		lopts.DmVerityRootFsVhd = vmutils.DefaultDmVerityRootfsVhd
 		lopts.DmVerityMode = true
 	}
 

@@ -11,9 +11,11 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+
 	eventstypes "github.com/containerd/containerd/api/events"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/v2/core/runtime"
@@ -21,6 +23,7 @@ import (
 	typeurl "github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -253,7 +256,9 @@ func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.Ex
 	if wpst.host == nil {
 		return 0, errTaskNotIsolated
 	}
-	return cmd.ExecInUvm(ctx, wpst.host, cmdReq)
+
+	ctx, _ = log.SetEntry(ctx, logrus.Fields{logfields.UVMID: wpst.host.ID()})
+	return wpst.host.ExecInUVM(ctx, cmdReq)
 }
 
 func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {

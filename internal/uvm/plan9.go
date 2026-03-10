@@ -13,6 +13,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -30,8 +31,6 @@ func (p9 *Plan9Share) Release(ctx context.Context) error {
 	}
 	return nil
 }
-
-const plan9Port = 564
 
 // AddPlan9 adds a Plan9 share to a utility VM.
 func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath string, readOnly bool, restrict bool, allowedNames []string) (*Plan9Share, error) {
@@ -80,7 +79,7 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 			Name:         name,
 			AccessName:   name,
 			Path:         hostPath,
-			Port:         plan9Port,
+			Port:         vmutils.Plan9Port,
 			Flags:        flags,
 			AllowedFiles: allowedNames,
 		},
@@ -91,7 +90,7 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 			Settings: guestresource.LCOWMappedDirectory{
 				MountPath: uvmPath,
 				ShareName: name,
-				Port:      plan9Port,
+				Port:      vmutils.Plan9Port,
 				ReadOnly:  readOnly,
 			},
 		},
@@ -120,7 +119,7 @@ func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) error 
 		Settings: hcsschema.Plan9Share{
 			Name:       share.name,
 			AccessName: share.name,
-			Port:       plan9Port,
+			Port:       vmutils.Plan9Port,
 		},
 		ResourcePath: resourcepaths.Plan9ShareResourcePath,
 		GuestRequest: guestrequest.ModificationRequest{
@@ -129,7 +128,7 @@ func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) error 
 			Settings: guestresource.LCOWMappedDirectory{
 				MountPath: share.uvmPath,
 				ShareName: share.name,
-				Port:      plan9Port,
+				Port:      vmutils.Plan9Port,
 			},
 		},
 	}

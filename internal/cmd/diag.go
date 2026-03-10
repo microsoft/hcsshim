@@ -7,13 +7,12 @@ import (
 	"errors"
 	"os/exec"
 
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
 // ExecInUvm is a helper function used to execute commands specified in `req` inside the given UVM.
-func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (int, error) {
+func ExecInUvm(ctx context.Context, guestVM *gcs.GuestConnection, req *CmdProcessRequest) (int, error) {
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}
@@ -22,18 +21,18 @@ func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (
 		return 0, err
 	}
 	defer np.Close(ctx)
-	cmd := CommandContext(ctx, vm, req.Args[0], req.Args[1:]...)
+	cmd := CommandContext(ctx, guestVM, req.Args[0], req.Args[1:]...)
 	if req.Workdir != "" {
 		cmd.Spec.Cwd = req.Workdir
 	}
-	if vm.OS() == "windows" {
+	if guestVM.OS() == "windows" {
 		cmd.Spec.User.Username = `NT AUTHORITY\SYSTEM`
 	}
 	cmd.Spec.Terminal = req.Terminal
 	cmd.Stdin = np.Stdin()
 	cmd.Stdout = np.Stdout()
 	cmd.Stderr = np.Stderr()
-	cmd.Log = log.G(ctx).WithField(logfields.UVMID, vm.ID())
+	cmd.Log = log.G(ctx)
 	err = cmd.Run()
 	return cmd.ExitState.ExitCode(), err
 }

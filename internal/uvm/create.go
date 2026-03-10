@@ -169,8 +169,8 @@ func verifyOptions(_ context.Context, options interface{}) error {
 		if opts.SCSIControllerCount > MaxSCSIControllers {
 			return fmt.Errorf("SCSI controller count can't be more than %d", MaxSCSIControllers)
 		}
-		if opts.VPMemDeviceCount > MaxVPMEMCount {
-			return fmt.Errorf("VPMem device count cannot be greater than %d", MaxVPMEMCount)
+		if opts.VPMemDeviceCount > vmutils.MaxVPMEMCount {
+			return fmt.Errorf("VPMem device count cannot be greater than %d", vmutils.MaxVPMEMCount)
 		}
 		if opts.VPMemDeviceCount > 0 {
 			if opts.VPMemSizeBytes%4096 != 0 {

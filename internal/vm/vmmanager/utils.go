@@ -1,17 +1,15 @@
 //go:build windows
 
-package guestmanager
+package vmmanager
 
 import (
 	"context"
 	"net"
-
-	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 )
 
 // AcceptConnection accepts a connection and then closes a listener.
 // It monitors ctx.Done() and uvm.Wait() for early termination.
-func AcceptConnection(ctx context.Context, uvm vmmanager.LifetimeManager, l net.Listener, closeConnection bool) (net.Conn, error) {
+func AcceptConnection(ctx context.Context, uvm LifetimeManager, l net.Listener, closeConnection bool) (net.Conn, error) {
 	// Channel to capture the accept result
 	type acceptResult struct {
 		conn net.Conn
@@ -43,18 +41,11 @@ func AcceptConnection(ctx context.Context, uvm vmmanager.LifetimeManager, l net.
 	}
 
 	_ = l.Close()
-	res := <-resultCh
-	if res.err == nil {
-		return res.conn, res.err
-	}
 
 	// Prefer context error to VM error to accept error in order to return the
 	// most useful error.
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-	if uvm.ExitError() != nil {
-		return nil, uvm.ExitError()
-	}
-	return nil, res.err
+	return nil, uvm.ExitError()
 }

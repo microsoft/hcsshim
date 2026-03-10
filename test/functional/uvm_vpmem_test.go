@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/hcsshim/test/internal/util"
@@ -29,7 +29,7 @@ func TestVPMEM(t *testing.T) {
 	u := testuvm.CreateAndStartLCOW(ctx, t, t.Name())
 	defer u.Close()
 
-	var iterations uint32 = uvm.MaxVPMEMCount
+	var iterations uint32 = vmutils.MaxVPMEMCount
 
 	// Use layer.vhd from the alpine image as something to add
 	tempDir := t.TempDir()

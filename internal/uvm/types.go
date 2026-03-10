@@ -3,12 +3,12 @@
 package uvm
 
 import (
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -83,8 +83,8 @@ type UtilityVM struct {
 	vpmemMaxCount           uint32 // The max number of VPMem devices.
 	vpmemMaxSizeBytes       uint64 // The max size of the layer in bytes per vPMem device.
 	vpmemMultiMapping       bool   // Enable mapping multiple VHDs onto a single VPMem device
-	vpmemDevicesDefault     [MaxVPMEMCount]*vPMemInfoDefault
-	vpmemDevicesMultiMapped [MaxVPMEMCount]*vPMemInfoMulti
+	vpmemDevicesDefault     [vmutils.MaxVPMEMCount]*vPMemInfoDefault
+	vpmemDevicesMultiMapped [vmutils.MaxVPMEMCount]*vPMemInfoMulti
 
 	// SCSI devices that are mapped into a Windows or Linux utility VM
 	SCSIManager         *scsi.Manager
@@ -101,7 +101,7 @@ type UtilityVM struct {
 
 	outputListener       net.Listener
 	outputProcessingDone chan struct{}
-	outputHandler        OutputHandler
+	outputHandler        vmutils.OutputHandler
 
 	entropyListener net.Listener
 
@@ -151,11 +151,6 @@ type UtilityVM struct {
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
 	return uvm.encryptScratch
 }
-
-// OutputHandler is used to process the output from the program run in the UVM.
-type OutputHandler func(io.Reader)
-
-type OutputHandlerCreator func(*Options) OutputHandler
 
 type WCOWBootFilesType uint8
 

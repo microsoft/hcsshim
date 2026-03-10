@@ -22,6 +22,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hvsocket"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/resources"
@@ -204,6 +205,9 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}()
 
 	if coi.HostingSystem != nil {
+		// Set the UVM ID in ctx so that it gets logged in all subsequent calls.
+		ctx, _ = log.SetEntry(ctx, logrus.Fields{logfields.UVMID: coi.HostingSystem.ID()})
+
 		if coi.Spec.Linux != nil {
 			r.SetContainerRootInUVM(fmt.Sprintf(lcowRootInUVM, coi.ID))
 		} else {

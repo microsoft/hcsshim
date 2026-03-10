@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/hcsshim/test/pkg/require"
@@ -52,8 +53,8 @@ func TestVirtualDevice(t *testing.T) {
 	opts.AllowOvercommit = false
 	opts.KernelDirect = false
 	opts.VPMemDeviceCount = 0
-	opts.KernelFile = uvm.KernelFile
-	opts.RootFSFile = uvm.InitrdFile
+	opts.KernelFile = vmutils.KernelFile
+	opts.RootFSFile = vmutils.InitrdFile
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 
 	// create test uvm and ensure we can assign and remove the device

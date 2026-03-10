@@ -75,7 +75,7 @@ func getChildrenDeviceLocationPaths(ctx context.Context, vm *uvm.UtilityVM, vmBu
 		Args:   args,
 		Stdout: p,
 	}
-	exitCode, err := cmd.ExecInUvm(ctx, vm, cmdReq)
+	exitCode, err := vm.ExecInUVM(ctx, cmdReq)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to find devices with exit code %d", exitCode)
 	}
