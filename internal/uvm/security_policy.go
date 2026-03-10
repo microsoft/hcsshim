@@ -67,6 +67,28 @@ func WithUVMReferenceInfo(referenceRoot string, referenceName string) Confidenti
 	}
 }
 
+// WithUVMHashEnvelopeReferenceInfo reads UVM hash envelope reference info file
+// and base64 encodes the content before setting it for the resource. This is
+// no-op if the `referenceName` is empty or the file doesn't exist.
+func WithUVMHashEnvelopeReferenceInfo(referenceRoot string, referenceName string) ConfidentialUVMOpt {
+	return func(ctx context.Context, r *guestresource.ConfidentialOptions) error {
+		if referenceName == "" {
+			return nil
+		}
+		fullFilePath := filepath.Join(referenceRoot, referenceName)
+		encoded, err := base64EncodeFileContents(fullFilePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.G(ctx).WithField("filePath", fullFilePath).Debug("UVM hash envelope reference info file not found")
+				return nil
+			}
+			return fmt.Errorf("failed to read UVM hash envelope reference info file: %w", err)
+		}
+		r.EncodedUVMHashEnvelopeReference = encoded
+		return nil
+	}
+}
+
 // SetConfidentialUVMOptions sends information required to run the UVM on
 // SNP hardware, e.g., security policy and enforcer type, signed UVM reference
 // information, etc.

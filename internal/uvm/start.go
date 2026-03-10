@@ -375,21 +375,24 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	uvm.SCSIManager = mgr
 
 	if uvm.HasConfidentialPolicy() {
-		var policy, enforcer, referenceInfoFileRoot, referenceInfoFilePath string
+		var policy, enforcer, referenceInfoFileRoot, referenceInfoFilePath, hashEnvelopeReferenceInfoFilePath string
 		if uvm.OS() == "linux" {
 			policy = uvm.createOpts.(*OptionsLCOW).SecurityPolicy
 			enforcer = uvm.createOpts.(*OptionsLCOW).SecurityPolicyEnforcer
 			referenceInfoFilePath = uvm.createOpts.(*OptionsLCOW).UVMReferenceInfoFile
+			hashEnvelopeReferenceInfoFilePath = uvm.createOpts.(*OptionsLCOW).UVMHashEnvelopeReferenceInfoFile
 			referenceInfoFileRoot = vmutils.DefaultLCOWOSBootFilesPath()
 		} else if uvm.OS() == "windows" {
 			policy = uvm.createOpts.(*OptionsWCOW).SecurityPolicy
 			enforcer = uvm.createOpts.(*OptionsWCOW).SecurityPolicyEnforcer
 			referenceInfoFilePath = uvm.createOpts.(*OptionsWCOW).UVMReferenceInfoFile
+			hashEnvelopeReferenceInfoFilePath = uvm.createOpts.(*OptionsWCOW).UVMHashEnvelopeReferenceInfoFile
 		}
 		copts := []ConfidentialUVMOpt{
 			WithSecurityPolicy(policy),
 			WithSecurityPolicyEnforcer(enforcer),
 			WithUVMReferenceInfo(referenceInfoFileRoot, referenceInfoFilePath),
+			WithUVMHashEnvelopeReferenceInfo(referenceInfoFileRoot, hashEnvelopeReferenceInfoFilePath),
 		}
 		if err := uvm.SetConfidentialUVMOptions(ctx, copts...); err != nil {
 			return err

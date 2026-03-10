@@ -88,6 +88,10 @@ const (
 	// reference UVM info, which can be made available to workload containers
 	// and can be used for validation purposes.
 	UVMReferenceInfoFile = "reference_info.cose"
+	// UVMHashEnvelopeReferenceInfoFile is the default file name for a COSE_Sign1
+	// hash envelope reference UVM info, which can be made available to workload
+	// containers and can be used for validation purposes.
+	UVMHashEnvelopeReferenceInfoFile = "hash_envelope_reference_info.cose"
 )
 
 type ConfidentialLCOWOptions struct {
@@ -162,8 +166,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		DisableTimeSyncService:  false,
 		ConfidentialLCOWOptions: &ConfidentialLCOWOptions{
 			ConfidentialCommonOptions: &ConfidentialCommonOptions{
-				SecurityPolicyEnabled: false,
-				UVMReferenceInfoFile:  UVMReferenceInfoFile,
+				SecurityPolicyEnabled:            false,
+				UVMReferenceInfoFile:             UVMReferenceInfoFile,
+				UVMHashEnvelopeReferenceInfoFile: UVMHashEnvelopeReferenceInfoFile,
 			},
 		},
 	}

@@ -52,6 +52,7 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 		initialEnforcer,
 		false,
 		"",
+		"",
 		logWriter,
 	)
 	return &Host{

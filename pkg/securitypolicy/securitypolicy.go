@@ -47,10 +47,11 @@ const (
 const plan9Prefix = "plan9://"
 
 const (
-	SecurityContextDirTemplate = "security-context-*"
-	PolicyFilename             = "security-policy-base64"
-	HostAMDCertFilename        = "host-amd-cert-base64"
-	ReferenceInfoFilename      = "reference-info-base64"
+	SecurityContextDirTemplate        = "security-context-*"
+	PolicyFilename                    = "security-policy-base64"
+	HostAMDCertFilename               = "host-amd-cert-base64"
+	ReferenceInfoFilename             = "reference-info-base64"
+	HashEnvelopeReferenceInfoFilename = "hash-envelope-reference-info-base64"
 )
 
 // PolicyConfig contains toml or JSON config for security policy.

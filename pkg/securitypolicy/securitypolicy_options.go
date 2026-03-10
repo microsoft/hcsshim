@@ -24,19 +24,21 @@ import (
 
 type SecurityOptions struct {
 	// state required for the security policy enforcement
-	PolicyEnforcer    SecurityPolicyEnforcer
-	PolicyEnforcerSet bool
-	UvmReferenceInfo  string
-	policyMutex       sync.Mutex
-	logWriter         io.Writer
+	PolicyEnforcer               SecurityPolicyEnforcer
+	PolicyEnforcerSet            bool
+	UvmReferenceInfo             string
+	UvmHashEnvelopeReferenceInfo string
+	policyMutex                  sync.Mutex
+	logWriter                    io.Writer
 }
 
-func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, logWriter io.Writer) *SecurityOptions {
+func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, uvmHashEnvelopeReferenceInfo string, logWriter io.Writer) *SecurityOptions {
 	return &SecurityOptions{
-		PolicyEnforcer:    enforcer,
-		PolicyEnforcerSet: enforcerSet,
-		UvmReferenceInfo:  uvmReferenceInfo,
-		logWriter:         logWriter,
+		PolicyEnforcer:               enforcer,
+		PolicyEnforcerSet:            enforcerSet,
+		UvmReferenceInfo:             uvmReferenceInfo,
+		UvmHashEnvelopeReferenceInfo: uvmHashEnvelopeReferenceInfo,
+		logWriter:                    logWriter,
 	}
 }
 
@@ -46,7 +48,7 @@ func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmRe
 // encoded security policy and signed UVM reference information The security
 // policy and uvm reference information can be further presented to workload
 // containers for validation and attestation purposes.
-func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerType string, encodedSecurityPolicy string, encodedUVMReference string) error {
+func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerType string, encodedSecurityPolicy string, encodedUVMReference string, encodedUVMHashEnvelopeReference string) error {
 	s.policyMutex.Lock()
 	defer s.policyMutex.Unlock()
 
@@ -95,6 +97,7 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	s.PolicyEnforcer = p
 	s.PolicyEnforcerSet = true
 	s.UvmReferenceInfo = encodedUVMReference
+	s.UvmHashEnvelopeReferenceInfo = encodedUVMHashEnvelopeReference
 
 	return nil
 }
@@ -191,7 +194,7 @@ func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) 
 func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) error {
 	encodedPolicy := s.PolicyEnforcer.EncodedSecurityPolicy()
 	hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 {
+	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 {
 		// Use os.MkdirTemp to make sure that the directory is unique.
 		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
 		if err != nil {
@@ -210,6 +213,11 @@ func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) error {
 		if len(s.UvmReferenceInfo) > 0 {
 			if err := writeFileInDir(securityContextDir, ReferenceInfoFilename, []byte(s.UvmReferenceInfo), 0777); err != nil {
 				return fmt.Errorf("failed to write UVM reference info: %w", err)
+			}
+		}
+		if len(s.UvmHashEnvelopeReferenceInfo) > 0 {
+			if err := writeFileInDir(securityContextDir, HashEnvelopeReferenceInfoFilename, []byte(s.UvmHashEnvelopeReferenceInfo), 0777); err != nil {
+				return fmt.Errorf("failed to write UVM hash envelope reference info: %w", err)
 			}
 		}
 

@@ -312,6 +312,12 @@ const (
 	VirtualMachineKernelDrivers = "io.microsoft.virtualmachine.kerneldrivers"
 )
 
+// Confidential UVM annotations.
+const (
+	// UVMHashEnvelopeReferenceInfoFile specifies the filename of a hash envelope signed UVM reference file to be passed to UVM.
+	UVMHashEnvelopeReferenceInfoFile = "io.microsoft.virtualmachine.uvm-hash-envelope-reference-info-file"
+)
+
 // uVM CPU annotations.
 const (
 	// CPUGroupID specifies the cpugroup ID that a UVM should be assigned to, if any.
