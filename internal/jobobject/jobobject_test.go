@@ -252,6 +252,27 @@ func TestSetMultipleExtendedLimits(t *testing.T) {
 	}
 }
 
+func TestSetResourceLimitsCPUAffinity(t *testing.T) {
+	job, err := Create(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	limits := &JobLimits{CPUAffinity: 0x3}
+	if err := job.SetResourceLimits(limits); err != nil {
+		t.Fatalf("failed to set resource limits with cpu affinity: %v", err)
+	}
+
+	affinity, err := job.GetCPUAffinity()
+	if err != nil {
+		t.Fatalf("failed to query cpu affinity: %v", err)
+	}
+	if affinity != limits.CPUAffinity {
+		t.Fatalf("unexpected cpu affinity: got %d want %d", affinity, limits.CPUAffinity)
+	}
+}
+
 func TestNoMoreProcessesMessageKill(t *testing.T) {
 	// Test that we receive the no more processes in job message after killing all of
 	// the processes in the job.
