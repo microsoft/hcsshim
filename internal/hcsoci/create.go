@@ -206,7 +206,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 
 	if coi.HostingSystem != nil {
 		// Set the UVM ID in ctx so that it gets logged in all subsequent calls.
-		ctx, _ = log.WithContext(ctx, log.G(ctx).WithField(logfields.UVMID, coi.HostingSystem.ID()))
+		ctx, _ = log.SetEntry(ctx, logrus.Fields{logfields.UVMID: coi.HostingSystem.ID()})
 
 		if coi.Spec.Linux != nil {
 			r.SetContainerRootInUVM(fmt.Sprintf(lcowRootInUVM, coi.ID))

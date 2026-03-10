@@ -217,7 +217,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				Args:   []string{"cmd", "/c", "mkdir", sandboxPath, "&", "dir", sandboxPath},
 				Stderr: stderr,
 			}
-			exitCode, err := cmd.ExecInUvm(ctx, coi.HostingSystem, req)
+			exitCode, err := coi.HostingSystem.ExecInUVM(ctx, req)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create sandbox mount directory in utility VM with exit code %d %q", exitCode, b.String())
 			}

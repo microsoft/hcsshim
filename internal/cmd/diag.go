@@ -7,12 +7,12 @@ import (
 	"errors"
 	"os/exec"
 
-	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 // ExecInUvm is a helper function used to execute commands specified in `req` inside the given UVM.
-func ExecInUvm(ctx context.Context, vm cow.ProcessHost, req *CmdProcessRequest) (int, error) {
+func ExecInUvm(ctx context.Context, guestVM *gcs.GuestConnection, req *CmdProcessRequest) (int, error) {
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}
@@ -21,11 +21,11 @@ func ExecInUvm(ctx context.Context, vm cow.ProcessHost, req *CmdProcessRequest) 
 		return 0, err
 	}
 	defer np.Close(ctx)
-	cmd := CommandContext(ctx, vm, req.Args[0], req.Args[1:]...)
+	cmd := CommandContext(ctx, guestVM, req.Args[0], req.Args[1:]...)
 	if req.Workdir != "" {
 		cmd.Spec.Cwd = req.Workdir
 	}
-	if vm.OS() == "windows" {
+	if guestVM.OS() == "windows" {
 		cmd.Spec.User.Username = `NT AUTHORITY\SYSTEM`
 	}
 	cmd.Spec.Terminal = req.Terminal

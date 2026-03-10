@@ -770,8 +770,8 @@ func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequ
 		return cmd.ExecInShimHost(ctx, cmdReq)
 	}
 
-	ctx, _ = log.WithContext(ctx, log.G(ctx).WithField(logfields.UVMID, ht.host.ID()))
-	return cmd.ExecInUvm(ctx, ht.host, cmdReq)
+	ctx, _ = log.SetEntry(ctx, logrus.Fields{logfields.UVMID: ht.host.ID()})
+	return ht.host.ExecInUVM(ctx, cmdReq)
 }
 
 func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {

@@ -51,7 +51,7 @@ func execPnPInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir stri
 	cmdReq := &cmd.CmdProcessRequest{
 		Args: args,
 	}
-	exitCode, err := cmd.ExecInUvm(ctx, vm, cmdReq)
+	exitCode, err := vm.ExecInUVM(ctx, cmdReq)
 	if err != nil && exitCode != winapi.ERROR_NO_MORE_ITEMS {
 		return errors.Wrapf(err, "failed to install driver %s in uvm with exit code %d", driverDir, exitCode)
 	} else if exitCode == winapi.ERROR_NO_MORE_ITEMS {

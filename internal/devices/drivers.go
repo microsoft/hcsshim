@@ -20,7 +20,7 @@ import (
 // InstallDrivers mounts a share from the host into the UVM, installs any kernel drivers in the share,
 // and configures the environment for library files and/or binaries in the share.
 //
-// InstallDriver mounts a specified kernel driver, then installs it in the UVM.
+// InstallDrivers mounts a specified kernel driver, then installs it in the UVM.
 //
 // `share` is a directory path on the host that contains files for standard driver installation.
 // For windows this means files for pnp installation (.inf, .cat, .sys, .cert files).
@@ -112,7 +112,7 @@ func execGCSInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir stri
 	// - There's an error copying IO. No need to wait for stderr logs.
 	//
 	// Since we cannot distinguish between the cases above, we should always wait to read the stderr output.
-	exitCode, execErr := cmd.ExecInUvm(ctx, vm, req)
+	exitCode, execErr := vm.ExecInUVM(ctx, req)
 
 	// wait to finish parsing stdout results
 	select {
