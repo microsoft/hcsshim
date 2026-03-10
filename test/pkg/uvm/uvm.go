@@ -60,15 +60,17 @@ func CreateAndStart(ctx context.Context, tb testing.TB, opts any) *uvm.UtilityVM
 
 func Start(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
-	err := vm.Start(ctx)
+	tb.Logf("start uVM: %q", vm.ID())
 
-	if err != nil {
+	if err := vm.Start(ctx); err != nil {
 		tb.Fatalf("could not start UVM: %v", err)
 	}
 }
 
 func Wait(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
+	tb.Logf("waiting on container: %q", vm.ID())
+
 	if err := vm.WaitCtx(ctx); err != nil {
 		tb.Fatalf("could not wait for uvm %q: %v", vm.ID(), err)
 	}
@@ -76,6 +78,8 @@ func Wait(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 
 func Kill(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
+	tb.Logf("kill uVM: %q", vm.ID())
+
 	if err := vm.Terminate(ctx); err != nil {
 		tb.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
 	}
@@ -83,6 +87,8 @@ func Kill(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 
 func Close(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
 	tb.Helper()
+	tb.Logf("close uVM: %q", vm.ID())
+
 	if err := vm.CloseCtx(ctx); err != nil {
 		tb.Fatalf("could not close uvm %q: %v", vm.ID(), err)
 	}

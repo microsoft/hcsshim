@@ -31,6 +31,7 @@ func Create(
 	name, owner string,
 ) (c cow.Container, r *resources.Resources, _ func()) {
 	tb.Helper()
+	tb.Logf("creating container: %q", name)
 
 	if spec.Windows == nil || spec.Windows.Network == nil || spec.Windows.LayerFolders == nil {
 		tb.Fatalf("improperly configured windows spec for container %q: %#+v", name, spec.Windows)
@@ -72,6 +73,8 @@ func Create(
 	}
 
 	f := func() {
+		tb.Logf("cleaning up container: %q", name)
+
 		if err := resources.ReleaseResources(ctx, r, vm, true); err != nil {
 			tb.Errorf("failed to release container resources: %v", err)
 		}
@@ -99,6 +102,8 @@ func Start(ctx context.Context, tb testing.TB, c cow.Container, io *testcmd.Buff
 
 func StartWithSpec(ctx context.Context, tb testing.TB, c cow.Container, p *specs.Process, io *testcmd.BufferedIO) *cmd.Cmd {
 	tb.Helper()
+	tb.Logf("starting container: %q", c.ID())
+
 	if err := c.Start(ctx); err != nil {
 		tb.Fatalf("could not start %q: %v", c.ID(), err)
 	}
@@ -111,6 +116,8 @@ func StartWithSpec(ctx context.Context, tb testing.TB, c cow.Container, p *specs
 
 func Wait(_ context.Context, tb testing.TB, c cow.Container) {
 	tb.Helper()
+	tb.Logf("waiting on container: %q", c.ID())
+
 	// todo: add wait on ctx.Done
 	if err := c.Wait(); err != nil {
 		tb.Fatalf("could not wait on container %q: %v", c.ID(), err)
@@ -119,6 +126,8 @@ func Wait(_ context.Context, tb testing.TB, c cow.Container) {
 
 func Kill(ctx context.Context, tb testing.TB, c cow.Container) {
 	tb.Helper()
+	tb.Logf("kill container: %q", c.ID())
+
 	if err := c.Shutdown(ctx); err != nil {
 		tb.Fatalf("could not terminate container %q: %v", c.ID(), err)
 	}

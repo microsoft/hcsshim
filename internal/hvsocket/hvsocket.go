@@ -6,12 +6,12 @@ package hvsocket
 import (
 	"context"
 	"fmt"
-	"github.com/Microsoft/hcsshim/internal/log"
 	"unsafe"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/resources"
 )
 

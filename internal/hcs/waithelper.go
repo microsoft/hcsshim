@@ -7,19 +7,20 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 func processAsyncHcsResult(
 	ctx context.Context,
 	err error,
 	resultJSON string,
-	callbackNumber uintptr,
+	callbackNum callbackNumber,
 	expectedNotification hcsNotification,
 	timeout *time.Duration,
 ) ([]ErrorEvent, error) {
 	events := processHcsResult(ctx, resultJSON)
 	if IsPending(err) {
-		return nil, waitForNotification(ctx, callbackNumber, expectedNotification, timeout)
+		return nil, waitForNotification(ctx, callbackNum, expectedNotification, timeout)
 	}
 
 	return events, err
@@ -27,17 +28,17 @@ func processAsyncHcsResult(
 
 func waitForNotification(
 	ctx context.Context,
-	callbackNumber uintptr,
+	callbackNum callbackNumber,
 	expectedNotification hcsNotification,
 	timeout *time.Duration,
 ) error {
 	callbackMapLock.RLock()
-	if _, ok := callbackMap[callbackNumber]; !ok {
+	if _, ok := callbackMap[callbackNum]; !ok {
 		callbackMapLock.RUnlock()
-		log.G(ctx).WithField("callbackNumber", callbackNumber).Error("failed to waitForNotification: callbackNumber does not exist in callbackMap")
+		log.G(ctx).WithField(logfields.CallbackNumber, callbackNum).Error("failed to waitForNotification: callback number does not exist in callbackMap")
 		return ErrHandleClose
 	}
-	channels := callbackMap[callbackNumber].channels
+	channels := callbackMap[callbackNum].channels
 	callbackMapLock.RUnlock()
 
 	expectedChannel := channels[expectedNotification]
