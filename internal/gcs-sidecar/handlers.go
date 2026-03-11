@@ -23,6 +23,7 @@ import (
 	oci "github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/internal/windevice"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
@@ -487,6 +488,67 @@ func (b *Bridge) lifecycleNotification(req *request) (err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	// No callers in the code for rpcLifecycleNotification
+	b.forwardRequestToGcs(req)
+	return nil
+}
+
+func (b *Bridge) modifyServiceSettings(req *request) (err error) {
+	_, span := oc.StartSpan(req.ctx, "sidecar::modifyServiceSettings")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	// Todo: Add policy enforcement for modifying service settings
+	modifyRequest, err := unmarshalModifyServiceSettings(req)
+	if err != nil {
+		return err
+	}
+
+	switch modifyRequest.PropertyType {
+	case string(prot.LogForwardService):
+		if modifyRequest.Settings != nil {
+			log.G(req.ctx).Tracef("modifyServiceSettings for LogForwardService with RPCModifyServiceSettings, enforcing policy for log sources")
+			settings := modifyRequest.Settings.(*guestrequest.LogForwardServiceRPCRequest)
+
+			switch settings.RPCType {
+			case guestrequest.RPCModifyServiceSettings, guestrequest.RPCStartLogForwarding, guestrequest.RPCStopLogForwarding:
+				log.G(req.ctx).Tracef("%v request received for LogForwardService, proceeding with policy enforcement for log sources", settings.RPCType)
+				// Enforce the policy for log sources in the request and update the settings with allowed log sources.
+				// For cwcow, the sidecar-GCS will verify the allowed log sources against policy and append the necessary GUIDs to the ones allowed. Rest are dropped.
+				// The Enforcer will have to unmarshal the log sources, enforce the policy and then marshal it back to a Base64 encoded JSON string which is what inbox GCS expects.
+				// It can query etw.GetDefaultLogSources to get the default log sources if the policy allows, and allow providers matching the default list during policy enforcement.
+				// This is because the log sources can be a combination of default and user specified log sources for which GUIDs need to be appended based on the policy enforcement.
+				if settings.Settings != "" {
+					// <EXAMPLE CALL>
+					// allowedLogSources, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogForwardServiceSettingsPolicy(req.ctx, settings.LogSources)
+
+					// For now, we are skipping the policy enforcement and allowing all log sources as the policy enforcer implementation is in progress. We will add the enforcement back once it's implemented.
+					allowedLogSources := settings.Settings // This is Base64 encoded JSON string of log sources
+					log.G(req.ctx).Tracef("Allowed log sources after policy enforcement: %v", allowedLogSources)
+
+					// Update the allowed log sources in the settings. This will be forwarded to inbox GCS which expects the log sources in a JSON string format with GUIDs for providers included.
+					allowedLogSources = etw.UpdateLogSources(req.ctx, allowedLogSources, false, true)
+					settings.Settings = allowedLogSources
+				}
+			default:
+				log.G(req.ctx).Tracef("modifyServiceSettings for LogForwardService with RPCType: %v, skipping policy enforcement", settings.RPCType)
+			}
+			modifyRequest.Settings = settings
+			buf, err := json.Marshal(modifyRequest)
+			if err != nil {
+				return fmt.Errorf("failed to marshal modifyServiceSettings request: %w", err)
+			}
+			var newRequest request
+			newRequest.ctx = req.ctx
+			newRequest.header = req.header
+			newRequest.header.Size = uint32(len(buf)) + prot.HdrSize
+			newRequest.message = buf
+			req = &newRequest
+		} else {
+			log.G(req.ctx).Tracef("modifyServiceSettings for LogForwardService with empty settings, skipping policy enforcement")
+		}
+	default:
+		log.G(req.ctx).Tracef("modifyServiceSettings with PropertyType: %v, skipping policy enforcement", modifyRequest.PropertyType)
+	}
 	b.forwardRequestToGcs(req)
 	return nil
 }

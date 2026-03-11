@@ -17,6 +17,37 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
+func unmarshalModifyServiceSettings(req *request) (_ *prot.ServiceModificationRequest, err error) {
+	ctx, span := oc.StartSpan(req.ctx, "sidecar::unmarshalModifyServiceSettings")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	var serviceModifyRequest prot.ServiceModificationRequest
+	var requestRawSettings json.RawMessage
+	serviceModifyRequest.Settings = &requestRawSettings
+	if err := commonutils.UnmarshalJSONWithHresult(req.message, &serviceModifyRequest); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal rpcModifySettings: %w", err)
+	}
+
+	if serviceModifyRequest.PropertyType != "" {
+		switch serviceModifyRequest.PropertyType {
+		case string(prot.LogForwardService):
+			log.G(ctx).Info("Unmarshalling log forward service modify settings")
+			settings := &guestrequest.LogForwardServiceRPCRequest{}
+			if err := commonutils.UnmarshalJSONWithHresult(requestRawSettings, settings); err != nil {
+				return nil, fmt.Errorf("invalid LogForwardService modify settings request: %w", err)
+			}
+			serviceModifyRequest.Settings = settings
+		default:
+			// Invalid request
+			log.G(ctx).Errorf("Invalid ServiceModificationRequest: %v", serviceModifyRequest.PropertyType)
+			return nil, fmt.Errorf("invalid ServiceModificationRequest")
+		}
+	}
+
+	return &serviceModifyRequest, nil
+}
+
 func unmarshalContainerModifySettings(req *request) (_ *prot.ContainerModifySettings, err error) {
 	ctx, span := oc.StartSpan(req.ctx, "sidecar::unmarshalContainerModifySettings")
 	defer span.End()

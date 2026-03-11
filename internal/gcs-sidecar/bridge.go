@@ -172,6 +172,7 @@ func (b *Bridge) AssignHandlers() {
 	b.HandleFunc(prot.RPCDeleteContainerState, b.deleteContainerState)
 	b.HandleFunc(prot.RPCUpdateContainer, b.updateContainer)
 	b.HandleFunc(prot.RPCLifecycleNotification, b.lifecycleNotification)
+	b.HandleFunc(prot.RPCModifyServiceSettings, b.modifyServiceSettings)
 }
 
 // readMessage reads the message from io.Reader
