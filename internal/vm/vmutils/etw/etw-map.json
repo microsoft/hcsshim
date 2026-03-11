@@ -34,7 +34,7 @@
         },
         {
             "providerName": "Microsoft.Windows.LogForwardService.Provider",
-            "providerGuid": "396A26FF-FB73-5465-0D17-DD493089623"
+            "providerGuid": "396a26ff-fb73-5465-0d17-dd4930896239"
         },
         {
             "providerName": "Microsoft.Windows.Security.KeyGuard",
