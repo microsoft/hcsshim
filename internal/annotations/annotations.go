@@ -70,6 +70,6 @@ const (
 
 // WCOW container annotations.
 const (
-	// This is for testing and debugging annotations that can be set in the WCOW containers
+	// This is for testing and debugging registry entries that can be set in the WCOW containers
 	WCOWAnnotationsTest = "io.microsoft.container.wcow.testannotation"
 )
