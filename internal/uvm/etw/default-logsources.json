@@ -1,0 +1,63 @@
+{
+  "LogConfig": {
+    "sources": [
+      {
+        "type": "ETW",
+        "providers": [
+          {
+            "providerName": "Microsoft.Windows.HyperV.Compute",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft-Windows-Guest-Network-Service",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.FileSystem.CimFS",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.FileSystem.UnionFs",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft-Windows-BitLocker-Driver",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft-windows-bitlocker-api",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.Security.KeyGuard",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.Security.KeyGuard.Attestation.Verify",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.Containers.Setup",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.Containers.Storage",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.Containers.Library",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.Containers.DynamicImage",
+            "level": "Information"
+          },
+          {
+            "providerName": "Microsoft.Windows.LogForwardService.Provider",
+            "level": "Information"
+          }
+        ]
+      }
+    ]
+  }
+}
