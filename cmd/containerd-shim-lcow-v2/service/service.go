@@ -8,7 +8,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shim"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
@@ -22,7 +21,7 @@ import (
 )
 
 // Service is the shared Service struct that implements all TTRPC Service interfaces.
-// All Service methods (sandbox, task, shimdiag,) operate on this shared struct.
+// All Service methods (sandbox, task, and shimdiag) operate on this shared struct.
 type Service struct {
 	// mu is used to synchronize access to shared state within the Service.
 	mu sync.Mutex
@@ -33,10 +32,8 @@ type Service struct {
 	events chan interface{}
 
 	// sandboxID is the unique identifier for the sandbox managed by this Service instance.
+	// For LCOW shim, sandboxID corresponds 1-1 with the UtilityVM managed by the shim.
 	sandboxID string
-
-	// vmHcsDocument holds the HCS compute-system document used to create the VM.
-	vmHcsDocument *hcsschema.ComputeSystem
 
 	// sandboxOptions contains parsed, shim-level configuration for the sandbox
 	// such as architecture and confidential-compute settings.
@@ -44,10 +41,6 @@ type Service struct {
 
 	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
 	vmController vm.Controller
-
-	// podControllers maps podID -> PodController for each active pod.
-	// TODO: Phase B/Pod-delete – wire CreateTask / Delete to create/remove entries here.
-	podControllers sync.Map
 
 	// shutdown manages graceful shutdown operations and allows registration of cleanup callbacks.
 	shutdown shutdown.Service
@@ -66,6 +59,8 @@ func NewService(ctx context.Context, eventsPublisher shim.Publisher, sd shutdown
 
 	go svc.forward(ctx, eventsPublisher)
 
+	// Register a shutdown callback to close the events channel,
+	// which signals the forward goroutine to exit.
 	sd.RegisterCallback(func(context.Context) error {
 		close(svc.events)
 		return nil
@@ -96,6 +91,10 @@ func (s *Service) SandboxID() string {
 
 // send enqueues an event onto the internal events channel so that it can be
 // forwarded to containerd asynchronously by the forward goroutine.
+//
+// TODO: wire up send() for task events once task lifecycle methods are implemented.
+//
+//nolint:unused
 func (s *Service) send(evt interface{}) {
 	s.events <- evt
 }

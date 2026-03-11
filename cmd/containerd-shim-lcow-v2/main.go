@@ -1,6 +1,6 @@
 //go:build windows
 
-// containerd-shim-lcow-v1 is a containerd shim implementation for Linux Containers on Windows (LCOW).
+// containerd-shim-lcow-v2 is a containerd shim implementation for Linux Containers on Windows (LCOW).
 package main
 
 import (
@@ -10,89 +10,39 @@ import (
 	"io"
 	"os"
 
-	"github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v1/service/plugin"
+	_ "github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v2/service/plugin"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shim"
-	hcsversion "github.com/Microsoft/hcsshim/internal/version"
-	"github.com/containerd/errdefs"
 
-	"github.com/Microsoft/go-winio/pkg/etw"
-	"github.com/Microsoft/go-winio/pkg/etwlogrus"
+	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
 const (
 	// name is the name of lcow shim implementation.
-	name = "containerd-shim-lcow-v1"
-	// etwProviderName is the ETW provider name for lcow shim.
-	etwProviderName = "Microsoft.Virtualization.RunHCSLCOW"
+	name = "containerd-shim-lcow-v2"
 )
 
 // Add a manifest to get proper Windows version detection.
 //go:generate go tool github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
 
-// `-ldflags '-X ...'` only works if the variable is uninitialized or set to a constant value.
-// keep empty and override with data from [internal/version] only if empty to allow
-// workflows currently setting these values to work.
-var (
-	// version will be the repo version that the binary was built from.
-	// Injected at build time via -ldflags '-X ...'.
-	version = ""
-	// gitCommit will be the hash that the binary was built from.
-	// Injected at build time via -ldflags '-X ...'.
-	gitCommit = ""
-)
-
 func main() {
 	logrus.AddHook(log.NewHook())
-
-	// Provider ID: 64F6FC7F-8326-5EE8-B890-3734AE584136
-	// Provider and hook aren't closed explicitly, as they will exist until process exit.
-	provider, err := etw.NewProvider(etwProviderName, plugin.ETWCallback)
-	if err != nil {
-		logrus.Error(err)
-	} else {
-		if hook, err := etwlogrus.NewHookFromProvider(provider); err == nil {
-			logrus.AddHook(hook)
-		} else {
-			logrus.Error(err)
-		}
-	}
-
-	// fall back on embedded version info (if any), if variables above were not set
-	if version == "" {
-		version = hcsversion.Version
-	}
-	if gitCommit == "" {
-		gitCommit = hcsversion.Commit
-	}
-
-	_ = provider.WriteEvent(
-		"ShimLaunched",
-		nil,
-		etw.WithFields(
-			etw.StringArray("Args", os.Args),
-			etw.StringField("version", version),
-			etw.StringField("commit", gitCommit),
-		),
-	)
 
 	// Register our OpenCensus logrus exporter so that trace spans are emitted via logrus.
 	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
 	trace.RegisterExporter(&oc.LogrusExporter{})
 
-	// LCOW shim is specifically designed for internal MS scenarios and therefore,
-	// will only log to ETW.
 	logrus.SetFormatter(log.NopFormatter{})
 	logrus.SetOutput(io.Discard)
 
 	// Set the log configuration.
 	// If we encounter an error, we exit with non-zero code.
 	if err := setLogConfiguration(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s", name, err)
+		_, _ = fmt.Fprintf(os.Stderr, "%s: %s", name, err)
 		os.Exit(1)
 	}
 
@@ -141,7 +91,7 @@ func setLogConfiguration() error {
 				log.SetScrubbing(true)
 			}
 		}
-		os.Stdin.Close()
+		_ = os.Stdin.Close()
 	}
 	return nil
 }

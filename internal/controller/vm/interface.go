@@ -11,15 +11,11 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
-	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 )
 
 type Controller interface {
-	// Host returns the vm manager instance for this VM.
-	Host() *vmmanager.UtilityVM
-
 	// Guest returns the guest manager instance for this VM.
 	Guest() *guestmanager.Guest
 
@@ -35,11 +31,11 @@ type Controller interface {
 	// guest-host communication, and transitions the VM to StateRunning.
 	StartVM(context.Context, *StartOptions) error
 
-	// AddGuestDrivers adds the specified drivers to the VM.
-	AddGuestDrivers(ctx context.Context, drivers []string) error
-
 	// ExecIntoHost executes a command in the running UVM.
 	ExecIntoHost(ctx context.Context, request *shimdiag.ExecProcessRequest) (int, error)
+
+	// DumpStacks dumps the GCS stacks associated with the VM.
+	DumpStacks(ctx context.Context) (string, error)
 
 	// Wait blocks until the VM exits or the context is cancelled.
 	// It also waits for log output processing to complete.
@@ -50,36 +46,12 @@ type Controller interface {
 	TerminateVM(context.Context) error
 
 	// StartTime returns the timestamp when the VM was started.
-	// Returns zero value of time.time, if the VM is not in StateRunning or StateStopped.
+	// Returns zero value of time.time, if the VM is not in StateRunning or StateTerminated.
 	StartTime() time.Time
 
-	// StoppedStatus returns information about the stopped VM, including when it
-	// stopped and any exit error. Returns an error if the VM is not in StateStopped.
-	StoppedStatus() (*StoppedStatus, error)
-}
-
-// Handle is the subset of Controller that grants a consumer access to the
-// VM's host and guest surfaces, and the ability to wait for the VM to exit.
-// Accepting this narrow interface instead of the full Controller keeps callers
-// (e.g. pod.Controller) decoupled from VM lifecycle management concerns they
-// do not own.
-type Handle interface {
-	// Host returns the vm manager instance for this VM.
-	// It can be used to interact with and modify the UVM host state.
-	Host() *vmmanager.UtilityVM
-
-	// Guest returns the guest manager instance for this VM.
-	// It can be used to perform actions within the guest.
-	Guest() *guestmanager.Guest
-
-	// AddGuestDrivers adds the specified drivers to the VM.
-	AddGuestDrivers(ctx context.Context, drivers []string) error
-
-	// State returns the current VM state.
-	State() State
-
-	// Wait blocks until the VM exits or the context is cancelled.
-	Wait(ctx context.Context) error
+	// ExitStatus returns information about the stopped VM, including when it
+	// stopped and any exit error. Returns an error if the VM is not in StateTerminated.
+	ExitStatus() (*ExitStatus, error)
 }
 
 // CreateOptions contains the configuration needed to create a new VM.
@@ -105,8 +77,8 @@ type StartOptions struct {
 	ConfidentialOptions *guestresource.ConfidentialOptions
 }
 
-// StoppedStatus contains information about a stopped VM's final state.
-type StoppedStatus struct {
+// ExitStatus contains information about a stopped VM's final state.
+type ExitStatus struct {
 	// StoppedTime is the timestamp when the VM stopped.
 	StoppedTime time.Time
 

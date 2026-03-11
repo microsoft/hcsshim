@@ -9,7 +9,12 @@ import (
 	"os"
 	"path/filepath"
 
+	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/log"
+
+	"github.com/containerd/typeurl/v2"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ParseUVMReferenceInfo reads the UVM reference info file, and base64 encodes the content if it exists.
@@ -29,4 +34,30 @@ func ParseUVMReferenceInfo(ctx context.Context, referenceRoot, referenceName str
 	}
 
 	return base64.StdEncoding.EncodeToString(content), nil
+}
+
+// UnmarshalRuntimeOptions decodes the runtime options into runhcsoptions.Options.
+// When no options are provided (options == nil) it returns a non-nil,
+// zero-value Options struct.
+func UnmarshalRuntimeOptions(ctx context.Context, options *anypb.Any) (*runhcsoptions.Options, error) {
+	opts := &runhcsoptions.Options{}
+	if options == nil {
+		return opts, nil
+	}
+
+	v, err := typeurl.UnmarshalAny(options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal options: %w", err)
+	}
+
+	shimOpts, ok := v.(*runhcsoptions.Options)
+	if !ok {
+		return nil, fmt.Errorf("failed to unmarshal runtime options: expected *runhcsoptions.Options, got %T", v)
+	}
+
+	if entry := log.G(ctx); entry.Logger.IsLevelEnabled(logrus.DebugLevel) {
+		entry.WithField("options", log.Format(ctx, shimOpts)).Debug("parsed runtime options")
+	}
+
+	return shimOpts, nil
 }

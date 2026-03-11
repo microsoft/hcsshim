@@ -26,7 +26,7 @@
         "InternalName": "",
         "LegalCopyright": "",
         "LegalTrademarks": "",
-        "OriginalFilename": "containerd-shim-lcow-v1.exe",
+        "OriginalFilename": "containerd-shim-lcow-v2.exe",
         "PrivateBuild": "",
         "ProductName": "lcow shim",
         "ProductVersion": "v1.0.0.0",
@@ -39,6 +39,6 @@
         }
     },
     "IconPath": "",
-    "ManifestPath": "containerd-shim-lcow-v1.exe.manifest"
+    "ManifestPath": "containerd-shim-lcow-v2.exe.manifest"
 }
 

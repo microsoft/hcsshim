@@ -24,11 +24,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// shimName is the name of lcow shim implementation.
+const shimName = "containerd-shim-lcow-v2"
+
 // BuildSandboxConfig is the primary entry point for generating the HCS ComputeSystem
 // document used to create an LCOW Utility VM.
 func BuildSandboxConfig(
 	ctx context.Context,
-	owner string,
 	bundlePath string,
 	opts *runhcsoptions.Options,
 	spec *vm.Spec,
@@ -240,7 +242,7 @@ func BuildSandboxConfig(
 
 	// Build the document.
 	doc := &hcsschema.ComputeSystem{
-		Owner:         owner,
+		Owner:         shimName,
 		SchemaVersion: schema,
 		// Terminate the UVM when the last handle is closed.
 		// To support impactless updates this will need to be configurable.

@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	iwin "github.com/Microsoft/hcsshim/internal/windows"
+	"github.com/containerd/errdefs"
 
 	"github.com/Microsoft/go-winio/pkg/process"
 	"github.com/sirupsen/logrus"
@@ -36,7 +37,8 @@ type Manager struct {
 	guest *guestmanager.Guest
 
 	// vmState tracks the current state of the VM lifecycle.
-	vmState atomicState
+	// Access must be guarded by mu.
+	vmState State
 
 	// mu guards the concurrent access to the Manager's fields and operations.
 	mu sync.Mutex
@@ -57,23 +59,13 @@ type Manager struct {
 
 // Ensure both the Controller, and it's subset Handle are implemented by Manager.
 var _ Controller = (*Manager)(nil)
-var _ Handle = (*Manager)(nil)
 
 // NewController creates a new Manager instance in the [StateNotCreated] state.
 func NewController() *Manager {
-	m := &Manager{
+	return &Manager{
 		logOutputDone: make(chan struct{}),
+		vmState:       StateNotCreated,
 	}
-	// Default of vmState would always be 0 and hence StateNotCreated,
-	// but setting it here explicitly for clarity.
-	m.vmState.store(StateNotCreated)
-	return m
-}
-
-// Host returns the vm manager instance for this VM.
-// It can be used to interact with and modify the UVM host state.
-func (c *Manager) Host() *vmmanager.UtilityVM {
-	return c.uvm
 }
 
 // Guest returns the guest manager instance for this VM.
@@ -84,7 +76,10 @@ func (c *Manager) Guest() *guestmanager.Guest {
 
 // State returns the current VM state.
 func (c *Manager) State() State {
-	return c.vmState.load()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.vmState
 }
 
 // CreateVM creates the VM using the HCS document and initializes device state.
@@ -94,11 +89,9 @@ func (c *Manager) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.vmState.load() == StateCreated {
-		return nil
-	}
-	if c.vmState.load() != StateNotCreated {
-		return fmt.Errorf("cannot create VM: VM is already in state %s", c.vmState.load())
+	// In case of duplicate CreateVM call for the same controller, we want to fail.
+	if c.vmState != StateNotCreated {
+		return fmt.Errorf("cannot create VM: VM is in incorrect state %s", c.vmState)
 	}
 
 	// Create the VM via vmmanager.
@@ -106,6 +99,8 @@ func (c *Manager) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %w", err)
 	}
+
+	// Set the Manager parameters after successful creation.
 	c.vmID = opts.ID
 	c.uvm = uvm
 	// Determine if the VM is physically backed based on the HCS document configuration.
@@ -116,42 +111,43 @@ func (c *Manager) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	// We will create the guest connection via GuestManager during StartVM.
 	c.guest = guestmanager.New(ctx, uvm)
 
-	c.vmState.store(StateCreated)
+	c.vmState = StateCreated
 	return nil
 }
 
 // StartVM starts the VM that was previously created via CreateVM.
 // It starts the underlying HCS VM, establishes the GCS connection,
 // and transitions the VM to [StateRunning].
-// On any failure the VM is transitioned to [StateStopped].
+// On any failure the VM is transitioned to [StateInvalid].
 func (c *Manager) StartVM(ctx context.Context, opts *StartOptions) (err error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "StartVM"))
-
-	if c.uvm == nil || c.guest == nil {
-		return errors.New("VM has not been created")
-	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.vmState.load() == StateRunning {
+	// If the VM is already running, we can skip the start operation and just return.
+	// This makes StartVM idempotent in the case of duplicate calls.
+	if c.vmState == StateRunning {
 		return nil
 	}
-	if c.vmState.load() != StateCreated {
-		return fmt.Errorf("cannot start VM: VM is already in state %s", c.vmState.load())
+	// However, if the VM is in any other state than Created,
+	// we should fail as StartVM is only valid on a created VM.
+	if c.vmState != StateCreated {
+		return fmt.Errorf("cannot start VM: VM is in incorrect state %s", c.vmState)
 	}
 
 	defer func() {
 		if err != nil {
-			// If there was an error starting the VM, transition to Stopped.
-			c.vmState.store(StateStopped)
+			// If starting the VM fails, we transition to Invalid state to prevent any further operations on the VM.
+			// The VM can be terminated by invoking TerminateVM.
+			c.vmState = StateInvalid
 		}
 	}()
 
-	// save parent context, without timeout to use in terminate
+	// save parent context, without timeout to use for wait.
 	pCtx := ctx
 	// For remaining operations, we expect them to complete within the GCS connection timeout,
-	// otherwise we want to fail and cleanup.
+	// otherwise we want to fail.
 	ctx, cancel := context.WithTimeout(pCtx, timeout.GCSConnectionTimeout)
 	log.G(ctx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
 
@@ -170,22 +166,12 @@ func (c *Manager) StartVM(ctx context.Context, opts *StartOptions) (err error) {
 
 	err = c.uvm.Start(ctx)
 	if err != nil {
-		// use parent context, to prevent 2 minute timout (set above) from overridding terminate operation's
-		// timeout and erroring out prematurely
-		_ = c.uvm.Terminate(pCtx)
 		return fmt.Errorf("failed to start VM: %w", err)
 	}
 
 	// Start waiting on the utility VM in the background.
 	// This goroutine will complete when the VM exits.
-	go func() {
-		// the original context may have timeout or propagate a cancellation
-		// copy the original to prevent it affecting the background wait go routine
-		cCtx := context.WithoutCancel(pCtx)
-		_ = c.uvm.Wait(cCtx)
-		// Once the VM has exited, atomically record the stopped state.
-		c.vmState.store(StateStopped)
-	}()
+	go c.waitForVMExit(pCtx)
 
 	// Collect any errors from writing entropy or establishing the log
 	// connection.
@@ -210,34 +196,48 @@ func (c *Manager) StartVM(ctx context.Context, opts *StartOptions) (err error) {
 		}
 	}
 
-	c.vmState.store(StateRunning)
+	// If all goes well, we can transition the VM to Running state.
+	c.vmState = StateRunning
 
 	return nil
 }
 
-func (c *Manager) AddGuestDrivers(ctx context.Context, drivers []string) error {
-	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "AddGuestDrivers"))
-
-	if c.uvm == nil {
-		return errors.New("VM has not been created")
-	}
-
+// waitForVMExit blocks until the VM exits and then transitions the VM state to [StateTerminated].
+// This is called in StartVM in a background goroutine.
+func (c *Manager) waitForVMExit(ctx context.Context) {
+	// The original context may have timeout or propagate a cancellation
+	// copy the original to prevent it affecting the background wait go routine
+	ctx = context.WithoutCancel(ctx)
+	_ = c.uvm.Wait(ctx)
+	// Once the VM has exited, attempt to transition to Terminated.
+	// This may be a no-op if TerminateVM already ran concurrently and
+	// transitioned the state first — log the discarded error so that
+	// concurrent-termination races remain observable.
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.vmState.load() != StateRunning {
-		return fmt.Errorf("cannot add guest drivers: VM is in state %s", c.vmState.load())
+	if c.vmState != StateTerminated {
+		c.vmState = StateTerminated
+	} else {
+		log.G(ctx).WithField("currentState", c.vmState).Debug("waitForVMExit: state transition to Terminated was a no-op")
 	}
-
-	for _, driver := range drivers {
-		_ = driver
-	}
-
-	return nil
+	c.mu.Unlock()
 }
 
 // ExecIntoHost executes a command in the running UVM.
 func (c *Manager) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProcessRequest) (int, error) {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "ExecIntoHost"))
+
+	if request.Terminal && request.Stderr != "" {
+		return -1, fmt.Errorf("if using terminal, stderr must be empty: %w", errdefs.ErrFailedPrecondition)
+	}
+
+	// Validate that the VM is running before allowing exec into it.
+	c.mu.Lock()
+	if c.vmState != StateRunning {
+		c.mu.Unlock()
+		return -1, fmt.Errorf("cannot exec into VM: VM is in incorrect state %s", c.vmState)
+	}
+	c.mu.Unlock()
+
 	// Keep a count of active exec sessions.
 	// This will be used to disallow LM with existing exec sessions,
 	// as that can lead to orphaned processes within UVM.
@@ -255,18 +255,41 @@ func (c *Manager) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProces
 	return c.guest.ExecIntoUVM(ctx, cmdReq)
 }
 
+// DumpStacks dumps the GCS stacks associated with the VM
+func (c *Manager) DumpStacks(ctx context.Context) (string, error) {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "DumpStacks"))
+
+	// Validate that the VM is running before sending dump stacks request to GCS.
+	c.mu.Lock()
+	if c.vmState != StateRunning {
+		c.mu.Unlock()
+		return "", fmt.Errorf("cannot dump stacks: VM is in incorrect state %s", c.vmState)
+	}
+	c.mu.Unlock()
+
+	if c.guest.Capabilities().IsDumpStacksSupported() {
+		return c.guest.DumpStacks(ctx)
+	}
+
+	return "", nil
+}
+
 // Wait blocks until the VM exits and all log output processing has completed.
 func (c *Manager) Wait(ctx context.Context) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "Wait"))
 
-	if c.uvm == nil {
-		return errors.New("VM has not been created")
+	// Validate that the VM has been created and can be waited on.
+	// Terminated VMs can also be waited on where we return immediately.
+	c.mu.Lock()
+	if c.vmState == StateNotCreated {
+		c.mu.Unlock()
+		return fmt.Errorf("cannot wait on VM: VM is in incorrect state %s", c.vmState)
 	}
+	c.mu.Unlock()
 
-	var err error
 	// Wait for the utility VM to exit.
 	// This will be unblocked when the VM exits or if the context is cancelled.
-	err = c.uvm.Wait(ctx)
+	err := c.uvm.Wait(ctx)
 
 	// Wait for the log output processing to complete,
 	// which ensures all logs are processed before we return.
@@ -285,32 +308,20 @@ func (c *Manager) Wait(ctx context.Context) error {
 func (c *Manager) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "Stats"))
 
-	if c.uvm == nil {
-		return nil, errors.New("VM has not been created")
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.vmState != StateRunning {
+		return nil, fmt.Errorf("cannot get stats: VM is in incorrect state %s", c.vmState)
 	}
 
-	if c.vmState.load() != StateRunning {
-		return nil, fmt.Errorf("cannot get stats: VM is in state %s", c.vmState.load())
-	}
-
-	// Initialization of vmmemProcess with double-checked locking
-	// to prevent concurrent lookups.
+	// Initialization of vmmemProcess to calculate stats properly for VA-backed UVMs.
 	if c.vmmemProcess == 0 {
-		// At this point in workflow, we are in Running state and
-		// therefore, c.mu is expected to be uncontended and used only
-		// in Terminate workflow.
-		c.mu.Lock()
-		// Check again after acquiring lock in case another goroutine
-		// already initialized it
-		if c.vmmemProcess == 0 {
-			vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
-			if err != nil {
-				c.mu.Unlock()
-				return nil, fmt.Errorf("cannot get stats: %w", err)
-			}
-			c.vmmemProcess = vmmemHandle
+		vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
+		if err != nil {
+			return nil, fmt.Errorf("cannot get stats: %w", err)
 		}
-		c.mu.Unlock()
+		c.vmmemProcess = vmmemHandle
 	}
 
 	s := &stats.VirtualMachineStatistics{}
@@ -358,22 +369,18 @@ func (c *Manager) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, e
 // and releases HCS resources.
 //
 // The context is used for all operations, including waits, so timeouts/cancellations may prevent
-// proper uVM cleanup.
+// proper UVM cleanup.
 func (c *Manager) TerminateVM(ctx context.Context) (err error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "TerminateVM"))
-
-	if c.uvm == nil {
-		return errors.New("VM has not been created")
-	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.vmState.load() == StateStopped {
+	// If the VM has already terminated, we can skip termination and just return.
+	// Alternatively, if the VM was never created, we can also skip termination.
+	// This makes the TerminateVM operation idempotent.
+	if c.vmState == StateTerminated || c.vmState == StateNotCreated {
 		return nil
-	}
-	if c.vmState.load() != StateRunning {
-		return fmt.Errorf("cannot terminate VM: VM is in state %s", c.vmState.load())
 	}
 
 	// Best effort attempt to clean up the open vmmem handle.
@@ -387,43 +394,42 @@ func (c *Manager) TerminateVM(ctx context.Context) (err error) {
 
 	err = c.uvm.Close(ctx)
 	if err != nil {
+		// Transition to Invalid so no further active operations can be performed on the VM.
+		c.vmState = StateInvalid
 		return fmt.Errorf("failed to close utility VM: %w", err)
 	}
 
-	// We set the Stopped status at the end and therefore, if any error is encountered during the termination
-	// or the context was canceled, the VM will not be marked as Stopped.
-	// In such a case, caller can retry the termination.
-	c.vmState.store(StateStopped)
+	// Set the Terminated status at the end.
+	c.vmState = StateTerminated
 	return nil
 }
 
 // StartTime returns the timestamp when the VM was started.
-// Returns zero value of time.time, if the VM is not in StateRunning or StateStopped.
+// Returns zero value of time.Time if the VM has not yet reached
+// [StateRunning] or [StateTerminated].
 func (c *Manager) StartTime() (startTime time.Time) {
-	if c.uvm == nil {
-		return startTime
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.vmState == StateRunning || c.vmState == StateTerminated {
+		return c.uvm.StartedTime()
 	}
 
-	if c.vmState.load() == StateNotCreated || c.vmState.load() == StateCreated {
-		return startTime
-	}
-
-	return c.uvm.StartedTime()
+	return startTime
 }
 
-// StoppedStatus returns the final status of the VM once it has reached
-// [StateStopped], including the time it stopped and any exit error.
+// ExitStatus returns the final status of the VM once it has reached
+// [StateTerminated], including the time it stopped and any exit error.
 // Returns an error if the VM has not yet stopped.
-func (c *Manager) StoppedStatus() (*StoppedStatus, error) {
-	if c.uvm == nil {
-		return nil, errors.New("VM has not been created")
+func (c *Manager) ExitStatus() (*ExitStatus, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.vmState != StateTerminated {
+		return nil, fmt.Errorf("cannot get exit status: VM is in incorrect state %s", c.vmState)
 	}
 
-	if c.vmState.load() != StateStopped {
-		return nil, fmt.Errorf("cannot get stopped status: VM is in state %s", c.vmState.load())
-	}
-
-	return &StoppedStatus{
+	return &ExitStatus{
 		StoppedTime: c.uvm.StoppedTime(),
 		Err:         c.uvm.ExitError(),
 	}, nil

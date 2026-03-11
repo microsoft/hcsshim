@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shim"
+	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 
 	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
@@ -33,6 +33,11 @@ import (
 const (
 	// addrFmt is the format of the address used for containerd shim.
 	addrFmt = "\\\\.\\pipe\\ProtectedPrefix\\Administrators\\containerd-shim-%s-%s-pipe"
+
+	// serveReadyEventNameFormat is the format string used to construct the named Windows event
+	// that signals when the child "serve" process is ready to accept ttrpc connections.
+	// It is formatted with the namespace and shim ID (e.g. "<ns>-<id>").
+	serveReadyEventNameFormat = "%s-%s"
 )
 
 // shimManager implements the shim.Manager interface. It is the entry-point
@@ -100,7 +105,7 @@ func (m *shimManager) Name() string {
 	return m.name
 }
 
-// Start starts a shim instance for 'containerd-shim-lcow-v1'.
+// Start starts a shim instance for 'containerd-shim-lcow-v2'.
 // This shim relies on containerd's Sandbox API to start a sandbox.
 // There can be following scenarios that will launch a shim-
 //
@@ -138,14 +143,16 @@ func (m *shimManager) Start(ctx context.Context, id string, opts shim.StartOpts)
 
 	// Create an event on which we will listen to know when the shim is ready to accept connections.
 	// The child serve process signals this event once its TTRPC server is fully initialized.
-	eventName, _ := windows.UTF16PtrFromString(fmt.Sprintf("%s-%s", ns, id))
+	eventName, _ := windows.UTF16PtrFromString(fmt.Sprintf(serveReadyEventNameFormat, ns, id))
 
 	// Create the named event
 	handle, err := windows.CreateEvent(nil, 0, 0, eventName)
 	if err != nil {
 		log.Fatalf("Failed to create event: %v", err)
 	}
-	defer windows.CloseHandle(handle)
+	defer func() {
+		_ = windows.CloseHandle(handle)
+	}()
 
 	// address is the named pipe address that the shim will use to serve the ttrpc service.
 	address := fmt.Sprintf(addrFmt, ns, id)
@@ -162,7 +169,7 @@ func (m *shimManager) Start(ctx context.Context, id string, opts shim.StartOpts)
 
 	defer func() {
 		if retErr != nil {
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 		}
 	}()
 
@@ -177,7 +184,7 @@ func (m *shimManager) Start(ctx context.Context, id string, opts shim.StartOpts)
 // It reads and logs any panic messages written to panic.log, then tries to
 // terminate the associated HCS compute system and waits up to 30 seconds for
 // it to exit.
-func (m *shimManager) Stop(ctx context.Context, id string) (resp shim.StopStatus, err error) {
+func (m *shimManager) Stop(_ context.Context, id string) (resp shim.StopStatus, err error) {
 	ctx, span := oc.StartSpan(context.Background(), "delete")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -230,7 +237,8 @@ func (m *shimManager) Stop(ctx context.Context, id string) (resp shim.StopStatus
 	}
 
 	resp = shim.StopStatus{
-		ExitedAt:   time.Now(),
+		ExitedAt: time.Now(),
+		// 255 exit code is used by convention to indicate unknown exit reason.
 		ExitStatus: 255,
 	}
 	return resp, nil
@@ -262,20 +270,11 @@ func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
 
 // Info returns runtime information about this shim including its name, version,
 // git commit, OCI spec version, and any runtime options decoded from optionsR.
-func (m *shimManager) Info(ctx context.Context, optionsR io.Reader) (*types.RuntimeInfo, error) {
-	var v []string
-	if version != "" {
-		v = append(v, version)
-	}
-	if gitCommit != "" {
-		v = append(v, fmt.Sprintf("commit: %s", gitCommit))
-	}
-	v = append(v, fmt.Sprintf("spec: %s", specs.Version))
-
+func (m *shimManager) Info(_ context.Context, optionsR io.Reader) (*types.RuntimeInfo, error) {
 	info := &types.RuntimeInfo{
 		Name: m.name,
 		Version: &types.RuntimeVersion{
-			Version: strings.Join(v, "\n"),
+			Version: fmt.Sprintf("%s\ncommit: %s\nspec: %s", hcsversion.Version, hcsversion.Commit, specs.Version),
 		},
 		Annotations: nil,
 	}

@@ -50,7 +50,7 @@ func runTestCases(t *testing.T, ctx context.Context, defaultOpts *runhcsoptions.
 			// Use a temp dir as bundlePath for confidential VM tests
 			bundlePath := t.TempDir()
 
-			doc, sandboxOpts, err := BuildSandboxConfig(ctx, "test-owner", bundlePath, opts, spec)
+			doc, sandboxOpts, err := BuildSandboxConfig(ctx, bundlePath, opts, spec)
 
 			if tt.wantErr {
 				if err == nil {
@@ -1990,7 +1990,7 @@ func TestBuildSandboxConfig_NUMA_OldWindows(t *testing.T) {
 
 	validBootFilesPath := newBootFilesPath(t)
 
-	doc, _, err := BuildSandboxConfig(ctx, "test-owner", t.TempDir(), &runhcsoptions.Options{
+	doc, _, err := BuildSandboxConfig(ctx, t.TempDir(), &runhcsoptions.Options{
 		SandboxPlatform:   "linux/amd64",
 		BootFilesRootPath: validBootFilesPath,
 	}, &vm.Spec{
@@ -2018,7 +2018,7 @@ func TestBuildSandboxConfig_CPUClamping(t *testing.T) {
 	hostCount := hostProcessorCount(t)
 	requestedCount := hostCount * 2
 
-	doc, _, err := BuildSandboxConfig(ctx, "test-owner", t.TempDir(), &runhcsoptions.Options{
+	doc, _, err := BuildSandboxConfig(ctx, t.TempDir(), &runhcsoptions.Options{
 		SandboxPlatform:   "linux/amd64",
 		BootFilesRootPath: validBootFilesPath,
 	}, &vm.Spec{
