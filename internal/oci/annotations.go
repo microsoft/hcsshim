@@ -212,7 +212,7 @@ func parseRegistryValues(ctx context.Context, a map[string]string, annotationKey
 // ParseTestAnnotationRegistryValues extracts registry values from the WCOW test annotation.
 // This is for testing and debugging purposes only.
 func ParseTestAnnotationRegistryValues(ctx context.Context, a map[string]string) []hcsschema.RegistryValue {
-	return parseRegistryValues(ctx, a, iannotations.WCOWAnnotationsTest)
+	return parseRegistryValues(ctx, a, iannotations.WCOWRegistryAnnotationTest)
 }
 
 // parseHVSocketServiceTable extracts any additional Hyper-V socket service configurations from annotations.
