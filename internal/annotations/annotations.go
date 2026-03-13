@@ -67,3 +67,9 @@ const (
 	// [HCS RegistryValue]: https://learn.microsoft.com/en-us/virtualization/api/hcs/schemareference#registryvalue
 	AdditionalRegistryValues = "io.microsoft.virtualmachine.wcow.additional-reg-keys"
 )
+
+// WCOW container annotations.
+const (
+	// This is for testing and debugging registry entries that can be set in the WCOW containers
+	WCOWRegistryAnnotationTest = "io.microsoft.container.wcow.test-registry-annotation"
+)

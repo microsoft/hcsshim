@@ -1231,6 +1231,116 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
     }
 }
 
+# Registry changes validation
+default registry_changes := {"allowed": false}
+
+# Helper function to compare registry keys
+registry_keys_match(policy_key, input_key) {
+    policy_key.hive == input_key.Hive
+    policy_key.name == input_key.Name
+    # Volatile field comparison (default to false if not specified)
+    policy_volatile := object.get(policy_key, "volatile", false)
+    input_volatile := object.get(input_key, "Volatile", false)
+    policy_volatile == input_volatile
+}
+
+# Helper function to compare registry values
+# STRING type
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "String"
+    policy_value.string_value == input_value.StringValue
+}
+
+# EXPANDED_STRING type (uses StringValue field)
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "ExpandedString"
+    policy_value.string_value == input_value.StringValue
+}
+
+# MULTI_STRING type (uses StringValue field)
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "MultiString"
+    policy_value.string_value == input_value.StringValue
+}
+
+# D_WORD type
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "DWord"
+    policy_value.dword_value == input_value.DWordValue
+}
+
+# Q_WORD type
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "QWord"
+    policy_value.qword_value == input_value.QWordValue
+}
+
+# BINARY type
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "Binary"
+    policy_value.binary_value == input_value.BinaryValue
+}
+
+# CUSTOM_TYPE - both CustomType field and BinaryValue must match
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "CustomType"
+    policy_value.custom_type == input_value.CustomType
+    policy_value.binary_value == input_value.BinaryValue
+}
+
+# NONE type - no value to compare, just key and name
+registry_value_matches(policy_value, input_value) {
+    registry_keys_match(policy_value.key, input_value.Key)
+    policy_value.name == input_value.Name
+    policy_value.type == input_value.Type
+    policy_value.type == "None"
+}
+
+# Filter input registry values to only include those that match policy
+filtered_registry_values(input_values, policy_values) := [input_val |
+    input_val := input_values[_]
+    some policy_val in policy_values
+    registry_value_matches(policy_val, input_val)
+]
+
+registry_changes := {"allowed": true} {
+    containers := data.metadata.matches[input.containerID]
+    container := containers[_]
+    
+    # Check if container has registry_changes defined in policy
+    container.registry_changes
+    
+    # If input has registry changes, filter to only matching ones
+    input.registryChanges.AddValues
+    matched_values := filtered_registry_values(input.registryChanges.AddValues, container.registry_changes.add_values)
+    
+    # Build result with filtered AddValues
+    result := {
+        "AddValues": matched_values
+    }
+}
+
 reason := {
     "errors": errors,
     "error_objects": error_objects
