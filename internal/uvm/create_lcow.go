@@ -876,6 +876,58 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	return doc, nil
 }
 
+// MakeLCOWDocument generates the HCS compute system document for an LCOW VM
+// without actually creating the VM or submitting to HCS. This is useful for
+// parity testing between the legacy and v2 shim document builders.
+//
+// It mirrors the initialization logic of CreateLCOW (UtilityVM struct setup,
+// SCSI controller adjustment, option verification) then calls makeLCOWDoc
+// or makeLCOWSecurityDoc to produce the document depending on whether
+// SecurityPolicyEnabled is set.
+func MakeLCOWDocument(ctx context.Context, opts *OptionsLCOW) (*hcsschema.ComputeSystem, error) {
+	if opts.ID == "" {
+		g, err := guid.NewV4()
+		if err != nil {
+			return nil, err
+		}
+		opts.ID = g.String()
+	}
+
+	if opts.OutputHandlerCreator == nil {
+		opts.OutputHandlerCreator = vmutils.ParseGCSLogrus
+	}
+
+	uvm := &UtilityVM{
+		id:                      opts.ID,
+		owner:                   opts.Owner,
+		operatingSystem:         "linux",
+		scsiControllerCount:     opts.SCSIControllerCount,
+		vpmemMaxCount:           opts.VPMemDeviceCount,
+		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
+		vpciDevices:             make(map[VPCIDeviceID]*VPCIDevice),
+		physicallyBacked:        !opts.AllowOvercommit,
+		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
+		createOpts:              opts,
+		vpmemMultiMapping:       !opts.VPMemNoMultiMapping,
+		encryptScratch:          opts.EnableScratchEncryption,
+		noWritableFileShares:    opts.NoWritableFileShares,
+		policyBasedRouting:      opts.PolicyBasedRouting,
+	}
+
+	if osversion.Build() >= osversion.RS5 && uvm.vpmemMaxCount == 0 {
+		uvm.scsiControllerCount = 4
+	}
+
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, errors.Wrap(err, errBadUVMOpts.Error())
+	}
+
+	if opts.SecurityPolicyEnabled {
+		return makeLCOWSecurityDoc(ctx, opts, uvm)
+	}
+	return makeLCOWDoc(ctx, opts, uvm)
+}
+
 // CreateLCOW creates an HCS compute system representing a utility VM. It
 // consumes a set of options derived from various defaults and options
 // expressed as annotations.
