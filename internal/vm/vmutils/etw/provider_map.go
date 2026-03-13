@@ -2,35 +2,12 @@ package etw
 
 import (
 	"context"
-	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-)
-
-//go:embed etw-map.json default-logsources.json
-var embeddedFiles embed.FS
-
-const (
-	EtwMapFileName        = "etw-map.json"
-	DefaultLogSourcesFile = "default-logsources.json"
-)
-
-var (
-	onceLists                sync.Once
-	onceListMap              sync.Once
-	defaultLogSources        LogSourcesInfo
-	defaultLogSourcesWithMap LogSourcesInfo
-)
-
-var (
-	onceProvider sync.Once
-	nameToGUID   map[string]string // STATIC
-	guidToName   map[string]string // STATIC
 )
 
 // Log Sources JSON structure
@@ -54,18 +31,8 @@ type EtwProvider struct {
 	Keywords     string `json:"keywords,omitempty"`
 }
 
-// ETW - Map JSON structure
-type EtwInfo struct {
-	EtwMap []EtwProviderMap `json:"EtwProviderMap"`
-}
-
-type EtwProviderMap struct {
-	ProviderName string `json:"providerName"`
-	ProviderGUID string `json:"providerGuid"`
-}
-
 // NormalizeGUID takes a GUID string in various formats and normalizes it to the standard 8-4-4-4-12 format with uppercase letters. It returns an error if the input string is not a valid GUID.
-func NormalizeGUID(in string) (string, error) {
+func normalizeGUID(in string) (string, error) {
 	s := strings.TrimSpace(in)
 	s = strings.TrimPrefix(s, "{")
 	s = strings.TrimSuffix(s, "}")
@@ -86,7 +53,7 @@ func NormalizeGUID(in string) (string, error) {
 		}
 	}
 
-	compact = strings.ToUpper(compact)
+	compact = strings.ToLower(compact)
 	return compact[0:8] + "-" +
 		compact[8:12] + "-" +
 		compact[12:16] + "-" +
@@ -94,139 +61,17 @@ func NormalizeGUID(in string) (string, error) {
 		compact[20:32], nil
 }
 
-// LoadEtwMap loads the ETW provider name to GUID mapping from the embedded JSON file. It returns two maps, one for name to GUID and another for GUID to name. If there is an error in loading or parsing the file, it returns empty maps and the error.
-func LoadEtwMap(ctx context.Context) (map[string]string, map[string]string, error) {
-	onceProvider.Do(func() {
-		b, err := embeddedFiles.ReadFile(EtwMapFileName)
-		if err != nil {
-			log.G(ctx).Errorf("Error reading ETW map file: %v", err)
-			return
-		}
-
-		var cfg EtwInfo
-		if err := json.Unmarshal(b, &cfg); err != nil {
-			log.G(ctx).Errorf("Error unmarshalling ETW map file: %v", err)
-			return
-		}
-
-		n2g := make(map[string]string)
-		g2n := make(map[string]string)
-
-		for _, p := range cfg.EtwMap {
-			name := strings.TrimSpace(p.ProviderName)
-			guid, err := NormalizeGUID(p.ProviderGUID)
-			if name == "" || err != nil {
-				// skip invalid entries
-				log.G(ctx).Warningf("Skipping invalid ETW map entry with name %q and GUID %q: %v", p.ProviderName, p.ProviderGUID, err)
-				continue
-			}
-
-			// Duplicate check
-			if _, ok := n2g[name]; ok {
-				// skip if already exists
-				log.G(ctx).Warningf("Skipping duplicate ETW provider name %q in ETW map", name)
-				continue
-			}
-			if _, ok := g2n[guid]; ok {
-				// skip if already exists
-				log.G(ctx).Warningf("Skipping duplicate ETW provider GUID %q in ETW map", guid)
-				continue
-			}
-
-			n2g[name] = guid
-			g2n[guid] = name
-		}
-
-		nameToGUID = n2g
-		guidToName = g2n
-
-	})
-
-	return nameToGUID, guidToName, nil
-}
-
-// GetDefaultLogSources returns the default log sources from the embedded JSON file. If there is an error in loading or parsing the file, it returns an empty LogSourcesInfo struct and the error.
-// The default log sources are defined in the "default-logsources.json" file and are loaded only once using sync.Once to ensure thread safety and performance.
-// The providers in the default-logsources.json file should only have Provider Names and must not contain GUIDs as the handling of GUIDs is based on the configuration and is done in the UpdateEncodedLogSources function where we
-// check if we need to include GUIDs for the log sources based on the configuration and if needed, we map the provider names to their corresponding GUIDs using the ETW map loaded from the "etw-map.json" file.
-// The only exception to this is if the provider does not have any name and only has a GUID.
-func GetDefaultLogSources(ctx context.Context) (LogSourcesInfo, error) {
-	onceLists.Do(func() {
-
-		allList, err := embeddedFiles.ReadFile(DefaultLogSourcesFile)
-		if err != nil {
-			log.G(ctx).Errorf("Error reading default log sources file: %v", err)
-			return
-		}
-
-		if err := json.Unmarshal(allList, &defaultLogSources); err != nil {
-			log.G(ctx).Errorf("Error unmarshalling default log sources file: %v", err)
-			return
-		}
-
-		// Check if the default log sources have provider names. If they do, do not include GUIDs in the
-		// default log sources, because GUID handling is based on configuration and is done in the
-		// UpdateEncodedLogSources function. There we check if GUIDs are needed for the log sources and,
-		// if so, map provider names to their corresponding GUIDs using the ETW map from "etw-map.json".
-		// The only exception is when a provider has no name and only a GUID.
-		for i := range defaultLogSources.LogConfig.Sources {
-			for j := range defaultLogSources.LogConfig.Sources[i].Providers {
-				if defaultLogSources.LogConfig.Sources[i].Providers[j].ProviderName != "" &&
-					defaultLogSources.LogConfig.Sources[i].Providers[j].ProviderGUID != "" {
-					defaultLogSources.LogConfig.Sources[i].Providers[j].ProviderGUID = ""
-				}
-			}
-		}
-	})
-	return defaultLogSources, nil
-}
-
-// GetDefaultLogSourcesWithMappedGUID returns the default log sources with provider GUIDs included in the providers. If there is an error in loading the default log sources or the ETW map, it returns the default log sources without GUIDs.
-func GetDefaultLogSourcesWithMappedGUID(ctx context.Context) (LogSourcesInfo, error) {
-	onceListMap.Do(func() {
-		_, err := GetDefaultLogSources(ctx)
-		if err != nil {
-			log.G(ctx).Errorf("Error getting default log sources: %v", err)
-			return
-		}
-
-		var logConfig LogConfig
-		for _, src := range defaultLogSources.LogConfig.Sources {
-			var source Source
-			source.Type = src.Type
-			for _, provider := range src.Providers {
-				var etwProvider EtwProvider
-				etwProvider.Keywords = provider.Keywords
-				etwProvider.Level = provider.Level
-				etwProvider.ProviderName = provider.ProviderName
-				etwProvider.ProviderGUID = GetProviderGUIDFromName(ctx, provider.ProviderName)
-				source.Providers = append(source.Providers, etwProvider)
-			}
-
-			logConfig.Sources = append(logConfig.Sources, source)
-		}
-
-		defaultLogSourcesWithMap.LogConfig = logConfig
-	})
-	return defaultLogSourcesWithMap, nil
+// GetDefaultLogSources returns the default log sources configuration.
+func GetDefaultLogSources() LogSourcesInfo {
+	return defaultLogSourcesInfo
 }
 
 // GetProviderGUIDFromName returns the provider GUID for a given provider name. If the provider name is not found in the map, it returns an empty string.
-func GetProviderGUIDFromName(ctx context.Context, providerName string) string {
-	if _, _, err := LoadEtwMap(ctx); err != nil {
-		log.G(ctx).Errorf("Error loading ETW map: %v", err)
-		return ""
+func getProviderGUIDFromName(providerName string) string {
+	if guid, ok := etwNameToGuidMap[strings.ToLower(providerName)]; ok {
+		return guid
 	}
-	return nameToGUID[providerName]
-}
-
-// GetProviderNameFromGUID returns the provider name for a given provider GUID. If the provider GUID is not found in the map, it returns an empty string.
-func GetProviderNameFromGUID(ctx context.Context, providerGUID string) string {
-	if _, _, err := LoadEtwMap(ctx); err != nil {
-		log.G(ctx).Errorf("Error loading ETW map: %v", err)
-		return ""
-	}
-	return guidToName[providerGUID]
+	return ""
 }
 
 // UpdateLogSources updates the user provided log sources with the default log sources based on the configuration and returns the updated log sources as a base64 encoded JSON string.
@@ -234,7 +79,7 @@ func GetProviderNameFromGUID(ctx context.Context, providerGUID string) string {
 func UpdateLogSources(ctx context.Context, base64EncodedJSONLogConfig string, useDefaultLogSources bool, includeGUIDs bool) string {
 	var resultLogCfg LogSourcesInfo
 	if useDefaultLogSources {
-		resultLogCfg, _ = GetDefaultLogSources(ctx)
+		resultLogCfg = defaultLogSourcesInfo
 	}
 
 	if base64EncodedJSONLogConfig != "" {
@@ -301,14 +146,14 @@ func UpdateLogSources(ctx context.Context, base64EncodedJSONLogConfig string, us
 			for i, src := range resultLogCfg.LogConfig.Sources {
 				for j, provider := range src.Providers {
 					if provider.ProviderGUID != "" {
-						guid, err := NormalizeGUID(provider.ProviderGUID)
+						guid, err := normalizeGUID(provider.ProviderGUID)
 						if err != nil {
 							log.G(ctx).Warningf("Skipping invalid GUID %q for provider %q: %v", provider.ProviderGUID, provider.ProviderName, err)
 						}
 						resultLogCfg.LogConfig.Sources[i].Providers[j].ProviderGUID = guid
 					}
 					if provider.ProviderName != "" && provider.ProviderGUID == "" {
-						resultLogCfg.LogConfig.Sources[i].Providers[j].ProviderGUID = GetProviderGUIDFromName(ctx, provider.ProviderName)
+						resultLogCfg.LogConfig.Sources[i].Providers[j].ProviderGUID = getProviderGUIDFromName(provider.ProviderName)
 					}
 				}
 			}
@@ -320,12 +165,12 @@ func UpdateLogSources(ctx context.Context, base64EncodedJSONLogConfig string, us
 			for i, src := range resultLogCfg.LogConfig.Sources {
 				for j, provider := range src.Providers {
 					if provider.ProviderName != "" && provider.ProviderGUID != "" {
-						guid, err := NormalizeGUID(provider.ProviderGUID)
+						guid, err := normalizeGUID(provider.ProviderGUID)
 						if err != nil {
 							log.G(ctx).Warningf("Skipping invalid GUID %q for provider %q: %v", provider.ProviderGUID, provider.ProviderName, err)
 							continue
 						}
-						if strings.EqualFold(guid, GetProviderGUIDFromName(ctx, provider.ProviderName)) {
+						if strings.EqualFold(guid, getProviderGUIDFromName(provider.ProviderName)) {
 							resultLogCfg.LogConfig.Sources[i].Providers[j].ProviderGUID = ""
 						} else {
 							resultLogCfg.LogConfig.Sources[i].Providers[j].ProviderGUID = guid

@@ -530,7 +530,7 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 					settings.Settings = allowedLogSources
 				}
 			default:
-				log.G(req.ctx).Tracef("modifyServiceSettings for LogForwardService with RPCType: %v, skipping policy enforcement", settings.RPCType)
+				log.G(req.ctx).Warningf("modifyServiceSettings for LogForwardService with RPCType: %v, skipping policy enforcement", settings.RPCType)
 			}
 			modifyRequest.Settings = settings
 			buf, err := json.Marshal(modifyRequest)
@@ -544,10 +544,10 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 			newRequest.message = buf
 			req = &newRequest
 		} else {
-			log.G(req.ctx).Tracef("modifyServiceSettings for LogForwardService with empty settings, skipping policy enforcement")
+			log.G(req.ctx).Warningf("modifyServiceSettings for LogForwardService with empty settings, skipping policy enforcement")
 		}
 	default:
-		log.G(req.ctx).Tracef("modifyServiceSettings with PropertyType: %v, skipping policy enforcement", modifyRequest.PropertyType)
+		log.G(req.ctx).Warningf("modifyServiceSettings with PropertyType: %v, skipping policy enforcement", modifyRequest.PropertyType)
 	}
 	b.forwardRequestToGcs(req)
 	return nil
