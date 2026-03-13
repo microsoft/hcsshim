@@ -86,16 +86,30 @@ out/delta-snp.tar.gz: out/delta.tar.gz bin/internal/tools/snp-report boot/startu
 	tar -zcf $@ -C rootfs-snp .
 	rm -rf rootfs-snp
 
-out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths Makefile
+out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths bin/request-key Makefile
 	@mkdir -p out
 	rm -rf rootfs
-	mkdir -p rootfs/bin/
+	rm -rf /tmp/base-rootfs && mkdir -p /tmp/base-rootfs
+	tar -xf $(BASE) -C /tmp/base-rootfs
+	if [ "$$(readlink -f /tmp/base-rootfs/bin)" = "/tmp/base-rootfs/usr/bin" ]; then \
+		mkdir -p rootfs/usr/bin; \
+		ln -s usr/bin rootfs/bin; \
+	else \
+		mkdir -p rootfs/bin; \
+	fi
+	if [ "$$(readlink -f /tmp/base-rootfs/sbin)" = "/tmp/base-rootfs/usr/sbin" ]; then \
+		mkdir -p rootfs/usr/sbin; \
+		ln -s usr/sbin rootfs/sbin; \
+	else \
+		mkdir -p rootfs/sbin; \
+	fi
 	mkdir -p rootfs/info/
 	cp bin/init rootfs/
 	cp bin/vsockexec rootfs/bin/
 	cp bin/cmd/gcs rootfs/bin/
 	cp bin/cmd/gcstools rootfs/bin/
 	cp bin/cmd/hooks/wait-paths rootfs/bin/
+	cp bin/request-key rootfs/sbin/
 	for tool in $(GCS_TOOLS); do ln -s gcstools rootfs/bin/$$tool; done
 	git -C $(SRCROOT) rev-parse HEAD > rootfs/info/gcs.commit && \
 	git -C $(SRCROOT) rev-parse --abbrev-ref HEAD > rootfs/info/gcs.branch && \
@@ -116,6 +130,10 @@ bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths bin/cmd/tar2ext4 bin/inter
 	GOOS=linux $(GO_BUILD) -o $@ $(SRCROOT)/$(@:bin/%=%)
 
 FORCE:
+
+bin/request-key: cmd/request-key/request-key.o
+	@mkdir -p bin
+	$(CC) $(LDFLAGS) -o $@ $^
 
 bin/vsockexec: vsockexec/vsockexec.o vsockexec/vsock.o
 	@mkdir -p bin
