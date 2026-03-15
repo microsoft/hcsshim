@@ -7,6 +7,6 @@
 // (internal/controller). Functions in this package are designed to be decoupled from
 // specific UVM implementations.
 //
-// This allows different shims (containerd-shim-runhcs-v1, containerd-shim-lcow-v1)
+// This allows different shims (containerd-shim-runhcs-v1, containerd-shim-lcow-v2)
 // to share common logic while maintaining their own orchestration patterns.
 package vmutils
