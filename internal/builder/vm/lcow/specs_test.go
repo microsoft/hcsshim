@@ -147,6 +147,14 @@ func TestBuildSandboxConfig(t *testing.T) {
 				if doc.VirtualMachine.ComputeTopology.Memory.SizeInMB != 1024 {
 					t.Errorf("expected default memory 1024MB, got %v", doc.VirtualMachine.ComputeTopology.Memory.SizeInMB)
 				}
+				// StorageQoS should be nil when no QoS annotations are set.
+				if doc.VirtualMachine.StorageQoS != nil {
+					t.Errorf("expected StorageQoS to be nil when no QoS annotations set, got %+v", doc.VirtualMachine.StorageQoS)
+				}
+				// CpuGroup should be nil when no CPUGroupID annotation is provided.
+				if doc.VirtualMachine.ComputeTopology.Processor.CpuGroup != nil {
+					t.Errorf("expected CpuGroup to be nil when no CPUGroupID annotation set, got %+v", doc.VirtualMachine.ComputeTopology.Processor.CpuGroup)
+				}
 			},
 		},
 		{
@@ -1025,6 +1033,75 @@ func TestBuildSandboxConfig_EdgeCases(t *testing.T) {
 			},
 		},
 		{
+			name: "StorageQoS is nil when both values are zero",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: validBootFilesPath,
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.StorageQoSIopsMaximum:      "0",
+					shimannotations.StorageQoSBandwidthMaximum: "0",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if doc.VirtualMachine.StorageQoS != nil {
+					t.Errorf("expected StorageQoS to be nil when both IOPS and bandwidth are zero, got %+v", doc.VirtualMachine.StorageQoS)
+				}
+			},
+		},
+		{
+			name: "StorageQoS set when only IOPS is non-zero",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: validBootFilesPath,
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.StorageQoSIopsMaximum: "5000",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				qos := doc.VirtualMachine.StorageQoS
+				if qos == nil {
+					t.Fatal("expected StorageQoS to be set when IOPS is non-zero")
+				}
+				if qos.IopsMaximum != 5000 {
+					t.Errorf("expected IOPS 5000, got %v", qos.IopsMaximum)
+				}
+				if qos.BandwidthMaximum != 0 {
+					t.Errorf("expected bandwidth 0, got %v", qos.BandwidthMaximum)
+				}
+			},
+		},
+		{
+			name: "StorageQoS set when only bandwidth is non-zero",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: validBootFilesPath,
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.StorageQoSBandwidthMaximum: "1000000",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				qos := doc.VirtualMachine.StorageQoS
+				if qos == nil {
+					t.Fatal("expected StorageQoS to be set when bandwidth is non-zero")
+				}
+				if qos.BandwidthMaximum != 1000000 {
+					t.Errorf("expected bandwidth 1000000, got %v", qos.BandwidthMaximum)
+				}
+				if qos.IopsMaximum != 0 {
+					t.Errorf("expected IOPS 0, got %v", qos.IopsMaximum)
+				}
+			},
+		},
+		{
 			name: "empty annotations map with defaults",
 			opts: &runhcsoptions.Options{
 				SandboxPlatform:   "linux/amd64",
@@ -1554,6 +1631,41 @@ func TestBuildSandboxConfig_BootOptions(t *testing.T) {
 				if len(vpmem.Devices) == 0 {
 					t.Error("expected VPMem device to be configured for rootfs")
 				}
+				dev, ok := vpmem.Devices["0"]
+				if !ok {
+					t.Fatal("expected VPMem device at index 0")
+				}
+				if !dev.ReadOnly {
+					t.Error("expected VPMem device to be read-only")
+				}
+				if dev.ImageFormat != "Vhd1" {
+					t.Errorf("expected image format Vhd1, got %s", dev.ImageFormat)
+				}
+			},
+		},
+		{
+			name: "VPMem with initrd boot creates controller but no devices",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: initrdOnlyPath,
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.VPMemCount: "32",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				vpmem := doc.VirtualMachine.Devices.VirtualPMem
+				if vpmem == nil {
+					t.Fatal("expected VirtualPMem controller to be created even with initrd boot")
+				}
+				if vpmem.MaximumCount != 32 {
+					t.Errorf("expected VPMem count 32, got %v", vpmem.MaximumCount)
+				}
+				if len(vpmem.Devices) != 0 {
+					t.Errorf("expected no VPMem devices with initrd boot, got %d", len(vpmem.Devices))
+				}
 			},
 		},
 		{
@@ -1734,6 +1846,28 @@ func TestBuildSandboxConfig_DeviceOptions(t *testing.T) {
 				t.Helper()
 				if len(doc.VirtualMachine.Devices.VirtualPci) != 0 {
 					t.Error("expected vPCI devices to be disabled in confidential VMs")
+				}
+			},
+		},
+		{
+			name: "same device with different function index is not duplicate",
+			spec: &vm.Spec{
+				Devices: []specs.WindowsDevice{
+					{
+						ID:     `PCIP\VEN_1234&DEV_5678/1`,
+						IDType: "vpci-instance-id",
+					},
+					{
+						ID:     `PCIP\VEN_1234&DEV_5678/2`,
+						IDType: "vpci-instance-id",
+					},
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				vpci := doc.VirtualMachine.Devices.VirtualPci
+				if len(vpci) != 2 {
+					t.Errorf("expected 2 assigned devices (different function indexes), got %d", len(vpci))
 				}
 			},
 		},

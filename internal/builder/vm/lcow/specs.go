@@ -353,17 +353,22 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 func parseStorageQOSOptions(ctx context.Context, annotations map[string]string) (*hcsschema.StorageQoS, error) {
 	log.G(ctx).Debug("parseStorageQOSOptions: starting storage QOS options parsing")
 
-	storageQOSConfig := &hcsschema.StorageQoS{
-		IopsMaximum:      oci.ParseAnnotationsInt32(ctx, annotations, shimannotations.StorageQoSIopsMaximum, 0),
-		BandwidthMaximum: oci.ParseAnnotationsInt32(ctx, annotations, shimannotations.StorageQoSBandwidthMaximum, 0),
-	}
+	iopsMaximum := oci.ParseAnnotationsInt32(ctx, annotations, shimannotations.StorageQoSIopsMaximum, 0)
+	bandwidthMaximum := oci.ParseAnnotationsInt32(ctx, annotations, shimannotations.StorageQoSBandwidthMaximum, 0)
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"qosBandwidthMax": storageQOSConfig.BandwidthMaximum,
-		"qosIopsMax":      storageQOSConfig.IopsMaximum,
+		"qosBandwidthMax": bandwidthMaximum,
+		"qosIopsMax":      iopsMaximum,
 	}).Debug("parseStorageQOSOptions completed successfully")
 
-	return storageQOSConfig, nil
+	if iopsMaximum > 0 || bandwidthMaximum > 0 {
+		return &hcsschema.StorageQoS{
+			IopsMaximum:      iopsMaximum,
+			BandwidthMaximum: bandwidthMaximum,
+		}, nil
+	}
+
+	return nil, nil
 }
 
 // setAdditionalOptions sets additional options from annotations.

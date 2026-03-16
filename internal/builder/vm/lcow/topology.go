@@ -48,10 +48,13 @@ func parseCPUOptions(ctx context.Context, opts *runhcsoptions.Options, annotatio
 
 	// CPU group configuration
 	cpuGroupID := oci.ParseAnnotationsString(annotations, shimannotations.CPUGroupID, "")
-	if cpuGroupID != "" && osversion.Build() < osversion.V21H1 {
-		return nil, vmutils.ErrCPUGroupCreateNotSupported
+	if cpuGroupID != "" {
+		// If CPU group ID is provided, validate it and set it in the CPU configuration.
+		if osversion.Build() < osversion.V21H1 {
+			return nil, vmutils.ErrCPUGroupCreateNotSupported
+		}
+		cpu.CpuGroup = &hcsschema.CpuGroup{Id: cpuGroupID}
 	}
-	cpu.CpuGroup = &hcsschema.CpuGroup{Id: cpuGroupID}
 
 	// Resource Partition ID parsing.
 	resourcePartitionID := oci.ParseAnnotationsString(annotations, shimannotations.ResourcePartitionID, "")

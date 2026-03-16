@@ -68,33 +68,37 @@ func parseDeviceOptions(
 
 	// Create VPMem controller configuration
 	var vpMemController *hcsschema.VirtualPMemController
-	if vpmemCount > 0 && rootFsFile == vmutils.VhdFile {
-		// If booting from VHD via VPMem, configure the VPMem device for rootfs
+	if vpmemCount > 0 {
+		// Initialize VPMem controller with specified count and size.
 		vpMemController = &hcsschema.VirtualPMemController{
 			MaximumCount:     vpmemCount,
 			MaximumSizeBytes: vpmemSize,
-			Devices:          make(map[string]hcsschema.VirtualPMemDevice),
 		}
 
-		// Determine image format based on file extension.
-		// filepath.Ext returns the extension with the leading dot (e.g. ".vhdx").
-		imageFormat := "Vhd1"
-		if strings.HasSuffix(strings.ToLower(filepath.Ext(rootFsFile)), "vhdx") {
-			imageFormat = "Vhdx"
-		}
+		// If booting from VHD via VPMem, configure the VPMem device for rootfs
+		if rootFsFile == vmutils.VhdFile {
+			vpMemController.Devices = make(map[string]hcsschema.VirtualPMemDevice)
 
-		// Add rootfs VHD as VPMem device 0
-		vpMemController.Devices["0"] = hcsschema.VirtualPMemDevice{
-			HostPath:    rootFsFullPath,
-			ReadOnly:    true,
-			ImageFormat: imageFormat,
-		}
+			// Determine image format based on file extension.
+			// filepath.Ext returns the extension with the leading dot (e.g. ".vhdx").
+			imageFormat := "Vhd1"
+			if strings.HasSuffix(strings.ToLower(filepath.Ext(rootFsFile)), "vhdx") {
+				imageFormat = "Vhdx"
+			}
 
-		log.G(ctx).WithFields(logrus.Fields{
-			"device":      "0",
-			"path":        rootFsFullPath,
-			"imageFormat": imageFormat,
-		}).Debug("configured VPMem device for VHD rootfs boot")
+			// Add rootfs VHD as VPMem device 0
+			vpMemController.Devices["0"] = hcsschema.VirtualPMemDevice{
+				HostPath:    rootFsFullPath,
+				ReadOnly:    true,
+				ImageFormat: imageFormat,
+			}
+
+			log.G(ctx).WithFields(logrus.Fields{
+				"device":      "0",
+				"path":        rootFsFullPath,
+				"imageFormat": imageFormat,
+			}).Debug("configured VPMem device for VHD rootfs boot")
+		}
 	}
 
 	// ===============================Parse SCSI configuration===============================
