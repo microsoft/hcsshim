@@ -22,20 +22,14 @@ func (s *Service) diagExecInHostInternal(ctx context.Context, request *shimdiag.
 	return &shimdiag.ExecProcessResponse{ExitCode: int32(ec)}, nil
 }
 
-func (s *Service) diagTasksInternal(ctx context.Context, request *shimdiag.TasksRequest) (*shimdiag.TasksResponse, error) {
-	_ = ctx
-	_ = request
+func (s *Service) diagTasksInternal(_ context.Context, _ *shimdiag.TasksRequest) (*shimdiag.TasksResponse, error) {
 	return nil, errdefs.ErrNotImplemented
 }
 
-func (s *Service) diagShareInternal(ctx context.Context, request *shimdiag.ShareRequest) (*shimdiag.ShareResponse, error) {
-	_ = ctx
-	_ = request
+func (s *Service) diagShareInternal(_ context.Context, _ *shimdiag.ShareRequest) (*shimdiag.ShareResponse, error) {
 	return nil, errdefs.ErrNotImplemented
 }
 
-func (s *Service) diagStacksInternal(ctx context.Context, request *shimdiag.StacksRequest) (*shimdiag.StacksResponse, error) {
-	_ = ctx
-	_ = request
+func (s *Service) diagStacksInternal(_ context.Context, _ *shimdiag.StacksRequest) (*shimdiag.StacksResponse, error) {
 	return nil, errdefs.ErrNotImplemented
 }

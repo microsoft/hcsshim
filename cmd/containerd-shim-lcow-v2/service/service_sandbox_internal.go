@@ -71,7 +71,7 @@ func (s *Service) createSandboxInternal(ctx context.Context, request *sandbox.Cr
 		return nil, fmt.Errorf("failed to create sandbox: sandbox already exists with ID %s", s.sandboxID)
 	}
 
-	hcsDocument, sandboxOptions, err := lcow.BuildSandboxConfig(ctx, request.BundlePath, shimOpts, &sandboxSpec)
+	hcsDocument, sandboxOptions, err := lcow.BuildSandboxConfig(ctx, vmutils.LCOWShimName, request.BundlePath, shimOpts, &sandboxSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse sandbox spec: %w", err)
 	}

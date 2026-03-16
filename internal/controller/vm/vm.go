@@ -41,7 +41,7 @@ type Manager struct {
 	vmState State
 
 	// mu guards the concurrent access to the Manager's fields and operations.
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// logOutputDone is closed when the GCS log output processing goroutine completes.
 	logOutputDone chan struct{}
@@ -76,8 +76,8 @@ func (c *Manager) Guest() *guestmanager.Guest {
 
 // State returns the current VM state.
 func (c *Manager) State() State {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	return c.vmState
 }
@@ -231,12 +231,12 @@ func (c *Manager) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProces
 	}
 
 	// Validate that the VM is running before allowing exec into it.
-	c.mu.Lock()
+	c.mu.RLock()
 	if c.vmState != StateRunning {
-		c.mu.Unlock()
+		c.mu.RUnlock()
 		return -1, fmt.Errorf("cannot exec into VM: VM is in incorrect state %s", c.vmState)
 	}
-	c.mu.Unlock()
+	c.mu.RUnlock()
 
 	// Keep a count of active exec sessions.
 	// This will be used to disallow LM with existing exec sessions,
@@ -259,13 +259,13 @@ func (c *Manager) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProces
 func (c *Manager) DumpStacks(ctx context.Context) (string, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "DumpStacks"))
 
-	// Validate that the VM is running before sending dump stacks request to GCS.
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Validate that the VM is running before sending dump stacks request to GCS.
 	if c.vmState != StateRunning {
-		c.mu.Unlock()
 		return "", fmt.Errorf("cannot dump stacks: VM is in incorrect state %s", c.vmState)
 	}
-	c.mu.Unlock()
 
 	if c.guest.Capabilities().IsDumpStacksSupported() {
 		return c.guest.DumpStacks(ctx)
@@ -280,12 +280,12 @@ func (c *Manager) Wait(ctx context.Context) error {
 
 	// Validate that the VM has been created and can be waited on.
 	// Terminated VMs can also be waited on where we return immediately.
-	c.mu.Lock()
+	c.mu.RLock()
 	if c.vmState == StateNotCreated {
-		c.mu.Unlock()
+		c.mu.RUnlock()
 		return fmt.Errorf("cannot wait on VM: VM is in incorrect state %s", c.vmState)
 	}
-	c.mu.Unlock()
+	c.mu.RUnlock()
 
 	// Wait for the utility VM to exit.
 	// This will be unblocked when the VM exits or if the context is cancelled.
@@ -408,8 +408,8 @@ func (c *Manager) TerminateVM(ctx context.Context) (err error) {
 // Returns zero value of time.Time if the VM has not yet reached
 // [StateRunning] or [StateTerminated].
 func (c *Manager) StartTime() (startTime time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	if c.vmState == StateRunning || c.vmState == StateTerminated {
 		return c.uvm.StartedTime()
@@ -422,8 +422,8 @@ func (c *Manager) StartTime() (startTime time.Time) {
 // [StateTerminated], including the time it stopped and any exit error.
 // Returns an error if the VM has not yet stopped.
 func (c *Manager) ExitStatus() (*ExitStatus, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	if c.vmState != StateTerminated {
 		return nil, fmt.Errorf("cannot get exit status: VM is in incorrect state %s", c.vmState)

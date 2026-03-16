@@ -35,7 +35,7 @@ func (s *Service) State(ctx context.Context, request *task.StateRequest) (resp *
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID))
+		trace.StringAttribute(logfields.ExecID, request.ExecID))
 
 	r, e := s.stateInternal(ctx, request)
 	return r, errgrpc.ToGRPC(e)
@@ -83,7 +83,7 @@ func (s *Service) Start(ctx context.Context, request *task.StartRequest) (resp *
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID))
+		trace.StringAttribute(logfields.ExecID, request.ExecID))
 
 	r, e := s.startInternal(ctx, request)
 	return r, errgrpc.ToGRPC(e)
@@ -107,7 +107,7 @@ func (s *Service) Delete(ctx context.Context, request *task.DeleteRequest) (resp
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID))
+		trace.StringAttribute(logfields.ExecID, request.ExecID))
 
 	r, e := s.deleteInternal(ctx, request)
 	return r, errgrpc.ToGRPC(e)
@@ -184,7 +184,7 @@ func (s *Service) Kill(ctx context.Context, request *task.KillRequest) (resp *em
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID),
+		trace.StringAttribute(logfields.ExecID, request.ExecID),
 		trace.Int64Attribute(logfields.Signal, int64(request.Signal)),
 		trace.BoolAttribute(logfields.All, request.All))
 
@@ -202,7 +202,7 @@ func (s *Service) Exec(ctx context.Context, request *task.ExecProcessRequest) (r
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID),
+		trace.StringAttribute(logfields.ExecID, request.ExecID),
 		trace.BoolAttribute(logfields.Terminal, request.Terminal),
 		trace.StringAttribute(logfields.Stdin, request.Stdin),
 		trace.StringAttribute(logfields.Stdout, request.Stdout),
@@ -222,7 +222,7 @@ func (s *Service) ResizePty(ctx context.Context, request *task.ResizePtyRequest)
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID),
+		trace.StringAttribute(logfields.ExecID, request.ExecID),
 		trace.Int64Attribute(logfields.Width, int64(request.Width)),
 		trace.Int64Attribute(logfields.Height, int64(request.Height)))
 
@@ -240,7 +240,7 @@ func (s *Service) CloseIO(ctx context.Context, request *task.CloseIORequest) (re
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID),
+		trace.StringAttribute(logfields.ExecID, request.ExecID),
 		trace.BoolAttribute(logfields.Stdin, request.Stdin))
 
 	r, e := s.closeIOInternal(ctx, request)
@@ -279,7 +279,7 @@ func (s *Service) Wait(ctx context.Context, request *task.WaitRequest) (resp *ta
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID),
-		trace.StringAttribute(logfields.ExecSpanID, request.ExecID))
+		trace.StringAttribute(logfields.ExecID, request.ExecID))
 
 	r, e := s.waitInternal(ctx, request)
 	return r, errgrpc.ToGRPC(e)

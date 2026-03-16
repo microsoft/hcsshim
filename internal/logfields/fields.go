@@ -69,7 +69,6 @@ const (
 	Version          = "version"
 	ShimPid          = "shim-pid"
 	TaskPid          = "task-pid"
-	ExecSpanID       = "exec-id"
 
 	// sandbox
 

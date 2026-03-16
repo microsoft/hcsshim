@@ -15,15 +15,11 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shim"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
 	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
-)
-
-const (
-	// name is the name of lcow shim implementation.
-	name = "containerd-shim-lcow-v2"
 )
 
 // Add a manifest to get proper Windows version detection.
@@ -42,13 +38,13 @@ func main() {
 	// Set the log configuration.
 	// If we encounter an error, we exit with non-zero code.
 	if err := setLogConfiguration(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%s: %s", name, err)
+		_, _ = fmt.Fprintf(os.Stderr, "%s: %s", vmutils.LCOWShimName, err)
 		os.Exit(1)
 	}
 
 	// Start the shim manager event loop. The manager is responsible for
 	// handling containerd start/stop lifecycle calls for the shim process.
-	shim.Run(context.Background(), newShimManager(name), func(c *shim.Config) {
+	shim.Run(context.Background(), newShimManager(vmutils.LCOWShimName), func(c *shim.Config) {
 		// We don't want the shim package to set up logging options.
 		c.NoSetupLogger = true
 	})
