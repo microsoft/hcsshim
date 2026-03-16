@@ -492,6 +492,43 @@ int reap_until(pid_t until_pid) {
 }
 
 #ifdef MODULES
+// Load networking modules explicitly by name. On distros like Ubuntu, these are
+// loadable (=m) not built-in (=y), and the ftw()-based scan may not resolve them
+// reliably by path alone.
+// Without hv_netvsc: hot-added NICs timeout. Without hv_sock: vsock fails.
+// Requires k_ctx to be initialized and resources loaded by the caller.
+void load_networking_modules() {
+    const char* modules[] = {
+        "hv_netvsc",     // Hyper-V network driver
+        "hv_sock",       // Hyper-V vsocket support
+        "bridge",        // Linux bridge support
+        "veth",          // Virtual ethernet pairs
+        "nf_conntrack",  // Connection tracking for NAT/masquerading
+        "br_netfilter",  // Bridge netfilter for iptables
+        NULL
+    };
+
+    for (int i = 0; modules[i] != NULL; i++) {
+        struct kmod_module* mod = NULL;
+        int err = kmod_module_new_from_name(k_ctx, modules[i], &mod);
+        if (err < 0)
+            continue;
+
+        err = kmod_module_probe_insert_module(mod, KMOD_PROBE_IGNORE_LOADED, NULL, NULL, NULL, NULL);
+        char msg[256];
+        const char* status = (err == 0 || err == -EEXIST) ? "ok"
+                           : (err == -ENOENT)             ? "not found (may be built-in)"
+                                                          : "failed";
+        snprintf(msg, sizeof(msg), "preload module %s: %s (err=%d)\n", modules[i], status, err);
+        if (err == 0 || err == -EEXIST || err == -ENOENT)
+            dmesgInfo(msg);
+        else
+            dmesgWarn(msg);
+
+        kmod_module_unref(mod);
+    }
+}
+
 // load_module gets the module from the absolute path to the module and then
 // inserts into the kernel.
 int load_module(struct kmod_ctx* ctx, const char* module_path) {
@@ -507,7 +544,8 @@ int load_module(struct kmod_ctx* ctx, const char* module_path) {
         return err;
     }
 
-    err = kmod_module_probe_insert_module(mod, 0, NULL, NULL, NULL, NULL);
+    // Use probe_insert_module for automatic dependency resolution
+    err = kmod_module_probe_insert_module(mod, KMOD_PROBE_APPLY_BLACKLIST | KMOD_PROBE_IGNORE_LOADED, NULL, NULL, NULL, NULL);
     if (err < 0) {
         kmod_module_unref(mod);
         return err;
@@ -549,10 +587,14 @@ int parse_tree_entry(const char* fpath, const struct stat* sb, int typeflag) {
     // print warning if we fail to load the module, but don't fail fn so
     // we keep trying to load the rest of the modules.
     result = load_module(k_ctx, fpath);
+    char msg[512];
     if (result != 0) {
-        warn2("failed to load module", fpath);
+        snprintf(msg, sizeof(msg), "failed to load module %s (error %d)\n", fpath, result);
+        dmesgWarn(msg);
+    } else {
+        snprintf(msg, sizeof(msg), "loaded module: %s\n", fpath);
+        dmesgInfo(msg);
     }
-    dmesgInfo(fpath);
     return 0;
 }
 
@@ -587,6 +629,10 @@ void load_all_modules() {
     }
 
     kmod_load_resources(k_ctx);
+
+    // Load critical networking modules by name before the general ftw() scan.
+    load_networking_modules();
+
     ret = ftw(modules_dir, parse_tree_entry, OPEN_FDS);
     if (ret != 0) {
         // Don't fail on error from walking the file tree and loading modules right now.
@@ -783,6 +829,9 @@ int main(int argc, char** argv) {
     load_all_modules();
 #endif
 
+    // Initialize entropy after module loading: on distros where hv_sock is a
+    // loadable module (e.g., Ubuntu), the vsock transport used by init_entropy
+    // is not available until the module is loaded above.
     if (entropy_port != 0) {
         init_entropy(entropy_port);
     }
