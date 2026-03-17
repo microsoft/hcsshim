@@ -10,9 +10,6 @@ import (
 )
 
 const (
-	// LCOWShimName is the name of the LCOW shim implementation.
-	LCOWShimName = "containerd-shim-lcow-v2"
-
 	// MaxVPMEMCount is the maximum number of VPMem devices that may be added to an LCOW
 	// utility VM.
 	MaxVPMEMCount = 128

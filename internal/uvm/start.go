@@ -129,8 +129,9 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 					e.Info("uvm output handler finished")
 				}
 				wg.Wait()
-				// Signal that log output processing has completed.
-				close(uvm.outputProcessingDone)
+				if _, ok := <-uvm.outputProcessingDone; ok {
+					close(uvm.outputProcessingDone)
+				}
 			}()
 		default:
 			// Default handling

@@ -10,7 +10,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 
 	"github.com/containerd/containerd/api/runtime/sandbox/v1"
-	errdefs2 "github.com/containerd/errdefs/pkg/errgrpc"
+	"github.com/containerd/errdefs/pkg/errgrpc"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -37,7 +37,7 @@ func (s *Service) CreateSandbox(ctx context.Context, request *sandbox.CreateSand
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.createSandboxInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // StartSandbox transitions a previously created sandbox to the "running" state.
@@ -53,7 +53,7 @@ func (s *Service) StartSandbox(ctx context.Context, request *sandbox.StartSandbo
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.startSandboxInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // Platform returns the platform details for the sandbox ("windows/amd64" or "linux/amd64").
@@ -66,7 +66,7 @@ func (s *Service) Platform(ctx context.Context, request *sandbox.PlatformRequest
 	span.AddAttributes(trace.StringAttribute(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.platformInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // StopSandbox attempts a graceful stop of the sandbox within the specified timeout.
@@ -83,7 +83,7 @@ func (s *Service) StopSandbox(ctx context.Context, request *sandbox.StopSandboxR
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.stopSandboxInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // WaitSandbox blocks until the sandbox reaches a terminal state (stopped/errored) and returns the outcome.
@@ -99,7 +99,7 @@ func (s *Service) WaitSandbox(ctx context.Context, request *sandbox.WaitSandboxR
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.waitSandboxInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // SandboxStatus returns current status for the sandbox, optionally verbose.
@@ -116,7 +116,7 @@ func (s *Service) SandboxStatus(ctx context.Context, request *sandbox.SandboxSta
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.sandboxStatusInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // PingSandbox performs a minimal liveness check on the sandbox and returns quickly.
@@ -132,7 +132,7 @@ func (s *Service) PingSandbox(ctx context.Context, request *sandbox.PingRequest)
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.pingSandboxInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // ShutdownSandbox requests a full shim + sandbox shutdown (stronger than StopSandbox),
@@ -149,7 +149,7 @@ func (s *Service) ShutdownSandbox(ctx context.Context, request *sandbox.Shutdown
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.shutdownSandboxInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }
 
 // SandboxMetrics returns runtime metrics for the sandbox (e.g., CPU/memory/IO),
@@ -166,5 +166,5 @@ func (s *Service) SandboxMetrics(ctx context.Context, request *sandbox.SandboxMe
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, request.SandboxID))
 
 	r, e := s.sandboxMetricsInternal(ctx, request)
-	return r, errdefs2.ToGRPC(e)
+	return r, errgrpc.ToGRPC(e)
 }

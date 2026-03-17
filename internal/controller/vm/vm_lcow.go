@@ -66,12 +66,14 @@ func (c *Manager) setupLoggingListener(ctx context.Context, group *errgroup.Grou
 			ServiceID: winio.VsockServiceID(vmutils.LinuxLogVsockPort),
 		})
 		if err != nil {
+			close(c.logOutputDone)
 			return fmt.Errorf("failed to listen on hvSocket for logs: %w", err)
 		}
 
 		// Accept the connection from the GCS.
 		conn, err := vmmanager.AcceptConnection(ctx, c.uvm, logConn, true)
 		if err != nil {
+			close(c.logOutputDone)
 			return fmt.Errorf("failed to accept connection on hvSocket for logs: %w", err)
 		}
 

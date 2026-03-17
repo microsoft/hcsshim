@@ -20,6 +20,11 @@ import (
 	"github.com/containerd/ttrpc"
 )
 
+const (
+	// ShimName is the name of the LCOW shim implementation.
+	ShimName = "containerd-shim-lcow-v2"
+)
+
 // Service is the shared Service struct that implements all TTRPC Service interfaces.
 // All Service methods (sandbox, task, and shimdiag) operate on this shared struct.
 type Service struct {

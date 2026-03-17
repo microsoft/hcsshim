@@ -68,10 +68,10 @@ func (s *Service) createSandboxInternal(ctx context.Context, request *sandbox.Cr
 	defer s.mu.Unlock()
 
 	if s.sandboxID != "" {
-		return nil, fmt.Errorf("failed to create sandbox: sandbox already exists with ID %s", s.sandboxID)
+		return nil, fmt.Errorf("sandbox already exists with ID %s", s.sandboxID)
 	}
 
-	hcsDocument, sandboxOptions, err := lcow.BuildSandboxConfig(ctx, vmutils.LCOWShimName, request.BundlePath, shimOpts, &sandboxSpec)
+	hcsDocument, sandboxOptions, err := lcow.BuildSandboxConfig(ctx, ShimName, request.BundlePath, shimOpts, &sandboxSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse sandbox spec: %w", err)
 	}
@@ -102,7 +102,7 @@ func (s *Service) createSandboxInternal(ctx context.Context, request *sandbox.Cr
 // applied to the VM after starting.
 func (s *Service) startSandboxInternal(ctx context.Context, request *sandbox.StartSandboxRequest) (*sandbox.StartSandboxResponse, error) {
 	if s.sandboxID != request.SandboxID {
-		return nil, fmt.Errorf("failed to start sandbox: sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
+		return nil, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
 	// If we successfully got past the above check, it means the sandbox was created and
@@ -144,11 +144,11 @@ func (s *Service) startSandboxInternal(ctx context.Context, request *sandbox.Sta
 // An error is returned if the sandbox is not currently in the created state.
 func (s *Service) platformInternal(_ context.Context, request *sandbox.PlatformRequest) (*sandbox.PlatformResponse, error) {
 	if s.sandboxID != request.SandboxID {
-		return nil, fmt.Errorf("failed to get platform: sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
+		return nil, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
 	if s.vmController.State() == vm.StateNotCreated {
-		return nil, fmt.Errorf("failed to get platform: sandbox has not been created (state: %s)", s.vmController.State())
+		return nil, fmt.Errorf("sandbox has not been created (state: %s)", s.vmController.State())
 	}
 
 	return &sandbox.PlatformResponse{
@@ -164,7 +164,7 @@ func (s *Service) platformInternal(_ context.Context, request *sandbox.PlatformR
 // It terminates the VM and performs any cleanup, if needed.
 func (s *Service) stopSandboxInternal(ctx context.Context, request *sandbox.StopSandboxRequest) (*sandbox.StopSandboxResponse, error) {
 	if s.sandboxID != request.SandboxID {
-		return nil, fmt.Errorf("failed to stop sandbox: sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
+		return nil, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
 	err := s.vmController.TerminateVM(ctx)
@@ -181,7 +181,7 @@ func (s *Service) stopSandboxInternal(ctx context.Context, request *sandbox.Stop
 // to a sandbox exit code.
 func (s *Service) waitSandboxInternal(ctx context.Context, request *sandbox.WaitSandboxRequest) (*sandbox.WaitSandboxResponse, error) {
 	if s.sandboxID != request.SandboxID {
-		return nil, fmt.Errorf("failed to wait for sandbox: sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
+		return nil, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
 	// Wait for the VM to be terminated, then return the exit code.
@@ -215,7 +215,7 @@ func (s *Service) waitSandboxInternal(ctx context.Context, request *sandbox.Wait
 // diagnostic information.
 func (s *Service) sandboxStatusInternal(_ context.Context, request *sandbox.SandboxStatusRequest) (*sandbox.SandboxStatusResponse, error) {
 	if s.sandboxID != request.SandboxID {
-		return nil, fmt.Errorf("failed to get sandbox status: sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
+		return nil, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
 	resp := &sandbox.SandboxStatusResponse{
@@ -264,7 +264,7 @@ func (s *Service) pingSandboxInternal(_ context.Context, _ *sandbox.PingRequest)
 // The sandbox must already be in the stopped state before shutdown is accepted.
 func (s *Service) shutdownSandboxInternal(ctx context.Context, request *sandbox.ShutdownSandboxRequest) (*sandbox.ShutdownSandboxResponse, error) {
 	if s.sandboxID != request.SandboxID {
-		return &sandbox.ShutdownSandboxResponse{}, fmt.Errorf("failed to shutdown sandbox: sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
+		return &sandbox.ShutdownSandboxResponse{}, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
 	// Ensure the VM is terminated. If the VM is already terminated,
@@ -298,7 +298,7 @@ func (s *Service) shutdownSandboxInternal(ctx context.Context, request *sandbox.
 // It collects and returns runtime statistics from the vmController.
 func (s *Service) sandboxMetricsInternal(ctx context.Context, request *sandbox.SandboxMetricsRequest) (*sandbox.SandboxMetricsResponse, error) {
 	if s.sandboxID != request.SandboxID {
-		return &sandbox.SandboxMetricsResponse{}, fmt.Errorf("failed to get sandbox metrics: sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
+		return &sandbox.SandboxMetricsResponse{}, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
 	stats, err := s.vmController.Stats(ctx)
