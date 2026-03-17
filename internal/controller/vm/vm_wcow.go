@@ -48,7 +48,13 @@ func (c *Manager) setupLoggingListener(ctx context.Context, _ *errgroup.Group) {
 			ServiceID: prot.WindowsLoggingHvsockServiceID,
 		})
 		if err != nil {
-			logrus.WithError(err).Fatal("failed to listen for windows logging connections")
+			// Close the output done channel to signal that logging setup
+			// has failed and no logs will be processed.
+			close(c.logOutputDone)
+			logrus.WithError(err).Error("failed to listen for windows logging connections")
+
+			// Return early due to error.
+			return
 		}
 
 		// Use a WaitGroup to track active log processing goroutines.
@@ -84,9 +90,7 @@ func (c *Manager) setupLoggingListener(ctx context.Context, _ *errgroup.Group) {
 		wg.Wait()
 
 		// Signal that log output processing has completed.
-		if _, ok := <-c.logOutputDone; ok {
-			close(c.logOutputDone)
-		}
+		close(c.logOutputDone)
 	}()
 }
 

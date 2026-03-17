@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -148,7 +147,7 @@ func (m *shimManager) Start(ctx context.Context, id string, opts shim.StartOpts)
 	// Create the named event
 	handle, err := windows.CreateEvent(nil, 0, 0, eventName)
 	if err != nil {
-		log.Fatalf("Failed to create event: %v", err)
+		return params, fmt.Errorf("failed to create event: %w", err)
 	}
 	defer func() {
 		_ = windows.CloseHandle(handle)

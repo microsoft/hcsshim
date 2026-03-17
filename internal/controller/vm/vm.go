@@ -259,8 +259,11 @@ func (c *Manager) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProces
 func (c *Manager) DumpStacks(ctx context.Context) (string, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "DumpStacks"))
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Take read lock at this place.
+	// The state change cannot happen until we release the lock,
+	// so we are sure that the state remains consistent throughout the method.
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	// Validate that the VM is running before sending dump stacks request to GCS.
 	if c.vmState != StateRunning {
@@ -308,8 +311,11 @@ func (c *Manager) Wait(ctx context.Context) error {
 func (c *Manager) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "Stats"))
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Take read lock at this place.
+	// The state change cannot happen until we release the lock,
+	// so we are sure that the state remains consistent throughout the method.
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	if c.vmState != StateRunning {
 		return nil, fmt.Errorf("cannot get stats: VM is in incorrect state %s", c.vmState)
