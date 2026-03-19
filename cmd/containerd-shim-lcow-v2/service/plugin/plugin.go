@@ -23,7 +23,7 @@ import (
 
 const (
 	// etwProviderName is the ETW provider name for lcow shim.
-	etwProviderName = "Microsoft.Virtualization.RunHCSLCOW"
+	etwProviderName = "Microsoft.Virtualization.containerd-shim-lcow-v2"
 )
 
 // svc holds the single Service instance created during plugin initialization.
