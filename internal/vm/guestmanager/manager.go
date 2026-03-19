@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
-	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -26,10 +25,6 @@ type Manager interface {
 	// Once the container is created, it can be managed using the returned `gcs.Container` interface.
 	// `gcs.Container` uses the underlying guest connection to issue commands to the guest.
 	CreateContainer(ctx context.Context, cid string, config interface{}) (*gcs.Container, error)
-	// CreateProcess creates a process in the guest.
-	// Once the process is created, it can be managed using the returned `cow.Process` interface.
-	// `cow.Process` uses the underlying guest connection to issue commands to the guest.
-	CreateProcess(ctx context.Context, settings interface{}) (cow.Process, error)
 	// DumpStacks requests a stack dump from the guest and returns it as a string.
 	DumpStacks(ctx context.Context) (string, error)
 	// DeleteContainerState removes persisted state for the container identified by `cid` from the guest.
@@ -42,11 +37,17 @@ var _ Manager = (*Guest)(nil)
 
 // Capabilities returns the capabilities of the guest connection.
 func (gm *Guest) Capabilities() gcs.GuestDefinedCapabilities {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
 	return gm.gc.Capabilities()
 }
 
 // CreateContainer creates a container in the guest with the given ID and config.
 func (gm *Guest) CreateContainer(ctx context.Context, cid string, config interface{}) (*gcs.Container, error) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
 	c, err := gm.gc.CreateContainer(ctx, cid, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container %s: %w", cid, err)
@@ -55,18 +56,11 @@ func (gm *Guest) CreateContainer(ctx context.Context, cid string, config interfa
 	return c, nil
 }
 
-// CreateProcess creates a process in the guest using the provided settings.
-func (gm *Guest) CreateProcess(ctx context.Context, settings interface{}) (cow.Process, error) {
-	p, err := gm.gc.CreateProcess(ctx, settings)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create process: %w", err)
-	}
-
-	return p, nil
-}
-
 // DumpStacks requests a stack dump from the guest and returns it as a string.
 func (gm *Guest) DumpStacks(ctx context.Context) (string, error) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
 	dump, err := gm.gc.DumpStacks(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to dump stacks: %w", err)
@@ -77,6 +71,9 @@ func (gm *Guest) DumpStacks(ctx context.Context) (string, error) {
 
 // DeleteContainerState removes persisted state for the container identified by cid from the guest.
 func (gm *Guest) DeleteContainerState(ctx context.Context, cid string) error {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
 	err := gm.gc.DeleteContainerState(ctx, cid)
 	if err != nil {
 		return fmt.Errorf("failed to delete container state for container %s: %w", cid, err)
