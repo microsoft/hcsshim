@@ -143,10 +143,17 @@ func unmarshalContainerModifySettings(req *request) (_ *prot.ContainerModifySett
 			}
 			modifyGuestSettingsRequest.Settings = wcowBlockCimMounts
 
+		case guestresource.ResourceTypePolicyFragment:
+			securityPolicyFragment := &guestresource.SecurityPolicyFragment{}
+			if err := commonutils.UnmarshalJSONWithHresult(rawGuestRequest, securityPolicyFragment); err != nil {
+				return nil, fmt.Errorf("invalid ResourceTypePolicyFragment request: %w", err)
+			}
+			modifyGuestSettingsRequest.Settings = securityPolicyFragment
+
 		default:
 			// Invalid request
-			log.G(ctx).Errorf("Invald modifySettingsRequest: %v", modifyGuestSettingsRequest.ResourceType)
-			return nil, fmt.Errorf("invald modifySettingsRequest")
+			log.G(ctx).Errorf("invalid modifySettingsRequest: %v", modifyGuestSettingsRequest.ResourceType)
+			return nil, fmt.Errorf("invalid modifySettingsRequest")
 		}
 	}
 	r.Request = &modifyGuestSettingsRequest

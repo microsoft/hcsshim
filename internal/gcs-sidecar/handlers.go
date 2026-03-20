@@ -683,7 +683,14 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			if !ok {
 				return errors.New("the request settings are not of type SecurityPolicyFragment")
 			}
-			return b.hostState.securityOptions.InjectFragment(ctx, r)
+			if err := b.hostState.securityOptions.InjectFragment(ctx, r); err != nil {
+				return err
+			}
+			resp := &prot.ResponseBase{
+				Result:     0,
+				ActivityID: req.activityID,
+			}
+			return b.sendResponseToShim(req.ctx, prot.RPCModifySettings, req.header.ID, resp)
 
 		case guestresource.ResourceTypeWCOWBlockCims:
 			// This is request to mount the merged cim at given volumeGUID
@@ -931,7 +938,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 
 		default:
 			// Invalid request
-			return fmt.Errorf("invald modifySettingsRequest: %v", guestResourceType)
+			return fmt.Errorf("invalid modifySettingsRequest: %v", guestResourceType)
 		}
 	}
 
