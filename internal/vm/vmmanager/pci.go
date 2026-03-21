@@ -11,17 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-// PCIManager manages assiging pci devices to a Utility VM. This is Windows specific at the moment.
-type PCIManager interface {
-	// AddDevice adds a pci device identified by `vmbusGUID` to the Utility VM with the provided settings.
-	AddDevice(ctx context.Context, vmbusGUID string, settings hcsschema.VirtualPciDevice) error
-
-	// RemoveDevice removes the pci device identified by `vmbusGUID` from the Utility VM.
-	RemoveDevice(ctx context.Context, vmbusGUID string) error
-}
-
-var _ PCIManager = (*UtilityVM)(nil)
-
 func (uvm *UtilityVM) AddDevice(ctx context.Context, vmbusGUID string, settings hcsschema.VirtualPciDevice) error {
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmbusGUID),

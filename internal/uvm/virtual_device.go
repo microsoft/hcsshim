@@ -24,10 +24,6 @@ const (
 	VPCIDeviceIDType        = "vpci-instance-id"
 )
 
-// this is the well known channel type GUID defined by VMBUS for all assigned devices
-const vmbusChannelTypeGUIDFormatted = "{44c4f61d-4444-4400-9d52-802e27ede19f}"
-const assignedDeviceEnumerator = "VMBUS"
-
 type VPCIDeviceID struct {
 	deviceInstanceID     string
 	virtualFunctionIndex uint16
@@ -53,23 +49,6 @@ type VPCIDevice struct {
 	virtualFunctionIndex uint16
 	// refCount stores the number of references to this device in the UVM
 	refCount uint32
-}
-
-// GetAssignedDeviceVMBUSInstanceID returns the instance ID of the VMBUS channel device node created.
-//
-// When a device is assigned to a UVM via VPCI support in HCS, a new VMBUS channel device node is
-// created in the UVM. The actual device that was assigned in is exposed as a child on this VMBUS
-// channel device node.
-//
-// A device node's instance ID is an identifier that distinguishes that device from other devices
-// on the system. The GUID of a VMBUS channel device node refers to that channel's unique
-// identifier used internally by VMBUS and can be used to determine the VMBUS channel
-// device node's instance ID.
-//
-// A VMBUS channel device node's instance ID is in the form:
-// "VMBUS\vmbusChannelTypeGUIDFormatted\{vmBusChannelGUID}"
-func (uvm *UtilityVM) GetAssignedDeviceVMBUSInstanceID(vmBusChannelGUID string) string {
-	return fmt.Sprintf("%s\\%s\\{%s}", assignedDeviceEnumerator, vmbusChannelTypeGUIDFormatted, vmBusChannelGUID)
 }
 
 // Release frees the resources of the corresponding vpci device
