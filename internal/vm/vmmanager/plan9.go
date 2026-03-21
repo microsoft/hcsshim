@@ -11,17 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-// Plan9Manager manages adding plan 9 shares to a Utility VM.
-type Plan9Manager interface {
-	// AddPlan9 adds a plan 9 share to a running Utility VM.
-	AddPlan9(ctx context.Context, settings hcsschema.Plan9Share) error
-
-	// RemovePlan9 removes a plan 9 share from a running Utility VM.
-	RemovePlan9(ctx context.Context, settings hcsschema.Plan9Share) error
-}
-
-var _ Plan9Manager = (*UtilityVM)(nil)
-
 func (uvm *UtilityVM) AddPlan9(ctx context.Context, settings hcsschema.Plan9Share) error {
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeAdd,
