@@ -15,14 +15,14 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	cgroups "github.com/containerd/cgroups/v3/cgroup1"
-	cgroupstats "github.com/containerd/cgroups/v3/cgroup1/stats"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
+	cgroups1 "github.com/containerd/cgroups/v3/cgroup1"
+	cgroups1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/bridge"
+	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
@@ -32,39 +32,51 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/version"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func memoryLogFormat(metrics *cgroupstats.Metrics) logrus.Fields {
-	return logrus.Fields{
-		"memoryUsage":      metrics.Memory.Usage.Usage,
-		"memoryUsageMax":   metrics.Memory.Usage.Max,
-		"memoryUsageLimit": metrics.Memory.Usage.Limit,
-		"swapUsage":        metrics.Memory.Swap.Usage,
-		"swapUsageMax":     metrics.Memory.Swap.Max,
-		"swapUsageLimit":   metrics.Memory.Swap.Limit,
-		"kernelUsage":      metrics.Memory.Kernel.Usage,
-		"kernelUsageMax":   metrics.Memory.Kernel.Max,
-		"kernelUsageLimit": metrics.Memory.Kernel.Limit,
+func memoryLogFormat(metrics *cgroups1stats.Metrics) logrus.Fields {
+	fields := logrus.Fields{}
+	if metrics.Memory == nil {
+		return fields
 	}
+	if metrics.Memory.Usage != nil {
+		fields["memoryUsage"] = metrics.Memory.Usage.Usage
+		fields["memoryUsageMax"] = metrics.Memory.Usage.Max
+		fields["memoryUsageLimit"] = metrics.Memory.Usage.Limit
+	}
+	if metrics.Memory.Swap != nil {
+		fields["swapUsage"] = metrics.Memory.Swap.Usage
+		fields["swapUsageMax"] = metrics.Memory.Swap.Max
+		fields["swapUsageLimit"] = metrics.Memory.Swap.Limit
+	}
+	if metrics.Memory.Kernel != nil {
+		fields["kernelUsage"] = metrics.Memory.Kernel.Usage
+		fields["kernelUsageMax"] = metrics.Memory.Kernel.Max
+		fields["kernelUsageLimit"] = metrics.Memory.Kernel.Limit
+	}
+	return fields
 }
 
-func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, threshold int64, cg cgroups.Cgroup) {
+func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, threshold int64, mgr cgroup.Manager) {
 	// Buffer must be >= 8 bytes for eventfd reads
 	// http://man7.org/linux/man-pages/man2/eventfd.2.html
 	count := 0
 	buf := make([]byte, 8)
+	isV1 := mgr.GetV1Cgroup() != nil
 	for {
 		if _, err := efdFile.Read(buf); err != nil {
 			logrus.WithError(err).WithField("cgroup", cgName).Error("failed to read from eventfd")
 			return
 		}
 
-		// Sometimes an event is sent during cgroup teardown, but does not indicate that the
-		// threshold was actually crossed. In the teardown case the cgroup.event_control file
-		// won't exist anymore, so check that to determine if we should ignore this event.
-		_, err := os.Lstat(fmt.Sprintf("/sys/fs/cgroup/memory%s/cgroup.event_control", cgName))
-		if os.IsNotExist(err) {
-			return
+		// For cgroup v1, check if event_control file still exists (for teardown detection).
+		// cgroup v2 doesn't use event_control, so we skip this check.
+		if isV1 {
+			_, err := os.Lstat(fmt.Sprintf("/sys/fs/cgroup/memory%s/cgroup.event_control", cgName))
+			if os.IsNotExist(err) {
+				return
+			}
 		}
 
 		count++
@@ -74,17 +86,26 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 		} else {
 			msg = "memory usage for cgroup exceeded threshold"
 		}
+
+		cgVersion := "v2"
+		if isV1 {
+			cgVersion = "v1"
+		}
 		entry := logrus.WithFields(logrus.Fields{
 			"gcsStartTime":   startTime,
 			"time":           time.Now(),
 			"cgroup":         cgName,
 			"thresholdBytes": threshold,
 			"count":          count,
+			"cgroup_version": cgVersion,
 		})
+
 		// Sleep for one second in case there is a series of allocations slightly after
 		// reaching threshold.
 		time.Sleep(time.Second)
-		metrics, err := cg.Stat(cgroups.IgnoreNotExist)
+
+		// Use the unified manager to get stats for both v1 and v2.
+		metrics, err := mgr.Stats()
 		if err != nil {
 			// Don't return on Stat err as it will return an error if
 			// any of the cgroup subsystems Stat calls failed for any reason.
@@ -284,6 +305,13 @@ func main() {
 		"version": version.Version,
 	}).Info("GCS started")
 
+	// Log which cgroup version is detected and will be used
+	if cgroup.IsCgroupV2() {
+		logrus.Info("cgroup v2 detected by GCS - using v2 API")
+	} else {
+		logrus.Info("cgroup v1 detected by GCS - using v1 API")
+	}
+
 	// Set the process core dump location. This will be global to all containers as it's a kernel configuration.
 	// If no path is specified core dumps will just be placed in the working directory of wherever the process
 	// was invoked to a file named "core".
@@ -307,9 +335,11 @@ func main() {
 
 	// Write 1 to memory.use_hierarchy on the root cgroup to enable hierarchy
 	// support. This needs to be set before we create any cgroups as the write
-	// will fail otherwise.
-	if err := os.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0644); err != nil {
-		logrus.WithError(err).Fatal("failed to enable hierarchy support for root cgroup")
+	// will fail otherwise. This is only needed for cgroup v1.
+	if !cgroup.IsCgroupV2() {
+		if err := os.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0644); err != nil {
+			logrus.WithError(err).Fatal("failed to enable hierarchy support for root cgroup")
+		}
 	}
 
 	// The containers cgroup is limited only by {Totalram - 75 MB
@@ -322,7 +352,7 @@ func main() {
 		logrus.WithError(err).Fatal("failed to get sys info")
 	}
 	containersLimit := int64(sinfo.Totalram - *rootMemReserveBytes)
-	containersControl, err := cgroups.New(cgroups.StaticPath("/containers"), &oci.LinuxResources{
+	containersControl, err := cgroup.NewManager("/containers", &oci.LinuxResources{
 		Memory: &oci.LinuxMemory{
 			Limit: &containersLimit,
 		},
@@ -334,7 +364,7 @@ func main() {
 
 	// Create virtual-pods cgroup hierarchy for multi-pod support
 	// This will be the parent for all virtual pod cgroups: /containers/virtual-pods/{virtualSandboxID}
-	virtualPodsControl, err := cgroups.New(cgroups.StaticPath("/containers/virtual-pods"), &oci.LinuxResources{
+	virtualPodsControl, err := cgroup.NewManager("/containers/virtual-pods", &oci.LinuxResources{
 		Memory: &oci.LinuxMemory{
 			Limit: &containersLimit, // Share the same limit as containers
 		},
@@ -344,12 +374,12 @@ func main() {
 	}
 	defer virtualPodsControl.Delete() //nolint:errcheck
 
-	gcsControl, err := cgroups.New(cgroups.StaticPath("/gcs"), &oci.LinuxResources{})
+	gcsControl, err := cgroup.NewManager("/gcs", &oci.LinuxResources{})
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to create gcs cgroup")
 	}
 	defer gcsControl.Delete() //nolint:errcheck
-	if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
+	if err := gcsControl.Add(cgroups1.Process{Pid: os.Getpid()}); err != nil {
 		logrus.WithError(err).Fatal("failed add gcs pid to gcs cgroup")
 	}
 
@@ -365,7 +395,9 @@ func main() {
 	}
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
 	// Initialize virtual pod support in the host
-	h.InitializeVirtualPodSupport(virtualPodsControl)
+	if err := h.InitializeVirtualPodSupport(virtualPodsControl); err != nil {
+		logrus.WithError(err).Warn("Virtual pod support initialization failed")
+	}
 	b.AssignHandlers(mux, h)
 
 	var bridgeIn io.ReadCloser
@@ -386,7 +418,7 @@ func main() {
 		bridgeOut = bridgeCon
 	}
 
-	event := cgroups.MemoryThresholdEvent(*gcsMemLimitBytes, false)
+	event := cgroups1.MemoryThresholdEvent(*gcsMemLimitBytes, false)
 	gefd, err := gcsControl.RegisterMemoryEvent(event)
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to register memory threshold for gcs cgroup")

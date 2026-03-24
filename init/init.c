@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <dirent.h>
 
 #ifdef MODULES
 #include <ftw.h>
@@ -75,6 +76,13 @@ const char* kmod_xz_ext = ".ko.xz";
 const char* const default_argv[] = {"/bin/gcs", "-loglevel", "debug", "-logfile=/run/gcs/gcs.log"};
 const char* const default_shell = "/bin/sh";
 const char* const lib_modules = "/lib/modules";
+
+// Forward declarations
+void dmesgInfo(const char* msg);
+void dmesgWarn(const char* msg);
+void enable_subtree_control(void);
+void init_cgroups_v1(void);
+bool try_init_cgroups_v2(void);
 
 struct Mount {
     const char *source, *target, *type;
@@ -136,7 +144,7 @@ const struct InitOp ops[] = {
 
     // mount /sys (which should already exist)
     {OpMount, .mount = {"sysfs", "/sys", "sysfs", MS_NODEV | MS_NOSUID | MS_NOEXEC}},
-    {OpMount, .mount = {"cgroup_root", "/sys/fs/cgroup", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "mode=0755"}},
+    // NOTE: Removed tmpfs mount of /sys/fs/cgroup - will be handled by init_cgroups()
 };
 
 /*
@@ -304,12 +312,110 @@ void init_fs(const struct InitOp* ops, size_t count) {
     }
 }
 
-void init_cgroups() {
+// Check if cgroup v2 should be disabled via kernel parameter
+bool is_cgroup_v2_disabled() {
+    FILE* f = fopen("/proc/cmdline", "r");
+    if (f == NULL) {
+        return false; // If we can't read cmdline, don't assume disabled
+    }
+
+    char cmdline[4096];
+    if (fgets(cmdline, sizeof(cmdline), f) != NULL) {
+        // Kernel cmdline is space-separated; tokenize and match exactly.
+        char* token = strtok(cmdline, " \n");
+        while (token) {
+            if (strcmp(token, "cgroup_no_v2=all") == 0) {
+                fclose(f);
+                dmesgInfo("cgroup v2: disabled by kernel parameter cgroup_no_v2=all\n");
+                return true;
+            }
+            token = strtok(NULL, " \n");
+        }
+    }
+    fclose(f);
+    return false;
+}
+
+// Enable all available controllers in the root cgroup's subtree_control.
+// Without this, child cgroups won't have memory, cpu, pids, etc. active.
+void enable_subtree_control() {
+    FILE* cf = fopen("/sys/fs/cgroup/cgroup.controllers", "r");
+    if (!cf) {
+        return;
+    }
+
+    char controllers[256];
+    if (fgets(controllers, sizeof(controllers), cf) == NULL) {
+        fclose(cf);
+        return;
+    }
+    fclose(cf);
+
+    // Build subtree_control string: prefix each controller with '+'
+    char subtree[512] = {0};
+    char* token = strtok(controllers, " \n");
+    while (token) {
+        if (subtree[0] != '\0') {
+            strcat(subtree, " ");
+        }
+        strcat(subtree, "+");
+        strcat(subtree, token);
+        token = strtok(NULL, " \n");
+    }
+
+    if (subtree[0] == '\0') {
+        return;
+    }
+
+    FILE* sc = fopen("/sys/fs/cgroup/cgroup.subtree_control", "w");
+    if (sc) {
+        fputs(subtree, sc);
+        fclose(sc);
+        dmesgInfo("cgroup v2: enabled controllers in subtree_control\n");
+    } else {
+        dmesgWarn("cgroup v2: failed to open subtree_control for writing\n");
+    }
+}
+
+// Try to initialize cgroup v2 by mounting it. Returns true if successful
+// (leaving the mount in place), false otherwise.
+bool try_init_cgroups_v2() {
+    // First check if cgroup v2 is explicitly disabled
+    if (is_cgroup_v2_disabled()) {
+        return false;
+    }
+
+    // Try to mount cgroup v2 to test if it works
+    if (mount("cgroup2", "/sys/fs/cgroup", "cgroup2", MS_NODEV | MS_NOSUID | MS_NOEXEC, "") < 0) {
+        dmesgInfo("cgroup v2: test mount failed\n");
+        return false;
+    }
+
+    // Check if controllers file appeared
+    if (access("/sys/fs/cgroup/cgroup.controllers", F_OK) == 0) {
+        dmesgInfo("cgroup v2: test mount successful, controllers found\n");
+        enable_subtree_control();
+        return true; // Leave it mounted, cgroup v2 is ready
+    }
+
+    // Mount worked but no controllers - clean up
+    dmesgInfo("cgroup v2: test mount succeeded but no controllers\n");
+    umount("/sys/fs/cgroup");
+    return false;
+}
+
+void init_cgroups_v1() {
     const char* fpath = "/proc/cgroups";
     FILE* f = fopen(fpath, "r");
     if (f == NULL) {
         die2("fopen", fpath);
     }
+
+    // For cgroup v1, we need to mount tmpfs at /sys/fs/cgroup first
+    if (mount("cgroup_root", "/sys/fs/cgroup", "tmpfs", MS_NODEV | MS_NOSUID | MS_NOEXEC, "mode=0755") < 0) {
+        die2("mount", "/sys/fs/cgroup");
+    }
+
     // Skip the first line.
     for (;;) {
         char c = fgetc(f);
@@ -341,6 +447,15 @@ void init_cgroups() {
         }
     }
     fclose(f);
+}
+
+void init_cgroups() {
+    if (try_init_cgroups_v2()) {
+        dmesgInfo("Using cgroup v2\n");
+    } else {
+        dmesgInfo("Using cgroup v1\n");
+        init_cgroups_v1();
+    }
 }
 
 void init_network(const char* iface, int domain) {

@@ -11,14 +11,13 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	cgroups "github.com/containerd/cgroups/v3/cgroup1"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
+	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
@@ -308,18 +307,13 @@ func (c *Container) setExitType(signal syscall.Signal) {
 }
 
 // GetStats returns the cgroup metrics for the container.
+// Works with both cgroup v1 and v2 systems.
 func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	_, span := oc.StartSpan(ctx, "opengcs::Container::GetStats")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	cgroupPath := c.spec.Linux.CgroupsPath
-	cg, err := cgroups.Load(cgroups.StaticPath(cgroupPath))
-	if err != nil {
-		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
-	}
-
-	return cg.Stat(cgroups.IgnoreNotExist)
+	return cgroup.LoadAndStat(c.spec.Linux.CgroupsPath)
 }
 
 func (c *Container) modifyContainerConstraints(ctx context.Context, _ guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {
