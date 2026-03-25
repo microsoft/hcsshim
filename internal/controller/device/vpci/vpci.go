@@ -65,26 +65,46 @@ func (m *Manager) AddToVM(ctx context.Context, opts *AddOptions) (err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Check for an existing assignment with the same device key.
-	if existingGUID, ok := m.keyToGUID[key]; ok {
-		dev := m.devices[existingGUID]
-
-		// If a previous assignment left the device in an invalid state
-		// reject new callers until the existing assignment is cleaned up.
-		if dev.invalid {
-			return fmt.Errorf("vpci device with vmBusGUID %s is in an invalid state", existingGUID)
+	// Check if the caller-provided GUID is already tracked.
+	if existingDev, ok := m.devices[opts.VMBusGUID]; ok {
+		// The GUID exists — verify the device settings match what was originally assigned.
+		// A mismatch means the caller is trying to reuse a GUID for a different device,
+		// which is a configuration error.
+		if existingDev.key != key {
+			return fmt.Errorf(
+				"vmBusGUID %s is already assigned to device (instanceID=%s, vfIndex=%d), but caller provided different settings (instanceID=%s, vfIndex=%d)",
+				opts.VMBusGUID,
+				existingDev.key.deviceInstanceID, existingDev.key.virtualFunctionIndex,
+				key.deviceInstanceID, key.virtualFunctionIndex,
+			)
 		}
 
-		// Increase the refCount and return the existing device.
-		dev.refCount++
+		// If a previous assignment left the device in an invalid state,
+		// reject new callers until the existing assignment is cleaned up.
+		if existingDev.invalid {
+			return fmt.Errorf("vpci device with vmBusGUID %s is in an invalid state", opts.VMBusGUID)
+		}
+
+		// Same GUID, same device — reuse the existing assignment.
+		existingDev.refCount++
 
 		log.G(ctx).WithFields(logrus.Fields{
 			"deviceInstanceID":     key.deviceInstanceID,
 			"virtualFunctionIndex": key.virtualFunctionIndex,
-			"refCount":             dev.refCount,
+			"refCount":             existingDev.refCount,
 		}).Debug("vPCI device already assigned, reusing existing assignment")
 
 		return nil
+	}
+
+	// The GUID is new — check whether the same device key is already assigned
+	// under a different GUID. This means the caller provided an inconsistent GUID.
+	if existingGUID, ok := m.keyToGUID[key]; ok {
+		return fmt.Errorf(
+			"vpci device (instanceID=%s, vfIndex=%d) is already assigned with vmBusGUID %s, but caller provided %s",
+			key.deviceInstanceID, key.virtualFunctionIndex,
+			existingGUID, opts.VMBusGUID,
+		)
 	}
 
 	// Device not attached to VM.
@@ -125,7 +145,7 @@ func (m *Manager) AddToVM(ctx context.Context, opts *AddOptions) (err error) {
 	m.keyToGUID[key] = opts.VMBusGUID
 
 	// Guest-side: device attach notification.
-	if err := m.addGuestVPCIDevice(ctx, opts.VMBusGUID); err != nil {
+	if err := m.waitGuestDeviceReady(ctx, opts.VMBusGUID); err != nil {
 		// Mark the device as invalid so the caller can call RemoveFromVM
 		// to clean up the host-side assignment.
 		dev.invalid = true
