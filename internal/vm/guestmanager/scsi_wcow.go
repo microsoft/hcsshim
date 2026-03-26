@@ -11,20 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// WCOWScsiManager exposes mapped virtual disk and SCSI device operations in the WCOW guest.
-type WCOWScsiManager interface {
-	// AddWCOWMappedVirtualDisk maps a virtual disk into the WCOW guest.
-	AddWCOWMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
-	// AddWCOWMappedVirtualDiskForContainerScratch attaches a scratch disk in the WCOW guest.
-	AddWCOWMappedVirtualDiskForContainerScratch(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
-	// RemoveWCOWMappedVirtualDisk unmaps a virtual disk from the WCOW guest.
-	RemoveWCOWMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
-	// RemoveSCSIDevice removes a SCSI device from the guest.
-	RemoveSCSIDevice(ctx context.Context, settings guestresource.SCSIDevice) error
-}
-
-var _ WCOWScsiManager = (*Guest)(nil)
-
 // AddWCOWMappedVirtualDisk maps a virtual disk into a WCOW guest.
 func (gm *Guest) AddWCOWMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error {
 	request := &hcsschema.ModifySettingRequest{

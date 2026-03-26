@@ -11,18 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// LCOWScsiManager exposes mapped virtual disk and SCSI device operations in the LCOW guest.
-type LCOWScsiManager interface {
-	// AddLCOWMappedVirtualDisk maps a virtual disk into the LCOW guest.
-	AddLCOWMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
-	// RemoveLCOWMappedVirtualDisk unmaps a virtual disk from the LCOW guest.
-	RemoveLCOWMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
-	// RemoveSCSIDevice removes a SCSI device from the guest.
-	RemoveSCSIDevice(ctx context.Context, settings guestresource.SCSIDevice) error
-}
-
-var _ LCOWScsiManager = (*Guest)(nil)
-
 // AddLCOWMappedVirtualDisk maps a virtual disk into a LCOW guest.
 func (gm *Guest) AddLCOWMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error {
 	request := &hcsschema.ModifySettingRequest{
