@@ -343,6 +343,24 @@ func LoadAndStat(cgroupPath string) (*cgroups1stats.Metrics, error) {
 	return cg.Stat(cgroups1.IgnoreNotExist)
 }
 
+// LoadManager loads an existing cgroup (created by the runtime) and returns a Manager.
+// Unlike NewManager, this does not create the cgroup — it wraps one that already exists.
+func LoadManager(cgroupPath string) (Manager, error) {
+	if IsCgroupV2() {
+		mgr, err := cgroups2.Load(cgroupPath)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to load v2 cgroup %s", cgroupPath)
+		}
+		return &V2Mgr{mgr: mgr, path: cgroupPath, done: make(chan struct{})}, nil
+	}
+
+	cg, err := cgroups1.Load(cgroups1.StaticPath(cgroupPath))
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to load v1 cgroup %s", cgroupPath)
+	}
+	return &V1Mgr{cg: cg}, nil
+}
+
 // Compile-time interface satisfaction checks.
 var (
 	_ Manager = &V1Mgr{}
