@@ -7,14 +7,16 @@ const (
 	Namespace = "namespace"
 	Operation = "operation"
 
-	ID          = "id"
-	ContainerID = "cid"
-	ExecID      = "eid"
-	ProcessID   = "pid"
-	TaskID      = "tid"
-	UVMID       = "uvm-id"
-	SandboxID   = "sandbox-id"
-	PodID       = "pod-id"
+	ID               = "id"
+	ContainerID      = "cid"
+	ExecID           = "eid"
+	NamespaceID      = "namespace-id"
+	PodID            = "pod-id"
+	ProcessID        = "pid"
+	SandboxID        = "sandbox-id"
+	TaskID           = "tid"
+	UVMID            = "uvm-id"
+	VirtualSandboxID = "virtual-sandbox-id"
 
 	// networking and IO
 

@@ -129,8 +129,8 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"options": fmt.Sprintf("%+v", createOptions),
-		"schema":  coi.actualSchemaVersion,
+		"options": log.Format(ctx, createOptions),
+		"schema":  log.Format(ctx, coi.actualSchemaVersion),
 	}).Debug("hcsshim::initializeCreateOptions")
 
 	return coi, nil
@@ -139,43 +139,61 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 // configureSandboxNetwork creates a new network namespace for the pod (sandbox)
 // if required and then adds that namespace to the pod.
 func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, ct oci.KubernetesContainerType) error {
+	virtualPodID := coi.Spec.Annotations[annotations.VirtualPodID]
+	ctx, entry := log.SetEntry(ctx, logrus.Fields{
+		"containerType":            ct,
+		logfields.VirtualSandboxID: virtualPodID,
+		logfields.NamespaceID:      coi.NetworkNamespace,
+	})
+	entry.Debug("hcsoci::configureSandboxNetwork")
+
 	if coi.NetworkNamespace != "" {
 		r.SetNetNS(coi.NetworkNamespace)
+		entry.Trace("using existing network namespace")
 	} else {
 		err := createNetworkNamespace(ctx, coi, r)
 		if err != nil {
+			entry.WithError(err).Error("failed to create network namespace")
 			return err
 		}
 	}
 	coi.actualNetworkNamespace = r.NetNS()
 
-	if coi.HostingSystem != nil {
-		// Check for virtual pod first containers: if containerID == virtualPodID, treat as sandbox for networking configuration
-		virtualPodID := coi.Spec.Annotations[annotations.VirtualPodID]
-		isVirtualPodFirstContainer := virtualPodID != "" && coi.actualID == virtualPodID
+	ctx, entry = log.SetEntry(ctx, logrus.Fields{logfields.NamespaceID: coi.actualNetworkNamespace})
 
-		// Only add the network namespace to a standalone or sandbox
-		// container but not a workload container in a sandbox that inherits
-		// the namespace.
-		if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox || isVirtualPodFirstContainer {
-			if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
-				// No network setup type was specified for this UVM. Create and assign one here unless
-				// we received a different error.
-				if errors.Is(err, uvm.ErrNoNetworkSetup) {
-					if err := coi.HostingSystem.CreateAndAssignNetworkSetup(ctx, "", ""); err != nil {
-						return err
-					}
-					if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
-						return err
-					}
-				} else {
-					return err
-				}
-			}
-			r.SetAddedNetNSToVM(true)
-		}
+	// Check for virtual pod first containers: if containerID == virtualPodID, treat as sandbox for networking configuration
+	isVirtualPodFirstContainer := virtualPodID != "" && coi.actualID == virtualPodID
+
+	if coi.HostingSystem == nil {
+		entry.Trace("skipping sandbox network configuration - no hosting system")
+		return nil
+	} else if ct != oci.KubernetesContainerTypeNone && ct != oci.KubernetesContainerTypeSandbox && !isVirtualPodFirstContainer {
+		// Only add the network namespace to a standalone or sandbox container,
+		// but not a workload container in a sandbox that inherits the namespace.
+		entry.Trace("skipping sandbox network configuration - not a sandbox/standalone/virtual pod first container")
+		return nil
 	}
 
+	entry.WithField("isVirtualPodFirstContainer", isVirtualPodFirstContainer).Trace("configuring uVM network for sandbox")
+
+	err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace)
+	if errors.Is(err, uvm.ErrNoNetworkSetup) {
+		// No network setup type was specified for this UVM.
+		// Create and assign one here and then retry
+		entry.Debug("retrying configuring sandbox network after creating and assigning uVM network setup")
+
+		if err := coi.HostingSystem.CreateAndAssignNetworkSetup(ctx, "", ""); err != nil {
+			entry.WithError(err).Error("failed to create and assign network setup for sandbox network")
+			return err
+		}
+		err = coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace)
+	}
+	if err != nil {
+		entry.WithError(err).Error("failed to configure sandbox network within uVM")
+		return err
+	}
+
+	r.SetAddedNetNSToVM(true)
 	return nil
 }
 

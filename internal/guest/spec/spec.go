@@ -50,9 +50,9 @@ func GenerateWorkloadContainerNetworkMounts(sandboxID string, spec *oci.Spec) []
 	rootDir := VirtualPodAwareSandboxRootDir(sandboxID, virtualSandboxID)
 
 	logrus.WithFields(logrus.Fields{
-		"sandboxID":        sandboxID,
-		"virtualSandboxID": virtualSandboxID,
-		"rootDir":          rootDir,
+		logfields.SandboxID:        sandboxID,
+		logfields.VirtualSandboxID: virtualSandboxID,
+		"rootDir":                  rootDir,
 	}).Info("GenerateWorkloadContainerNetworkMounts: resolved mount source root directory")
 
 	for _, mountPath := range networkingMountPaths() {
