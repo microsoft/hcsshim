@@ -9,32 +9,16 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/disk"
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/mount"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 
-	"github.com/google/uuid"
+	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/sirupsen/logrus"
 )
 
-type VMSCSIOps interface {
-	disk.VMSCSIAdder
-	disk.VMSCSIRemover
-}
-
-type LinuxGuestSCSIOps interface {
-	mount.LinuxGuestSCSIMounter
-	mount.LinuxGuestSCSIUnmounter
-	disk.LinuxGuestSCSIEjector
-}
-
-type WindowsGuestSCSIOps interface {
-	mount.WindowsGuestSCSIMounter
-	mount.WindowsGuestSCSIUnmounter
-}
-
-// numLUNsPerController is the maximum number of LUNs per controller, fixed by Hyper-V.
-const numLUNsPerController = 64
-
-// The controller manages all SCSI attached devices and guest mounted
-// directories.
-//
+// Controller manages the full SCSI disk lifecycle — slot allocation, VM
+// attachment, guest mounting, and teardown — across one or more controllers
+// on a Hyper-V VM. All operations are serialized by a single mutex.
 // It is required that all callers:
 //
 // 1. Obtain a reservation using Reserve().
@@ -49,36 +33,44 @@ const numLUNsPerController = 64
 // If UnmapFromGuest() fails, the caller must call UnmapFromGuest() again until
 // it succeeds to release the reservation and all resources.
 type Controller struct {
-	vm     VMSCSIOps
-	lGuest LinuxGuestSCSIOps
-	wGuest WindowsGuestSCSIOps
-
+	// mu serializes all public operations on the Controller.
 	mu sync.Mutex
 
-	// Every call to Reserve gets a unique reservation ID which holds pointers
-	// to its controllerSlot for the disk and its partition for the mount.
-	reservations map[uuid.UUID]*reservation
+	// vm is the host-side interface for adding and removing SCSI disks.
+	// Immutable after construction.
+	vm VMSCSIOps
+	// linuxGuest is the guest-side interface for LCOW SCSI operations.
+	// Immutable after construction.
+	linuxGuest LinuxGuestSCSIOps
+	// windowsGuest is the guest-side interface for WCOW SCSI operations.
+	// Immutable after construction.
+	windowsGuest WindowsGuestSCSIOps
 
-	// For fast lookup we keep a hostPath to controllerSlot mapping for all
-	// allocated disks.
+	// reservations maps a reservation ID to its disk slot and partition.
+	// Guarded by mu.
+	reservations map[guid.GUID]*reservation
+
+	// disksByPath maps a host disk path to its controllerSlots index for
+	// fast deduplication of disk attachments. Guarded by mu.
 	disksByPath map[string]int
 
-	// Tracks all allocated and unallocated available slots on the SCSI
-	// controllers.
+	// controllerSlots tracks all disk slots across all SCSI controllers.
+	// A nil entry means the slot is free for allocation.
 	//
-	// NumControllers == len(controllerSlots) / numLUNsPerController
-	// ControllerID == index / numLUNsPerController
-	// LunID == index % numLUNsPerController
+	// Index layout:
+	//   ControllerID = index / numLUNsPerController
+	//   LUN          = index % numLUNsPerController
 	controllerSlots []*disk.Disk
 }
 
-func New(numControllers int, vm VMSCSIOps, lGuest LinuxGuestSCSIOps, wGuest WindowsGuestSCSIOps) *Controller {
+// New creates a new [Controller] for the given number of SCSI controllers and
+// host/guest operation interfaces.
+func New(numControllers int, vm VMSCSIOps, linuxGuest LinuxGuestSCSIOps, windowsGuest WindowsGuestSCSIOps) *Controller {
 	return &Controller{
 		vm:              vm,
-		lGuest:          lGuest,
-		wGuest:          wGuest,
-		mu:              sync.Mutex{},
-		reservations:    make(map[uuid.UUID]*reservation),
+		linuxGuest:      linuxGuest,
+		windowsGuest:    windowsGuest,
+		reservations:    make(map[guid.GUID]*reservation),
 		disksByPath:     make(map[string]int),
 		controllerSlots: make([]*disk.Disk, numControllers*numLUNsPerController),
 	}
@@ -101,47 +93,59 @@ func (c *Controller) ReserveForRootfs(ctx context.Context, controller, lun uint)
 	if c.controllerSlots[slot] != nil {
 		return fmt.Errorf("slot for controller %d and lun %d is already reserved", controller, lun)
 	}
-	c.controllerSlots[slot] = disk.NewReserved(controller, lun, disk.DiskConfig{})
+	c.controllerSlots[slot] = disk.NewReserved(controller, lun, disk.Config{})
 	return nil
 }
 
-// Reserves a referenced counted mapping entry for a SCSI attachment based on
+// Reserve reserves a referenced counted mapping entry for a SCSI attachment based on
 // the SCSI disk path, and partition number.
 //
 // If an error is returned from this function, it is guaranteed that no
 // reservation mapping was made and no UnmapFromGuest() call is necessary to
 // clean up.
-func (c *Controller) Reserve(ctx context.Context, diskConfig disk.DiskConfig, mountConfig mount.MountConfig) (uuid.UUID, error) {
+func (c *Controller) Reserve(ctx context.Context, diskConfig disk.Config, mountConfig mount.Config) (guid.GUID, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Generate a new reservation id.
-	id := uuid.New()
-	if _, ok := c.reservations[id]; ok {
-		return uuid.Nil, fmt.Errorf("reservation ID collision")
+	ctx, _ = log.WithContext(ctx, logrus.WithFields(logrus.Fields{
+		logfields.HostPath:  diskConfig.HostPath,
+		logfields.Partition: mountConfig.Partition,
+	}))
+
+	log.G(ctx).Debug("reserving SCSI slot")
+
+	// Generate a unique reservation ID.
+	id, err := guid.NewV4()
+	if err != nil {
+		return guid.GUID{}, fmt.Errorf("generate reservation ID: %w", err)
 	}
+	if _, ok := c.reservations[id]; ok {
+		return guid.GUID{}, fmt.Errorf("reservation ID already exists: %s", id)
+	}
+
+	// Create the reservation entry.
 	r := &reservation{
 		controllerSlot: -1,
 		partition:      mountConfig.Partition,
 	}
 
-	// Determine if this hostPath already had a disk known.
+	// Check whether this disk path already has an allocated slot.
 	if slot, ok := c.disksByPath[diskConfig.HostPath]; ok {
-		r.controllerSlot = slot // Update our reservation where the disk is.
-		d := c.controllerSlots[slot]
+		r.controllerSlot = slot // Update our reservation where the dsk is.
+		existingDisk := c.controllerSlots[slot]
 
-		// Verify the caller config is the same.
-		if !d.Config().Equals(diskConfig) {
-			return uuid.Nil, fmt.Errorf("cannot reserve ref on disk with different config")
+		// Verify the caller is requesting the same disk configuration.
+		if !existingDisk.Config().Equals(diskConfig) {
+			return guid.GUID{}, fmt.Errorf("cannot reserve ref on disk with different config")
 		}
 
-		// We at least have a disk, now determine if we have a mount for this
+		// We at least have a dsk, now determine if we have a mount for this
 		// partition.
-		if _, err := d.ReservePartition(ctx, mountConfig); err != nil {
-			return uuid.Nil, fmt.Errorf("reserve partition %d: %w", mountConfig.Partition, err)
+		if _, err := existingDisk.ReservePartition(ctx, mountConfig); err != nil {
+			return guid.GUID{}, fmt.Errorf("reserve partition %d: %w", mountConfig.Partition, err)
 		}
 	} else {
-		// No hostPath was found. Find a slot for the disk.
+		// No existing slot for this path — find a free one.
 		nextSlot := -1
 		for i, d := range c.controllerSlots {
 			if d == nil {
@@ -150,72 +154,103 @@ func (c *Controller) Reserve(ctx context.Context, diskConfig disk.DiskConfig, mo
 			}
 		}
 		if nextSlot == -1 {
-			return uuid.Nil, fmt.Errorf("no available slots")
+			return guid.GUID{}, fmt.Errorf("no available SCSI slots")
 		}
 
 		// Create the Disk and Partition Mount in the reserved states.
 		controller := uint(nextSlot / numLUNsPerController)
 		lun := uint(nextSlot % numLUNsPerController)
-		d := disk.NewReserved(controller, lun, diskConfig)
-		if _, err := d.ReservePartition(ctx, mountConfig); err != nil {
-			return uuid.Nil, fmt.Errorf("reserve partition %d: %w", mountConfig.Partition, err)
+		newDisk := disk.NewReserved(controller, lun, diskConfig)
+		if _, err := newDisk.ReservePartition(ctx, mountConfig); err != nil {
+			return guid.GUID{}, fmt.Errorf("reserve partition %d: %w", mountConfig.Partition, err)
 		}
-		c.controllerSlots[controller*numLUNsPerController+lun] = d
+		c.controllerSlots[controller*numLUNsPerController+lun] = newDisk
 		c.disksByPath[diskConfig.HostPath] = nextSlot
 		r.controllerSlot = nextSlot
 	}
 
 	// Ensure our reservation is saved for all future operations.
 	c.reservations[id] = r
+	log.G(ctx).WithField("reservation", id).Debug("SCSI slot reserved")
 	return id, nil
 }
 
-func (c *Controller) MapToGuest(ctx context.Context, reservation uuid.UUID) (string, error) {
+// MapToGuest attaches the reserved disk to the VM and mounts its partition
+// inside the guest, returning the guest path. It is idempotent for a
+// reservation that is already fully mapped.
+func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if r, ok := c.reservations[reservation]; ok {
-		d := c.controllerSlots[r.controllerSlot]
-		if err := d.AttachToVM(ctx, c.vm); err != nil {
-			return "", fmt.Errorf("attach disk to vm: %w", err)
-		}
-		guestPath, err := d.MountPartitionToGuest(ctx, r.partition, c.lGuest, c.wGuest)
-		if err != nil {
-			return "", fmt.Errorf("mount partition %d to guest: %w", r.partition, err)
-		}
-		return guestPath, nil
+	r, ok := c.reservations[id]
+	if !ok {
+		return "", fmt.Errorf("reservation %s not found", id)
 	}
-	return "", fmt.Errorf("reservation %s not found", reservation)
+
+	existingDisk := c.controllerSlots[r.controllerSlot]
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.HostPath:  existingDisk.HostPath(),
+		logfields.Partition: r.partition,
+	}).Debug("mapping SCSI disk to guest")
+
+	// Attach the disk to the VM's SCSI bus (idempotent if already attached).
+	if err := existingDisk.AttachToVM(ctx, c.vm); err != nil {
+		return "", fmt.Errorf("attach disk to VM: %w", err)
+	}
+
+	// Mount the partition inside the guest.
+	guestPath, err := existingDisk.MountPartitionToGuest(ctx, r.partition, c.linuxGuest, c.windowsGuest)
+	if err != nil {
+		return "", fmt.Errorf("mount partition %d to guest: %w", r.partition, err)
+	}
+
+	log.G(ctx).WithField(logfields.UVMPath, guestPath).Debug("SCSI disk mapped to guest")
+	return guestPath, nil
 }
 
-func (c *Controller) UnmapFromGuest(ctx context.Context, reservation uuid.UUID) error {
+// UnmapFromGuest unmounts the partition from the guest and, when all
+// reservations for a disk are released, detaches the disk from the VM and
+// frees the SCSI slot. A failed call is retryable with the same reservation ID.
+func (c *Controller) UnmapFromGuest(ctx context.Context, id guid.GUID) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if r, ok := c.reservations[reservation]; ok {
-		d := c.controllerSlots[r.controllerSlot]
-		// Ref counted unmount.
-		if err := d.UnmountPartitionFromGuest(ctx, r.partition, c.lGuest, c.wGuest); err != nil {
-			return fmt.Errorf("unmount partition %d from guest: %w", r.partition, err)
-		}
-		if err := d.DetachFromVM(ctx, c.vm, c.lGuest); err != nil {
-			return fmt.Errorf("detach disk from vm: %w", err)
-		}
-		if d.State() == disk.DiskStateDetached {
-			// If we have no more mounts on this disk, remove the disk from the
-			// known disks and free the slot.
-			delete(c.disksByPath, d.HostPath())
-			c.controllerSlots[r.controllerSlot] = nil
-		}
-		delete(c.reservations, reservation)
-		return nil
-	}
-	return fmt.Errorf("reservation %s not found", reservation)
-}
+	ctx, _ = log.WithContext(ctx, logrus.WithField("reservation", id.String()))
 
-type reservation struct {
-	// This is the index into controllerSlots that holds this disk.
-	controllerSlot int
-	// This is the index into the disk mounts for this partition.
-	partition uint64
+	r, ok := c.reservations[id]
+	if !ok {
+		return fmt.Errorf("reservation %s not found", id)
+	}
+
+	existingDisk := c.controllerSlots[r.controllerSlot]
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.HostPath:  existingDisk.HostPath(),
+		logfields.Partition: r.partition,
+	}).Debug("unmapping SCSI disk from guest")
+
+	// Unmount the partition from the guest (ref-counted; only issues the
+	// guest call when this is the last reservation on the partition).
+	if err := existingDisk.UnmountPartitionFromGuest(ctx, r.partition, c.linuxGuest, c.windowsGuest); err != nil {
+		return fmt.Errorf("unmount partition %d from guest: %w", r.partition, err)
+	}
+
+	// Detach the disk from the VM when no partitions remain active.
+	if err := existingDisk.DetachFromVM(ctx, c.vm, c.linuxGuest); err != nil {
+		return fmt.Errorf("detach disk from VM: %w", err)
+	}
+
+	// If the disk is now fully detached, free its slot for reuse.
+	if existingDisk.State() == disk.StateDetached {
+		delete(c.disksByPath, existingDisk.HostPath())
+		c.controllerSlots[r.controllerSlot] = nil
+		log.G(ctx).Debug("SCSI slot freed")
+	}
+
+	// Remove the reservation last so it remains available for retries if
+	// any earlier step above fails.
+	delete(c.reservations, id)
+	log.G(ctx).Debug("SCSI disk unmapped from guest")
+	return nil
 }

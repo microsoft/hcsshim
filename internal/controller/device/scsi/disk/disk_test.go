@@ -76,11 +76,11 @@ func (m *mockWindowsGuestSCSIUnmounter) RemoveWCOWMappedVirtualDisk(_ context.Co
 
 // --- Helpers ---
 
-func defaultConfig() DiskConfig {
-	return DiskConfig{
+func defaultConfig() Config {
+	return Config{
 		HostPath: `C:\test\disk.vhdx`,
 		ReadOnly: false,
-		Type:     DiskTypeVirtualDisk,
+		Type:     TypeVirtualDisk,
 	}
 }
 
@@ -96,16 +96,16 @@ func attachedDisk(t *testing.T) *Disk {
 // --- Tests ---
 
 func TestNewReserved(t *testing.T) {
-	cfg := DiskConfig{
+	cfg := Config{
 		HostPath: `C:\test\disk.vhdx`,
 		ReadOnly: true,
-		Type:     DiskTypePassThru,
+		Type:     TypePassThru,
 		EVDType:  "evd-type",
 	}
 	d := NewReserved(1, 2, cfg)
 
-	if d.State() != DiskStateReserved {
-		t.Errorf("expected state %d, got %d", DiskStateReserved, d.State())
+	if d.State() != StateReserved {
+		t.Errorf("expected state %d, got %d", StateReserved, d.State())
 	}
 	if d.Config() != cfg {
 		t.Errorf("expected config %+v, got %+v", cfg, d.Config())
@@ -115,11 +115,11 @@ func TestNewReserved(t *testing.T) {
 	}
 }
 
-func TestDiskConfigEquals(t *testing.T) {
-	base := DiskConfig{
+func TestConfigEquals(t *testing.T) {
+	base := Config{
 		HostPath: `C:\a.vhdx`,
 		ReadOnly: true,
-		Type:     DiskTypeVirtualDisk,
+		Type:     TypeVirtualDisk,
 		EVDType:  "evd",
 	}
 	same := base
@@ -140,7 +140,7 @@ func TestDiskConfigEquals(t *testing.T) {
 	}
 
 	diffType := base
-	diffType.Type = DiskTypePassThru
+	diffType.Type = TypePassThru
 	if base.Equals(diffType) {
 		t.Error("expected different Type to be not equal")
 	}
@@ -158,8 +158,8 @@ func TestAttachToVM_FromReserved_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateAttached {
+		t.Errorf("expected state %d, got %d", StateAttached, d.State())
 	}
 }
 
@@ -173,8 +173,8 @@ func TestAttachToVM_FromReserved_Error(t *testing.T) {
 	if !errors.Is(err, addErr) {
 		t.Errorf("expected wrapped error %v, got %v", addErr, err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d after failure, got %d", DiskStateDetached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d after failure, got %d", StateDetached, d.State())
 	}
 }
 
@@ -184,8 +184,8 @@ func TestAttachToVM_Idempotent_WhenAttached(t *testing.T) {
 	if err := d.AttachToVM(context.Background(), &mockVMSCSIAdder{}); err != nil {
 		t.Fatalf("unexpected error on idempotent attach: %v", err)
 	}
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateAttached {
+		t.Errorf("expected state %d, got %d", StateAttached, d.State())
 	}
 }
 
@@ -193,7 +193,7 @@ func TestAttachToVM_ErrorWhenDetached(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
 	// Fail attachment to move to detached.
 	_ = d.AttachToVM(context.Background(), &mockVMSCSIAdder{err: errors.New("fail")})
-	if d.State() != DiskStateDetached {
+	if d.State() != StateDetached {
 		t.Fatalf("expected detached state, got %d", d.State())
 	}
 	err := d.AttachToVM(context.Background(), &mockVMSCSIAdder{})
@@ -208,8 +208,8 @@ func TestDetachFromVM_FromAttached_NoMounts_NoLinuxGuest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d, got %d", StateDetached, d.State())
 	}
 }
 
@@ -219,8 +219,8 @@ func TestDetachFromVM_FromAttached_WithLinuxGuest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d, got %d", StateDetached, d.State())
 	}
 }
 
@@ -235,8 +235,8 @@ func TestDetachFromVM_LinuxEjectError(t *testing.T) {
 		t.Errorf("expected wrapped error %v, got %v", ejectErr, err)
 	}
 	// State should remain attached since eject failed before state transition.
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateAttached {
+		t.Errorf("expected state %d, got %d", StateAttached, d.State())
 	}
 }
 
@@ -252,15 +252,15 @@ func TestDetachFromVM_RemoveError(t *testing.T) {
 		t.Errorf("expected wrapped error %v, got %v", removeErr, err)
 	}
 	// State should be ejected since eject succeeded but removal failed.
-	if d.State() != DiskStateEjected {
-		t.Errorf("expected state %d, got %d", DiskStateEjected, d.State())
+	if d.State() != StateEjected {
+		t.Errorf("expected state %d, got %d", StateEjected, d.State())
 	}
 }
 
 func TestDetachFromVM_SkipsWhenMountsExist(t *testing.T) {
 	d := attachedDisk(t)
 	// Reserve a partition so len(mounts) > 0.
-	_, err := d.ReservePartition(context.Background(), mount.MountConfig{Partition: 1})
+	_, err := d.ReservePartition(context.Background(), mount.Config{Partition: 1})
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
 	}
@@ -269,8 +269,8 @@ func TestDetachFromVM_SkipsWhenMountsExist(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should remain attached because there are outstanding mounts.
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateAttached {
+		t.Errorf("expected state %d, got %d", StateAttached, d.State())
 	}
 }
 
@@ -294,7 +294,7 @@ func TestDetachFromVM_Idempotent_WhenDetached(t *testing.T) {
 
 func TestReservePartition_Success(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1, ReadOnly: true}
+	cfg := mount.Config{Partition: 1, ReadOnly: true}
 	m, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -302,14 +302,14 @@ func TestReservePartition_Success(t *testing.T) {
 	if m == nil {
 		t.Fatal("expected non-nil mount")
 	}
-	if m.State() != mount.MountStateReserved {
-		t.Errorf("expected mount state %d, got %d", mount.MountStateReserved, m.State())
+	if m.State() != mount.StateReserved {
+		t.Errorf("expected mount state %d, got %d", mount.StateReserved, m.State())
 	}
 }
 
 func TestReservePartition_SuccessFromReservedDisk(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	m, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -321,7 +321,7 @@ func TestReservePartition_SuccessFromReservedDisk(t *testing.T) {
 
 func TestReservePartition_SamePartitionSameConfig(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1, ReadOnly: true}
+	cfg := mount.Config{Partition: 1, ReadOnly: true}
 	m1, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("first reserve: %v", err)
@@ -337,12 +337,12 @@ func TestReservePartition_SamePartitionSameConfig(t *testing.T) {
 
 func TestReservePartition_SamePartitionDifferentConfig(t *testing.T) {
 	d := attachedDisk(t)
-	cfg1 := mount.MountConfig{Partition: 1, ReadOnly: true}
+	cfg1 := mount.Config{Partition: 1, ReadOnly: true}
 	_, err := d.ReservePartition(context.Background(), cfg1)
 	if err != nil {
 		t.Fatalf("first reserve: %v", err)
 	}
-	cfg2 := mount.MountConfig{Partition: 1, ReadOnly: false}
+	cfg2 := mount.Config{Partition: 1, ReadOnly: false}
 	_, err = d.ReservePartition(context.Background(), cfg2)
 	if err == nil {
 		t.Fatal("expected error reserving same partition with different config")
@@ -352,7 +352,7 @@ func TestReservePartition_SamePartitionDifferentConfig(t *testing.T) {
 func TestReservePartition_ErrorWhenDetached(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
 	_ = d.AttachToVM(context.Background(), &mockVMSCSIAdder{err: errors.New("fail")})
-	_, err := d.ReservePartition(context.Background(), mount.MountConfig{Partition: 1})
+	_, err := d.ReservePartition(context.Background(), mount.Config{Partition: 1})
 	if err == nil {
 		t.Fatal("expected error when disk is detached")
 	}
@@ -360,7 +360,7 @@ func TestReservePartition_ErrorWhenDetached(t *testing.T) {
 
 func TestMountPartitionToGuest_Success(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -392,7 +392,7 @@ func TestMountPartitionToGuest_PartitionNotFound(t *testing.T) {
 
 func TestMountPartitionToGuest_MountError(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -406,7 +406,7 @@ func TestMountPartitionToGuest_MountError(t *testing.T) {
 
 func TestUnmountPartitionFromGuest_Success(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -441,7 +441,7 @@ func TestUnmountPartitionFromGuest_PartitionNotFound_IsNoOp(t *testing.T) {
 
 func TestUnmountPartitionFromGuest_UnmountError(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -462,7 +462,7 @@ func TestUnmountPartitionFromGuest_UnmountError(t *testing.T) {
 
 func TestUnmountPartitionFromGuest_RemovesMountWhenFullyUnmounted(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -481,8 +481,8 @@ func TestUnmountPartitionFromGuest_RemovesMountWhenFullyUnmounted(t *testing.T) 
 	if err != nil {
 		t.Fatalf("DetachFromVM after unmount: %v", err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d, got %d", StateDetached, d.State())
 	}
 }
 
@@ -491,7 +491,7 @@ func TestUnmountPartitionFromGuest_RetryAfterDetachFailure(t *testing.T) {
 	// On retry, UnmountPartitionFromGuest should be a no-op (partition already removed)
 	// so that DetachFromVM can be retried.
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -520,8 +520,8 @@ func TestUnmountPartitionFromGuest_RetryAfterDetachFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retry DetachFromVM: %v", err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d, got %d", StateDetached, d.State())
 	}
 }
 
@@ -529,7 +529,7 @@ func TestUnmountPartitionFromGuest_RetryAfterDetachFailure(t *testing.T) {
 
 func TestMountPartitionToGuest_WCOW_Success(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -545,7 +545,7 @@ func TestMountPartitionToGuest_WCOW_Success(t *testing.T) {
 
 func TestMountPartitionToGuest_WCOW_MountError(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -558,7 +558,7 @@ func TestMountPartitionToGuest_WCOW_MountError(t *testing.T) {
 
 func TestMountPartitionToGuest_WCOW_FormatWithRefs(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1, FormatWithRefs: true}
+	cfg := mount.Config{Partition: 1, FormatWithRefs: true}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -574,7 +574,7 @@ func TestMountPartitionToGuest_WCOW_FormatWithRefs(t *testing.T) {
 
 func TestUnmountPartitionFromGuest_WCOW_Success(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -591,7 +591,7 @@ func TestUnmountPartitionFromGuest_WCOW_Success(t *testing.T) {
 
 func TestUnmountPartitionFromGuest_WCOW_UnmountError(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -612,7 +612,7 @@ func TestUnmountPartitionFromGuest_WCOW_UnmountError(t *testing.T) {
 
 func TestUnmountPartitionFromGuest_WCOW_RemovesMountWhenFullyUnmounted(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
@@ -629,7 +629,7 @@ func TestUnmountPartitionFromGuest_WCOW_RemovesMountWhenFullyUnmounted(t *testin
 	if err != nil {
 		t.Fatalf("DetachFromVM after unmount: %v", err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d, got %d", StateDetached, d.State())
 	}
 }

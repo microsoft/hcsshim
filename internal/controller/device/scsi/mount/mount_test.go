@@ -54,8 +54,8 @@ func (m *mockWindowsUnmounter) RemoveWCOWMappedVirtualDisk(_ context.Context, _ 
 
 // --- Helpers ---
 
-func defaultMountConfig() MountConfig {
-	return MountConfig{
+func defaultConfig() Config {
+	return Config{
 		Partition: 1,
 		ReadOnly:  false,
 	}
@@ -63,7 +63,7 @@ func defaultMountConfig() MountConfig {
 
 func mountedLCOW(t *testing.T) *Mount {
 	t.Helper()
-	m := NewReserved(0, 0, defaultMountConfig())
+	m := NewReserved(0, 0, defaultConfig())
 	if _, err := m.MountToGuest(context.Background(), &mockLinuxMounter{}, nil); err != nil {
 		t.Fatalf("setup MountToGuest: %v", err)
 	}
@@ -72,7 +72,7 @@ func mountedLCOW(t *testing.T) *Mount {
 
 func mountedWCOW(t *testing.T) *Mount {
 	t.Helper()
-	m := NewReserved(0, 0, defaultMountConfig())
+	m := NewReserved(0, 0, defaultConfig())
 	if _, err := m.MountToGuest(context.Background(), nil, &mockWindowsMounter{}); err != nil {
 		t.Fatalf("setup MountToGuest WCOW: %v", err)
 	}
@@ -82,20 +82,20 @@ func mountedWCOW(t *testing.T) *Mount {
 // --- Tests ---
 
 func TestNewReserved(t *testing.T) {
-	cfg := MountConfig{
+	cfg := Config{
 		Partition:  2,
 		ReadOnly:   true,
 		Encrypted:  true,
 		Filesystem: "ext4",
 	}
 	m := NewReserved(1, 3, cfg)
-	if m.State() != MountStateReserved {
-		t.Errorf("expected state %d, got %d", MountStateReserved, m.State())
+	if m.State() != StateReserved {
+		t.Errorf("expected state %d, got %d", StateReserved, m.State())
 	}
 }
 
-func TestMountConfigEquals(t *testing.T) {
-	base := MountConfig{
+func TestConfigEquals(t *testing.T) {
+	base := Config{
 		ReadOnly:         true,
 		Encrypted:        true,
 		EnsureFilesystem: true,
@@ -104,7 +104,7 @@ func TestMountConfigEquals(t *testing.T) {
 		FormatWithRefs:   false,
 		Options:          []string{"rw", "noatime"},
 	}
-	same := MountConfig{
+	same := Config{
 		ReadOnly:         true,
 		Encrypted:        true,
 		EnsureFilesystem: true,
@@ -119,16 +119,16 @@ func TestMountConfigEquals(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		modify func(c *MountConfig)
+		modify func(c *Config)
 	}{
-		{"ReadOnly", func(c *MountConfig) { c.ReadOnly = false }},
-		{"Encrypted", func(c *MountConfig) { c.Encrypted = false }},
-		{"EnsureFilesystem", func(c *MountConfig) { c.EnsureFilesystem = false }},
-		{"Filesystem", func(c *MountConfig) { c.Filesystem = "xfs" }},
-		{"BlockDev", func(c *MountConfig) { c.BlockDev = true }},
-		{"FormatWithRefs", func(c *MountConfig) { c.FormatWithRefs = true }},
-		{"Options", func(c *MountConfig) { c.Options = []string{"ro"} }},
-		{"OptionsNil", func(c *MountConfig) { c.Options = nil }},
+		{"ReadOnly", func(c *Config) { c.ReadOnly = false }},
+		{"Encrypted", func(c *Config) { c.Encrypted = false }},
+		{"EnsureFilesystem", func(c *Config) { c.EnsureFilesystem = false }},
+		{"Filesystem", func(c *Config) { c.Filesystem = "xfs" }},
+		{"BlockDev", func(c *Config) { c.BlockDev = true }},
+		{"FormatWithRefs", func(c *Config) { c.FormatWithRefs = true }},
+		{"Options", func(c *Config) { c.Options = []string{"ro"} }},
+		{"OptionsNil", func(c *Config) { c.Options = nil }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,7 +142,7 @@ func TestMountConfigEquals(t *testing.T) {
 }
 
 func TestReserve_SameConfig(t *testing.T) {
-	cfg := defaultMountConfig()
+	cfg := defaultConfig()
 	m := NewReserved(0, 0, cfg)
 	if err := m.Reserve(cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -150,8 +150,8 @@ func TestReserve_SameConfig(t *testing.T) {
 }
 
 func TestReserve_DifferentConfig(t *testing.T) {
-	m := NewReserved(0, 0, MountConfig{ReadOnly: true})
-	err := m.Reserve(MountConfig{ReadOnly: false})
+	m := NewReserved(0, 0, Config{ReadOnly: true})
+	err := m.Reserve(Config{ReadOnly: false})
 	if err == nil {
 		t.Fatal("expected error for different config")
 	}
@@ -159,7 +159,7 @@ func TestReserve_DifferentConfig(t *testing.T) {
 
 func TestReserve_WhenMounted(t *testing.T) {
 	m := mountedLCOW(t)
-	cfg := defaultMountConfig()
+	cfg := defaultConfig()
 	if err := m.Reserve(cfg); err != nil {
 		t.Fatalf("unexpected error reserving mounted mount: %v", err)
 	}
@@ -168,17 +168,17 @@ func TestReserve_WhenMounted(t *testing.T) {
 func TestReserve_WhenUnmounted(t *testing.T) {
 	m := mountedLCOW(t)
 	_ = m.UnmountFromGuest(context.Background(), &mockLinuxUnmounter{}, nil)
-	if m.State() != MountStateUnmounted {
+	if m.State() != StateUnmounted {
 		t.Fatalf("expected unmounted, got %d", m.State())
 	}
-	err := m.Reserve(defaultMountConfig())
+	err := m.Reserve(defaultConfig())
 	if err == nil {
 		t.Fatal("expected error reserving unmounted mount")
 	}
 }
 
 func TestMountToGuest_LCOW_Success(t *testing.T) {
-	m := NewReserved(0, 0, defaultMountConfig())
+	m := NewReserved(0, 0, defaultConfig())
 	guestPath, err := m.MountToGuest(context.Background(), &mockLinuxMounter{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -186,13 +186,13 @@ func TestMountToGuest_LCOW_Success(t *testing.T) {
 	if guestPath == "" {
 		t.Error("expected non-empty guestPath")
 	}
-	if m.State() != MountStateMounted {
-		t.Errorf("expected state %d, got %d", MountStateMounted, m.State())
+	if m.State() != StateMounted {
+		t.Errorf("expected state %d, got %d", StateMounted, m.State())
 	}
 }
 
 func TestMountToGuest_WCOW_Success(t *testing.T) {
-	m := NewReserved(0, 0, defaultMountConfig())
+	m := NewReserved(0, 0, defaultConfig())
 	guestPath, err := m.MountToGuest(context.Background(), nil, &mockWindowsMounter{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -200,14 +200,14 @@ func TestMountToGuest_WCOW_Success(t *testing.T) {
 	if guestPath == "" {
 		t.Error("expected non-empty guestPath")
 	}
-	if m.State() != MountStateMounted {
-		t.Errorf("expected state %d, got %d", MountStateMounted, m.State())
+	if m.State() != StateMounted {
+		t.Errorf("expected state %d, got %d", StateMounted, m.State())
 	}
 }
 
 func TestMountToGuest_LCOW_Error(t *testing.T) {
 	mountErr := errors.New("lcow mount failed")
-	m := NewReserved(0, 0, defaultMountConfig())
+	m := NewReserved(0, 0, defaultConfig())
 	_, err := m.MountToGuest(context.Background(), &mockLinuxMounter{err: mountErr}, nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -215,14 +215,14 @@ func TestMountToGuest_LCOW_Error(t *testing.T) {
 	if !errors.Is(err, mountErr) {
 		t.Errorf("expected wrapped error %v, got %v", mountErr, err)
 	}
-	if m.State() != MountStateUnmounted {
-		t.Errorf("expected state %d after failure, got %d", MountStateUnmounted, m.State())
+	if m.State() != StateUnmounted {
+		t.Errorf("expected state %d after failure, got %d", StateUnmounted, m.State())
 	}
 }
 
 func TestMountToGuest_WCOW_Error(t *testing.T) {
 	mountErr := errors.New("wcow mount failed")
-	m := NewReserved(0, 0, defaultMountConfig())
+	m := NewReserved(0, 0, defaultConfig())
 	_, err := m.MountToGuest(context.Background(), nil, &mockWindowsMounter{err: mountErr})
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -230,14 +230,14 @@ func TestMountToGuest_WCOW_Error(t *testing.T) {
 	if !errors.Is(err, mountErr) {
 		t.Errorf("expected wrapped error %v, got %v", mountErr, err)
 	}
-	if m.State() != MountStateUnmounted {
-		t.Errorf("expected state %d after failure, got %d", MountStateUnmounted, m.State())
+	if m.State() != StateUnmounted {
+		t.Errorf("expected state %d after failure, got %d", StateUnmounted, m.State())
 	}
 }
 
 func TestMountToGuest_WCOW_FormatWithRefs(t *testing.T) {
 	scratchCalled := false
-	m := NewReserved(0, 0, MountConfig{Partition: 1, FormatWithRefs: true})
+	m := NewReserved(0, 0, Config{Partition: 1, FormatWithRefs: true})
 	wm := &mockWindowsMounter{scratchFn: func() { scratchCalled = true }}
 	_, err := m.MountToGuest(context.Background(), nil, wm)
 	if err != nil {
@@ -257,8 +257,8 @@ func TestMountToGuest_Idempotent_WhenMounted(t *testing.T) {
 	if guestPath == "" {
 		t.Error("expected non-empty guestPath on idempotent mount")
 	}
-	if m.State() != MountStateMounted {
-		t.Errorf("expected state %d, got %d", MountStateMounted, m.State())
+	if m.State() != StateMounted {
+		t.Errorf("expected state %d, got %d", StateMounted, m.State())
 	}
 }
 
@@ -271,14 +271,12 @@ func TestMountToGuest_ErrorWhenUnmounted(t *testing.T) {
 	}
 }
 
-func TestMountToGuest_PanicsWhenBothGuestsNil(t *testing.T) {
-	m := NewReserved(0, 0, defaultMountConfig())
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic when both guests are nil")
-		}
-	}()
-	_, _ = m.MountToGuest(context.Background(), nil, nil)
+func TestMountToGuest_ErrorWhenBothGuestsNil(t *testing.T) {
+	m := NewReserved(0, 0, defaultConfig())
+	_, err := m.MountToGuest(context.Background(), nil, nil)
+	if err == nil {
+		t.Fatal("expected error when both guests are nil")
+	}
 }
 
 func TestUnmountFromGuest_LCOW_Success(t *testing.T) {
@@ -287,8 +285,8 @@ func TestUnmountFromGuest_LCOW_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if m.State() != MountStateUnmounted {
-		t.Errorf("expected state %d, got %d", MountStateUnmounted, m.State())
+	if m.State() != StateUnmounted {
+		t.Errorf("expected state %d, got %d", StateUnmounted, m.State())
 	}
 }
 
@@ -298,8 +296,8 @@ func TestUnmountFromGuest_WCOW_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if m.State() != MountStateUnmounted {
-		t.Errorf("expected state %d, got %d", MountStateUnmounted, m.State())
+	if m.State() != StateUnmounted {
+		t.Errorf("expected state %d, got %d", StateUnmounted, m.State())
 	}
 }
 
@@ -314,8 +312,8 @@ func TestUnmountFromGuest_LCOW_Error(t *testing.T) {
 		t.Errorf("expected wrapped error %v, got %v", unmountErr, err)
 	}
 	// State should remain mounted since unmount failed.
-	if m.State() != MountStateMounted {
-		t.Errorf("expected state %d, got %d", MountStateMounted, m.State())
+	if m.State() != StateMounted {
+		t.Errorf("expected state %d, got %d", StateMounted, m.State())
 	}
 }
 
@@ -329,20 +327,20 @@ func TestUnmountFromGuest_WCOW_Error(t *testing.T) {
 	if !errors.Is(err, unmountErr) {
 		t.Errorf("expected wrapped error %v, got %v", unmountErr, err)
 	}
-	if m.State() != MountStateMounted {
-		t.Errorf("expected state %d, got %d", MountStateMounted, m.State())
+	if m.State() != StateMounted {
+		t.Errorf("expected state %d, got %d", StateMounted, m.State())
 	}
 }
 
 func TestUnmountFromGuest_FromReserved_DecrementsRefCount(t *testing.T) {
-	m := NewReserved(0, 0, defaultMountConfig())
+	m := NewReserved(0, 0, defaultConfig())
 	err := m.UnmountFromGuest(context.Background(), &mockLinuxUnmounter{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should still be reserved since no guest mount was done.
-	if m.State() != MountStateReserved {
-		t.Errorf("expected state %d, got %d", MountStateReserved, m.State())
+	if m.State() != StateReserved {
+		t.Errorf("expected state %d, got %d", StateReserved, m.State())
 	}
 }
 
@@ -364,7 +362,7 @@ func TestUnmountFromGuest_ErrorWhenBothGuestsNil(t *testing.T) {
 }
 
 func TestUnmountFromGuest_MultipleRefs_DoesNotUnmountUntilLastRef(t *testing.T) {
-	cfg := defaultMountConfig()
+	cfg := defaultConfig()
 	m := NewReserved(0, 0, cfg)
 	// Add a second reservation.
 	if err := m.Reserve(cfg); err != nil {
@@ -378,14 +376,14 @@ func TestUnmountFromGuest_MultipleRefs_DoesNotUnmountUntilLastRef(t *testing.T) 
 	if err := m.UnmountFromGuest(context.Background(), &mockLinuxUnmounter{}, nil); err != nil {
 		t.Fatalf("first UnmountFromGuest: %v", err)
 	}
-	if m.State() != MountStateMounted {
-		t.Errorf("expected state %d after first unmount, got %d", MountStateMounted, m.State())
+	if m.State() != StateMounted {
+		t.Errorf("expected state %d after first unmount, got %d", StateMounted, m.State())
 	}
 	// Second unmount should actually unmount.
 	if err := m.UnmountFromGuest(context.Background(), &mockLinuxUnmounter{}, nil); err != nil {
 		t.Fatalf("second UnmountFromGuest: %v", err)
 	}
-	if m.State() != MountStateUnmounted {
-		t.Errorf("expected state %d after final unmount, got %d", MountStateUnmounted, m.State())
+	if m.State() != StateUnmounted {
+		t.Errorf("expected state %d after final unmount, got %d", StateUnmounted, m.State())
 	}
 }

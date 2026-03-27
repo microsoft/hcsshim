@@ -12,7 +12,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/mount"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/google/uuid"
+
+	"github.com/Microsoft/go-winio/pkg/guid"
 )
 
 // --- Mock types ---
@@ -67,16 +68,16 @@ func (m *mockWindowsGuestOps) RemoveWCOWMappedVirtualDisk(_ context.Context, _ g
 
 // --- Helpers ---
 
-func defaultDiskConfig() disk.DiskConfig {
-	return disk.DiskConfig{
+func defaultDiskConfig() disk.Config {
+	return disk.Config{
 		HostPath: `C:\test\disk.vhdx`,
 		ReadOnly: false,
-		Type:     disk.DiskTypeVirtualDisk,
+		Type:     disk.TypeVirtualDisk,
 	}
 }
 
-func defaultMountConfig() mount.MountConfig {
-	return mount.MountConfig{
+func defaultMountConfig() mount.Config {
+	return mount.Config{
 		Partition: 1,
 		ReadOnly:  false,
 	}
@@ -86,7 +87,7 @@ func newController(vm *mockVMOps, lg *mockLinuxGuestOps, wg *mockWindowsGuestOps
 	return New(1, vm, lg, wg)
 }
 
-func reservedController(t *testing.T) (*Controller, uuid.UUID) {
+func reservedController(t *testing.T) (*Controller, guid.GUID) {
 	t.Helper()
 	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
 	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
@@ -96,7 +97,7 @@ func reservedController(t *testing.T) (*Controller, uuid.UUID) {
 	return c, id
 }
 
-func mappedController(t *testing.T) (*Controller, uuid.UUID) {
+func mappedController(t *testing.T) (*Controller, guid.GUID) {
 	t.Helper()
 	c, id := reservedController(t)
 	if _, err := c.MapToGuest(context.Background(), id); err != nil {
@@ -122,7 +123,7 @@ func TestReserve_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id == uuid.Nil {
+	if id == (guid.GUID{}) {
 		t.Fatal("expected non-nil reservation ID")
 	}
 }
@@ -147,17 +148,17 @@ func TestReserve_SameDiskSamePartition(t *testing.T) {
 func TestReserve_SameDiskDifferentPartition(t *testing.T) {
 	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
 	dc := defaultDiskConfig()
-	_, err := c.Reserve(context.Background(), dc, mount.MountConfig{Partition: 1})
+	_, err := c.Reserve(context.Background(), dc, mount.Config{Partition: 1})
 	if err != nil {
 		t.Fatalf("first reserve: %v", err)
 	}
-	_, err = c.Reserve(context.Background(), dc, mount.MountConfig{Partition: 2})
+	_, err = c.Reserve(context.Background(), dc, mount.Config{Partition: 2})
 	if err != nil {
 		t.Fatalf("second reserve different partition: %v", err)
 	}
 }
 
-func TestReserve_SamePathDifferentDiskConfig(t *testing.T) {
+func TestReserve_SamePathDifferentConfig(t *testing.T) {
 	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
 	dc := defaultDiskConfig()
 	mc := defaultMountConfig()
@@ -176,11 +177,11 @@ func TestReserve_SamePathDifferentDiskConfig(t *testing.T) {
 func TestReserve_DifferentDisks(t *testing.T) {
 	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
 	mc := defaultMountConfig()
-	_, err := c.Reserve(context.Background(), disk.DiskConfig{HostPath: `C:\a.vhdx`, Type: disk.DiskTypeVirtualDisk}, mc)
+	_, err := c.Reserve(context.Background(), disk.Config{HostPath: `C:\a.vhdx`, Type: disk.TypeVirtualDisk}, mc)
 	if err != nil {
 		t.Fatalf("first reserve: %v", err)
 	}
-	_, err = c.Reserve(context.Background(), disk.DiskConfig{HostPath: `C:\b.vhdx`, Type: disk.DiskTypeVirtualDisk}, mc)
+	_, err = c.Reserve(context.Background(), disk.Config{HostPath: `C:\b.vhdx`, Type: disk.TypeVirtualDisk}, mc)
 	if err != nil {
 		t.Fatalf("second reserve: %v", err)
 	}
@@ -199,9 +200,9 @@ func TestReserve_FillsAllSlots(t *testing.T) {
 	c := New(1, &mockVMOps{}, &mockLinuxGuestOps{}, nil)
 	mc := defaultMountConfig()
 	for i := range numLUNsPerController {
-		dc := disk.DiskConfig{
+		dc := disk.Config{
 			HostPath: fmt.Sprintf(`C:\disk%d.vhdx`, i),
-			Type:     disk.DiskTypeVirtualDisk,
+			Type:     disk.TypeVirtualDisk,
 		}
 		_, err := c.Reserve(context.Background(), dc, mc)
 		if err != nil {
@@ -209,7 +210,7 @@ func TestReserve_FillsAllSlots(t *testing.T) {
 		}
 	}
 	// Next reservation should fail.
-	_, err := c.Reserve(context.Background(), disk.DiskConfig{HostPath: `C:\overflow.vhdx`, Type: disk.DiskTypeVirtualDisk}, mc)
+	_, err := c.Reserve(context.Background(), disk.Config{HostPath: `C:\overflow.vhdx`, Type: disk.TypeVirtualDisk}, mc)
 	if err == nil {
 		t.Fatal("expected error when all slots are full")
 	}
@@ -230,7 +231,11 @@ func TestMapToGuest_Success(t *testing.T) {
 
 func TestMapToGuest_UnknownReservation(t *testing.T) {
 	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
-	_, err := c.MapToGuest(context.Background(), uuid.New())
+	unknownID, err := guid.NewV4()
+	if err != nil {
+		t.Fatalf("NewV4: %v", err)
+	}
+	_, err = c.MapToGuest(context.Background(), unknownID)
 	if err == nil {
 		t.Fatal("expected error for unknown reservation")
 	}
@@ -285,7 +290,11 @@ func TestUnmapFromGuest_Success(t *testing.T) {
 
 func TestUnmapFromGuest_UnknownReservation(t *testing.T) {
 	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
-	err := c.UnmapFromGuest(context.Background(), uuid.New())
+	unknownID, err := guid.NewV4()
+	if err != nil {
+		t.Fatalf("NewV4: %v", err)
+	}
+	err = c.UnmapFromGuest(context.Background(), unknownID)
 	if err == nil {
 		t.Fatal("expected error for unknown reservation")
 	}
@@ -405,7 +414,7 @@ func TestReserveAfterUnmap_ReusesSlot(t *testing.T) {
 		t.Fatalf("UnmapFromGuest: %v", err)
 	}
 	// Reserve a different disk in the now-freed slot.
-	dc := disk.DiskConfig{HostPath: `C:\other.vhdx`, Type: disk.DiskTypeVirtualDisk}
+	dc := disk.Config{HostPath: `C:\other.vhdx`, Type: disk.TypeVirtualDisk}
 	_, err := c.Reserve(context.Background(), dc, defaultMountConfig())
 	if err != nil {
 		t.Fatalf("reserve after unmap: %v", err)

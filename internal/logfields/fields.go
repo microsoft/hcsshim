@@ -22,6 +22,13 @@ const (
 	Bytes = "bytes"
 	Pipe  = "pipe"
 
+	// SCSI Constants
+
+	Controller = "controller"
+	LUN        = "lun"
+	DiskType   = "disk-type"
+	Partition  = "partition"
+
 	// Common Misc
 
 	Attempt = "attemptNo"
