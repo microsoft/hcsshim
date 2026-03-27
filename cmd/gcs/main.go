@@ -63,7 +63,7 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 	// http://man7.org/linux/man-pages/man2/eventfd.2.html
 	count := 0
 	buf := make([]byte, 8)
-	isV1 := mgr.GetV1Cgroup() != nil
+	isV1 := !cgroup.IsCgroupV2()
 	for {
 		if _, err := efdFile.Read(buf); err != nil {
 			logrus.WithError(err).WithField("cgroup", cgName).Error("failed to read from eventfd")

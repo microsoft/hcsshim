@@ -186,7 +186,8 @@ func (v *V2Mgr) RegisterMemoryEvent(event cgroups1.MemoryEvent) (uintptr, error)
 	}
 
 	go func() {
-		defer unix.Close(fd)
+		// Note: the caller owns the fd lifetime (via os.NewFile + Close).
+		// Do not close fd here — it would close the raw fd under the caller's os.File.
 		var lastMemoryUsage uint64
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -241,7 +242,8 @@ func (v *V2Mgr) OOMEventFD() (uintptr, error) {
 	}
 
 	go func() {
-		defer unix.Close(fd)
+		// Note: the caller owns the fd lifetime (via os.NewFile + Close).
+		// Do not close fd here — it would close the raw fd under the caller's os.File.
 		var lastOOMKillCount uint64
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
