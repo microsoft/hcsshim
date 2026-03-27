@@ -11,17 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-// VPMemManager manages adding and removing virtual persistent memory devices for a Utility VM.
-type VPMemManager interface {
-	// AddVPMemDevice adds a virtual pmem device to the Utility VM.
-	AddVPMemDevice(ctx context.Context, id uint32, settings hcsschema.VirtualPMemDevice) error
-
-	// RemoveVPMemDevice removes a virtual pmem device from the Utility VM.
-	RemoveVPMemDevice(ctx context.Context, id uint32) error
-}
-
-var _ VPMemManager = (*UtilityVM)(nil)
-
 func (uvm *UtilityVM) AddVPMemDevice(ctx context.Context, id uint32, settings hcsschema.VirtualPMemDevice) error {
 	request := &hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeAdd,

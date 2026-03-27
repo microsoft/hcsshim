@@ -11,18 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// LCOWDeviceManager exposes VPCI and VPMem device operations in the LCOW guest.
-type LCOWDeviceManager interface {
-	// AddVPCIDevice adds a VPCI device to the guest.
-	AddVPCIDevice(ctx context.Context, settings guestresource.LCOWMappedVPCIDevice) error
-	// AddVPMemDevice adds a VPMem device to the guest.
-	AddVPMemDevice(ctx context.Context, settings guestresource.LCOWMappedVPMemDevice) error
-	// RemoveVPMemDevice removes a VPMem device from the guest.
-	RemoveVPMemDevice(ctx context.Context, settings guestresource.LCOWMappedVPMemDevice) error
-}
-
-var _ LCOWDeviceManager = (*Guest)(nil)
-
 // AddVPCIDevice adds a VPCI device in the guest.
 func (gm *Guest) AddVPCIDevice(ctx context.Context, settings guestresource.LCOWMappedVPCIDevice) error {
 	request := &hcsschema.ModifySettingRequest{
