@@ -15,23 +15,23 @@ import (
 // addNetNSInsideGuest maps a host network namespace into the guest as a managed Guest Network Namespace.
 // This is a no-op for LCOW as the network namespace is created via pause container
 // and the adapters are added dynamically.
-func (m *Manager) addNetNSInsideGuest(_ context.Context, _ *hcn.HostComputeNamespace) error {
+func (c *Controller) addNetNSInsideGuest(_ context.Context, _ *hcn.HostComputeNamespace) error {
 	return nil
 }
 
 // removeNetNSInsideGuest is a no-op for LCOW; the guest-managed namespace
 // is torn down automatically when pause container exits.
-func (m *Manager) removeNetNSInsideGuest(_ context.Context, _ string) error {
+func (c *Controller) removeNetNSInsideGuest(_ context.Context, _ string) error {
 	return nil
 }
 
 // addEndpointToGuestNamespace hot-adds an HCN endpoint to the UVM and,
 // configures it inside the LCOW guest.
-func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint, isPolicyBasedRoutingSupported bool) error {
+func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint, isPolicyBasedRoutingSupported bool) error {
 	log.G(ctx).Info("adding endpoint to guest namespace")
 
 	// 1. Host-side hot-add.
-	if err := m.vmNetManager.AddNIC(ctx, nicID, &hcsschema.NetworkAdapter{
+	if err := c.vmNetManager.AddNIC(ctx, nicID, &hcsschema.NetworkAdapter{
 		EndpointId: endpoint.Id,
 		MacAddress: endpoint.MacAddress,
 	}); err != nil {
@@ -41,10 +41,10 @@ func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string,
 	log.G(ctx).Debug("added NIC to host")
 
 	// Track early so Teardown cleans up even if the guest Add call fails.
-	m.vmEndpoints[nicID] = endpoint
+	c.vmEndpoints[nicID] = endpoint
 
 	// 2. Guest-side add.
-	if m.isNamespaceSupportedByGuest {
+	if c.isNamespaceSupportedByGuest {
 		lcowAdapter, err := guestresource.BuildLCOWNetworkAdapter(nicID, endpoint, isPolicyBasedRoutingSupported)
 		if err != nil {
 			return fmt.Errorf("build LCOW network adapter for endpoint %s: %w", endpoint.Id, err)
@@ -52,7 +52,7 @@ func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string,
 
 		log.G(ctx).Tracef("built LCOW network adapter: %+v", lcowAdapter)
 
-		if err := m.linuxGuestMgr.AddLCOWNetworkInterface(ctx, lcowAdapter); err != nil {
+		if err := c.linuxGuestMgr.AddLCOWNetworkInterface(ctx, lcowAdapter); err != nil {
 			return fmt.Errorf("add NIC %s to guest (endpoint %s): %w", nicID, endpoint.Id, err)
 		}
 
@@ -64,13 +64,13 @@ func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string,
 
 // removeEndpointFromGuestNamespace removes an endpoint from the LCOW guest
 // and then hot-removes the NIC from the host.
-func (m *Manager) removeEndpointFromGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint) error {
+func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint) error {
 	log.G(ctx).Info("removing endpoint from guest namespace")
 
-	if m.isNamespaceSupportedByGuest {
+	if c.isNamespaceSupportedByGuest {
 		// 1. LCOW guest-side removal.
-		if err := m.linuxGuestMgr.RemoveLCOWNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{
-			NamespaceID: m.namespaceID,
+		if err := c.linuxGuestMgr.RemoveLCOWNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{
+			NamespaceID: c.namespaceID,
 			ID:          nicID,
 		}); err != nil {
 			return fmt.Errorf("remove NIC %s from guest: %w", nicID, err)
@@ -80,7 +80,7 @@ func (m *Manager) removeEndpointFromGuestNamespace(ctx context.Context, nicID st
 	}
 
 	// 2. Host-side removal.
-	if err := m.vmNetManager.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
+	if err := c.vmNetManager.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
 		EndpointId: endpoint.Id,
 		MacAddress: endpoint.MacAddress,
 	}); err != nil {

@@ -18,13 +18,13 @@ import (
 // addNetNSInsideGuest maps a host network namespace into the guest as a managed Guest Network Namespace.
 // For WCOWs, this method sends a request to GCS for adding the namespace.
 // GCS forwards the request to GNS which coordinates with HNS to add the namespace to the guest.
-func (m *Manager) addNetNSInsideGuest(ctx context.Context, hcnNamespace *hcn.HostComputeNamespace) error {
+func (c *Controller) addNetNSInsideGuest(ctx context.Context, hcnNamespace *hcn.HostComputeNamespace) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Namespace, hcnNamespace.Id))
 
-	if m.isNamespaceSupportedByGuest {
+	if c.isNamespaceSupportedByGuest {
 		log.G(ctx).Info("adding network namespace to guest")
 
-		if err := m.winGuestMgr.AddNetworkNamespace(ctx, hcnNamespace); err != nil {
+		if err := c.winGuestMgr.AddNetworkNamespace(ctx, hcnNamespace); err != nil {
 			return fmt.Errorf("add network namespace %s to guest: %w", hcnNamespace.Id, err)
 		}
 	}
@@ -33,8 +33,8 @@ func (m *Manager) addNetNSInsideGuest(ctx context.Context, hcnNamespace *hcn.Hos
 }
 
 // removeNetNSInsideGuest removes the HCN namespace from the WCOW guest via GCS/GNS.
-func (m *Manager) removeNetNSInsideGuest(ctx context.Context, namespaceID string) error {
-	if m.isNamespaceSupportedByGuest {
+func (c *Controller) removeNetNSInsideGuest(ctx context.Context, namespaceID string) error {
+	if c.isNamespaceSupportedByGuest {
 		log.G(ctx).Info("removing network namespace from guest")
 
 		hcnNamespace, err := hcn.GetNamespaceByID(namespaceID)
@@ -42,7 +42,7 @@ func (m *Manager) removeNetNSInsideGuest(ctx context.Context, namespaceID string
 			return fmt.Errorf("get network namespace %s: %w", namespaceID, err)
 		}
 
-		if err := m.winGuestMgr.RemoveNetworkNamespace(ctx, hcnNamespace); err != nil {
+		if err := c.winGuestMgr.RemoveNetworkNamespace(ctx, hcnNamespace); err != nil {
 			return fmt.Errorf("remove network namespace %s from guest: %w", namespaceID, err)
 		}
 	}
@@ -52,11 +52,11 @@ func (m *Manager) removeNetNSInsideGuest(ctx context.Context, namespaceID string
 
 // addEndpointToGuestNamespace wires an HCN endpoint into the WCOW guest in three steps:
 // pre-add (guest notification), host-side hot-add, and guest-side finalisation.
-func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint, _ bool) error {
+func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint, _ bool) error {
 	log.G(ctx).Info("adding network endpoint to guest namespace")
 
 	// 1. Guest pre-add: informs WCOW guest that a NIC is about to arrive.
-	if err := m.winGuestMgr.AddNetworkInterface(
+	if err := c.winGuestMgr.AddNetworkInterface(
 		ctx,
 		nicID,
 		guestrequest.RequestTypePreAdd,
@@ -68,7 +68,7 @@ func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string,
 	log.G(ctx).Info("pre-added network endpoint to guest namespace")
 
 	// 2. Host-side hot-add.
-	if err := m.vmNetManager.AddNIC(ctx, nicID, &hcsschema.NetworkAdapter{
+	if err := c.vmNetManager.AddNIC(ctx, nicID, &hcsschema.NetworkAdapter{
 		EndpointId: endpoint.Id,
 		MacAddress: endpoint.MacAddress,
 	}); err != nil {
@@ -78,10 +78,10 @@ func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string,
 	log.G(ctx).Info("hot-added network endpoint to host")
 
 	// Track early so Teardown cleans up even if the guest Add call fails.
-	m.vmEndpoints[nicID] = endpoint
+	c.vmEndpoints[nicID] = endpoint
 
 	// 3. Guest add: finalise the NIC in the WCOW guest.
-	if err := m.winGuestMgr.AddNetworkInterface(
+	if err := c.winGuestMgr.AddNetworkInterface(
 		ctx,
 		nicID,
 		guestrequest.RequestTypeAdd,
@@ -97,11 +97,11 @@ func (m *Manager) addEndpointToGuestNamespace(ctx context.Context, nicID string,
 
 // removeEndpointFromGuestNamespace removes an endpoint from the WCOW guest and then
 // hot-removes the NIC from the host.
-func (m *Manager) removeEndpointFromGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint) error {
+func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint) error {
 	log.G(ctx).Info("removing network endpoint from guest namespace")
 
 	// 1. Guest-side removal.
-	if err := m.winGuestMgr.RemoveNetworkInterface(
+	if err := c.winGuestMgr.RemoveNetworkInterface(
 		ctx,
 		nicID,
 		guestrequest.RequestTypeRemove,
@@ -113,7 +113,7 @@ func (m *Manager) removeEndpointFromGuestNamespace(ctx context.Context, nicID st
 	log.G(ctx).Info("removed network endpoint from guest namespace")
 
 	// 2. Host-side removal.
-	if err := m.vmNetManager.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
+	if err := c.vmNetManager.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
 		EndpointId: endpoint.Id,
 		MacAddress: endpoint.MacAddress,
 	}); err != nil {

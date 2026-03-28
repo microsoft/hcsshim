@@ -4,8 +4,7 @@
 // running inside a Utility VM (UVM).
 //
 // It handles attaching an HCN namespace and its endpoints to the guest VM,
-// and tearing them down on pod removal. The [Controller] interface is the
-// primary entry point, with [Manager] as its concrete implementation.
+// and tearing them down on pod removal.
 //
 // # Lifecycle
 //

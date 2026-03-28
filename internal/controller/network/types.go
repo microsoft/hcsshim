@@ -12,16 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// Controller manages the network lifecycle for a single pod running inside a UVM.
-type Controller interface {
-	// Setup attaches the HCN namespace and its endpoints to the guest VM.
-	Setup(ctx context.Context, opts *SetupOptions) error
-
-	// Teardown removes all guest-side NICs and the network namespace from the VM.
-	// It is idempotent: calling it on an already torn-down or unconfigured network is a no-op.
-	Teardown(ctx context.Context) error
-}
-
 // SetupOptions holds the configuration required to set up the network for a pod.
 type SetupOptions struct {
 	// NetworkNamespace is the HCN namespace ID to attach to the guest.

@@ -17,8 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Manager is the concrete implementation of [Controller].
-type Manager struct {
+type Controller struct {
 	mu sync.Mutex
 
 	// namespaceID is the HCN namespace ID in use after a successful Setup.
@@ -47,20 +46,14 @@ type Manager struct {
 	capsProvider capabilitiesProvider
 }
 
-// Assert that Manager implements Controller.
-var _ Controller = (*Manager)(nil)
-
-// New creates a ready-to-use Manager in [StateNotConfigured].
-//
-// This method is called from [VMController.CreateNetworkController()]
-// which injects the necessary dependencies.
+// New creates a ready-to-use Controller in [StateNotConfigured].
 func New(
 	vmNetManager vmNetworkManager,
 	linuxGuestMgr linuxGuestNetworkManager,
 	windowsGuestMgr windowsGuestNetworkManager,
 	capsProvider capabilitiesProvider,
-) *Manager {
-	m := &Manager{
+) *Controller {
+	m := &Controller{
 		vmNetManager:  vmNetManager,
 		linuxGuestMgr: linuxGuestMgr,
 		winGuestMgr:   windowsGuestMgr,
@@ -80,24 +73,24 @@ func New(
 // Setup attaches the requested HCN namespace to the guest VM
 // and hot-adds all endpoints found in that namespace.
 // It must be called only once; subsequent calls return an error.
-func (m *Manager) Setup(ctx context.Context, opts *SetupOptions) (err error) {
+func (c *Controller) Setup(ctx context.Context, opts *SetupOptions) (err error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Namespace, opts.NetworkNamespace))
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	log.G(ctx).Debug("starting network setup")
 
 	// If Setup has already been called, then error out.
-	if m.netState != StateNotConfigured {
-		return fmt.Errorf("cannot set up network in state %s", m.netState)
+	if c.netState != StateNotConfigured {
+		return fmt.Errorf("cannot set up network in state %s", c.netState)
 	}
 
 	defer func() {
 		if err != nil {
 			// If setup fails for any reason, move to invalid so no further
 			// Setup calls are accepted.
-			m.netState = StateInvalid
+			c.netState = StateInvalid
 			log.G(ctx).WithError(err).Error("network setup failed, moving to invalid state")
 		}
 	}()
@@ -113,13 +106,13 @@ func (m *Manager) Setup(ctx context.Context, opts *SetupOptions) (err error) {
 	}
 
 	// Fetch all endpoints in the namespace.
-	endpoints, err := m.fetchEndpointsInNamespace(ctx, hcnNamespace)
+	endpoints, err := c.fetchEndpointsInNamespace(ctx, hcnNamespace)
 	if err != nil {
 		return fmt.Errorf("fetch endpoints in namespace %s: %w", hcnNamespace.Id, err)
 	}
 
 	// Add the namespace to the guest.
-	if err = m.addNetNSInsideGuest(ctx, hcnNamespace); err != nil {
+	if err = c.addNetNSInsideGuest(ctx, hcnNamespace); err != nil {
 		return fmt.Errorf("add network namespace to guest: %w", err)
 	}
 
@@ -132,13 +125,13 @@ func (m *Manager) Setup(ctx context.Context, opts *SetupOptions) (err error) {
 		// add the nicID and endpointID to the context for trace.
 		nicCtx, _ := log.WithContext(ctx, logrus.WithFields(logrus.Fields{"vm_nic_id": nicGUID.String(), "hns_endpoint_id": endpoint.Id}))
 
-		if err = m.addEndpointToGuestNamespace(nicCtx, nicGUID.String(), endpoint, opts.PolicyBasedRouting); err != nil {
+		if err = c.addEndpointToGuestNamespace(nicCtx, nicGUID.String(), endpoint, opts.PolicyBasedRouting); err != nil {
 			return fmt.Errorf("add endpoint %s to guest: %w", endpoint.Name, err)
 		}
 	}
 
-	m.namespaceID = hcnNamespace.Id
-	m.netState = StateConfigured
+	c.namespaceID = hcnNamespace.Id
+	c.netState = StateConfigured
 
 	log.G(ctx).Info("network setup completed successfully")
 
@@ -149,21 +142,21 @@ func (m *Manager) Setup(ctx context.Context, opts *SetupOptions) (err error) {
 //
 // It is idempotent: calling it when the network is already torn down or not yet
 // configured is a no-op.
-func (m *Manager) Teardown(ctx context.Context) error {
-	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Namespace, m.namespaceID))
+func (c *Controller) Teardown(ctx context.Context) error {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Namespace, c.namespaceID))
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	log.G(ctx).WithField("State", m.netState).Debug("starting network teardown")
+	log.G(ctx).WithField("State", c.netState).Debug("starting network teardown")
 
-	if m.netState == StateTornDown {
+	if c.netState == StateTornDown {
 		// Teardown is idempotent, so return nil if already torn down.
 		log.G(ctx).Info("network already torn down, skipping")
 		return nil
 	}
 
-	if m.netState == StateNotConfigured {
+	if c.netState == StateNotConfigured {
 		// Nothing was configured; nothing to clean up.
 		log.G(ctx).Info("network not configured, skipping")
 		return nil
@@ -173,33 +166,33 @@ func (m *Manager) Teardown(ctx context.Context) error {
 	// Use a continue-on-error strategy: attempt every NIC regardless of individual
 	// failures, then collect all errors.
 	var teardownErrs []error
-	for nicID, endpoint := range m.vmEndpoints {
+	for nicID, endpoint := range c.vmEndpoints {
 		// add the nicID and endpointID to the context for trace.
 		nicCtx, _ := log.WithContext(ctx, logrus.WithFields(logrus.Fields{"vm_nic_id": nicID, "hns_endpoint_id": endpoint.Id}))
 
-		if err := m.removeEndpointFromGuestNamespace(nicCtx, nicID, endpoint); err != nil {
+		if err := c.removeEndpointFromGuestNamespace(nicCtx, nicID, endpoint); err != nil {
 			teardownErrs = append(teardownErrs, fmt.Errorf("remove endpoint %s from guest: %w", endpoint.Name, err))
 			continue // continue attempting to remove other endpoints
 		}
 
-		delete(m.vmEndpoints, nicID)
+		delete(c.vmEndpoints, nicID)
 	}
 
 	if len(teardownErrs) > 0 {
 		// If any errors were encountered during teardown, mark the state as invalid.
-		m.netState = StateInvalid
+		c.netState = StateInvalid
 		return errors.Join(teardownErrs...)
 	}
 
-	if err := m.removeNetNSInsideGuest(ctx, m.namespaceID); err != nil {
+	if err := c.removeNetNSInsideGuest(ctx, c.namespaceID); err != nil {
 		// Mark the state as invalid so that we can retry teardown.
-		m.netState = StateInvalid
+		c.netState = StateInvalid
 		return fmt.Errorf("remove network namespace from guest: %w", err)
 	}
 
 	// Mark as torn down if we do not encounter any errors.
 	// No further Setup or Teardown calls are allowed.
-	m.netState = StateTornDown
+	c.netState = StateTornDown
 
 	log.G(ctx).Info("network teardown completed successfully")
 
@@ -209,7 +202,7 @@ func (m *Manager) Teardown(ctx context.Context) error {
 // fetchEndpointsInNamespace retrieves all HCN endpoints present in
 // the given namespace.
 // Endpoints are sorted so that those with names ending in "eth0" appear first.
-func (m *Manager) fetchEndpointsInNamespace(ctx context.Context, ns *hcn.HostComputeNamespace) ([]*hcn.HostComputeEndpoint, error) {
+func (c *Controller) fetchEndpointsInNamespace(ctx context.Context, ns *hcn.HostComputeNamespace) ([]*hcn.HostComputeEndpoint, error) {
 	log.G(ctx).Info("fetching endpoints from the network namespace")
 
 	ids, err := hcn.GetNamespaceEndpointIds(ns.Id)
