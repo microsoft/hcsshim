@@ -7,23 +7,25 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 )
 
-// Manager is the concrete implementation of [Controller].
-type Manager struct {
+// Controller manages vPCI device assignments for a Utility VM.
+type Controller struct {
 	mu sync.Mutex
 
 	// devices tracks currently assigned vPCI devices, keyed by VMBus GUID.
 	// Guarded by mu.
-	devices map[string]*deviceInfo
+	devices map[guid.GUID]*deviceInfo
 
-	// keyToGUID maps a [deviceKey] to its VMBus GUID for duplicate detection
-	// during [Manager.AddToVM]. Guarded by mu.
-	keyToGUID map[deviceKey]string
+	// deviceToGUID maps a [Device] to its VMBus GUID for duplicate detection
+	// during [Controller.Reserve]. Guarded by mu.
+	deviceToGUID map[Device]guid.GUID
 
 	// vmVPCI performs host-side vPCI device add/remove on the VM.
 	vmVPCI vmVPCI
@@ -32,88 +34,98 @@ type Manager struct {
 	linuxGuestVPCI linuxGuestVPCI
 }
 
-var _ Controller = (*Manager)(nil)
-
-// New creates a ready-to-use [Manager].
+// New creates a ready-to-use [Controller].
 func New(
 	vmVPCI vmVPCI,
 	linuxGuestVPCI linuxGuestVPCI,
-) *Manager {
-	return &Manager{
+) *Controller {
+	return &Controller{
 		vmVPCI:         vmVPCI,
 		linuxGuestVPCI: linuxGuestVPCI,
-		devices:        make(map[string]*deviceInfo),
-		keyToGUID:      make(map[deviceKey]string),
+		devices:        make(map[guid.GUID]*deviceInfo),
+		deviceToGUID:   make(map[Device]guid.GUID),
 	}
 }
 
-// AddToVM assigns a vPCI device to the VM.
-// If the same device is already assigned, the existing assignment is reused.
-func (m *Manager) AddToVM(ctx context.Context, opts *AddOptions) (err error) {
-	if opts.VMBusGUID == "" {
-		return fmt.Errorf("vmbus guid is required in add options")
+// Reserve generates a unique VMBus GUID for the given vPCI device and records
+// the reservation. The returned GUID can later be passed to [Controller.AddToVM]
+// to actually assign the device to the VM.
+//
+// If the same device (identified by DeviceInstanceID and VirtualFunctionIndex) has
+// already been reserved, the existing GUID is returned.
+//
+// Each Virtual Function is assigned as an independent guest device with its own
+// VMBus GUID. Multiple Virtual Functions on the same physical device are treated
+// as separate devices.
+func (c *Controller) Reserve(ctx context.Context, device Device) (guid.GUID, error) {
+	ctx, _ = log.WithContext(ctx, logrus.WithFields(logrus.Fields{
+		logfields.DeviceID: device.DeviceInstanceID,
+		logfields.VFIndex:  device.VirtualFunctionIndex,
+	}))
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// If this device is already reserved, return the existing GUID.
+	if existingGUID, ok := c.deviceToGUID[device]; ok {
+		log.G(ctx).WithField(logfields.VMBusGUID, existingGUID).Debug("vPCI device already reserved, reusing existing GUID")
+		return existingGUID, nil
 	}
 
-	key := deviceKey{
-		deviceInstanceID:     opts.DeviceInstanceID,
-		virtualFunctionIndex: opts.VirtualFunctionIndex,
+	// Generate a new VMBus GUID for this device.
+	vmBusGUID, err := guid.NewV4()
+	if err != nil {
+		return guid.GUID{}, fmt.Errorf("generate vmbus guid for device %s: %w", device.DeviceInstanceID, err)
 	}
 
+	c.devices[vmBusGUID] = &deviceInfo{
+		device:    device,
+		vmBusGUID: vmBusGUID,
+	}
+	c.deviceToGUID[device] = vmBusGUID
+
+	log.G(ctx).WithField(logfields.VMBusGUID, vmBusGUID).Debug("reserved vPCI device with new VMBus GUID")
+	return vmBusGUID, nil
+}
+
+// AddToVM assigns a previously reserved vPCI device to the VM.
+// The vmBusGUID must have been obtained from a prior call to [Controller.Reserve].
+// If the device is already assigned to the VM, the existing assignment is reused.
+func (c *Controller) AddToVM(ctx context.Context, vmBusGUID guid.GUID) error {
 	// Set vmBusGUID in logging context.
-	ctx, _ = log.WithContext(ctx, logrus.WithField("vmBusGUID", opts.VMBusGUID))
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.VMBusGUID, vmBusGUID))
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// Check if the caller-provided GUID is already tracked.
-	if existingDev, ok := m.devices[opts.VMBusGUID]; ok {
-		// The GUID exists — verify the device settings match what was originally assigned.
-		// A mismatch means the caller is trying to reuse a GUID for a different device,
-		// which is a configuration error.
-		if existingDev.key != key {
-			return fmt.Errorf(
-				"vmBusGUID %s is already assigned to device (instanceID=%s, vfIndex=%d), but caller provided different settings (instanceID=%s, vfIndex=%d)",
-				opts.VMBusGUID,
-				existingDev.key.deviceInstanceID, existingDev.key.virtualFunctionIndex,
-				key.deviceInstanceID, key.virtualFunctionIndex,
-			)
-		}
+	dev, ok := c.devices[vmBusGUID]
+	if !ok {
+		return fmt.Errorf("no reservation found for vmBusGUID %s; call Reserve first", vmBusGUID)
+	}
 
-		// If a previous assignment left the device in an invalid state,
-		// reject new callers until the existing assignment is cleaned up.
-		if existingDev.invalid {
-			return fmt.Errorf("vpci device with vmBusGUID %s is in an invalid state", opts.VMBusGUID)
-		}
+	// If a previous assignment left the device in an invalid state,
+	// reject new callers until the existing assignment is cleaned up.
+	if dev.invalid {
+		return fmt.Errorf("vpci device with vmBusGUID %s is in an invalid state", vmBusGUID)
+	}
 
-		// Same GUID, same device — reuse the existing assignment.
-		existingDev.refCount++
+	ctx, _ = log.WithContext(ctx, logrus.WithFields(logrus.Fields{
+		logfields.DeviceID: dev.device.DeviceInstanceID,
+		logfields.VFIndex:  dev.device.VirtualFunctionIndex,
+	}))
 
-		log.G(ctx).WithFields(logrus.Fields{
-			"deviceInstanceID":     key.deviceInstanceID,
-			"virtualFunctionIndex": key.virtualFunctionIndex,
-			"refCount":             existingDev.refCount,
-		}).Debug("vPCI device already assigned, reusing existing assignment")
+	// If the device is already assigned to the VM (host-side call was already made),
+	// just bump the reference count and return.
+	if dev.refCount > 0 {
+		dev.refCount++
+
+		log.G(ctx).Debug("vPCI device already assigned, reusing existing assignment")
 
 		return nil
 	}
 
-	// The GUID is new — check whether the same device key is already assigned
-	// under a different GUID. This means the caller provided an inconsistent GUID.
-	if existingGUID, ok := m.keyToGUID[key]; ok {
-		return fmt.Errorf(
-			"vpci device (instanceID=%s, vfIndex=%d) is already assigned with vmBusGUID %s, but caller provided %s",
-			key.deviceInstanceID, key.virtualFunctionIndex,
-			existingGUID, opts.VMBusGUID,
-		)
-	}
-
-	// Device not attached to VM.
-	// Build the VirtualPciDevice settings for HCS call.
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"deviceInstanceID":     key.deviceInstanceID,
-		"virtualFunctionIndex": key.virtualFunctionIndex,
-	}).Debug("assigning vPCI device to VM")
+	// Device not yet attached to VM.
+	log.G(ctx).Debug("assigning vPCI device to VM")
 
 	// NUMA affinity is always propagated for assigned devices.
 	// This feature is available on WS2025 and later.
@@ -123,34 +135,30 @@ func (m *Manager) AddToVM(ctx context.Context, opts *AddOptions) (err error) {
 	settings := hcsschema.VirtualPciDevice{
 		Functions: []hcsschema.VirtualPciFunction{
 			{
-				DeviceInstancePath: opts.DeviceInstanceID,
-				VirtualFunction:    opts.VirtualFunctionIndex,
+				DeviceInstancePath: dev.device.DeviceInstanceID,
+				VirtualFunction:    dev.device.VirtualFunctionIndex,
 			},
 		},
 		PropagateNumaAffinity: &propagateAffinity,
 	}
 
+	guidStr := vmBusGUID.String()
+
 	// Host-side: add the vPCI device to the VM.
-	if err := m.vmVPCI.AddDevice(ctx, opts.VMBusGUID, settings); err != nil {
-		return fmt.Errorf("add vpci device %s to vm: %w", opts.DeviceInstanceID, err)
+	if err := c.vmVPCI.AddDevice(ctx, guidStr, settings); err != nil {
+		return fmt.Errorf("add vpci device %s to vm: %w", dev.device.DeviceInstanceID, err)
 	}
 
-	// Track early so RemoveFromVM can clean up even if the guest-side call fails.
-	dev := &deviceInfo{
-		key:       key,
-		vmBusGUID: opts.VMBusGUID,
-		refCount:  1,
-	}
-	m.devices[opts.VMBusGUID] = dev
-	m.keyToGUID[key] = opts.VMBusGUID
+	// Update the ref count to indicate the device is now assigned to the VM.
+	dev.refCount++
 
 	// Guest-side: device attach notification.
-	if err := m.waitGuestDeviceReady(ctx, opts.VMBusGUID); err != nil {
+	if err := c.waitGuestDeviceReady(ctx, guidStr); err != nil {
 		// Mark the device as invalid so the caller can call RemoveFromVM
 		// to clean up the host-side assignment.
 		dev.invalid = true
 		log.G(ctx).WithError(err).Error("guest-side vpci device setup failed, device marked invalid")
-		return fmt.Errorf("add guest vpci device with vmBusGUID %s to vm: %w", opts.VMBusGUID, err)
+		return fmt.Errorf("add guest vpci device with vmBusGUID %s to vm: %w", vmBusGUID, err)
 	}
 
 	log.G(ctx).Info("vPCI device assigned to VM")
@@ -161,37 +169,49 @@ func (m *Manager) AddToVM(ctx context.Context, opts *AddOptions) (err error) {
 // RemoveFromVM removes a vPCI device from the VM.
 // If the device is shared (reference count > 1), the reference count is
 // decremented without actually removing the device from the VM.
-func (m *Manager) RemoveFromVM(ctx context.Context, vmBusGUID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (c *Controller) RemoveFromVM(ctx context.Context, vmBusGUID guid.GUID) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	ctx, _ = log.WithContext(ctx, logrus.WithField("vmBusGUID", vmBusGUID))
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.VMBusGUID, vmBusGUID))
 
-	dev, ok := m.devices[vmBusGUID]
+	dev, ok := c.devices[vmBusGUID]
 	if !ok {
 		return fmt.Errorf("no vpci device with vmBusGUID %s is assigned to the vm", vmBusGUID)
 	}
 
+	// Device was reserved but never added to the VM. Just clean up the reservation.
+	if dev.refCount == 0 {
+		log.G(ctx).Debug("vPCI device was reserved but never assigned, cleaning up reservation")
+
+		delete(c.devices, vmBusGUID)
+		delete(c.deviceToGUID, dev.device)
+
+		return nil
+	}
+
+	// Decrement the ref count for the device.
 	dev.refCount--
 	if dev.refCount > 0 {
 		log.G(ctx).WithField("refCount", dev.refCount).Debug("vPCI device still in use, decremented ref count")
 		return nil
 	}
 
-	// This path is reached when the device is no longer shared (refCount == 0) or
-	// had transitioned into an invalid state during AddToVM call.
+	// Last reference dropped (refCount == 0). Remove the device from the VM.
+	// This also covers devices marked invalid during AddToVM — the host-side
+	// assignment still needs to be cleaned up.
 
 	log.G(ctx).Debug("removing vPCI device from VM")
 
 	// Host-side: remove the vPCI device from the VM.
-	if err := m.vmVPCI.RemoveDevice(ctx, vmBusGUID); err != nil {
+	if err := c.vmVPCI.RemoveDevice(ctx, vmBusGUID.String()); err != nil {
 		// Restore the ref count since the removal failed.
 		dev.refCount++
 		return fmt.Errorf("remove vpci device %s from vm: %w", vmBusGUID, err)
 	}
 
-	delete(m.devices, vmBusGUID)
-	delete(m.keyToGUID, dev.key)
+	delete(c.devices, vmBusGUID)
+	delete(c.deviceToGUID, dev.device)
 
 	log.G(ctx).Info("vPCI device removed from VM")
 

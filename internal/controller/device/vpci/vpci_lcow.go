@@ -1,4 +1,4 @@
-//go:build windows && !wcow
+//go:build windows && lcow
 
 package vpci
 
@@ -10,8 +10,8 @@ import (
 
 // waitGuestDeviceReady notifies the guest about the new device and blocks until
 // the required sysfs/device paths are available before workloads use them.
-func (m *Manager) waitGuestDeviceReady(ctx context.Context, vmBusGUID string) error {
-	return m.linuxGuestVPCI.AddVPCIDevice(ctx, guestresource.LCOWMappedVPCIDevice{
+func (c *Controller) waitGuestDeviceReady(ctx context.Context, vmBusGUID string) error {
+	return c.linuxGuestVPCI.AddVPCIDevice(ctx, guestresource.LCOWMappedVPCIDevice{
 		VMBusGUID: vmBusGUID,
 	})
 }

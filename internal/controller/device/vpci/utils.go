@@ -41,23 +41,23 @@ func GetDeviceInfoFromPath(rawDevicePath string) (string, uint16) {
 	indexString := filepath.Base(rawDevicePath)
 	index, err := strconv.ParseUint(indexString, 10, 16)
 	if err == nil {
-		// we have a vf index
+		// We have a VF index.
 		return filepath.Dir(rawDevicePath), uint16(index)
 	}
-	// otherwise, just use default index and full device ID given
+	// Otherwise, just use default index and the full device ID as given.
 	return rawDevicePath, 0
 }
 
 // GetAssignedDeviceVMBUSInstanceID returns the instance ID of the VMBus channel
 // device node created when a device is assigned to a UVM via vPCI.
 //
-// When a device is assigned to a UVM via VPCI support in HCS, a new VMBUS channel device node is
-// created in the UVM. The actual device that was assigned in is exposed as a child on this VMBUS
+// When a device is assigned to a UVM via vPCI support in HCS, a new VMBus channel device node is
+// created in the UVM. The actual device that was assigned in is exposed as a child on this VMBus
 // channel device node.
 //
 // A device node's instance ID is an identifier that distinguishes that device from other devices
-// on the system. The GUID of a VMBUS channel device node refers to that channel's unique
-// identifier used internally by VMBUS and can be used to determine the VMBUS channel
+// on the system. The GUID of a VMBus channel device node refers to that channel's unique
+// identifier used internally by VMBus and can be used to determine the VMBus channel
 // device node's instance ID.
 //
 // A VMBus channel device node's instance ID is in the form:

@@ -70,6 +70,12 @@ const (
 	ShimPid          = "shim-pid"
 	TaskPid          = "task-pid"
 
+	// vpci device
+
+	VMBusGUID = "vmBusGUID"
+	DeviceID  = "deviceInstanceID"
+	VFIndex   = "virtualFunctionIndex"
+
 	// sandbox
 
 	NetNsPath = "net-ns-path"
