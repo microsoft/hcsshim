@@ -120,7 +120,6 @@ func (c *Controller) AddToVM(ctx context.Context, vmBusGUID guid.GUID) error {
 		dev.refCount++
 
 		log.G(ctx).Debug("vPCI device already assigned, reusing existing assignment")
-
 		return nil
 	}
 
@@ -214,6 +213,5 @@ func (c *Controller) RemoveFromVM(ctx context.Context, vmBusGUID guid.GUID) erro
 	delete(c.deviceToGUID, dev.device)
 
 	log.G(ctx).Info("vPCI device removed from VM")
-
 	return nil
 }
