@@ -2,10 +2,14 @@
 
 package vpci
 
-import "context"
+import (
+	"context"
+
+	"github.com/Microsoft/go-winio/pkg/guid"
+)
 
 // waitGuestDeviceReady is a no-op for Windows guests. WCOW does not require a
 // guest-side notification as part of vPCI device assignment.
-func (c *Controller) waitGuestDeviceReady(_ context.Context, _ string) error {
+func (c *Controller) waitGuestDeviceReady(_ context.Context, _ guid.GUID) error {
 	return nil
 }

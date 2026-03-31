@@ -24,10 +24,10 @@ type Device struct {
 // Implemented by [vmmanager.UtilityVM].
 type vmVPCI interface {
 	// AddDevice adds a vPCI device identified by `vmBusGUID` to the Utility VM with the provided settings.
-	AddDevice(ctx context.Context, vmBusGUID string, settings hcsschema.VirtualPciDevice) error
+	AddDevice(ctx context.Context, vmbusGUID guid.GUID, settings hcsschema.VirtualPciDevice) error
 
 	// RemoveDevice removes the vPCI device identified by `vmBusGUID` from the Utility VM.
-	RemoveDevice(ctx context.Context, vmBusGUID string) error
+	RemoveDevice(ctx context.Context, vmbusGUID guid.GUID) error
 }
 
 // linuxGuestVPCI exposes vPCI device operations in the LCOW guest.
@@ -51,11 +51,11 @@ type deviceInfo struct {
 	// inside the UVM.
 	vmBusGUID guid.GUID
 
+	// state is the current lifecycle state of this device assignment.
+	// Access must be guarded by [Controller.mu].
+	state State
+
 	// refCount is the number of active callers sharing this device.
 	// Access must be guarded by [Controller.mu].
 	refCount uint32
-
-	// invalid indicates the host-side assignment succeeded but the guest-side
-	// assignment failed. Access must be guarded by [Controller.mu].
-	invalid bool
 }

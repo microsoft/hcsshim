@@ -24,8 +24,9 @@
 //
 // # Invalid Devices
 //
-// If the host-side assignment succeeds but the guest-side notification fails,
-// the device is marked invalid. It remains tracked so that the caller can call
+// The device is marked invalid if the host-side assignment succeeds but the
+// guest-side notification fails or if the host-side remove call fails.
+// The device remains tracked as Invalid so that the caller can call
 // [Controller.RemoveFromVM] to perform host-side cleanup.
 //
 // # Virtual Functions

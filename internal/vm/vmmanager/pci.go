@@ -6,12 +6,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
+
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-func (uvm *UtilityVM) AddDevice(ctx context.Context, vmbusGUID string, settings hcsschema.VirtualPciDevice) error {
+func (uvm *UtilityVM) AddDevice(ctx context.Context, vmbusGUID guid.GUID, settings hcsschema.VirtualPciDevice) error {
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmbusGUID),
 		RequestType:  guestrequest.RequestTypeAdd,
@@ -23,7 +25,7 @@ func (uvm *UtilityVM) AddDevice(ctx context.Context, vmbusGUID string, settings 
 	return nil
 }
 
-func (uvm *UtilityVM) RemoveDevice(ctx context.Context, vmbusGUID string) error {
+func (uvm *UtilityVM) RemoveDevice(ctx context.Context, vmbusGUID guid.GUID) error {
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmbusGUID),
 		RequestType:  guestrequest.RequestTypeRemove,
