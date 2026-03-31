@@ -230,6 +230,71 @@ func SandboxLogPath(sandboxID, virtualSandboxID, path string) string {
 	return filepath.Join(SandboxLogsDir(sandboxID, virtualSandboxID), path)
 }
 
+// Root-based path helpers. These accept a pre-resolved sandbox root directory
+// and are used by the guest-side sandbox root mapping for Shim v2 / multi-pod support.
+
+// SandboxMountsDirFromRoot returns the sandbox mounts directory for a given root.
+func SandboxMountsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "sandboxMounts")
+}
+
+// SandboxTmpfsMountsDirFromRoot returns the sandbox tmpfs mounts directory for a given root.
+func SandboxTmpfsMountsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "sandboxTmpfsMounts")
+}
+
+// SandboxHugePagesMountsDirFromRoot returns the hugepages directory for a given root.
+func SandboxHugePagesMountsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "hugepages")
+}
+
+// SandboxLogsDirFromRoot returns the logs directory for a given root.
+func SandboxLogsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "logs")
+}
+
+// SandboxMountSourceFromRoot resolves a sandbox:// mount source from a given root.
+func SandboxMountSourceFromRoot(sandboxRoot, mountPath string) string {
+	subPath := strings.TrimPrefix(mountPath, guestpath.SandboxMountPrefix)
+	return filepath.Join(SandboxMountsDirFromRoot(sandboxRoot), subPath)
+}
+
+// SandboxTmpfsMountSourceFromRoot resolves a sandbox-tmp:// mount source from a given root.
+func SandboxTmpfsMountSourceFromRoot(sandboxRoot, mountPath string) string {
+	subPath := strings.TrimPrefix(mountPath, guestpath.SandboxTmpfsMountPrefix)
+	return filepath.Join(SandboxTmpfsMountsDirFromRoot(sandboxRoot), subPath)
+}
+
+// HugePagesMountSourceFromRoot resolves a hugepages:// mount source from a given root.
+func HugePagesMountSourceFromRoot(sandboxRoot, mountPath string) string {
+	subPath := strings.TrimPrefix(mountPath, guestpath.HugePagesMountPrefix)
+	return filepath.Join(SandboxHugePagesMountsDirFromRoot(sandboxRoot), subPath)
+}
+
+// GenerateWorkloadContainerNetworkMountsFromRoot generates networking mounts
+// using a pre-resolved sandbox root directory.
+func GenerateWorkloadContainerNetworkMountsFromRoot(sandboxRoot string, spec *oci.Spec) []oci.Mount {
+	var nMounts []oci.Mount
+	for _, mountPath := range networkingMountPaths() {
+		if MountPresent(mountPath, spec.Mounts) {
+			continue
+		}
+		options := []string{"bind"}
+		if spec.Root != nil && spec.Root.Readonly {
+			options = append(options, "ro")
+		}
+		trimmedMountPath := strings.TrimPrefix(mountPath, "/etc/")
+		mt := oci.Mount{
+			Destination: mountPath,
+			Type:        "bind",
+			Source:      filepath.Join(sandboxRoot, trimmedMountPath),
+			Options:     options,
+		}
+		nMounts = append(nMounts, mt)
+	}
+	return nMounts
+}
+
 // GetNetworkNamespaceID returns the `ToLower` of
 // `spec.Windows.Network.NetworkNamespace` or `""`.
 func GetNetworkNamespaceID(spec *oci.Spec) string {
