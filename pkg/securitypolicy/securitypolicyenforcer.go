@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"syscall"
 
+	"errors"
+
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 type createEnforcerFunc func(base64EncodedPolicy string, criMounts, criPrivilegedMounts []oci.Mount, maxErrorMessageLength int) (SecurityPolicyEnforcer, error)

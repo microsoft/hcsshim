@@ -12,7 +12,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )

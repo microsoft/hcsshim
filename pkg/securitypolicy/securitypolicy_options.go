@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"errors"
+
 	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -18,7 +20,6 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 

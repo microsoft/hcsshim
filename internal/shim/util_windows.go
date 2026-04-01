@@ -27,8 +27,9 @@ import (
 	"syscall"
 	"time"
 
+	"errors"
+
 	winio "github.com/Microsoft/go-winio"
-	"github.com/pkg/errors"
 )
 
 const shimBinaryFormat = "containerd-shim-%s-%s.exe"

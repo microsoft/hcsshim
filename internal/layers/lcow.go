@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"errors"
+
 	"github.com/Microsoft/go-winio/pkg/fs"
 	"github.com/containerd/containerd/api/types"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"

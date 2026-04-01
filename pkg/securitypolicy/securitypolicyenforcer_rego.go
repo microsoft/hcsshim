@@ -14,12 +14,13 @@ import (
 	"strings"
 	"syscall"
 
+	"errors"
+
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 const regoEnforcerName = "rego"

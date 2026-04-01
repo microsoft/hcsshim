@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pkg/errors"
+	"errors"
 )
 
 const tempDir = "/tmp/dir/"

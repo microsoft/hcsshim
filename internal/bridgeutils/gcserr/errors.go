@@ -1,19 +1,16 @@
 package gcserr
 
 import (
+	"errors"
 	"fmt"
 	"io"
-
-	"github.com/pkg/errors"
 )
 
 // Hresult is a type corresponding to the HRESULT error type used on Windows.
 type Hresult int32
 
-// ! Must match error values in internal\hcs\errors.go
-// from
-// - https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/705fb797-2175-4a90-b5a3-3918024b10b8
-// - https://docs.microsoft.com/en-us/virtualization/api/hcs/reference/hcshresult
+// HRESULT constants matching internal\hcs\errors.go
+// from MS-ERREF and HCS docs
 const (
 	// HrNotImpl is the HRESULT for a not implemented function.
 	HrNotImpl = Hresult(-2147467263) // 0x80004001
@@ -55,41 +52,12 @@ const (
 	HrVmcomputeSystemAlreadyStopped = Hresult(-1070137072) // 0xC0370110
 )
 
-// TODO: update implementation to use go1.13 style errors with `errors.As` and co.
-
-// StackTracer is an interface originating (but not exported) from the
-// github.com/pkg/errors package. It defines something which can return a stack
-// trace.
-type StackTracer interface {
-	StackTrace() errors.StackTrace
+// Hresulter interface for errors with Hresult().
+type Hresulter interface {
+	Hresult() Hresult
 }
 
-// BaseStackTrace gets the earliest errors.StackTrace in the given error's cause
-// stack. This will be the stack trace which reaches closest to the error's
-// actual origin. It returns nil if no stack trace is found in the cause stack.
-func BaseStackTrace(e error) errors.StackTrace {
-	type causer interface {
-		Cause() error
-	}
-	cause := e
-	var tracer StackTracer
-	for cause != nil {
-		serr, ok := cause.(StackTracer)
-		if ok {
-			tracer = serr
-		}
-		cerr, ok := cause.(causer)
-		if !ok {
-			break
-		}
-		cause = cerr.Cause()
-	}
-	if tracer == nil {
-		return nil
-	}
-	return tracer.StackTrace()
-}
-
+// baseHresultError is a basic HRESULT error.
 type baseHresultError struct {
 	hresult Hresult
 }
@@ -97,47 +65,48 @@ type baseHresultError struct {
 func (e *baseHresultError) Error() string {
 	return fmt.Sprintf("HRESULT: 0x%x", uint32(e.Hresult()))
 }
+
 func (e *baseHresultError) Hresult() Hresult {
 	return e.hresult
 }
 
+func (e *baseHresultError) Unwrap() error {
+	return nil
+}
+
+// wrappingHresultError wraps another error with an HRESULT.
 type wrappingHresultError struct {
 	cause   error
 	hresult Hresult
 }
 
 func (e *wrappingHresultError) Error() string {
-	return fmt.Sprintf("HRESULT 0x%x", uint32(e.Hresult())) + ": " + e.Cause().Error()
+	return fmt.Sprintf("HRESULT 0x%x: %s", uint32(e.Hresult()), e.cause.Error())
 }
+
 func (e *wrappingHresultError) Hresult() Hresult {
 	return e.hresult
 }
+
 func (e *wrappingHresultError) Cause() error {
 	return e.cause
 }
+
+func (e *wrappingHresultError) Unwrap() error {
+	return e.cause
+}
+
 func (e *wrappingHresultError) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v\n", e.Cause())
+			fmt.Fprintf(s, "%+v", e.Unwrap())
 			return
 		}
 		fallthrough
-	case 's':
+	case 's', 'q':
 		_, _ = io.WriteString(s, e.Error())
-	case 'q':
-		fmt.Fprintf(s, "%q", e.Error())
 	}
-}
-func (e *wrappingHresultError) StackTrace() errors.StackTrace {
-	type stackTracer interface {
-		StackTrace() errors.StackTrace
-	}
-	serr, ok := e.Cause().(stackTracer)
-	if !ok {
-		return nil
-	}
-	return serr.StackTrace()
 }
 
 // NewHresultError produces a new error with the given HRESULT.
@@ -145,38 +114,22 @@ func NewHresultError(hresult Hresult) error {
 	return &baseHresultError{hresult: hresult}
 }
 
-// WrapHresult produces a new error with the given HRESULT and wrapping the
-// given error.
-func WrapHresult(e error, hresult Hresult) error {
-	return &wrappingHresultError{
-		cause:   e,
-		hresult: hresult,
-	}
+// WrapHresult produces a new error with the given HRESULT wrapping the given error.
+func WrapHresult(cause error, hresult Hresult) error {
+	return &wrappingHresultError{cause: cause, hresult: hresult}
 }
 
-// GetHresult iterates through the error's cause stack (similar to how the
-// Cause function in github.com/pkg/errors operates). At the first error it
-// encounters which implements the Hresult() method, it return's that error's
-// HRESULT. This allows errors higher up in the cause stack to shadow the
-// HRESULTs of errors lower down.
+// GetHresult finds the first Hresult in the error chain using errors.As compatible loop.
 func GetHresult(e error) (Hresult, error) {
-	type hresulter interface {
-		Hresult() Hresult
-	}
-	type causer interface {
-		Cause() error
-	}
-	cause := e
-	for cause != nil {
-		herr, ok := cause.(hresulter)
-		if ok {
+	for e != nil {
+		if herr, ok := e.(Hresulter); ok {
 			return herr.Hresult(), nil
 		}
-		cerr, ok := cause.(causer)
-		if !ok {
-			break
-		}
-		cause = cerr.Cause()
+		e = errors.Unwrap(e)
 	}
-	return -1, errors.Errorf("no HRESULT found in cause stack for error %s", e)
+	return 0, fmt.Errorf("no HRESULT found in error chain: %w", e)
 }
+
+// BaseStackTrace is removed as pkg/errors.StackTrace is deprecated.
+// Stack traces can be obtained using %+v formatting on wrapped errors.
+// TODO: if runtime/callers stack needed, add custom stack capturer.

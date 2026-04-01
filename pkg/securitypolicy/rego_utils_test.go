@@ -21,13 +21,14 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/blang/semver/v4"
 	"github.com/open-policy-agent/opa/rego"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 const (

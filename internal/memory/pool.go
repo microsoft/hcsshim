@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"github.com/pkg/errors"
+	"errors"
 )
 
 const (

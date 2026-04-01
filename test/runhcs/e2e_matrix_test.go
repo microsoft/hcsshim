@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"testing"
 
+	"errors"
+
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/osversion"
 	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
@@ -23,7 +25,6 @@ import (
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	runc "github.com/containerd/go-runc"
 	"github.com/opencontainers/runtime-tools/generate"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 

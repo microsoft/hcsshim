@@ -6,7 +6,8 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"golang.org/x/sys/windows"
 )
 
