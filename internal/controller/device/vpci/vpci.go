@@ -91,9 +91,9 @@ func (c *Controller) Reserve(ctx context.Context, device Device) (guid.GUID, err
 
 // AddToVM assigns a previously reserved vPCI device to the VM.
 // The vmBusGUID must have been obtained from a prior call to [Controller.Reserve].
-// If the device is already assigned to the VM, the existing assignment is reused.
+// If the device is already ready for use in the VM, the reference count is incremented.
 //
-// On failure, the caller should call [Controller.RemoveFromVM] to clean up any partial assignment state.
+// On failure the caller should call [Controller.RemoveFromVM] to clean up.
 func (c *Controller) AddToVM(ctx context.Context, vmBusGUID guid.GUID) error {
 	// Set vmBusGUID in logging context.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.VMBusGUID, vmBusGUID))
@@ -112,14 +112,13 @@ func (c *Controller) AddToVM(ctx context.Context, vmBusGUID guid.GUID) error {
 	}))
 
 	switch dev.state {
-	case StateAssigned:
-		// If the device is already assigned to the VM (host-side call was already made),
-		// just bump the reference count and return.
+	case StateReady:
+		// Device is already fully assigned and guest-ready; just bump the ref count.
 		dev.refCount++
-		log.G(ctx).Debug("vPCI device already assigned, reusing existing assignment")
+		log.G(ctx).Debug("vPCI device already ready, reusing existing assignment")
 
 	case StateReserved:
-		// Device not yet attached to VM.
+		// Device not yet attached to VM — perform the host-side add.
 		log.G(ctx).Debug("assigning vPCI device to VM")
 
 		// NUMA affinity is always propagated for assigned devices.
@@ -138,34 +137,45 @@ func (c *Controller) AddToVM(ctx context.Context, vmBusGUID guid.GUID) error {
 		}
 
 		// Host-side: add the vPCI device to the VM.
-		// On failure the device stays in StateReserved — the caller may
-		// retry AddToVM directly without any cleanup.
 		if err := c.vmVPCI.AddDevice(ctx, vmBusGUID, settings); err != nil {
+			// Set state to removed on failure.
+			// The caller can call RemoveFromVM to clean up the reservation.
+			dev.state = StateRemoved
 			return fmt.Errorf("add vpci device %s to vm: %w", dev.device.DeviceInstanceID, err)
 		}
 
-		// Guest-side: device attach notification.
+		// Host-side succeeded; mark as assigned (transient state) before
+		// waiting for the guest.
+		dev.state = StateAssigned
+
+		// Guest-side: wait for the device to be ready inside the guest.
 		if err := c.waitGuestDeviceReady(ctx, vmBusGUID); err != nil {
-			// Mark the device as invalid so the caller can call RemoveFromVM
+			// Host assignment is in place but guest is not ready.
+			// Mark StateAssignedInvalid so the caller can call RemoveFromVM
 			// to clean up the host-side assignment.
-			dev.state = StateInvalid
-			return fmt.Errorf("add guest vpci device with vmBusGUID %s to vm: %w", vmBusGUID, err)
+			dev.state = StateAssignedInvalid
+			return fmt.Errorf("wait for guest vpci device with vmBusGUID %s to become ready: %w", vmBusGUID, err)
 		}
 
-		// device add succeeded; bump the ref count.
+		// Both host and guest succeeded; device is fully ready.
 		dev.refCount++
-		dev.state = StateAssigned
+		dev.state = StateReady
 
 		log.G(ctx).Info("vPCI device assigned to VM")
 
-	case StateInvalid:
+	case StateAssignedInvalid:
 		// The device add failed in a previous attempt after the host-side assignment
-		// succeeded. Call RemoveFromVM to clean up the host-side assignment.
-		return fmt.Errorf("vpci device with vmBusGUID %s is in an invalid state", vmBusGUID)
-	default:
-		// This state cannot be reached.
-		return fmt.Errorf("vpci device with vmBusGUID %s is in an unknown state %d", vmBusGUID, dev.state)
+		// succeeded. Call RemoveFromVM to clean up the host-side assignment before retrying.
+		return fmt.Errorf("vpci device with vmBusGUID %s is in an invalid state; call RemoveFromVM first", vmBusGUID)
 
+	case StateRemoved:
+		// The device failed to be added to the VM and hence was moved to state removed.
+		return fmt.Errorf("vpci device with vmBusGUID %s was removed due to a prior failure; call RemoveFromVM first", vmBusGUID)
+
+	default:
+		// StateAssigned should never be observed by callers (it is a transient
+		// within-call state).
+		return fmt.Errorf("vpci device with vmBusGUID %s is in an unexpected state %s", vmBusGUID, dev.state)
 	}
 
 	return nil
@@ -185,26 +195,32 @@ func (c *Controller) RemoveFromVM(ctx context.Context, vmBusGUID guid.GUID) erro
 		return fmt.Errorf("no vpci device with vmBusGUID %s is assigned to the vm", vmBusGUID)
 	}
 
-	// Devices that were reserved but never assigned to the VM have no host-side
-	// state to clean up — just drop the reservation and return early.
-	if dev.state == StateReserved {
-		log.G(ctx).Debug("vPCI device was reserved but never assigned, cleaning up reservation")
+	switch dev.state {
+	case StateReserved, StateRemoved:
+		// Device was reserved but never assigned to the VM (or never assigned).
+		// No host-side state to clean up — just drop the tracking entry.
+		log.G(ctx).WithField("state", dev.state).Debug("vPCI device has no host-side assignment, cleaning up reservation")
 		c.untrack(vmBusGUID, dev)
 		return nil
-	}
 
-	// Decrement the ref count. For StateInvalid devices the ref count is
-	// always 0 (AddToVM never completed successfully or RemoveFromVM failed), so this is
-	// effectively a no-op and the device proceeds straight to host-side removal.
-	if dev.refCount > 0 {
-		dev.refCount--
-	}
+	case StateReady:
+		// Decrement ref count; only remove from the host when the last reference is dropped.
+		if dev.refCount > 1 {
+			dev.refCount--
+			log.G(ctx).WithField("refCount", dev.refCount).Debug("vPCI device still in use, decremented ref count")
+			return nil
+		}
 
-	// If the state is assigned and there are still active references,
-	// do not remove the device from the VM yet.
-	if dev.state == StateAssigned && dev.refCount > 0 {
-		log.G(ctx).WithField("refCount", dev.refCount).Debug("vPCI device still in use, decremented ref count")
-		return nil
+		// Last reference — fall through to host-side remove below.
+		dev.refCount = 0
+
+	case StateAssignedInvalid:
+		// Host-side assignment exists but device is in an inconsistent state.
+		// Proceed directly to host-side remove (refCount is always 0 here).
+
+	default:
+		// StateAssigned is a transient within-call state and should not be seen here.
+		return fmt.Errorf("vpci device with vmBusGUID %s is in an unexpected state %s", vmBusGUID, dev.state)
 	}
 
 	log.G(ctx).Debug("removing vPCI device from VM")
@@ -212,8 +228,8 @@ func (c *Controller) RemoveFromVM(ctx context.Context, vmBusGUID guid.GUID) erro
 	// Host-side: remove the vPCI device from the VM.
 	if err := c.vmVPCI.RemoveDevice(ctx, vmBusGUID); err != nil {
 		// The host-side remove failed; the device is still partially assigned.
-		// Mark it StateInvalid so that callers can retry via RemoveFromVM.
-		dev.state = StateInvalid
+		// Mark it StateAssignedInvalid so that callers can retry via RemoveFromVM.
+		dev.state = StateAssignedInvalid
 		return fmt.Errorf("remove vpci device %s from vm: %w", vmBusGUID, err)
 	}
 
@@ -222,8 +238,9 @@ func (c *Controller) RemoveFromVM(ctx context.Context, vmBusGUID guid.GUID) erro
 	return nil
 }
 
-// untrack removes a device from the controller's tracking maps and marks it as
-// [StateRemoved]. Must be called with c.mu held.
+// untrack removes a device from the controller's tracking maps and sets its
+// state to [StateRemoved] as a safety marker.
+// Must be called with c.mu held.
 func (c *Controller) untrack(vmBusGUID guid.GUID, dev *deviceInfo) {
 	dev.state = StateRemoved
 	delete(c.devices, vmBusGUID)

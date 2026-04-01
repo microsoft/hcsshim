@@ -140,8 +140,8 @@ func TestAddToVM_HappyPath(t *testing.T) {
 	}
 
 	di := c.devices[g]
-	if di.state != StateAssigned {
-		t.Errorf("expected StateAssigned, got %v", di.state)
+	if di.state != StateReady {
+		t.Errorf("expected StateReady, got %v", di.state)
 	}
 	if di.refCount != 1 {
 		t.Errorf("expected refCount=1, got %d", di.refCount)
@@ -173,13 +173,14 @@ func TestAddToVM_Idempotent(t *testing.T) {
 	if di.refCount != 2 {
 		t.Errorf("expected refCount=2, got %d", di.refCount)
 	}
-	if di.state != StateAssigned {
-		t.Errorf("expected StateAssigned, got %v", di.state)
+	if di.state != StateReady {
+		t.Errorf("expected StateReady, got %v", di.state)
 	}
 }
 
-// TestAddToVM_HostFails verifies that a host-side failure leaves the device in
-// StateReserved (no transition to StateInvalid) and does not bump the refCount.
+// TestAddToVM_HostFails verifies that a host-side failure transitions the device
+// to StateRemoved (still tracked in the map) without bumping the refCount.
+// The device must be cleaned up via RemoveFromVM.
 func TestAddToVM_HostFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
@@ -197,18 +198,44 @@ func TestAddToVM_HostFails(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	di := c.devices[g]
-
+	// Device must still be tracked (StateRemoved, awaiting RemoveFromVM cleanup).
+	di, ok := c.devices[g]
+	if !ok {
+		t.Fatal("expected device to still be tracked after host failure")
+	}
+	if di.state != StateRemoved {
+		t.Errorf("expected StateRemoved after host failure, got %v", di.state)
+	}
 	if di.refCount != 0 {
 		t.Errorf("expected refCount=0 after host failure, got %d", di.refCount)
 	}
-	if di.state != StateReserved {
-		t.Errorf("expected StateReserved after host failure, got %v", di.state)
+}
+
+// TestAddToVM_StateRemoved verifies that calling AddToVM on a StateRemoved device
+// returns an error and does not make any host or guest calls.
+func TestAddToVM_StateRemoved(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmVPCI(ctrl)
+	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	c := New(vm, guest)
+	ctx := context.Background()
+
+	dev := newTestDevice()
+	g, _ := c.Reserve(ctx, dev)
+
+	// Host-side add fails → StateRemoved.
+	vm.EXPECT().AddDevice(gomock.Any(), g, gomock.Any()).Return(errHostAdd)
+	_ = c.AddToVM(ctx, g)
+
+	// Second AddToVM: must NOT call host or guest again.
+	err := c.AddToVM(ctx, g)
+	if err == nil {
+		t.Fatal("expected error for StateRemoved device")
 	}
 }
 
 // TestAddToVM_GuestFails verifies that a guest-side failure marks the device
-// StateInvalid and does not bump the refCount.
+// StateAssignedInvalid and does not bump the refCount.
 func TestAddToVM_GuestFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
@@ -228,15 +255,15 @@ func TestAddToVM_GuestFails(t *testing.T) {
 	}
 
 	di := c.devices[g]
-	if di.state != StateInvalid {
-		t.Errorf("expected StateInvalid after guest failure, got %v", di.state)
+	if di.state != StateAssignedInvalid {
+		t.Errorf("expected StateAssignedInvalid after guest failure, got %v", di.state)
 	}
 	if di.refCount != 0 {
 		t.Errorf("expected refCount=0 after guest failure, got %d", di.refCount)
 	}
 }
 
-// TestAddToVM_InvalidDevice verifies that AddToVM on a StateInvalid device
+// TestAddToVM_InvalidDevice verifies that AddToVM on a StateAssignedInvalid device
 // returns an error and does not attempt a new host/guest call.
 func TestAddToVM_InvalidDevice(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -248,7 +275,7 @@ func TestAddToVM_InvalidDevice(t *testing.T) {
 	dev := newTestDevice()
 	g, _ := c.Reserve(ctx, dev)
 
-	// First AddToVM: host succeeds, guest fails → StateInvalid.
+	// First AddToVM: host succeeds, guest fails → StateAssignedInvalid.
 	vm.EXPECT().AddDevice(gomock.Any(), g, gomock.Any()).Return(nil)
 	guest.EXPECT().AddVPCIDevice(gomock.Any(), gomock.Any()).Return(errGuestAdd)
 	_ = c.AddToVM(ctx, g)
@@ -256,7 +283,7 @@ func TestAddToVM_InvalidDevice(t *testing.T) {
 	// Second AddToVM: must NOT call host or guest again.
 	err := c.AddToVM(ctx, g)
 	if err == nil {
-		t.Fatal("expected error for StateInvalid device")
+		t.Fatal("expected error for StateAssignedInvalid device")
 	}
 }
 
@@ -329,6 +356,36 @@ func TestRemoveFromVM_ReservedButNeverAdded(t *testing.T) {
 	}
 }
 
+// TestRemoveFromVM_AfterHostAddFails verifies that a device in StateRemoved (due to
+// a failed host-side add in AddToVM) can be cleaned up via RemoveFromVM without
+// making any host call.
+func TestRemoveFromVM_AfterHostAddFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmVPCI(ctrl)
+	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	c := New(vm, guest)
+	ctx := context.Background()
+
+	dev := newTestDevice()
+	g, _ := c.Reserve(ctx, dev)
+
+	// Host-side add fails → StateRemoved.
+	vm.EXPECT().AddDevice(gomock.Any(), g, gomock.Any()).Return(errHostAdd)
+	_ = c.AddToVM(ctx, g)
+
+	// RemoveFromVM must NOT call RemoveDevice (no host-side state to clean up).
+	if err := c.RemoveFromVM(ctx, g); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, ok := c.devices[g]; ok {
+		t.Error("device still tracked after RemoveFromVM on StateRemoved device")
+	}
+	if _, ok := c.deviceToGUID[dev]; ok {
+		t.Error("deviceToGUID still has entry after RemoveFromVM on StateRemoved device")
+	}
+}
+
 // TestRemoveFromVM_HappyPath verifies a full Reserve → AddToVM → RemoveFromVM cycle.
 func TestRemoveFromVM_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -390,7 +447,7 @@ func TestRemoveFromVM_RefCounting(t *testing.T) {
 }
 
 // TestRemoveFromVM_HostFails verifies that a failed host-side remove marks the
-// device StateInvalid so it can be retried.
+// device StateAssignedInvalid so it can be retried.
 func TestRemoveFromVM_HostFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
@@ -413,8 +470,8 @@ func TestRemoveFromVM_HostFails(t *testing.T) {
 	}
 
 	di := c.devices[g]
-	if di.state != StateInvalid {
-		t.Errorf("expected StateInvalid after failed remove, got %v", di.state)
+	if di.state != StateAssignedInvalid {
+		t.Errorf("expected StateAssignedInvalid after failed remove, got %v", di.state)
 	}
 	if di.refCount != 0 {
 		t.Errorf("expected refCount=0 after failed remove, got %d", di.refCount)
@@ -422,7 +479,7 @@ func TestRemoveFromVM_HostFails(t *testing.T) {
 }
 
 // TestRemoveFromVM_HostFails_ThenRetry verifies that after a failed host remove
-// (device is now StateInvalid with refCount=0), a retry via RemoveFromVM
+// (device is now StateAssignedInvalid with refCount=0), a retry via RemoveFromVM
 // succeeds and cleans up the maps.
 func TestRemoveFromVM_HostFails_ThenRetry(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -454,7 +511,7 @@ func TestRemoveFromVM_HostFails_ThenRetry(t *testing.T) {
 }
 
 // TestRemoveFromVM_InvalidDevice_AfterGuestFail verifies that a device stuck in
-// StateInvalid (due to guest failure in AddToVM) can be cleaned up via RemoveFromVM.
+// StateAssignedInvalid (due to guest failure in AddToVM) can be cleaned up via RemoveFromVM.
 func TestRemoveFromVM_InvalidDevice_AfterGuestFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
@@ -517,7 +574,7 @@ func TestReserve_AfterRemove(t *testing.T) {
 }
 
 // TestReserve_AfterGuestFailure verifies what Reserve returns for a device that
-// is currently StateInvalid (guest failed, host succeeded).
+// is currently StateAssignedInvalid (guest failed, host succeeded).
 // Since the device is still in deviceToGUID, Reserve should return the SAME GUID.
 func TestReserve_AfterGuestFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -533,7 +590,7 @@ func TestReserve_AfterGuestFailure(t *testing.T) {
 	guest.EXPECT().AddVPCIDevice(gomock.Any(), gomock.Any()).Return(errGuestAdd)
 	_ = c.AddToVM(ctx, g1)
 
-	// Device is now StateInvalid and still in deviceToGUID.
+	// Device is now StateAssignedInvalid and still in deviceToGUID.
 	g2, err := c.Reserve(ctx, dev)
 	if err != nil {
 		t.Fatalf("Reserve after guest failure: %v", err)
