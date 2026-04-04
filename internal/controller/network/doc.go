@@ -37,5 +37,5 @@
 //
 // Guest-side operations differ between LCOW and WCOW and are implemented in
 // platform-specific source files selected via build tags
-// (default for LCOW shim, "wcow" tag for WCOW shim).
+// ("lcow" tag for LCOW shim, "wcow" tag for WCOW shim).
 package network

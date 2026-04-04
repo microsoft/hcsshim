@@ -32,14 +32,12 @@ type Controller struct {
 	// isNamespaceSupportedByGuest determines if network namespace is supported inside the guest
 	isNamespaceSupportedByGuest bool
 
-	// vmNetManager performs host-side NIC hot-add/remove on the UVM.
-	vmNetManager vmNetworkManager
+	// vmNetwork performs host-side NIC hot-add/remove on the UVM.
+	vmNetwork vmNetworkManager
 
-	// linuxGuestMgr performs guest-side NIC inject/remove for LCOW.
-	linuxGuestMgr linuxGuestNetworkManager
-
-	// winGuestMgr performs guest-side NIC/namespace operations for WCOW.
-	winGuestMgr windowsGuestNetworkManager
+	// guestNetwork performs guest-side NIC inject/remove for LCOW or WCOW.
+	// The correct implementation is injected based on the build tags.
+	guestNetwork guestNetwork
 
 	// capsProvider exposes the guest's declared capabilities.
 	// Used to check IsNamespaceAddRequestSupported.
@@ -49,17 +47,15 @@ type Controller struct {
 // New creates a ready-to-use Controller in [StateNotConfigured].
 func New(
 	vmNetManager vmNetworkManager,
-	linuxGuestMgr linuxGuestNetworkManager,
-	windowsGuestMgr windowsGuestNetworkManager,
+	guestNetwork guestNetwork,
 	capsProvider capabilitiesProvider,
 ) *Controller {
 	m := &Controller{
-		vmNetManager:  vmNetManager,
-		linuxGuestMgr: linuxGuestMgr,
-		winGuestMgr:   windowsGuestMgr,
-		capsProvider:  capsProvider,
-		netState:      StateNotConfigured,
-		vmEndpoints:   make(map[string]*hcn.HostComputeEndpoint),
+		vmNetwork:    vmNetManager,
+		guestNetwork: guestNetwork,
+		capsProvider: capsProvider,
+		netState:     StateNotConfigured,
+		vmEndpoints:  make(map[string]*hcn.HostComputeEndpoint),
 	}
 
 	// Cache once at construction so hot-add paths can branch without re-querying.

@@ -5,11 +5,8 @@ package network
 import (
 	"context"
 
-	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // SetupOptions holds the configuration required to set up the network for a pod.
@@ -39,26 +36,4 @@ type vmNetworkManager interface {
 	// RemoveNIC removes a network adapter from the Utility VM. `nicID` should be a string representation of a
 	// Windows GUID.
 	RemoveNIC(ctx context.Context, nicID string, settings *hcsschema.NetworkAdapter) error
-}
-
-// linuxGuestNetworkManager exposes linux guest network operations.
-// Implemented by guestmanager.Guest.
-type linuxGuestNetworkManager interface {
-	// AddLCOWNetworkInterface adds a network interface to the LCOW guest.
-	AddLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
-	// RemoveLCOWNetworkInterface removes a network interface from the LCOW guest.
-	RemoveLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
-}
-
-// windowsGuestNetworkManager exposes windows guest network operations.
-// Implemented by guestmanager.Guest.
-type windowsGuestNetworkManager interface {
-	// AddNetworkNamespace adds a network namespace to the WCOW guest.
-	AddNetworkNamespace(ctx context.Context, settings *hcn.HostComputeNamespace) error
-	// RemoveNetworkNamespace removes a network namespace from the WCOW guest.
-	RemoveNetworkNamespace(ctx context.Context, settings *hcn.HostComputeNamespace) error
-	// AddNetworkInterface adds a network interface to the WCOW guest.
-	AddNetworkInterface(ctx context.Context, adapterID string, requestType guestrequest.RequestType, settings *hcn.HostComputeEndpoint) error
-	// RemoveNetworkInterface removes a network interface from the WCOW guest.
-	RemoveNetworkInterface(ctx context.Context, adapterID string, requestType guestrequest.RequestType, settings *hcn.HostComputeEndpoint) error
 }

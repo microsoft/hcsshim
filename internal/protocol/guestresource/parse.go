@@ -12,7 +12,7 @@ import (
 	"github.com/samber/lo"
 )
 
-// BuildLCOWNetworkAdapter converts an HCN endpoint into the guestresource.LCOWNetworkAdapter
+// BuildLCOWNetworkAdapter converts an HCN endpoint into the [LCOWNetworkAdapter]
 // payload that the GCS expects.
 func BuildLCOWNetworkAdapter(nicID string, endpoint *hcn.HostComputeEndpoint, policyBasedRouting bool) (*LCOWNetworkAdapter, error) {
 	req := &LCOWNetworkAdapter{
