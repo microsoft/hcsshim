@@ -1,62 +1,45 @@
-//go:build windows && !wcow
+//go:build windows
 
-// Package plan9 provides a manager for managing Plan9 file-share devices
-// attached to a Utility VM (UVM).
+// Package plan9 manages the full lifecycle of Plan9 share mappings on a
+// Hyper-V VM, from host-side name allocation through guest-side mounting.
 //
-// It handles adding and removing Plan9 shares on the host side via HCS modify
-// calls. Guest-side mount operations (mapped-directory requests) are handled
-// separately by the mount manager.
+// # Architecture
 //
-// # Deduplication and Reference Counting
+// [Controller] is the primary entry point, exposing three methods:
 //
-// [Manager] deduplicates shares: if two callers add a share with identical
-// [AddOptions], the second call reuses the existing share and increments an
-// internal reference count rather than issuing a second HCS call. The share is
-// only removed from the VM when the last caller invokes [Manager.RemoveFromVM].
+//   - [Controller.Reserve]: allocates a reference-counted Plan9 share for a
+//     host path and returns a reservation ID.
+//   - [Controller.MapToGuest]: adds the share to the VM and mounts it
+//     inside the guest.
+//   - [Controller.UnmapFromGuest]: unmounts the share from the guest and,
+//     when all reservations for a share are released, removes the share from
+//     the VM.
 //
-// # Lifecycle
+// All three operations are serialized by a single mutex on the [Controller].
 //
-// Each share progresses through the states below.
-// The happy path runs down the left column; the error path is on the right.
+// # Usage
 //
-//	Allocate entry for the share
-//	            │
-//	            ▼
-//	┌─────────────────────┐
-//	│    sharePending     │
-//	└──────────┬──────────┘
-//	           │
-//	   ┌───────┴────────────────────────────────┐
-//	   │ AddPlan9 succeeds                      │ AddPlan9 fails
-//	   ▼                                        ▼
-//	┌─────────────────────┐         ┌──────────────────────┐
-//	│     shareAdded      │         │    shareInvalid      │
-//	└──────────┬──────────┘         └──────────────────────┘
-//	           │ RemovePlan9 succeeds   (auto-removed from map)
-//	           ▼
-//	┌─────────────────────┐
-//	│    shareRemoved     │  ← terminal; entry removed from map
-//	└─────────────────────┘
+//	c := plan9.New(vmOps, linuxGuestOps, noWritableFileShares)
 //
-// State descriptions:
+//	// Reserve a share (no I/O yet):
+//	id, err := c.Reserve(ctx, shareConfig, mountConfig)
 //
-//   - [sharePending]: entered when a new entry is allocated (by [Manager.ResolveShareName]
-//     or the first [Manager.AddToVM] call). No HCS call has been made yet.
-//   - [shareAdded]: entered once [vmPlan9Manager.AddPlan9] succeeds;
-//     the share is live on the VM.
-//   - [shareInvalid]: entered when [vmPlan9Manager.AddPlan9] fails;
-//     the map entry is removed immediately so the next call can retry.
-//   - [shareRemoved]: terminal state entered once [vmPlan9Manager.RemovePlan9] succeeds.
+//	// Add the share and mount in the guest:
+//	guestPath, err := c.MapToGuest(ctx, id)
 //
-// Method summary:
+//	// Unmount and remove when done:
+//	err = c.UnmapFromGuest(ctx, id)
 //
-//   - [Manager.ResolveShareName] pre-allocates a share name for the given [AddOptions]
-//     without issuing any HCS call. If a matching share is already tracked,
-//     the existing name is returned. This is useful for resolving downstream
-//     resource paths (e.g., guest mount paths) before the share is live.
-//   - [Manager.AddToVM] attaches the share, driving the HCS AddPlan9 call on
-//     the first caller and incrementing the reference count on subsequent ones.
-//     If the HCS call fails, the entry is removed so the next call can retry.
-//   - [Manager.RemoveFromVM] decrements the reference count and tears down the
-//     share only when the count reaches zero.
+// # Retry / Idempotency
+//
+// [Controller.MapToGuest] is idempotent for a reservation that is already
+// fully mapped. [Controller.UnmapFromGuest] is retryable: if it fails
+// partway through teardown, calling it again with the same reservation ID
+// resumes from where the previous attempt stopped.
+//
+// # Layered Design
+//
+// The [Controller] delegates all share-level state to [share.Share] and all
+// mount-level state to [mount.Mount]; it only coordinates name allocation
+// and the overall call sequence.
 package plan9
