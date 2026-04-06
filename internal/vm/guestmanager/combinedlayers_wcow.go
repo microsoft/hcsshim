@@ -11,20 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// WCOWLayersManager exposes combined layer operations in the WCOW guest.
-type WCOWLayersManager interface {
-	// AddWCOWCombinedLayers adds combined layers to the WCOW guest.
-	AddWCOWCombinedLayers(ctx context.Context, settings guestresource.WCOWCombinedLayers) error
-	// AddCWCOWCombinedLayers adds combined layers to the CWCOW guest.
-	AddCWCOWCombinedLayers(ctx context.Context, settings guestresource.CWCOWCombinedLayers) error
-	// RemoveWCOWCombinedLayers removes combined layers from the WCOW guest.
-	RemoveWCOWCombinedLayers(ctx context.Context, settings guestresource.WCOWCombinedLayers) error
-	// RemoveCWCOWCombinedLayers removes combined layers from the CWCOW guest.
-	RemoveCWCOWCombinedLayers(ctx context.Context, settings guestresource.CWCOWCombinedLayers) error
-}
-
-var _ WCOWLayersManager = (*Guest)(nil)
-
 // AddWCOWCombinedLayers adds WCOW combined layers in the guest.
 func (gm *Guest) AddWCOWCombinedLayers(ctx context.Context, settings guestresource.WCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{

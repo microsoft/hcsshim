@@ -17,6 +17,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// uvm exposes the subset of [vmmanager.UtilityVM] functionality that the
+// guest manager needs.
+type uvm interface {
+	// ID returns the user-visible identifier for the Utility VM.
+	ID() string
+	// RuntimeID returns the Hyper-V VM GUID.
+	RuntimeID() guid.GUID
+	// Wait blocks until the VM exits or ctx is cancelled.
+	Wait(ctx context.Context) error
+	// ExitError returns the error that caused the VM to exit, if any.
+	ExitError() error
+}
+
 // Guest manages the GCS connection and guest-side operations for a utility VM.
 type Guest struct {
 	// mu serializes all operations that interact with the guest connection (gc).
@@ -28,22 +41,15 @@ type Guest struct {
 
 	log *logrus.Entry
 	// uvm is the utility VM that this GuestManager is managing.
-	// We restrict access to just lifetime manager and VMSocket manager.
-	// Other APIs are outside the purview of this package.
-	uvm interface {
-		vmmanager.LifetimeManager
-		vmmanager.VMSocketManager
-	}
+	// We restrict access to just the methods actually needed by this package.
+	uvm uvm
 	// gc is the active GCS connection to the guest.
 	// It will be nil if no connection is active.
 	gc *gcs.GuestConnection
 }
 
 // New creates a new Guest Manager.
-func New(ctx context.Context, uvm interface {
-	vmmanager.LifetimeManager
-	vmmanager.VMSocketManager
-}) *Guest {
+func New(ctx context.Context, uvm uvm) *Guest {
 	return &Guest{
 		log: log.G(ctx).WithField(logfields.UVMID, uvm.ID()),
 		uvm: uvm,

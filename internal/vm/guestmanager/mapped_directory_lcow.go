@@ -11,16 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// LCOWDirectoryManager exposes mapped directory operations in the LCOW guest.
-type LCOWDirectoryManager interface {
-	// AddLCOWMappedDirectory maps a directory into the LCOW guest.
-	AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
-	// RemoveLCOWMappedDirectory unmaps a directory from the LCOW guest.
-	RemoveLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
-}
-
-var _ LCOWDirectoryManager = (*Guest)(nil)
-
 // AddLCOWMappedDirectory maps a directory into LCOW guest.
 func (gm *Guest) AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
 	request := &hcsschema.ModifySettingRequest{

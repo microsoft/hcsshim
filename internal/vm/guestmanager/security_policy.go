@@ -11,16 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// SecurityPolicyManager exposes guest security policy operations.
-type SecurityPolicyManager interface {
-	// AddSecurityPolicy adds a security policy to the guest.
-	AddSecurityPolicy(ctx context.Context, settings guestresource.ConfidentialOptions) error
-	// InjectPolicyFragment injects a policy fragment into the guest.
-	InjectPolicyFragment(ctx context.Context, settings guestresource.SecurityPolicyFragment) error
-}
-
-var _ SecurityPolicyManager = (*Guest)(nil)
-
 // AddSecurityPolicy adds a security policy to the guest.
 func (gm *Guest) AddSecurityPolicy(ctx context.Context, settings guestresource.ConfidentialOptions) error {
 	request := &hcsschema.ModifySettingRequest{

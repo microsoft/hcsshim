@@ -11,16 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// LCOWLayersManager exposes combined layer operations in the LCOW guest.
-type LCOWLayersManager interface {
-	// AddLCOWCombinedLayers adds combined layers to the LCOW guest.
-	AddLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
-	// RemoveLCOWCombinedLayers removes combined layers from the LCOW guest.
-	RemoveLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
-}
-
-var _ LCOWLayersManager = (*Guest)(nil)
-
 // AddLCOWCombinedLayers adds LCOW combined layers in the guest.
 func (gm *Guest) AddLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{

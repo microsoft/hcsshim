@@ -11,13 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// HVSocketManager exposes the hvSocket operations in the Guest.
-type HVSocketManager interface {
-	UpdateHvSocketAddress(ctx context.Context, settings *hcsschema.HvSocketAddress) error
-}
-
-var _ HVSocketManager = (*Guest)(nil)
-
 // UpdateHvSocketAddress updates the Hyper-V socket address settings for the VM.
 // These address settings are applied by the GCS every time the VM starts or restores.
 func (gm *Guest) UpdateHvSocketAddress(ctx context.Context, settings *hcsschema.HvSocketAddress) error {
