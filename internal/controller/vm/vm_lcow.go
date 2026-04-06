@@ -1,4 +1,4 @@
-//go:build windows && !wcow
+//go:build windows && lcow
 
 package vm
 
@@ -8,19 +8,38 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
+	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/containerd/errdefs"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sync/errgroup"
 )
+
+// Plan9Controller returns the singleton controller which can be used
+// to manage the Plan9 shares on the Linux UVM.
+func (c *Controller) Plan9Controller() *plan9.Controller {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.plan9Controller == nil {
+		c.plan9Controller = plan9.New(c.uvm, c.guest, c.noWritableFileShares)
+	}
+
+	return c.plan9Controller
+}
 
 // setupEntropyListener sets up entropy for LCOW UVMs.
 //
 // Linux VMs require entropy to initialize their random number generators during boot.
 // This method listens on a predefined vsock port and provides cryptographically secure
 // random data to the Linux init process when it connects.
-func (c *Manager) setupEntropyListener(ctx context.Context, group *errgroup.Group) {
+func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.Group) {
 	group.Go(func() error {
 		// The Linux guest will connect to this port during init to receive entropy.
 		entropyConn, err := winio.ListenHvsock(&winio.HvsockAddr{
@@ -58,7 +77,7 @@ func (c *Manager) setupEntropyListener(ctx context.Context, group *errgroup.Grou
 // This method establishes a vsock connection to receive log output from GCS
 // running inside the Linux VM. The logs are parsed and
 // forwarded to the host's logging system for monitoring and debugging.
-func (c *Manager) setupLoggingListener(ctx context.Context, group *errgroup.Group) {
+func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.Group) {
 	group.Go(func() error {
 		// The GCS will connect to this port to stream log output.
 		logConn, err := winio.ListenHvsock(&winio.HvsockAddr{
@@ -93,6 +112,53 @@ func (c *Manager) setupLoggingListener(ctx context.Context, group *errgroup.Grou
 
 // finalizeGCSConnection finalizes the GCS connection for LCOW VMs.
 // For LCOW, no additional finalization is needed.
-func (c *Manager) finalizeGCSConnection(_ context.Context) error {
+func (c *Controller) finalizeGCSConnection(_ context.Context) error {
+	return nil
+}
+
+// updateVMResources applies Linux VM memory and CPU limits from OCI resources.
+func (c *Controller) updateVMResources(ctx context.Context, data interface{}) error {
+	resources, ok := data.(*specs.LinuxResources)
+	if !ok {
+		return fmt.Errorf("invalid resource type %T, expected *specs.LinuxResources", data)
+	}
+
+	if resources.Memory != nil {
+		if resources.Memory.Limit == nil {
+			return fmt.Errorf("invalid linux memory limit")
+		}
+
+		sizeInBytes := uint64(*resources.Memory.Limit)
+		// Make a call to the VM's orchestrator to update the VM's size in MB
+		// Internally, HCS will get the number of pages this corresponds to and attempt to assign
+		// pages to numa nodes evenly
+		requestedSizeInMB := sizeInBytes / memory.MiB
+		actual := vmutils.NormalizeMemorySize(ctx, c.vmID, requestedSizeInMB)
+
+		if err := c.uvm.UpdateMemory(ctx, actual); err != nil {
+			return fmt.Errorf("update vm memory: %w", err)
+		}
+	}
+
+	// Translate OCI CPU knobs to HCS processor limits.
+	if resources.CPU != nil {
+		processorLimits := &hcsschema.ProcessorLimits{}
+		if resources.CPU.Quota != nil {
+			processorLimits.Limit = uint64(*resources.CPU.Quota)
+		}
+		if resources.CPU.Shares != nil {
+			processorLimits.Weight = uint64(*resources.CPU.Shares)
+		}
+
+		// Support for updating CPU limits was not added until 20H2 build
+		if osversion.Get().Build < osversion.V20H2 {
+			return errdefs.ErrNotImplemented
+		}
+
+		if err := c.uvm.UpdateCPULimits(ctx, processorLimits); err != nil {
+			return fmt.Errorf("update vm cpu limits: %w", err)
+		}
+	}
+
 	return nil
 }

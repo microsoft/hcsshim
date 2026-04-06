@@ -12,26 +12,32 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
+	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
+	"github.com/Microsoft/hcsshim/internal/controller/device/scsi"
+	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	iwin "github.com/Microsoft/hcsshim/internal/windows"
-	"github.com/containerd/errdefs"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 
 	"github.com/Microsoft/go-winio/pkg/process"
+	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows"
 )
 
-// Manager is the VM controller implementation that manages the lifecycle of a Utility VM
+// Controller is the VM controller implementation that manages the lifecycle of a Utility VM
 // and its associated resources.
-type Manager struct {
+type Controller struct {
 	vmID  string
 	uvm   *vmmanager.UtilityVM
 	guest *guestmanager.Guest
@@ -40,7 +46,7 @@ type Manager struct {
 	// Access must be guarded by mu.
 	vmState State
 
-	// mu guards the concurrent access to the Manager's fields and operations.
+	// mu guards the concurrent access to the Controller's fields and operations.
 	mu sync.RWMutex
 
 	// logOutputDone is closed when the GCS log output processing goroutine completes.
@@ -55,14 +61,23 @@ type Manager struct {
 
 	// isPhysicallyBacked indicates whether the VM is using physical backing for its memory.
 	isPhysicallyBacked bool
+
+	// noWritableFileShares indicates whether writable file shares are disabled for this VM.
+	noWritableFileShares bool
+
+	// scsiController manages SCSI devices for this VM.
+	scsiController *scsi.Controller
+
+	// vpciController manages virtual PCI device assignments for this VM.
+	vpciController *vpci.Controller
+
+	// plan9Controller manages Plan9 file share mounts for this VM.
+	plan9Controller *plan9.Controller
 }
 
-// Ensure both the Controller, and it's subset Handle are implemented by Manager.
-var _ Controller = (*Manager)(nil)
-
-// NewController creates a new Manager instance in the [StateNotCreated] state.
-func NewController() *Manager {
-	return &Manager{
+// New creates a new Controller instance in the [StateNotCreated] state.
+func New() *Controller {
+	return &Controller{
 		logOutputDone: make(chan struct{}),
 		vmState:       StateNotCreated,
 	}
@@ -70,20 +85,32 @@ func NewController() *Manager {
 
 // Guest returns the guest manager instance for this VM.
 // The guest manager provides access to guest-host communication.
-func (c *Manager) Guest() *guestmanager.Guest {
+func (c *Controller) Guest() *guestmanager.Guest {
 	return c.guest
 }
 
 // State returns the current VM state.
-func (c *Manager) State() State {
+func (c *Controller) State() State {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.vmState
 }
 
+// RuntimeID returns the UVM runtime identifier when the VM is created or running.
+func (c *Controller) RuntimeID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.vmState != StateCreated && c.vmState != StateRunning {
+		return ""
+	}
+
+	return c.uvm.RuntimeID().String()
+}
+
 // CreateVM creates the VM using the HCS document and initializes device state.
-func (c *Manager) CreateVM(ctx context.Context, opts *CreateOptions) error {
+func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "CreateVM"))
 
 	c.mu.Lock()
@@ -100,16 +127,24 @@ func (c *Manager) CreateVM(ctx context.Context, opts *CreateOptions) error {
 		return fmt.Errorf("failed to create VM: %w", err)
 	}
 
-	// Set the Manager parameters after successful creation.
+	// Set the Controller parameters after successful creation.
 	c.vmID = opts.ID
 	c.uvm = uvm
-	// Determine if the VM is physically backed based on the HCS document configuration.
-	// We need this while extracting memory metrics, as some of them are only relevant for physically backed VMs.
-	c.isPhysicallyBacked = !opts.HCSDocument.VirtualMachine.ComputeTopology.Memory.AllowOvercommit
+	// Determine if the VM is physically backed based on the create options.
+	c.isPhysicallyBacked = opts.FullyPhysicallyBacked
+	//
+	c.noWritableFileShares = opts.NoWritableFileShares
 
 	// Initialize the GuestManager for managing guest interactions.
 	// We will create the guest connection via GuestManager during StartVM.
 	c.guest = guestmanager.New(ctx, uvm)
+
+	// Eager initialize the SCSI controller as opposed to all other controllers.
+	// This is because we always use SCSI for attaching scratch VHDs.
+	c.scsiController, err = newSCSIController(ctx, opts.HCSDocument, c.uvm, c.guest, c.guest)
+	if err != nil {
+		return fmt.Errorf("failed to initialize SCSI controller: %w", err)
+	}
 
 	c.vmState = StateCreated
 	return nil
@@ -119,7 +154,7 @@ func (c *Manager) CreateVM(ctx context.Context, opts *CreateOptions) error {
 // It starts the underlying HCS VM, establishes the GCS connection,
 // and transitions the VM to [StateRunning].
 // On any failure the VM is transitioned to [StateInvalid].
-func (c *Manager) StartVM(ctx context.Context, opts *StartOptions) (err error) {
+func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "StartVM"))
 
 	c.mu.Lock()
@@ -202,9 +237,49 @@ func (c *Manager) StartVM(ctx context.Context, opts *StartOptions) (err error) {
 	return nil
 }
 
+// Update is used to update the VM configuration on-the-fly.
+// It supports modifying resources like CPU and memory while the VM is running.
+// It also supports injecting policy fragments or updating the CPU group id for the VM.
+func (c *Controller) Update(ctx context.Context, resources interface{}, annots map[string]string) error {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "Update"))
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.vmState != StateRunning {
+		return fmt.Errorf("cannot update VM: VM is in state %s", c.vmState)
+	}
+
+	// If the resource is a policy fragment, inject it directly into the guest and return.
+	if policyFragment, ok := resources.(*ctrdtaskapi.PolicyFragment); ok {
+		return c.guest.InjectPolicyFragment(ctx,
+			guestresource.SecurityPolicyFragment{
+				Fragment: policyFragment.Fragment,
+			},
+		)
+	}
+
+	// Apply generic VM resource updates (e.g., CPU count, memory).
+	if err := c.updateVMResources(ctx, resources); err != nil {
+		return fmt.Errorf("failed to update VM resources: %w", err)
+	}
+
+	// Update CPU group membership if the corresponding annotation is present.
+	if cpuGroupID, ok := annots[annotations.CPUGroupID]; ok {
+		if cpuGroupID == "" {
+			return errors.New("must specify an ID to use when configuring a VM's cpugroup")
+		}
+		if err := c.uvm.SetCPUGroup(ctx, &hcsschema.CpuGroup{Id: cpuGroupID}); err != nil {
+			return fmt.Errorf("failed to set CPU group: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // waitForVMExit blocks until the VM exits and then transitions the VM state to [StateTerminated].
 // This is called in StartVM in a background goroutine.
-func (c *Manager) waitForVMExit(ctx context.Context) {
+func (c *Controller) waitForVMExit(ctx context.Context) {
 	// The original context may have timeout or propagate a cancellation
 	// copy the original to prevent it affecting the background wait go routine
 	ctx = context.WithoutCancel(ctx)
@@ -216,14 +291,12 @@ func (c *Manager) waitForVMExit(ctx context.Context) {
 	c.mu.Lock()
 	if c.vmState != StateTerminated {
 		c.vmState = StateTerminated
-	} else {
-		log.G(ctx).WithField("currentState", c.vmState).Debug("waitForVMExit: state transition to Terminated was a no-op")
 	}
 	c.mu.Unlock()
 }
 
 // ExecIntoHost executes a command in the running UVM.
-func (c *Manager) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProcessRequest) (int, error) {
+func (c *Controller) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProcessRequest) (int, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "ExecIntoHost"))
 
 	if request.Terminal && request.Stderr != "" {
@@ -256,7 +329,7 @@ func (c *Manager) ExecIntoHost(ctx context.Context, request *shimdiag.ExecProces
 }
 
 // DumpStacks dumps the GCS stacks associated with the VM
-func (c *Manager) DumpStacks(ctx context.Context) (string, error) {
+func (c *Controller) DumpStacks(ctx context.Context) (string, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "DumpStacks"))
 
 	// Take read lock at this place.
@@ -278,7 +351,7 @@ func (c *Manager) DumpStacks(ctx context.Context) (string, error) {
 }
 
 // Wait blocks until the VM exits and all log output processing has completed.
-func (c *Manager) Wait(ctx context.Context) error {
+func (c *Controller) Wait(ctx context.Context) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "Wait"))
 
 	// Validate that the VM has been created and can be waited on.
@@ -308,7 +381,7 @@ func (c *Manager) Wait(ctx context.Context) error {
 
 // Stats returns runtime statistics for the VM including processor runtime and
 // memory usage. The VM must be in [StateRunning].
-func (c *Manager) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, error) {
+func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "Stats"))
 
 	// Take read lock at this place.
@@ -376,7 +449,7 @@ func (c *Manager) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, e
 //
 // The context is used for all operations, including waits, so timeouts/cancellations may prevent
 // proper UVM cleanup.
-func (c *Manager) TerminateVM(ctx context.Context) (err error) {
+func (c *Controller) TerminateVM(ctx context.Context) (err error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "TerminateVM"))
 
 	c.mu.Lock()
@@ -413,7 +486,7 @@ func (c *Manager) TerminateVM(ctx context.Context) (err error) {
 // StartTime returns the timestamp when the VM was started.
 // Returns zero value of time.Time if the VM has not yet reached
 // [StateRunning] or [StateTerminated].
-func (c *Manager) StartTime() (startTime time.Time) {
+func (c *Controller) StartTime() (startTime time.Time) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -427,7 +500,7 @@ func (c *Manager) StartTime() (startTime time.Time) {
 // ExitStatus returns the final status of the VM once it has reached
 // [StateTerminated], including the time it stopped and any exit error.
 // Returns an error if the VM has not yet stopped.
-func (c *Manager) ExitStatus() (*ExitStatus, error) {
+func (c *Controller) ExitStatus() (*ExitStatus, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

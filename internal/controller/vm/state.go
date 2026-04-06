@@ -29,7 +29,7 @@ type State int32
 
 const (
 	// StateNotCreated indicates the VM has not been created yet.
-	// This is the initial state when a Controller is first instantiated via [NewController].
+	// This is the initial state when a Controller is first instantiated via [New].
 	// Valid transitions: StateNotCreated → StateCreated (via [Controller.CreateVM])
 	StateNotCreated State = iota
 
