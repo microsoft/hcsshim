@@ -52,6 +52,7 @@ type Container struct {
 
 	spec          *oci.Spec
 	ociBundlePath string
+	sandboxID     string // ID of the sandbox/pod this container belongs to
 	isSandbox     bool
 
 	container   runtime.Container

@@ -362,17 +362,16 @@ func main() {
 	}
 	defer containersControl.Delete() //nolint:errcheck
 
-	// Create virtual-pods cgroup hierarchy for multi-pod support
-	// This will be the parent for all virtual pod cgroups: /containers/virtual-pods/{virtualSandboxID}
-	virtualPodsControl, err := cgroup.NewManager("/containers/virtual-pods", &oci.LinuxResources{
+	// Create /pods cgroup hierarchy for all pods (sandbox, virtual pod, and v2).
+	podsControl, err := cgroup.NewManager("/pods", &oci.LinuxResources{
 		Memory: &oci.LinuxMemory{
-			Limit: &containersLimit, // Share the same limit as containers
+			Limit: &containersLimit,
 		},
 	})
 	if err != nil {
-		logrus.WithError(err).Fatal("failed to create containers/virtual-pods cgroup")
+		logrus.WithError(err).Fatal("failed to create pods cgroup")
 	}
-	defer virtualPodsControl.Delete() //nolint:errcheck
+	defer podsControl.Delete() //nolint:errcheck
 
 	gcsControl, err := cgroup.NewManager("/gcs", &oci.LinuxResources{})
 	if err != nil {
@@ -394,10 +393,6 @@ func main() {
 		EnableV4: *v4,
 	}
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
-	// Initialize virtual pod support in the host
-	if err := h.InitializeVirtualPodSupport(virtualPodsControl); err != nil {
-		logrus.WithError(err).Warn("Virtual pod support initialization failed")
-	}
 	b.AssignHandlers(mux, h)
 
 	var bridgeIn io.ReadCloser
@@ -433,13 +428,13 @@ func main() {
 	oomFile := os.NewFile(oom, "cefd")
 	defer oomFile.Close()
 
-	// Setup OOM monitoring for virtual-pods cgroup
-	virtualPodsOom, err := virtualPodsControl.OOMEventFD()
+	// Setup OOM monitoring for pods cgroup
+	podsOom, err := podsControl.OOMEventFD()
 	if err != nil {
-		logrus.WithError(err).Fatal("failed to retrieve the virtual-pods cgroups oom eventfd")
+		logrus.WithError(err).Fatal("failed to retrieve the pods cgroups oom eventfd")
 	}
-	virtualPodsOomFile := os.NewFile(virtualPodsOom, "vp-oomfd")
-	defer virtualPodsOomFile.Close()
+	podsOomFile := os.NewFile(podsOom, "pods-oomfd")
+	defer podsOomFile.Close()
 
 	// time synchronization service
 	if !(*disableTimeSync) {
@@ -450,7 +445,7 @@ func main() {
 
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
 	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
-	go readMemoryEvents(startTime, virtualPodsOomFile, "/containers/virtual-pods", containersLimit, virtualPodsControl)
+	go readMemoryEvents(startTime, podsOomFile, "/pods", containersLimit, podsControl)
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{

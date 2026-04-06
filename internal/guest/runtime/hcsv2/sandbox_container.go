@@ -119,12 +119,8 @@ func setupSandboxContainerSpec(ctx context.Context, id, sandboxRoot string, spec
 	// also has a concept of a sandbox/shm file when the IPC NamespaceMode !=
 	// NODE.
 
-	// Set cgroup path - check if this is a virtual pod
-	if virtualSandboxID != "" {
-		spec.Linux.CgroupsPath = "/containers/virtual-pods/" + virtualSandboxID
-	} else {
-		spec.Linux.CgroupsPath = "/containers/" + id
-	}
+	// Set cgroup path under the pod's cgroup.
+	spec.Linux.CgroupsPath = "/pods/" + id
 
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil

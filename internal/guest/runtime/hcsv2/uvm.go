@@ -56,35 +56,31 @@ import (
 // for V2 where the specific message is targeted at the UVM itself.
 const UVMContainerID = "00000000-0000-0000-0000-000000000000"
 
-// Prevent path traversal via malformed container / sandbox IDs.  Container IDs
-// can be either UVMContainerID, or a 64 character hex string. This is also used
-// to check that sandbox IDs (which is also used in paths) are valid, which has
-// the same format.
+// validContainerIDRegexRaw matches 64-char hex IDs used for container and sandbox IDs.
+// Used by security policy enforcement to prevent path traversal.
 const validContainerIDRegexRaw = `[0-9a-fA-F]{64}`
 
 var validContainerIDRegex = regexp.MustCompile("^" + validContainerIDRegexRaw + "$")
 
-// idType just changes the error message
 func checkValidContainerID(id string, idType string) error {
 	if id == UVMContainerID || validContainerIDRegex.MatchString(id) {
 		return nil
 	}
-
 	return errors.Errorf("invalid %s id: %s (must match %s)", idType, id, validContainerIDRegex.String())
 }
 
-// VirtualPod represents a virtual pod that shares a UVM/Sandbox with other pods
-type VirtualPod struct {
-	VirtualSandboxID string
-	MasterSandboxID  string
-	NetworkNamespace string
-	CgroupPath       string
-	CgroupControl    cgroup.Manager  // Unified cgroup manager (v1 or v2)
-	Containers       map[string]bool // containerID -> exists
-	CreatedAt        time.Time
+// uvmPod represents a pod within the UVM.
+// Used for V1 sandbox containers, virtual pods, and V2 native sandboxes.
+type uvmPod struct {
+	sandboxID        string
+	networkNamespace string
+	cgroupPath       string
+	cgroupControl    cgroup.Manager
+	containers       map[string]bool
+	createdAt        time.Time
 }
 
-// Host is the structure tracking all UVM host state including all containers
+// Host is the structure tracking all UVM host state including all pods and containers
 // and processes.
 type Host struct {
 	containersMutex sync.Mutex
@@ -93,11 +89,9 @@ type Host struct {
 	externalProcessesMutex sync.Mutex
 	externalProcesses      map[int]*externalProcess
 
-	// Virtual pod support for multi-pod scenarios
-	virtualPodsMutex         sync.Mutex
-	virtualPods              map[string]*VirtualPod // virtualSandboxID -> VirtualPod
-	containerToVirtualPod    map[string]string      // containerID -> virtualSandboxID
-	virtualPodsCgroupManager cgroup.Manager         // Parent cgroup for all virtual pods
+	// pods tracks all pods (sandboxes) in this UVM.
+	podsMutex sync.Mutex
+	pods      map[string]*uvmPod
 
 	// sandboxRoots maps sandboxID to the resolved sandbox root directory.
 	// Populated via RegisterSandboxRoot during sandbox creation using
@@ -125,16 +119,15 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		logWriter,
 	)
 	return &Host{
-		containers:            make(map[string]*Container),
-		externalProcesses:     make(map[int]*externalProcess),
-		virtualPods:           make(map[string]*VirtualPod),
-		containerToVirtualPod: make(map[string]string),
-		sandboxRoots:          make(map[string]string),
-		rtime:                 rtime,
-		vsock:                 vsock,
-		devNullTransport:      &transport.DevNullTransport{},
-		hostMounts:            newHostMounts(),
-		securityOptions:       securityPolicyOptions,
+		containers:        make(map[string]*Container),
+		externalProcesses: make(map[int]*externalProcess),
+		pods:              make(map[string]*uvmPod),
+		sandboxRoots:      make(map[string]string),
+		rtime:             rtime,
+		vsock:             vsock,
+		devNullTransport:  &transport.DevNullTransport{},
+		hostMounts:        newHostMounts(),
+		securityOptions:   securityPolicyOptions,
 	}
 }
 
@@ -217,22 +210,32 @@ func (h *Host) RemoveContainer(id string) {
 		return
 	}
 
-	// Check if this container is part of a virtual pod
-	virtualPodID, isVirtualPod := c.spec.Annotations[annotations.VirtualPodID]
-	if isVirtualPod {
-		// Remove from virtual pod tracking
-		h.RemoveContainerFromVirtualPod(id)
-		// Network namespace cleanup is handled in virtual pod cleanup when last container is removed.
-		logrus.WithFields(logrus.Fields{
-			"containerID":  id,
-			"virtualPodID": virtualPodID,
-		}).Info("Container removed from virtual pod")
-	} else {
-		// delete the network namespace for standalone and sandbox containers
-		criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
-		if !isCRI || criType == "sandbox" {
-			_ = RemoveNetworkNamespace(context.Background(), id)
+	// Delete the network namespace for standalone and sandbox containers.
+	criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
+	if !isCRI || criType == "sandbox" {
+		_ = RemoveNetworkNamespace(context.Background(), id)
+	}
+
+	// Update the pod tracking.
+	if c.sandboxID != "" {
+		h.podsMutex.Lock()
+		if pod, exists := h.pods[c.sandboxID]; exists {
+			if criType == "container" {
+				// For a workload container, just remove the reference from the pod.
+				delete(pod.containers, c.id)
+			}
+			if criType == "sandbox" || criType == "" {
+				// For a sandbox container, delete the pod's cgroup and the pod itself.
+				if pod.cgroupControl != nil {
+					if err := pod.cgroupControl.Delete(); err != nil {
+						logrus.WithError(err).WithField("sandboxID", c.sandboxID).
+							Warn("failed to delete pod cgroup")
+					}
+				}
+				delete(h.pods, c.sandboxID)
+			}
 		}
+		h.podsMutex.Unlock()
 	}
 
 	delete(h.containers, id)
@@ -377,31 +380,24 @@ func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHost
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 
-	// Check for virtual pod annotation
-	virtualPodID, isVirtualPod := settings.OCISpecification.Annotations[annotations.VirtualPodID]
-
-	if h.HasSecurityPolicy() {
-		if err = checkValidContainerID(id, "container"); err != nil {
-			return nil, err
-		}
-		if virtualPodID != "" {
-			if err = checkValidContainerID(virtualPodID, "virtual pod"); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// Special handling for virtual pod sandbox containers:
-	// The first container in a virtual pod (containerID == virtualPodID) should be treated as a sandbox
-	// even if the CRI annotation might indicate otherwise due to host-side UVM setup differences
-	if isVirtualPod && id == virtualPodID {
+	// For virtual pods, the first container (containerID == virtualPodID) is the sandbox.
+	virtualPodID := settings.OCISpecification.Annotations[annotations.VirtualPodID]
+	if virtualPodID != "" && id == virtualPodID {
 		criType = "sandbox"
 		isCRI = true
-		logrus.WithFields(logrus.Fields{
-			"containerID":     id,
-			"virtualPodID":    virtualPodID,
-			"originalCriType": settings.OCISpecification.Annotations[annotations.KubernetesContainerType],
-		}).Info("Virtual pod first container detected - treating as sandbox container")
+	}
+
+	// Determine the sandbox ID. For sandbox containers it's the container's own ID.
+	// For virtual pods it's the virtual pod ID. For workloads it comes from the annotation.
+	sandboxID := id
+	if criType == "container" {
+		sid := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
+		if sid == "" {
+			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
+		}
+		sandboxID = sid
+	} else if virtualPodID != "" {
+		sandboxID = virtualPodID
 	}
 
 	c := &Container{
@@ -409,6 +405,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		vsock:          h.vsock,
 		spec:           settings.OCISpecification,
 		ociBundlePath:  settings.OCIBundlePath,
+		sandboxID:      sandboxID,
 		isSandbox:      criType == "sandbox",
 		exitType:       prot.NtUnexpectedExit,
 		processes:      make(map[uint32]*containerProcess),
@@ -425,54 +422,20 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}()
 
-	// Handle virtual pod logic
-	if isVirtualPod && isCRI {
-		logrus.WithFields(logrus.Fields{
-			"containerID":  id,
-			"virtualPodID": virtualPodID,
-			"criType":      criType,
-		}).Info("Processing container for virtual pod")
-
-		if criType == "sandbox" {
-			// This is a virtual pod sandbox - create the virtual pod if it doesn't exist
-			if _, exists := h.GetVirtualPod(virtualPodID); !exists {
-				// Use the network namespace ID from the current container spec
-				// Virtual pods share the same network namespace
-				networkNamespace := specGuest.GetNetworkNamespaceID(settings.OCISpecification)
-				if networkNamespace == "" {
-					networkNamespace = fmt.Sprintf("virtual-pod-%s", virtualPodID)
-				}
-
-				if err := h.CreateVirtualPod(ctx, virtualPodID, virtualPodID, networkNamespace, settings.OCISpecification); err != nil {
-					return nil, errors.Wrapf(err, "failed to create virtual pod %s", virtualPodID)
-				}
-			}
-		}
-
-		// Add this container to the virtual pod
-		if err := h.AddContainerToVirtualPod(id, virtualPodID); err != nil {
-			return nil, errors.Wrapf(err, "failed to add container %s to virtual pod %s", id, virtualPodID)
-		}
-	}
-
-	// Normally we would be doing policy checking here at the start of our
-	// "policy gated function". However, we can't for create container as we
-	// need a properly correct sandboxID which might be changed by the code
-	// below that determines the sandboxID. This is a bit of future proofing
-	// as currently for our single use case, the sandboxID is the same as the
-	// container id
-
 	var namespaceID string
-	// for sandbox container sandboxID is same as container id
-	sandboxID := id
 	if isCRI {
 		switch criType {
 		case "sandbox":
-			// Capture namespaceID if any because setupSandboxContainerSpec clears the Windows section.
+			// Capture namespaceID before setupSandboxContainerSpec clears the Windows section.
 			namespaceID = specGuest.GetNetworkNamespaceID(settings.OCISpecification)
 
-			// Resolve the sandbox root from OCIBundlePath.
-			sandboxRoot := h.registerSandboxRoot(id, settings.OCIBundlePath, virtualPodID)
+			// Create the pod within the UVM.
+			if err := h.createPodInUVM(sandboxID, settings.OCISpecification, namespaceID); err != nil {
+				return nil, err
+			}
+
+			// Register the sandbox root from OCIBundlePath.
+			sandboxRoot := h.registerSandboxRoot(sandboxID, settings.OCIBundlePath, virtualPodID)
 			c.sandboxRoot = sandboxRoot
 
 			err = setupSandboxContainerSpec(ctx, id, sandboxRoot, settings.OCISpecification)
@@ -502,19 +465,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 		case "container":
-			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
-			sandboxID = sid
-			if h.HasSecurityPolicy() {
-				if err = checkValidContainerID(sid, "sandbox"); err != nil {
-					return nil, err
-				}
-			}
-			if !ok || sid == "" {
-				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
-			}
-			sandboxRoot := h.resolveSandboxRoot(sid)
+			// Add this container to the pod's tracking.
+			h.addContainerToPod(sandboxID, id)
+
+			sandboxRoot := h.resolveSandboxRoot(sandboxID)
 			c.sandboxRoot = sandboxRoot
-			if err = setupWorkloadContainerSpec(ctx, sid, id, sandboxRoot, settings.OCISpecification, settings.OCIBundlePath); err != nil {
+			if err = setupWorkloadContainerSpec(ctx, sandboxID, id, sandboxRoot, settings.OCISpecification, settings.OCIBundlePath); err != nil {
 				return nil, err
 			}
 
@@ -1480,174 +1436,51 @@ func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec)
 	return oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false)
 }
 
-// Virtual Pod Management Methods
+// Pod Management Methods
 
-// InitializeVirtualPodSupport sets up the parent cgroup for virtual pods
-func (h *Host) InitializeVirtualPodSupport(mgr cgroup.Manager) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
+// createPodInUVM creates a new pod with its own cgroup.
+func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec, nsID string) error {
+	h.podsMutex.Lock()
+	defer h.podsMutex.Unlock()
 
-	if mgr == nil {
-		return errors.New("no valid cgroup manager provided for virtual pod support")
+	if _, exists := h.pods[sid]; exists {
+		return fmt.Errorf("pod with id %s already exists", sid)
 	}
 
-	h.virtualPodsCgroupManager = mgr
-	logrus.Info("Virtual pod support initialized")
-	return nil
-}
+	cgroupPath := path.Join("/pods", sid)
 
-// CreateVirtualPod creates a new virtual pod with its own cgroup and network namespace
-func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string, pSpec *specs.Spec) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	// Check if virtual pod already exists
-	if _, exists := h.virtualPods[virtualSandboxID]; exists {
-		return fmt.Errorf("virtual pod %s already exists", virtualSandboxID)
-	}
-
-	// Extract resource limits if provided
 	resources := &specs.LinuxResources{}
 	if pSpec != nil && pSpec.Linux != nil && pSpec.Linux.Resources != nil {
 		resources = pSpec.Linux.Resources
-		logrus.WithFields(logrus.Fields{
-			"virtualSandboxID": virtualSandboxID,
-		}).Info("Creating virtual pod with specified resources")
-	} else {
-		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Creating pod cgroup with default resources as none were specified")
 	}
 
-	if h.virtualPodsCgroupManager == nil {
-		return fmt.Errorf("no virtual pod cgroup manager available")
-	}
-
-	cgroupPath := path.Join("/containers/virtual-pods", virtualSandboxID)
 	cgroupControl, err := cgroup.NewManager(cgroupPath, resources)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create cgroup for virtual pod %s", virtualSandboxID)
-	}
-	logrus.WithField("cgroupPath", cgroupPath).Info("Created virtual pod cgroup")
-
-	// Create virtual pod structure
-	virtualPod := &VirtualPod{
-		VirtualSandboxID: virtualSandboxID,
-		MasterSandboxID:  masterSandboxID,
-		NetworkNamespace: networkNamespace,
-		CgroupPath:       cgroupPath,
-		CgroupControl:    cgroupControl,
-		Containers:       make(map[string]bool),
-		CreatedAt:        time.Now(),
+		return errors.Wrapf(err, "failed to create cgroup for pod %s", sid)
 	}
 
-	h.virtualPods[virtualSandboxID] = virtualPod
+	h.pods[sid] = &uvmPod{
+		sandboxID:        sid,
+		networkNamespace: nsID,
+		cgroupPath:       cgroupPath,
+		cgroupControl:    cgroupControl,
+		containers:       make(map[string]bool),
+		createdAt:        time.Now(),
+	}
 
 	logrus.WithFields(logrus.Fields{
-		"virtualSandboxID": virtualSandboxID,
-		"masterSandboxID":  masterSandboxID,
-		"cgroupPath":       cgroupPath,
-		"networkNamespace": networkNamespace,
-	}).Info("Virtual pod created successfully")
+		"sandboxID":  sid,
+		"cgroupPath": cgroupPath,
+	}).Info("pod created in UVM")
 
 	return nil
 }
 
-// CreateVirtualPodWithoutMemoryLimit creates a virtual pod without memory limits (backward compatibility)
-func (h *Host) CreateVirtualPodWithoutMemoryLimit(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string) error {
-	return h.CreateVirtualPod(ctx, virtualSandboxID, masterSandboxID, networkNamespace, nil)
-}
-
-// GetVirtualPod retrieves a virtual pod by its virtualSandboxID
-func (h *Host) GetVirtualPod(virtualSandboxID string) (*VirtualPod, bool) {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	vp, exists := h.virtualPods[virtualSandboxID]
-	return vp, exists
-}
-
-// AddContainerToVirtualPod associates a container with a virtual pod
-func (h *Host) AddContainerToVirtualPod(containerID, virtualSandboxID string) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	// Check if virtual pod exists
-	vp, exists := h.virtualPods[virtualSandboxID]
-	if !exists {
-		return fmt.Errorf("virtual pod %s does not exist", virtualSandboxID)
-	}
-
-	// Add container to virtual pod
-	vp.Containers[containerID] = true
-	h.containerToVirtualPod[containerID] = virtualSandboxID
-
-	logrus.WithFields(logrus.Fields{
-		"containerID":      containerID,
-		"virtualSandboxID": virtualSandboxID,
-	}).Info("Container added to virtual pod")
-
-	return nil
-}
-
-// RemoveContainerFromVirtualPod removes a container from a virtual pod
-func (h *Host) RemoveContainerFromVirtualPod(containerID string) {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	virtualSandboxID, exists := h.containerToVirtualPod[containerID]
-	if !exists {
-		return // Container not in any virtual pod
-	}
-
-	// Remove from virtual pod
-	if vp, vpExists := h.virtualPods[virtualSandboxID]; vpExists {
-		delete(vp.Containers, containerID)
-
-		// If this is the sandbox container, delete the network namespace
-		if containerID == virtualSandboxID && vp.NetworkNamespace != "" {
-			if err := RemoveNetworkNamespace(context.Background(), vp.NetworkNamespace); err != nil {
-				logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-					Warn("Failed to remove virtual pod network namespace (sandbox container removal)")
-			}
-		}
-
-		// If this was the last container, cleanup the virtual pod
-		if len(vp.Containers) == 0 {
-			h.cleanupVirtualPod(virtualSandboxID)
-		}
-	}
-
-	delete(h.containerToVirtualPod, containerID)
-
-	logrus.WithFields(logrus.Fields{
-		"containerID":      containerID,
-		"virtualSandboxID": virtualSandboxID,
-	}).Info("Container removed from virtual pod")
-}
-
-// cleanupVirtualPod removes a virtual pod and its cgroup (should be called with mutex held)
-func (h *Host) cleanupVirtualPod(virtualSandboxID string) {
-	if vp, exists := h.virtualPods[virtualSandboxID]; exists {
-		// Delete the cgroup
-		if vp.CgroupControl != nil {
-			if err := vp.CgroupControl.Delete(); err != nil {
-				logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-					Warn("Failed to delete virtual pod cgroup")
-			}
-		}
-
-		// Clean up network namespace if this is the last virtual pod using it
-		// Only remove if this virtual pod was managing the network namespace
-		if vp.NetworkNamespace != "" {
-			// For virtual pods, the network namespace is shared, so we only clean it up
-			// when the virtual pod itself is being destroyed
-			if err := RemoveNetworkNamespace(context.Background(), vp.NetworkNamespace); err != nil {
-				logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-					Warn("Failed to remove virtual pod network namespace")
-			}
-		}
-
-		delete(h.virtualPods, virtualSandboxID)
-
-		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Virtual pod cleaned up")
+// addContainerToPod adds a container reference to the pod.
+func (h *Host) addContainerToPod(sandboxID, containerID string) {
+	h.podsMutex.Lock()
+	defer h.podsMutex.Unlock()
+	if pod, exists := h.pods[sandboxID]; exists {
+		pod.containers[containerID] = true
 	}
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 func getStandaloneHostnamePath(rootDir string) string {
@@ -118,13 +117,8 @@ func setupStandaloneContainerSpec(ctx context.Context, id, rootDir string, spec 
 		spec.Mounts = append(spec.Mounts, mt)
 	}
 
-	// Set cgroup path
-	virtualSandboxID := spec.Annotations[annotations.VirtualPodID]
-	if virtualSandboxID != "" {
-		spec.Linux.CgroupsPath = "/containers/virtual-pods/" + virtualSandboxID + "/" + id
-	} else {
-		spec.Linux.CgroupsPath = "/containers/" + id
-	}
+	// Set cgroup path. Standalone containers go under /containers.
+	spec.Linux.CgroupsPath = "/containers/" + id
 
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil

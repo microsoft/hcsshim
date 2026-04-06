@@ -224,17 +224,8 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id, sandboxRoot strin
 		}
 	}
 
-	// Check if this is a virtual pod container
-	virtualPodID := spec.Annotations[annotations.VirtualPodID]
-
-	// Set cgroup path - check if this is a virtual pod container
-	if virtualPodID != "" {
-		// Virtual pod containers go under /containers/virtual-pods/virtualPodID/containerID
-		spec.Linux.CgroupsPath = "/containers/virtual-pods/" + virtualPodID + "/" + id
-	} else {
-		// Regular containers go under /containers
-		spec.Linux.CgroupsPath = "/containers/" + id
-	}
+	// Set cgroup path under the pod's cgroup.
+	spec.Linux.CgroupsPath = "/pods/" + sbid + "/" + id
 
 	if spec.Windows != nil {
 		// we only support Nvidia gpus right now
