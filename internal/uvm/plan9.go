@@ -47,24 +47,15 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 		return nil, fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied)
 	}
 
-	// TODO: JTERRY75 - These are marked private in the schema. For now use them
-	// but when there are public variants we need to switch to them.
-	const (
-		shareFlagsReadOnly           int32 = 0x00000001
-		shareFlagsLinuxMetadata      int32 = 0x00000004
-		shareFlagsCaseSensitive      int32 = 0x00000008
-		shareFlagsRestrictFileAccess int32 = 0x00000080
-	)
-
-	// TODO: JTERRY75 - `shareFlagsCaseSensitive` only works if the Windows
+	// TODO: JTERRY75 - `Plan9ShareFlagsCaseSensitive` only works if the Windows
 	// `hostPath` supports case sensitivity. We need to detect this case before
 	// forwarding this flag in all cases.
-	flags := shareFlagsLinuxMetadata // | shareFlagsCaseSensitive
+	flags := hcsschema.Plan9ShareFlagsLinuxMetadata // | hcsschema.Plan9ShareFlagsCaseSensitive
 	if readOnly {
-		flags |= shareFlagsReadOnly
+		flags |= hcsschema.Plan9ShareFlagsReadOnly
 	}
 	if restrict {
-		flags |= shareFlagsRestrictFileAccess
+		flags |= hcsschema.Plan9ShareFlagsRestrictFileAccess
 	}
 
 	uvm.m.Lock()

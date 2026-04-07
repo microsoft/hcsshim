@@ -15,16 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
-// share-flag constants used in Plan9 HCS requests.
-//
-// These are marked private in the HCS schema. When public variants become
-// available, we should replace these.
-const (
-	shareFlagsReadOnly           int32 = 0x00000001
-	shareFlagsLinuxMetadata      int32 = 0x00000004
-	shareFlagsRestrictFileAccess int32 = 0x00000080
-)
-
 // Share represents a Plan9 share attached to a Hyper-V VM. It tracks the
 // share lifecycle and delegates guest mount management to [mount.Mount].
 //
@@ -98,12 +88,12 @@ func (s *Share) AddToVM(ctx context.Context, vm VMPlan9Adder) error {
 		}).Debug("adding Plan9 share to VM")
 
 		// Build the HCS flags from the share config.
-		flags := shareFlagsLinuxMetadata
+		flags := hcsschema.Plan9ShareFlagsLinuxMetadata
 		if s.config.ReadOnly {
-			flags |= shareFlagsReadOnly
+			flags |= hcsschema.Plan9ShareFlagsReadOnly
 		}
 		if s.config.Restrict {
-			flags |= shareFlagsRestrictFileAccess
+			flags |= hcsschema.Plan9ShareFlagsRestrictFileAccess
 		}
 
 		// Attempt to add the share to the VM.
