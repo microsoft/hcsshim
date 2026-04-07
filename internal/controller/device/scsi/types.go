@@ -25,15 +25,9 @@ type VMSCSIOps interface {
 	disk.VMSCSIRemover
 }
 
-// LinuxGuestSCSIOps combines all guest-side SCSI operations for LCOW guests.
-type LinuxGuestSCSIOps interface {
-	mount.LinuxGuestSCSIMounter
-	mount.LinuxGuestSCSIUnmounter
-	disk.LinuxGuestSCSIEjector
-}
-
-// WindowsGuestSCSIOps combines all guest-side SCSI operations for WCOW guests.
-type WindowsGuestSCSIOps interface {
-	mount.WindowsGuestSCSIMounter
-	mount.WindowsGuestSCSIUnmounter
+// GuestSCSIOps combines all guest-side SCSI operations.
+type GuestSCSIOps interface {
+	mount.GuestSCSIMounter
+	mount.GuestSCSIUnmounter
+	disk.GuestSCSIEjector
 }

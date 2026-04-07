@@ -76,7 +76,7 @@ func (m *Mount) Reserve(config Config) error {
 
 // MountToGuest issues the guest-side mount operation and returns the guest
 // path.
-func (m *Mount) MountToGuest(ctx context.Context, linuxGuest LinuxGuestSCSIMounter, windowsGuest WindowsGuestSCSIMounter) (string, error) {
+func (m *Mount) MountToGuest(ctx context.Context, guest GuestSCSIMounter) (string, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithFields(logrus.Fields{
 		logfields.Controller: m.controller,
 		logfields.LUN:        m.lun,
@@ -90,23 +90,13 @@ func (m *Mount) MountToGuest(ctx context.Context, linuxGuest LinuxGuestSCSIMount
 
 		// Issue the platform-specific guest mount. On failure, advance to
 		// StateUnmounted since no guest state was established from Reserved.
-		if linuxGuest != nil {
-			if err := m.mountReservedLCOW(ctx, linuxGuest); err != nil {
-				// Move to unmounted since we know from reserved there was no
-				// guest state.
-				m.state = StateUnmounted
-				return "", err
-			}
-		} else if windowsGuest != nil {
-			if err := m.mountReservedWCOW(ctx, windowsGuest); err != nil {
-				// Move to unmounted since we know from reserved there was no
-				// guest state.
-				m.state = StateUnmounted
-				return "", err
-			}
-		} else {
-			return "", fmt.Errorf("both linuxGuest and windowsGuest cannot be nil")
+		if err := m.mountReserved(ctx, guest); err != nil {
+			// Move to unmounted since we know from reserved there was no
+			// guest state.
+			m.state = StateUnmounted
+			return "", err
 		}
+
 		m.state = StateMounted
 		// Note we don't increment the ref count here as the caller of
 		// MountToGuest is responsible for calling it once per reservation, so
@@ -128,7 +118,7 @@ func (m *Mount) MountToGuest(ctx context.Context, linuxGuest LinuxGuestSCSIMount
 
 // UnmountFromGuest decrements the reference count and, when it reaches zero,
 // issues the guest-side unmount.
-func (m *Mount) UnmountFromGuest(ctx context.Context, linuxGuest LinuxGuestSCSIUnmounter, windowsGuest WindowsGuestSCSIUnmounter) error {
+func (m *Mount) UnmountFromGuest(ctx context.Context, guest GuestSCSIUnmounter) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithFields(logrus.Fields{
 		logfields.Controller: m.controller,
 		logfields.LUN:        m.lun,
@@ -147,17 +137,10 @@ func (m *Mount) UnmountFromGuest(ctx context.Context, linuxGuest LinuxGuestSCSIU
 			log.G(ctx).Debug("unmounting partition from guest")
 
 			// Last reference — issue the physical guest unmount.
-			if linuxGuest != nil {
-				if err := m.unmountLCOW(ctx, linuxGuest); err != nil {
-					return err
-				}
-			} else if windowsGuest != nil {
-				if err := m.unmountWCOW(ctx, windowsGuest); err != nil {
-					return err
-				}
-			} else {
-				return fmt.Errorf("both linuxGuest and windowsGuest cannot be nil")
+			if err := m.unmountPartition(ctx, guest); err != nil {
+				return err
 			}
+
 			m.state = StateUnmounted
 			log.G(ctx).Debug("partition unmounted from guest")
 		}

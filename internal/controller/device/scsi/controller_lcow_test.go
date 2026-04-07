@@ -1,0 +1,81 @@
+//go:build windows && lcow
+
+package scsi
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+)
+
+// --- Mock type ---
+
+type mockGuestOps struct {
+	mountErr   error
+	unmountErr error
+	ejectErr   error
+}
+
+func (m *mockGuestOps) AddLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+	return m.mountErr
+}
+
+func (m *mockGuestOps) RemoveLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+	return m.unmountErr
+}
+
+func (m *mockGuestOps) RemoveSCSIDevice(_ context.Context, _ guestresource.SCSIDevice) error {
+	return m.ejectErr
+}
+
+// --- Helpers used by shared tests ---
+
+func newMockGuestOps() *mockGuestOps {
+	return &mockGuestOps{}
+}
+
+func newMockGuestOpsWithMountErr(err error) *mockGuestOps {
+	return &mockGuestOps{mountErr: err}
+}
+
+func newMockGuestOpsWithUnmountErr(err error) *mockGuestOps {
+	return &mockGuestOps{unmountErr: err}
+}
+
+// --- LCOW-specific tests ---
+
+func TestMapToGuest_MountError(t *testing.T) {
+	guest := &mockGuestOps{mountErr: errors.New("mount failed")}
+	c := New(1, &mockVMOps{}, guest)
+	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
+	if err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+	_, err = c.MapToGuest(context.Background(), id)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestUnmapFromGuest_UnmountError(t *testing.T) {
+	guest := &mockGuestOps{}
+	c := New(1, &mockVMOps{}, guest)
+	dc := defaultDiskConfig()
+	mc := defaultMountConfig()
+
+	id, err := c.Reserve(context.Background(), dc, mc)
+	if err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+	if _, err := c.MapToGuest(context.Background(), id); err != nil {
+		t.Fatalf("MapToGuest: %v", err)
+	}
+	// Now inject an unmount error.
+	guest.unmountErr = errors.New("unmount failed")
+	err = c.UnmapFromGuest(context.Background(), id)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}

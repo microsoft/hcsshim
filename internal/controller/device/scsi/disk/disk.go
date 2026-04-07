@@ -12,7 +12,6 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // Disk represents a SCSI disk attached to a Hyper-V VM. It tracks the
@@ -113,7 +112,7 @@ func (d *Disk) AttachToVM(ctx context.Context, vm VMSCSIAdder) error {
 // DetachFromVM ejects the disk from the guest and removes it from the VM's SCSI
 // bus. It is idempotent for a disk that was never attached or is already detached;
 // a failed removal is retriable by calling DetachFromVM again.
-func (d *Disk) DetachFromVM(ctx context.Context, vm VMSCSIRemover, linuxGuest LinuxGuestSCSIEjector) error {
+func (d *Disk) DetachFromVM(ctx context.Context, vm VMSCSIRemover, guest GuestSCSIEjector) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithFields(logrus.Fields{
 		logfields.Controller: d.controller,
 		logfields.LUN:        d.lun,
@@ -127,18 +126,10 @@ func (d *Disk) DetachFromVM(ctx context.Context, vm VMSCSIRemover, linuxGuest Li
 			return nil
 		}
 
-		// LCOW guests require an explicit SCSI device removal before the host
-		// removes the disk from the VM bus. For WCOW, Windows handles hot-unplug
-		// automatically, so linuxGuest will be nil.
-		if linuxGuest != nil {
-			log.G(ctx).Debug("ejecting SCSI device from guest")
-
-			if err := linuxGuest.RemoveSCSIDevice(ctx, guestresource.SCSIDevice{
-				Controller: uint8(d.controller),
-				Lun:        uint8(d.lun),
-			}); err != nil {
-				return fmt.Errorf("eject SCSI device controller=%d lun=%d from guest: %w", d.controller, d.lun, err)
-			}
+		// Attempt to eject the disk from the guest.
+		if err := d.ejectFromGuest(ctx, guest); err != nil {
+			// Leave the disk in StateAttached so the caller can retry this step.
+			return fmt.Errorf("eject from guest: %w", err)
 		}
 
 		// Advance to Ejected before attempting VM removal so that a removal
@@ -209,7 +200,7 @@ func (d *Disk) ReservePartition(ctx context.Context, config mount.Config) (*moun
 // MountPartitionToGuest mounts the partition inside the guest,
 // returning the auto-generated guest path. The partition must first be reserved
 // via [Disk.ReservePartition].
-func (d *Disk) MountPartitionToGuest(ctx context.Context, partition uint64, linuxGuest mount.LinuxGuestSCSIMounter, windowsGuest mount.WindowsGuestSCSIMounter) (string, error) {
+func (d *Disk) MountPartitionToGuest(ctx context.Context, partition uint64, guest mount.GuestSCSIMounter) (string, error) {
 	if d.state != StateAttached {
 		return "", fmt.Errorf("cannot mount partition on disk in state %s, expected attached", d.state)
 	}
@@ -219,21 +210,21 @@ func (d *Disk) MountPartitionToGuest(ctx context.Context, partition uint64, linu
 	if !ok {
 		return "", fmt.Errorf("partition %d not reserved on disk controller=%d lun=%d", partition, d.controller, d.lun)
 	}
-	return existingMnt.MountToGuest(ctx, linuxGuest, windowsGuest)
+	return existingMnt.MountToGuest(ctx, guest)
 }
 
 // UnmountPartitionFromGuest unmounts the partition at the given index from the
 // guest. When the mount's reference count reaches zero, and it transitions to
 // the unmounted state, its entry is removed from the disk so a subsequent
 // [Disk.DetachFromVM] call sees no active mounts.
-func (d *Disk) UnmountPartitionFromGuest(ctx context.Context, partition uint64, linuxGuest mount.LinuxGuestSCSIUnmounter, windowsGuest mount.WindowsGuestSCSIUnmounter) error {
+func (d *Disk) UnmountPartitionFromGuest(ctx context.Context, partition uint64, guest mount.GuestSCSIUnmounter) error {
 	existingMount, ok := d.mounts[partition]
 	if !ok {
 		// No mount found — treat as a no-op to support retry by callers.
 		return nil
 	}
 
-	if err := existingMount.UnmountFromGuest(ctx, linuxGuest, windowsGuest); err != nil {
+	if err := existingMount.UnmountFromGuest(ctx, guest); err != nil {
 		return fmt.Errorf("unmount partition %d from guest: %w", partition, err)
 	}
 

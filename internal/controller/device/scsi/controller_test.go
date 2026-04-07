@@ -1,4 +1,4 @@
-//go:build windows
+//go:build (windows && lcow) || (windows && wcow)
 
 package scsi
 
@@ -11,7 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/disk"
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/mount"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 )
@@ -31,41 +30,6 @@ func (m *mockVMOps) RemoveSCSIDisk(_ context.Context, _ uint, _ uint) error {
 	return m.removeErr
 }
 
-type mockLinuxGuestOps struct {
-	mountErr   error
-	unmountErr error
-	ejectErr   error
-}
-
-func (m *mockLinuxGuestOps) AddLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
-	return m.mountErr
-}
-
-func (m *mockLinuxGuestOps) RemoveLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
-	return m.unmountErr
-}
-
-func (m *mockLinuxGuestOps) RemoveSCSIDevice(_ context.Context, _ guestresource.SCSIDevice) error {
-	return m.ejectErr
-}
-
-type mockWindowsGuestOps struct {
-	mountErr   error
-	unmountErr error
-}
-
-func (m *mockWindowsGuestOps) AddWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
-	return m.mountErr
-}
-
-func (m *mockWindowsGuestOps) AddWCOWMappedVirtualDiskForContainerScratch(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
-	return m.mountErr
-}
-
-func (m *mockWindowsGuestOps) RemoveWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
-	return m.unmountErr
-}
-
 // --- Helpers ---
 
 func defaultDiskConfig() disk.Config {
@@ -83,13 +47,13 @@ func defaultMountConfig() mount.Config {
 	}
 }
 
-func newController(vm *mockVMOps, lg *mockLinuxGuestOps, wg *mockWindowsGuestOps) *Controller {
-	return New(1, vm, lg, wg)
+func newController(vm *mockVMOps, guest *mockGuestOps) *Controller {
+	return New(1, vm, guest)
 }
 
 func reservedController(t *testing.T) (*Controller, guid.GUID) {
 	t.Helper()
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
 	if err != nil {
 		t.Fatalf("setup Reserve: %v", err)
@@ -109,7 +73,7 @@ func mappedController(t *testing.T) (*Controller, guid.GUID) {
 // --- Tests: New ---
 
 func TestNew(t *testing.T) {
-	c := New(4, &mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := New(4, &mockVMOps{}, newMockGuestOps())
 	if c == nil {
 		t.Fatal("expected non-nil controller")
 	}
@@ -118,7 +82,7 @@ func TestNew(t *testing.T) {
 // --- Tests: Reserve ---
 
 func TestReserve_Success(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -129,7 +93,7 @@ func TestReserve_Success(t *testing.T) {
 }
 
 func TestReserve_SameDiskSamePartition(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	dc := defaultDiskConfig()
 	mc := defaultMountConfig()
 	id1, err := c.Reserve(context.Background(), dc, mc)
@@ -146,7 +110,7 @@ func TestReserve_SameDiskSamePartition(t *testing.T) {
 }
 
 func TestReserve_SameDiskDifferentPartition(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	dc := defaultDiskConfig()
 	_, err := c.Reserve(context.Background(), dc, mount.Config{Partition: 1})
 	if err != nil {
@@ -159,7 +123,7 @@ func TestReserve_SameDiskDifferentPartition(t *testing.T) {
 }
 
 func TestReserve_SamePathDifferentConfig(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	dc := defaultDiskConfig()
 	mc := defaultMountConfig()
 	_, err := c.Reserve(context.Background(), dc, mc)
@@ -175,7 +139,7 @@ func TestReserve_SamePathDifferentConfig(t *testing.T) {
 }
 
 func TestReserve_DifferentDisks(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	mc := defaultMountConfig()
 	_, err := c.Reserve(context.Background(), disk.Config{HostPath: `C:\a.vhdx`, Type: disk.TypeVirtualDisk}, mc)
 	if err != nil {
@@ -189,7 +153,7 @@ func TestReserve_DifferentDisks(t *testing.T) {
 
 func TestReserve_NoAvailableSlots(t *testing.T) {
 	// Create with 0 controllers so there are no slots.
-	c := New(0, &mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := New(0, &mockVMOps{}, newMockGuestOps())
 	_, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
 	if err == nil {
 		t.Fatal("expected error when no slots available")
@@ -197,7 +161,7 @@ func TestReserve_NoAvailableSlots(t *testing.T) {
 }
 
 func TestReserve_FillsAllSlots(t *testing.T) {
-	c := New(1, &mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := New(1, &mockVMOps{}, newMockGuestOps())
 	mc := defaultMountConfig()
 	for i := range numLUNsPerController {
 		dc := disk.Config{
@@ -230,7 +194,7 @@ func TestMapToGuest_Success(t *testing.T) {
 }
 
 func TestMapToGuest_UnknownReservation(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	unknownID, err := guid.NewV4()
 	if err != nil {
 		t.Fatalf("NewV4: %v", err)
@@ -243,20 +207,7 @@ func TestMapToGuest_UnknownReservation(t *testing.T) {
 
 func TestMapToGuest_AttachError(t *testing.T) {
 	vm := &mockVMOps{addErr: errors.New("attach failed")}
-	c := New(1, vm, &mockLinuxGuestOps{}, nil)
-	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
-	if err != nil {
-		t.Fatalf("Reserve: %v", err)
-	}
-	_, err = c.MapToGuest(context.Background(), id)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestMapToGuest_MountError(t *testing.T) {
-	lg := &mockLinuxGuestOps{mountErr: errors.New("mount failed")}
-	c := New(1, &mockVMOps{}, lg, nil)
+	c := New(1, vm, newMockGuestOps())
 	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
 	if err != nil {
 		t.Fatalf("Reserve: %v", err)
@@ -289,7 +240,7 @@ func TestUnmapFromGuest_Success(t *testing.T) {
 }
 
 func TestUnmapFromGuest_UnknownReservation(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	unknownID, err := guid.NewV4()
 	if err != nil {
 		t.Fatalf("NewV4: %v", err)
@@ -313,27 +264,9 @@ func TestUnmapFromGuest_CleansUpSlotWhenFullyDetached(t *testing.T) {
 	}
 }
 
-func TestUnmapFromGuest_UnmountError(t *testing.T) {
-	lg := &mockLinuxGuestOps{}
-	c := New(1, &mockVMOps{}, lg, nil)
-	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
-	if err != nil {
-		t.Fatalf("Reserve: %v", err)
-	}
-	if _, err := c.MapToGuest(context.Background(), id); err != nil {
-		t.Fatalf("MapToGuest: %v", err)
-	}
-	// Now inject an unmount error.
-	lg.unmountErr = errors.New("unmount failed")
-	err = c.UnmapFromGuest(context.Background(), id)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
 func TestUnmapFromGuest_DetachError(t *testing.T) {
 	vm := &mockVMOps{}
-	c := New(1, vm, &mockLinuxGuestOps{}, nil)
+	c := New(1, vm, newMockGuestOps())
 	id, err := c.Reserve(context.Background(), defaultDiskConfig(), defaultMountConfig())
 	if err != nil {
 		t.Fatalf("Reserve: %v", err)
@@ -350,7 +283,7 @@ func TestUnmapFromGuest_DetachError(t *testing.T) {
 }
 
 func TestUnmapFromGuest_MultipleReservationsSameDisk(t *testing.T) {
-	c := newController(&mockVMOps{}, &mockLinuxGuestOps{}, nil)
+	c := newController(&mockVMOps{}, newMockGuestOps())
 	dc := defaultDiskConfig()
 	mc := defaultMountConfig()
 
@@ -388,24 +321,6 @@ func TestUnmapFromGuest_MultipleReservationsSameDisk(t *testing.T) {
 	}
 }
 
-func TestUnmapFromGuest_WindowsGuest(t *testing.T) {
-	wg := &mockWindowsGuestOps{}
-	c := New(1, &mockVMOps{}, nil, wg)
-	dc := defaultDiskConfig()
-	mc := defaultMountConfig()
-
-	id, err := c.Reserve(context.Background(), dc, mc)
-	if err != nil {
-		t.Fatalf("Reserve: %v", err)
-	}
-	if _, err := c.MapToGuest(context.Background(), id); err != nil {
-		t.Fatalf("MapToGuest: %v", err)
-	}
-	if err := c.UnmapFromGuest(context.Background(), id); err != nil {
-		t.Fatalf("UnmapFromGuest: %v", err)
-	}
-}
-
 // --- Tests: Reserve + Unmap lifecycle ---
 
 func TestReserveAfterUnmap_ReusesSlot(t *testing.T) {
@@ -425,7 +340,7 @@ func TestUnmapFromGuest_AfterFailedMapToGuest(t *testing.T) {
 	// MapToGuest fails at attach, then UnmapFromGuest should clean up the
 	// reservation and free the slot.
 	vm := &mockVMOps{addErr: errors.New("attach failed")}
-	c := New(1, vm, &mockLinuxGuestOps{}, nil)
+	c := New(1, vm, newMockGuestOps())
 	dc := defaultDiskConfig()
 	mc := defaultMountConfig()
 
@@ -453,7 +368,7 @@ func TestUnmapFromGuest_RetryAfterDetachFailure(t *testing.T) {
 	// UnmapFromGuest fails at detach. Retry should succeed because
 	// UnmountPartitionFromGuest is a no-op when the partition is already gone.
 	vm := &mockVMOps{}
-	c := New(1, vm, &mockLinuxGuestOps{}, nil)
+	c := New(1, vm, newMockGuestOps())
 	dc := defaultDiskConfig()
 	mc := defaultMountConfig()
 

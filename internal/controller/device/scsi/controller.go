@@ -39,12 +39,9 @@ type Controller struct {
 	// vm is the host-side interface for adding and removing SCSI disks.
 	// Immutable after construction.
 	vm VMSCSIOps
-	// linuxGuest is the guest-side interface for LCOW SCSI operations.
+	// guest is the guest-side interface for SCSI operations.
 	// Immutable after construction.
-	linuxGuest LinuxGuestSCSIOps
-	// windowsGuest is the guest-side interface for WCOW SCSI operations.
-	// Immutable after construction.
-	windowsGuest WindowsGuestSCSIOps
+	guest GuestSCSIOps
 
 	// reservations maps a reservation ID to its disk slot and partition.
 	// Guarded by mu.
@@ -65,11 +62,10 @@ type Controller struct {
 
 // New creates a new [Controller] for the given number of SCSI controllers and
 // host/guest operation interfaces.
-func New(numControllers int, vm VMSCSIOps, linuxGuest LinuxGuestSCSIOps, windowsGuest WindowsGuestSCSIOps) *Controller {
+func New(numControllers int, vm VMSCSIOps, guest GuestSCSIOps) *Controller {
 	return &Controller{
 		vm:              vm,
-		linuxGuest:      linuxGuest,
-		windowsGuest:    windowsGuest,
+		guest:           guest,
 		reservations:    make(map[guid.GUID]*reservation),
 		disksByPath:     make(map[string]int),
 		controllerSlots: make([]*disk.Disk, numControllers*numLUNsPerController),
@@ -200,7 +196,7 @@ func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, erro
 	}
 
 	// Mount the partition inside the guest.
-	guestPath, err := existingDisk.MountPartitionToGuest(ctx, r.partition, c.linuxGuest, c.windowsGuest)
+	guestPath, err := existingDisk.MountPartitionToGuest(ctx, r.partition, c.guest)
 	if err != nil {
 		return "", fmt.Errorf("mount partition %d to guest: %w", r.partition, err)
 	}
@@ -232,12 +228,12 @@ func (c *Controller) UnmapFromGuest(ctx context.Context, id guid.GUID) error {
 
 	// Unmount the partition from the guest (ref-counted; only issues the
 	// guest call when this is the last reservation on the partition).
-	if err := existingDisk.UnmountPartitionFromGuest(ctx, r.partition, c.linuxGuest, c.windowsGuest); err != nil {
+	if err := existingDisk.UnmountPartitionFromGuest(ctx, r.partition, c.guest); err != nil {
 		return fmt.Errorf("unmount partition %d from guest: %w", r.partition, err)
 	}
 
 	// Detach the disk from the VM when no partitions remain active.
-	if err := existingDisk.DetachFromVM(ctx, c.vm, c.linuxGuest); err != nil {
+	if err := existingDisk.DetachFromVM(ctx, c.vm, c.guest); err != nil {
 		return fmt.Errorf("detach disk from VM: %w", err)
 	}
 

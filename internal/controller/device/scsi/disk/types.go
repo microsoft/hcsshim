@@ -6,7 +6,6 @@ import (
 	"context"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // Type identifies the attachment protocol used when adding a disk to the VM's SCSI bus.
@@ -54,12 +53,4 @@ type VMSCSIAdder interface {
 type VMSCSIRemover interface {
 	// RemoveSCSIDisk removes a SCSI disk from the Utility VM.
 	RemoveSCSIDisk(ctx context.Context, controller uint, lun uint) error
-}
-
-// LinuxGuestSCSIEjector issues a guest-side SCSI device removal for LCOW guests.
-// Pass nil to [Disk.DetachFromVM] to skip this step for WCOW guests, which handle
-// SCSI hot-unplug automatically.
-type LinuxGuestSCSIEjector interface {
-	// RemoveSCSIDevice removes a SCSI device from the LCOW guest.
-	RemoveSCSIDevice(ctx context.Context, settings guestresource.SCSIDevice) error
 }
