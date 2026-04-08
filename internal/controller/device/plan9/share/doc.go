@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 // Package share manages the lifecycle of a single Plan9 share attached to a
 // Hyper-V VM, from host-side name allocation through guest-side mounting.

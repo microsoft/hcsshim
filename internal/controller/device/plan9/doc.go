@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 // Package plan9 manages the full lifecycle of Plan9 share mappings on a
 // Hyper-V VM, from host-side name allocation through guest-side mounting.
