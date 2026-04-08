@@ -22,6 +22,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// platformControllers holds platform-specific sub-controllers embedded in [Controller].
+// For WCOW, no additional controllers are needed as of now (VSMB will be added later).
+type platformControllers struct{}
+
 // setupEntropyListener sets up entropy for WCOW (Windows Containers on Windows) VMs.
 //
 // For WCOW, entropy setup is not required. Windows VMs have their own internal

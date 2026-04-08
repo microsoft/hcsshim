@@ -12,7 +12,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
-	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi"
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -71,8 +70,8 @@ type Controller struct {
 	// vpciController manages virtual PCI device assignments for this VM.
 	vpciController *vpci.Controller
 
-	// plan9Controller manages Plan9 file share mounts for this VM.
-	plan9Controller *plan9.Controller
+	// platformControllers embeds platform-specific sub-controllers (e.g., Plan9 for LCOW).
+	platformControllers
 }
 
 // New creates a new Controller instance in the [StateNotCreated] state.
@@ -141,7 +140,7 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 
 	// Eager initialize the SCSI controller as opposed to all other controllers.
 	// This is because we always use SCSI for attaching scratch VHDs.
-	c.scsiController, err = newSCSIController(ctx, opts.HCSDocument, c.uvm, c.guest, c.guest)
+	c.scsiController, err = newSCSIController(ctx, opts.HCSDocument, c.uvm, c.guest)
 	if err != nil {
 		return fmt.Errorf("failed to initialize SCSI controller: %w", err)
 	}

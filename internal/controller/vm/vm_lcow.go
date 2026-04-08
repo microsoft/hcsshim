@@ -21,6 +21,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// platformControllers holds platform-specific sub-controllers embedded in [Controller].
+// For LCOW, this includes the Plan9 file share controller.
+type platformControllers struct {
+	// plan9Controller manages Plan9 file share mounts for this VM.
+	plan9Controller *plan9.Controller
+}
+
 // Plan9Controller returns the singleton controller which can be used
 // to manage the Plan9 shares on the Linux UVM.
 func (c *Controller) Plan9Controller() *plan9.Controller {

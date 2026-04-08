@@ -43,8 +43,7 @@ func newSCSIController(
 	ctx context.Context,
 	doc *hcsschema.ComputeSystem,
 	vm scsi.VMSCSIOps,
-	linuxGuest scsi.LinuxGuestSCSIOps,
-	windowsGuest scsi.WindowsGuestSCSIOps,
+	guest scsi.GuestSCSIOps,
 ) (*scsi.Controller, error) {
 	// If there are no SCSI device controllers in the document, error out.
 	if doc.VirtualMachine == nil ||
@@ -55,7 +54,7 @@ func newSCSIController(
 
 	// Create a VM SCSI controller.
 	scsiMap := doc.VirtualMachine.Devices.Scsi
-	ctrl := scsi.New(len(scsiMap), vm, linuxGuest, windowsGuest)
+	ctrl := scsi.New(len(scsiMap), vm, guest)
 
 	// Iterate over the well-known controller GUIDs so the slice index gives us
 	// the correct controller number directly.

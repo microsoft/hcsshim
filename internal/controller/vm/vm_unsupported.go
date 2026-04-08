@@ -9,6 +9,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// platformControllers holds platform-specific sub-controllers embedded in [Controller].
+// For unsupported guests, no additional controllers are needed.
+type platformControllers struct{}
+
 // setupEntropyListener is a no-op for unsupported guests.
 func (c *Controller) setupEntropyListener(_ context.Context, _ *errgroup.Group) {}
 
