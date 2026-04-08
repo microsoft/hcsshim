@@ -71,9 +71,10 @@ func TestAddToVM_HappyPath(t *testing.T) {
 	}
 }
 
-// TestAddToVM_VMFails_TransitionsToRemoved verifies that when the VM AddPlan9
-// call fails, the share transitions directly to StateRemoved.
-func TestAddToVM_VMFails_TransitionsToRemoved(t *testing.T) {
+// TestAddToVM_VMFails_TransitionsToInvalid verifies that when the VM AddPlan9
+// call fails, the share transitions to StateInvalid so that outstanding
+// mount reservations can be drained before the share is fully removed.
+func TestAddToVM_VMFails_TransitionsToInvalid(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockVMPlan9Adder(ctrl)
 
@@ -84,8 +85,8 @@ func TestAddToVM_VMFails_TransitionsToRemoved(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if s.State() != StateRemoved {
-		t.Errorf("expected StateRemoved after VM add failure, got %v", s.State())
+	if s.State() != StateInvalid {
+		t.Errorf("expected StateInvalid after VM add failure, got %v", s.State())
 	}
 }
 
@@ -110,9 +111,9 @@ func TestAddToVM_AlreadyAdded_Idempotent(t *testing.T) {
 	}
 }
 
-// TestAddToVM_OnRemovedShare_Errors verifies that calling AddToVM on a share in
-// the terminal StateRemoved returns an error without issuing any VM call.
-func TestAddToVM_OnRemovedShare_Errors(t *testing.T) {
+// TestAddToVM_OnInvalidShare_Errors verifies that calling AddToVM on a share in
+// StateInvalid (previous add failed) returns an error without issuing any VM call.
+func TestAddToVM_OnInvalidShare_Errors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockVMPlan9Adder(ctrl)
 
@@ -120,10 +121,10 @@ func TestAddToVM_OnRemovedShare_Errors(t *testing.T) {
 	vm.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(errVMAdd)
 	_ = s.AddToVM(context.Background(), vm)
 
-	// Share is now StateRemoved — AddToVM must return an error.
+	// Share is now StateInvalid — AddToVM must return an error.
 	err := s.AddToVM(context.Background(), vm)
 	if err == nil {
-		t.Fatal("expected error when adding a removed share")
+		t.Fatal("expected error when adding an invalid share")
 	}
 }
 
@@ -258,6 +259,66 @@ func TestRemoveFromVM_WithActiveMountSkipsRemove(t *testing.T) {
 	}
 }
 
+// TestRemoveFromVM_OnInvalid_WithActiveMount_NoOps verifies that RemoveFromVM
+// on a StateInvalid share with an active mount reservation does not transition
+// to StateRemoved and keeps the share in StateInvalid.
+func TestRemoveFromVM_OnInvalid_WithActiveMount_NoOps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vmAdd := mocks.NewMockVMPlan9Adder(ctrl)
+	vmRemove := mocks.NewMockVMPlan9Remover(ctrl)
+
+	s := NewReserved("share0", newTestConfig())
+	// Reserve a mount before AddToVM to simulate the controller's Reserve flow.
+	_, _ = s.ReserveMount(context.Background(), mount.Config{})
+
+	// AddToVM fails → StateInvalid, but mount is still active.
+	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(errVMAdd)
+	_ = s.AddToVM(context.Background(), vmAdd)
+
+	if s.State() != StateInvalid {
+		t.Fatalf("expected StateInvalid, got %v", s.State())
+	}
+
+	// RemoveFromVM must not transition to Removed while mount is active.
+	if err := s.RemoveFromVM(context.Background(), vmRemove); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.State() != StateInvalid {
+		t.Errorf("expected StateInvalid (mount still active), got %v", s.State())
+	}
+}
+
+// TestRemoveFromVM_OnInvalid_NoMount_TransitionsToRemoved verifies that
+// RemoveFromVM on a StateInvalid share with no active mount transitions to
+// StateRemoved.
+func TestRemoveFromVM_OnInvalid_NoMount_TransitionsToRemoved(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vmAdd := mocks.NewMockVMPlan9Adder(ctrl)
+	vmRemove := mocks.NewMockVMPlan9Remover(ctrl)
+	guestUnmount := mountmocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+
+	s := NewReserved("share0", newTestConfig())
+	// Reserve a mount, then drain it so mount becomes nil.
+	_, _ = s.ReserveMount(context.Background(), mount.Config{})
+
+	// AddToVM fails → StateInvalid.
+	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(errVMAdd)
+	_ = s.AddToVM(context.Background(), vmAdd)
+
+	// Drain the mount via UnmountFromGuest.
+	if err := s.UnmountFromGuest(context.Background(), guestUnmount); err != nil {
+		t.Fatalf("unexpected error during unmount: %v", err)
+	}
+
+	// Now RemoveFromVM should transition to Removed.
+	if err := s.RemoveFromVM(context.Background(), vmRemove); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.State() != StateRemoved {
+		t.Errorf("expected StateRemoved after draining mounts, got %v", s.State())
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ReserveMount
 // ─────────────────────────────────────────────────────────────────────────────
@@ -307,9 +368,9 @@ func TestReserveMount_DifferentConfig_Errors(t *testing.T) {
 	}
 }
 
-// TestReserveMount_OnRemovedShare_Errors verifies that calling ReserveMount on
-// a share that has reached the terminal StateRemoved returns an error.
-func TestReserveMount_OnRemovedShare_Errors(t *testing.T) {
+// TestReserveMount_OnInvalidShare_Errors verifies that calling ReserveMount on
+// a share in StateInvalid (previous add failed) returns an error.
+func TestReserveMount_OnInvalidShare_Errors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockVMPlan9Adder(ctrl)
 
@@ -319,7 +380,7 @@ func TestReserveMount_OnRemovedShare_Errors(t *testing.T) {
 
 	_, err := s.ReserveMount(context.Background(), mount.Config{})
 	if err == nil {
-		t.Fatal("expected error when reserving mount on removed share")
+		t.Fatal("expected error when reserving mount on invalid share")
 	}
 }
 

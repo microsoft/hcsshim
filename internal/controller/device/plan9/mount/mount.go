@@ -100,8 +100,9 @@ func (m *Mount) MountToGuest(ctx context.Context, guest LinuxGuestPlan9Mounter) 
 			Port:      vmutils.Plan9Port,
 			ReadOnly:  m.config.ReadOnly,
 		}); err != nil {
-			// Move to unmounted since no guest state was established from Reserved.
-			m.state = StateUnmounted
+			// Move to invalid since no guest state was established from Reserved,
+			// but outstanding reservations may still need to be drained.
+			m.state = StateInvalid
 			return "", fmt.Errorf("add LCOW mapped directory share=%s: %w", m.shareName, err)
 		}
 
@@ -117,10 +118,9 @@ func (m *Mount) MountToGuest(ctx context.Context, guest LinuxGuestPlan9Mounter) 
 		// existing guest path directly.
 		return m.guestPath, nil
 
-	case StateUnmounted:
+	default:
 		return "", fmt.Errorf("cannot mount a share in state %s", m.state)
 	}
-	return "", nil
 }
 
 // UnmountFromGuest decrements the reference count and, when it reaches zero,
@@ -160,10 +160,17 @@ func (m *Mount) UnmountFromGuest(ctx context.Context, guest LinuxGuestPlan9Unmou
 		m.refCount--
 		return nil
 
-	case StateUnmounted:
-		// Already in the terminal state — nothing to do. This can happen when
-		// MountToGuest failed (it transitions StateReserved → StateUnmounted),
-		// and the caller subsequently calls UnmapFromGuest to clean up.
+	case StateInvalid:
+		// The guest mount failed; no guest-side state to tear down.
+		// Decrement the ref count and transition to the terminal state
+		// once all reservations are drained.
+		m.refCount--
+		if m.refCount == 0 {
+			m.state = StateUnmounted
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("cannot unmount a share in state %s", m.state)
 	}
-	return nil
 }

@@ -16,15 +16,15 @@
 // # Mount Lifecycle
 //
 //	┌──────────────────────┐
-//	│    StateReserved     │ ← mount failure → StateUnmounted (not retriable)
-//	└──────────┬───────────┘
-//	           │ guest mount succeeds
-//	           ▼
-//	┌──────────────────────┐
-//	│    StateMounted      │
-//	└──────────┬───────────┘
-//	           │ reference count → 0;
-//	           │ guest unmount succeeds
+//	│    StateReserved     │ ← mount failure → StateInvalid
+//	└──────────┬───────────┘                       │
+//	           │ guest mount succeeds              │ all refs drained
+//	           ▼                                   ▼
+//	┌──────────────────────┐              ┌──────────────────────┐
+//	│    StateMounted      │              │   StateUnmounted     │
+//	└──────────┬───────────┘              └──────────────────────┘
+//	           │ reference count → 0;       (terminal — entry
+//	           │ guest unmount succeeds      removed from share)
 //	           ▼
 //	┌──────────────────────┐
 //	│   StateUnmounted     │

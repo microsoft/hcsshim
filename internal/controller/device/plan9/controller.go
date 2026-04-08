@@ -23,7 +23,7 @@ import (
 //
 // 1. Obtain a reservation using Reserve().
 //
-// 2. Use the reservation in MapToGuest() to mount the share unto guest.
+// 2. Use the reservation in MapToGuest() to mount the share into the guest.
 //
 // 3. Call UnmapFromGuest() to release the reservation and all resources.
 //
@@ -171,8 +171,8 @@ func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, erro
 
 	// Validate if the host path has an associated share.
 	// This should be reserved by the Reserve() call.
-	existingShare := c.sharesByHostPath[res.hostPath]
-	if existingShare == nil {
+	existingShare, ok := c.sharesByHostPath[res.hostPath]
+	if !ok {
 		return "", fmt.Errorf("share for host path %s not found", res.hostPath)
 	}
 
@@ -210,14 +210,9 @@ func (c *Controller) UnmapFromGuest(ctx context.Context, id guid.GUID) error {
 
 	// Validate that the share exists before proceeding with teardown.
 	// This should be reserved by the Reserve() call.
-	existingShare := c.sharesByHostPath[res.hostPath]
-	if existingShare == nil {
-		// Share is gone — a sibling reservation already cleaned it up.
-		// Example: A and B reserve the same path; A's AddToVM fails
-		// (share→StateRemoved) and A's UnmapFromGuest deletes the map entry.
-		// B has nothing left to clean up, so just drop the reservation.
-		delete(c.reservations, id)
-		return nil
+	existingShare, ok := c.sharesByHostPath[res.hostPath]
+	if !ok {
+		return fmt.Errorf("share for host path %s not found", res.hostPath)
 	}
 
 	log.G(ctx).WithField(logfields.HostPath, existingShare.HostPath()).Debug("unmapping Plan9 share from guest")

@@ -9,8 +9,11 @@ package mount
 //
 //	StateReserved → StateMounted → StateUnmounted
 //
-// Mount failure from StateReserved transitions directly to the terminal
-// StateUnmounted state; the entry is then removed by the parent [share.Share].
+// Mount failure from StateReserved transitions to [StateInvalid].
+// In [StateInvalid] the guest mount was never established, but outstanding
+// reservations may still exist. The mount remains in [StateInvalid] until
+// all reservations have been drained via [Mount.UnmountFromGuest], at which
+// point it transitions to [StateUnmounted].
 // An unmount failure from StateMounted leaves the mount in StateMounted so
 // the caller can retry.
 //
@@ -19,12 +22,14 @@ package mount
 //	Current State   │ Trigger                                    │ Next State
 //	────────────────┼────────────────────────────────────────────┼──────────────────────
 //	StateReserved   │ guest mount succeeds                       │ StateMounted
-//	StateReserved   │ guest mount fails                          │ StateUnmounted
+//	StateReserved   │ guest mount fails                          │ StateInvalid
 //	StateReserved   │ UnmountFromGuest (refCount > 1)            │ StateReserved (ref--)
 //	StateReserved   │ UnmountFromGuest (refCount == 1)           │ StateUnmounted
 //	StateMounted    │ UnmountFromGuest (refCount > 1)            │ StateMounted (ref--)
 //	StateMounted    │ UnmountFromGuest (refCount == 1) succeeds  │ StateUnmounted
 //	StateMounted    │ UnmountFromGuest (refCount == 1) fails     │ StateMounted
+//	StateInvalid    │ UnmountFromGuest (refCount > 1)            │ StateInvalid (ref--)
+//	StateInvalid    │ UnmountFromGuest (refCount == 1)           │ StateUnmounted
 //	StateUnmounted  │ UnmountFromGuest                           │ StateUnmounted (no-op)
 //	StateUnmounted  │ (terminal — entry removed from share)      │ —
 type State int
@@ -38,6 +43,13 @@ const (
 	// the guest. The guest path is valid from this state onward.
 	StateMounted
 
+	// StateInvalid means the guest mount operation failed. No guest-side
+	// state was established, but outstanding reservations may still need
+	// to be drained via [Mount.UnmountFromGuest]. Once all reservations
+	// are released (refCount reaches zero), the mount transitions to
+	// [StateUnmounted].
+	StateInvalid
+
 	// StateUnmounted means the guest has unmounted the share. This is a
 	// terminal state; the entry is removed from the parent share.
 	StateUnmounted
@@ -50,6 +62,8 @@ func (s State) String() string {
 		return "Reserved"
 	case StateMounted:
 		return "Mounted"
+	case StateInvalid:
+		return "Invalid"
 	case StateUnmounted:
 		return "Unmounted"
 	default:

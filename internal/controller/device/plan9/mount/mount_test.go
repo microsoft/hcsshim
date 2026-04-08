@@ -118,10 +118,10 @@ func TestMountToGuest_HappyPath(t *testing.T) {
 	}
 }
 
-// TestMountToGuest_GuestFails_TransitionsToUnmounted verifies that when the
+// TestMountToGuest_GuestFails_TransitionsToInvalid verifies that when the
 // guest AddLCOWMappedDirectory call fails, the mount transitions directly from
-// StateReserved to StateUnmounted (the terminal state).
-func TestMountToGuest_GuestFails_TransitionsToUnmounted(t *testing.T) {
+// StateReserved to StateInvalid so outstanding reservations can be drained.
+func TestMountToGuest_GuestFails_TransitionsToInvalid(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
 
@@ -133,8 +133,8 @@ func TestMountToGuest_GuestFails_TransitionsToUnmounted(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if m.State() != StateUnmounted {
-		t.Errorf("expected StateUnmounted after mount failure, got %v", m.State())
+	if m.State() != StateInvalid {
+		t.Errorf("expected StateInvalid after mount failure, got %v", m.State())
 	}
 }
 
@@ -165,9 +165,9 @@ func TestMountToGuest_AlreadyMounted_Idempotent(t *testing.T) {
 	}
 }
 
-// TestMountToGuest_OnUnmounted_Errors verifies that calling MountToGuest on a
-// mount in the terminal StateUnmounted returns an error.
-func TestMountToGuest_OnUnmounted_Errors(t *testing.T) {
+// TestMountToGuest_OnInvalid_Errors verifies that calling MountToGuest on a
+// mount in StateInvalid (from a prior mount failure) returns an error.
+func TestMountToGuest_OnInvalid_Errors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
 
@@ -175,10 +175,10 @@ func TestMountToGuest_OnUnmounted_Errors(t *testing.T) {
 	guest.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(errGuestMount)
 	_, _ = m.MountToGuest(context.Background(), guest)
 
-	// Try to mount again from StateUnmounted.
+	// Try to mount again from StateInvalid.
 	_, err := m.MountToGuest(context.Background(), guest)
 	if err == nil {
-		t.Fatal("expected error when mounting from StateUnmounted")
+		t.Fatal("expected error when mounting from StateInvalid")
 	}
 }
 
@@ -308,10 +308,9 @@ func TestUnmountFromGuest_OnReserved_NoGuestCall(t *testing.T) {
 	}
 }
 
-// TestUnmountFromGuest_OnUnmounted_NoOp verifies that calling UnmountFromGuest
-// on a mount already in the terminal StateUnmounted is a no-op that returns
-// no error and does not issue any guest call.
-func TestUnmountFromGuest_OnUnmounted_NoOp(t *testing.T) {
+// TestUnmountFromGuest_OnUnmounted_Errors verifies that calling UnmountFromGuest
+// on a mount already in the terminal StateUnmounted returns an error.
+func TestUnmountFromGuest_OnUnmounted_Errors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
 	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
@@ -323,8 +322,8 @@ func TestUnmountFromGuest_OnUnmounted_NoOp(t *testing.T) {
 	guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	_ = m.UnmountFromGuest(context.Background(), guestUnmount)
 
-	// Second unmount on StateUnmounted — must be a no-op with no error.
-	if err := m.UnmountFromGuest(context.Background(), guestUnmount); err != nil {
-		t.Fatalf("unexpected error on double unmount: %v", err)
+	// Second unmount on StateUnmounted — must return an error.
+	if err := m.UnmountFromGuest(context.Background(), guestUnmount); err == nil {
+		t.Fatal("expected error when unmounting an already-unmounted mount")
 	}
 }

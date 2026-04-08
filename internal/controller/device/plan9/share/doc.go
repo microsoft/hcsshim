@@ -15,7 +15,7 @@
 // # Share Lifecycle
 //
 //	┌──────────────────────┐
-//	│    StateReserved     │ ← add failure → StateRemoved (not retriable)
+//	│    StateReserved     │ ← add failure → StateInvalid
 //	└──────────┬───────────┘
 //	           │ share added to VM
 //	           ▼
@@ -25,6 +25,17 @@
 //	  (guest mount driven here)
 //	           │ mount released;
 //	           │ share removed from VM
+//	           ▼
+//	┌──────────────────────┐
+//	│    StateRemoved      │
+//	└──────────────────────┘
+//	  (terminal — entry removed from controller)
+//
+//	┌──────────────────────┐
+//	│    StateInvalid      │ ← add failed; share never on VM
+//	└──────────┬───────────┘
+//	           │ all mount reservations drained
+//	           │ via UnmountFromGuest + RemoveFromVM
 //	           ▼
 //	┌──────────────────────┐
 //	│    StateRemoved      │
