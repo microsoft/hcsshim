@@ -65,15 +65,6 @@ func (s *Share) HostPath() string {
 	return s.config.HostPath
 }
 
-// GuestPath returns the guest-side mount path of the share.
-// Valid only if a mount has been reserved on this share; otherwise returns an empty string.
-func (s *Share) GuestPath() string {
-	if s.mount == nil {
-		return ""
-	}
-	return s.mount.GuestPath()
-}
-
 // AddToVM adds the share to the VM's Plan9 provider. It is idempotent for an
 // already-added share; on failure the share is moved into invalid state so
 // that outstanding mount reservations can be drained before the share is

@@ -32,8 +32,8 @@ func newTestConfig() Config {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // TestNewReserved_InitialState verifies that a freshly created share starts in
-// StateReserved with the correct name, host path, and an empty guest path
-// (no mount has been reserved yet).
+// StateReserved with the correct name and host path (no mount has been reserved
+// yet).
 func TestNewReserved_InitialState(t *testing.T) {
 	s := NewReserved("share0", newTestConfig())
 	if s.State() != StateReserved {
@@ -44,9 +44,6 @@ func TestNewReserved_InitialState(t *testing.T) {
 	}
 	if s.HostPath() != "/host/path" {
 		t.Errorf("expected host path %q, got %q", "/host/path", s.HostPath())
-	}
-	if s.GuestPath() != "" {
-		t.Errorf("expected empty guest path before mount, got %q", s.GuestPath())
 	}
 }
 
@@ -451,7 +448,7 @@ func TestMountToGuest_HappyPath(t *testing.T) {
 
 // TestUnmountFromGuest_HappyPath verifies a full mount → unmount cycle: after
 // a successful guest RemoveLCOWMappedDirectory call the share's internal mount
-// entry is cleared (GuestPath returns empty).
+// entry is cleared.
 func TestUnmountFromGuest_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vmAdd := mocks.NewMockVMPlan9Adder(ctrl)
@@ -469,11 +466,6 @@ func TestUnmountFromGuest_HappyPath(t *testing.T) {
 	guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	if err := s.UnmountFromGuest(context.Background(), guestUnmount); err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// After unmount the share's internal mount entry should be cleared.
-	if s.GuestPath() != "" {
-		t.Errorf("expected empty GuestPath after unmount, got %q", s.GuestPath())
 	}
 }
 

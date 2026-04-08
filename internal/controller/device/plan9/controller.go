@@ -78,13 +78,13 @@ func New(vm vmPlan9, linuxGuest guestPlan9, noWritableFileShares bool) *Controll
 // If an error is returned from this function, it is guaranteed that no
 // reservation mapping was made and no UnmapFromGuest() call is necessary to
 // clean up.
-func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, mountConfig mount.Config) (guid.GUID, string, error) {
+func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, mountConfig mount.Config) (guid.GUID, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Validate write-share policy before touching shared state.
 	if !shareConfig.ReadOnly && c.noWritableFileShares {
-		return guid.GUID{}, "", fmt.Errorf("adding writable Plan9 shares is denied")
+		return guid.GUID{}, fmt.Errorf("adding writable Plan9 shares is denied")
 	}
 
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.HostPath, shareConfig.HostPath))
@@ -93,21 +93,19 @@ func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, moun
 	// Generate a unique reservation ID.
 	id, err := guid.NewV4()
 	if err != nil {
-		return guid.GUID{}, "", fmt.Errorf("generate reservation ID: %w", err)
+		return guid.GUID{}, fmt.Errorf("generate reservation ID: %w", err)
 	}
 
 	// Check if the generated reservation ID already exists, which is extremely unlikely,
 	// but we want to be certain before proceeding with share creation.
 	if _, ok := c.reservations[id]; ok {
-		return guid.GUID{}, "", fmt.Errorf("reservation ID already exists: %s", id)
+		return guid.GUID{}, fmt.Errorf("reservation ID already exists: %s", id)
 	}
 
 	// Create the reservation entry.
 	res := &reservation{
 		hostPath: shareConfig.HostPath,
 	}
-
-	var guestPath string
 
 	// Check whether this host path already has an allocated share.
 	existingShare, ok := c.sharesByHostPath[shareConfig.HostPath]
@@ -116,7 +114,7 @@ func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, moun
 	if ok {
 		// Verify the caller is requesting the same share configuration.
 		if !existingShare.Config().Equals(shareConfig) {
-			return guid.GUID{}, "", fmt.Errorf("cannot reserve ref on share with different config")
+			return guid.GUID{}, fmt.Errorf("cannot reserve ref on share with different config")
 		}
 
 		// Set the share name.
@@ -124,10 +122,8 @@ func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, moun
 
 		// We have a share, now reserve a mount on it.
 		if _, err = existingShare.ReserveMount(ctx, mountConfig); err != nil {
-			return guid.GUID{}, "", fmt.Errorf("reserve mount on share %s: %w", existingShare.Name(), err)
+			return guid.GUID{}, fmt.Errorf("reserve mount on share %s: %w", existingShare.Name(), err)
 		}
-
-		guestPath = existingShare.GuestPath()
 	}
 
 	// If we don't have an existing share, we need to create one and reserve a mount on it.
@@ -139,13 +135,11 @@ func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, moun
 		// Create the Share and Mount in the reserved states.
 		newShare := share.NewReserved(name, shareConfig)
 		if _, err = newShare.ReserveMount(ctx, mountConfig); err != nil {
-			return guid.GUID{}, "", fmt.Errorf("reserve mount on share %s: %w", name, err)
+			return guid.GUID{}, fmt.Errorf("reserve mount on share %s: %w", name, err)
 		}
 
 		c.sharesByHostPath[shareConfig.HostPath] = newShare
 		res.name = newShare.Name()
-
-		guestPath = newShare.GuestPath()
 	}
 
 	// Ensure our reservation is saved for all future operations.
@@ -153,7 +147,7 @@ func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, moun
 	log.G(ctx).WithField("reservation", id).Debug("Plan9 share reserved")
 
 	// Return the reserved guest path in addition to the reservation ID for caller convenience.
-	return id, guestPath, nil
+	return id, nil
 }
 
 // MapToGuest adds the reserved share to the VM and mounts it inside the guest,
