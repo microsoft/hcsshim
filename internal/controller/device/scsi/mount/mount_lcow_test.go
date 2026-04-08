@@ -78,6 +78,20 @@ func TestConfigEquals_LCOW(t *testing.T) {
 		t.Error("expected equal configs to be equal")
 	}
 
+	// Options comparison should be order-insensitive.
+	reordered := same
+	reordered.Options = []string{"noatime", "rw"}
+	if !base.Equals(reordered) {
+		t.Error("expected configs with reordered options to be equal")
+	}
+
+	// Options comparison should be case-insensitive.
+	uppercased := same
+	uppercased.Options = []string{"RW", "Noatime"}
+	if !base.Equals(uppercased) {
+		t.Error("expected configs with differently-cased options to be equal")
+	}
+
 	tests := []struct {
 		name   string
 		modify func(c *Config)

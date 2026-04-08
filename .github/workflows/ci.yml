@@ -643,8 +643,16 @@ jobs:
             $LASTEXITCODE = 0
           }
 
+      - run: ${{ env.GO_BUILD_CMD }} -tags lcow ./...
+        name: Build lcow tagged packages (shimV2)
+      - run: ${{ env.GO_BUILD_CMD }} -tags wcow ./...
+        name: Build wcow tagged packages (shimV2)
+      - run: ${{ env.GO_BUILD_CMD }} ./...
+        name: Build untagged packages
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/containerd-shim-runhcs-v1
         name: Build containerd-shim-runhcs-v1.exe
+      - run: ${{ env.GO_BUILD_CMD }} -tags lcow ./cmd/containerd-shim-lcow-v2
+        name: Build containerd-shim-lcow-v2.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/device-util
         name: Build device-util.exe
       - run: ${{ env.GO_BUILD_CMD }} ./cmd/jobobject-util
@@ -682,12 +690,6 @@ jobs:
         name: Build uvmboot.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
         name: Build zapdir.exe
-
-      - name: Build lcow tagged packages (shimV2)
-        run: go build -tags lcow ./...
-
-      - name: Build wcow tagged packages (shimV2)
-        run: go build -tags wcow ./...
 
       - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'pull_request' }}

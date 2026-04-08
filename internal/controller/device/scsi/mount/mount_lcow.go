@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
@@ -53,13 +54,22 @@ type Config struct {
 }
 
 // Equals reports whether two mount Config values describe the same mount parameters.
+// Options are compared in a case-insensitive and order-insensitive manner.
 func (c Config) Equals(other Config) bool {
+	cmpFoldCase := func(a, b string) int {
+		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+	}
+
 	return c.ReadOnly == other.ReadOnly &&
 		c.Encrypted == other.Encrypted &&
 		c.EnsureFilesystem == other.EnsureFilesystem &&
 		c.Filesystem == other.Filesystem &&
 		c.BlockDev == other.BlockDev &&
-		slices.Equal(c.Options, other.Options)
+		slices.EqualFunc(
+			slices.SortedFunc(slices.Values(c.Options), cmpFoldCase),
+			slices.SortedFunc(slices.Values(other.Options), cmpFoldCase),
+			strings.EqualFold,
+		)
 }
 
 // mountReserved issues the LCOW guest mount for a partition in the
