@@ -20,6 +20,15 @@ jobs:
       matrix:
         goos: [windows, linux]
         root: ["", test] # cannot specify "./... ./test/..." unless in go workspace
+        tags: [""]
+        include:
+          # add LCOW/WCOW specific configurations
+          - goos: windows
+            root: ""
+            tags: lcow
+          - goos: windows
+            root: ""
+            tags: wcow
 
     steps:
       - name: Checkout
@@ -36,7 +45,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1
+          version: v2.11
           args: >-
             --verbose
             --max-issues-per-linter=0
@@ -44,6 +53,7 @@ jobs:
             --modules-download-mode=readonly
             --timeout=10m
             --config=${{ github.workspace }}/.golangci.yml
+            ${{ case(matrix.tags != '', format('--build-tags {0}', matrix.tags), '') }}
           working-directory: ${{ github.workspace }}/${{ matrix.root }}
         env:
           GOOS: ${{ matrix.goos }}
@@ -269,8 +279,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name:
-          [windows-2022]
+        name: [windows-2022]
         include:
           - name: "windows-2022"
             runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]

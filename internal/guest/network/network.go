@@ -42,9 +42,9 @@ func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
 	buf := bytes.Buffer{}
 	buf.WriteString("127.0.0.1 localhost\n")
 	if len(nameParts) > 1 {
-		buf.WriteString(fmt.Sprintf("127.0.0.1 %s %s\n", hostname, nameParts[0]))
+		fmt.Fprintf(&buf, "127.0.0.1 %s %s\n", hostname, nameParts[0])
 	} else {
-		buf.WriteString(fmt.Sprintf("127.0.0.1 %s\n", hostname))
+		fmt.Fprintf(&buf, "127.0.0.1 %s\n", hostname)
 	}
 	buf.WriteString("\n")
 	buf.WriteString("# The following lines are desirable for IPv6 capable hosts\n")
