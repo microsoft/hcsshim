@@ -182,7 +182,7 @@ func (uvm *UtilityVM) RemoveDevice(ctx context.Context, deviceInstanceID string,
 
 	vpci := uvm.vpciDevices[key]
 	if vpci == nil {
-		entry.Error("failed to remove nonexistant vPCI device ")
+		entry.Error("failed to remove nonexistent vPCI device ")
 		return fmt.Errorf("no device with ID %s and index %d is present on the uvm %s", deviceInstanceID, index, uvm.ID())
 	}
 

@@ -4,6 +4,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -12,7 +13,6 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/containerd/ttrpc"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/hcn"
@@ -147,7 +147,7 @@ func (n *ncproxyClient) Close() error {
 func (uvm *UtilityVM) GetNCProxyClient() (*ncproxyClient, error) {
 	conn, err := winio.DialPipe(uvm.ncProxyClientAddress, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to ncproxy service")
+		return nil, fmt.Errorf("failed to connect to ncproxy service: %w", err)
 	}
 	raw := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
 	return &ncproxyClient{raw, ncproxyttrpc.NewNetworkConfigProxyClient(raw)}, nil
@@ -298,7 +298,7 @@ func (e *externalNetworkSetup) ConfigureNetworking(ctx context.Context, namespac
 
 	client, err := e.vm.GetNCProxyClient()
 	if err != nil {
-		return errors.Wrapf(err, "no ncproxy client for UVM %q", e.vm.ID())
+		return fmt.Errorf("no ncproxy client for UVM %q: %w", e.vm.ID(), err)
 	}
 	defer client.Close()
 
@@ -523,16 +523,25 @@ func (uvm *UtilityVM) RemoveNetNS(ctx context.Context, id string) error {
 
 	ns, ok := uvm.namespaces[id]
 	if !ok {
-		entry.Warn("cannot remove non-existant namespace from uVM")
+		entry.Warn("cannot remove non-existent namespace from uVM")
 		return nil
 	}
 
 	entry.WithField("nics", log.Format(ctx, ns.nics)).Debug("removing NICs from namespace")
+	var errs []error
 	for _, ninfo := range ns.nics {
 		if err := uvm.removeNIC(ctx, ninfo.ID, ninfo.Endpoint); err != nil {
-			return err
+			entry.WithFields(logrus.Fields{
+				logrus.ErrorKey: err,
+				"nic-id":        ninfo.ID,
+			}).Warn("failed to remove NIC from uVM")
+			errs = append(errs, err)
+		} else {
+			delete(ns.nics, ninfo.Endpoint.Id)
 		}
-		ns.nics[ninfo.Endpoint.Id] = nil
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("remove nic from uVM %q: %w", uvm.ID(), errors.Join(errs...))
 	}
 
 	// Remove the Guest Network namespace

@@ -1589,7 +1589,7 @@ func (h *Host) cleanupVirtualPod(ctx context.Context, virtualSandboxID string) {
 
 	vp, exists := h.virtualPods[virtualSandboxID]
 	if !exists {
-		entry.Warn("attempted to cleanup non-existant virtual sandbox pod")
+		entry.Warn("attempted to cleanup non-existent virtual sandbox pod")
 		return // virtual pod does not exist
 	}
 
