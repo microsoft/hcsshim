@@ -46,25 +46,12 @@ func newDefaultEjector() GuestSCSIEjector {
 	return &mockGuestSCSIEjector{}
 }
 
-func newFailingEjector(_ error) GuestSCSIEjector {
-	// WCOW ejector is a no-op; errors are not applicable.
-	return &mockGuestSCSIEjector{}
-}
-
 func newDefaultMounter() mount.GuestSCSIMounter {
 	return &mockGuestSCSIMounter{}
 }
 
-func newFailingMounter(err error) mount.GuestSCSIMounter {
-	return &mockGuestSCSIMounter{err: err}
-}
-
 func newDefaultUnmounter() mount.GuestSCSIUnmounter {
 	return &mockGuestSCSIUnmounter{}
-}
-
-func newFailingUnmounter(err error) mount.GuestSCSIUnmounter {
-	return &mockGuestSCSIUnmounter{err: err}
 }
 
 // --- WCOW-specific tests ---

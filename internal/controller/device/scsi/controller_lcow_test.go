@@ -36,14 +36,6 @@ func newMockGuestOps() *mockGuestOps {
 	return &mockGuestOps{}
 }
 
-func newMockGuestOpsWithMountErr(err error) *mockGuestOps {
-	return &mockGuestOps{mountErr: err}
-}
-
-func newMockGuestOpsWithUnmountErr(err error) *mockGuestOps {
-	return &mockGuestOps{unmountErr: err}
-}
-
 // --- LCOW-specific tests ---
 
 func TestMapToGuest_MountError(t *testing.T) {

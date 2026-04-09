@@ -43,24 +43,12 @@ func newDefaultEjector() GuestSCSIEjector {
 	return &mockGuestSCSIEjector{}
 }
 
-func newFailingEjector(err error) GuestSCSIEjector {
-	return &mockGuestSCSIEjector{err: err}
-}
-
 func newDefaultMounter() mount.GuestSCSIMounter {
 	return &mockGuestSCSIMounter{}
 }
 
-func newFailingMounter(err error) mount.GuestSCSIMounter {
-	return &mockGuestSCSIMounter{err: err}
-}
-
 func newDefaultUnmounter() mount.GuestSCSIUnmounter {
 	return &mockGuestSCSIUnmounter{}
-}
-
-func newFailingUnmounter(err error) mount.GuestSCSIUnmounter {
-	return &mockGuestSCSIUnmounter{err: err}
 }
 
 // --- LCOW-specific tests ---

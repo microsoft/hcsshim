@@ -42,10 +42,6 @@ func newFailingMounter(err error) GuestSCSIMounter {
 	return &mockMounter{err: err}
 }
 
-func newFailingUnmounter(err error) GuestSCSIUnmounter {
-	return &mockUnmounter{err: err}
-}
-
 func mountedMount(t *testing.T) *Mount {
 	t.Helper()
 	m := NewReserved(0, 0, defaultConfig())
