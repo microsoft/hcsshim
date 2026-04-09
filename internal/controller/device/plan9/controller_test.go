@@ -43,10 +43,10 @@ func (v *combinedVM) RemovePlan9(ctx context.Context, settings hcsschema.Plan9Sh
 	return v.remove.RemovePlan9(ctx, settings)
 }
 
-// combinedGuest satisfies guestPlan9 (LinuxGuestPlan9Mounter + LinuxGuestPlan9Unmounter).
+// combinedGuest satisfies guestPlan9 (GuestPlan9Mounter + GuestPlan9Unmounter).
 type combinedGuest struct {
-	mounter   *mountmocks.MockLinuxGuestPlan9Mounter
-	unmounter *mountmocks.MockLinuxGuestPlan9Unmounter
+	mounter   *mountmocks.MockGuestPlan9Mounter
+	unmounter *mountmocks.MockGuestPlan9Unmounter
 }
 
 func (g *combinedGuest) AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
@@ -62,8 +62,8 @@ type testController struct {
 	c            *Controller
 	vmAdd        *sharemocks.MockVMPlan9Adder
 	vmRemove     *sharemocks.MockVMPlan9Remover
-	guestMount   *mountmocks.MockLinuxGuestPlan9Mounter
-	guestUnmount *mountmocks.MockLinuxGuestPlan9Unmounter
+	guestMount   *mountmocks.MockGuestPlan9Mounter
+	guestUnmount *mountmocks.MockGuestPlan9Unmounter
 }
 
 func newTestController(t *testing.T, noWritableFileShares bool) *testController {
@@ -72,8 +72,8 @@ func newTestController(t *testing.T, noWritableFileShares bool) *testController 
 	ctrl := gomock.NewController(t)
 	vmAdd := sharemocks.NewMockVMPlan9Adder(ctrl)
 	vmRemove := sharemocks.NewMockVMPlan9Remover(ctrl)
-	guestMount := mountmocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mountmocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guestMount := mountmocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mountmocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	vm := &combinedVM{add: vmAdd, remove: vmRemove}
 	guest := &combinedGuest{mounter: guestMount, unmounter: guestUnmount}

@@ -40,9 +40,9 @@ type Controller struct {
 	// Immutable after construction.
 	vmPlan9 vmPlan9
 
-	// linuxGuest is the guest-side interface for LCOW Plan9 operations.
+	// guest is the guest-side interface for LCOW Plan9 operations.
 	// Immutable after construction.
-	linuxGuest guestPlan9
+	guest guestPlan9
 
 	// noWritableFileShares disallows adding writable Plan9 shares.
 	// Immutable after construction.
@@ -62,10 +62,10 @@ type Controller struct {
 }
 
 // New creates a new [Controller] for managing the plan9 shares on a VM.
-func New(vm vmPlan9, linuxGuest guestPlan9, noWritableFileShares bool) *Controller {
+func New(vm vmPlan9, guest guestPlan9, noWritableFileShares bool) *Controller {
 	return &Controller{
 		vmPlan9:              vm,
-		linuxGuest:           linuxGuest,
+		guest:                guest,
 		noWritableFileShares: noWritableFileShares,
 		reservations:         make(map[guid.GUID]*reservation),
 		sharesByHostPath:     make(map[string]*share.Share),
@@ -178,7 +178,7 @@ func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, erro
 	}
 
 	// Mount the share inside the guest.
-	guestPath, err := existingShare.MountToGuest(ctx, c.linuxGuest)
+	guestPath, err := existingShare.MountToGuest(ctx, c.guest)
 	if err != nil {
 		return "", fmt.Errorf("mount share to guest: %w", err)
 	}
@@ -213,7 +213,7 @@ func (c *Controller) UnmapFromGuest(ctx context.Context, id guid.GUID) error {
 
 	// Unmount the share from the guest (ref-counted; only issues the guest
 	// call when this is the last res on the share).
-	if err := existingShare.UnmountFromGuest(ctx, c.linuxGuest); err != nil {
+	if err := existingShare.UnmountFromGuest(ctx, c.guest); err != nil {
 		return fmt.Errorf("unmount share from guest: %w", err)
 	}
 

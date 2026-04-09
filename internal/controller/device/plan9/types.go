@@ -25,6 +25,6 @@ type vmPlan9 interface {
 
 // guestPlan9 combines all guest-side Plan9 operations for LCOW guests.
 type guestPlan9 interface {
-	mount.LinuxGuestPlan9Mounter
-	mount.LinuxGuestPlan9Unmounter
+	mount.GuestPlan9Mounter
+	mount.GuestPlan9Unmounter
 }

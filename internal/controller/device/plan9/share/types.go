@@ -5,6 +5,7 @@ package share
 import (
 	"context"
 	"slices"
+	"strings"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
@@ -23,10 +24,18 @@ type Config struct {
 
 // Equals reports whether two share Config values describe the same share parameters.
 func (c Config) Equals(other Config) bool {
+	cmpFoldCase := func(a, b string) int {
+		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+	}
+
 	return c.HostPath == other.HostPath &&
 		c.ReadOnly == other.ReadOnly &&
 		c.Restrict == other.Restrict &&
-		slices.Equal(c.AllowedNames, other.AllowedNames)
+		slices.EqualFunc(
+			slices.SortedFunc(slices.Values(c.AllowedNames), cmpFoldCase),
+			slices.SortedFunc(slices.Values(other.AllowedNames), cmpFoldCase),
+			strings.EqualFold,
+		)
 }
 
 // VMPlan9Adder adds a Plan9 share to a Utility VM.

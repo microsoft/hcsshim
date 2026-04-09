@@ -85,7 +85,7 @@ func (m *Mount) Reserve(config Config) error {
 
 // MountToGuest issues the guest-side mount operation and returns the guest
 // path.
-func (m *Mount) MountToGuest(ctx context.Context, guest LinuxGuestPlan9Mounter) (string, error) {
+func (m *Mount) MountToGuest(ctx context.Context, guest GuestPlan9Mounter) (string, error) {
 	ctx, _ = log.WithContext(ctx, logrus.WithField("shareName", m.shareName))
 
 	// Drive the mount state machine.
@@ -107,8 +107,6 @@ func (m *Mount) MountToGuest(ctx context.Context, guest LinuxGuestPlan9Mounter) 
 		}
 
 		m.state = StateMounted
-		// Note we don't increment the ref count here as the caller of
-		// MountToGuest is responsible for calling it once per reservation.
 
 		log.G(ctx).WithField(logfields.UVMPath, m.guestPath).Debug("Plan9 share mounted in guest")
 		return m.guestPath, nil
@@ -125,7 +123,7 @@ func (m *Mount) MountToGuest(ctx context.Context, guest LinuxGuestPlan9Mounter) 
 
 // UnmountFromGuest decrements the reference count and, when it reaches zero,
 // issues the guest-side unmount.
-func (m *Mount) UnmountFromGuest(ctx context.Context, guest LinuxGuestPlan9Unmounter) error {
+func (m *Mount) UnmountFromGuest(ctx context.Context, guest GuestPlan9Unmounter) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithField("shareName", m.shareName))
 
 	// Drive the state machine.

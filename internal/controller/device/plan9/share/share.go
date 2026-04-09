@@ -138,36 +138,28 @@ func (s *Share) RemoveFromVM(ctx context.Context, vm VMPlan9Remover) error {
 		// Share was never added — move directly to removed.
 		s.state = StateRemoved
 
-	case StateAdded:
+	case StateAdded, StateInvalid:
 		// If the mount is still active, skip removal.
 		if s.mount != nil {
 			return nil
 		}
 
-		log.G(ctx).Debug("removing Plan9 share from VM")
+		// Only remove from the VM if the share was actually added.
+		if s.state == StateAdded {
+			log.G(ctx).Debug("removing Plan9 share from VM")
 
-		// Remove the share from the VM.
-		if err := vm.RemovePlan9(ctx, hcsschema.Plan9Share{
-			Name:       s.name,
-			AccessName: s.name,
-			Port:       vmutils.Plan9Port,
-		}); err != nil {
-			// Leave the share in StateAdded so the caller can retry.
-			return fmt.Errorf("remove Plan9 share %s from VM: %w", s.name, err)
+			if err := vm.RemovePlan9(ctx, hcsschema.Plan9Share{
+				Name:       s.name,
+				AccessName: s.name,
+				Port:       vmutils.Plan9Port,
+			}); err != nil {
+				// Leave the share in StateAdded so the caller can retry.
+				return fmt.Errorf("remove Plan9 share %s from VM: %w", s.name, err)
+			}
 		}
 
 		s.state = StateRemoved
 		log.G(ctx).Debug("Plan9 share removed from VM")
-
-	case StateInvalid:
-		// The share was never successfully added to the VM. Wait for all
-		// mount reservations to be drained before transitioning to Removed.
-		if s.mount != nil {
-			return nil
-		}
-
-		s.state = StateRemoved
-		log.G(ctx).Debug("invalid Plan9 share transitioned to removed (all mounts drained)")
 
 	case StateRemoved:
 		// Already fully removed — no-op.
@@ -207,7 +199,7 @@ func (s *Share) ReserveMount(ctx context.Context, config mount.Config) (*mount.M
 
 // MountToGuest mounts the share inside the guest, returning the guest path.
 // The mount must first be reserved via [Share.ReserveMount].
-func (s *Share) MountToGuest(ctx context.Context, guest mount.LinuxGuestPlan9Mounter) (string, error) {
+func (s *Share) MountToGuest(ctx context.Context, guest mount.GuestPlan9Mounter) (string, error) {
 	if s.state != StateAdded {
 		return "", fmt.Errorf("cannot mount share in state %s, expected added", s.state)
 	}
@@ -223,7 +215,7 @@ func (s *Share) MountToGuest(ctx context.Context, guest mount.LinuxGuestPlan9Mou
 // reference count reaches zero and it transitions to the unmounted state,
 // the mount entry is removed from the share so a subsequent
 // [Share.RemoveFromVM] call sees no active mount.
-func (s *Share) UnmountFromGuest(ctx context.Context, guest mount.LinuxGuestPlan9Unmounter) error {
+func (s *Share) UnmountFromGuest(ctx context.Context, guest mount.GuestPlan9Unmounter) error {
 	if s.mount == nil {
 		// No mount found — treat as a no-op to support retry by callers.
 		return nil

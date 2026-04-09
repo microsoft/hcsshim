@@ -68,8 +68,8 @@ func TestReserve_DifferentConfig_Errors(t *testing.T) {
 // cannot accept new reservations.
 func TestReserve_OnUnmountedMount_Errors(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 
@@ -99,7 +99,7 @@ func TestReserve_OnUnmountedMount_Errors(t *testing.T) {
 // returns the expected guest path.
 func TestMountToGuest_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
 
 	m := NewReserved("share0", Config{ReadOnly: true})
 
@@ -123,7 +123,7 @@ func TestMountToGuest_HappyPath(t *testing.T) {
 // StateReserved to StateInvalid so outstanding reservations can be drained.
 func TestMountToGuest_GuestFails_TransitionsToInvalid(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 
@@ -143,7 +143,7 @@ func TestMountToGuest_GuestFails_TransitionsToInvalid(t *testing.T) {
 // issuing a new AddLCOWMappedDirectory call to the guest.
 func TestMountToGuest_AlreadyMounted_Idempotent(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 
@@ -169,7 +169,7 @@ func TestMountToGuest_AlreadyMounted_Idempotent(t *testing.T) {
 // mount in StateInvalid (from a prior mount failure) returns an error.
 func TestMountToGuest_OnInvalid_Errors(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 	guest.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(errGuestMount)
@@ -191,8 +191,8 @@ func TestMountToGuest_OnInvalid_Errors(t *testing.T) {
 // the mount to the terminal StateUnmounted.
 func TestUnmountFromGuest_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 	guest.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
@@ -212,8 +212,8 @@ func TestUnmountFromGuest_HappyPath(t *testing.T) {
 // can retry.
 func TestUnmountFromGuest_GuestFails_StaysInMounted(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 	guest.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
@@ -234,8 +234,8 @@ func TestUnmountFromGuest_GuestFails_StaysInMounted(t *testing.T) {
 // succeeds and transitions the mount to StateUnmounted.
 func TestUnmountFromGuest_GuestFails_ThenRetrySucceeds(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 	guest.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
@@ -260,8 +260,8 @@ func TestUnmountFromGuest_GuestFails_ThenRetrySucceeds(t *testing.T) {
 // transitions the mount to StateUnmounted.
 func TestUnmountFromGuest_RefCounting_NoGuestCallUntilLastRef(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 	// Add a second reservation.
@@ -296,7 +296,7 @@ func TestUnmountFromGuest_RefCounting_NoGuestCallUntilLastRef(t *testing.T) {
 // StateUnmounted without issuing any guest call.
 func TestUnmountFromGuest_OnReserved_NoGuestCall(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guestUnmount := mocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	// Never mounted — never calls guest unmount.
 	m := NewReserved("share0", Config{})
@@ -312,8 +312,8 @@ func TestUnmountFromGuest_OnReserved_NoGuestCall(t *testing.T) {
 // on a mount already in the terminal StateUnmounted returns an error.
 func TestUnmountFromGuest_OnUnmounted_Errors(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guest := mocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guest := mocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	m := NewReserved("share0", Config{})
 	guest.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)

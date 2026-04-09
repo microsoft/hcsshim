@@ -292,7 +292,7 @@ func TestRemoveFromVM_OnInvalid_NoMount_TransitionsToRemoved(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vmAdd := mocks.NewMockVMPlan9Adder(ctrl)
 	vmRemove := mocks.NewMockVMPlan9Remover(ctrl)
-	guestUnmount := mountmocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guestUnmount := mountmocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
 	// Reserve a mount, then drain it so mount becomes nil.
@@ -389,7 +389,7 @@ func TestReserveMount_OnInvalidShare_Errors(t *testing.T) {
 // the share is still in StateReserved (not yet added to the VM).
 func TestMountToGuest_RequiresStateAdded(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guestMount := mountmocks.NewMockLinuxGuestPlan9Mounter(ctrl)
+	guestMount := mountmocks.NewMockGuestPlan9Mounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
 	_, _ = s.ReserveMount(context.Background(), mount.Config{})
@@ -406,7 +406,7 @@ func TestMountToGuest_RequiresStateAdded(t *testing.T) {
 func TestMountToGuest_RequiresReservedMount(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vmAdd := mocks.NewMockVMPlan9Adder(ctrl)
-	guestMount := mountmocks.NewMockLinuxGuestPlan9Mounter(ctrl)
+	guestMount := mountmocks.NewMockGuestPlan9Mounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
 	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
@@ -425,7 +425,7 @@ func TestMountToGuest_RequiresReservedMount(t *testing.T) {
 func TestMountToGuest_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vmAdd := mocks.NewMockVMPlan9Adder(ctrl)
-	guestMount := mountmocks.NewMockLinuxGuestPlan9Mounter(ctrl)
+	guestMount := mountmocks.NewMockGuestPlan9Mounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
 	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
@@ -452,8 +452,8 @@ func TestMountToGuest_HappyPath(t *testing.T) {
 func TestUnmountFromGuest_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vmAdd := mocks.NewMockVMPlan9Adder(ctrl)
-	guestMount := mountmocks.NewMockLinuxGuestPlan9Mounter(ctrl)
-	guestUnmount := mountmocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guestMount := mountmocks.NewMockGuestPlan9Mounter(ctrl)
+	guestUnmount := mountmocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
 	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
@@ -473,7 +473,7 @@ func TestUnmountFromGuest_HappyPath(t *testing.T) {
 // a share with no reserved mount is a no-op that returns no error.
 func TestUnmountFromGuest_NoMount_IsNoOp(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	guestUnmount := mountmocks.NewMockLinuxGuestPlan9Unmounter(ctrl)
+	guestUnmount := mountmocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
 

@@ -19,32 +19,32 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockLinuxGuestPlan9Mounter is a mock of LinuxGuestPlan9Mounter interface.
-type MockLinuxGuestPlan9Mounter struct {
+// MockGuestPlan9Mounter is a mock of GuestPlan9Mounter interface.
+type MockGuestPlan9Mounter struct {
 	ctrl     *gomock.Controller
-	recorder *MockLinuxGuestPlan9MounterMockRecorder
+	recorder *MockGuestPlan9MounterMockRecorder
 	isgomock struct{}
 }
 
-// MockLinuxGuestPlan9MounterMockRecorder is the mock recorder for MockLinuxGuestPlan9Mounter.
-type MockLinuxGuestPlan9MounterMockRecorder struct {
-	mock *MockLinuxGuestPlan9Mounter
+// MockGuestPlan9MounterMockRecorder is the mock recorder for MockGuestPlan9Mounter.
+type MockGuestPlan9MounterMockRecorder struct {
+	mock *MockGuestPlan9Mounter
 }
 
-// NewMockLinuxGuestPlan9Mounter creates a new mock instance.
-func NewMockLinuxGuestPlan9Mounter(ctrl *gomock.Controller) *MockLinuxGuestPlan9Mounter {
-	mock := &MockLinuxGuestPlan9Mounter{ctrl: ctrl}
-	mock.recorder = &MockLinuxGuestPlan9MounterMockRecorder{mock}
+// NewMockGuestPlan9Mounter creates a new mock instance.
+func NewMockGuestPlan9Mounter(ctrl *gomock.Controller) *MockGuestPlan9Mounter {
+	mock := &MockGuestPlan9Mounter{ctrl: ctrl}
+	mock.recorder = &MockGuestPlan9MounterMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockLinuxGuestPlan9Mounter) EXPECT() *MockLinuxGuestPlan9MounterMockRecorder {
+func (m *MockGuestPlan9Mounter) EXPECT() *MockGuestPlan9MounterMockRecorder {
 	return m.recorder
 }
 
 // AddLCOWMappedDirectory mocks base method.
-func (m *MockLinuxGuestPlan9Mounter) AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+func (m *MockGuestPlan9Mounter) AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddLCOWMappedDirectory", ctx, settings)
 	ret0, _ := ret[0].(error)
@@ -52,37 +52,37 @@ func (m *MockLinuxGuestPlan9Mounter) AddLCOWMappedDirectory(ctx context.Context,
 }
 
 // AddLCOWMappedDirectory indicates an expected call of AddLCOWMappedDirectory.
-func (mr *MockLinuxGuestPlan9MounterMockRecorder) AddLCOWMappedDirectory(ctx, settings any) *gomock.Call {
+func (mr *MockGuestPlan9MounterMockRecorder) AddLCOWMappedDirectory(ctx, settings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLCOWMappedDirectory", reflect.TypeOf((*MockLinuxGuestPlan9Mounter)(nil).AddLCOWMappedDirectory), ctx, settings)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLCOWMappedDirectory", reflect.TypeOf((*MockGuestPlan9Mounter)(nil).AddLCOWMappedDirectory), ctx, settings)
 }
 
-// MockLinuxGuestPlan9Unmounter is a mock of LinuxGuestPlan9Unmounter interface.
-type MockLinuxGuestPlan9Unmounter struct {
+// MockGuestPlan9Unmounter is a mock of GuestPlan9Unmounter interface.
+type MockGuestPlan9Unmounter struct {
 	ctrl     *gomock.Controller
-	recorder *MockLinuxGuestPlan9UnmounterMockRecorder
+	recorder *MockGuestPlan9UnmounterMockRecorder
 	isgomock struct{}
 }
 
-// MockLinuxGuestPlan9UnmounterMockRecorder is the mock recorder for MockLinuxGuestPlan9Unmounter.
-type MockLinuxGuestPlan9UnmounterMockRecorder struct {
-	mock *MockLinuxGuestPlan9Unmounter
+// MockGuestPlan9UnmounterMockRecorder is the mock recorder for MockGuestPlan9Unmounter.
+type MockGuestPlan9UnmounterMockRecorder struct {
+	mock *MockGuestPlan9Unmounter
 }
 
-// NewMockLinuxGuestPlan9Unmounter creates a new mock instance.
-func NewMockLinuxGuestPlan9Unmounter(ctrl *gomock.Controller) *MockLinuxGuestPlan9Unmounter {
-	mock := &MockLinuxGuestPlan9Unmounter{ctrl: ctrl}
-	mock.recorder = &MockLinuxGuestPlan9UnmounterMockRecorder{mock}
+// NewMockGuestPlan9Unmounter creates a new mock instance.
+func NewMockGuestPlan9Unmounter(ctrl *gomock.Controller) *MockGuestPlan9Unmounter {
+	mock := &MockGuestPlan9Unmounter{ctrl: ctrl}
+	mock.recorder = &MockGuestPlan9UnmounterMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockLinuxGuestPlan9Unmounter) EXPECT() *MockLinuxGuestPlan9UnmounterMockRecorder {
+func (m *MockGuestPlan9Unmounter) EXPECT() *MockGuestPlan9UnmounterMockRecorder {
 	return m.recorder
 }
 
 // RemoveLCOWMappedDirectory mocks base method.
-func (m *MockLinuxGuestPlan9Unmounter) RemoveLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+func (m *MockGuestPlan9Unmounter) RemoveLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveLCOWMappedDirectory", ctx, settings)
 	ret0, _ := ret[0].(error)
@@ -90,7 +90,7 @@ func (m *MockLinuxGuestPlan9Unmounter) RemoveLCOWMappedDirectory(ctx context.Con
 }
 
 // RemoveLCOWMappedDirectory indicates an expected call of RemoveLCOWMappedDirectory.
-func (mr *MockLinuxGuestPlan9UnmounterMockRecorder) RemoveLCOWMappedDirectory(ctx, settings any) *gomock.Call {
+func (mr *MockGuestPlan9UnmounterMockRecorder) RemoveLCOWMappedDirectory(ctx, settings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLCOWMappedDirectory", reflect.TypeOf((*MockLinuxGuestPlan9Unmounter)(nil).RemoveLCOWMappedDirectory), ctx, settings)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLCOWMappedDirectory", reflect.TypeOf((*MockGuestPlan9Unmounter)(nil).RemoveLCOWMappedDirectory), ctx, settings)
 }
