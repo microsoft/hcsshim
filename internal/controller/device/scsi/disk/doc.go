@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 // Package disk manages the lifecycle of a single SCSI disk attachment to a
 // Hyper-V VM, from host-side slot allocation through guest-side partition

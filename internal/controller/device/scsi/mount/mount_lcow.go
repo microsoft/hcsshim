@@ -102,10 +102,10 @@ func (m *Mount) mountReserved(ctx context.Context, guest GuestSCSIMounter) error
 	return nil
 }
 
-// unmountPartition issues the LCOW guest unmount for a partition in the
+// unmount issues the LCOW guest unmount for a partition in the
 // [StateMounted] state. It does not transition the state; that is handled
 // by the caller in [Mount.UnmountFromGuest].
-func (m *Mount) unmountPartition(ctx context.Context, guest GuestSCSIUnmounter) error {
+func (m *Mount) unmount(ctx context.Context, guest GuestSCSIUnmounter) error {
 	if m.state != StateMounted {
 		return fmt.Errorf("unexpected mount state %s, expected mounted", m.state)
 	}

@@ -1,4 +1,4 @@
-//go:build (windows && lcow) || (windows && wcow)
+//go:build windows && (lcow || wcow)
 
 package disk
 

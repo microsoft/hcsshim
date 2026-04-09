@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 // Package scsi manages the full lifecycle of SCSI disk mappings on a
 // Hyper-V VM, from host-side slot allocation through guest-side mounting.

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 // Package mount manages the lifecycle of a single partition mount inside a
 // Hyper-V guest VM, from the initial reservation through mounting and

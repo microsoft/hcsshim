@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package mount
 
@@ -137,7 +137,7 @@ func (m *Mount) UnmountFromGuest(ctx context.Context, guest GuestSCSIUnmounter) 
 			log.G(ctx).Debug("unmounting partition from guest")
 
 			// Last reference — issue the physical guest unmount.
-			if err := m.unmountPartition(ctx, guest); err != nil {
+			if err := m.unmount(ctx, guest); err != nil {
 				return err
 			}
 
