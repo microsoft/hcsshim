@@ -376,6 +376,14 @@ func (s *service) FinalizeSandbox(ctx context.Context, req *lmproto.FinalizeSand
 		}
 		go waitContainer(s.sandbox.waitCtx, s.sandbox.Sandbox, s.sandbox.State, s.publisher)
 	case lmproto.FinalizeAction_STOP:
+		// Cancel waitContainer goroutines before killing the VM. Without this,
+		// LMKill tears down the HCS system, the waitContainer goroutines detect
+		// the VM exit and race to shut down the shim. By the time containerd
+		// calls Kill/Delete (via StopPodSandbox), the shim's ttrpc pipe is
+		// dead, causing "ttrpc: closed" errors that surface as
+		// StopSourceVMFailure.
+		s.sandbox.waitCancel()
+
 		if err := s.migState.migrated.LMKill(ctx); err != nil {
 			return nil, err
 		}
@@ -402,9 +410,11 @@ func (s *service) FinalizeSandbox(ctx context.Context, req *lmproto.FinalizeSand
 		}); err != nil {
 			log.G(ctx).WithError(err).Info("PublishEvent failed")
 		}
-		s.sandbox = nil
-		// We should do this for resume at some point as well, but can't do it right away,
-		// since we need the info in migState for container restore.
+		// Do not nil s.sandbox — containerd will call Kill and Delete on the
+		// task ttrpc service after this returns. Those handlers need s.sandbox
+		// to be present. The sandbox is already marked as exited, so Kill will
+		// call Terminate which returns nil for an already-stopped system, and
+		// Delete will return the cached exit state.
 		s.migState = nil
 	default:
 		return nil, fmt.Errorf("unsupported action: %v", req.Action)
