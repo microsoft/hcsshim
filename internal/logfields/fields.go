@@ -9,6 +9,7 @@ const (
 
 	ID               = "id"
 	ContainerID      = "cid"
+	GCSContainerID   = "gcs_container_id"
 	ExecID           = "eid"
 	NamespaceID      = "namespace-id"
 	PodID            = "pod-id"

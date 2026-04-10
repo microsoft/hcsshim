@@ -4,6 +4,10 @@ const (
 	// LCOWRootPrefixInUVM is the path inside UVM where LCOW container's root
 	// file system will be mounted
 	LCOWRootPrefixInUVM = "/run/gcs/c"
+	// LCOWV2RootPrefixInVM is the path inside the UVM where LCOW container's root
+	// file system will be mounted.
+	// For V2 shims, this will be of format "/run/gcs/pods/<pod-id>/<container-id>".
+	LCOWV2RootPrefixInVM = "/run/gcs/pods"
 	// WCOWRootPrefixInUVM is the path inside UVM where WCOW container's root
 	// file system will be mounted
 	WCOWRootPrefixInUVM = `C:\c`
