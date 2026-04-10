@@ -11,10 +11,10 @@ import (
 
 	"github.com/opencontainers/cgroups"
 	"github.com/opencontainers/cgroups/manager"
+	"github.com/opencontainers/runc/internal/pathrs"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/configs/validate"
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
-	"github.com/opencontainers/runc/libcontainer/utils"
 )
 
 const (
@@ -51,7 +51,7 @@ func Create(root, id string, config *configs.Config) (*Container, error) {
 	}
 	if _, err := os.Stat(stateDir); err == nil {
 		return nil, ErrExist
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 
@@ -154,7 +154,7 @@ func loadState(root string) (*State, error) {
 	}
 	f, err := os.Open(stateFilePath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil, ErrNotExist
 		}
 		return nil, err
@@ -195,7 +195,7 @@ func validateID(id string) error {
 	}
 
 	// Allowed characters: 0-9 A-Z a-z _ + - .
-	for i := 0; i < len(id); i++ {
+	for i := range len(id) {
 		c := id[i]
 		switch {
 		case c >= 'a' && c <= 'z':
@@ -211,7 +211,7 @@ func validateID(id string) error {
 
 	}
 
-	if string(os.PathSeparator)+id != utils.CleanPath(string(os.PathSeparator)+id) {
+	if string(os.PathSeparator)+id != pathrs.LexicallyCleanPath(string(os.PathSeparator)+id) {
 		return ErrInvalidID
 	}
 

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -50,11 +49,11 @@ type Container struct {
 type State struct {
 	BaseState
 
-	// Platform specific fields below here
+	// Platform specific fields below.
 
 	// Specified if the container was started under the rootless mode.
 	// Set to true if BaseState.Config.RootlessEUID && BaseState.Config.RootlessCgroups
-	Rootless bool `json:"rootless"`
+	Rootless bool `json:"rootless,omitempty"`
 
 	// Paths to all the container's cgroups, as returned by (*cgroups.Manager).GetPaths
 	//
@@ -62,17 +61,22 @@ type State struct {
 	// to the cgroup for this subsystem.
 	//
 	// For cgroup v2 unified hierarchy, a key is "", and the value is the unified path.
-	CgroupPaths map[string]string `json:"cgroup_paths"`
+	CgroupPaths map[string]string `json:"cgroup_paths,omitempty"`
 
 	// NamespacePaths are filepaths to the container's namespaces. Key is the namespace type
 	// with the value as the path.
 	NamespacePaths map[configs.NamespaceType]string `json:"namespace_paths"`
 
-	// Container's standard descriptors (std{in,out,err}), needed for checkpoint and restore
+	// Container's standard descriptors (std{in,out,err}), needed for checkpoint and restore.
 	ExternalDescriptors []string `json:"external_descriptors,omitempty"`
 
-	// Intel RDT "resource control" filesystem path
-	IntelRdtPath string `json:"intel_rdt_path"`
+	// Intel RDT "resource control" filesystem path.
+	IntelRdtPath string `json:"intel_rdt_path,omitempty"`
+
+	// Path of the container specific monitoring group in resctrl filesystem.
+	// Empty if the container does not have aindividual dedicated monitoring
+	// group.
+	IntelRdtMonPath string `json:"intel_rdt_mon_path,omitempty"`
 }
 
 // ID returns the container's unique ID
@@ -290,7 +294,11 @@ func handleFifoResult(result openResult) error {
 	if err := readFromExecFifo(f); err != nil {
 		return err
 	}
-	return os.Remove(f.Name())
+	err := os.Remove(f.Name())
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 type openResult struct {
@@ -330,8 +338,6 @@ func (c *Container) start(process *Process) (retErr error) {
 	// We do not need the cloned binaries once the process is spawned.
 	defer process.closeClonedExes()
 
-	logsDone := parent.forwardChildLogs()
-
 	// Before starting "runc init", mark all non-stdio open files as O_CLOEXEC
 	// to make sure we don't leak any files into "runc init". Any files to be
 	// passed to "runc init" through ExtraFiles will get dup2'd by the Go
@@ -341,19 +347,26 @@ func (c *Container) start(process *Process) (retErr error) {
 	if err := utils.CloseExecFrom(3); err != nil {
 		return fmt.Errorf("unable to mark non-stdio fds as cloexec: %w", err)
 	}
-	if err := parent.start(); err != nil {
-		return fmt.Errorf("unable to start container process: %w", err)
-	}
 
-	if logsDone != nil {
+	if logsDone := parent.forwardChildLogs(); logsDone != nil {
 		defer func() {
 			// Wait for log forwarder to finish. This depends on
 			// runc init closing the _LIBCONTAINER_LOGPIPE log fd.
 			err := <-logsDone
-			if err != nil && retErr == nil {
-				retErr = fmt.Errorf("unable to forward init logs: %w", err)
+			if err != nil {
+				// runc init errors are important; make sure retErr has them.
+				err = fmt.Errorf("runc init error(s): %w", err)
+				if retErr != nil {
+					retErr = fmt.Errorf("%w; %w", retErr, err)
+				} else {
+					retErr = err
+				}
 			}
 		}()
+	}
+
+	if err := parent.start(); err != nil {
+		return fmt.Errorf("unable to start container process: %w", err)
 	}
 
 	if process.Init {
@@ -515,6 +528,12 @@ func (c *Container) newParentProcess(p *Process) (parentProcess, error) {
 	}
 
 	cmd := exec.Command(exePath, "init")
+	// Theoretically, exec.Command can set cmd.Err. Practically, this
+	// should never happen (Linux, Go <= 1.26, exePath is absolute),
+	// but in the unlikely case it just did, let's fail early.
+	if cmd.Err != nil {
+		return nil, fmt.Errorf("exec.Command: %w", cmd.Err)
+	}
 	cmd.Args[0] = os.Args[0]
 	cmd.Stdin = p.Stdin
 	cmd.Stdout = p.Stdout
@@ -651,39 +670,9 @@ func (c *Container) newSetnsProcess(p *Process, cmd *exec.Cmd, comm *processComm
 			bootstrapData: data,
 			container:     c,
 		},
-		cgroupPaths:     state.CgroupPaths,
 		rootlessCgroups: c.config.RootlessCgroups,
 		intelRdtPath:    state.IntelRdtPath,
 		initProcessPid:  state.InitProcessPid,
-	}
-	if len(p.SubCgroupPaths) > 0 {
-		if add, ok := p.SubCgroupPaths[""]; ok {
-			// cgroup v1: using the same path for all controllers.
-			// cgroup v2: the only possible way.
-			for k := range proc.cgroupPaths {
-				subPath := path.Join(proc.cgroupPaths[k], add)
-				if !strings.HasPrefix(subPath, proc.cgroupPaths[k]) {
-					return nil, fmt.Errorf("%s is not a sub cgroup path", add)
-				}
-				proc.cgroupPaths[k] = subPath
-			}
-			// cgroup v2: do not try to join init process's cgroup
-			// as a fallback (see (*setnsProcess).start).
-			proc.initProcessPid = 0
-		} else {
-			// Per-controller paths.
-			for ctrl, add := range p.SubCgroupPaths {
-				if val, ok := proc.cgroupPaths[ctrl]; ok {
-					subPath := path.Join(val, add)
-					if !strings.HasPrefix(subPath, val) {
-						return nil, fmt.Errorf("%s is not a sub cgroup path", add)
-					}
-					proc.cgroupPaths[ctrl] = subPath
-				} else {
-					return nil, fmt.Errorf("unknown controller %s in SubCgroupPaths", ctrl)
-				}
-			}
-		}
 	}
 	return proc, nil
 }
@@ -938,8 +927,10 @@ func (c *Container) currentState() *State {
 	}
 
 	intelRdtPath := ""
+	intelRdtMonPath := ""
 	if c.intelRdtManager != nil {
 		intelRdtPath = c.intelRdtManager.GetPath()
+		intelRdtMonPath = c.intelRdtManager.GetMonPath()
 	}
 	state := &State{
 		BaseState: BaseState{
@@ -952,6 +943,7 @@ func (c *Container) currentState() *State {
 		Rootless:            c.config.RootlessEUID && c.config.RootlessCgroups,
 		CgroupPaths:         c.cgroupManager.GetPaths(),
 		IntelRdtPath:        intelRdtPath,
+		IntelRdtMonPath:     intelRdtMonPath,
 		NamespacePaths:      make(map[configs.NamespaceType]string),
 		ExternalDescriptors: externalDescriptors,
 	}

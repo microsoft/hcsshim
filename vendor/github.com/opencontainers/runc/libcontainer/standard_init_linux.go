@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	"github.com/opencontainers/runc/internal/linux"
 	"github.com/opencontainers/runc/internal/pathrs"
 	"github.com/opencontainers/runc/internal/sys"
 	"github.com/opencontainers/runc/libcontainer/apparmor"
@@ -49,22 +50,22 @@ func (l *linuxStandardInit) getSessionRingParams() (string, uint32, uint32) {
 
 func (l *linuxStandardInit) Init() error {
 	if !l.config.Config.NoNewKeyring {
-		if err := selinux.SetKeyLabel(l.config.ProcessLabel); err != nil {
-			return err
+		if l.config.ProcessLabel != "" {
+			if err := selinux.SetKeyLabel(l.config.ProcessLabel); err != nil {
+				return err
+			}
+			defer selinux.SetKeyLabel("") //nolint: errcheck
 		}
-		defer selinux.SetKeyLabel("") //nolint: errcheck
 		ringname, keepperms, newperms := l.getSessionRingParams()
 
 		// Do not inherit the parent's session keyring.
 		if sessKeyId, err := keys.JoinSessionKeyring(ringname); err != nil {
+			logrus.Warnf("KeyctlJoinSessionKeyring: %v", err)
 			// If keyrings aren't supported then it is likely we are on an
 			// older kernel (or inside an LXC container). While we could bail,
 			// the security feature we are using here is best-effort (it only
 			// really provides marginal protection since VFS credentials are
 			// the only significant protection of keyrings).
-			//
-			// TODO(cyphar): Log this so people know what's going on, once we
-			//               have proper logging in 'runc init'.
 			if !errors.Is(err, unix.ENOSYS) {
 				return fmt.Errorf("unable to join session keyring: %w", err)
 			}
@@ -162,16 +163,29 @@ func (l *linuxStandardInit) Init() error {
 		return err
 	}
 
+	// Set personality if specified.
+	if l.config.Config.Personality != nil {
+		if err := setupPersonality(l.config.Config); err != nil {
+			return err
+		}
+	}
+
+	if err := setupMemoryPolicy(l.config.Config); err != nil {
+		return err
+	}
+
 	// Tell our parent that we're ready to exec. This must be done before the
 	// Seccomp rules have been applied, because we need to be able to read and
 	// write to a socket.
 	if err := syncParentReady(l.pipe); err != nil {
 		return fmt.Errorf("sync ready: %w", err)
 	}
-	if err := selinux.SetExecLabel(l.config.ProcessLabel); err != nil {
-		return fmt.Errorf("can't set process label: %w", err)
+	if l.config.ProcessLabel != "" {
+		if err := selinux.SetExecLabel(l.config.ProcessLabel); err != nil {
+			return fmt.Errorf("can't set process label: %w", err)
+		}
+		defer selinux.SetExecLabel("") //nolint: errcheck
 	}
-	defer selinux.SetExecLabel("") //nolint: errcheck
 	// Without NoNewPrivileges seccomp is a privileged operation, so we need to
 	// do this before dropping capabilities; otherwise do it as late as possible
 	// just before execve so as few syscalls take place after it as possible.
@@ -234,13 +248,6 @@ func (l *linuxStandardInit) Init() error {
 		}
 	}
 
-	// Set personality if specified.
-	if l.config.Config.Personality != nil {
-		if err := setupPersonality(l.config.Config); err != nil {
-			return err
-		}
-	}
-
 	// Close the pipe to signal that we have completed our init.
 	logrus.Debugf("init: closing the pipe to signal completion")
 	_ = l.pipe.Close()
@@ -294,5 +301,5 @@ func (l *linuxStandardInit) Init() error {
 	if err := utils.UnsafeCloseFrom(l.config.PassedFilesCount + 3); err != nil {
 		return err
 	}
-	return system.Exec(name, l.config.Args, l.config.Env)
+	return linux.Exec(name, l.config.Args, l.config.Env)
 }
