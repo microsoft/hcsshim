@@ -22,10 +22,27 @@ type Verifier interface {
 	Verify(content, signature []byte) error
 }
 
+// DigestVerifier is an interface for public keys to verify digested COSE signatures.
+type DigestVerifier interface {
+	// Algorithm returns the signing algorithm associated with the public key.
+	Algorithm() Algorithm
+
+	// VerifyDigest verifies message digest with the public key, returning nil
+	// for success.
+	// Otherwise, it returns ErrVerification.
+	VerifyDigest(digest, signature []byte) error
+}
+
 // NewVerifier returns a verifier with a given public key.
 // Only golang built-in crypto public keys of type `*rsa.PublicKey`,
 // `*ecdsa.PublicKey`, and `ed25519.PublicKey` are accepted.
+// When `*ecdsa.PublicKey` is specified, its curve must be supported by
+// crypto/ecdh.
+//
+// The returned signer for rsa and ecdsa keys also implements
+// `cose.DigestSigner`.
 func NewVerifier(alg Algorithm, key crypto.PublicKey) (Verifier, error) {
+	var errReason string
 	switch alg {
 	case AlgorithmPS256, AlgorithmPS384, AlgorithmPS512:
 		vk, ok := key.(*rsa.PublicKey)
@@ -46,14 +63,17 @@ func NewVerifier(alg Algorithm, key crypto.PublicKey) (Verifier, error) {
 		if !ok {
 			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
-		if !vk.Curve.IsOnCurve(vk.X, vk.Y) {
-			return nil, errors.New("public key point is not on curve")
+		if _, err := vk.ECDH(); err != nil {
+			if err.Error() == "ecdsa: invalid public key" {
+				return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
+			}
+			return nil, fmt.Errorf("%v: %w: %v", alg, ErrInvalidPubKey, err)
 		}
 		return &ecdsaVerifier{
 			alg: alg,
 			key: vk,
 		}, nil
-	case AlgorithmEd25519:
+	case AlgorithmEdDSA:
 		vk, ok := key.(ed25519.PublicKey)
 		if !ok {
 			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
@@ -61,7 +81,12 @@ func NewVerifier(alg Algorithm, key crypto.PublicKey) (Verifier, error) {
 		return &ed25519Verifier{
 			key: vk,
 		}, nil
+	case AlgorithmReserved:
+		errReason = "can't be implemented"
+	case AlgorithmRS256, AlgorithmRS384, AlgorithmRS512:
+		errReason = "no built-in implementation available"
 	default:
-		return nil, ErrAlgorithmNotSupported
+		errReason = "unknown algorithm"
 	}
+	return nil, fmt.Errorf("can't create new Verifier for %s: %s: %w", alg, errReason, ErrAlgorithmNotSupported)
 }

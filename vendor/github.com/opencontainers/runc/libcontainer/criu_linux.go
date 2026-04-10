@@ -16,14 +16,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/checkpoint-restore/go-criu/v6"
-	criurpc "github.com/checkpoint-restore/go-criu/v6/rpc"
+	"github.com/checkpoint-restore/go-criu/v7"
+	criurpc "github.com/checkpoint-restore/go-criu/v7/rpc"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/opencontainers/cgroups"
+	"github.com/opencontainers/runc/internal/pathrs"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/utils"
 )
@@ -78,7 +79,7 @@ func (c *Container) checkCriuFeatures(criuOpts *CriuOpts, criuFeat *criurpc.Criu
 	return nil
 }
 
-func compareCriuVersion(criuVersion int, minVersion int) error {
+func compareCriuVersion(criuVersion, minVersion int) error {
 	// simple function to perform the actual version compare
 	if criuVersion < minVersion {
 		return fmt.Errorf("CRIU version %d must be %d or higher", criuVersion, minVersion)
@@ -123,7 +124,7 @@ func (c *Container) addMaskPaths(req *criurpc.CriuReq) error {
 	for _, path := range c.config.MaskPaths {
 		fi, err := os.Stat(fmt.Sprintf("/proc/%d/root/%s", c.initProcess.pid(), path))
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
 			return err
@@ -304,7 +305,7 @@ func (c *Container) Checkpoint(criuOpts *CriuOpts) error {
 
 	// Since a container can be C/R'ed multiple times,
 	// the checkpoint directory may already exist.
-	if err := os.Mkdir(criuOpts.ImagesDirectory, 0o700); err != nil && !os.IsExist(err) {
+	if err := os.Mkdir(criuOpts.ImagesDirectory, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 		return err
 	}
 
@@ -339,7 +340,7 @@ func (c *Container) Checkpoint(criuOpts *CriuOpts) error {
 
 	// if criuOpts.WorkDirectory is not set, criu default is used.
 	if criuOpts.WorkDirectory != "" {
-		if err := os.Mkdir(criuOpts.WorkDirectory, 0o700); err != nil && !os.IsExist(err) {
+		if err := os.Mkdir(criuOpts.WorkDirectory, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
 		workDir, err := os.Open(criuOpts.WorkDirectory)
@@ -542,16 +543,22 @@ func (c *Container) prepareCriuRestoreMounts(mounts []*configs.Mount) error {
 	umounts := []string{}
 	defer func() {
 		for _, u := range umounts {
-			_ = utils.WithProcfd(c.config.Rootfs, u, func(procfd string) error {
-				if e := unix.Unmount(procfd, unix.MNT_DETACH); e != nil {
-					if e != unix.EINVAL {
+			mntFile, err := pathrs.OpenInRoot(c.config.Rootfs, u, unix.O_PATH)
+			if err != nil {
+				logrus.Warnf("Error during cleanup unmounting %s: open handle: %v", u, err)
+				continue
+			}
+			_ = utils.WithProcfdFile(mntFile, func(procfd string) error {
+				if err := unix.Unmount(procfd, unix.MNT_DETACH); err != nil {
+					if err != unix.EINVAL {
 						// Ignore EINVAL as it means 'target is not a mount point.'
 						// It probably has already been unmounted.
-						logrus.Warnf("Error during cleanup unmounting of %s (%s): %v", procfd, u, e)
+						logrus.Warnf("Error during cleanup unmounting of %s (%s): %v", procfd, u, err)
 					}
 				}
 				return nil
 			})
+			_ = mntFile.Close()
 		}
 	}()
 	// Now go through all mounts and create the required mountpoints.
@@ -698,7 +705,7 @@ func (c *Container) Restore(process *Process, criuOpts *CriuOpts) error {
 	if criuOpts.WorkDirectory != "" {
 		// Since a container can be C/R'ed multiple times,
 		// the work directory may already exist.
-		if err := os.Mkdir(criuOpts.WorkDirectory, 0o700); err != nil && !os.IsExist(err) {
+		if err := os.Mkdir(criuOpts.WorkDirectory, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
 		workDir, err := os.Open(criuOpts.WorkDirectory)
@@ -819,7 +826,7 @@ func logCriuErrors(dir, file string) {
 			logrus.Warn("...")
 		}
 		// Print the last lines.
-		for add := 0; add < max; add++ {
+		for add := range max {
 			i := (idx + add) % max
 			s := lines[i]
 			actLineNo := lineNo + add - max + 1
@@ -948,7 +955,7 @@ func (c *Container) criuSwrk(process *Process, req *criurpc.CriuReq, opts *CriuO
 
 		val := reflect.ValueOf(req.GetOpts())
 		v := reflect.Indirect(val)
-		for i := 0; i < v.NumField(); i++ {
+		for i := range v.NumField() {
 			st := v.Type()
 			name := st.Field(i).Name
 			if 'A' <= name[0] && name[0] <= 'Z' {
@@ -1149,7 +1156,7 @@ func (c *Container) criuNotifications(resp *criurpc.CriuResp, process *Process, 
 			return err
 		}
 		if err := os.Remove(filepath.Join(c.stateDir, "checkpoint")); err != nil {
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, os.ErrNotExist) {
 				logrus.Error(err)
 			}
 		}

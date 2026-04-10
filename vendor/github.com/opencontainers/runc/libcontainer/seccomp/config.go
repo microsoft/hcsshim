@@ -2,7 +2,8 @@ package seccomp
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -25,12 +26,7 @@ var operators = map[string]configs.Operator{
 // KnownOperators returns the list of the known operations.
 // Used by `runc features`.
 func KnownOperators() []string {
-	var res []string
-	for k := range operators {
-		res = append(res, k)
-	}
-	sort.Strings(res)
-	return res
+	return slices.Sorted(maps.Keys(operators))
 }
 
 var actions = map[string]configs.Action{
@@ -48,12 +44,7 @@ var actions = map[string]configs.Action{
 // KnownActions returns the list of the known actions.
 // Used by `runc features`.
 func KnownActions() []string {
-	var res []string
-	for k := range actions {
-		res = append(res, k)
-	}
-	sort.Strings(res)
-	return res
+	return slices.Sorted(maps.Keys(actions))
 }
 
 var archs = map[string]string{
@@ -74,17 +65,13 @@ var archs = map[string]string{
 	"SCMP_ARCH_RISCV64":     "riscv64",
 	"SCMP_ARCH_S390":        "s390",
 	"SCMP_ARCH_S390X":       "s390x",
+	"SCMP_ARCH_LOONGARCH64": "loong64",
 }
 
 // KnownArchs returns the list of the known archs.
 // Used by `runc features`.
 func KnownArchs() []string {
-	var res []string
-	for k := range archs {
-		res = append(res, k)
-	}
-	sort.Strings(res)
-	return res
+	return slices.Sorted(maps.Keys(archs))
 }
 
 // ConvertStringToOperator converts a string into a Seccomp comparison operator.

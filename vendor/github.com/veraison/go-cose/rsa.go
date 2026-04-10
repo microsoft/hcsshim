@@ -24,14 +24,20 @@ func (rs *rsaSigner) Algorithm() Algorithm {
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8
 func (rs *rsaSigner) Sign(rand io.Reader, content []byte) ([]byte, error) {
-	hash := rs.alg.hashFunc()
-	digest, err := computeHash(hash, content)
+	digest, err := rs.alg.computeHash(content)
 	if err != nil {
 		return nil, err
 	}
+	return rs.SignDigest(rand, digest)
+}
+
+// SignDigest signs message digest with the private key, possibly using
+// entropy from rand.
+// The resulting signature should follow RFC 8152 section 8.
+func (rs *rsaSigner) SignDigest(rand io.Reader, digest []byte) ([]byte, error) {
 	return rs.key.Sign(rand, digest, &rsa.PSSOptions{
 		SaltLength: rsa.PSSSaltLengthEqualsHash, // defined in RFC 8230 sec 2
-		Hash:       hash,
+		Hash:       rs.alg.hashFunc(),
 	})
 }
 
@@ -54,12 +60,20 @@ func (rv *rsaVerifier) Algorithm() Algorithm {
 //
 // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8
 func (rv *rsaVerifier) Verify(content []byte, signature []byte) error {
-	hash := rv.alg.hashFunc()
-	digest, err := computeHash(hash, content)
+	digest, err := rv.alg.computeHash(content)
 	if err != nil {
 		return err
 	}
-	if err := rsa.VerifyPSS(rv.key, hash, digest, signature, &rsa.PSSOptions{
+	return rv.VerifyDigest(digest, signature)
+}
+
+// VerifyDigest verifies message digest with the public key, returning nil
+// for success.
+// Otherwise, it returns ErrVerification.
+//
+// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
+func (rv *rsaVerifier) VerifyDigest(digest []byte, signature []byte) error {
+	if err := rsa.VerifyPSS(rv.key, rv.alg.hashFunc(), digest, signature, &rsa.PSSOptions{
 		SaltLength: rsa.PSSSaltLengthEqualsHash, // defined in RFC 8230 sec 2
 	}); err != nil {
 		return ErrVerification

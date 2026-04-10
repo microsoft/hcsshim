@@ -24,3 +24,6 @@ vendor/
 .DS_Store
 /cose-fuzz.zip
 /workdir/
+
+# Editor files
+.vscode/

@@ -57,6 +57,13 @@ func (es *ecdsaKeySigner) Sign(rand io.Reader, content []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return es.SignDigest(rand, digest)
+}
+
+// SignDigest signs message digest with the private key, possibly using
+// entropy from rand.
+// The resulting signature should follow RFC 8152 section 8.
+func (es *ecdsaKeySigner) SignDigest(rand io.Reader, digest []byte) ([]byte, error) {
 	r, s, err := ecdsa.Sign(rand, es.key, digest)
 	if err != nil {
 		return nil, err
@@ -86,6 +93,13 @@ func (es *ecdsaCryptoSigner) Sign(rand io.Reader, content []byte) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
+	return es.SignDigest(rand, digest)
+}
+
+// SignDigest signs message digest with the private key, possibly using
+// entropy from rand.
+// The resulting signature should follow RFC 8152 section 8.
+func (es *ecdsaCryptoSigner) SignDigest(rand io.Reader, digest []byte) ([]byte, error) {
 	sigASN1, err := es.signer.Sign(rand, digest, nil)
 	if err != nil {
 		return nil, err
@@ -153,7 +167,15 @@ func (ev *ecdsaVerifier) Verify(content []byte, signature []byte) error {
 	if err != nil {
 		return err
 	}
+	return ev.VerifyDigest(digest, signature)
+}
 
+// VerifyDigest verifies message digest with the public key, returning nil
+// for success.
+// Otherwise, it returns ErrVerification.
+//
+// Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
+func (ev *ecdsaVerifier) VerifyDigest(digest []byte, signature []byte) error {
 	// verify signature
 	r, s, err := decodeECDSASignature(ev.key.Curve, signature)
 	if err != nil {
