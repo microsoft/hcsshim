@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim
 
-go 1.24.0
+go 1.25.0
 
 // protobuf/gRPC/ttrpc generation
 tool (
@@ -64,7 +64,7 @@ require (
 	go.uber.org/mock v0.6.0
 	golang.org/x/net v0.48.0
 	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.40.0
+	golang.org/x/sys v0.43.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.10
 )
