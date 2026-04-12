@@ -1,4 +1,4 @@
-# cyphar.com/go-pathrs v0.2.1
+# cyphar.com/go-pathrs v0.2.4
 ## explicit; go 1.18
 cyphar.com/go-pathrs
 cyphar.com/go-pathrs/internal/fdutils
@@ -48,10 +48,10 @@ github.com/cenkalti/backoff/v4
 # github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/checkpoint-restore/go-criu/v6 v6.3.0
-## explicit; go 1.16
-github.com/checkpoint-restore/go-criu/v6
-github.com/checkpoint-restore/go-criu/v6/rpc
+# github.com/checkpoint-restore/go-criu/v7 v7.2.0
+## explicit; go 1.20
+github.com/checkpoint-restore/go-criu/v7
+github.com/checkpoint-restore/go-criu/v7/rpc
 # github.com/cilium/ebpf v0.17.3
 ## explicit; go 1.22
 github.com/cilium/ebpf
@@ -153,13 +153,13 @@ github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc
 # github.com/containerd/typeurl/v2 v2.2.3
 ## explicit; go 1.21
 github.com/containerd/typeurl/v2
-# github.com/coreos/go-systemd/v22 v22.5.0
-## explicit; go 1.12
+# github.com/coreos/go-systemd/v22 v22.7.0
+## explicit; go 1.23
 github.com/coreos/go-systemd/v22/dbus
-# github.com/cpuguy83/go-md2man/v2 v2.0.5
-## explicit; go 1.11
+# github.com/cpuguy83/go-md2man/v2 v2.0.7
+## explicit; go 1.12
 github.com/cpuguy83/go-md2man/v2/md2man
-# github.com/cyphar/filepath-securejoin v0.6.0
+# github.com/cyphar/filepath-securejoin v0.6.1
 ## explicit; go 1.18
 github.com/cyphar/filepath-securejoin
 github.com/cyphar/filepath-securejoin/internal/consts
@@ -442,7 +442,7 @@ github.com/open-policy-agent/opa/types
 github.com/open-policy-agent/opa/util
 github.com/open-policy-agent/opa/util/decoding
 github.com/open-policy-agent/opa/version
-# github.com/opencontainers/cgroups v0.0.4
+# github.com/opencontainers/cgroups v0.0.6
 ## explicit; go 1.23.0
 github.com/opencontainers/cgroups
 github.com/opencontainers/cgroups/devices/config
@@ -459,8 +459,8 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/opencontainers/runc v1.3.3
-## explicit; go 1.23.0
+# github.com/opencontainers/runc v1.4.2
+## explicit; go 1.24.0
 github.com/opencontainers/runc/internal/linux
 github.com/opencontainers/runc/internal/pathrs
 github.com/opencontainers/runc/internal/sys
@@ -480,7 +480,7 @@ github.com/opencontainers/runc/libcontainer/seccomp/patchbpf
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/utils
 github.com/opencontainers/runc/types
-# github.com/opencontainers/runtime-spec v1.2.1
+# github.com/opencontainers/runtime-spec v1.3.0
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
 github.com/opencontainers/runtime-spec/specs-go/features
@@ -524,8 +524,8 @@ github.com/samber/lo/internal/constraints
 github.com/samber/lo/internal/xrand
 github.com/samber/lo/internal/xtime
 github.com/samber/lo/mutable
-# github.com/seccomp/libseccomp-golang v0.10.0
-## explicit; go 1.14
+# github.com/seccomp/libseccomp-golang v0.11.1
+## explicit; go 1.19
 github.com/seccomp/libseccomp-golang
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
@@ -533,7 +533,7 @@ github.com/sirupsen/logrus
 # github.com/tchap/go-patricia/v2 v2.3.2
 ## explicit; go 1.16
 github.com/tchap/go-patricia/v2/patricia
-# github.com/urfave/cli v1.22.16
+# github.com/urfave/cli v1.22.17
 ## explicit; go 1.11
 github.com/urfave/cli
 # github.com/urfave/cli/v2 v2.27.6
