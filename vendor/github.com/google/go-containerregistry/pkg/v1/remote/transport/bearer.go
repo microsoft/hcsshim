@@ -24,12 +24,13 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
-	authchallenge "github.com/docker/distribution/registry/client/auth/challenge"
 	"github.com/google/go-containerregistry/internal/redact"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/logs"
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote/internal/authchallenge"
 )
 
 type Token struct {
@@ -81,6 +82,13 @@ func fromChallenge(reg name.Registry, auth authn.Authenticator, t http.RoundTrip
 	if !ok {
 		return nil, fmt.Errorf("malformed www-authenticate, missing realm: %v", pr.Parameters)
 	}
+	// Validate the realm URL before storing it. A malicious or compromised
+	// registry can supply a realm pointing at an internal service or cloud
+	// metadata endpoint (e.g. 169.254.169.254), causing SSRF when the client
+	// subsequently fetches a token.
+	if err := validateRealmURL(realm, pr.Insecure); err != nil {
+		return nil, fmt.Errorf("invalid realm in www-authenticate: %w", err)
+	}
 	service := pr.Parameters["service"]
 	scheme := "https"
 	if pr.Insecure {
@@ -97,7 +105,40 @@ func fromChallenge(reg name.Registry, auth authn.Authenticator, t http.RoundTrip
 	}, nil
 }
 
+// validateRealmURL returns an error if the realm URL uses a disallowed scheme
+// or resolves to a private / link-local IP address. This prevents a crafted
+// WWW-Authenticate header from redirecting token fetches to internal services.
+func validateRealmURL(realm string, insecure bool) error {
+	u, err := url.Parse(realm)
+	if err != nil {
+		return fmt.Errorf("parsing realm %q: %w", realm, err)
+	}
+	switch u.Scheme {
+	case "https":
+		// always allowed
+	case "http":
+		if !insecure {
+			return fmt.Errorf("realm scheme %q not allowed for a secure registry; use https", u.Scheme)
+		}
+	default:
+		return fmt.Errorf("realm scheme %q not allowed; must be https (or http for insecure registries)", u.Scheme)
+	}
+	// Reject IP literals that resolve to private or link-local ranges.
+	// This blocks direct references to RFC 1918 addresses, loopback, and
+	// link-local ranges including the cloud instance metadata service
+	// (169.254.169.254 / fd00:ec2::254).  DNS-based SSRF is out of scope
+	// here; callers should apply network-level controls if needed.
+	host := u.Hostname()
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() {
+			return fmt.Errorf("realm host %q is a private or link-local address", host)
+		}
+	}
+	return nil
+}
+
 type bearerTransport struct {
+	mx sync.RWMutex
 	// Wrapped by bearerTransport.
 	inner http.RoundTripper
 	// Basic credentials that we exchange for bearer tokens.
@@ -139,7 +180,10 @@ func (bt *bearerTransport) RoundTrip(in *http.Request) (*http.Response, error) {
 		// the registry with which we are interacting.
 		// In case of redirect http.Client can use an empty Host, check URL too.
 		if matchesHost(bt.registry.RegistryStr(), in, bt.scheme) {
-			hdr := fmt.Sprintf("Bearer %s", bt.bearer.RegistryToken)
+			bt.mx.RLock()
+			localToken := bt.bearer.RegistryToken
+			bt.mx.RUnlock()
+			hdr := fmt.Sprintf("Bearer %s", localToken)
 			in.Header.Set("Authorization", hdr)
 		}
 		return bt.inner.RoundTrip(in)
@@ -156,11 +200,12 @@ func (bt *bearerTransport) RoundTrip(in *http.Request) (*http.Response, error) {
 		res.Body.Close()
 
 		newScopes := []string{}
+		bt.mx.Lock()
+		got := stringSet(bt.scopes)
 		for _, wac := range challenges {
 			// TODO(jonjohnsonjr): Should we also update "realm" or "service"?
 			if want, ok := wac.Parameters["scope"]; ok {
 				// Add any scopes that we don't already request.
-				got := stringSet(bt.scopes)
 				if _, ok := got[want]; !ok {
 					newScopes = append(newScopes, want)
 				}
@@ -172,6 +217,7 @@ func (bt *bearerTransport) RoundTrip(in *http.Request) (*http.Response, error) {
 		// otherwise the registry might just ignore it :/
 		newScopes = append(newScopes, bt.scopes...)
 		bt.scopes = newScopes
+		bt.mx.Unlock()
 
 		// TODO(jonjohnsonjr): Teach transport.Error about "error" and "error_description" from challenge.
 
@@ -196,7 +242,9 @@ func (bt *bearerTransport) refresh(ctx context.Context) error {
 	}
 
 	if auth.RegistryToken != "" {
+		bt.mx.Lock()
 		bt.bearer.RegistryToken = auth.RegistryToken
+		bt.mx.Unlock()
 		return nil
 	}
 
@@ -212,7 +260,9 @@ func (bt *bearerTransport) refresh(ctx context.Context) error {
 
 	// Find a token to turn into a Bearer authenticator
 	if response.Token != "" {
+		bt.mx.Lock()
 		bt.bearer.RegistryToken = response.Token
+		bt.mx.Unlock()
 	}
 
 	// If we obtained a refresh token from the oauth flow, use that for refresh() now.
@@ -306,7 +356,9 @@ func (bt *bearerTransport) refreshOauth(ctx context.Context) ([]byte, error) {
 	}
 
 	v := url.Values{}
+	bt.mx.RLock()
 	v.Set("scope", strings.Join(bt.scopes, " "))
+	bt.mx.RUnlock()
 	if bt.service != "" {
 		v.Set("service", bt.service)
 	}
@@ -362,7 +414,9 @@ func (bt *bearerTransport) refreshBasic(ctx context.Context) ([]byte, error) {
 	client := http.Client{Transport: b}
 
 	v := u.Query()
+	bt.mx.RLock()
 	v["scope"] = bt.scopes
+	bt.mx.RUnlock()
 	v.Set("service", bt.service)
 	u.RawQuery = v.Encode()
 

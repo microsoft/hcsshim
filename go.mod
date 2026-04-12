@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim
 
-go 1.24.0
+go 1.25.0
 
 // protobuf/gRPC/ttrpc generation
 tool (
@@ -42,7 +42,7 @@ require (
 	github.com/containerd/ttrpc v1.2.7
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.20.1
+	github.com/google/go-containerregistry v0.21.5
 	github.com/google/uuid v1.6.0
 	github.com/linuxkit/virtsock v0.0.0-20241009230534-cb6a20cc0422
 	github.com/mattn/go-shellwords v1.0.12
@@ -54,7 +54,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.52.0
-	github.com/sirupsen/logrus v1.9.3
+	github.com/sirupsen/logrus v1.9.4
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/vishvananda/netlink v1.3.1
@@ -62,9 +62,9 @@ require (
 	go.etcd.io/bbolt v1.4.0
 	go.opencensus.io v0.24.0
 	go.uber.org/mock v0.6.0
-	golang.org/x/net v0.48.0
-	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.40.0
+	golang.org/x/net v0.53.0
+	golang.org/x/sync v0.20.0
+	golang.org/x/sys v0.43.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.10
 )
@@ -81,14 +81,13 @@ require (
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
 	github.com/containerd/protobuild v0.3.0 // indirect
-	github.com/containerd/stargz-snapshotter/estargz v0.15.1 // indirect
+	github.com/containerd/stargz-snapshotter/estargz v0.18.2 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
-	github.com/docker/cli v29.2.0+incompatible // indirect
-	github.com/docker/distribution v2.8.3+incompatible // indirect
-	github.com/docker/docker-credential-helpers v0.7.0 // indirect
+	github.com/docker/cli v29.4.0+incompatible // indirect
+	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -102,7 +101,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/josephspurrier/goversioninfo v1.5.0 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
@@ -128,7 +127,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/seccomp/libseccomp-golang v0.10.0 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.2 // indirect
-	github.com/vbatts/tar-split v0.11.5 // indirect
+	github.com/vbatts/tar-split v0.12.2 // indirect
 	github.com/veraison/go-cose v1.1.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
@@ -140,10 +139,10 @@ require (
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
-	golang.org/x/mod v0.30.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
-	golang.org/x/tools v0.39.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

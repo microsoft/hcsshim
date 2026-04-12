@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
 	"strings"
 	"time"
@@ -165,16 +166,16 @@ func Annotations(f partial.WithRawManifest, anns map[string]string) partial.With
 	if img, ok := f.(v1.Image); ok {
 		return &image{
 			base:        img,
-			annotations: anns,
+			annotations: maps.Clone(anns),
 		}
 	}
 	if idx, ok := f.(v1.ImageIndex); ok {
 		return &index{
 			base:        idx,
-			annotations: anns,
+			annotations: maps.Clone(anns),
 		}
 	}
-	return arbitraryRawManifest{a: f, anns: anns}
+	return arbitraryRawManifest{a: f, anns: maps.Clone(anns)}
 }
 
 type arbitraryRawManifest struct {
@@ -295,6 +296,7 @@ func extract(img v1.Image, w io.Writer) error {
 			// Some tools prepend everything with "./", so if we don't Clean the
 			// name, we may have duplicate entries, which angers tar-split.
 			header.Name = filepath.Clean(header.Name)
+
 			// force PAX format to remove Name/Linkname length limit of 100 characters
 			// required by USTAR and to not depend on internal tar package guess which
 			// prefers USTAR over PAX
@@ -316,7 +318,7 @@ func extract(img v1.Image, w io.Writer) error {
 				name = filepath.Join(dirname, basename)
 			}
 
-			if _, ok := fileMap[name]; ok {
+			if _, ok := fileMap[name]; ok && !tombstone {
 				continue
 			}
 
@@ -327,7 +329,7 @@ func extract(img v1.Image, w io.Writer) error {
 
 			// mark file as handled. non-directory implicitly tombstones
 			// any entries with a matching (or child) name
-			fileMap[name] = tombstone || !(header.Typeflag == tar.TypeDir)
+			fileMap[name] = tombstone || (header.Typeflag != tar.TypeDir)
 			if !tombstone {
 				if err := tarWriter.WriteHeader(header); err != nil {
 					return err
@@ -344,10 +346,7 @@ func extract(img v1.Image, w io.Writer) error {
 }
 
 func inWhiteoutDir(fileMap map[string]bool, file string) bool {
-	for {
-		if file == "" {
-			break
-		}
+	for file != "" {
 		dirname := filepath.Dir(file)
 		if file == dirname {
 			break
@@ -358,13 +357,6 @@ func inWhiteoutDir(fileMap map[string]bool, file string) bool {
 		file = dirname
 	}
 	return false
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // Time sets all timestamps in an image to the given timestamp.
@@ -523,7 +515,7 @@ func Canonical(img v1.Image) (v1.Image, error) {
 
 	cfg.Container = ""
 	cfg.Config.Hostname = ""
-	cfg.DockerVersion = ""
+	cfg.DockerVersion = "" //nolint:staticcheck // Field will be removed in next release
 
 	return ConfigFile(img, cfg)
 }
