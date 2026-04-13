@@ -113,7 +113,7 @@ func TestConvertToV2Resources_ExtremeLimits(t *testing.T) {
 			Limit: &maxLimit,
 		},
 		Pids: &oci.LinuxPids{
-			Limit: maxLimit,
+			Limit: &maxLimit,
 		},
 	}
 

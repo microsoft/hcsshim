@@ -178,16 +178,18 @@ func TestConvertToV2Resources(t *testing.T) {
 	}
 
 	// Pids
+	want := int64(500)
 	result = ConvertToV2Resources(&oci.LinuxResources{
-		Pids: &oci.LinuxPids{Limit: 500},
+		Pids: &oci.LinuxPids{Limit: &want},
 	})
-	if result.Pids == nil || result.Pids.Max != 500 {
+	if result.Pids == nil || result.Pids.Max != want {
 		t.Error("Pids limit not converted")
 	}
 
 	// Pids with zero limit should not create v2 Pids
+	want = 0
 	result = ConvertToV2Resources(&oci.LinuxResources{
-		Pids: &oci.LinuxPids{Limit: 0},
+		Pids: &oci.LinuxPids{Limit: &want},
 	})
 	if result.Pids != nil {
 		t.Error("Pids with zero limit should not create v2 Pids")

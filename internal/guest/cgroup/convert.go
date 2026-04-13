@@ -188,9 +188,9 @@ func ConvertToV2Resources(resources *oci.LinuxResources) *cgroups2.Resources {
 		v2Resources.CPU = v2CPU
 	}
 
-	if resources.Pids != nil && resources.Pids.Limit > 0 {
+	if resources.Pids != nil && resources.Pids.Limit != nil && *resources.Pids.Limit > 0 {
 		v2Resources.Pids = &cgroups2.Pids{
-			Max: resources.Pids.Limit,
+			Max: *resources.Pids.Limit,
 		}
 	}
 
