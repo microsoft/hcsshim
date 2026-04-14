@@ -199,7 +199,7 @@ func getRuntime(_ context.Context, tb testing.TB) runtime.Runtime {
 }
 
 func getRuntimeErr() (runtime.Runtime, error) {
-	rt, err := runc.NewRuntime(guestpath.LCOWRootPrefixInUVM)
+	rt, err := runc.NewRuntime()
 	if err != nil {
 		return rt, fmt.Errorf("failed to initialize runc runtime: %w", err)
 	}

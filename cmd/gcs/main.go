@@ -27,7 +27,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/version"
@@ -297,8 +296,6 @@ func main() {
 
 	log.SetScrubbing(*scrubLogs)
 
-	baseLogPath := guestpath.LCOWRootPrefixInUVM
-
 	logrus.WithFields(logrus.Fields{
 		"branch":  version.Branch,
 		"commit":  version.Commit,
@@ -384,7 +381,7 @@ func main() {
 	}
 
 	tport := &transport.VsockTransport{}
-	rtime, err := runc.NewRuntime(baseLogPath)
+	rtime, err := runc.NewRuntime()
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
 	}

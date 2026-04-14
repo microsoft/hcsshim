@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/opencontainers/runc/libcontainer/devices"
@@ -32,9 +31,9 @@ func mkdirAllModePerm(target string) error {
 	return os.MkdirAll(target, os.ModePerm)
 }
 
-func updateSandboxMounts(sbid string, spec *oci.Spec) error {
-	// Check if this is a virtual pod
-	virtualSandboxID := spec.Annotations[annotations.VirtualPodID]
+func updateSandboxMounts(sandboxRoot string, spec *oci.Spec) error {
+	mountsDir := specGuest.SandboxMountsDirFromRoot(sandboxRoot)
+	tmpfsMountsDir := specGuest.SandboxTmpfsMountsDirFromRoot(sandboxRoot)
 
 	for i, m := range spec.Mounts {
 		if !strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) &&
@@ -43,25 +42,16 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 		}
 
 		var sandboxSource string
-		// if using `sandbox-tmp://` prefix, we mount a tmpfs in sandboxTmpfsMountsDir
 		if strings.HasPrefix(m.Source, guestpath.SandboxTmpfsMountPrefix) {
-			// Use virtual pod aware mount source
-			sandboxSource = specGuest.VirtualPodAwareSandboxTmpfsMountSource(sbid, virtualSandboxID, m.Source)
-			expectedMountsDir := specGuest.VirtualPodAwareSandboxTmpfsMountsDir(sbid, virtualSandboxID)
+			sandboxSource = specGuest.SandboxTmpfsMountSourceFromRoot(sandboxRoot, m.Source)
 
-			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
-			// Hence, we need to ensure that the resolved path is still under the correct directory
-			if !strings.HasPrefix(sandboxSource, expectedMountsDir) {
+			if !strings.HasPrefix(sandboxSource, tmpfsMountsDir) {
 				return errors.Errorf("mount path %v for mount %v is not within sandbox's tmpfs mounts dir", sandboxSource, m.Source)
 			}
 		} else {
-			// Use virtual pod aware mount source
-			sandboxSource = specGuest.VirtualPodAwareSandboxMountSource(sbid, virtualSandboxID, m.Source)
-			expectedMountsDir := specGuest.VirtualPodAwareSandboxMountsDir(sbid, virtualSandboxID)
+			sandboxSource = specGuest.SandboxMountSourceFromRoot(sandboxRoot, m.Source)
 
-			// filepath.Join cleans the resulting path before returning, so it would resolve the relative path if one was given.
-			// Hence, we need to ensure that the resolved path is still under the correct directory
-			if !strings.HasPrefix(sandboxSource, expectedMountsDir) {
+			if !strings.HasPrefix(sandboxSource, mountsDir) {
 				return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
 			}
 		}
@@ -78,24 +68,21 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 	return nil
 }
 
-func updateHugePageMounts(sbid string, spec *oci.Spec) error {
-	// Check if this is a virtual pod
-	virtualSandboxID := spec.Annotations[annotations.VirtualPodID]
+func updateHugePageMounts(sandboxRoot string, spec *oci.Spec) error {
+	hugepagesDir := specGuest.SandboxHugePagesMountsDirFromRoot(sandboxRoot)
 
 	for i, m := range spec.Mounts {
 		if !strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
 			continue
 		}
 
-		// Use virtual pod aware hugepages directory
-		mountsDir := specGuest.VirtualPodAwareHugePagesMountsDir(sbid, virtualSandboxID)
 		subPath := strings.TrimPrefix(m.Source, guestpath.HugePagesMountPrefix)
 		pageSize := strings.Split(subPath, string(os.PathSeparator))[0]
-		hugePageMountSource := filepath.Join(mountsDir, subPath)
+		hugePageMountSource := specGuest.HugePagesMountSourceFromRoot(sandboxRoot, m.Source)
 
 		// filepath.Join cleans the resulting path before returning so it would resolve the relative path if one was given.
 		// Hence, we need to ensure that the resolved path is still under the correct directory
-		if !strings.HasPrefix(hugePageMountSource, mountsDir) {
+		if !strings.HasPrefix(hugePageMountSource, hugepagesDir) {
 			return errors.Errorf("mount path %v for mount %v is not within hugepages's mounts dir", hugePageMountSource, m.Source)
 		}
 
@@ -178,7 +165,7 @@ func specHasGPUDevice(spec *oci.Spec) bool {
 	return false
 }
 
-func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec, ociBundlePath string) (err error) {
+func setupWorkloadContainerSpec(ctx context.Context, sbid, id, sandboxRoot string, spec *oci.Spec, ociBundlePath string) (err error) {
 	ctx, span := oc.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -192,11 +179,11 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	}
 
 	// update any sandbox mounts with the sandboxMounts directory path and create files
-	if err = updateSandboxMounts(sbid, spec); err != nil {
+	if err = updateSandboxMounts(sandboxRoot, spec); err != nil {
 		return errors.Wrapf(err, "failed to update sandbox mounts for container %v in sandbox %v", id, sbid)
 	}
 
-	if err = updateHugePageMounts(sbid, spec); err != nil {
+	if err = updateHugePageMounts(sandboxRoot, spec); err != nil {
 		return errors.Wrapf(err, "failed to update hugepages mounts for container %v in sandbox %v", id, sbid)
 	}
 
@@ -210,7 +197,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 
 	// Add default mounts for container networking (e.g. /etc/hostname, /etc/hosts),
 	// if spec didn't override them explicitly.
-	networkingMounts := specGuest.GenerateWorkloadContainerNetworkMounts(sbid, spec)
+	networkingMounts := specGuest.GenerateWorkloadContainerNetworkMountsFromRoot(sandboxRoot, spec)
 	spec.Mounts = append(spec.Mounts, networkingMounts...)
 
 	// TODO: JTERRY75 /dev/shm is not properly setup for LCOW I believe. CRI
