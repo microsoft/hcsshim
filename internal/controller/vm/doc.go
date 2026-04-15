@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 // Package vm provides a controller for managing the lifecycle of a Utility VM (UVM).
 //

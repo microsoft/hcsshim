@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package vm
 
@@ -24,8 +24,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	iwin "github.com/Microsoft/hcsshim/internal/windows"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
-	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 
 	"github.com/Microsoft/go-winio/pkg/process"
 	"github.com/containerd/errdefs"
@@ -236,41 +234,78 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 	return nil
 }
 
-// Update is used to update the VM configuration on-the-fly.
-// It supports modifying resources like CPU and memory while the VM is running.
-// It also supports injecting policy fragments or updating the CPU group id for the VM.
-func (c *Controller) Update(ctx context.Context, resources interface{}, annots map[string]string) error {
-	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "Update"))
+// UpdatePolicyFragment injects a security policy fragment into the running VM's guest.
+func (c *Controller) UpdatePolicyFragment(ctx context.Context, fragment guestresource.SecurityPolicyFragment) error {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "UpdatePolicyFragment"))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.vmState != StateRunning {
-		return fmt.Errorf("cannot update VM: VM is in state %s", c.vmState)
+		return fmt.Errorf("cannot update policy fragment: VM is in state %s", c.vmState)
 	}
 
-	// If the resource is a policy fragment, inject it directly into the guest and return.
-	if policyFragment, ok := resources.(*ctrdtaskapi.PolicyFragment); ok {
-		return c.guest.InjectPolicyFragment(ctx,
-			guestresource.SecurityPolicyFragment{
-				Fragment: policyFragment.Fragment,
-			},
-		)
+	return c.guest.InjectPolicyFragment(ctx, fragment)
+}
+
+// UpdateCPUGroup assigns the VM to the specified CPU group.
+func (c *Controller) UpdateCPUGroup(ctx context.Context, cpuGroupID string) error {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "UpdateCPUGroup"))
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.vmState != StateRunning {
+		return fmt.Errorf("cannot update cpu group: VM is in state %s", c.vmState)
 	}
 
-	// Apply generic VM resource updates (e.g., CPU count, memory).
-	if err := c.updateVMResources(ctx, resources); err != nil {
-		return fmt.Errorf("failed to update VM resources: %w", err)
+	if cpuGroupID == "" {
+		return errors.New("must specify an ID to use when configuring a VM's cpu group")
 	}
 
-	// Update CPU group membership if the corresponding annotation is present.
-	if cpuGroupID, ok := annots[annotations.CPUGroupID]; ok {
-		if cpuGroupID == "" {
-			return errors.New("must specify an ID to use when configuring a VM's cpugroup")
-		}
-		if err := c.uvm.SetCPUGroup(ctx, &hcsschema.CpuGroup{Id: cpuGroupID}); err != nil {
-			return fmt.Errorf("failed to set CPU group: %w", err)
-		}
+	if err := c.uvm.SetCPUGroup(ctx, &hcsschema.CpuGroup{Id: cpuGroupID}); err != nil {
+		return fmt.Errorf("failed to set CPU group: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateCPU updates the CPU limits for the running VM.
+func (c *Controller) UpdateCPU(ctx context.Context, limits *hcsschema.ProcessorLimits) error {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "UpdateCPU"))
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.vmState != StateRunning {
+		return fmt.Errorf("cannot update cpu limits: VM is in state %s", c.vmState)
+	}
+
+	if err := c.uvm.UpdateCPULimits(ctx, limits); err != nil {
+		return fmt.Errorf("failed to update vm cpu limits: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateMemory updates the memory size for the running VM.
+// The requestedSizeInMB is normalized before being applied.
+func (c *Controller) UpdateMemory(ctx context.Context, requestedSizeInMB uint64) error {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "UpdateMemory"))
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.vmState != StateRunning {
+		return fmt.Errorf("cannot update memory: VM is in state %s", c.vmState)
+	}
+
+	// Normalize the requested memory size and apply it.
+	// Internally, HCS will get the number of pages this corresponds to
+	// and attempt to assign pages to numa nodes evenly.
+	actual := vmutils.NormalizeMemorySize(ctx, c.vmID, requestedSizeInMB)
+	if err := c.uvm.UpdateMemory(ctx, actual); err != nil {
+		return fmt.Errorf("failed to update vm memory: %w", err)
 	}
 
 	return nil

@@ -9,15 +9,10 @@ import (
 	"io"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
-	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/containerd/errdefs"
-	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -120,52 +115,5 @@ func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.G
 // finalizeGCSConnection finalizes the GCS connection for LCOW VMs.
 // For LCOW, no additional finalization is needed.
 func (c *Controller) finalizeGCSConnection(_ context.Context) error {
-	return nil
-}
-
-// updateVMResources applies Linux VM memory and CPU limits from OCI resources.
-func (c *Controller) updateVMResources(ctx context.Context, data interface{}) error {
-	resources, ok := data.(*specs.LinuxResources)
-	if !ok {
-		return fmt.Errorf("invalid resource type %T, expected *specs.LinuxResources", data)
-	}
-
-	if resources.Memory != nil {
-		if resources.Memory.Limit == nil {
-			return fmt.Errorf("invalid linux memory limit")
-		}
-
-		sizeInBytes := uint64(*resources.Memory.Limit)
-		// Make a call to the VM's orchestrator to update the VM's size in MB
-		// Internally, HCS will get the number of pages this corresponds to and attempt to assign
-		// pages to numa nodes evenly
-		requestedSizeInMB := sizeInBytes / memory.MiB
-		actual := vmutils.NormalizeMemorySize(ctx, c.vmID, requestedSizeInMB)
-
-		if err := c.uvm.UpdateMemory(ctx, actual); err != nil {
-			return fmt.Errorf("update vm memory: %w", err)
-		}
-	}
-
-	// Translate OCI CPU knobs to HCS processor limits.
-	if resources.CPU != nil {
-		processorLimits := &hcsschema.ProcessorLimits{}
-		if resources.CPU.Quota != nil {
-			processorLimits.Limit = uint64(*resources.CPU.Quota)
-		}
-		if resources.CPU.Shares != nil {
-			processorLimits.Weight = uint64(*resources.CPU.Shares)
-		}
-
-		// Support for updating CPU limits was not added until 20H2 build
-		if osversion.Get().Build < osversion.V20H2 {
-			return errdefs.ErrNotImplemented
-		}
-
-		if err := c.uvm.UpdateCPULimits(ctx, processorLimits); err != nil {
-			return fmt.Errorf("update vm cpu limits: %w", err)
-		}
-	}
-
 	return nil
 }
