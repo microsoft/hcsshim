@@ -69,7 +69,7 @@ type Controller struct {
 	vpciController *vpci.Controller
 
 	// platformControllers embeds platform-specific sub-controllers (e.g., Plan9 for LCOW).
-	platformControllers
+	platformControllers //nolint:unused,nolintlint // embedded for cross-platform compatibility; empty on WCOW
 }
 
 // New creates a new Controller instance in the [StateNotCreated] state.

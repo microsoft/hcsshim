@@ -20,7 +20,7 @@ import (
 
 // platformControllers holds platform-specific sub-controllers embedded in [Controller].
 // For WCOW, no additional controllers are needed as of now (VSMB will be added later).
-type platformControllers struct{}
+type platformControllers struct{} //nolint:unused // embedded in Controller for cross-platform compatibility with LCOW
 
 // setupEntropyListener sets up entropy for WCOW (Windows Containers on Windows) VMs.
 //

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package service
 
@@ -45,7 +45,7 @@ type Service struct {
 	sandboxOptions *lcow.SandboxOptions
 
 	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
-	vmController vm.Controller
+	vmController *vm.Controller
 
 	// shutdown manages graceful shutdown operations and allows registration of cleanup callbacks.
 	shutdown shutdown.Service
@@ -58,7 +58,7 @@ func NewService(ctx context.Context, eventsPublisher shim.Publisher, sd shutdown
 	svc := &Service{
 		publisher:    eventsPublisher,
 		events:       make(chan interface{}, 128), // Buffered channel for events
-		vmController: vm.NewController(),
+		vmController: vm.New(),
 		shutdown:     sd,
 	}
 

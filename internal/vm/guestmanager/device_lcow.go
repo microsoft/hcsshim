@@ -1,4 +1,4 @@
-//go:build windows && lcow
+//go:build windows
 
 package guestmanager
 
