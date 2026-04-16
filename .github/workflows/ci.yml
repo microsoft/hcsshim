@@ -4,8 +4,8 @@ on:
   - pull_request
 
 env:
-  GO_BUILD_CMD: 'go build "-ldflags=-s -w" -trimpath'
-  GO_BUILD_TEST_CMD: "go test -mod=mod -gcflags=all=-d=checkptr -c -tags functional"
+  GO_BUILD_CMD: 'go build "-ldflags=-s -w -linkmode=external" -trimpath'
+  GO_BUILD_TEST_CMD: 'go test -mod=mod "-ldflags=-linkmode=external" -gcflags=all=-d=checkptr -c -tags functional'
 
   GOTESTSUM_VERSION: "latest"
 
@@ -319,25 +319,32 @@ jobs:
           # accept the eula
           & '${{ github.workspace }}/bin/psexec' -accepteula -nobanner cmd /c "exit 0"
 
+      - name: Generate Resource Object Files
+        shell: pwsh
+        run: |
+          go generate -x ./cmd/...
+          cd test
+          go generate -x ./...
+
       # run tests
       - name: Test rego security policy
-        run: ${{ env.GOTESTSUM_CMD }} -tags=rego -timeout=30m -gcflags=all=-d=checkptr ./pkg/securitypolicy/...
+        run: ${{ env.GOTESTSUM_CMD }} -ldflags=-linkmode=external -gcflags=all=-d=checkptr -tags=rego -timeout=30m ./pkg/securitypolicy/...
 
       - name: Test repo
-        run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr -tags admin -timeout=20m ./...
+        run: ${{ env.GOTESTSUM_CMD }} -ldflags=-linkmode=external -gcflags=all=-d=checkptr -tags=admin -timeout=20m ./...
 
       - name: Test lcow tagged packages (shimV2)
-        run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr -tags lcow -timeout=10m ./...
+        run: ${{ env.GOTESTSUM_CMD }} -ldflags=-linkmode=external -gcflags=all=-d=checkptr -tags=lcow -timeout=10m ./...
 
       - name: Test wcow tagged packages (shimV2)
-        run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr -tags wcow -timeout=10m ./...
+        run: ${{ env.GOTESTSUM_CMD }} -ldflags=-linkmode=external -gcflags=all=-d=checkptr -tags=wcow -timeout=10m ./...
 
       - name: Run non-functional tests
-        run: ${{ env.GOTESTSUM_CMD }} -mod=mod -gcflags=all=-d=checkptr ./internal/... ./pkg/...
+        run: ${{ env.GOTESTSUM_CMD }} -mod=mod -ldflags=-linkmode=external -gcflags=all=-d=checkptr -timeout=10m ./internal/... ./pkg/...
         working-directory: test
 
       - name: Run lcow parity tests
-        run: ${{ env.GOTESTSUM_CMD }} -mod=mod -gcflags=all=-d=checkptr -tags lcow ./parity/...
+        run: ${{ env.GOTESTSUM_CMD }} -mod=mod -ldflags=-linkmode=external -gcflags=all=-d=checkptr -tags lcow -timeout=10m ./parity/...
         working-directory: test
 
       - name: Build and run containerd-shim-runhcs-v1 tests
@@ -541,8 +548,10 @@ jobs:
 
       - name: Build the shim
         working-directory: src/github.com/Microsoft/hcsshim
-        shell: powershell
+        shell: pwsh
         run: |
+          go generate -x ./cmd/containerd-shim-runhcs-v1
+
           ${{ env.GO_BUILD_CMD }} -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
 
       - name: Install gotestsum
@@ -659,6 +668,13 @@ jobs:
             $LASTEXITCODE = 0
           }
 
+      - name: Generate Resource Object Files
+        shell: pwsh
+        run: |
+          go generate -x ./cmd/...
+          cd test
+          go generate -x ./...
+
       - run: ${{ env.GO_BUILD_CMD }} -tags lcow ./...
         name: Build lcow tagged packages (shimV2)
       - run: ${{ env.GO_BUILD_CMD }} -tags wcow ./...
@@ -697,7 +713,7 @@ jobs:
         name: Build rootfs.exe
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
         name: Build securitypolicy.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
+      - run: go build "-ldflags=-s -w" -trimpath ./internal/tools/securitypolicy
         name: Build securitypolicy
         env:
           GOOS: linux

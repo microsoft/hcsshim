@@ -16,9 +16,6 @@ tool (
 	// generate Win32 API code
 	github.com/Microsoft/go-winio/tools/mkwinsyscall
 
-	// create syso files for manifesting
-	github.com/josephspurrier/goversioninfo/cmd/goversioninfo
-
 	// mock gRPC client and servers
 	go.uber.org/mock/mockgen
 )
@@ -72,7 +69,6 @@ require (
 	cyphar.com/go-pathrs v0.2.4 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.2.0 // indirect
-	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/checkpoint-restore/go-criu/v7 v7.2.0 // indirect
@@ -100,7 +96,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
-	github.com/josephspurrier/goversioninfo v1.5.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect

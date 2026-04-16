@@ -24,7 +24,7 @@ import (
 )
 
 // Add a manifest to get proper Windows version detection.
-//go:generate go tool github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
+//go:generate pwsh -Command "../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'containerd-shim-lcow-v2' -UseVersionFile -Architecture 'all'"
 
 func main() {
 	logrus.AddHook(log.NewHook())

@@ -13,7 +13,7 @@ import (
 )
 
 // Add a manifest to get proper Windows version detection.
-//go:generate go tool github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
+//go:generate pwsh -Command "../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'wclayer' -UseVersionFile -Architecture 'all'"
 
 var usage = `Windows Container layer utility
 

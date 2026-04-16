@@ -3,4 +3,4 @@
 // This package allows tests can include the .syso to manifest them to pick up the right Windows build
 package manifest
 
-//go:generate go tool github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
+//go:generate pwsh -Command "../../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'hcsshim-test' -UseVersionFile -Architecture 'all'"
