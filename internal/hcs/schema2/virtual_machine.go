@@ -26,4 +26,6 @@ type VirtualMachine struct {
 	DebugOptions     *DebugOptions     `json:"DebugOptions,omitempty"`
 	GuestConnection  *GuestConnection  `json:"GuestConnection,omitempty"`
 	SecuritySettings *SecuritySettings `json:"SecuritySettings,omitempty"`
+	// Live migration options to be used on destination.
+	MigrationOptions *MigrationInitializeOptions `json:"MigrationOptions,omitempty"`
 }
