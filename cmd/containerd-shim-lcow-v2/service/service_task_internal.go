@@ -83,7 +83,7 @@ func (s *Service) stateInternal(_ context.Context, request *task.StateRequest) (
 	// Retrieve the process controller for the target exec (or init) process.
 	proc, err := ctrCtrl.GetProcess(request.ExecID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get process (execID=%q) in container %s: %w", request.ExecID, request.ID, err)
+		return nil, fmt.Errorf("failed to get process (execID=%q) in container %s: %w: %w", request.ExecID, request.ID, errdefs.ErrNotFound, err)
 	}
 
 	// Return the current status snapshot for the process.

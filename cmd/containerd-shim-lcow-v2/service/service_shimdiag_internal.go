@@ -19,10 +19,6 @@ import (
 //
 // It is used to create an exec session into the hosting UVM.
 func (s *Service) diagExecInHostInternal(ctx context.Context, request *shimdiag.ExecProcessRequest) (*shimdiag.ExecProcessResponse, error) {
-	if err := s.ensureVMRunning(); err != nil {
-		return nil, err
-	}
-
 	ec, err := s.vmController.ExecIntoHost(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exec into host: %w", err)
