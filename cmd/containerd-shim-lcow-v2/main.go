@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shim"
+	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
@@ -39,6 +40,13 @@ func main() {
 	// If we encounter an error, we exit with non-zero code.
 	if err := setLogConfiguration(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%s: %s", service.ShimName, err)
+		os.Exit(1)
+	}
+
+	// This shim is supported on Windows Build 26100 and later.
+	if osversion.Build() < osversion.V25H1Server {
+		_, _ = fmt.Fprintf(os.Stderr,
+			"%s: Windows version [%v] is not supported", service.ShimName, osversion.Build())
 		os.Exit(1)
 	}
 

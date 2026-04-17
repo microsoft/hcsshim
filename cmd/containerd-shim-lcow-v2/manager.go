@@ -217,7 +217,7 @@ func (m *shimManager) Stop(_ context.Context, id string) (resp shim.StopStatus, 
 	if sys, _ := hcs.OpenComputeSystem(ctx, id); sys != nil {
 		defer sys.Close()
 		if err := sys.Terminate(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", id, err)
+			fmt.Fprintf(os.Stderr, "failed to terminate %q: %v", id, err)
 		} else {
 			ch := make(chan error, 1)
 			go func() { ch <- sys.Wait() }()
@@ -225,11 +225,11 @@ func (m *shimManager) Stop(_ context.Context, id string) (resp shim.StopStatus, 
 			select {
 			case <-t.C:
 				sys.Close()
-				return resp, fmt.Errorf("timed out waiting for '%s' to terminate", id)
+				return resp, fmt.Errorf("timed out waiting for %q to terminate", id)
 			case err := <-ch:
 				t.Stop()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", id, err)
+					fmt.Fprintf(os.Stderr, "failed to wait for %q to terminate: %v", id, err)
 				}
 			}
 		}
@@ -249,12 +249,12 @@ func (m *shimManager) Stop(_ context.Context, id string) (resp shim.StopStatus, 
 func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("limited read failed to open file: %s: %w", filePath, err)
+		return nil, fmt.Errorf("open file %s: %w", filePath, err)
 	}
 	defer f.Close()
 	fi, err := f.Stat()
 	if err != nil {
-		return []byte{}, fmt.Errorf("limited read failed during file stat: %s: %w", filePath, err)
+		return []byte{}, fmt.Errorf("stat file %s: %w", filePath, err)
 	}
 	if fi.Size() < readLimitBytes {
 		readLimitBytes = fi.Size()
@@ -262,7 +262,7 @@ func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
 	buf := make([]byte, readLimitBytes)
 	_, err = f.Read(buf)
 	if err != nil {
-		return []byte{}, fmt.Errorf("limited read failed during file read: %s: %w", filePath, err)
+		return []byte{}, fmt.Errorf("read file %s: %w", filePath, err)
 	}
 	return buf, nil
 }
