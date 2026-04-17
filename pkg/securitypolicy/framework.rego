@@ -174,6 +174,7 @@ mount_cims := {"metadata": [addMatches], "allowed": true} {
     containers := [container |
         container := candidate_containers[_]
         layerHashes_ok(container.layers)
+        input.mountedCim == container.mounted_cim
     ]
 
     count(containers) > 0

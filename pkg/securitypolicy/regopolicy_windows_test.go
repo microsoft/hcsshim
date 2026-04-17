@@ -347,8 +347,14 @@ func Test_Rego_EnforceVerifiedCIMSPolicy_Multiple_Instances_Same_Container(t *te
 				layerHashes[len(container.Layers)-1-i] = layer
 			}
 
+			hashesToVerify := layerHashes
+			mountedCim := []string{layerHashes[0]}
+			if len(layerHashes) > 1 {
+				hashesToVerify = layerHashes[1:]
+			}
+
 			id := testDataGenerator.uniqueContainerID()
-			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes)
+			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, hashesToVerify, mountedCim)
 			if err != nil {
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}

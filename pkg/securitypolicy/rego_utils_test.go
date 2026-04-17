@@ -2163,7 +2163,12 @@ func mountImageForWindowsContainer(policy *regoEnforcer, container *securityPoli
 	}
 
 	// Mount the CIMFS for the Windows container
-	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, layerHashes)
+	hashesToVerify := layerHashes
+	mountedCim := []string{layerHashes[0]}
+	if len(layerHashes) > 1 {
+		hashesToVerify = layerHashes[1:]
+	}
+	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim)
 	if err != nil {
 		return "", fmt.Errorf("error mounting CIMFS: %w", err)
 	}

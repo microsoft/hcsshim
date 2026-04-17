@@ -752,9 +752,14 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					log.G(ctx).Debugf("block CIM layer digest %s, path: %s\n", layerHashes[i], physicalDevPath)
 				}
 
+				// Top layer is the merged layer that will also be verified
 				hashesToVerify := layerHashes
+				mountedCim := []string{layerHashes[0]}
+				if len(layerHashes) > 1 {
+					hashesToVerify = layerHashes[1:]
+				}
 
-				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify)
+				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify, mountedCim)
 				if err != nil {
 					return errors.Wrap(err, "CIM mount is denied by policy")
 				}
@@ -763,7 +768,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				volGUID := wcowBlockCimMounts.VolumeGUID
 
 				// Cache hashes along with volGUID
-				b.hostState.blockCIMVolumeHashes[volGUID] = hashesToVerify
+				b.hostState.blockCIMVolumeHashes[volGUID] = layerHashes
 
 				// Store the containerID (associated with volGUID) to mark that hashes are verified for this container
 				if _, ok := b.hostState.blockCIMVolumeContainers[volGUID]; !ok {
@@ -886,10 +891,15 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					if _, seen := containers[containerID]; !seen {
 						// This is a container with similar layers as an existing container, hence already mounted.
 						// Call EnforceVerifiedCIMsPolicy on this new container.
-						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
-						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashes); err != nil {
+						hashesToVerify := hashes
+						mountedCim := []string{hashes[0]}
+						if len(hashes) > 1 {
+							hashesToVerify = hashes[1:]
+						}
+						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim); err != nil {
 							return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
 						}
+						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
 						containers[containerID] = struct{}{}
 					}
 				}
