@@ -94,6 +94,31 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 	return &config, nil
 }
 
+// ConvertCPUAffinity handles the logic of converting and validating the container's CPU affinity
+// specified in the OCI spec to what HCS expects.
+//
+// Returns the CPU affinity bitmask (0 if not specified) and any validation error.
+// Phase 2 limitations:
+//   - Multiple affinity entries are rejected
+//   - Non-zero processor groups are rejected
+func ConvertCPUAffinity(spec *specs.Spec) (uint64, error) {
+	if spec.Windows == nil || spec.Windows.Resources == nil || spec.Windows.Resources.CPU == nil || len(spec.Windows.Resources.CPU.Affinity) == 0 {
+		return 0, nil
+	}
+
+	affinity := spec.Windows.Resources.CPU.Affinity
+	if len(affinity) != 1 {
+		return 0, fmt.Errorf("cpu affinity with multiple processor groups is not supported")
+	}
+	if affinity[0].Group != 0 {
+		return 0, fmt.Errorf("cpu affinity processor group %d is not supported", affinity[0].Group)
+	}
+	if affinity[0].Mask == 0 {
+		return 0, fmt.Errorf("cpu affinity mask must be non-zero")
+	}
+	return affinity[0].Mask, nil
+}
+
 // ConvertCPULimits handles the logic of converting and validating the containers CPU limits
 // specified in the OCI spec to what HCS expects.
 //
@@ -184,6 +209,11 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		return nil, nil, err
 	}
 
+	cpuAffinity, err := ConvertCPUAffinity(coi.Spec)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if coi.HostingSystem != nil && coi.ScaleCPULimitsToSandbox && cpuLimit > 0 {
 		// When ScaleCPULimitsToSandbox is set and we are running in a UVM, we assume
 		// the CPU limit has been calculated based on the number of processors on the
@@ -233,9 +263,10 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v1.ProcessorWeight = uint64(cpuWeight)
 
 	v2Container.Processor = &hcsschema.Processor{
-		Count:   cpuCount,
-		Maximum: cpuLimit,
-		Weight:  cpuWeight,
+		Count:    cpuCount,
+		Maximum:  cpuLimit,
+		Weight:   cpuWeight,
+		Affinity: cpuAffinity,
 	}
 
 	// Memory Resources

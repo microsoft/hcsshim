@@ -15,4 +15,6 @@ type Processor struct {
 	Maximum int32 `json:"Maximum,omitempty"`
 
 	Weight int32 `json:"Weight,omitempty"`
+
+	Affinity uint64 `json:"Affinity,omitempty"`
 }

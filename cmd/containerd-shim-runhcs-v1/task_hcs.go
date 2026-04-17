@@ -934,6 +934,21 @@ func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.Window
 		if cpu.Shares != nil {
 			req.Weight = int32(*cpu.Shares)
 		}
+		if len(cpu.Affinity) > 0 {
+			// Create a temporary spec to reuse the existing ConvertCPUAffinity validation
+			tempSpec := &specs.Spec{
+				Windows: &specs.Windows{
+					Resources: &specs.WindowsResources{
+						CPU: cpu,
+					},
+				},
+			}
+			affinity, err := hcsoci.ConvertCPUAffinity(tempSpec)
+			if err != nil {
+				return err
+			}
+			req.Affinity = affinity
+		}
 		return ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req)
 	}
 
