@@ -184,6 +184,8 @@ type securityPolicyWindowsContainer struct {
 	// order that the layers are overlayed is important and needs to be enforced
 	// as part of policy.
 	Layers []string `json:"layers"`
+	// The merged CIM hash for Windows containers
+	MountedCim []string `json:"mounted_cim"`
 	// WorkingDir is a path to container's working directory, which all the processes
 	// will default to.
 	WorkingDir string `json:"working_dir"`

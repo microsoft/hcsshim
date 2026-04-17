@@ -392,6 +392,10 @@ func writeLayers(builder *strings.Builder, layers []string, indent string) {
 	writeLine(builder, `%s"layers": %s,`, indent, (stringArray(layers)).marshalRego())
 }
 
+func writeMountedCim(builder *strings.Builder, mountedCim []string, indent string) {
+	writeLine(builder, `%s"mounted_cim": %s,`, indent, (stringArray(mountedCim)).marshalRego())
+}
+
 func writeCapabilities(builder *strings.Builder, capabilities *capabilitiesInternal, indent string) {
 	if capabilities != nil {
 		writeLine(builder, `%s"capabilities": {`, indent)
@@ -458,6 +462,7 @@ func writeWindowsContainer(builder *strings.Builder, container *securityPolicyWi
 	writeCommand(builder, container.Command, indent+indentUsing)
 	writeEnvRules(builder, container.EnvRules, indent+indentUsing)
 	writeLayers(builder, container.Layers, indent+indentUsing)
+	writeMountedCim(builder, container.MountedCim, indent+indentUsing)
 	writeWindowsExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeWindowsSignals(builder, container.Signals, indent+indentUsing)
 	writeWindowsUser(builder, container.User, indent+indentUsing)

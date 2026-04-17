@@ -1857,6 +1857,7 @@ func (c *securityPolicyWindowsContainer) toWindowsContainer() *WindowsContainer 
 		Command:       CommandArgs(stringArrayToStringMap(c.Command)),
 		EnvRules:      envRuleArrayToEnvRules(c.EnvRules),
 		Layers:        Layers(stringArrayToStringMap(c.Layers)),
+		MountedCim:    c.MountedCim,
 		WorkingDir:    c.WorkingDir,
 		ExecProcesses: execProcesses,
 		Signals:       c.Signals,
@@ -2163,17 +2164,11 @@ func mountImageForWindowsContainer(policy *regoEnforcer, container *securityPoli
 	}
 
 	// Mount the CIMFS for the Windows container
-	hashesToVerify := layerHashes
-	mountedCim := []string{layerHashes[0]}
-	if len(layerHashes) > 1 {
-		hashesToVerify = layerHashes[1:]
-	}
-	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim)
+	// layerHashes are the individual layer hashes, mountedCim is the merged CIM from the policy
+	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, layerHashes, container.MountedCim)
 	if err != nil {
 		return "", fmt.Errorf("error mounting CIMFS: %w", err)
 	}
-
-	//fmt.Printf("CIMFS mounted successfully for container %s with layers %v\n", containerID, layerHashes)
 
 	return containerID, nil
 }
@@ -2310,6 +2305,11 @@ func generateConstraintsWindowsContainer(r *rand.Rand, minNumberOfLayers, maxNum
 	numLayers := int(atLeastNAtMostM(r, minNumberOfLayers, maxNumberOfLayers))
 	for i := 0; i < numLayers; i++ {
 		c.Layers = append(c.Layers, generateRootHash(r))
+	}
+	// For Windows, mounted_cim is the top/merged layer hash
+	// After reversal in the runtime, this becomes layerHashes[0]
+	if len(c.Layers) > 0 {
+		c.MountedCim = []string{c.Layers[len(c.Layers)-1]}
 	}
 	c.ExecProcesses = generateWindowsExecProcesses(r)
 	c.Signals = generateWindowsSignals(r)
