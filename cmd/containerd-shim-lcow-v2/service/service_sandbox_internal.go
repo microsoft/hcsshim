@@ -10,11 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	vmsandbox "github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
@@ -71,16 +69,12 @@ func (s *Service) createSandboxInternal(ctx context.Context, request *sandbox.Cr
 		return nil, fmt.Errorf("sandbox already exists with ID %s", s.sandboxID)
 	}
 
-	hcsDocument, sandboxOptions, err := lcow.BuildSandboxConfig(ctx, ShimName, request.BundlePath, shimOpts, &sandboxSpec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse sandbox spec: %w", err)
-	}
-
-	s.sandboxOptions = sandboxOptions
-
 	err = s.vmController.CreateVM(ctx, &vm.CreateOptions{
 		ID:          fmt.Sprintf("%s@vm", request.SandboxID),
-		HCSDocument: hcsDocument,
+		Owner:       ShimName,
+		BundlePath:  request.BundlePath,
+		ShimOpts:    shimOpts,
+		SandboxSpec: &sandboxSpec,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create VM: %w", err)
@@ -105,29 +99,9 @@ func (s *Service) startSandboxInternal(ctx context.Context, request *sandbox.Sta
 		return nil, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
 
-	// If we successfully got past the above check, it means the sandbox was created and
-	// the sandboxOptions should be populated.
-	var confidentialOpts *guestresource.ConfidentialOptions
-	if s.sandboxOptions != nil && s.sandboxOptions.ConfidentialConfig != nil {
-		uvmReferenceInfoEncoded, err := vmutils.ParseUVMReferenceInfo(
-			ctx,
-			vmutils.DefaultLCOWOSBootFilesPath(),
-			s.sandboxOptions.ConfidentialConfig.UvmReferenceInfoFile,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse UVM reference info: %w", err)
-		}
-		confidentialOpts = &guestresource.ConfidentialOptions{
-			EnforcerType:          s.sandboxOptions.ConfidentialConfig.SecurityPolicyEnforcer,
-			EncodedSecurityPolicy: s.sandboxOptions.ConfidentialConfig.SecurityPolicy,
-			EncodedUVMReference:   uvmReferenceInfoEncoded,
-		}
-	}
-
 	// VM controller ensures that only once of the Start call goes through.
 	err := s.vmController.StartVM(ctx, &vm.StartOptions{
-		GCSServiceID:        winio.VsockServiceID(prot.LinuxGcsVsockPort),
-		ConfidentialOptions: confidentialOpts,
+		GCSServiceID: winio.VsockServiceID(prot.LinuxGcsVsockPort),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start VM: %w", err)
@@ -151,10 +125,17 @@ func (s *Service) platformInternal(_ context.Context, request *sandbox.PlatformR
 		return nil, fmt.Errorf("sandbox has not been created (state: %s)", s.vmController.State())
 	}
 
+	// Find the architecture.
+	var architecture string
+	sandboxOpts := s.vmController.SandboxOptions()
+	if sandboxOpts != nil {
+		architecture = sandboxOpts.Architecture
+	}
+
 	return &sandbox.PlatformResponse{
 		Platform: &types.Platform{
 			OS:           linuxPlatform,
-			Architecture: s.sandboxOptions.Architecture,
+			Architecture: architecture,
 		},
 	}, nil
 }

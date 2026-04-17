@@ -10,6 +10,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
@@ -21,6 +22,16 @@ import (
 // platformControllers holds platform-specific sub-controllers embedded in [Controller].
 // For WCOW, no additional controllers are needed as of now (VSMB will be added later).
 type platformControllers struct{} //nolint:unused // embedded in Controller for cross-platform compatibility with LCOW
+
+// buildHCSConfig builds the HCS document for a WCOW VM.
+func (c *Controller) buildHCSConfig(_ context.Context, _ *CreateOptions) (*hcsschema.ComputeSystem, error) {
+	return nil, fmt.Errorf("WCOW buildHCSConfig not yet implemented")
+}
+
+// buildConfidentialOptions builds confidential options for WCOW VMs.
+func (c *Controller) buildConfidentialOptions(_ context.Context) (*guestresource.ConfidentialOptions, error) {
+	return nil, nil
+}
 
 // setupEntropyListener sets up entropy for WCOW (Windows Containers on Windows) VMs.
 //

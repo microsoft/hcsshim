@@ -6,7 +6,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shim"
@@ -39,10 +38,6 @@ type Service struct {
 	// sandboxID is the unique identifier for the sandbox managed by this Service instance.
 	// For LCOW shim, sandboxID corresponds 1-1 with the UtilityVM managed by the shim.
 	sandboxID string
-
-	// sandboxOptions contains parsed, shim-level configuration for the sandbox
-	// such as architecture and confidential-compute settings.
-	sandboxOptions *lcow.SandboxOptions
 
 	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
 	vmController *vm.Controller

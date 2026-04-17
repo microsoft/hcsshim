@@ -9,16 +9,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi"
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
-	"github.com/Microsoft/hcsshim/internal/controller/network"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
-
-// NetworkController returns a new controller for managing network devices on the VM.
-// Since we have a namespace per pod, we create a new controller per call.
-func (c *Controller) NetworkController() *network.Controller {
-	return network.New(c.uvm, c.guest, c.guest)
-}
 
 // SCSIController returns the singleton SCSI device controller for this VM.
 func (c *Controller) SCSIController() *scsi.Controller {

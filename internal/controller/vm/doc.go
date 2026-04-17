@@ -55,7 +55,10 @@
 //
 //	if err := ctrl.CreateVM(ctx, &vm.CreateOptions{
 //	    ID:          "my-uvm",
-//	    HCSDocument: doc,
+//	    Owner:       "my-shim",
+//	    BundlePath:  bundlePath,
+//	    ShimOpts:    shimOpts,
+//	    SandboxSpec: sandboxSpec,
 //	}); err != nil {
 //	    // handle error
 //	}

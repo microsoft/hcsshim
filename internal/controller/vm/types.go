@@ -5,9 +5,9 @@ package vm
 import (
 	"time"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
+	vmsandbox "github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 )
@@ -17,14 +17,17 @@ type CreateOptions struct {
 	// ID specifies the unique identifier for the VM.
 	ID string
 
-	// HCSDocument specifies the HCS schema document used to create the VM.
-	HCSDocument *hcsschema.ComputeSystem
+	// Owner specifies the owner name for the VM (e.g., shim name).
+	Owner string
 
-	// NoWritableFileShares disallows writable file shares to the UVM.
-	NoWritableFileShares bool
+	// BundlePath is the path to the bundle directory containing the sandbox config.
+	BundlePath string
 
-	// FullyPhysicallyBacked indicates all memory allocations are backed by physical memory.
-	FullyPhysicallyBacked bool
+	// ShimOpts specifies the runtime options for the shim.
+	ShimOpts *runhcsoptions.Options
+
+	// SandboxSpec specifies the sandbox specification from CRI.
+	SandboxSpec *vmsandbox.Spec
 }
 
 // StartOptions contains the configuration needed to start a VM and establish
@@ -35,10 +38,6 @@ type StartOptions struct {
 
 	// ConfigOptions specifies additional configuration options for the guest config.
 	ConfigOptions []guestmanager.ConfigOption
-
-	// ConfidentialOptions specifies security policy and confidential computing
-	// options for the VM. This is optional and only used for confidential VMs.
-	ConfidentialOptions *guestresource.ConfidentialOptions
 }
 
 // ExitStatus contains information about a stopped VM's final state.

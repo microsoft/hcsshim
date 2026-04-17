@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 // Package network provides a controller for managing the network lifecycle of a pod
 // running inside a Utility VM (UVM).

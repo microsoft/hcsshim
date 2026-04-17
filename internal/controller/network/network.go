@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package network
 
@@ -29,6 +29,10 @@ type Controller struct {
 	// netState is the current lifecycle state of the network.
 	netState State
 
+	// policyBasedRouting controls whether policy-based routing is configured
+	// for the endpoints added to the guest
+	policyBasedRouting bool
+
 	// isNamespaceSupportedByGuest determines if network namespace is supported inside the guest
 	isNamespaceSupportedByGuest bool
 
@@ -46,16 +50,19 @@ type Controller struct {
 
 // New creates a ready-to-use Controller in [StateNotConfigured].
 func New(
+	opts *Options,
 	vmNetManager vmNetworkManager,
 	guestNetwork guestNetwork,
 	capsProvider capabilitiesProvider,
 ) *Controller {
 	m := &Controller{
-		vmNetwork:    vmNetManager,
-		guestNetwork: guestNetwork,
-		capsProvider: capsProvider,
-		netState:     StateNotConfigured,
-		vmEndpoints:  make(map[string]*hcn.HostComputeEndpoint),
+		namespaceID:        opts.NetworkNamespace,
+		policyBasedRouting: opts.PolicyBasedRouting,
+		vmNetwork:          vmNetManager,
+		guestNetwork:       guestNetwork,
+		capsProvider:       capsProvider,
+		netState:           StateNotConfigured,
+		vmEndpoints:        make(map[string]*hcn.HostComputeEndpoint),
 	}
 
 	// Cache once at construction so hot-add paths can branch without re-querying.
@@ -69,8 +76,8 @@ func New(
 // Setup attaches the requested HCN namespace to the guest VM
 // and hot-adds all endpoints found in that namespace.
 // It must be called only once; subsequent calls return an error.
-func (c *Controller) Setup(ctx context.Context, opts *SetupOptions) (err error) {
-	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Namespace, opts.NetworkNamespace))
+func (c *Controller) Setup(ctx context.Context) (err error) {
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Namespace, c.namespaceID))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -91,14 +98,14 @@ func (c *Controller) Setup(ctx context.Context, opts *SetupOptions) (err error) 
 		}
 	}()
 
-	if opts.NetworkNamespace == "" {
+	if c.namespaceID == "" {
 		return fmt.Errorf("network namespace must not be empty")
 	}
 
 	// Validate that the provided namespace exists.
-	hcnNamespace, err := hcn.GetNamespaceByID(opts.NetworkNamespace)
+	hcnNamespace, err := hcn.GetNamespaceByID(c.namespaceID)
 	if err != nil {
-		return fmt.Errorf("get network namespace %s: %w", opts.NetworkNamespace, err)
+		return fmt.Errorf("get network namespace %s: %w", c.namespaceID, err)
 	}
 
 	// Fetch all endpoints in the namespace.
@@ -121,12 +128,11 @@ func (c *Controller) Setup(ctx context.Context, opts *SetupOptions) (err error) 
 		// add the nicID and endpointID to the context for trace.
 		nicCtx, _ := log.WithContext(ctx, logrus.WithFields(logrus.Fields{"vm_nic_id": nicGUID.String(), "hns_endpoint_id": endpoint.Id}))
 
-		if err = c.addEndpointToGuestNamespace(nicCtx, nicGUID.String(), endpoint, opts.PolicyBasedRouting); err != nil {
+		if err = c.addEndpointToGuestNamespace(nicCtx, nicGUID.String(), endpoint, c.policyBasedRouting); err != nil {
 			return fmt.Errorf("add endpoint %s to guest: %w", endpoint.Name, err)
 		}
 	}
 
-	c.namespaceID = hcnNamespace.Id
 	c.netState = StateConfigured
 
 	log.G(ctx).Info("network setup completed successfully")

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package network
 
@@ -9,8 +9,9 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
-// SetupOptions holds the configuration required to set up the network for a pod.
-type SetupOptions struct {
+// Options holds the configuration for the controller which would be required
+// to set up the network for a pod.
+type Options struct {
 	// NetworkNamespace is the HCN namespace ID to attach to the guest.
 	NetworkNamespace string
 

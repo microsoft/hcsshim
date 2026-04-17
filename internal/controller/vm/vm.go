@@ -59,9 +59,6 @@ type Controller struct {
 	// isPhysicallyBacked indicates whether the VM is using physical backing for its memory.
 	isPhysicallyBacked bool
 
-	// noWritableFileShares indicates whether writable file shares are disabled for this VM.
-	noWritableFileShares bool
-
 	// scsiController manages SCSI devices for this VM.
 	scsiController *scsi.Controller
 
@@ -118,8 +115,14 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 		return fmt.Errorf("cannot create VM: VM is in incorrect state %s", c.vmState)
 	}
 
+	// Build the HCS document and sandbox options from the platform-specific builder.
+	hcsDocument, err := c.buildHCSConfig(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("failed to build VM config: %w", err)
+	}
+
 	// Create the VM via vmmanager.
-	uvm, err := vmmanager.Create(ctx, opts.ID, opts.HCSDocument)
+	uvm, err := vmmanager.Create(ctx, opts.ID, hcsDocument)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %w", err)
 	}
@@ -127,10 +130,6 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	// Set the Controller parameters after successful creation.
 	c.vmID = opts.ID
 	c.uvm = uvm
-	// Determine if the VM is physically backed based on the create options.
-	c.isPhysicallyBacked = opts.FullyPhysicallyBacked
-	//
-	c.noWritableFileShares = opts.NoWritableFileShares
 
 	// Initialize the GuestManager for managing guest interactions.
 	// We will create the guest connection via GuestManager during StartVM.
@@ -138,7 +137,7 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 
 	// Eager initialize the SCSI controller as opposed to all other controllers.
 	// This is because we always use SCSI for attaching scratch VHDs.
-	c.scsiController, err = newSCSIController(ctx, opts.HCSDocument, c.uvm, c.guest)
+	c.scsiController, err = newSCSIController(ctx, hcsDocument, c.uvm, c.guest)
 	if err != nil {
 		return fmt.Errorf("failed to initialize SCSI controller: %w", err)
 	}
@@ -222,8 +221,13 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 	}
 
 	// Set the confidential options if applicable.
-	if opts.ConfidentialOptions != nil {
-		if err := c.guest.AddSecurityPolicy(ctx, *opts.ConfidentialOptions); err != nil {
+	// These are determined from the sandbox options stored during CreateVM.
+	confidentialOpts, err := c.buildConfidentialOptions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to build confidential options: %w", err)
+	}
+	if confidentialOpts != nil {
+		if err := c.guest.AddSecurityPolicy(ctx, *confidentialOpts); err != nil {
 			return fmt.Errorf("failed to set confidential options: %w", err)
 		}
 	}
