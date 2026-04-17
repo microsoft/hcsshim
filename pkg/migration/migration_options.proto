@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/pkg/migration;migration";
+
+// MigrationMemoryTransport is the transport protocol used for memory transfer during migration.
+enum MigrationMemoryTransport {
+    MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED = 0;
+    // VM memory is copied over a TCP/IP connection.
+    MIGRATION_MEMORY_TRANSPORT_TCP = 1;
+}
+
+message MigrationInitializeOptions {
+    // MemoryTransport specifies the transport protocol for memory transfer during migration.
+    MigrationMemoryTransport memory_transport = 1;
+    // MemoryTransferThrottleParams specifies settings for throttling during memory transfer.
+    optional MemoryMigrationTransferThrottleParams memory_transfer_throttle_params = 2;
+    // CompressionSettings specifies additional settings when compression is enabled.
+    optional MigrationCompressionSettings compression_settings = 3;
+    // ChecksumVerification enables memory checksum verification.
+    bool checksum_verification = 4;
+    // PerfTracingEnabled enables performance tracing during migration.
+    bool perf_tracing_enabled = 5;
+    // CancelIfBlackoutThresholdExceeds cancels the operation if the blackout threshold is exceeded.
+    bool cancel_if_blackout_threshold_exceeds = 6;
+    // PrepareMemoryTransferMode extends timeout for cross-version live migration.
+    bool prepare_memory_transfer_mode = 7;
+    // CompatibilityData is the compatibility information required for the destination VM.
+    optional CompatibilityInfo compatibility_data = 8;
+}
+
+// CompatibilityInfo is opaque VM compatibility data, primarily used in migration.
+message CompatibilityInfo {
+    // Raw compatibility information.
+    bytes data = 1;
+}
+
+message MemoryMigrationTransferThrottleParams {
+    // A flag indicating if throttling should be skipped.
+    optional bool skip_throttling = 1;
+    // The scale of the throttling. The value is in percentage (1-100).
+    optional double throttling_scale = 2;
+    // Minimum percentage value to which memory transfer can be throttled.
+    optional uint32 minimum_throttle_percentage = 3;
+    // Number of memory transfer passes targeted before the VM enters blackout.
+    optional uint32 target_number_of_brownout_transfer_passes = 4;
+    // The starting transfer pass where throttling is starting.
+    optional uint32 starting_brownout_pass_number_for_throttling = 5;
+    // Maximum number of memory transfer passes before forcing the VM to enter blackout.
+    optional uint32 maximum_number_of_brownout_transfer_passes = 6;
+    // Expected duration for blackout transfer time.
+    optional uint32 target_blackout_transfer_time = 7;
+    // Threshold for blackout duration prior to cancelling migration.
+    optional uint32 blackout_time_threshold_for_cancelling_migration = 8;
+}
+
+message MigrationCompressionSettings {
+    // Number of worker threads used for [de]compression. Values higher than what the host
+    // and VM configuration can support will be adjusted. The value should be non-zero.
+    optional uint32 throttle_worker_count = 1;
+}

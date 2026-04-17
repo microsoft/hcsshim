@@ -21,5 +21,6 @@ prefixes = [
   "github.com/Microsoft/hcsshim/internal/computeagent",
   "github.com/Microsoft/hcsshim/internal/ncproxyttrpc",
   "github.com/Microsoft/hcsshim/internal/vmservice",
+  "github.com/Microsoft/hcsshim/pkg/migration",
 ]
 generators = ["go", "go-ttrpc"]

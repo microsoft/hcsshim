@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/pkg/migration;migration";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "github.com/Microsoft/hcsshim/pkg/migration/migration_options.proto";
+
+service Migration {
+    // Called on SOURCE. Prepares the sandbox for live migration.
+    rpc PrepareAndExportSandbox(PrepareAndExportSandboxRequest) returns (PrepareAndExportSandboxResponse);
+    // Called on DESTINATION. Imports the exported sandbox config produced by
+    // PrepareAndExportSandbox on the source.
+    rpc ImportSandbox(ImportSandboxRequest) returns (ImportSandboxResponse);
+    // Called on DESTINATION. Prepares the destination sandbox for migration.
+    rpc PrepareSandbox(PrepareSandboxRequest) returns (PrepareSandboxResponse);
+    // Called on SOURCE AND DESTINATION. Initiates memory transfer, and returns a stream of status updates.
+    rpc TransferSandbox(TransferSandboxRequest) returns (stream TransferSandboxResponse);
+    // Called on SOURCE AND DESTINATION. Finalizes live migration and starts or deletes the sandbox.
+    rpc FinalizeSandbox(FinalizeSandboxRequest) returns (FinalizeSandboxResponse);
+    // Creates a duplicate socket for the migration transport.
+    rpc CreateDuplicateSocket(CreateDuplicateSocketRequest) returns (CreateDuplicateSocketResponse);
+}
+
+message PrepareAndExportSandboxRequest {
+    // Idempotency key for the migration session (stable across retries).
+    string session_id = 1;
+    // Options for initializing the live migration on the source.
+    MigrationInitializeOptions init_options = 2;
+}
+
+message PrepareAndExportSandboxResponse {
+    // An opaque config that should be set in the CreateSandbox input on the destination.
+    google.protobuf.Any config = 1;
+}
+
+message ImportSandboxRequest {
+    // Idempotency key for the migration session (must match the key used on the source).
+    string session_id = 1;
+    // Opaque config produced by PrepareAndExportSandbox on the source. Forwarded
+    // verbatim by the caller; the destination service is responsible for decoding it.
+    google.protobuf.Any config = 2;
+}
+
+message ImportSandboxResponse {}
+
+message PrepareSandboxRequest {
+    // Idempotency key for the migration session (must match the key used on the source).
+    string session_id = 1;
+    // Options for initializing the live migration on the destination.
+    MigrationInitializeOptions init_options = 2;
+}
+
+message PrepareSandboxResponse {}
+
+message TransferSandboxRequest {
+    // Idempotency key for migration session.
+    string session_id = 1;
+    // Max time to wait for socket/connection readiness before declaring TIMEOUT.
+    // If unset, server uses a sensible default (e.g., 10 minutes).
+    google.protobuf.Duration timeout = 2;
+}
+
+message TransferSandboxResponse {
+    // Increments per message; can be used to dedupe after client restarts.
+    uint32 message_id = 1;
+    // Event-specific message from the migration notification.
+    string event = 2;
+    // Populated when event indicates an error or timeout.
+    string error = 3;
+    // When the transfer started (according to the server).
+    google.protobuf.Timestamp start_time = 4;
+    // When this update was produced.
+    google.protobuf.Timestamp update_time = 5;
+}
+
+message FinalizeSandboxRequest {
+    // Idempotency key for the session (must match the key used in PrepareSandbox).
+    string session_id = 1;
+    // Action to perform on the sandbox at finalize time.
+    FinalizeAction action = 2;
+}
+
+// FinalizeAction specifies the action to take on the sandbox during finalization.
+enum FinalizeAction {
+    // No action specified; the server should treat this as an error or use a default.
+    FINALIZE_ACTION_UNSPECIFIED = 0;
+    // Stop and clean up the sandbox.
+    FINALIZE_ACTION_STOP = 1;
+    // Resume the sandbox (used on the destination to start running, or on the source to rollback).
+    FINALIZE_ACTION_RESUME = 2;
+}
+
+message FinalizeSandboxResponse {}
+
+message CreateDuplicateSocketRequest {
+    // Idempotency key; must match active LM session.
+    string session_id = 1;
+    // Serialized WSAProtocolInfo struct (opaque to clients).
+    bytes protocol_info = 2;
+}
+
+message CreateDuplicateSocketResponse {}
