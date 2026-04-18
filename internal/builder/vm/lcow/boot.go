@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -87,6 +88,11 @@ func parseBootOptions(ctx context.Context, opts *runhcsoptions.Options, annotati
 	// uncompressed and simply named 'kernel' it will still be used
 	// uncompressed automatically.
 	kernelDirectBootSupported := osversion.Build() >= 18286
+	if runtime.GOARCH == "arm64" {
+		// KernelDirectBoot is currently not supported by Hyper-V on arm64.
+		// Todo: enable this by default once KernelDirectBoot on arm64 is supported.
+		kernelDirectBootSupported = false
+	}
 	useKernelDirect := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.KernelDirectBoot, kernelDirectBootSupported)
 
 	log.G(ctx).WithFields(logrus.Fields{

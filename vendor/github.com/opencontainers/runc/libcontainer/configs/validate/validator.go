@@ -10,7 +10,6 @@ import (
 
 	"github.com/opencontainers/cgroups"
 	"github.com/opencontainers/runc/libcontainer/configs"
-	"github.com/opencontainers/runc/libcontainer/intelrdt"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	selinux "github.com/opencontainers/selinux/go-selinux"
 	"github.com/sirupsen/logrus"
@@ -24,6 +23,7 @@ func Validate(config *configs.Config) error {
 		cgroupsCheck,
 		rootfs,
 		network,
+		netdevices,
 		uts,
 		security,
 		namespaces,
@@ -33,6 +33,7 @@ func Validate(config *configs.Config) error {
 		mountsStrict,
 		scheduler,
 		ioPriority,
+		memoryPolicy,
 	}
 	for _, c := range checks {
 		if err := c(config); err != nil {
@@ -66,6 +67,43 @@ func rootfs(config *configs.Config) error {
 	}
 	if filepath.Clean(config.Rootfs) != cleaned {
 		return errors.New("invalid rootfs: not an absolute path, or a symlink")
+	}
+	return nil
+}
+
+// https://elixir.bootlin.com/linux/v6.12/source/net/core/dev.c#L1066
+func devValidName(name string) bool {
+	if len(name) == 0 || len(name) > unix.IFNAMSIZ {
+		return false
+	}
+	if name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsAny(name, "/: ") {
+		return false
+	}
+	return true
+}
+
+func netdevices(config *configs.Config) error {
+	if len(config.NetDevices) == 0 {
+		return nil
+	}
+	if !config.Namespaces.Contains(configs.NEWNET) {
+		return errors.New("unable to move network devices without a NET namespace")
+	}
+
+	if config.RootlessEUID || config.RootlessCgroups {
+		return errors.New("network devices are not supported for rootless containers")
+	}
+
+	for name, netdev := range config.NetDevices {
+		if !devValidName(name) {
+			return fmt.Errorf("invalid network device name %q", name)
+		}
+		if netdev.Name != "" && !devValidName(netdev.Name) {
+			return fmt.Errorf("invalid network device name %q", netdev.Name)
+		}
 	}
 	return nil
 }
@@ -104,7 +142,7 @@ func security(config *configs.Config) error {
 
 func namespaces(config *configs.Config) error {
 	if config.Namespaces.Contains(configs.NEWUSER) {
-		if _, err := os.Stat("/proc/self/ns/user"); os.IsNotExist(err) {
+		if _, err := os.Stat("/proc/self/ns/user"); errors.Is(err, os.ErrNotExist) {
 			return errors.New("user namespaces aren't enabled in the kernel")
 		}
 		hasPath := config.Namespaces.PathOf(configs.NEWUSER) != ""
@@ -122,13 +160,13 @@ func namespaces(config *configs.Config) error {
 	}
 
 	if config.Namespaces.Contains(configs.NEWCGROUP) {
-		if _, err := os.Stat("/proc/self/ns/cgroup"); os.IsNotExist(err) {
+		if _, err := os.Stat("/proc/self/ns/cgroup"); errors.Is(err, os.ErrNotExist) {
 			return errors.New("cgroup namespaces aren't enabled in the kernel")
 		}
 	}
 
 	if config.Namespaces.Contains(configs.NEWTIME) {
-		if _, err := os.Stat("/proc/self/timens_offsets"); os.IsNotExist(err) {
+		if _, err := os.Stat("/proc/self/timens_offsets"); errors.Is(err, os.ErrNotExist) {
 			return errors.New("time namespaces aren't enabled in the kernel")
 		}
 		hasPath := config.Namespaces.PathOf(configs.NEWTIME) != ""
@@ -237,6 +275,30 @@ func sysctl(config *configs.Config) error {
 				return fmt.Errorf("sysctl %q is not allowed as it conflicts with the OCI %q field", s, "hostname")
 			}
 		}
+
+		if strings.HasPrefix(s, "user.") {
+
+			// while it is technically true that a non-userns
+			// container can write to /proc/sys/user on behalf of
+			// the init_user_ns, it was not previously supported,
+			// and doesn't guarantee that someone else spawns a
+			// different container and writes there, changing the
+			// values. in particular, setting something like
+			// max_user_namespaces to non-zero could be a vector to
+			// use 0-days where the admin had previously disabled
+			// them.
+			//
+			// additionally, this setting affects other host
+			// processes that are not container related.
+			//
+			// so let's refuse this unless we know for sure it
+			// won't touch anything else.
+			if !config.Namespaces.Contains(configs.NEWUSER) {
+				return fmt.Errorf("setting ucounts without a user namespace not allowed: %v", s)
+			}
+			continue
+		}
+
 		return fmt.Errorf("sysctl %q is not in a separate kernel namespace", s)
 	}
 
@@ -245,14 +307,19 @@ func sysctl(config *configs.Config) error {
 
 func intelrdtCheck(config *configs.Config) error {
 	if config.IntelRdt != nil {
-		if config.IntelRdt.ClosID == "." || config.IntelRdt.ClosID == ".." || strings.Contains(config.IntelRdt.ClosID, "/") {
-			return fmt.Errorf("invalid intelRdt.ClosID %q", config.IntelRdt.ClosID)
+		if !intelRdt.isEnabled() {
+			return fmt.Errorf("intelRdt is specified in config, but Intel RDT is not enabled")
 		}
 
-		if !intelrdt.IsCATEnabled() && config.IntelRdt.L3CacheSchema != "" {
+		switch clos := config.IntelRdt.ClosID; {
+		case clos == ".", clos == "..", len(clos) > 1 && strings.Contains(clos, "/"):
+			return fmt.Errorf("invalid intelRdt.ClosID %q", clos)
+		}
+
+		if !intelRdt.isCATEnabled() && config.IntelRdt.L3CacheSchema != "" {
 			return errors.New("intelRdt.l3CacheSchema is specified in config, but Intel RDT/CAT is not enabled")
 		}
-		if !intelrdt.IsMBAEnabled() && config.IntelRdt.MemBwSchema != "" {
+		if !intelRdt.isMBAEnabled() && config.IntelRdt.MemBwSchema != "" {
 			return errors.New("intelRdt.memBwSchema is specified in config, but Intel RDT/MBA is not enabled")
 		}
 	}
@@ -414,5 +481,28 @@ func ioPriority(config *configs.Config) error {
 		return fmt.Errorf("invalid ioPriority.Class: %q", class)
 	}
 
+	return nil
+}
+
+func memoryPolicy(config *configs.Config) error {
+	mpol := config.MemoryPolicy
+	if mpol == nil {
+		return nil
+	}
+	switch mpol.Mode {
+	case unix.MPOL_DEFAULT, unix.MPOL_LOCAL:
+		if mpol.Nodes != nil && mpol.Nodes.Count() != 0 {
+			return fmt.Errorf("memory policy mode requires 0 nodes but got %d", mpol.Nodes.Count())
+		}
+	case unix.MPOL_BIND, unix.MPOL_INTERLEAVE,
+		unix.MPOL_PREFERRED_MANY, unix.MPOL_WEIGHTED_INTERLEAVE:
+		if mpol.Nodes == nil || mpol.Nodes.Count() == 0 {
+			return fmt.Errorf("memory policy mode requires at least one node but got 0")
+		}
+	case unix.MPOL_PREFERRED:
+		// Zero or more nodes are allowed by the kernel.
+	default:
+		return fmt.Errorf("invalid memory policy mode: %d", mpol.Mode)
+	}
 	return nil
 }

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && wcow
 
 package guestmanager
 
@@ -10,16 +10,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
-
-// CIMsManager exposes guest WCOW block CIM operations.
-type CIMsManager interface {
-	// AddWCOWBlockCIMs adds WCOW block CIM mounts in the guest.
-	AddWCOWBlockCIMs(ctx context.Context, settings *guestresource.CWCOWBlockCIMMounts) error
-	// RemoveWCOWBlockCIMs removes WCOW block CIM mounts from the guest.
-	RemoveWCOWBlockCIMs(ctx context.Context, settings *guestresource.CWCOWBlockCIMMounts) error
-}
-
-var _ CIMsManager = (*Guest)(nil)
 
 // AddWCOWBlockCIMs adds WCOW block CIM mounts in the guest.
 func (gm *Guest) AddWCOWBlockCIMs(ctx context.Context, settings *guestresource.CWCOWBlockCIMMounts) error {

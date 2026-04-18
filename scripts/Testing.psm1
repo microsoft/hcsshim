@@ -139,7 +139,7 @@ function Invoke-TestCommand {
             Write-Verbose "Running output command: $oc"
             Invoke-Expression $oc
         } else {
-            Write-Warning "Cannot run output command with non-existant output file: $oc"
+            Write-Warning "Cannot run output command with non-existent output file: $oc"
         }
     }
 }

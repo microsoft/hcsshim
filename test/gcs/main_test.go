@@ -12,10 +12,12 @@ import (
 	"testing"
 
 	cgroups "github.com/containerd/cgroups/v3/cgroup1"
+	cgroupsv2 "github.com/containerd/cgroups/v3/cgroup2"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
+	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
@@ -120,12 +122,22 @@ func setup() (err error) {
 
 	// should already start in gcs cgroup
 	if !*flagJoinGCSCgroup {
-		gcsControl, err := cgroups.Load(cgroups.StaticPath("/"))
-		if err != nil {
-			return fmt.Errorf("failed to load root cgroup: %w", err)
-		}
-		if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
-			return fmt.Errorf("failed join root cgroup: %w", err)
+		if cgroup.IsCgroupV2() {
+			mgr, err := cgroupsv2.Load("/")
+			if err != nil {
+				return fmt.Errorf("failed to load root cgroup v2: %w", err)
+			}
+			if err := mgr.AddProc(uint64(os.Getpid())); err != nil {
+				return fmt.Errorf("failed join root cgroup v2: %w", err)
+			}
+		} else {
+			gcsControl, err := cgroups.Load(cgroups.StaticPath("/"))
+			if err != nil {
+				return fmt.Errorf("failed to load root cgroup: %w", err)
+			}
+			if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
+				return fmt.Errorf("failed join root cgroup: %w", err)
+			}
 		}
 		logrus.Debug("joined root cgroup")
 	}

@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
@@ -113,6 +114,14 @@ type OptionsLCOW struct {
 func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	// Use KernelDirect boot by default on all builds that support it.
 	kernelDirectSupported := osversion.Build() >= 18286
+	var vPmemCount uint32 = vmutils.DefaultVPMEMCount
+	if runtime.GOARCH == "arm64" {
+		// Todo: Add a conditional check for osversion once KernelDirect
+		// becomes available on ARM64, and enable it for supported versions.
+		// This is used by create-scratch and cannot be overriden by annotations
+		kernelDirectSupported = false
+		vPmemCount = 0
+	}
 	opts := &OptionsLCOW{
 		Options:                 newDefaultOptions(id, owner),
 		KernelFile:              vmutils.KernelFile,
@@ -124,7 +133,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		ForwardStdout:           false,
 		ForwardStderr:           true,
 		OutputHandlerCreator:    vmutils.ParseGCSLogrus,
-		VPMemDeviceCount:        vmutils.DefaultVPMEMCount,
+		VPMemDeviceCount:        vPmemCount,
 		VPMemSizeBytes:          vmutils.DefaultVPMemSizeBytes,
 		VPMemNoMultiMapping:     osversion.Get().Build < osversion.V19H1,
 		PreferredRootFSType:     PreferredRootFSTypeInitRd,
@@ -775,14 +784,20 @@ func MakeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	vmDebugging := false
 	if opts.ConsolePipe != "" {
 		vmDebugging = true
-		kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1 console=ttyS0,115200"
+		if runtime.GOARCH == "arm64" {
+			kernelArgs += " console=ttyAMA0,115200"
+		} else {
+			kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1 console=ttyS0,115200"
+		}
 		doc.VirtualMachine.Devices.ComPorts = map[string]hcsschema.ComPort{
 			"0": { // Which is actually COM1
 				NamedPipe: opts.ConsolePipe,
 			},
 		}
 	} else {
-		kernelArgs += " 8250_core.nr_uarts=0"
+		if runtime.GOARCH != "arm64" {
+			kernelArgs += " 8250_core.nr_uarts=0"
+		}
 	}
 
 	if opts.EnableGraphicsConsole {

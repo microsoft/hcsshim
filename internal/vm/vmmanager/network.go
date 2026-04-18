@@ -12,22 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-// NetworkManager manages adding and removing network adapters for a Utility VM.
-type NetworkManager interface {
-	// AddNIC adds a network adapter to the Utility VM. `nicID` should be a string representation of a
-	// Windows GUID.
-	AddNIC(ctx context.Context, nicID string, settings *hcsschema.NetworkAdapter) error
-
-	// RemoveNIC removes a network adapter from the Utility VM. `nicID` should be a string representation of a
-	// Windows GUID.
-	RemoveNIC(ctx context.Context, nicID string, settings *hcsschema.NetworkAdapter) error
-
-	// UpdateNIC updates the configuration of a network adapter on the Utility VM.
-	UpdateNIC(ctx context.Context, nicID string, settings *hcsschema.NetworkAdapter) error
-}
-
-var _ NetworkManager = (*UtilityVM)(nil)
-
 func (uvm *UtilityVM) AddNIC(ctx context.Context, nicID string, settings *hcsschema.NetworkAdapter) error {
 	request := hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeAdd,

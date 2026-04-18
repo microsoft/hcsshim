@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
@@ -45,8 +46,9 @@ func parseDeviceOptions(
 	vpmemCount := oci.ParseAnnotationsUint32(ctx, annotations, shimannotations.VPMemCount, vmutils.DefaultVPMEMCount)
 	vpmemSize := oci.ParseAnnotationsUint64(ctx, annotations, shimannotations.VPMemSize, vmutils.DefaultVPMemSizeBytes)
 
-	// VPMem is not supported by the enlightened kernel for SNP (confidential VMs).
-	if isFullyPhysicallyBacked || isConfidential {
+	// VPMem is not supported by the enlightened kernel for SNP (confidential VMs, and Hyper-V on arm64).
+	// Todo: Remove arm64 check once VPMem is supported by Hyper-V on arm64.
+	if isFullyPhysicallyBacked || isConfidential || runtime.GOARCH == "arm64" {
 		vpmemCount = 0
 	}
 

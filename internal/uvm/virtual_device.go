@@ -7,9 +7,12 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -23,10 +26,6 @@ const (
 	VPCIDeviceIDTypeLegacy  = "vpci"
 	VPCIDeviceIDType        = "vpci-instance-id"
 )
-
-// this is the well known channel type GUID defined by VMBUS for all assigned devices
-const vmbusChannelTypeGUIDFormatted = "{44c4f61d-4444-4400-9d52-802e27ede19f}"
-const assignedDeviceEnumerator = "VMBUS"
 
 type VPCIDeviceID struct {
 	deviceInstanceID     string
@@ -53,23 +52,6 @@ type VPCIDevice struct {
 	virtualFunctionIndex uint16
 	// refCount stores the number of references to this device in the UVM
 	refCount uint32
-}
-
-// GetAssignedDeviceVMBUSInstanceID returns the instance ID of the VMBUS channel device node created.
-//
-// When a device is assigned to a UVM via VPCI support in HCS, a new VMBUS channel device node is
-// created in the UVM. The actual device that was assigned in is exposed as a child on this VMBUS
-// channel device node.
-//
-// A device node's instance ID is an identifier that distinguishes that device from other devices
-// on the system. The GUID of a VMBUS channel device node refers to that channel's unique
-// identifier used internally by VMBUS and can be used to determine the VMBUS channel
-// device node's instance ID.
-//
-// A VMBUS channel device node's instance ID is in the form:
-// "VMBUS\vmbusChannelTypeGUIDFormatted\{vmBusChannelGUID}"
-func (uvm *UtilityVM) GetAssignedDeviceVMBUSInstanceID(vmBusChannelGUID string) string {
-	return fmt.Sprintf("%s\\%s\\{%s}", assignedDeviceEnumerator, vmbusChannelTypeGUIDFormatted, vmBusChannelGUID)
 }
 
 // Release frees the resources of the corresponding vpci device
@@ -102,6 +84,12 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		vmBusGUID = guid.String()
 	}
 
+	ctx, entry := log.SetEntry(ctx, logrus.Fields{
+		logfields.UVMID: uvm.ID(),
+		"deviceID":      deviceID,
+		"funcIndex":     index,
+	})
+
 	key := VPCIDeviceID{
 		deviceInstanceID:     deviceID,
 		virtualFunctionIndex: index,
@@ -113,6 +101,10 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 	existingVPCIDevice := uvm.vpciDevices[key]
 	if existingVPCIDevice != nil {
 		existingVPCIDevice.refCount++
+		entry.WithFields(logrus.Fields{
+			"vmBusGUID": existingVPCIDevice.VMBusGUID,
+			"refCount":  existingVPCIDevice.refCount,
+		}).Debug("reusing existing vPCI device")
 		return existingVPCIDevice, nil
 	}
 
@@ -153,6 +145,8 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		}
 	}
 
+	entry.WithField("vmBusGUID", vmBusGUID).Debug("assigning vPCI device")
+
 	if err := uvm.modify(ctx, request); err != nil {
 		return nil, err
 	}
@@ -164,6 +158,7 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 		refCount:             1,
 	}
 	uvm.vpciDevices[key] = device
+
 	return device, nil
 }
 
@@ -176,21 +171,37 @@ func (uvm *UtilityVM) RemoveDevice(ctx context.Context, deviceInstanceID string,
 		virtualFunctionIndex: index,
 	}
 
+	ctx, entry := log.SetEntry(ctx, logrus.Fields{
+		logfields.UVMID: uvm.ID(),
+		"deviceID":      deviceInstanceID,
+		"funcIndex":     index,
+	})
+
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
 	vpci := uvm.vpciDevices[key]
 	if vpci == nil {
+		entry.Error("failed to remove nonexistent vPCI device ")
 		return fmt.Errorf("no device with ID %s and index %d is present on the uvm %s", deviceInstanceID, index, uvm.ID())
 	}
 
 	vpci.refCount--
+	entry = entry.WithFields(logrus.Fields{
+		"vmBusGUID": vpci.VMBusGUID,
+		"refCount":  vpci.refCount,
+	})
+
+	entry.Trace("vPCI device refcount updated")
 	if vpci.refCount == 0 {
+		entry.Debug("removing vPCI device from uVM")
+
 		delete(uvm.vpciDevices, key)
 		return uvm.modify(ctx, &hcsschema.ModifySettingRequest{
 			ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vpci.VMBusGUID),
 			RequestType:  guestrequest.RequestTypeRemove,
 		})
 	}
+
 	return nil
 }

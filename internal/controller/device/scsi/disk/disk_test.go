@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package disk
 
@@ -9,7 +9,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/mount"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // --- Mock types ---
@@ -30,57 +29,13 @@ func (m *mockVMSCSIRemover) RemoveSCSIDisk(_ context.Context, _ uint, _ uint) er
 	return m.err
 }
 
-type mockLinuxGuestSCSIEjector struct {
-	err error
-}
-
-func (m *mockLinuxGuestSCSIEjector) RemoveSCSIDevice(_ context.Context, _ guestresource.SCSIDevice) error {
-	return m.err
-}
-
-type mockLinuxGuestSCSIMounter struct {
-	err error
-}
-
-func (m *mockLinuxGuestSCSIMounter) AddLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
-	return m.err
-}
-
-type mockLinuxGuestSCSIUnmounter struct {
-	err error
-}
-
-func (m *mockLinuxGuestSCSIUnmounter) RemoveLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
-	return m.err
-}
-
-type mockWindowsGuestSCSIMounter struct {
-	err error
-}
-
-func (m *mockWindowsGuestSCSIMounter) AddWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
-	return m.err
-}
-
-func (m *mockWindowsGuestSCSIMounter) AddWCOWMappedVirtualDiskForContainerScratch(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
-	return m.err
-}
-
-type mockWindowsGuestSCSIUnmounter struct {
-	err error
-}
-
-func (m *mockWindowsGuestSCSIUnmounter) RemoveWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
-	return m.err
-}
-
 // --- Helpers ---
 
-func defaultConfig() DiskConfig {
-	return DiskConfig{
+func defaultConfig() Config {
+	return Config{
 		HostPath: `C:\test\disk.vhdx`,
 		ReadOnly: false,
-		Type:     DiskTypeVirtualDisk,
+		Type:     TypeVirtualDisk,
 	}
 }
 
@@ -96,16 +51,16 @@ func attachedDisk(t *testing.T) *Disk {
 // --- Tests ---
 
 func TestNewReserved(t *testing.T) {
-	cfg := DiskConfig{
+	cfg := Config{
 		HostPath: `C:\test\disk.vhdx`,
 		ReadOnly: true,
-		Type:     DiskTypePassThru,
+		Type:     TypePassThru,
 		EVDType:  "evd-type",
 	}
 	d := NewReserved(1, 2, cfg)
 
-	if d.State() != DiskStateReserved {
-		t.Errorf("expected state %d, got %d", DiskStateReserved, d.State())
+	if d.State() != StateReserved {
+		t.Errorf("expected state %d, got %d", StateReserved, d.State())
 	}
 	if d.Config() != cfg {
 		t.Errorf("expected config %+v, got %+v", cfg, d.Config())
@@ -115,11 +70,11 @@ func TestNewReserved(t *testing.T) {
 	}
 }
 
-func TestDiskConfigEquals(t *testing.T) {
-	base := DiskConfig{
+func TestConfigEquals(t *testing.T) {
+	base := Config{
 		HostPath: `C:\a.vhdx`,
 		ReadOnly: true,
-		Type:     DiskTypeVirtualDisk,
+		Type:     TypeVirtualDisk,
 		EVDType:  "evd",
 	}
 	same := base
@@ -140,7 +95,7 @@ func TestDiskConfigEquals(t *testing.T) {
 	}
 
 	diffType := base
-	diffType.Type = DiskTypePassThru
+	diffType.Type = TypePassThru
 	if base.Equals(diffType) {
 		t.Error("expected different Type to be not equal")
 	}
@@ -158,8 +113,8 @@ func TestAttachToVM_FromReserved_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateAttached {
+		t.Errorf("expected state %d, got %d", StateAttached, d.State())
 	}
 }
 
@@ -173,8 +128,8 @@ func TestAttachToVM_FromReserved_Error(t *testing.T) {
 	if !errors.Is(err, addErr) {
 		t.Errorf("expected wrapped error %v, got %v", addErr, err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d after failure, got %d", DiskStateDetached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d after failure, got %d", StateDetached, d.State())
 	}
 }
 
@@ -184,8 +139,8 @@ func TestAttachToVM_Idempotent_WhenAttached(t *testing.T) {
 	if err := d.AttachToVM(context.Background(), &mockVMSCSIAdder{}); err != nil {
 		t.Fatalf("unexpected error on idempotent attach: %v", err)
 	}
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateAttached {
+		t.Errorf("expected state %d, got %d", StateAttached, d.State())
 	}
 }
 
@@ -193,7 +148,7 @@ func TestAttachToVM_ErrorWhenDetached(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
 	// Fail attachment to move to detached.
 	_ = d.AttachToVM(context.Background(), &mockVMSCSIAdder{err: errors.New("fail")})
-	if d.State() != DiskStateDetached {
+	if d.State() != StateDetached {
 		t.Fatalf("expected detached state, got %d", d.State())
 	}
 	err := d.AttachToVM(context.Background(), &mockVMSCSIAdder{})
@@ -202,49 +157,21 @@ func TestAttachToVM_ErrorWhenDetached(t *testing.T) {
 	}
 }
 
-func TestDetachFromVM_FromAttached_NoMounts_NoLinuxGuest(t *testing.T) {
+func TestDetachFromVM_FromAttached_NoMounts(t *testing.T) {
 	d := attachedDisk(t)
-	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
+	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, newDefaultEjector())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
-	}
-}
-
-func TestDetachFromVM_FromAttached_WithLinuxGuest(t *testing.T) {
-	d := attachedDisk(t)
-	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, &mockLinuxGuestSCSIEjector{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
-	}
-}
-
-func TestDetachFromVM_LinuxEjectError(t *testing.T) {
-	d := attachedDisk(t)
-	ejectErr := errors.New("eject failed")
-	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, &mockLinuxGuestSCSIEjector{err: ejectErr})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, ejectErr) {
-		t.Errorf("expected wrapped error %v, got %v", ejectErr, err)
-	}
-	// State should remain attached since eject failed before state transition.
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateDetached {
+		t.Errorf("expected state %d, got %d", StateDetached, d.State())
 	}
 }
 
 func TestDetachFromVM_RemoveError(t *testing.T) {
 	d := attachedDisk(t)
 	removeErr := errors.New("remove failed")
-	// No linux guest so eject is skipped, but RemoveSCSIDisk fails.
-	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{err: removeErr}, nil)
+	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{err: removeErr}, newDefaultEjector())
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -252,31 +179,31 @@ func TestDetachFromVM_RemoveError(t *testing.T) {
 		t.Errorf("expected wrapped error %v, got %v", removeErr, err)
 	}
 	// State should be ejected since eject succeeded but removal failed.
-	if d.State() != DiskStateEjected {
-		t.Errorf("expected state %d, got %d", DiskStateEjected, d.State())
+	if d.State() != StateEjected {
+		t.Errorf("expected state %d, got %d", StateEjected, d.State())
 	}
 }
 
 func TestDetachFromVM_SkipsWhenMountsExist(t *testing.T) {
 	d := attachedDisk(t)
 	// Reserve a partition so len(mounts) > 0.
-	_, err := d.ReservePartition(context.Background(), mount.MountConfig{Partition: 1})
+	_, err := d.ReservePartition(context.Background(), mount.Config{Partition: 1})
 	if err != nil {
 		t.Fatalf("ReservePartition: %v", err)
 	}
-	err = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
+	err = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, newDefaultEjector())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should remain attached because there are outstanding mounts.
-	if d.State() != DiskStateAttached {
-		t.Errorf("expected state %d, got %d", DiskStateAttached, d.State())
+	if d.State() != StateAttached {
+		t.Errorf("expected state %d, got %d", StateAttached, d.State())
 	}
 }
 
 func TestDetachFromVM_Idempotent_WhenReserved(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
-	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
+	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, newDefaultEjector())
 	if err != nil {
 		t.Fatalf("unexpected error detaching reserved disk: %v", err)
 	}
@@ -284,9 +211,9 @@ func TestDetachFromVM_Idempotent_WhenReserved(t *testing.T) {
 
 func TestDetachFromVM_Idempotent_WhenDetached(t *testing.T) {
 	d := attachedDisk(t)
-	_ = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
+	_ = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, newDefaultEjector())
 	// Second detach should be idempotent.
-	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
+	err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, newDefaultEjector())
 	if err != nil {
 		t.Fatalf("unexpected error on idempotent detach: %v", err)
 	}
@@ -294,7 +221,7 @@ func TestDetachFromVM_Idempotent_WhenDetached(t *testing.T) {
 
 func TestReservePartition_Success(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1, ReadOnly: true}
+	cfg := mount.Config{Partition: 1, ReadOnly: true}
 	m, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -302,14 +229,14 @@ func TestReservePartition_Success(t *testing.T) {
 	if m == nil {
 		t.Fatal("expected non-nil mount")
 	}
-	if m.State() != mount.MountStateReserved {
-		t.Errorf("expected mount state %d, got %d", mount.MountStateReserved, m.State())
+	if m.State() != mount.StateReserved {
+		t.Errorf("expected mount state %d, got %d", mount.StateReserved, m.State())
 	}
 }
 
 func TestReservePartition_SuccessFromReservedDisk(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
-	cfg := mount.MountConfig{Partition: 1}
+	cfg := mount.Config{Partition: 1}
 	m, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -321,7 +248,7 @@ func TestReservePartition_SuccessFromReservedDisk(t *testing.T) {
 
 func TestReservePartition_SamePartitionSameConfig(t *testing.T) {
 	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1, ReadOnly: true}
+	cfg := mount.Config{Partition: 1, ReadOnly: true}
 	m1, err := d.ReservePartition(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("first reserve: %v", err)
@@ -337,12 +264,12 @@ func TestReservePartition_SamePartitionSameConfig(t *testing.T) {
 
 func TestReservePartition_SamePartitionDifferentConfig(t *testing.T) {
 	d := attachedDisk(t)
-	cfg1 := mount.MountConfig{Partition: 1, ReadOnly: true}
+	cfg1 := mount.Config{Partition: 1, ReadOnly: true}
 	_, err := d.ReservePartition(context.Background(), cfg1)
 	if err != nil {
 		t.Fatalf("first reserve: %v", err)
 	}
-	cfg2 := mount.MountConfig{Partition: 1, ReadOnly: false}
+	cfg2 := mount.Config{Partition: 1, ReadOnly: false}
 	_, err = d.ReservePartition(context.Background(), cfg2)
 	if err == nil {
 		t.Fatal("expected error reserving same partition with different config")
@@ -352,31 +279,15 @@ func TestReservePartition_SamePartitionDifferentConfig(t *testing.T) {
 func TestReservePartition_ErrorWhenDetached(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
 	_ = d.AttachToVM(context.Background(), &mockVMSCSIAdder{err: errors.New("fail")})
-	_, err := d.ReservePartition(context.Background(), mount.MountConfig{Partition: 1})
+	_, err := d.ReservePartition(context.Background(), mount.Config{Partition: 1})
 	if err == nil {
 		t.Fatal("expected error when disk is detached")
 	}
 }
 
-func TestMountPartitionToGuest_Success(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	guestPath, err := d.MountPartitionToGuest(context.Background(), 1, &mockLinuxGuestSCSIMounter{}, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if guestPath == "" {
-		t.Error("expected non-empty guestPath")
-	}
-}
-
 func TestMountPartitionToGuest_ErrorWhenNotAttached(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
-	_, err := d.MountPartitionToGuest(context.Background(), 1, &mockLinuxGuestSCSIMounter{}, nil)
+	_, err := d.MountPartitionToGuest(context.Background(), 1, newDefaultMounter())
 	if err == nil {
 		t.Fatal("expected error when disk is not attached")
 	}
@@ -384,47 +295,16 @@ func TestMountPartitionToGuest_ErrorWhenNotAttached(t *testing.T) {
 
 func TestMountPartitionToGuest_PartitionNotFound(t *testing.T) {
 	d := attachedDisk(t)
-	_, err := d.MountPartitionToGuest(context.Background(), 99, &mockLinuxGuestSCSIMounter{}, nil)
+	_, err := d.MountPartitionToGuest(context.Background(), 99, newDefaultMounter())
 	if err == nil {
 		t.Fatal("expected error for unreserved partition")
-	}
-}
-
-func TestMountPartitionToGuest_MountError(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, &mockLinuxGuestSCSIMounter{err: errors.New("mount fail")}, nil)
-	if err != nil {
-		// This is expected - the mount error propagates.
-		return
-	}
-}
-
-func TestUnmountPartitionFromGuest_Success(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, &mockLinuxGuestSCSIMounter{}, nil)
-	if err != nil {
-		t.Fatalf("MountPartitionToGuest: %v", err)
-	}
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, &mockLinuxGuestSCSIUnmounter{}, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestUnmountPartitionFromGuest_SucceedsWhenNotAttached(t *testing.T) {
 	d := NewReserved(0, 0, defaultConfig())
 	// No partition reserved, so this is a no-op success for retry logic.
-	err := d.UnmountPartitionFromGuest(context.Background(), 1, &mockLinuxGuestSCSIUnmounter{}, nil)
+	err := d.UnmountPartitionFromGuest(context.Background(), 1, newDefaultUnmounter())
 	if err != nil {
 		t.Fatalf("expected nil error for missing partition on non-attached disk, got: %v", err)
 	}
@@ -433,203 +313,8 @@ func TestUnmountPartitionFromGuest_SucceedsWhenNotAttached(t *testing.T) {
 func TestUnmountPartitionFromGuest_PartitionNotFound_IsNoOp(t *testing.T) {
 	d := attachedDisk(t)
 	// Missing partition is treated as success for retry safety.
-	err := d.UnmountPartitionFromGuest(context.Background(), 99, &mockLinuxGuestSCSIUnmounter{}, nil)
+	err := d.UnmountPartitionFromGuest(context.Background(), 99, newDefaultUnmounter())
 	if err != nil {
 		t.Fatalf("expected nil error for missing partition, got: %v", err)
-	}
-}
-
-func TestUnmountPartitionFromGuest_UnmountError(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, &mockLinuxGuestSCSIMounter{}, nil)
-	if err != nil {
-		t.Fatalf("MountPartitionToGuest: %v", err)
-	}
-	unmountErr := errors.New("unmount fail")
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, &mockLinuxGuestSCSIUnmounter{err: unmountErr}, nil)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, unmountErr) {
-		t.Errorf("expected wrapped error %v, got %v", unmountErr, err)
-	}
-}
-
-func TestUnmountPartitionFromGuest_RemovesMountWhenFullyUnmounted(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, &mockLinuxGuestSCSIMounter{}, nil)
-	if err != nil {
-		t.Fatalf("MountPartitionToGuest: %v", err)
-	}
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, &mockLinuxGuestSCSIUnmounter{}, nil)
-	if err != nil {
-		t.Fatalf("UnmountPartitionFromGuest: %v", err)
-	}
-	// After full unmount the partition should be removed, so detach should succeed
-	// (no mounts remain).
-	err = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
-	if err != nil {
-		t.Fatalf("DetachFromVM after unmount: %v", err)
-	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
-	}
-}
-
-func TestUnmountPartitionFromGuest_RetryAfterDetachFailure(t *testing.T) {
-	// Simulates the scenario where unmount succeeds but detach fails.
-	// On retry, UnmountPartitionFromGuest should be a no-op (partition already removed)
-	// so that DetachFromVM can be retried.
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, &mockLinuxGuestSCSIMounter{}, nil)
-	if err != nil {
-		t.Fatalf("MountPartitionToGuest: %v", err)
-	}
-	// Unmount succeeds and removes the partition from the mounts map.
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, &mockLinuxGuestSCSIUnmounter{}, nil)
-	if err != nil {
-		t.Fatalf("UnmountPartitionFromGuest: %v", err)
-	}
-	// Detach fails (e.g. transient error).
-	err = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{err: errors.New("transient")}, nil)
-	if err == nil {
-		t.Fatal("expected detach error")
-	}
-	// Retry: unmount is a no-op since partition is gone.
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, &mockLinuxGuestSCSIUnmounter{}, nil)
-	if err != nil {
-		t.Fatalf("retry UnmountPartitionFromGuest should be no-op, got: %v", err)
-	}
-	// Retry detach now succeeds.
-	err = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
-	if err != nil {
-		t.Fatalf("retry DetachFromVM: %v", err)
-	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
-	}
-}
-
-// --- Windows (WCOW) guest tests ---
-
-func TestMountPartitionToGuest_WCOW_Success(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	guestPath, err := d.MountPartitionToGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIMounter{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if guestPath == "" {
-		t.Error("expected non-empty guestPath")
-	}
-}
-
-func TestMountPartitionToGuest_WCOW_MountError(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIMounter{err: errors.New("wcow mount fail")})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestMountPartitionToGuest_WCOW_FormatWithRefs(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1, FormatWithRefs: true}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	guestPath, err := d.MountPartitionToGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIMounter{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if guestPath == "" {
-		t.Error("expected non-empty guestPath")
-	}
-}
-
-func TestUnmountPartitionFromGuest_WCOW_Success(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIMounter{})
-	if err != nil {
-		t.Fatalf("MountPartitionToGuest: %v", err)
-	}
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIUnmounter{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestUnmountPartitionFromGuest_WCOW_UnmountError(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIMounter{})
-	if err != nil {
-		t.Fatalf("MountPartitionToGuest: %v", err)
-	}
-	unmountErr := errors.New("wcow unmount fail")
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIUnmounter{err: unmountErr})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, unmountErr) {
-		t.Errorf("expected wrapped error %v, got %v", unmountErr, err)
-	}
-}
-
-func TestUnmountPartitionFromGuest_WCOW_RemovesMountWhenFullyUnmounted(t *testing.T) {
-	d := attachedDisk(t)
-	cfg := mount.MountConfig{Partition: 1}
-	_, err := d.ReservePartition(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ReservePartition: %v", err)
-	}
-	_, err = d.MountPartitionToGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIMounter{})
-	if err != nil {
-		t.Fatalf("MountPartitionToGuest: %v", err)
-	}
-	err = d.UnmountPartitionFromGuest(context.Background(), 1, nil, &mockWindowsGuestSCSIUnmounter{})
-	if err != nil {
-		t.Fatalf("UnmountPartitionFromGuest: %v", err)
-	}
-	err = d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, nil)
-	if err != nil {
-		t.Fatalf("DetachFromVM after unmount: %v", err)
-	}
-	if d.State() != DiskStateDetached {
-		t.Errorf("expected state %d, got %d", DiskStateDetached, d.State())
 	}
 }

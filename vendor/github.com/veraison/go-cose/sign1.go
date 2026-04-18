@@ -174,7 +174,7 @@ func (m *Sign1Message) toBeSigned(external []byte) ([]byte, error) {
 	if external == nil {
 		external = []byte{}
 	}
-	sigStructure := []interface{}{
+	sigStructure := []any{
 		"Signature1", // context
 		protected,    // body_protected
 		external,     // external_aad
@@ -262,7 +262,7 @@ func (m *UntaggedSign1Message) MarshalCBOR() ([]byte, error) {
 	return encMode.Marshal(content)
 }
 
-// UnmarshalCBOR decodes a COSE_Sign1 object into an UnataggedSign1Message.
+// UnmarshalCBOR decodes a COSE_Sign1 object into an UntaggedSign1Message.
 func (m *UntaggedSign1Message) UnmarshalCBOR(data []byte) error {
 	if m == nil {
 		return errors.New("cbor: UnmarshalCBOR on nil UntaggedSign1Message pointer")

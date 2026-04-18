@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 // containerd-shim-lcow-v2 is a containerd shim implementation for Linux Containers on Windows (LCOW).
 package main

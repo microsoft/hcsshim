@@ -11,17 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-// PipeManager manages adding and removing named pipes for a Utility VM.
-type PipeManager interface {
-	// AddPipe adds a named pipe to the Utility VM.
-	AddPipe(ctx context.Context, hostPath string) error
-
-	// RemovePipe removes a named pipe from the Utility VM.
-	RemovePipe(ctx context.Context, hostPath string) error
-}
-
-var _ PipeManager = (*UtilityVM)(nil)
-
 func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) error {
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeAdd,

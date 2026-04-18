@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
@@ -187,6 +188,12 @@ func VerifyOptions(_ context.Context, options interface{}) error {
 		if opts.ResourcePartitionID != nil {
 			if opts.CPUGroupID != "" {
 				return errors.New("resource partition ID and CPU group ID cannot be set at the same time")
+			}
+		}
+		if runtime.GOARCH == "arm64" {
+			// ARM64 specific checks for currently unsupported features. These can be removed when the features are supported on ARM64.
+			if opts.VPMemDeviceCount > 0 {
+				return errors.New("VPMem devices are not supported on ARM64")
 			}
 		}
 	case *OptionsWCOW:

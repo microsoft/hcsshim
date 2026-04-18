@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package service
 
@@ -6,7 +6,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shim"
@@ -40,12 +39,8 @@ type Service struct {
 	// For LCOW shim, sandboxID corresponds 1-1 with the UtilityVM managed by the shim.
 	sandboxID string
 
-	// sandboxOptions contains parsed, shim-level configuration for the sandbox
-	// such as architecture and confidential-compute settings.
-	sandboxOptions *lcow.SandboxOptions
-
 	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
-	vmController vm.Controller
+	vmController *vm.Controller
 
 	// shutdown manages graceful shutdown operations and allows registration of cleanup callbacks.
 	shutdown shutdown.Service
@@ -58,7 +53,7 @@ func NewService(ctx context.Context, eventsPublisher shim.Publisher, sd shutdown
 	svc := &Service{
 		publisher:    eventsPublisher,
 		events:       make(chan interface{}, 128), // Buffered channel for events
-		vmController: vm.NewController(),
+		vmController: vm.New(),
 		shutdown:     sd,
 	}
 

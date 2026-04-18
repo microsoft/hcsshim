@@ -20,7 +20,6 @@ import (
 	"syscall"
 	"time"
 
-	cgroups "github.com/containerd/cgroups/v3/cgroup1"
 	cgroup1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	"github.com/mattn/go-shellwords"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -30,6 +29,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/debug"
+	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
@@ -79,7 +79,7 @@ type VirtualPod struct {
 	MasterSandboxID  string
 	NetworkNamespace string
 	CgroupPath       string
-	CgroupControl    cgroups.Cgroup
+	CgroupControl    cgroup.Manager  // Unified cgroup manager (v1 or v2)
 	Containers       map[string]bool // containerID -> exists
 	CreatedAt        time.Time
 }
@@ -94,10 +94,10 @@ type Host struct {
 	externalProcesses      map[int]*externalProcess
 
 	// Virtual pod support for multi-pod scenarios
-	virtualPodsMutex        sync.Mutex
-	virtualPods             map[string]*VirtualPod // virtualSandboxID -> VirtualPod
-	containerToVirtualPod   map[string]string      // containerID -> virtualSandboxID
-	virtualPodsCgroupParent cgroups.Cgroup         // Parent cgroup for all virtual pods
+	virtualPodsMutex         sync.Mutex
+	virtualPods              map[string]*VirtualPod // virtualSandboxID -> VirtualPod
+	containerToVirtualPod    map[string]string      // containerID -> virtualSandboxID
+	virtualPodsCgroupManager cgroup.Manager         // Parent cgroup for all virtual pods
 
 	rtime            runtime.Runtime
 	vsock            transport.Transport
@@ -159,8 +159,8 @@ func (h *Host) RemoveContainer(id string) {
 		h.RemoveContainerFromVirtualPod(id)
 		// Network namespace cleanup is handled in virtual pod cleanup when last container is removed.
 		logrus.WithFields(logrus.Fields{
-			"containerID":  id,
-			"virtualPodID": virtualPodID,
+			logfields.ContainerID:      id,
+			logfields.VirtualSandboxID: virtualPodID,
 		}).Info("Container removed from virtual pod")
 	} else {
 		// delete the network namespace for standalone and sandbox containers
@@ -333,9 +333,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		criType = "sandbox"
 		isCRI = true
 		logrus.WithFields(logrus.Fields{
-			"containerID":     id,
-			"virtualPodID":    virtualPodID,
-			"originalCriType": settings.OCISpecification.Annotations[annotations.KubernetesContainerType],
+			logfields.ContainerID:      id,
+			logfields.VirtualSandboxID: virtualPodID,
+			"originalCriType":          settings.OCISpecification.Annotations[annotations.KubernetesContainerType],
 		}).Info("Virtual pod first container detected - treating as sandbox container")
 	}
 
@@ -363,9 +363,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// Handle virtual pod logic
 	if isVirtualPod && isCRI {
 		logrus.WithFields(logrus.Fields{
-			"containerID":  id,
-			"virtualPodID": virtualPodID,
-			"criType":      criType,
+			logfields.ContainerID:      id,
+			logfields.VirtualSandboxID: virtualPodID,
+			"criType":                  criType,
 		}).Info("Processing container for virtual pod")
 
 		if criType == "sandbox" {
@@ -1368,7 +1368,14 @@ func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestre
 		// container or not so it must always call `Sync`.
 		return ns.Sync(ctx)
 	case guestrequest.RequestTypeRemove:
-		ns := GetOrAddNetworkNamespace(na.ID)
+		ns, err := getNetworkNamespace(na.NamespaceID)
+		if err != nil {
+			log.G(ctx).WithFields(logrus.Fields{
+				logfields.NamespaceID: na.NamespaceID,
+				"adapterID":           na.ID,
+			}).WithError(err).Warn("namespace not found for adapter removal, skipping")
+			return nil
+		}
 		if err := ns.RemoveAdapter(ctx, na.ID); err != nil {
 			return err
 		}
@@ -1423,12 +1430,17 @@ func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec)
 // Virtual Pod Management Methods
 
 // InitializeVirtualPodSupport sets up the parent cgroup for virtual pods
-func (h *Host) InitializeVirtualPodSupport(virtualPodsCgroup cgroups.Cgroup) {
+func (h *Host) InitializeVirtualPodSupport(mgr cgroup.Manager) error {
 	h.virtualPodsMutex.Lock()
 	defer h.virtualPodsMutex.Unlock()
 
-	h.virtualPodsCgroupParent = virtualPodsCgroup
+	if mgr == nil {
+		return errors.New("no valid cgroup manager provided for virtual pod support")
+	}
+
+	h.virtualPodsCgroupManager = mgr
 	logrus.Info("Virtual pod support initialized")
+	return nil
 }
 
 // CreateVirtualPod creates a new virtual pod with its own cgroup and network namespace
@@ -1441,34 +1453,27 @@ func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSan
 		return fmt.Errorf("virtual pod %s already exists", virtualSandboxID)
 	}
 
-	// Create cgroup path for this virtual pod under the parent cgroup
-	parentPath := ""
-	if h.virtualPodsCgroupParent != nil {
-		if pather, ok := h.virtualPodsCgroupParent.(interface{ Path() string }); ok {
-			parentPath = pather.Path()
-		} else {
-			parentPath = "/containers/virtual-pods" // fallback for default behavior
-		}
-	} else {
-		parentPath = "/containers/virtual-pods" // fallback for default behavior
-	}
-	cgroupPath := path.Join(parentPath, virtualSandboxID)
-
-	// Create the cgroup for this virtual pod with resource limits if provided
+	// Extract resource limits if provided
 	resources := &specs.LinuxResources{}
 	if pSpec != nil && pSpec.Linux != nil && pSpec.Linux.Resources != nil {
 		resources = pSpec.Linux.Resources
 		logrus.WithFields(logrus.Fields{
-			"virtualSandboxID": virtualSandboxID,
+			logfields.VirtualSandboxID: virtualSandboxID,
 		}).Info("Creating virtual pod with specified resources")
 	} else {
-		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Creating pod cgroup with default resources as none were specified")
+		logrus.WithField(logfields.VirtualSandboxID, virtualSandboxID).Info("Creating pod cgroup with default resources as none were specified")
 	}
 
-	cgroupControl, err := cgroups.New(cgroups.StaticPath(cgroupPath), resources)
+	if h.virtualPodsCgroupManager == nil {
+		return fmt.Errorf("no virtual pod cgroup manager available")
+	}
+
+	cgroupPath := path.Join("/containers/virtual-pods", virtualSandboxID)
+	cgroupControl, err := cgroup.NewManager(cgroupPath, resources)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create cgroup for virtual pod %s", virtualSandboxID)
 	}
+	logrus.WithField("cgroupPath", cgroupPath).Info("Created virtual pod cgroup")
 
 	// Create virtual pod structure
 	virtualPod := &VirtualPod{
@@ -1484,10 +1489,10 @@ func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSan
 	h.virtualPods[virtualSandboxID] = virtualPod
 
 	logrus.WithFields(logrus.Fields{
-		"virtualSandboxID": virtualSandboxID,
-		"masterSandboxID":  masterSandboxID,
-		"cgroupPath":       cgroupPath,
-		"networkNamespace": networkNamespace,
+		logfields.VirtualSandboxID: virtualSandboxID,
+		"masterSandboxID":          masterSandboxID,
+		"cgroupPath":               cgroupPath,
+		"networkNamespace":         networkNamespace,
 	}).Info("Virtual pod created successfully")
 
 	return nil
@@ -1523,8 +1528,8 @@ func (h *Host) AddContainerToVirtualPod(containerID, virtualSandboxID string) er
 	h.containerToVirtualPod[containerID] = virtualSandboxID
 
 	logrus.WithFields(logrus.Fields{
-		"containerID":      containerID,
-		"virtualSandboxID": virtualSandboxID,
+		logfields.ContainerID:      containerID,
+		logfields.VirtualSandboxID: virtualSandboxID,
 	}).Info("Container added to virtual pod")
 
 	return nil
@@ -1540,56 +1545,78 @@ func (h *Host) RemoveContainerFromVirtualPod(containerID string) {
 		return // Container not in any virtual pod
 	}
 
+	ctx, entry := log.SetEntry(context.Background(), logrus.Fields{
+		logfields.VirtualSandboxID: virtualSandboxID,
+		logfields.ContainerID:      containerID,
+	})
+
 	// Remove from virtual pod
 	if vp, vpExists := h.virtualPods[virtualSandboxID]; vpExists {
 		delete(vp.Containers, containerID)
 
-		// If this is the sandbox container, delete the network namespace
+		// If this is the sandbox container, clean up the network namespace adapters first,
+		// then remove the namespace.
+
+		// Do NOT call [RemoveNetworkNamespace] here.
+		// When cleaning up the virtual pod's sandbox container on the host,
+		// [UtilityVM.TearDownNetworking] calls [UtilityVM.RemoveNetNS],
+		// which, via [UtilityVM.removeNIC], removes the NICs from the uVM and
+		// sends [guestresource.ResourceTypeNetwork] RPCs that ultimately cal [modifyNetwork]
+		// to remove adapters from guest tracking.
+		// However, that happens AFTER this function runs.
+		// Calling [RemoveNetworkNamespace] here would
+		// fail with "contains adapters" since the host hasn't removed them yet.
+		//
+		// The host-driven path handles cleanup in the correct order.
 		if containerID == virtualSandboxID && vp.NetworkNamespace != "" {
-			if err := RemoveNetworkNamespace(context.Background(), vp.NetworkNamespace); err != nil {
-				logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-					Warn("Failed to remove virtual pod network namespace (sandbox container removal)")
-			}
+			entry.WithField(logfields.NamespaceID, vp.NetworkNamespace).Debug("skipping virtual pod network namespace removal")
 		}
 
 		// If this was the last container, cleanup the virtual pod
 		if len(vp.Containers) == 0 {
-			h.cleanupVirtualPod(virtualSandboxID)
+			h.cleanupVirtualPod(ctx, virtualSandboxID)
 		}
 	}
 
 	delete(h.containerToVirtualPod, containerID)
 
-	logrus.WithFields(logrus.Fields{
-		"containerID":      containerID,
-		"virtualSandboxID": virtualSandboxID,
-	}).Info("Container removed from virtual pod")
+	entry.Info("Container removed from virtual pod")
 }
 
-// cleanupVirtualPod removes a virtual pod and its cgroup (should be called with mutex held)
-func (h *Host) cleanupVirtualPod(virtualSandboxID string) {
-	if vp, exists := h.virtualPods[virtualSandboxID]; exists {
-		// Delete the cgroup
-		if err := vp.CgroupControl.Delete(); err != nil {
-			logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-				Warn("Failed to delete virtual pod cgroup")
-		}
+func (h *Host) cleanupVirtualPod(ctx context.Context, virtualSandboxID string) {
+	// logfields set on [Host.RemoveContainerFromVirtualPod]
+	entry := log.G(ctx)
 
-		// Clean up network namespace if this is the last virtual pod using it
-		// Only remove if this virtual pod was managing the network namespace
-		if vp.NetworkNamespace != "" {
-			// For virtual pods, the network namespace is shared, so we only clean it up
-			// when the virtual pod itself is being destroyed
-			if err := RemoveNetworkNamespace(context.Background(), vp.NetworkNamespace); err != nil {
-				logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-					Warn("Failed to remove virtual pod network namespace")
-			}
-		}
-
-		delete(h.virtualPods, virtualSandboxID)
-
-		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Virtual pod cleaned up")
+	vp, exists := h.virtualPods[virtualSandboxID]
+	if !exists {
+		entry.Warn("attempted to cleanup non-existent virtual sandbox pod")
+		return // virtual pod does not exist
 	}
+
+	// Delete the cgroup
+	if vp.CgroupControl != nil {
+		if err := vp.CgroupControl.Delete(); err != nil {
+			entry.WithError(err).Warn("failed to delete virtual pod cgroup")
+		}
+	}
+
+	// NOTE: Do NOT call [RemoveNetworkNamespace] here.
+	// See comment in [Host.RemoveContainerFromVirtualPod] for more info.
+
+	// Clean up the virtual pod root directory which contains hostname, hosts,
+	// resolv.conf, and logs/. These are NOT cleaned by Container.Delete() because
+	// they live under /run/gcs/c/virtual-pods/<id>/ which is separate from the
+	// container's ociBundlePath (/run/gcs/c/<id>/).
+	if vpRootDir := specGuest.VirtualPodRootDir(virtualSandboxID); vpRootDir != "" {
+		if err := os.RemoveAll(vpRootDir); err != nil {
+			entry.WithField("path", vpRootDir).WithError(err).Warn("Failed to remove virtual pod root directory")
+		} else {
+			entry.WithField("path", vpRootDir).Debug("Removed virtual pod root directory")
+		}
+	}
+
+	delete(h.virtualPods, virtualSandboxID)
+	entry.Info("Virtual pod cleaned up")
 }
 
 // setupVirtualPodMountsPath creates mount directories for virtual pods

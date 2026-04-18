@@ -236,7 +236,7 @@ func (s *Signature) toBeSigned(bodyProtected cbor.RawMessage, payload, external 
 	if external == nil {
 		external = []byte{}
 	}
-	sigStructure := []interface{}{
+	sigStructure := []any{
 		"Signature",   // context
 		bodyProtected, // body_protected
 		signProtected, // sign_protected

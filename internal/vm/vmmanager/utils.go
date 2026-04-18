@@ -7,9 +7,18 @@ import (
 	"net"
 )
 
+// vmWaiter exposes the subset of VM lifecycle needed by [AcceptConnection]:
+// Implemented by [UtilityVM].
+type vmWaiter interface {
+	// Wait blocks until the VM exits or ctx is cancelled.
+	Wait(ctx context.Context) error
+	// ExitError returns the error that caused the VM to exit, if any.
+	ExitError() error
+}
+
 // AcceptConnection accepts a connection and then closes a listener.
 // It monitors ctx.Done() and uvm.Wait() for early termination.
-func AcceptConnection(ctx context.Context, uvm LifetimeManager, l net.Listener, closeConnection bool) (net.Conn, error) {
+func AcceptConnection(ctx context.Context, uvm vmWaiter, l net.Listener, closeConnection bool) (net.Conn, error) {
 	// Channel to capture the accept result
 	type acceptResult struct {
 		conn net.Conn
