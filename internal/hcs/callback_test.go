@@ -3,10 +3,63 @@
 package hcs
 
 import (
+	"strings"
 	"syscall"
 	"testing"
 	"unsafe"
 )
+
+func TestParseExitType_Reboot(t *testing.T) {
+	et, err := parseExitType(`{"Status":0,"ExitType":"Reboot"}`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if et != "Reboot" {
+		t.Fatalf("got %q want Reboot", et)
+	}
+}
+
+func TestParseExitType_GracefulExit(t *testing.T) {
+	et, err := parseExitType(`{"Status":0,"ExitType":"GracefulExit"}`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if et != "GracefulExit" {
+		t.Fatalf("got %q want GracefulExit", et)
+	}
+}
+
+func TestParseExitType_Empty(t *testing.T) {
+	et, err := parseExitType("")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if et != "" {
+		t.Fatalf("got %q want empty", et)
+	}
+}
+
+func TestParseExitType_Malformed(t *testing.T) {
+	_, err := parseExitType(`{not json`)
+	if err == nil {
+		t.Fatal("expected error on malformed JSON")
+	}
+	if !strings.Contains(err.Error(), "invalid") && !strings.Contains(err.Error(), "json") {
+		t.Logf("non-canonical error (still OK): %v", err)
+	}
+}
+
+func TestParseExitType_NoExitTypeField(t *testing.T) {
+	// Older HCS builds may send SystemExitStatus without the ExitType field.
+	// The parse shouldn't fail, just return "".
+	et, err := parseExitType(`{"Status":0}`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if et != "" {
+		t.Fatalf("got %q want empty", et)
+	}
+}
 
 // TestNotificationWatcher_DeliversDataAndError verifies that notificationWatcher
 // routes both the error and the raw notificationData payload to the channel that

@@ -38,6 +38,13 @@ type System struct {
 	os, typ, owner string
 	startTime      time.Time
 	stopTime       time.Time
+
+	// container-reboot-v2: parsed SystemExitStatus.ExitType populated by
+	// waitBackground when hcsNotificationSystemExited fires with JSON payload.
+	// Read via ExitType(). Empty until waitBlock is closed; "Reboot" when
+	// the HCS server sent SystemExited with the new 2.18 Reboot enum value.
+	exitTypeMu sync.RWMutex
+	exitType   string
 }
 
 var _ cow.Container = &System{}
@@ -279,14 +286,55 @@ func (computeSystem *System) waitBackground() {
 	operation := "hcs::System::waitBackground"
 	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
+	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+
+	// container-reboot-v2 Stage 2: peek the hcsNotificationSystemExited channel
+	// BEFORE calling waitForNotification so we observe the payload.data (the
+	// SystemExitStatus JSON). waitForNotification consumes the same channel but
+	// discards data — it only returns payload.err. Running the recv ourselves
+	// here lets us extract ExitType; then we synthesize the err-only wait by
+	// returning the recv's error directly without going through waitForNotification.
+	//
+	// Safe because System.waitBackground is the sole reader of this channel for
+	// the compute system's lifetime (other waiters go through waitForNotification
+	// for *other* notification types). If that invariant changes, this split
+	// must move into waitForNotification itself.
+	callbackMapLock.RLock()
+	cbCtx, cbOK := callbackMap[computeSystem.callbackNumber]
+	callbackMapLock.RUnlock()
+
+	var err error
+	var exitData string
+	if cbOK {
+		payload, ok := <-cbCtx.channels[hcsNotificationSystemExited]
+		if !ok {
+			err = ErrHandleClose
+		} else {
+			err = payload.err
+			exitData = payload.data
+		}
+	} else {
+		// Fall back to the old path if the callback context disappeared.
+		err = waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
+	}
+
+	if exitData != "" {
+		if et, parseErr := parseExitType(exitData); parseErr == nil && et != "" {
+			computeSystem.exitTypeMu.Lock()
+			computeSystem.exitType = et
+			computeSystem.exitTypeMu.Unlock()
+		} else if parseErr != nil {
+			log.G(ctx).WithError(parseErr).WithField("system-id", computeSystem.id).Debug("failed to parse SystemExitStatus JSON")
+		}
+	}
+
+	// container-reboot-v2 Stage 1 checkpoint #7 span attrs, populated with real
+	// values once Stage 2's PassExitStatusJson guard makes the JSON survive to here.
 	span.AddAttributes(
-		trace.StringAttribute("cid", computeSystem.id),
-		// container-reboot-v2 Stage 1 placeholders; Stage 2 populates from SystemExitStatus JSON.
-		trace.StringAttribute("reboot.exit_type", ""),
-		trace.Int64Attribute("reboot.notification_data_bytes", 0),
+		trace.StringAttribute("reboot.exit_type", computeSystem.ExitType()),
+		trace.Int64Attribute("reboot.notification_data_bytes", int64(len(exitData))),
 	)
 
-	err := waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	if err == nil {
 		log.G(ctx).Debug("system exited")
 	} else if errors.Is(err, ErrVmcomputeUnexpectedExit) {
@@ -306,6 +354,20 @@ func (computeSystem *System) waitBackground() {
 
 func (computeSystem *System) WaitChannel() <-chan struct{} {
 	return computeSystem.waitBlock
+}
+
+// ExitType returns the parsed SystemExitStatus.ExitType string reported by HCS
+// at compute-system exit — "Reboot", "GracefulExit", "UnexpectedExit", etc. Empty
+// string before the system has exited (before WaitChannel() unblocks) or when
+// HCS did not send a parseable SystemExitStatus JSON payload. Populated by
+// waitBackground exactly once per compute-system lifetime.
+//
+// container-reboot-v2 Stage 4 uses this to detect when a container exit was a
+// reboot request and reroute to handleReboot instead of teardown.
+func (computeSystem *System) ExitType() string {
+	computeSystem.exitTypeMu.RLock()
+	defer computeSystem.exitTypeMu.RUnlock()
+	return computeSystem.exitType
 }
 
 func (computeSystem *System) WaitError() error {
