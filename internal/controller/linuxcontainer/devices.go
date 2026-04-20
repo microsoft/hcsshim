@@ -35,6 +35,9 @@ func (c *Controller) allocateDevices(ctx context.Context, spec *specs.Spec) erro
 			return fmt.Errorf("reserve device %s: %w", device.ID, err)
 		}
 
+		// Store the reservation so that we can unwind in case of errors.
+		c.devices = append(c.devices, vmBusGUID)
+
 		// Map the device into the VM.
 		if err = c.vpci.AddToVM(ctx, vmBusGUID); err != nil {
 			return fmt.Errorf("add device %s to vm: %w", device.ID, err)
@@ -48,7 +51,6 @@ func (c *Controller) allocateDevices(ctx context.Context, spec *specs.Spec) erro
 
 		// Rewrite the spec entry so GCS references the VMBus GUID.
 		device.ID = vmBusGUID.String()
-		c.devices = append(c.devices, vmBusGUID)
 	}
 
 	log.G(ctx).Debug("all vPCI devices allocated successfully")

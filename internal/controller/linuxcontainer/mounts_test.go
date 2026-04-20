@@ -50,7 +50,6 @@ func newMountsTestController(t *testing.T) (
 // TestAllocateMounts_VirtualDisk verifies the full Reserve → MapToGuest flow
 // for a virtual-disk mount, including source rewrite and type change.
 func TestAllocateMounts_VirtualDisk(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -99,7 +98,6 @@ func TestAllocateMounts_VirtualDisk(t *testing.T) {
 // TestAllocateMounts_PhysicalDisk verifies that a physical-disk mount uses
 // PassThru disk type and correctly rewrites the spec.
 func TestAllocateMounts_PhysicalDisk(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -141,7 +139,6 @@ func TestAllocateMounts_PhysicalDisk(t *testing.T) {
 // TestAllocateMounts_ExtensibleVirtualDisk verifies EVD path parsing and SCSI
 // reservation for an extensible-virtual-disk mount.
 func TestAllocateMounts_ExtensibleVirtualDisk(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 
 	c, scsiCtrl, _ := newMountsTestController(t)
@@ -180,7 +177,6 @@ func TestAllocateMounts_ExtensibleVirtualDisk(t *testing.T) {
 // TestAllocateMounts_BlockDevMount verifies that a block-device mount (indicated
 // by a "blockdev://" destination prefix) keeps the bind type.
 func TestAllocateMounts_BlockDevMount(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -218,7 +214,6 @@ func TestAllocateMounts_BlockDevMount(t *testing.T) {
 // TestAllocateMounts_SCSIReserveFailure verifies that a SCSI Reserve failure
 // propagates the error.
 func TestAllocateMounts_SCSIReserveFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -249,7 +244,6 @@ func TestAllocateMounts_SCSIReserveFailure(t *testing.T) {
 // TestAllocateMounts_SCSIMapToGuestFailure verifies that a SCSI MapToGuest
 // failure propagates the error.
 func TestAllocateMounts_SCSIMapToGuestFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -284,7 +278,6 @@ func TestAllocateMounts_SCSIMapToGuestFailure(t *testing.T) {
 // TestAllocateMounts_VirtualDiskResolvePathFailure verifies that a resolvePath
 // failure for a virtual-disk mount propagates the error.
 func TestAllocateMounts_VirtualDiskResolvePathFailure(t *testing.T) {
-	t.Parallel()
 	stubGrantVMAccess(t)
 
 	orig := resolvePath
@@ -314,7 +307,6 @@ func TestAllocateMounts_VirtualDiskResolvePathFailure(t *testing.T) {
 // TestAllocateMounts_VirtualDiskGrantVMAccessFailure verifies that a
 // grantVMAccess failure for a virtual-disk mount propagates the error.
 func TestAllocateMounts_VirtualDiskGrantVMAccessFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 
 	orig := grantVMAccess
@@ -344,7 +336,6 @@ func TestAllocateMounts_VirtualDiskGrantVMAccessFailure(t *testing.T) {
 // TestAllocateMounts_EVDResolvePathFailure verifies that a resolvePath failure
 // for an extensible-virtual-disk mount propagates the error.
 func TestAllocateMounts_EVDResolvePathFailure(t *testing.T) {
-	t.Parallel()
 
 	orig := resolvePath
 	resolvePath = func(_ string) (string, error) { return "", errResolvePath }
@@ -375,7 +366,6 @@ func TestAllocateMounts_EVDResolvePathFailure(t *testing.T) {
 // TestAllocateMounts_Plan9BindDirectory verifies the Reserve → MapToGuest flow
 // for a host directory bind mount served via Plan9.
 func TestAllocateMounts_Plan9BindDirectory(t *testing.T) {
-	t.Parallel()
 
 	c, _, plan9Ctrl := newMountsTestController(t)
 	hostDir := t.TempDir()
@@ -416,7 +406,6 @@ func TestAllocateMounts_Plan9BindDirectory(t *testing.T) {
 // TestAllocateMounts_Plan9BindReadOnly verifies that the read-only flag
 // is propagated to both share and mount configs for Plan9 mounts.
 func TestAllocateMounts_Plan9BindReadOnly(t *testing.T) {
-	t.Parallel()
 
 	c, _, plan9Ctrl := newMountsTestController(t)
 	hostDir := t.TempDir()
@@ -451,7 +440,6 @@ func TestAllocateMounts_Plan9BindReadOnly(t *testing.T) {
 // TestAllocateMounts_Plan9BindSingleFile verifies that a single-file bind mount
 // shares the parent directory with restrict mode and the file in AllowedNames.
 func TestAllocateMounts_Plan9BindSingleFile(t *testing.T) {
-	t.Parallel()
 
 	c, _, plan9Ctrl := newMountsTestController(t)
 
@@ -500,7 +488,6 @@ func TestAllocateMounts_Plan9BindSingleFile(t *testing.T) {
 // TestAllocateMounts_Plan9ReserveFailure verifies that a Plan9 Reserve failure
 // propagates the error.
 func TestAllocateMounts_Plan9ReserveFailure(t *testing.T) {
-	t.Parallel()
 
 	c, _, plan9Ctrl := newMountsTestController(t)
 	hostDir := t.TempDir()
@@ -531,7 +518,6 @@ func TestAllocateMounts_Plan9ReserveFailure(t *testing.T) {
 // TestAllocateMounts_Plan9MapToGuestFailure verifies that a Plan9 MapToGuest
 // failure propagates the error.
 func TestAllocateMounts_Plan9MapToGuestFailure(t *testing.T) {
-	t.Parallel()
 
 	c, _, plan9Ctrl := newMountsTestController(t)
 	hostDir := t.TempDir()
@@ -566,7 +552,6 @@ func TestAllocateMounts_Plan9MapToGuestFailure(t *testing.T) {
 // TestAllocateMounts_Plan9StatFailure verifies that allocateMounts returns an
 // error when os.Stat fails for a bind mount source.
 func TestAllocateMounts_Plan9StatFailure(t *testing.T) {
-	t.Parallel()
 
 	c, _, _ := newMountsTestController(t)
 	spec := &specs.Spec{
@@ -590,7 +575,6 @@ func TestAllocateMounts_Plan9StatFailure(t *testing.T) {
 // TestAllocateMounts_HugePagesSkipped verifies that hugepages mounts are
 // validated but skipped (no Plan9 or SCSI calls).
 func TestAllocateMounts_HugePagesSkipped(t *testing.T) {
-	t.Parallel()
 
 	c, _, _ := newMountsTestController(t)
 	spec := &specs.Spec{
@@ -612,7 +596,6 @@ func TestAllocateMounts_HugePagesSkipped(t *testing.T) {
 // TestAllocateMounts_HugePagesInvalidSize verifies that only 2M hugepages are
 // accepted.
 func TestAllocateMounts_HugePagesInvalidSize(t *testing.T) {
-	t.Parallel()
 
 	c, _, _ := newMountsTestController(t)
 	spec := &specs.Spec{
@@ -634,7 +617,6 @@ func TestAllocateMounts_HugePagesInvalidSize(t *testing.T) {
 // TestAllocateMounts_HugePagesInvalidFormat verifies that an improperly
 // formatted hugepages path is rejected.
 func TestAllocateMounts_HugePagesInvalidFormat(t *testing.T) {
-	t.Parallel()
 
 	c, _, _ := newMountsTestController(t)
 	spec := &specs.Spec{
@@ -656,7 +638,6 @@ func TestAllocateMounts_HugePagesInvalidFormat(t *testing.T) {
 // TestAllocateMounts_GuestInternalPathsSkipped verifies that sandbox://, sandbox-tmp://,
 // and uvm:// prefixed mounts pass through without host-side allocation.
 func TestAllocateMounts_GuestInternalPathsSkipped(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name   string
@@ -697,7 +678,6 @@ func TestAllocateMounts_GuestInternalPathsSkipped(t *testing.T) {
 // TestAllocateMounts_UnknownTypesPassThrough verifies that unknown mount types
 // (e.g. tmpfs, proc) are passed through without error or host-side allocation.
 func TestAllocateMounts_UnknownTypesPassThrough(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name      string
@@ -732,7 +712,6 @@ func TestAllocateMounts_UnknownTypesPassThrough(t *testing.T) {
 // TestAllocateMounts_NoMounts verifies that allocateMounts succeeds when the
 // spec contains no mounts.
 func TestAllocateMounts_NoMounts(t *testing.T) {
-	t.Parallel()
 
 	c, _, _ := newMountsTestController(t)
 	spec := &specs.Spec{}
@@ -752,7 +731,6 @@ func TestAllocateMounts_NoMounts(t *testing.T) {
 // TestAllocateMounts_EmptySourceOrDestination verifies that a mount with an
 // empty source or destination returns an error.
 func TestAllocateMounts_EmptySourceOrDestination(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name string
@@ -788,7 +766,6 @@ func TestAllocateMounts_EmptySourceOrDestination(t *testing.T) {
 // TestAllocateMounts_MultipleMixed verifies that allocateMounts correctly
 // handles a mix of SCSI, Plan9, and passthrough mounts in a single spec.
 func TestAllocateMounts_MultipleMixed(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -871,7 +848,6 @@ func TestAllocateMounts_MultipleMixed(t *testing.T) {
 
 // TestParseExtensibleVirtualDiskPath verifies parsing of EVD paths.
 func TestParseExtensibleVirtualDiskPath(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name     string
@@ -936,7 +912,6 @@ func TestParseExtensibleVirtualDiskPath(t *testing.T) {
 
 // TestValidateHugePageMount verifies the hugepages mount source validation.
 func TestValidateHugePageMount(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name    string
@@ -975,7 +950,6 @@ func TestValidateHugePageMount(t *testing.T) {
 
 // TestIsReadOnlyMount verifies read-only flag detection from mount options.
 func TestIsReadOnlyMount(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name    string
@@ -1002,7 +976,6 @@ func TestIsReadOnlyMount(t *testing.T) {
 
 // TestIsGuestInternalPath verifies detection of guest-internal path prefixes.
 func TestIsGuestInternalPath(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name string
@@ -1030,7 +1003,6 @@ func TestIsGuestInternalPath(t *testing.T) {
 // TestAllocateMounts_EVDInvalidPath verifies that an invalid EVD source path
 // returns an error before any SCSI reservation.
 func TestAllocateMounts_EVDInvalidPath(t *testing.T) {
-	t.Parallel()
 
 	c, _, _ := newMountsTestController(t)
 	spec := &specs.Spec{

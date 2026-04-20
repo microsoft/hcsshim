@@ -62,17 +62,17 @@ func (c *Controller) generateContainerDocument(
 		return nil, fmt.Errorf("allocate devices: %w", err)
 	}
 
-	// Set the rootfs path for the container within guest.
-	if spec.Root == nil {
-		spec.Root = &specs.Root{}
-	}
-	spec.Root.Path = c.layers.rootfsPath
-
 	// Build a sanitized deep copy of the spec for the guest.
 	linuxSpec, err := sanitizeSpec(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("sanitize spec: %w", err)
 	}
+
+	// Set the rootfs path for the container within guest.
+	if linuxSpec.Root == nil {
+		linuxSpec.Root = &specs.Root{}
+	}
+	linuxSpec.Root.Path = c.layers.rootfsPath
 
 	return &vmHostedContainerSettingsV2{
 		SchemaVersion:    schemaversion.SchemaV21(),

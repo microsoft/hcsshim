@@ -145,13 +145,14 @@ func (c *Controller) allocateSCSIMount(ctx context.Context, mount *specs.Mount, 
 		return fmt.Errorf("reserve scsi mount for %s: %w", mount.Source, err)
 	}
 
+	// Store the reservation so that we can unwind in case of errors.
+	c.scsiResources = append(c.scsiResources, reservationID)
+
 	// Map the device into the guest.
 	guestPath, err := c.scsi.MapToGuest(ctx, reservationID)
 	if err != nil {
 		return fmt.Errorf("map scsi mount %s to guest: %w", mount.Source, err)
 	}
-
-	c.scsiResources = append(c.scsiResources, reservationID)
 
 	// Rewrite source to guest path; block-device mounts retain bind type.
 	mount.Source = guestPath
@@ -191,13 +192,15 @@ func (c *Controller) allocatePlan9Mount(ctx context.Context, mount *specs.Mount,
 		return fmt.Errorf("reserve plan9 share for %s: %w", mount.Source, err)
 	}
 
+	// Store the reservation so that we can unwind in case of errors.
+	c.plan9Resources = append(c.plan9Resources, reservationID)
+
 	// Map the share into the guest.
 	guestPath, err := c.plan9.MapToGuest(ctx, reservationID)
 	if err != nil {
 		return fmt.Errorf("map plan9 share %s to guest: %w", mount.Source, err)
 	}
 
-	c.plan9Resources = append(c.plan9Resources, reservationID)
 	mount.Source = guestPath
 	return nil
 }

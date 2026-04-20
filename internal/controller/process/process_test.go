@@ -254,15 +254,26 @@ func TestStart_HostCreateProcessFails(t *testing.T) {
 	}
 }
 
-// TestKill_WrongState verifies that Kill returns ErrFailedPrecondition
-// for states that are not part of the valid kill state machine (e.g., StateNotCreated).
-func TestKill_WrongState(t *testing.T) {
+// TestKill_NotCreatedState verifies that Kill on a process that was never
+// created transitions it directly to StateTerminated without error. Because
+// upstreamIO has not been populated yet, abortInternal must tolerate a nil
+// upstreamIO and not panic.
+func TestKill_NotCreatedState(t *testing.T) {
 	t.Parallel()
 	_, _, _, controller := newSetup(t)
-	// StateNotCreated is not a valid state for Kill.
-	err := controller.Kill(t.Context(), nil)
-	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
-		t.Errorf("Kill(NotCreated) = %v; want ErrFailedPrecondition", err)
+	// upstreamIO intentionally left nil — Create was never called.
+
+	if err := controller.Kill(t.Context(), nil); err != nil {
+		t.Fatalf("Kill(NotCreated) = %v; want nil", err)
+	}
+	if controller.state != StateTerminated {
+		t.Errorf("state = %s; want StateTerminated", controller.state)
+	}
+	// exitedCh must be closed so any waiters are unblocked.
+	select {
+	case <-controller.exitedCh:
+	default:
+		t.Error("exitedCh should be closed after Kill(NotCreated)")
 	}
 }
 

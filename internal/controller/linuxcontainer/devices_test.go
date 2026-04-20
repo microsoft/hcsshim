@@ -101,7 +101,7 @@ func TestAllocateDevices_SingleDevice(t *testing.T) {
 			name:      "vpci-instance-id",
 			deviceID:  "PCI\\VEN_1234&DEV_5678\\0",
 			idType:    vpci.DeviceIDType,
-			expectPCI: "PCI\\VEN_1234&DEV_5678\\0",
+			expectPCI: "PCI\\VEN_1234&DEV_5678",
 			expectVF:  0,
 		},
 		{
@@ -115,7 +115,7 @@ func TestAllocateDevices_SingleDevice(t *testing.T) {
 			name:      "gpu",
 			deviceID:  "PCI\\VEN_ABCD&DEV_9876\\0",
 			idType:    vpci.GpuDeviceIDType,
-			expectPCI: "PCI\\VEN_ABCD&DEV_9876\\0",
+			expectPCI: "PCI\\VEN_ABCD&DEV_9876",
 			expectVF:  0,
 		},
 	}
@@ -206,8 +206,15 @@ func TestAllocateDevices_SingleDeviceFailure(t *testing.T) {
 			if !errors.Is(err, tt.wantWrapped) {
 				t.Errorf("error = %v, want wrapping %v", err, tt.wantWrapped)
 			}
-			if len(c.devices) != 0 {
-				t.Errorf("expected 0 tracked devices, got %d", len(c.devices))
+			// Reserve appends to c.devices BEFORE AddToVM is invoked, so a
+			// Reserve failure leaves nothing tracked, while an AddToVM
+			// failure leaves the device tracked for unwind.
+			wantTracked := 0
+			if tt.reserveErr == nil {
+				wantTracked = 1
+			}
+			if len(c.devices) != wantTracked {
+				t.Errorf("expected %d tracked devices, got %d", wantTracked, len(c.devices))
 			}
 		})
 	}
@@ -227,7 +234,7 @@ func TestAllocateDevices_MultipleDevices(t *testing.T) {
 
 	vpciCtrl.EXPECT().
 		Reserve(gomock.Any(), vpci.Device{
-			DeviceInstanceID:     "PCI\\VEN_AAAA&DEV_1111\\0",
+			DeviceInstanceID:     "PCI\\VEN_AAAA&DEV_1111",
 			VirtualFunctionIndex: 0,
 		}).
 		Return(guidA, nil)
@@ -237,7 +244,7 @@ func TestAllocateDevices_MultipleDevices(t *testing.T) {
 
 	vpciCtrl.EXPECT().
 		Reserve(gomock.Any(), vpci.Device{
-			DeviceInstanceID:     "PCI\\VEN_BBBB&DEV_2222\\0",
+			DeviceInstanceID:     "PCI\\VEN_BBBB&DEV_2222",
 			VirtualFunctionIndex: 0,
 		}).
 		Return(guidB, nil)
@@ -300,7 +307,7 @@ func TestAllocateDevices_MultipleDevicesPartialFailure(t *testing.T) {
 			// First device always succeeds.
 			vpciCtrl.EXPECT().
 				Reserve(gomock.Any(), vpci.Device{
-					DeviceInstanceID:     "PCI\\VEN_AAAA&DEV_1111\\0",
+					DeviceInstanceID:     "PCI\\VEN_AAAA&DEV_1111",
 					VirtualFunctionIndex: 0,
 				}).
 				Return(guidA, nil)
@@ -311,7 +318,7 @@ func TestAllocateDevices_MultipleDevicesPartialFailure(t *testing.T) {
 			// Second device fails at the configured step.
 			vpciCtrl.EXPECT().
 				Reserve(gomock.Any(), vpci.Device{
-					DeviceInstanceID:     "PCI\\VEN_BBBB&DEV_2222\\0",
+					DeviceInstanceID:     "PCI\\VEN_BBBB&DEV_2222",
 					VirtualFunctionIndex: 0,
 				}).
 				Return(guidB, tt.reserveErr)
@@ -332,8 +339,16 @@ func TestAllocateDevices_MultipleDevicesPartialFailure(t *testing.T) {
 			}
 
 			// First device was already allocated before the second failed.
-			if len(c.devices) != 1 {
-				t.Errorf("expected 1 tracked device after partial failure, got %d", len(c.devices))
+			// When the second Reserve fails, only the first device is
+			// tracked. When the second AddToVM fails, the second device has
+			// also been appended to c.devices (append happens before
+			// AddToVM), leaving 2 tracked for unwind.
+			wantTracked := 1
+			if tt.reserveErr == nil {
+				wantTracked = 2
+			}
+			if len(c.devices) != wantTracked {
+				t.Errorf("expected %d tracked device(s) after partial failure, got %d", wantTracked, len(c.devices))
 			}
 		})
 	}

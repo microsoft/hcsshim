@@ -87,11 +87,12 @@ func TestSanitizeSpec_ClearsGCSManagedResources(t *testing.T) {
 	t.Parallel()
 	classID := uint32(1)
 	cpuShares := uint64(512)
+	pidsLimit := int64(100)
 	spec := &specs.Spec{Linux: &specs.Linux{}, Windows: &specs.Windows{}}
 	spec.Linux.CgroupsPath = "/sys/fs/cgroup/test"
 	spec.Linux.Resources = &specs.LinuxResources{
 		Devices:        []specs.LinuxDeviceCgroup{{Allow: true}},
-		Pids:           &specs.LinuxPids{Limit: 100},
+		Pids:           &specs.LinuxPids{Limit: &pidsLimit},
 		BlockIO:        &specs.LinuxBlockIO{},
 		HugepageLimits: []specs.LinuxHugepageLimit{{Pagesize: "2MB", Limit: 1024}},
 		Network:        &specs.LinuxNetwork{ClassID: &classID},

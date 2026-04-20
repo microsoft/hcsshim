@@ -78,9 +78,6 @@ type Controller struct {
 	// Access must be guarded by mu.
 	state State
 
-	// closeOnce ensures closeContainer executes its teardown exactly once.
-	closeOnce sync.Once
-
 	// terminatedCh is closed exactly once when the container is closed.
 	// All callers of Wait block on this channel, and closing it unblocks
 	// every waiter simultaneously.
@@ -156,7 +153,14 @@ func (c *Controller) Create(ctx context.Context, spec *specs.Spec, opts *task.Cr
 	defer func() {
 		if err != nil {
 			c.state = StateInvalid
-			c.closeContainer(ctx)
+			// If we fail during create, then there won't be an opportunity to
+			// call Delete and therefore, we need to perform the best effort cleanup here.
+			if releaseErr := c.releaseResources(ctx); releaseErr != nil {
+				log.G(ctx).WithError(releaseErr).Error("failed to release resources during create")
+			}
+			if closeErr := c.closeContainer(ctx); closeErr != nil {
+				log.G(ctx).WithError(closeErr).Error("failed to close container during create")
+			}
 		}
 	}()
 
@@ -194,36 +198,42 @@ func (c *Controller) Create(ctx context.Context, spec *specs.Spec, opts *task.Cr
 	return nil
 }
 
-// closeContainer performs full container teardown exactly once.
-func (c *Controller) closeContainer(ctx context.Context) {
-	c.closeOnce.Do(func() {
-		c.releaseResources(ctx)
-
-		// Delete guest-side container state after resources have been released.
-		if c.container != nil {
-			// Delete the container state if supported.
-			if c.guest.Capabilities().IsDeleteContainerStateSupported() {
-				if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil {
-					log.G(ctx).WithError(err).Error("failed to delete container state")
-				}
+// closeContainer performs container teardown. It is safe to retry on
+// failure. Needs to be called while holding c.mu lock.
+func (c *Controller) closeContainer(ctx context.Context) error {
+	if c.container != nil {
+		// Delete the guest-side container state if supported. If this
+		// fails, return early without nil'ing c.container so a retry
+		// re-issues the request.
+		if c.guest.Capabilities().IsDeleteContainerStateSupported() {
+			if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil {
+				return fmt.Errorf("delete container state: %w", err)
 			}
-
-			// Close the container handle.
-			_ = c.container.Close()
 		}
 
-		// Release all waiters.
+		// Close the container handle. The calling code never returns error.
+		_ = c.container.Close()
+		c.container = nil
+	}
+
+	// Release all waiters exactly once. A non-blocking receive distinguishes
+	// an already-closed channel from one that still needs closing.
+	select {
+	case <-c.terminatedCh:
+		// already closed
+	default:
 		close(c.terminatedCh)
-	})
+	}
+	return nil
 }
 
 // releaseResources undoes each allocation in reverse order.
 // It is idempotent — subsequent calls after the first are no-ops.
-func (c *Controller) releaseResources(ctx context.Context) {
+func (c *Controller) releaseResources(ctx context.Context) error {
 	// Combined layers must be removed before unmapping the underlying SCSI
 	// layer devices.
 	if c.layers != nil && c.layers.layersCombined {
-		var hcsLayers []hcsschema.Layer
+		hcsLayers := make([]hcsschema.Layer, 0, len(c.layers.roLayers))
 		for _, layer := range c.layers.roLayers {
 			hcsLayers = append(hcsLayers, hcsschema.Layer{Path: layer.guestPath})
 		}
@@ -234,50 +244,59 @@ func (c *Controller) releaseResources(ctx context.Context) {
 			Layers:            hcsLayers,
 			ScratchPath:       c.layers.scratch.guestPath,
 		}); err != nil {
-			log.G(ctx).WithError(err).Error("failed to remove combined layers from guest")
+			return fmt.Errorf("remove combined layers from guest: %w", err)
 		}
+
+		// Set layersCombined to false so that we do not retry this post successful remove.
+		c.layers.layersCombined = false
 	}
 
-	// Unmap layers (scratch + RO layers).
-	if c.layers != nil {
+	// Unmap the scratch layer. A zero ID indicates it has already been
+	// unmapped on a prior call.
+	var zeroGUID guid.GUID
+	if c.layers != nil && c.layers.scratch.id != zeroGUID {
 		if err := c.scsi.UnmapFromGuest(ctx, c.layers.scratch.id); err != nil {
-			log.G(ctx).WithError(err).Error("failed to unmap scratch layer")
+			return fmt.Errorf("unmap scratch layer: %w", err)
 		}
+		c.layers.scratch = scsiReservation{}
+	}
 
-		for _, layer := range c.layers.roLayers {
+	// Unmap RO layers. On failure, retain the unprocessed tail so a retry
+	// resumes from the first failure.
+	if c.layers != nil {
+		for i, layer := range c.layers.roLayers {
 			if err := c.scsi.UnmapFromGuest(ctx, layer.id); err != nil {
-				log.G(ctx).WithError(err).Error("failed to unmap ro layer")
+				c.layers.roLayers = c.layers.roLayers[i:]
+				return fmt.Errorf("unmap ro layer: %w", err)
 			}
 		}
 	}
 
 	// Unmap additional SCSI mounts.
-	for _, id := range c.scsiResources {
+	for i, id := range c.scsiResources {
 		if err := c.scsi.UnmapFromGuest(ctx, id); err != nil {
-			log.G(ctx).WithError(err).Error("failed to unmap scsi resource")
+			c.scsiResources = c.scsiResources[i:]
+			return fmt.Errorf("unmap scsi resource: %w", err)
 		}
 	}
 
 	// Unmap Plan9 shares.
-	for _, id := range c.plan9Resources {
+	for i, id := range c.plan9Resources {
 		if err := c.plan9.UnmapFromGuest(ctx, id); err != nil {
-			log.G(ctx).WithError(err).Error("failed to unmap plan9 share")
+			c.plan9Resources = c.plan9Resources[i:]
+			return fmt.Errorf("unmap plan9 share: %w", err)
 		}
 	}
 
 	// Remove VPCI devices.
-	for _, id := range c.devices {
+	for i, id := range c.devices {
 		if err := c.vpci.RemoveFromVM(ctx, id); err != nil {
-			log.G(ctx).WithError(err).Error("failed to remove vpci device")
+			c.devices = c.devices[i:]
+			return fmt.Errorf("remove vpci device: %w", err)
 		}
 	}
 
-	// Clear all resource references so a repeated call is a no-op, and the
-	// GC can reclaim the slices.
-	c.layers = nil
-	c.scsiResources = nil
-	c.plan9Resources = nil
-	c.devices = nil
+	return nil
 }
 
 // Start starts the container and its init process, returning the init PID.
@@ -295,7 +314,6 @@ func (c *Controller) Start(ctx context.Context, events chan interface{}) (uint32
 	// Start the container.
 	if err := c.container.Start(ctx); err != nil {
 		c.state = StateInvalid
-		c.closeContainer(ctx)
 		return 1, fmt.Errorf("start container %s: %w", c.containerID, err)
 	}
 
@@ -306,7 +324,6 @@ func (c *Controller) Start(ctx context.Context, events chan interface{}) (uint32
 	pid, err := initProcess.Start(ctx, nil)
 	if err != nil {
 		c.state = StateInvalid
-		c.closeContainer(ctx)
 		return 1, fmt.Errorf("start init process: %w", err)
 	}
 
@@ -328,7 +345,12 @@ func (c *Controller) handleInitProcessExit(ctx context.Context, initProcess *pro
 
 	c.mu.Lock()
 	c.state = StateStopped
-	c.closeContainer(ctx)
+	if err := c.closeContainer(ctx); err != nil {
+		// Leave state as StateStopped so DeleteProcess can retry the
+		// teardown. The exit event below still informs the caller that
+		// the init process is gone.
+		log.G(ctx).WithError(err).Error("failed to close container after init exit")
+	}
 	c.mu.Unlock()
 
 	// Publish the exit event after teardown is complete.
@@ -403,6 +425,12 @@ func (c *Controller) GetProcess(execID string) (*process.Controller, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	return c.getProcess(execID)
+}
+
+// getProcess returns the process controller for the given exec ID.
+// The caller must hold c.mu (for reading or writing).
+func (c *Controller) getProcess(execID string) (*process.Controller, error) {
 	proc, ok := c.processes[execID]
 	if !ok {
 		return nil, fmt.Errorf("process %q not found in container %s: %w",
@@ -534,7 +562,7 @@ func (c *Controller) KillProcess(ctx context.Context, execID string, signal uint
 	}
 
 	// Now signal the actual process identified by execID.
-	targetProcess, err := c.GetProcess(execID)
+	targetProcess, err := c.getProcess(execID)
 	if err != nil {
 		return err
 	}
@@ -569,7 +597,7 @@ func (c *Controller) DeleteProcess(ctx context.Context, execID string) (*task.St
 		return nil, fmt.Errorf("container %s is in state %s; cannot delete process: %w", c.containerID, c.state, errdefs.ErrFailedPrecondition)
 	}
 
-	proc, err := c.GetProcess(execID)
+	proc, err := c.getProcess(execID)
 	if err != nil {
 		return nil, err
 	}
@@ -587,8 +615,13 @@ func (c *Controller) DeleteProcess(ctx context.Context, execID string) (*task.St
 	if execID == "" {
 		// For containers that were created but never started, handleInitProcessExit
 		// was never launched, so closeContainer was never called. Perform full
-		// teardown now. For already-stopped containers, closeOnce makes this a no-op.
-		c.closeContainer(ctx)
+		// teardown now. closeContainer is retriable.
+		if err = c.closeContainer(ctx); err != nil {
+			return nil, fmt.Errorf("close container %s: %w", c.containerID, err)
+		}
+		if err = c.releaseResources(ctx); err != nil {
+			return nil, fmt.Errorf("releasing resources for container %s: %w", c.containerID, err)
+		}
 	}
 
 	// Remove the process entry only after all fallible operations have

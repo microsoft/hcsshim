@@ -14,7 +14,7 @@ import (
 
 // vmController exposes the subset of the VM manager that the pod controller
 // needs: identity, guest access, device controllers, and the network controller.
-// Implemented by the VM controller (e.g., vmmanager.UtilityVM).
+// Implemented by the VM controller.
 type vmController interface {
 	// RuntimeID returns the unique runtime identifier for the VM.
 	RuntimeID() string
@@ -32,14 +32,14 @@ type vmController interface {
 	Plan9Controller() *plan9.Controller
 
 	// NetworkController returns the network controller for the VM.
-	NetworkController() *network.Controller
+	NetworkController(networkNamespaceID string) *network.Controller
 }
 
 // networkController is the narrow interface used by the pod to set up and
 // tear down the network namespace. Implemented by [network.Controller].
 type networkController interface {
 	// Setup performs network setup for the pod.
-	Setup(ctx context.Context, opts *network.SetupOptions) error
+	Setup(ctx context.Context) error
 
 	// Teardown performs network teardown for the pod.
 	Teardown(ctx context.Context) error

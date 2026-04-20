@@ -296,7 +296,7 @@ func (c *Controller) Kill(ctx context.Context, signalOptions interface{}) error 
 	defer c.mu.Unlock()
 
 	switch c.state {
-	case StateCreated:
+	case StateNotCreated, StateCreated:
 		// The process was never started. Transition directly to terminated state.
 		c.abortInternal(ctx, 1)
 		return nil
@@ -308,7 +308,7 @@ func (c *Controller) Kill(ctx context.Context, signalOptions interface{}) error 
 		if signalOptions != nil {
 			isDelivered, err = c.process.Signal(ctx, signalOptions)
 		} else {
-			// Legacy path: signals are not supported, issue a direct terminate.
+			// WCOW containers issue a Kill directly instead of a signal.
 			isDelivered, err = c.process.Kill(ctx)
 		}
 
@@ -366,8 +366,9 @@ func (c *Controller) abortInternal(ctx context.Context, exitCode uint32) {
 	c.exitCode = exitCode
 	c.exitedAt = time.Now()
 
-	// Release upstream IO connections that were never used.
-	c.upstreamIO.Close(ctx)
+	if c.upstreamIO != nil {
+		c.upstreamIO.Close(ctx)
+	}
 
 	// Unblock any waiters.
 	close(c.exitedCh)

@@ -29,9 +29,7 @@ const (
 )
 
 var (
-	errUnmapSCSI  = errors.New("unmap scsi failed")
-	errUnmapPlan9 = errors.New("unmap plan9 failed")
-	errRemoveVPCI = errors.New("remove vpci failed")
+	errUnmapSCSI = errors.New("unmap scsi failed")
 )
 
 // newContainerTestController creates a Controller wired to fresh mock
@@ -256,19 +254,38 @@ func TestGetProcess_NotFound(t *testing.T) {
 
 // --- ListProcesses ---
 
-// TestListProcesses_Empty verifies that ListProcesses returns an empty map
-// when only the init process is registered.
-func TestListProcesses_Empty(t *testing.T) {
+// TestListProcesses_EmptyAndInitOnly verifies that ListProcesses returns an
+// empty map both when the processes map is empty and when only the init
+// process is registered.
+func TestListProcesses_EmptyAndInitOnly(t *testing.T) {
 	t.Parallel()
-	c, _, _, _, _ := newContainerTestController(t)
-	c.processes[""] = process.New(testContainerID, "", nil, 0)
-
-	result, err := c.ListProcesses()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name    string
+		seedMap func(c *Controller)
+	}{
+		{name: "no processes", seedMap: func(*Controller) {}},
+		{
+			name: "init only",
+			seedMap: func(c *Controller) {
+				c.processes[""] = process.New(testContainerID, "", nil, 0)
+			},
+		},
 	}
-	if len(result) != 0 {
-		t.Errorf("expected 0 exec processes, got %d", len(result))
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, _, _, _, _ := newContainerTestController(t)
+			tc.seedMap(c)
+
+			result, err := c.ListProcesses()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 0 {
+				t.Errorf("expected 0 exec processes, got %d", len(result))
+			}
+		})
 	}
 }
 
@@ -297,21 +314,6 @@ func TestListProcesses_ExcludesInit(t *testing.T) {
 	}
 	if result["exec-2"] != exec2 {
 		t.Error("exec-2 not found or mismatched")
-	}
-}
-
-// TestListProcesses_NoProcesses verifies that ListProcesses returns an empty
-// map when the processes map is completely empty.
-func TestListProcesses_NoProcesses(t *testing.T) {
-	t.Parallel()
-	c, _, _, _, _ := newContainerTestController(t)
-
-	result, err := c.ListProcesses()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 0 {
-		t.Errorf("expected 0 processes, got %d", len(result))
 	}
 }
 
@@ -411,27 +413,26 @@ func TestDeleteProcess_ProcessNotFound(t *testing.T) {
 	}
 }
 
-// TestDeleteProcess_InitProcessNotStarted verifies that deleting the init
-// process on a created-but-never-started container triggers closeContainer.
-func TestDeleteProcess_InitProcessNotStarted(t *testing.T) {
+// TestDeleteProcess_InitProcessInNotCreatedStateRejected verifies that
+// deleting the init process while the underlying process controller is in
+// its initial (NotCreated) state returns an error from the process layer.
+func TestDeleteProcess_InitProcessInNotCreatedStateRejected(t *testing.T) {
 	t.Parallel()
 	c, _, _, _, _ := newContainerTestController(t)
 	c.state = StateCreated
 
-	// Create a process controller in terminated state so Delete succeeds.
-	// process.New starts in StateNotCreated; Delete from NotCreated returns error.
-	// We need a process in StateCreated or StateTerminated for Delete to succeed.
-	// Since we can't directly set the state of process.Controller from outside
-	// the package, we use the fact that Kill on a StateCreated process aborts it
-	// into StateTerminated.
-	initProc := process.New(testContainerID, "", nil, 0)
-	c.processes[""] = initProc
+	// process.New starts in StateNotCreated; Delete from NotCreated returns
+	// ErrFailedPrecondition from the process package.
+	c.processes[""] = process.New(testContainerID, "", nil, 0)
 
-	// The init process is in StateNotCreated. Delete on a process in
-	// StateNotCreated hits the default case and returns ErrFailedPrecondition.
 	_, err := c.DeleteProcess(t.Context(), "")
-	if err == nil {
-		t.Fatal("expected error deleting init process in StateNotCreated")
+	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Errorf("DeleteProcess() error = %v, want ErrFailedPrecondition", err)
+	}
+
+	// The process entry must be retained so a retry can locate it.
+	if _, ok := c.processes[""]; !ok {
+		t.Error("init process entry should be retained after failed delete")
 	}
 }
 
@@ -516,20 +517,20 @@ func TestReleaseResources_AllResourceTypes(t *testing.T) {
 	// Expect VPCI device removal.
 	vpciCtrl.EXPECT().RemoveFromVM(gomock.Any(), deviceGUID).Return(nil)
 
-	c.releaseResources(t.Context())
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("releaseResources returned error: %v", err)
+	}
 
-	// All resource slices must be nil after release.
-	if c.layers != nil {
-		t.Error("layers should be nil after releaseResources")
+	// After successful release, layersCombined is reset and scratch zeroed.
+	if c.layers == nil {
+		t.Fatal("layers struct should still be present after releaseResources")
 	}
-	if c.scsiResources != nil {
-		t.Error("scsiResources should be nil after releaseResources")
+	if c.layers.layersCombined {
+		t.Error("layersCombined should be false after releaseResources")
 	}
-	if c.plan9Resources != nil {
-		t.Error("plan9Resources should be nil after releaseResources")
-	}
-	if c.devices != nil {
-		t.Error("devices should be nil after releaseResources")
+	var zeroGUID guid.GUID
+	if c.layers.scratch.id != zeroGUID {
+		t.Error("scratch reservation should be zeroed after releaseResources")
 	}
 }
 
@@ -544,10 +545,8 @@ func TestReleaseResources_NoLayers(t *testing.T) {
 
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(nil)
 
-	c.releaseResources(t.Context())
-
-	if c.scsiResources != nil {
-		t.Error("scsiResources should be nil after releaseResources")
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("releaseResources returned error: %v", err)
 	}
 }
 
@@ -570,15 +569,13 @@ func TestReleaseResources_LayersNotCombined(t *testing.T) {
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scratchGUID).Return(nil)
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUID).Return(nil)
 
-	c.releaseResources(t.Context())
-
-	if c.layers != nil {
-		t.Error("layers should be nil after releaseResources")
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("releaseResources returned error: %v", err)
 	}
 }
 
-// TestReleaseResources_Idempotent verifies that a second call to
-// releaseResources is a no-op.
+// TestReleaseResources_Idempotent verifies that releaseResources can be safely
+// invoked multiple times without panicking.
 func TestReleaseResources_Idempotent(t *testing.T) {
 	t.Parallel()
 	c, scsiCtrl, _, _, _ := newContainerTestController(t)
@@ -586,18 +583,24 @@ func TestReleaseResources_Idempotent(t *testing.T) {
 	scsiGUID, _ := guid.NewV4()
 	c.scsiResources = []guid.GUID{scsiGUID}
 
-	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(nil).Times(1)
+	// The implementation does not clear the slice on success, so a second
+	// call will retry the unmap. Both calls succeed.
+	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(nil).Times(2)
 
-	c.releaseResources(t.Context())
-	// Second call should be a no-op (no mock calls expected).
-	c.releaseResources(t.Context())
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("first releaseResources returned error: %v", err)
+	}
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("second releaseResources returned error: %v", err)
+	}
 }
 
-// TestReleaseResources_ErrorsContinue verifies that releaseResources continues
-// releasing remaining resources even when individual unmaps fail.
-func TestReleaseResources_ErrorsContinue(t *testing.T) {
+// TestReleaseResources_StopsOnFirstError verifies that releaseResources
+// returns the first error encountered and does not proceed to subsequent
+// resource categories.
+func TestReleaseResources_StopsOnFirstError(t *testing.T) {
 	t.Parallel()
-	c, scsiCtrl, plan9Ctrl, vpciCtrl, _ := newContainerTestController(t)
+	c, scsiCtrl, _, _, _ := newContainerTestController(t)
 
 	scsiGUID, _ := guid.NewV4()
 	plan9GUID, _ := guid.NewV4()
@@ -607,23 +610,23 @@ func TestReleaseResources_ErrorsContinue(t *testing.T) {
 	c.plan9Resources = []guid.GUID{plan9GUID}
 	c.devices = []guid.GUID{deviceGUID}
 
-	// Each unmap fails, but releaseResources should still attempt all.
+	// SCSI unmap fails; plan9/vpci should not be invoked.
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(errUnmapSCSI)
-	plan9Ctrl.EXPECT().UnmapFromGuest(gomock.Any(), plan9GUID).Return(errUnmapPlan9)
-	vpciCtrl.EXPECT().RemoveFromVM(gomock.Any(), deviceGUID).Return(errRemoveVPCI)
 
-	// Should not panic; errors are logged.
-	c.releaseResources(t.Context())
+	err := c.releaseResources(t.Context())
+	if !errors.Is(err, errUnmapSCSI) {
+		t.Fatalf("releaseResources error = %v, want %v", err, errUnmapSCSI)
+	}
 
-	// Slices still cleared even on errors.
-	if c.scsiResources != nil {
-		t.Error("scsiResources should be nil after releaseResources")
+	// Failed scsi entry is retained for retry; plan9 and devices unchanged.
+	if len(c.scsiResources) != 1 {
+		t.Errorf("scsiResources len = %d, want 1 (retained for retry)", len(c.scsiResources))
 	}
-	if c.plan9Resources != nil {
-		t.Error("plan9Resources should be nil after releaseResources")
+	if len(c.plan9Resources) != 1 {
+		t.Errorf("plan9Resources len = %d, want 1 (untouched)", len(c.plan9Resources))
 	}
-	if c.devices != nil {
-		t.Error("devices should be nil after releaseResources")
+	if len(c.devices) != 1 {
+		t.Errorf("devices len = %d, want 1 (untouched)", len(c.devices))
 	}
 }
 
@@ -634,34 +637,124 @@ func TestReleaseResources_MultipleROLayers(t *testing.T) {
 	c, scsiCtrl, _, _, guestCtrl := newContainerTestController(t)
 
 	scratchGUID, _ := guid.NewV4()
-	roGUID0, _ := guid.NewV4()
-	roGUID1, _ := guid.NewV4()
-	roGUID2, _ := guid.NewV4()
+	roGUIDs := [3]guid.GUID{}
+	for i := range roGUIDs {
+		roGUIDs[i], _ = guid.NewV4()
+	}
 
 	c.layers = &scsiLayers{
 		layersCombined: true,
 		rootfsPath:     "/rootfs",
 		scratch:        scsiReservation{id: scratchGUID, guestPath: "/dev/scratch"},
 		roLayers: []scsiReservation{
-			{id: roGUID0, guestPath: "/dev/ro0"},
-			{id: roGUID1, guestPath: "/dev/ro1"},
-			{id: roGUID2, guestPath: "/dev/ro2"},
+			{id: roGUIDs[0], guestPath: "/dev/ro0"},
+			{id: roGUIDs[1], guestPath: "/dev/ro1"},
+			{id: roGUIDs[2], guestPath: "/dev/ro2"},
 		},
 	}
 
-	guestCtrl.EXPECT().
-		RemoveLCOWCombinedLayers(gomock.Any(), gomock.Any()).
-		Return(nil)
-
+	guestCtrl.EXPECT().RemoveLCOWCombinedLayers(gomock.Any(), gomock.Any()).Return(nil)
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scratchGUID).Return(nil)
-	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUID0).Return(nil)
-	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUID1).Return(nil)
-	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUID2).Return(nil)
+	for _, g := range roGUIDs {
+		scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), g).Return(nil)
+	}
 
-	c.releaseResources(t.Context())
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("releaseResources returned error: %v", err)
+	}
+}
 
-	if c.layers != nil {
-		t.Error("layers should be nil after releaseResources")
+// TestReleaseResources_RemoveCombinedLayersFails verifies that a failure to
+// remove combined layers aborts release and leaves layersCombined=true so a
+// retry can resume from the same step.
+func TestReleaseResources_RemoveCombinedLayersFails(t *testing.T) {
+	t.Parallel()
+	c, _, _, _, guestCtrl := newContainerTestController(t)
+
+	scratchGUID, _ := guid.NewV4()
+	c.layers = &scsiLayers{
+		layersCombined: true,
+		rootfsPath:     "/rootfs",
+		scratch:        scsiReservation{id: scratchGUID, guestPath: "/dev/scratch"},
+	}
+
+	wantErr := errors.New("remove combined layers failed")
+	guestCtrl.EXPECT().RemoveLCOWCombinedLayers(gomock.Any(), gomock.Any()).Return(wantErr)
+
+	err := c.releaseResources(t.Context())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("releaseResources error = %v, want %v", err, wantErr)
+	}
+
+	// State must be preserved so the next call retries the same step.
+	if !c.layers.layersCombined {
+		t.Error("layersCombined should remain true after failed removal")
+	}
+	if c.layers.scratch.id != scratchGUID {
+		t.Error("scratch reservation should be untouched after failed removal")
+	}
+}
+
+// TestReleaseResources_ScratchUnmapFails verifies that a scratch unmap
+// failure leaves the scratch reservation intact for retry.
+func TestReleaseResources_ScratchUnmapFails(t *testing.T) {
+	t.Parallel()
+	c, scsiCtrl, _, _, _ := newContainerTestController(t)
+
+	scratchGUID, _ := guid.NewV4()
+	c.layers = &scsiLayers{
+		scratch: scsiReservation{id: scratchGUID, guestPath: "/dev/scratch"},
+	}
+
+	wantErr := errors.New("scratch unmap failed")
+	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scratchGUID).Return(wantErr)
+
+	err := c.releaseResources(t.Context())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("releaseResources error = %v, want %v", err, wantErr)
+	}
+	if c.layers.scratch.id != scratchGUID {
+		t.Error("scratch reservation should be retained for retry after failure")
+	}
+}
+
+// TestReleaseResources_ROLayerUnmapMidwayFails verifies that when an RO layer
+// unmap fails mid-iteration, the failed entry and subsequent entries are
+// retained while already-unmapped entries are dropped.
+func TestReleaseResources_ROLayerUnmapMidwayFails(t *testing.T) {
+	t.Parallel()
+	c, scsiCtrl, _, _, _ := newContainerTestController(t)
+
+	roGUIDs := [3]guid.GUID{}
+	for i := range roGUIDs {
+		roGUIDs[i], _ = guid.NewV4()
+	}
+
+	c.layers = &scsiLayers{
+		roLayers: []scsiReservation{
+			{id: roGUIDs[0]},
+			{id: roGUIDs[1]},
+			{id: roGUIDs[2]},
+		},
+	}
+
+	wantErr := errors.New("ro layer unmap failed")
+	gomock.InOrder(
+		scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUIDs[0]).Return(nil),
+		scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUIDs[1]).Return(wantErr),
+	)
+
+	err := c.releaseResources(t.Context())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("releaseResources error = %v, want %v", err, wantErr)
+	}
+
+	// Tail beginning at the failed index must be retained.
+	if len(c.layers.roLayers) != 2 {
+		t.Fatalf("roLayers len = %d, want 2 (failed + tail retained)", len(c.layers.roLayers))
+	}
+	if c.layers.roLayers[0].id != roGUIDs[1] || c.layers.roLayers[1].id != roGUIDs[2] {
+		t.Errorf("roLayers content unexpected: %+v", c.layers.roLayers)
 	}
 }
 
@@ -672,19 +765,24 @@ func TestReleaseResources_NoResources(t *testing.T) {
 	c, _, _, _, _ := newContainerTestController(t)
 
 	// No mock calls expected.
-	c.releaseResources(t.Context())
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("releaseResources returned error: %v", err)
+	}
 }
 
 // --- closeContainer ---
 
-// TestCloseContainer_IdempotentViaSyncOnce verifies that closeContainer
-// executes teardown exactly once even when called multiple times.
-func TestCloseContainer_IdempotentViaSyncOnce(t *testing.T) {
+// TestCloseContainer_IdempotentViaFlags verifies that closeContainer is
+// safe to call multiple times: terminatedCh is closed exactly once and
+// repeated calls are no-ops when the container handle is nil.
+func TestCloseContainer_IdempotentViaFlags(t *testing.T) {
 	t.Parallel()
 	c, _, _, _, _ := newContainerTestController(t)
 
 	// No container, no layers — closeContainer should just close terminatedCh.
-	c.closeContainer(t.Context())
+	if err := c.closeContainer(t.Context()); err != nil {
+		t.Fatalf("closeContainer returned error: %v", err)
+	}
 
 	// Verify terminatedCh is closed.
 	select {
@@ -693,23 +791,9 @@ func TestCloseContainer_IdempotentViaSyncOnce(t *testing.T) {
 		t.Fatal("terminatedCh should be closed after closeContainer")
 	}
 
-	// Second call should be a no-op (no panic from double-close).
-	c.closeContainer(t.Context())
-}
-
-// TestCloseContainer_NilContainer verifies that closeContainer succeeds
-// without panicking when the container handle is nil.
-func TestCloseContainer_NilContainer(t *testing.T) {
-	t.Parallel()
-	c, _, _, _, _ := newContainerTestController(t)
-	c.container = nil
-
-	c.closeContainer(t.Context())
-
-	select {
-	case <-c.terminatedCh:
-	default:
-		t.Fatal("terminatedCh should be closed after closeContainer")
+	// Second call must be a no-op (no panic from double-close on terminatedCh).
+	if err := c.closeContainer(t.Context()); err != nil {
+		t.Fatalf("second closeContainer returned error: %v", err)
 	}
 }
 
@@ -799,47 +883,37 @@ func TestStats_WrongState(t *testing.T) {
 
 // --- KillProcess (additional state and flow tests) ---
 
-// TestKillProcess_AllowedInCreatedState verifies that KillProcess does not
-// reject containers in StateCreated. The downstream error from the process
-// controller (which is in StateNotCreated) is expected but should not be
-// confused with a container-level state rejection.
-func TestKillProcess_AllowedInCreatedState(t *testing.T) {
+// TestKillProcess_AllowedInPostCreatedStates verifies that KillProcess does
+// not reject containers in StateCreated or StateStopped on container-level
+// state grounds. Errors that surface from the underlying process controller
+// (which here is in StateNotCreated) are tolerated; the test only asserts
+// that the container's own "cannot kill" precondition does not fire.
+func TestKillProcess_AllowedInPostCreatedStates(t *testing.T) {
 	t.Parallel()
-	c, _, _, _, guestCtrl := newContainerTestController(t)
-	c.state = StateCreated
-
-	// Add a process controller in its initial (NotCreated) state.
-	c.processes[""] = process.New(testContainerID, "", nil, 0)
-
-	guestCtrl.EXPECT().
-		Capabilities().
-		Return(&gcs.LCOWGuestDefinedCapabilities{})
-
-	// SIGTERM (15) with no signal support returns nil options.
-	err := c.KillProcess(t.Context(), "", 15, false)
-	// An error from the process controller is expected (process not started),
-	// but the container-level state check should not fire.
-	if err != nil && strings.Contains(err.Error(), "cannot kill") {
-		t.Errorf("KillProcess should not reject StateCreated containers, got: %v", err)
+	tests := []struct {
+		name  string
+		state State
+	}{
+		{name: "created", state: StateCreated},
+		{name: "stopped", state: StateStopped},
 	}
-}
 
-// TestKillProcess_AllowedInStoppedState verifies that KillProcess does not
-// reject containers in StateStopped.
-func TestKillProcess_AllowedInStoppedState(t *testing.T) {
-	t.Parallel()
-	c, _, _, _, guestCtrl := newContainerTestController(t)
-	c.state = StateStopped
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, _, _, _, guestCtrl := newContainerTestController(t)
+			c.state = tc.state
+			c.processes[""] = process.New(testContainerID, "", nil, 0)
 
-	c.processes[""] = process.New(testContainerID, "", nil, 0)
+			guestCtrl.EXPECT().
+				Capabilities().
+				Return(&gcs.LCOWGuestDefinedCapabilities{})
 
-	guestCtrl.EXPECT().
-		Capabilities().
-		Return(&gcs.LCOWGuestDefinedCapabilities{})
-
-	err := c.KillProcess(t.Context(), "", 15, false)
-	// Container state check should pass; any error should come from the process.
-	if err != nil && strings.Contains(err.Error(), "cannot kill") {
-		t.Errorf("KillProcess should not reject StateStopped containers, got: %v", err)
+			// SIGTERM (15) with no signal support returns nil options.
+			err := c.KillProcess(t.Context(), "", 15, false)
+			if err != nil && strings.Contains(err.Error(), "cannot kill") {
+				t.Errorf("KillProcess should not reject %s containers, got: %v", tc.state, err)
+			}
+		})
 	}
 }

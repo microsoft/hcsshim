@@ -9,11 +9,13 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/Microsoft/hcsshim/internal/controller/linuxcontainer"
-	"github.com/Microsoft/hcsshim/internal/controller/network"
 	"github.com/Microsoft/hcsshim/internal/controller/pod/mocks"
 )
 
-const testPodID = "test-pod-1234"
+const (
+	testPodID            = "test-pod-1234"
+	testNetworkNamespace = "ns-1234"
+)
 
 // errTest is a sentinel used in table-driven tests to verify error propagation.
 var errTest = errors.New("test error")
@@ -50,9 +52,9 @@ func expectVMCallsForNewContainer(vm *mocks.MockvmController) {
 func TestNew_InitializesFields(t *testing.T) {
 	mc := gomock.NewController(t)
 	vm := mocks.NewMockvmController(mc)
-	vm.EXPECT().NetworkController().Return(nil)
+	vm.EXPECT().NetworkController(testNetworkNamespace).Return(nil)
 
-	c := New(testPodID, vm)
+	c := New(testPodID, testNetworkNamespace, vm)
 
 	if c.podID != testPodID {
 		t.Errorf("expected podID=%q, got %q", testPodID, c.podID)
@@ -70,8 +72,6 @@ func TestNew_InitializesFields(t *testing.T) {
 
 // TestSetupNetwork verifies that SetupNetwork delegates to the network controller.
 func TestSetupNetwork(t *testing.T) {
-	opts := &network.SetupOptions{NetworkNamespace: "ns-1234"}
-
 	tests := []struct {
 		name   string
 		retErr error
@@ -82,9 +82,9 @@ func TestSetupNetwork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, net, c := newSetup(t)
-			net.EXPECT().Setup(gomock.Any(), opts).Return(tt.retErr)
+			net.EXPECT().Setup(gomock.Any()).Return(tt.retErr)
 
-			err := c.SetupNetwork(t.Context(), opts)
+			err := c.SetupNetwork(t.Context())
 			if !errors.Is(err, tt.retErr) {
 				t.Errorf("SetupNetwork() error = %v, wantErr %v", err, tt.retErr)
 			}

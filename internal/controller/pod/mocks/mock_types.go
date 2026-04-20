@@ -62,17 +62,17 @@ func (mr *MockvmControllerMockRecorder) Guest() *gomock.Call {
 }
 
 // NetworkController mocks base method.
-func (m *MockvmController) NetworkController() *network.Controller {
+func (m *MockvmController) NetworkController(networkNamespaceID string) *network.Controller {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NetworkController")
+	ret := m.ctrl.Call(m, "NetworkController", networkNamespaceID)
 	ret0, _ := ret[0].(*network.Controller)
 	return ret0
 }
 
 // NetworkController indicates an expected call of NetworkController.
-func (mr *MockvmControllerMockRecorder) NetworkController() *gomock.Call {
+func (mr *MockvmControllerMockRecorder) NetworkController(networkNamespaceID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkController", reflect.TypeOf((*MockvmController)(nil).NetworkController))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkController", reflect.TypeOf((*MockvmController)(nil).NetworkController), networkNamespaceID)
 }
 
 // Plan9Controller mocks base method.
@@ -156,17 +156,17 @@ func (m *MocknetworkController) EXPECT() *MocknetworkControllerMockRecorder {
 }
 
 // Setup mocks base method.
-func (m *MocknetworkController) Setup(ctx context.Context, opts *network.SetupOptions) error {
+func (m *MocknetworkController) Setup(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Setup", ctx, opts)
+	ret := m.ctrl.Call(m, "Setup", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Setup indicates an expected call of Setup.
-func (mr *MocknetworkControllerMockRecorder) Setup(ctx, opts any) *gomock.Call {
+func (mr *MocknetworkControllerMockRecorder) Setup(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MocknetworkController)(nil).Setup), ctx, opts)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MocknetworkController)(nil).Setup), ctx)
 }
 
 // Teardown mocks base method.

@@ -79,7 +79,6 @@ func legacyLayerFolders(parentPaths []string, scratchDir string) []string {
 // TestAllocateLayers_SingleReadOnlyLayer verifies the full Reserve → MapToGuest
 // → CombineLayers flow for a container with one read-only layer and a scratch.
 func TestAllocateLayers_SingleReadOnlyLayer(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -142,7 +141,6 @@ func TestAllocateLayers_SingleReadOnlyLayer(t *testing.T) {
 // TestAllocateLayers_MultipleReadOnlyLayers verifies that multiple read-only
 // layers are each reserved, mapped, and passed to CombineLayers in order.
 func TestAllocateLayers_MultipleReadOnlyLayers(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -203,7 +201,6 @@ func TestAllocateLayers_MultipleReadOnlyLayers(t *testing.T) {
 // TestAllocateLayers_ScratchEncryption verifies that when scratch encryption is
 // enabled, the scratch disk is reserved with xfs and the encrypted flag set.
 func TestAllocateLayers_ScratchEncryption(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -252,7 +249,6 @@ func TestAllocateLayers_ScratchEncryption(t *testing.T) {
 // TestAllocateLayers_ResolvePathFailure verifies that a resolvePath failure on
 // a read-only layer propagates the error.
 func TestAllocateLayers_ResolvePathFailure(t *testing.T) {
-	t.Parallel()
 	stubGrantVMAccess(t)
 
 	orig := resolvePath
@@ -274,7 +270,6 @@ func TestAllocateLayers_ResolvePathFailure(t *testing.T) {
 // TestAllocateLayers_ROLayerReserveFailure verifies that a SCSI Reserve failure
 // for a read-only layer propagates the error.
 func TestAllocateLayers_ROLayerReserveFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -297,7 +292,6 @@ func TestAllocateLayers_ROLayerReserveFailure(t *testing.T) {
 // TestAllocateLayers_ROLayerMapToGuestFailure verifies that a MapToGuest
 // failure for a read-only layer propagates the error.
 func TestAllocateLayers_ROLayerMapToGuestFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -324,7 +318,6 @@ func TestAllocateLayers_ROLayerMapToGuestFailure(t *testing.T) {
 // TestAllocateLayers_GrantVMAccessFailure verifies that a grantVMAccess failure
 // on the scratch layer propagates the error.
 func TestAllocateLayers_GrantVMAccessFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 
 	orig := grantVMAccess
@@ -356,7 +349,6 @@ func TestAllocateLayers_GrantVMAccessFailure(t *testing.T) {
 // TestAllocateLayers_ScratchReserveFailure verifies that a SCSI Reserve failure
 // on the scratch layer propagates the error.
 func TestAllocateLayers_ScratchReserveFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -390,7 +382,6 @@ func TestAllocateLayers_ScratchReserveFailure(t *testing.T) {
 // TestAllocateLayers_ScratchMapToGuestFailure verifies that a MapToGuest
 // failure on the scratch layer propagates the error.
 func TestAllocateLayers_ScratchMapToGuestFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -429,7 +420,6 @@ func TestAllocateLayers_ScratchMapToGuestFailure(t *testing.T) {
 // AddLCOWCombinedLayers failure propagates the error and layersCombined remains
 // false.
 func TestAllocateLayers_CombineLayersFailure(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -475,7 +465,6 @@ func TestAllocateLayers_CombineLayersFailure(t *testing.T) {
 // TestAllocateLayers_ScratchResolvePathFailure verifies that a resolvePath
 // failure on the scratch VHD propagates the error.
 func TestAllocateLayers_ScratchResolvePathFailure(t *testing.T) {
-	t.Parallel()
 	stubGrantVMAccess(t)
 
 	callCount := 0
@@ -515,7 +504,6 @@ func TestAllocateLayers_ScratchResolvePathFailure(t *testing.T) {
 // TestAllocateLayers_RootfsMount verifies allocateLayers works with a rootfs
 // mount instead of legacy layer folders.
 func TestAllocateLayers_RootfsMount(t *testing.T) {
-	t.Parallel()
 	stubResolvePath(t)
 	stubGrantVMAccess(t)
 
@@ -569,7 +557,6 @@ func TestAllocateLayers_RootfsMount(t *testing.T) {
 // TestAllocateLayers_InvalidLayerFolders verifies that allocateLayers returns
 // an error when both rootfs and layerFolders are empty.
 func TestAllocateLayers_InvalidLayerFolders(t *testing.T) {
-	t.Parallel()
 	c, _, _ := newLayersTestController(t)
 
 	err := c.allocateLayers(t.Context(), nil, nil, false)

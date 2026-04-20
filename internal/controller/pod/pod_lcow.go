@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/controller/linuxcontainer"
-	"github.com/Microsoft/hcsshim/internal/controller/network"
 )
 
 // Controller manages the lifecycle of a single pod inside a Utility VM.
@@ -36,6 +35,7 @@ type Controller struct {
 // New creates a ready-to-use [Controller] for the given pod.
 func New(
 	podID string,
+	networkNamespaceID string,
 	vm vmController,
 ) *Controller {
 	return &Controller{
@@ -44,14 +44,14 @@ func New(
 		// the primary ID while GCS continues to use the original one.
 		gcsPodID:   podID,
 		vm:         vm,
-		network:    vm.NetworkController(),
+		network:    vm.NetworkController(networkNamespaceID),
 		containers: make(map[string]*linuxcontainer.Controller),
 	}
 }
 
 // SetupNetwork performs network setup for the pod.
-func (c *Controller) SetupNetwork(ctx context.Context, opts *network.SetupOptions) error {
-	if err := c.network.Setup(ctx, opts); err != nil {
+func (c *Controller) SetupNetwork(ctx context.Context) error {
+	if err := c.network.Setup(ctx); err != nil {
 		return fmt.Errorf("setup network for pod %s: %w", c.podID, err)
 	}
 	return nil

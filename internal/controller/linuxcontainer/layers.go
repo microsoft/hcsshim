@@ -51,6 +51,7 @@ func (c *Controller) allocateLayers(
 	log.G(ctx).Debug("allocating container layers")
 
 	// Parse the rootfs mounts and layer folders into the canonical LCOW layer format.
+	// todo: containerd snapshotter only assigns containerdtypes.Mount and should not support layerFolders.
 	lcowLayers, err := layers.ParseLCOWLayers(rootfs, layerFolders)
 	if err != nil {
 		return fmt.Errorf("parse lcow layers: %w", err)
@@ -80,12 +81,16 @@ func (c *Controller) allocateLayers(
 			return fmt.Errorf("reserve scsi slot for layer %s: %w", roLayer.VHDPath, err)
 		}
 
+		// Store the reservation so that we can unwind in case of errors.
+		c.layers.roLayers = append(c.layers.roLayers, scsiReservation{id: reservationID})
+
 		guestPath, err := c.scsi.MapToGuest(ctx, reservationID)
 		if err != nil {
 			return fmt.Errorf("map layer %s to guest: %w", roLayer.VHDPath, err)
 		}
 
-		c.layers.roLayers = append(c.layers.roLayers, scsiReservation{id: reservationID, guestPath: guestPath})
+		// Set the guest path on the stored reservation.
+		c.layers.roLayers[len(c.layers.roLayers)-1].guestPath = guestPath
 	}
 
 	// Reserve and map the writable scratch layer.
@@ -121,6 +126,9 @@ func (c *Controller) allocateLayers(
 		return fmt.Errorf("reserve scsi slot for scratch %s: %w", lcowLayers.ScratchVHDPath, err)
 	}
 
+	// Store the reservation so that we can unwind in case of errors.
+	c.layers.scratch = scsiReservation{id: scratchID}
+
 	scratchMountPath, err := c.scsi.MapToGuest(ctx, scratchID)
 	if err != nil {
 		return fmt.Errorf("map scratch to guest: %w", err)
@@ -128,10 +136,7 @@ func (c *Controller) allocateLayers(
 
 	// When sharing a scratch disk across multiple containers, derive a unique
 	// sub-path per container to prevent upper/work directory collisions.
-	c.layers.scratch = scsiReservation{
-		id:        scratchID,
-		guestPath: ospath.Join("linux", scratchMountPath, "scratch", c.gcsPodID, c.gcsContainerID),
-	}
+	c.layers.scratch.guestPath = ospath.Join("linux", scratchMountPath, "scratch", c.gcsPodID, c.gcsContainerID)
 	c.layers.rootfsPath = ospath.Join("linux", guestpath.LCOWV2RootPrefixInVM, c.gcsPodID, c.gcsContainerID, guestpath.RootfsPath)
 
 	// Combine the mapped layers as the final step.
