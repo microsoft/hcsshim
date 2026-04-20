@@ -24,15 +24,24 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// FinalizeAction specifies the action to take on the sandbox during finalization.
+// FinalizeAction specifies the action to take on the sandbox during
+// finalization. The concrete meaning depends on whether the call is made
+// on the source or the destination — see the FinalizeSandbox RPC docs.
 type FinalizeAction int32
 
 const (
-	// No action specified; the server should treat this as an error or use a default.
+	// No action specified. Servers should treat this as an error rather
+	// than silently picking a default, since the wrong choice can either
+	// destroy a running VM or leak a stopped one.
 	FinalizeAction_FINALIZE_ACTION_UNSPECIFIED FinalizeAction = 0
-	// Stop and clean up the sandbox.
+	// Stop and clean up the sandbox on this side. On the source this is
+	// used after a successful migration; on the destination this is used
+	// when the migration was cancelled or failed.
 	FinalizeAction_FINALIZE_ACTION_STOP FinalizeAction = 1
-	// Resume the sandbox (used on the destination to start running, or on the source to rollback).
+	// Resume the sandbox on this side. On the destination this completes
+	// a successful migration by bringing the migrated VM back to a
+	// running state; on the source this is used to roll back when the
+	// migration was cancelled or failed.
 	FinalizeAction_FINALIZE_ACTION_RESUME FinalizeAction = 2
 )
 
@@ -79,9 +88,13 @@ func (FinalizeAction) EnumDescriptor() ([]byte, []int) {
 
 type PrepareAndExportSandboxRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Idempotency key for the migration session (stable across retries).
+	// Identifier for the migration session. The same session_id is used on
+	// both source and destination for the lifetime of this LM and is what
+	// ties subsequent calls (TransferSandbox, FinalizeSandbox, etc.) back
+	// to this sandbox.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Options for initializing the live migration on the source.
+	// Source-side options that control how live migration is initialized
+	// on the compute system.
 	InitOptions   *MigrationInitializeOptions `protobuf:"bytes,2,opt,name=init_options,json=initOptions,proto3" json:"init_options,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -133,7 +146,10 @@ func (x *PrepareAndExportSandboxRequest) GetInitOptions() *MigrationInitializeOp
 
 type PrepareAndExportSandboxResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// An opaque config that should be set in the CreateSandbox input on the destination.
+	// Opaque, serialized snapshot of the source shim's view of the sandbox
+	// and its containers. The caller must forward this verbatim as the
+	// `config` field of ImportSandboxRequest on the destination; only the
+	// destination shim knows how to decode it.
 	Config        *anypb.Any `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -178,10 +194,12 @@ func (x *PrepareAndExportSandboxResponse) GetConfig() *anypb.Any {
 
 type ImportSandboxRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Idempotency key for the migration session (must match the key used on the source).
+	// Identifier for the migration session. Must match the session_id used
+	// on the source for this LM.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Opaque config produced by PrepareAndExportSandbox on the source. Forwarded
-	// verbatim by the caller; the destination service is responsible for decoding it.
+	// Opaque config produced by PrepareAndExportSandbox on the source.
+	// Forwarded verbatim by the caller; the destination shim is responsible
+	// for decoding and applying it.
 	Config        *anypb.Any `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -269,9 +287,11 @@ func (*ImportSandboxResponse) Descriptor() ([]byte, []int) {
 
 type PrepareSandboxRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Idempotency key for the migration session (must match the key used on the source).
+	// Identifier for the migration session. Must match the session_id used
+	// by ImportSandbox on this destination.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Options for initializing the live migration on the destination.
+	// Destination-side options that control how live migration is
+	// initialized when the HCS compute system is created.
 	InitOptions   *MigrationInitializeOptions `protobuf:"bytes,2,opt,name=init_options,json=initOptions,proto3" json:"init_options,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -359,10 +379,13 @@ func (*PrepareSandboxResponse) Descriptor() ([]byte, []int) {
 
 type TransferSandboxRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Idempotency key for migration session.
+	// Identifier for the migration session. Must match the session_id used
+	// for the rest of this LM on this side.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Max time to wait for socket/connection readiness before declaring TIMEOUT.
-	// If unset, server uses a sensible default (e.g., 10 minutes).
+	// Maximum time to wait for the migration socket / underlying transport
+	// to become ready before the server gives up and reports a TIMEOUT
+	// event on the response stream. If unset, the server applies a sensible
+	// default (e.g. 10 minutes).
 	Timeout       *durationpb.Duration `protobuf:"bytes,2,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -414,15 +437,18 @@ func (x *TransferSandboxRequest) GetTimeout() *durationpb.Duration {
 
 type TransferSandboxResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Increments per message; can be used to dedupe after client restarts.
+	// Monotonically increasing per-message counter on this stream. Useful
+	// for de-duplication if the client reconnects mid-transfer.
 	MessageID uint32 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	// Event-specific message from the migration notification.
+	// Event-specific message describing the current migration notification
+	// (e.g. progress milestone, state change).
 	Event string `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
-	// Populated when event indicates an error or timeout.
+	// Populated when `event` indicates an error or a timeout; empty
+	// otherwise.
 	Error string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	// When the transfer started (according to the server).
+	// Server-side timestamp of when the transfer began.
 	StartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	// When this update was produced.
+	// Server-side timestamp of when this particular update was produced.
 	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -495,9 +521,12 @@ func (x *TransferSandboxResponse) GetUpdateTime() *timestamppb.Timestamp {
 
 type FinalizeSandboxRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Idempotency key for the session (must match the key used in PrepareSandbox).
+	// Identifier for the migration session. Must match the session_id used
+	// for the rest of this LM on this side.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Action to perform on the sandbox at finalize time.
+	// Action the shim should take on the sandbox during finalization. See
+	// FinalizeAction and the FinalizeSandbox RPC documentation for the
+	// per-side semantics of STOP vs. RESUME.
 	Action        FinalizeAction `protobuf:"varint,2,opt,name=action,proto3,enum=FinalizeAction" json:"action,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -585,9 +614,13 @@ func (*FinalizeSandboxResponse) Descriptor() ([]byte, []int) {
 
 type CreateDuplicateSocketRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Idempotency key; must match active LM session.
+	// Identifier for the active LM session. Must match the session_id used
+	// for the rest of this LM on this side.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Serialized WSAProtocolInfo struct (opaque to clients).
+	// Serialized WSAProtocolInfo struct describing the source socket whose
+	// handle should be duplicated into the shim process. The exact layout
+	// is opaque to clients; the shim feeds it directly to WSASocket to
+	// create the duplicate.
 	ProtocolInfo  []byte `protobuf:"bytes,2,opt,name=protocol_info,json=protocolInfo,proto3" json:"protocol_info,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

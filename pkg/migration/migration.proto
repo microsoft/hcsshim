@@ -7,97 +7,217 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "github.com/Microsoft/hcsshim/pkg/migration/migration_options.proto";
 
+// Migration is the ttrpc service exposed by the shim that orchestrates a live
+// migration (LM) of a sandbox (utility VM and its containers) from a SOURCE
+// host to a DESTINATION host.
+//
+// High-level flow (in order):
+//
+//   SOURCE                                  DESTINATION
+//   ------                                  -----------
+//   1. PrepareAndExportSandbox  ─────────►  2. ImportSandbox
+//                                           3. NewTask (per container, repeated)
+//                                           4. PrepareSandbox
+//   5. CreateDuplicateSocket                5. CreateDuplicateSocket
+//   6. TransferSandbox          ◄────────►  6. TransferSandbox
+//   7. FinalizeSandbox                      7. FinalizeSandbox
+//
+// NewTask is part of the existing task service (not this service) and is what
+// the destination uses to attach updated resource paths to the rehydrated
+// shim state produced by ImportSandbox.
 service Migration {
-    // Called on SOURCE. Prepares the sandbox for live migration.
+    // PrepareAndExportSandbox is the FIRST call of a live migration and is
+    // invoked on the SOURCE shim.
+    //
+    // It performs two things:
+    //   1. Calls into HCS to initialize live migration on the underlying
+    //      compute system. After this returns successfully, the utility VM
+    //      is in the "migrating" state and is no longer mutable.
+    //   2. Collects the full in-memory state of the source shim (sandbox
+    //      and container bookkeeping) and returns it as an opaque blob to
+    //      the caller.
+    //
+    // The caller is expected to forward the returned opaque config verbatim
+    // to ImportSandbox on the destination.
     rpc PrepareAndExportSandbox(PrepareAndExportSandboxRequest) returns (PrepareAndExportSandboxResponse);
-    // Called on DESTINATION. Imports the exported sandbox config produced by
-    // PrepareAndExportSandbox on the source.
+
+    // ImportSandbox is the FIRST call made on the DESTINATION shim.
+    //
+    // It consumes the opaque config produced by PrepareAndExportSandbox on
+    // the source and rehydrates the destination shim with that state so that
+    // it mirrors the source's view of the sandbox and its containers.
+    //
+    // ImportSandbox does NOT create any HCS compute system, and
+    // the resource paths embedded in the rehydrated state still refer to
+    // source-host paths. Those paths must be fixed up by issuing a NewTask
+    // call (on the existing task service) for each container. Each NewTask
+    // identifies the corresponding container imported here and supplies the
+    // updated, destination-local resource paths, which the shim then patches
+    // into the rehydrated state.
     rpc ImportSandbox(ImportSandboxRequest) returns (ImportSandboxResponse);
-    // Called on DESTINATION. Prepares the destination sandbox for migration.
+
+    // PrepareSandbox is the SECOND call made on the DESTINATION shim, after
+    // ImportSandbox and after a NewTask has been issued for every container
+    // in the sandbox.
+    //
+    // At this point the shim has a complete, destination-correct view of the
+    // sandbox. PrepareSandbox uses that view to create the HCS compute
+    // system on the destination with the updated resources. The compute
+    // system is created but NOT started; starting happens later, as part of
+    // TransferSandbox.
     rpc PrepareSandbox(PrepareSandboxRequest) returns (PrepareSandboxResponse);
-    // Called on SOURCE AND DESTINATION. Initiates memory transfer, and returns a stream of status updates.
+
+    // TransferSandbox drives the actual memory transfer between source and
+    // destination. It is called on BOTH sides and returns a stream of
+    // progress / status updates so the caller can observe the transfer.
+    //
+    // The stream remains open for the duration of the transfer and emits
+    // TransferSandboxResponse messages as state changes (progress, error,
+    // timeout, completion).
     rpc TransferSandbox(TransferSandboxRequest) returns (stream TransferSandboxResponse);
-    // Called on SOURCE AND DESTINATION. Finalizes live migration and starts or deletes the sandbox.
+
+    // FinalizeSandbox terminates a live migration session. It is called on
+    // BOTH the source and the destination, and the meaning of the action
+    // depends on which side it is being invoked on:
+    //
+    //   SOURCE:
+    //     - STOP   : Migration completed successfully; tear down the source
+    //                compute system and release its resources.
+    //     - RESUME : Migration was cancelled or failed; roll back and
+    //                resume running the VM on the source.
+    //
+    //   DESTINATION:
+    //     - STOP   : Migration was cancelled or failed; discard the
+    //                destination compute system and clean up.
+    //     - RESUME : Migration completed successfully; bring the migrated
+    //                VM back to a running state on the destination.
     rpc FinalizeSandbox(FinalizeSandboxRequest) returns (FinalizeSandboxResponse);
-    // Creates a duplicate socket for the migration transport.
+
+    // CreateDuplicateSocket is called on BOTH the source and destination
+    // shims, after the caller has created the underlying
+    // migration transport sockets on each host. The caller hands the shim
+    // an opaque, serialized WSAProtocolInfo describing one of those sockets,
+    // and the shim uses it to materialize a duplicate handle to that same
+    // socket inside the shim process.
+    //
+    // This must be invoked prior to TransferSandbox on each side, because
+    // TransferSandbox uses the duplicated socket as the migration channel
+    // owned by the shim.
+    //
+    // Duplicating the sockets into the shim decouples the migration
+    // transport from the containerd process lifetime: once the duplicates
+    // exist, the shim alone can drive the migration to completion. This
+    // also provides resiliency — if containerd is interrupted mid-migration,
+    // the duplicated sockets in the shim continue to work and the shim can
+    // finish the live migration on its own.
     rpc CreateDuplicateSocket(CreateDuplicateSocketRequest) returns (CreateDuplicateSocketResponse);
 }
 
 message PrepareAndExportSandboxRequest {
-    // Idempotency key for the migration session (stable across retries).
+    // Identifier for the migration session. The same session_id is used on
+    // both source and destination for the lifetime of this LM and is what
+    // ties subsequent calls (TransferSandbox, FinalizeSandbox, etc.) back
+    // to this sandbox.
     string session_id = 1;
-    // Options for initializing the live migration on the source.
+    // Source-side options that control how live migration is initialized
+    // on the compute system.
     MigrationInitializeOptions init_options = 2;
 }
 
 message PrepareAndExportSandboxResponse {
-    // An opaque config that should be set in the CreateSandbox input on the destination.
+    // Opaque, serialized snapshot of the source shim's view of the sandbox
+    // and its containers. The caller must forward this verbatim as the
+    // `config` field of ImportSandboxRequest on the destination; only the
+    // destination shim knows how to decode it.
     google.protobuf.Any config = 1;
 }
 
 message ImportSandboxRequest {
-    // Idempotency key for the migration session (must match the key used on the source).
+    // Identifier for the migration session. Must match the session_id used
+    // on the source for this LM.
     string session_id = 1;
-    // Opaque config produced by PrepareAndExportSandbox on the source. Forwarded
-    // verbatim by the caller; the destination service is responsible for decoding it.
+    // Opaque config produced by PrepareAndExportSandbox on the source.
+    // Forwarded verbatim by the caller; the destination shim is responsible
+    // for decoding and applying it.
     google.protobuf.Any config = 2;
 }
 
 message ImportSandboxResponse {}
 
 message PrepareSandboxRequest {
-    // Idempotency key for the migration session (must match the key used on the source).
+    // Identifier for the migration session. Must match the session_id used
+    // by ImportSandbox on this destination.
     string session_id = 1;
-    // Options for initializing the live migration on the destination.
+    // Destination-side options that control how live migration is
+    // initialized when the HCS compute system is created.
     MigrationInitializeOptions init_options = 2;
 }
 
 message PrepareSandboxResponse {}
 
 message TransferSandboxRequest {
-    // Idempotency key for migration session.
+    // Identifier for the migration session. Must match the session_id used
+    // for the rest of this LM on this side.
     string session_id = 1;
-    // Max time to wait for socket/connection readiness before declaring TIMEOUT.
-    // If unset, server uses a sensible default (e.g., 10 minutes).
+    // Maximum time to wait for the migration socket / underlying transport
+    // to become ready before the server gives up and reports a TIMEOUT
+    // event on the response stream. If unset, the server applies a sensible
+    // default (e.g. 10 minutes).
     google.protobuf.Duration timeout = 2;
 }
 
 message TransferSandboxResponse {
-    // Increments per message; can be used to dedupe after client restarts.
+    // Monotonically increasing per-message counter on this stream. Useful
+    // for de-duplication if the client reconnects mid-transfer.
     uint32 message_id = 1;
-    // Event-specific message from the migration notification.
+    // Event-specific message describing the current migration notification.
     string event = 2;
-    // Populated when event indicates an error or timeout.
+    // Populated when `event` indicates an error or a timeout; empty
+    // otherwise.
     string error = 3;
-    // When the transfer started (according to the server).
+    // Server-side timestamp of when the transfer began.
     google.protobuf.Timestamp start_time = 4;
-    // When this update was produced.
+    // Server-side timestamp of when this particular update was produced.
     google.protobuf.Timestamp update_time = 5;
 }
 
 message FinalizeSandboxRequest {
-    // Idempotency key for the session (must match the key used in PrepareSandbox).
+    // Identifier for the migration session. Must match the session_id used
+    // for the rest of this LM on this side.
     string session_id = 1;
-    // Action to perform on the sandbox at finalize time.
+    // Action the shim should take on the sandbox during finalization. See
+    // FinalizeAction and the FinalizeSandbox RPC documentation for the
+    // per-side semantics of STOP vs. RESUME.
     FinalizeAction action = 2;
 }
 
-// FinalizeAction specifies the action to take on the sandbox during finalization.
+// FinalizeAction specifies the action to take on the sandbox during
+// finalization. The concrete meaning depends on whether the call is made
+// on the source or the destination — see the FinalizeSandbox RPC docs.
 enum FinalizeAction {
-    // No action specified; the server should treat this as an error or use a default.
+    // No action specified. Servers should treat this as an error.
     FINALIZE_ACTION_UNSPECIFIED = 0;
-    // Stop and clean up the sandbox.
+    // Stop and clean up the sandbox on this side. On the source this is
+    // used after a successful migration; on the destination this is used
+    // when the migration was cancelled or failed.
     FINALIZE_ACTION_STOP = 1;
-    // Resume the sandbox (used on the destination to start running, or on the source to rollback).
+    // Resume the sandbox on this side. On the destination this completes
+    // a successful migration by bringing the migrated VM back to a
+    // running state; on the source this is used to roll back when the
+    // migration was cancelled or failed.
     FINALIZE_ACTION_RESUME = 2;
 }
 
 message FinalizeSandboxResponse {}
 
 message CreateDuplicateSocketRequest {
-    // Idempotency key; must match active LM session.
+    // Identifier for the active LM session. Must match the session_id used
+    // for the rest of this LM on this side.
     string session_id = 1;
-    // Serialized WSAProtocolInfo struct (opaque to clients).
+    // Serialized WSAProtocolInfo struct describing the source socket whose
+    // handle should be duplicated into the shim process. The exact layout
+    // is opaque to clients; the shim feeds it directly to WSASocket to
+    // create the duplicate.
     bytes protocol_info = 2;
 }
 
