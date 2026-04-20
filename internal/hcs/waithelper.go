@@ -54,19 +54,19 @@ func waitForNotification(
 	}
 
 	select {
-	case err, ok := <-expectedChannel:
+	case payload, ok := <-expectedChannel:
 		if !ok {
 			return ErrHandleClose
 		}
-		return err
-	case err, ok := <-channels[hcsNotificationSystemExited]:
+		return payload.err
+	case payload, ok := <-channels[hcsNotificationSystemExited]:
 		if !ok {
 			return ErrHandleClose
 		}
 		// If the expected notification is hcsNotificationSystemExited which of the two selects
 		// chosen is random. Return the raw error if hcsNotificationSystemExited is expected
 		if channels[hcsNotificationSystemExited] == expectedChannel {
-			return err
+			return payload.err
 		}
 		return ErrUnexpectedContainerExit
 	case _, ok := <-channels[hcsNotificationServiceDisconnect]:

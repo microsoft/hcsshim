@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"syscall"
+	"unicode/utf16"
+	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -87,7 +89,18 @@ func (hn hcsNotification) String() string {
 	}
 }
 
-type notificationChannel chan error
+// notificationPayload carries both the error code and the raw EventData
+// string that accompanied the HCS notification. Prior to container-reboot-v2
+// the channel was just `chan error`, which silently discarded the
+// notificationData pointer — so hcsshim couldn't observe the
+// SystemExitStatus JSON (and therefore couldn't see ExitType=Reboot).
+// Callers that only care about err can ignore data.
+type notificationPayload struct {
+	err  error
+	data string
+}
+
+type notificationChannel chan notificationPayload
 
 type notificationWatcherContext struct {
 	channels notificationChannels
@@ -133,9 +146,12 @@ func closeChannels(channels notificationChannels) {
 }
 
 func notificationWatcher(notificationType hcsNotification, callbackNumber uintptr, notificationStatus uintptr, notificationData *uint16) uintptr {
-	var result error
+	var payload notificationPayload
 	if int32(notificationStatus) < 0 {
-		result = interop.Win32FromHresult(notificationStatus)
+		payload.err = interop.Win32FromHresult(notificationStatus)
+	}
+	if notificationData != nil {
+		payload.data = utf16PtrToString(notificationData)
 	}
 
 	callbackMapLock.RLock()
@@ -156,8 +172,27 @@ func notificationWatcher(notificationType hcsNotification, callbackNumber uintpt
 	log.Debug("HCS notification")
 
 	if channel, ok := context.channels[notificationType]; ok {
-		channel <- result
+		channel <- payload
 	}
 
 	return 0
+}
+
+// utf16PtrToString materializes a null-terminated UTF-16 pointer (as the
+// Win32 HCS callback gives us) into a Go string. Returns "" on nil input.
+// Walks the pointer two bytes at a time until it hits NUL; the caller owns
+// neither the pointer nor its backing memory so we must copy immediately.
+func utf16PtrToString(p *uint16) string {
+	if p == nil {
+		return ""
+	}
+	var units []uint16
+	for addr := uintptr(unsafe.Pointer(p)); ; addr += 2 {
+		c := *(*uint16)(unsafe.Pointer(addr))
+		if c == 0 {
+			break
+		}
+		units = append(units, c)
+	}
+	return string(utf16.Decode(units))
 }
