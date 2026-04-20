@@ -96,4 +96,13 @@ type Container interface {
 	WaitError() error
 	// Modify sends a request to modify container resources
 	Modify(ctx context.Context, config interface{}) error
+	// ExitType returns the parsed SystemExitStatus.ExitType string reported by HCS
+	// at compute-system exit — "Reboot", "GracefulExit", "UnexpectedExit", etc.
+	// Empty string before the container has exited (before WaitChannel() closes) or
+	// when HCS did not send a parseable SystemExitStatus JSON payload.
+	//
+	// Container implementations that don't observe HCS exit notifications (fakes,
+	// UVM wrappers, test containers) return "". Callers should treat empty string
+	// as "unknown/not a reboot" and fall back to the previous exit-handling logic.
+	ExitType() string
 }

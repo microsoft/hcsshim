@@ -617,6 +617,13 @@ func (c *JobContainer) WaitError() error {
 	return c.waitError
 }
 
+// ExitType returns "" — job containers don't wrap an HCS compute system and
+// therefore never observe a SystemExitStatus.ExitType notification. Callers
+// treating empty string as "unknown" get the right fallback behavior.
+func (c *JobContainer) ExitType() string {
+	return ""
+}
+
 // Wait synchronously waits for the container to shutdown or terminate. If
 // the container has already exited returns the previous error (if any).
 func (c *JobContainer) Wait() error {

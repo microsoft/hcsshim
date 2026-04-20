@@ -241,6 +241,15 @@ func (c *Container) WaitError() error {
 	return c.waitError
 }
 
+// ExitType returns "" — the guest connection path doesn't observe HCS
+// SystemExitStatus notifications (it talks to the LCOW guest directly), so the
+// cow.Container.ExitType contract of "empty string means unknown/fallback" is
+// the correct behavior here. container-reboot-v2 is Argon-only (process-isolated
+// Windows Server containers) which go through *hcs.System, not *gcs.Container.
+func (c *Container) ExitType() string {
+	return ""
+}
+
 // Wait waits for the container to terminate (or Close to be called, or the
 // guest connection to terminate).
 func (c *Container) Wait() error {
