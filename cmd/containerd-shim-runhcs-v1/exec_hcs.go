@@ -523,7 +523,25 @@ func (he *hcsExec) waitForContainerExit() {
 	select {
 	case <-he.c.WaitChannel():
 		// Container exited first. We need to force the process into the exited
-		// state and cleanup any resources
+		// state and cleanup any resources.
+
+		// container-reboot-v2 Stage 2 observability: surface the ExitType that
+		// *hcs.System.waitBackground parsed out of SystemExitStatus JSON. When
+		// the HCS ExposeRebootNotification + PassExitStatusJson guards are on
+		// and the container ran `shutdown /r`, this logs "Reboot" — which is the
+		// signal Stage 4's handleReboot will key off instead of running the
+		// teardown branch below. At Stage 2 we only observe; the teardown runs
+		// unchanged so the container still dies. Harmless for non-Exited paths
+		// (empty string) and non-Argon paths (*gcs.Container / *JobContainer
+		// ExitType() return "" per cow.Container contract).
+		if exitType := he.c.ExitType(); exitType != "" {
+			log.G(ctx).
+				WithField("tid", he.tid).
+				WithField("eid", he.id).
+				WithField("reboot.exit_type", exitType).
+				Info("reboot-v2: container exited with ExitType (no action; Stage 2)")
+		}
+
 		he.sl.Lock()
 		switch he.state {
 		case shimExecStateCreated:
