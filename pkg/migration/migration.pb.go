@@ -30,9 +30,7 @@ const (
 type FinalizeAction int32
 
 const (
-	// No action specified. Servers should treat this as an error rather
-	// than silently picking a default, since the wrong choice can either
-	// destroy a running VM or leak a stopped one.
+	// No action specified. Servers should treat this as an error.
 	FinalizeAction_FINALIZE_ACTION_UNSPECIFIED FinalizeAction = 0
 	// Stop and clean up the sandbox on this side. On the source this is
 	// used after a successful migration; on the destination this is used
@@ -440,8 +438,7 @@ type TransferSandboxResponse struct {
 	// Monotonically increasing per-message counter on this stream. Useful
 	// for de-duplication if the client reconnects mid-transfer.
 	MessageID uint32 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	// Event-specific message describing the current migration notification
-	// (e.g. progress milestone, state change).
+	// Event-specific message describing the current migration notification.
 	Event string `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
 	// Populated when `event` indicates an error or a timeout; empty
 	// otherwise.
