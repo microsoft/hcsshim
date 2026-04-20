@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,12 +28,10 @@ import (
 )
 
 type System struct {
-	handleLock        sync.RWMutex
-	handle            vmcompute.HcsSystem
-	migrationHandle   computecore.HcsSystem
-	migrationNotifyCh chan string
-	id                string
-	callbackNumber    uintptr
+	handleLock     sync.RWMutex
+	handle         vmcompute.HcsSystem
+	id             string
+	callbackNumber uintptr
 
 	closedWaitOnce sync.Once
 	waitBlock      chan struct{}
@@ -41,6 +40,15 @@ type System struct {
 	os, typ, owner string
 	startTime      time.Time
 	stopTime       time.Time
+
+	// Live Migration specific fields.
+	migrationHandle   computecore.HcsSystem
+	migrationNotifyCh chan string
+	// migrationPinner pins &migrationNotifyCh while it is registered as the
+	// callback context with HCS, so the GC sees the cgo-held uintptr as a
+	// live reference. Unpinned in closeMigrationHandle after HCS guarantees
+	// no further callbacks will fire.
+	migrationPinner runtime.Pinner
 }
 
 var _ cow.Container = &System{}

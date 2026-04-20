@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/computecore"
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/oc"
 
@@ -17,9 +18,6 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 )
-
-// liveMigrationSocketURI is the HCS resource URI for the live migration transport socket.
-const liveMigrationSocketURI = "hcs:/VirtualMachine/LiveMigrationSocket"
 
 // migrationNotificationBufferSize is the capacity of the LM notification channel.
 const migrationNotificationBufferSize = 16
@@ -39,6 +37,11 @@ type MigrationConfig struct {
 var migrationCallback = syscall.NewCallback(migrationCallbackHandler)
 
 // migrationCallbackHandler is invoked by computecore.dll for live migration events.
+// ctx is &computeSystem.migrationNotifyCh, kept alive across the cgo boundary by
+// computeSystem.migrationPinner (unpinned only after HcsCloseComputeSystem has
+// drained any in-flight callbacks). The notification channel is never closed.
+// Skipping the close keeps tear-down trivially safe and removes the only
+// thing that could turn a channel send into a panic.
 func migrationCallbackHandler(eventPtr uintptr, ctx uintptr) uintptr {
 	if eventPtr == 0 || ctx == 0 {
 		return 0
@@ -67,7 +70,7 @@ func migrationCallbackHandler(eventPtr uintptr, ctx uintptr) uintptr {
 	return 0
 }
 
-// openMigrationHandle opens a second computecore handle to the same system and
+// openMigrationHandle opens a computecore handle to the same system and
 // registers a callback for live migration events. It populates
 // computeSystem.migrationHandle and computeSystem.migrationNotifyCh.
 //
@@ -92,8 +95,15 @@ func (computeSystem *System) openMigrationHandle(ctx context.Context) error {
 	// Create the notification channel and store it on the struct.
 	computeSystem.migrationHandle = handle
 	computeSystem.migrationNotifyCh = make(chan string, migrationNotificationBufferSize)
+
+	// Pin the address of the notification channel field so it stays visible
+	// to the GC while HCS holds it as a uintptr callback context. Without
+	// pinning, this would violate cgo's pointer-passing rules.
+	computeSystem.migrationPinner.Pin(&computeSystem.migrationNotifyCh)
+
 	// Register the callback.
 	if err := computecore.HcsSetComputeSystemCallback(ctx, handle, computecore.HcsEventOptionEnableLiveMigrationEvents, uintptr(unsafe.Pointer(&computeSystem.migrationNotifyCh)), migrationCallback); err != nil {
+		computeSystem.migrationPinner.Unpin()
 		computeSystem.migrationNotifyCh = nil
 		computeSystem.migrationHandle = 0
 		computecore.HcsCloseComputeSystem(ctx, handle)
@@ -102,8 +112,8 @@ func (computeSystem *System) openMigrationHandle(ctx context.Context) error {
 	return nil
 }
 
-// closeMigrationHandle unregisters the LM callback, closes the migration handle,
-// and drains the notification channel.
+// closeMigrationHandle unregisters the LM callback and closes the migration
+// handle.
 //
 // The caller MUST hold computeSystem.handleLock.
 func (computeSystem *System) closeMigrationHandle(ctx context.Context) {
@@ -111,18 +121,20 @@ func (computeSystem *System) closeMigrationHandle(ctx context.Context) {
 		return
 	}
 
-	// Unregister callback by passing zeros.
+	// Unregister callback by passing zeros, then close the compute system.
+	// HcsCloseComputeSystem waits for any in-flight callbacks to return, so
+	// after it completes no callback can still be reading the pinned
+	// channel pointer and it is safe to Unpin.
 	_ = computecore.HcsSetComputeSystemCallback(ctx, computeSystem.migrationHandle, computecore.HcsEventOptionNone, 0, 0)
-
-	// Close compute system.
 	computecore.HcsCloseComputeSystem(ctx, computeSystem.migrationHandle)
 	computeSystem.migrationHandle = 0
 
-	// Nullify the handle and notification channel.
-	if computeSystem.migrationNotifyCh != nil {
-		close(computeSystem.migrationNotifyCh)
-		computeSystem.migrationNotifyCh = nil
-	}
+	computeSystem.migrationPinner.Unpin()
+
+	// Drop the channel reference. The channel is intentionally not closed:
+	// consumers signal end-of-stream via the System's context, so a close
+	// would add no information and would only complicate tear-down.
+	computeSystem.migrationNotifyCh = nil
 }
 
 // StartWithMigrationOptions synchronously starts the compute system as a live
@@ -159,7 +171,7 @@ func (computeSystem *System) StartWithMigrationOptions(ctx context.Context, conf
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Attach the live migration socket to the operation.
-	if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, liveMigrationSocketURI, config.Socket); err != nil {
+	if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, resourcepaths.LiveMigrationSocketURI, config.Socket); err != nil {
 		return makeSystemError(computeSystem, operation, err, nil)
 	}
 
@@ -251,7 +263,7 @@ func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, con
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Attach the migration socket to the operation before starting.
-	if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, liveMigrationSocketURI, config.Socket); err != nil {
+	if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, resourcepaths.LiveMigrationSocketURI, config.Socket); err != nil {
 		return makeSystemError(computeSystem, operation, err, nil)
 	}
 

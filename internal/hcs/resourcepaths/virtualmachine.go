@@ -20,4 +20,6 @@ const (
 	VPMemDeviceResourceFormat        string = "VirtualMachine/Devices/VirtualPMem/Devices/%d/Mappings/%d"
 	VSMBShareResourcePath            string = "VirtualMachine/Devices/VirtualSmb/Shares"
 	HvSocketConfigResourceFormat     string = "VirtualMachine/Devices/HvSocket/HvSocketConfig/ServiceTable/%s"
+	// LiveMigrationSocketURI is the HCS resource URI for the live migration transport socket.
+	LiveMigrationSocketURI string = "hcs:/VirtualMachine/LiveMigrationSocket"
 )
