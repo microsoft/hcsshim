@@ -621,7 +621,9 @@ func (ht *hcsTask) waitInitExit() {
 	span.AddAttributes(
 		trace.StringAttribute("tid", ht.id),
 		trace.BoolAttribute("host", ht.host != nil),
-		trace.BoolAttribute("ownsHost", ht.ownsHost))
+		trace.BoolAttribute("ownsHost", ht.ownsHost),
+		// container-reboot-v2 Stage 1 placeholder; Stage 4 flips this when dispatching to handleReboot.
+		trace.BoolAttribute("reboot.pending", false))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()

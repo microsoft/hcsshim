@@ -515,7 +515,9 @@ func (he *hcsExec) waitForContainerExit() {
 	defer span.End()
 	span.AddAttributes(
 		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id))
+		trace.StringAttribute("eid", he.id),
+		// container-reboot-v2 Stage 1 placeholder; Stage 4 flips this when Reboot notification is observed.
+		trace.BoolAttribute("reboot.pending", false))
 
 	// wait for container or process to exit and ckean up resrources
 	select {

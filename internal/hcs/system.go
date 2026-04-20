@@ -279,7 +279,12 @@ func (computeSystem *System) waitBackground() {
 	operation := "hcs::System::waitBackground"
 	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.AddAttributes(
+		trace.StringAttribute("cid", computeSystem.id),
+		// container-reboot-v2 Stage 1 placeholders; Stage 2 populates from SystemExitStatus JSON.
+		trace.StringAttribute("reboot.exit_type", ""),
+		trace.Int64Attribute("reboot.notification_data_bytes", 0),
+	)
 
 	err := waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	if err == nil {
