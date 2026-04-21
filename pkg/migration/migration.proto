@@ -19,8 +19,9 @@ import "github.com/Microsoft/hcsshim/pkg/migration/migration_options.proto";
 //                                           3. NewTask (per container, repeated)
 //                                           4. PrepareSandbox
 //   5. CreateDuplicateSocket                5. CreateDuplicateSocket
-//   6. TransferSandbox          ◄────────►  6. TransferSandbox
-//   7. FinalizeSandbox                      7. FinalizeSandbox
+//   6. Notifications (stream)               6. Notifications (stream)
+//   7. TransferSandbox          ◄────────►  7. TransferSandbox
+//   8. FinalizeSandbox                      8. FinalizeSandbox
 //
 // NewTask is part of the existing task service (not this service) and is what
 // the destination uses to attach updated resource paths to the rehydrated
@@ -68,13 +69,13 @@ service Migration {
     rpc PrepareSandbox(PrepareSandboxRequest) returns (PrepareSandboxResponse);
 
     // TransferSandbox drives the actual memory transfer between source and
-    // destination. It is called on BOTH sides and returns a stream of
-    // progress / status updates so the caller can observe the transfer.
+    // destination. It is called on BOTH sides and blocks until the transfer
+    // either completes, fails, or times out.
     //
-    // The stream remains open for the duration of the transfer and emits
-    // TransferSandboxResponse messages as state changes (progress, error,
-    // timeout, completion).
-    rpc TransferSandbox(TransferSandboxRequest) returns (stream TransferSandboxResponse);
+    // Progress and status updates produced during the transfer are NOT
+    // returned by this RPC. Callers that wish to observe those updates must
+    // separately subscribe via Notifications.
+    rpc TransferSandbox(TransferSandboxRequest) returns (TransferSandboxResponse);
 
     // FinalizeSandbox terminates a live migration session. It is called on
     // BOTH the source and the destination, and the meaning of the action
@@ -92,6 +93,16 @@ service Migration {
     //     - RESUME : Migration completed successfully; bring the migrated
     //                VM back to a running state on the destination.
     rpc FinalizeSandbox(FinalizeSandboxRequest) returns (FinalizeSandboxResponse);
+
+    // Notifications opens a server-streaming subscription to migration
+    // events for this session. It can be called on BOTH the source and
+    // destination shims and will emit NotificationsResponse messages as
+    // the underlying compute system reports state changes (progress,
+    // error, timeout, completion) for the duration of the migration.
+    //
+    // Callers typically open this stream prior to invoking TransferSandbox
+    // so that no notifications are missed while the transfer is in flight.
+    rpc Notifications(NotificationsRequest) returns (stream NotificationsResponse);
 
     // CreateDuplicateSocket is called on BOTH the source and destination
     // shims, after the caller has created the underlying
@@ -160,25 +171,13 @@ message TransferSandboxRequest {
     // for the rest of this LM on this side.
     string session_id = 1;
     // Maximum time to wait for the migration socket / underlying transport
-    // to become ready before the server gives up and reports a TIMEOUT
-    // event on the response stream. If unset, the server applies a sensible
-    // default (e.g. 10 minutes).
+    // to become ready before the server gives up and fails the transfer
+    // with a TIMEOUT. If unset, the server applies a sensible default
+    // (e.g. 10 minutes).
     google.protobuf.Duration timeout = 2;
 }
 
-message TransferSandboxResponse {
-    // Monotonically increasing per-message counter on this stream. Useful
-    // for de-duplication if the client reconnects mid-transfer.
-    uint32 message_id = 1;
-    // Structured notification describing the current migration event. This
-    // mirrors the HCS OperationSystemMigrationNotificationInfo payload
-    // emitted by the underlying compute system as the transfer progresses.
-    MigrationNotification notification = 2;
-    // Server-side timestamp of when the transfer began.
-    google.protobuf.Timestamp start_time = 3;
-    // Server-side timestamp of when this particular update was produced.
-    google.protobuf.Timestamp update_time = 4;
-}
+message TransferSandboxResponse {}
 
 message FinalizeSandboxRequest {
     // Identifier for the migration session. Must match the session_id used
@@ -208,6 +207,26 @@ enum FinalizeAction {
 }
 
 message FinalizeSandboxResponse {}
+
+message NotificationsRequest {
+    // Identifier for the migration session. Must match the session_id used
+    // for the rest of this LM on this side.
+    string session_id = 1;
+}
+
+message NotificationsResponse {
+    // Monotonically increasing per-message counter on this stream. Useful
+    // for de-duplication if the client reconnects mid-transfer.
+    uint32 message_id = 1;
+    // Structured notification describing the current migration event. This
+    // mirrors the HCS OperationSystemMigrationNotificationInfo payload
+    // emitted by the underlying compute system as the transfer progresses.
+    MigrationNotification notification = 2;
+    // Server-side timestamp of when the transfer began.
+    google.protobuf.Timestamp start_time = 3;
+    // Server-side timestamp of when this particular update was produced.
+    google.protobuf.Timestamp update_time = 4;
+}
 
 message CreateDuplicateSocketRequest {
     // Identifier for the active LM session. Must match the session_id used

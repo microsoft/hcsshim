@@ -11,21 +11,22 @@ type MigrationService interface {
 	PrepareAndExportSandbox(context.Context, *PrepareAndExportSandboxRequest) (*PrepareAndExportSandboxResponse, error)
 	ImportSandbox(context.Context, *ImportSandboxRequest) (*ImportSandboxResponse, error)
 	PrepareSandbox(context.Context, *PrepareSandboxRequest) (*PrepareSandboxResponse, error)
-	TransferSandbox(context.Context, *TransferSandboxRequest, Migration_TransferSandboxServer) error
+	TransferSandbox(context.Context, *TransferSandboxRequest) (*TransferSandboxResponse, error)
 	FinalizeSandbox(context.Context, *FinalizeSandboxRequest) (*FinalizeSandboxResponse, error)
+	Notifications(context.Context, *NotificationsRequest, Migration_NotificationsServer) error
 	CreateDuplicateSocket(context.Context, *CreateDuplicateSocketRequest) (*CreateDuplicateSocketResponse, error)
 }
 
-type Migration_TransferSandboxServer interface {
-	Send(*TransferSandboxResponse) error
+type Migration_NotificationsServer interface {
+	Send(*NotificationsResponse) error
 	ttrpc.StreamServer
 }
 
-type migrationTransferSandboxServer struct {
+type migrationNotificationsServer struct {
 	ttrpc.StreamServer
 }
 
-func (x *migrationTransferSandboxServer) Send(m *TransferSandboxResponse) error {
+func (x *migrationNotificationsServer) Send(m *NotificationsResponse) error {
 	return x.StreamServer.SendMsg(m)
 }
 
@@ -53,6 +54,13 @@ func RegisterMigrationService(srv *ttrpc.Server, svc MigrationService) {
 				}
 				return svc.PrepareSandbox(ctx, &req)
 			},
+			"TransferSandbox": func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
+				var req TransferSandboxRequest
+				if err := unmarshal(&req); err != nil {
+					return nil, err
+				}
+				return svc.TransferSandbox(ctx, &req)
+			},
 			"FinalizeSandbox": func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
 				var req FinalizeSandboxRequest
 				if err := unmarshal(&req); err != nil {
@@ -69,13 +77,13 @@ func RegisterMigrationService(srv *ttrpc.Server, svc MigrationService) {
 			},
 		},
 		Streams: map[string]ttrpc.Stream{
-			"TransferSandbox": {
+			"Notifications": {
 				Handler: func(ctx context.Context, stream ttrpc.StreamServer) (interface{}, error) {
-					m := new(TransferSandboxRequest)
+					m := new(NotificationsRequest)
 					if err := stream.RecvMsg(m); err != nil {
 						return nil, err
 					}
-					return nil, svc.TransferSandbox(ctx, m, &migrationTransferSandboxServer{stream})
+					return nil, svc.Notifications(ctx, m, &migrationNotificationsServer{stream})
 				},
 				StreamingClient: false,
 				StreamingServer: true,
@@ -88,8 +96,9 @@ type MigrationClient interface {
 	PrepareAndExportSandbox(context.Context, *PrepareAndExportSandboxRequest) (*PrepareAndExportSandboxResponse, error)
 	ImportSandbox(context.Context, *ImportSandboxRequest) (*ImportSandboxResponse, error)
 	PrepareSandbox(context.Context, *PrepareSandboxRequest) (*PrepareSandboxResponse, error)
-	TransferSandbox(context.Context, *TransferSandboxRequest) (Migration_TransferSandboxClient, error)
+	TransferSandbox(context.Context, *TransferSandboxRequest) (*TransferSandboxResponse, error)
 	FinalizeSandbox(context.Context, *FinalizeSandboxRequest) (*FinalizeSandboxResponse, error)
+	Notifications(context.Context, *NotificationsRequest) (Migration_NotificationsClient, error)
 	CreateDuplicateSocket(context.Context, *CreateDuplicateSocketRequest) (*CreateDuplicateSocketResponse, error)
 }
 
@@ -127,33 +136,12 @@ func (c *migrationClient) PrepareSandbox(ctx context.Context, req *PrepareSandbo
 	return &resp, nil
 }
 
-func (c *migrationClient) TransferSandbox(ctx context.Context, req *TransferSandboxRequest) (Migration_TransferSandboxClient, error) {
-	stream, err := c.client.NewStream(ctx, &ttrpc.StreamDesc{
-		StreamingClient: false,
-		StreamingServer: true,
-	}, "Migration", "TransferSandbox", req)
-	if err != nil {
+func (c *migrationClient) TransferSandbox(ctx context.Context, req *TransferSandboxRequest) (*TransferSandboxResponse, error) {
+	var resp TransferSandboxResponse
+	if err := c.client.Call(ctx, "Migration", "TransferSandbox", req, &resp); err != nil {
 		return nil, err
 	}
-	x := &migrationTransferSandboxClient{stream}
-	return x, nil
-}
-
-type Migration_TransferSandboxClient interface {
-	Recv() (*TransferSandboxResponse, error)
-	ttrpc.ClientStream
-}
-
-type migrationTransferSandboxClient struct {
-	ttrpc.ClientStream
-}
-
-func (x *migrationTransferSandboxClient) Recv() (*TransferSandboxResponse, error) {
-	m := new(TransferSandboxResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	return &resp, nil
 }
 
 func (c *migrationClient) FinalizeSandbox(ctx context.Context, req *FinalizeSandboxRequest) (*FinalizeSandboxResponse, error) {
@@ -162,6 +150,35 @@ func (c *migrationClient) FinalizeSandbox(ctx context.Context, req *FinalizeSand
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (c *migrationClient) Notifications(ctx context.Context, req *NotificationsRequest) (Migration_NotificationsClient, error) {
+	stream, err := c.client.NewStream(ctx, &ttrpc.StreamDesc{
+		StreamingClient: false,
+		StreamingServer: true,
+	}, "Migration", "Notifications", req)
+	if err != nil {
+		return nil, err
+	}
+	x := &migrationNotificationsClient{stream}
+	return x, nil
+}
+
+type Migration_NotificationsClient interface {
+	Recv() (*NotificationsResponse, error)
+	ttrpc.ClientStream
+}
+
+type migrationNotificationsClient struct {
+	ttrpc.ClientStream
+}
+
+func (x *migrationNotificationsClient) Recv() (*NotificationsResponse, error) {
+	m := new(NotificationsResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *migrationClient) CreateDuplicateSocket(ctx context.Context, req *CreateDuplicateSocketRequest) (*CreateDuplicateSocketResponse, error) {

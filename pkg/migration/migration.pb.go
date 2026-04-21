@@ -381,9 +381,9 @@ type TransferSandboxRequest struct {
 	// for the rest of this LM on this side.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// Maximum time to wait for the migration socket / underlying transport
-	// to become ready before the server gives up and reports a TIMEOUT
-	// event on the response stream. If unset, the server applies a sensible
-	// default (e.g. 10 minutes).
+	// to become ready before the server gives up and fails the transfer
+	// with a TIMEOUT. If unset, the server applies a sensible default
+	// (e.g. 10 minutes).
 	Timeout       *durationpb.Duration `protobuf:"bytes,2,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -434,18 +434,7 @@ func (x *TransferSandboxRequest) GetTimeout() *durationpb.Duration {
 }
 
 type TransferSandboxResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Monotonically increasing per-message counter on this stream. Useful
-	// for de-duplication if the client reconnects mid-transfer.
-	MessageID uint32 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	// Structured notification describing the current migration event. This
-	// mirrors the HCS OperationSystemMigrationNotificationInfo payload
-	// emitted by the underlying compute system as the transfer progresses.
-	Notification *MigrationNotification `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
-	// Server-side timestamp of when the transfer began.
-	StartTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	// Server-side timestamp of when this particular update was produced.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -478,34 +467,6 @@ func (x *TransferSandboxResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use TransferSandboxResponse.ProtoReflect.Descriptor instead.
 func (*TransferSandboxResponse) Descriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *TransferSandboxResponse) GetMessageID() uint32 {
-	if x != nil {
-		return x.MessageID
-	}
-	return 0
-}
-
-func (x *TransferSandboxResponse) GetNotification() *MigrationNotification {
-	if x != nil {
-		return x.Notification
-	}
-	return nil
-}
-
-func (x *TransferSandboxResponse) GetStartTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.StartTime
-	}
-	return nil
-}
-
-func (x *TransferSandboxResponse) GetUpdateTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.UpdateTime
-	}
-	return nil
 }
 
 type FinalizeSandboxRequest struct {
@@ -601,6 +562,127 @@ func (*FinalizeSandboxResponse) Descriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{9}
 }
 
+type NotificationsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Identifier for the migration session. Must match the session_id used
+	// for the rest of this LM on this side.
+	SessionID     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NotificationsRequest) Reset() {
+	*x = NotificationsRequest{}
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NotificationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NotificationsRequest) ProtoMessage() {}
+
+func (x *NotificationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NotificationsRequest.ProtoReflect.Descriptor instead.
+func (*NotificationsRequest) Descriptor() ([]byte, []int) {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *NotificationsRequest) GetSessionID() string {
+	if x != nil {
+		return x.SessionID
+	}
+	return ""
+}
+
+type NotificationsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Monotonically increasing per-message counter on this stream. Useful
+	// for de-duplication if the client reconnects mid-transfer.
+	MessageID uint32 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// Structured notification describing the current migration event. This
+	// mirrors the HCS OperationSystemMigrationNotificationInfo payload
+	// emitted by the underlying compute system as the transfer progresses.
+	Notification *MigrationNotification `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
+	// Server-side timestamp of when the transfer began.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// Server-side timestamp of when this particular update was produced.
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NotificationsResponse) Reset() {
+	*x = NotificationsResponse{}
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NotificationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NotificationsResponse) ProtoMessage() {}
+
+func (x *NotificationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NotificationsResponse.ProtoReflect.Descriptor instead.
+func (*NotificationsResponse) Descriptor() ([]byte, []int) {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *NotificationsResponse) GetMessageID() uint32 {
+	if x != nil {
+		return x.MessageID
+	}
+	return 0
+}
+
+func (x *NotificationsResponse) GetNotification() *MigrationNotification {
+	if x != nil {
+		return x.Notification
+	}
+	return nil
+}
+
+func (x *NotificationsResponse) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *NotificationsResponse) GetUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdateTime
+	}
+	return nil
+}
+
 type CreateDuplicateSocketRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Identifier for the active LM session. Must match the session_id used
@@ -617,7 +699,7 @@ type CreateDuplicateSocketRequest struct {
 
 func (x *CreateDuplicateSocketRequest) Reset() {
 	*x = CreateDuplicateSocketRequest{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[10]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -629,7 +711,7 @@ func (x *CreateDuplicateSocketRequest) String() string {
 func (*CreateDuplicateSocketRequest) ProtoMessage() {}
 
 func (x *CreateDuplicateSocketRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[10]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -642,7 +724,7 @@ func (x *CreateDuplicateSocketRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDuplicateSocketRequest.ProtoReflect.Descriptor instead.
 func (*CreateDuplicateSocketRequest) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{10}
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateDuplicateSocketRequest) GetSessionID() string {
@@ -667,7 +749,7 @@ type CreateDuplicateSocketResponse struct {
 
 func (x *CreateDuplicateSocketResponse) Reset() {
 	*x = CreateDuplicateSocketResponse{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[11]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -679,7 +761,7 @@ func (x *CreateDuplicateSocketResponse) String() string {
 func (*CreateDuplicateSocketResponse) ProtoMessage() {}
 
 func (x *CreateDuplicateSocketResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[11]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -692,7 +774,7 @@ func (x *CreateDuplicateSocketResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDuplicateSocketResponse.ProtoReflect.Descriptor instead.
 func (*CreateDuplicateSocketResponse) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{11}
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP(), []int{13}
 }
 
 var File_github_com_Microsoft_hcsshim_pkg_migration_migration_proto protoreflect.FileDescriptor
@@ -719,20 +801,24 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc = 
 	"\x16TransferSandboxRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x123\n" +
-	"\atimeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xec\x01\n" +
-	"\x17TransferSandboxResponse\x12\x1d\n" +
+	"\atimeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\x19\n" +
+	"\x17TransferSandboxResponse\"`\n" +
+	"\x16FinalizeSandboxRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
+	"\x06action\x18\x02 \x01(\x0e2\x0f.FinalizeActionR\x06action\"\x19\n" +
+	"\x17FinalizeSandboxResponse\"5\n" +
+	"\x14NotificationsRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\xea\x01\n" +
+	"\x15NotificationsResponse\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\rR\tmessageId\x12:\n" +
 	"\fnotification\x18\x02 \x01(\v2\x16.MigrationNotificationR\fnotification\x129\n" +
 	"\n" +
 	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
 	"\vupdate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"`\n" +
-	"\x16FinalizeSandboxRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
-	"\x06action\x18\x02 \x01(\x0e2\x0f.FinalizeActionR\x06action\"\x19\n" +
-	"\x17FinalizeSandboxResponse\"b\n" +
+	"updateTime\"b\n" +
 	"\x1cCreateDuplicateSocketRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12#\n" +
@@ -741,13 +827,14 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc = 
 	"\x0eFinalizeAction\x12\x1f\n" +
 	"\x1bFINALIZE_ACTION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14FINALIZE_ACTION_STOP\x10\x01\x12\x1a\n" +
-	"\x16FINALIZE_ACTION_RESUME\x10\x022\xd2\x03\n" +
+	"\x16FINALIZE_ACTION_RESUME\x10\x022\x92\x04\n" +
 	"\tMigration\x12\\\n" +
 	"\x17PrepareAndExportSandbox\x12\x1f.PrepareAndExportSandboxRequest\x1a .PrepareAndExportSandboxResponse\x12>\n" +
 	"\rImportSandbox\x12\x15.ImportSandboxRequest\x1a\x16.ImportSandboxResponse\x12A\n" +
-	"\x0ePrepareSandbox\x12\x16.PrepareSandboxRequest\x1a\x17.PrepareSandboxResponse\x12F\n" +
-	"\x0fTransferSandbox\x12\x17.TransferSandboxRequest\x1a\x18.TransferSandboxResponse0\x01\x12D\n" +
-	"\x0fFinalizeSandbox\x12\x17.FinalizeSandboxRequest\x1a\x18.FinalizeSandboxResponse\x12V\n" +
+	"\x0ePrepareSandbox\x12\x16.PrepareSandboxRequest\x1a\x17.PrepareSandboxResponse\x12D\n" +
+	"\x0fTransferSandbox\x12\x17.TransferSandboxRequest\x1a\x18.TransferSandboxResponse\x12D\n" +
+	"\x0fFinalizeSandbox\x12\x17.FinalizeSandboxRequest\x1a\x18.FinalizeSandboxResponse\x12@\n" +
+	"\rNotifications\x12\x15.NotificationsRequest\x1a\x16.NotificationsResponse0\x01\x12V\n" +
 	"\x15CreateDuplicateSocket\x12\x1d.CreateDuplicateSocketRequest\x1a\x1e.CreateDuplicateSocketResponseB6Z4github.com/Microsoft/hcsshim/pkg/migration;migrationb\x06proto3"
 
 var (
@@ -763,7 +850,7 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDescGZIP
 }
 
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_goTypes = []any{
 	(FinalizeAction)(0),                     // 0: FinalizeAction
 	(*PrepareAndExportSandboxRequest)(nil),  // 1: PrepareAndExportSandboxRequest
@@ -776,38 +863,42 @@ var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_goTypes = []
 	(*TransferSandboxResponse)(nil),         // 8: TransferSandboxResponse
 	(*FinalizeSandboxRequest)(nil),          // 9: FinalizeSandboxRequest
 	(*FinalizeSandboxResponse)(nil),         // 10: FinalizeSandboxResponse
-	(*CreateDuplicateSocketRequest)(nil),    // 11: CreateDuplicateSocketRequest
-	(*CreateDuplicateSocketResponse)(nil),   // 12: CreateDuplicateSocketResponse
-	(*MigrationInitializeOptions)(nil),      // 13: MigrationInitializeOptions
-	(*anypb.Any)(nil),                       // 14: google.protobuf.Any
-	(*durationpb.Duration)(nil),             // 15: google.protobuf.Duration
-	(*MigrationNotification)(nil),           // 16: MigrationNotification
-	(*timestamppb.Timestamp)(nil),           // 17: google.protobuf.Timestamp
+	(*NotificationsRequest)(nil),            // 11: NotificationsRequest
+	(*NotificationsResponse)(nil),           // 12: NotificationsResponse
+	(*CreateDuplicateSocketRequest)(nil),    // 13: CreateDuplicateSocketRequest
+	(*CreateDuplicateSocketResponse)(nil),   // 14: CreateDuplicateSocketResponse
+	(*MigrationInitializeOptions)(nil),      // 15: MigrationInitializeOptions
+	(*anypb.Any)(nil),                       // 16: google.protobuf.Any
+	(*durationpb.Duration)(nil),             // 17: google.protobuf.Duration
+	(*MigrationNotification)(nil),           // 18: MigrationNotification
+	(*timestamppb.Timestamp)(nil),           // 19: google.protobuf.Timestamp
 }
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_depIdxs = []int32{
-	13, // 0: PrepareAndExportSandboxRequest.init_options:type_name -> MigrationInitializeOptions
-	14, // 1: PrepareAndExportSandboxResponse.config:type_name -> google.protobuf.Any
-	14, // 2: ImportSandboxRequest.config:type_name -> google.protobuf.Any
-	13, // 3: PrepareSandboxRequest.init_options:type_name -> MigrationInitializeOptions
-	15, // 4: TransferSandboxRequest.timeout:type_name -> google.protobuf.Duration
-	16, // 5: TransferSandboxResponse.notification:type_name -> MigrationNotification
-	17, // 6: TransferSandboxResponse.start_time:type_name -> google.protobuf.Timestamp
-	17, // 7: TransferSandboxResponse.update_time:type_name -> google.protobuf.Timestamp
-	0,  // 8: FinalizeSandboxRequest.action:type_name -> FinalizeAction
+	15, // 0: PrepareAndExportSandboxRequest.init_options:type_name -> MigrationInitializeOptions
+	16, // 1: PrepareAndExportSandboxResponse.config:type_name -> google.protobuf.Any
+	16, // 2: ImportSandboxRequest.config:type_name -> google.protobuf.Any
+	15, // 3: PrepareSandboxRequest.init_options:type_name -> MigrationInitializeOptions
+	17, // 4: TransferSandboxRequest.timeout:type_name -> google.protobuf.Duration
+	0,  // 5: FinalizeSandboxRequest.action:type_name -> FinalizeAction
+	18, // 6: NotificationsResponse.notification:type_name -> MigrationNotification
+	19, // 7: NotificationsResponse.start_time:type_name -> google.protobuf.Timestamp
+	19, // 8: NotificationsResponse.update_time:type_name -> google.protobuf.Timestamp
 	1,  // 9: Migration.PrepareAndExportSandbox:input_type -> PrepareAndExportSandboxRequest
 	3,  // 10: Migration.ImportSandbox:input_type -> ImportSandboxRequest
 	5,  // 11: Migration.PrepareSandbox:input_type -> PrepareSandboxRequest
 	7,  // 12: Migration.TransferSandbox:input_type -> TransferSandboxRequest
 	9,  // 13: Migration.FinalizeSandbox:input_type -> FinalizeSandboxRequest
-	11, // 14: Migration.CreateDuplicateSocket:input_type -> CreateDuplicateSocketRequest
-	2,  // 15: Migration.PrepareAndExportSandbox:output_type -> PrepareAndExportSandboxResponse
-	4,  // 16: Migration.ImportSandbox:output_type -> ImportSandboxResponse
-	6,  // 17: Migration.PrepareSandbox:output_type -> PrepareSandboxResponse
-	8,  // 18: Migration.TransferSandbox:output_type -> TransferSandboxResponse
-	10, // 19: Migration.FinalizeSandbox:output_type -> FinalizeSandboxResponse
-	12, // 20: Migration.CreateDuplicateSocket:output_type -> CreateDuplicateSocketResponse
-	15, // [15:21] is the sub-list for method output_type
-	9,  // [9:15] is the sub-list for method input_type
+	11, // 14: Migration.Notifications:input_type -> NotificationsRequest
+	13, // 15: Migration.CreateDuplicateSocket:input_type -> CreateDuplicateSocketRequest
+	2,  // 16: Migration.PrepareAndExportSandbox:output_type -> PrepareAndExportSandboxResponse
+	4,  // 17: Migration.ImportSandbox:output_type -> ImportSandboxResponse
+	6,  // 18: Migration.PrepareSandbox:output_type -> PrepareSandboxResponse
+	8,  // 19: Migration.TransferSandbox:output_type -> TransferSandboxResponse
+	10, // 20: Migration.FinalizeSandbox:output_type -> FinalizeSandboxResponse
+	12, // 21: Migration.Notifications:output_type -> NotificationsResponse
+	14, // 22: Migration.CreateDuplicateSocket:output_type -> CreateDuplicateSocketResponse
+	16, // [16:23] is the sub-list for method output_type
+	9,  // [9:16] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -825,7 +916,7 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc), len(file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
