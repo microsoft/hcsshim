@@ -385,35 +385,23 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
 	}
-	mux := bridge.NewBridgeMux()
-	b := bridge.Bridge{
-		Handler:  mux,
-		EnableV4: *v4,
-	}
+
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
 	// Initialize virtual pod support in the host
 	if err := h.InitializeVirtualPodSupport(virtualPodsControl); err != nil {
 		logrus.WithError(err).Warn("Virtual pod support initialization failed")
 	}
-	b.AssignHandlers(mux, h)
 
-	var bridgeIn io.ReadCloser
-	var bridgeOut io.WriteCloser
-	if *useInOutErr {
-		bridgeIn = os.Stdin
-		bridgeOut = os.Stdout
-	} else {
-		const commandPort uint32 = 0x40000000
-		bridgeCon, err := tport.Dial(commandPort)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"port":          commandPort,
-				logrus.ErrorKey: err,
-			}).Fatal("failed to dial host vsock connection")
-		}
-		bridgeIn = bridgeCon
-		bridgeOut = bridgeCon
-	}
+	const commandPort uint32 = 0x40000000
+
+	// Reconnect loop: on each iteration we create a fresh bridge+mux, dial the
+	// host, and serve until the connection drops. After a live migration the
+	// vsock connection breaks; we re-dial and continue.
+	//
+	// During live migration the VM is frozen and only wakes up when the host
+	// shim is ready, so the vsock port should be immediately available. We
+	// use a tight retry interval instead of exponential backoff.
+	const reconnectInterval = 100 * time.Millisecond
 
 	event := cgroups1.MemoryThresholdEvent(*gcsMemLimitBytes, false)
 	gefd, err := gcsControl.RegisterMemoryEvent(event)
@@ -430,7 +418,6 @@ func main() {
 	oomFile := os.NewFile(oom, "cefd")
 	defer oomFile.Close()
 
-	// Setup OOM monitoring for virtual-pods cgroup
 	virtualPodsOom, err := virtualPodsControl.OOMEventFD()
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to retrieve the virtual-pods cgroups oom eventfd")
@@ -438,7 +425,6 @@ func main() {
 	virtualPodsOomFile := os.NewFile(virtualPodsOom, "vp-oomfd")
 	defer virtualPodsOomFile.Close()
 
-	// time synchronization service
 	if !(*disableTimeSync) {
 		if err = startTimeSyncService(); err != nil {
 			logrus.WithError(err).Fatal("failed to start time synchronization service")
@@ -448,10 +434,42 @@ func main() {
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
 	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
 	go readMemoryEvents(startTime, virtualPodsOomFile, "/containers/virtual-pods", containersLimit, virtualPodsControl)
-	err = b.ListenAndServe(bridgeIn, bridgeOut)
-	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			logrus.ErrorKey: err,
-		}).Fatal("failed to serve gcs service")
+
+	mux := bridge.NewBridgeMux()
+	b := bridge.New(mux, *v4)
+	b.AssignHandlers(mux, h)
+
+	// Reconnect loop: dial the host, serve until the connection drops, then
+	// re-dial. During live migration the VM is frozen and only wakes up when
+	// the destination host shim is ready, so the vsock port should be
+	// immediately available.
+	for {
+		var bridgeIn io.ReadCloser
+		var bridgeOut io.WriteCloser
+		if *useInOutErr {
+			bridgeIn = os.Stdin
+			bridgeOut = os.Stdout
+		} else {
+			bridgeCon, dialErr := tport.Dial(commandPort)
+			if dialErr != nil {
+				logrus.WithError(dialErr).Warn("failed to dial host, retrying")
+				time.Sleep(reconnectInterval)
+				continue
+			}
+			bridgeIn = bridgeCon
+			bridgeOut = bridgeCon
+		}
+
+		logrus.Info("bridge connected, serving")
+
+		serveErr := b.ListenAndServe(bridgeIn, bridgeOut)
+
+		if b.ShutdownRequested() {
+			logrus.Info("bridge shutdown requested, exiting reconnect loop")
+			break
+		}
+
+		logrus.WithError(serveErr).Warn("bridge connection lost, will reconnect")
+		time.Sleep(reconnectInterval)
 	}
 }

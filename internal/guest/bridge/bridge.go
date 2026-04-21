@@ -189,6 +189,43 @@ type Bridge struct {
 	hasQuitPending atomic.Bool
 
 	protVer prot.ProtocolVersion
+
+	// publisher is a stable notification sink that survives bridge recreation
+	// during live migration. Notifications are queued when the bridge is down
+	// and drained when it reconnects.
+	publisher *publisher
+}
+
+// responseChanBuffer is the buffer size for the bridge response channel.
+const responseChanBuffer = 16
+
+// New creates a Bridge with a notification publisher that queues container
+// queues container exit notifications when the bridge is disconnected and
+// drains them when it reconnects.
+func New(handler Handler, enableV4 bool) *Bridge {
+	return &Bridge{
+		Handler:   handler,
+		EnableV4:  enableV4,
+		publisher: newPublisher(),
+	}
+}
+
+// Connect attaches the publisher to this bridge so that container exit
+// notifications are delivered. Any notifications queued while disconnected
+// are drained immediately.
+func (b *Bridge) Connect() {
+	b.publisher.setBridge(b)
+}
+
+// Disconnect detaches the publisher. Notifications arriving while
+// disconnected are queued until the next Connect.
+func (b *Bridge) Disconnect() {
+	b.publisher.setBridge(nil)
+}
+
+// ShutdownRequested returns true if the bridge has been asked to shut down.
+func (b *Bridge) ShutdownRequested() bool {
+	return b.hasQuitPending.Load()
 }
 
 // AssignHandlers creates and assigns the appropriate bridge
@@ -226,17 +263,26 @@ func (b *Bridge) AssignHandlers(mux *Mux, host *hcsv2.Host) {
 func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser) error {
 	requestChan := make(chan *Request)
 	requestErrChan := make(chan error)
-	b.responseChan = make(chan bridgeResponse)
+	b.responseChan = make(chan bridgeResponse, responseChanBuffer)
 	responseErrChan := make(chan error)
 	b.quitChan = make(chan bool)
 
-	defer close(b.quitChan)
+	// Attach the publisher now that responseChan is valid. Queued
+	// notifications from a previous connection are drained here.
+	b.publisher.setBridge(b)
+
+	// Defers execute in LIFO order. quitChan is deferred last so it
+	// closes first, letting PublishNotification's select see it before
+	// responseChan becomes invalid. responseChan is not explicitly closed;
+	// the response writer goroutine exits when the bridge connection drops.
+	defer bridgeIn.Close()
+	defer close(requestErrChan)
+	defer close(requestChan)
 	defer bridgeOut.Close()
 	defer close(responseErrChan)
-	defer close(b.responseChan)
-	defer close(requestChan)
-	defer close(requestErrChan)
-	defer bridgeIn.Close()
+	defer b.publisher.setBridge(nil)
+	defer close(b.quitChan)
+	defer close(b.quitChan)
 
 	// Receive bridge requests and schedule them to be processed.
 	go func() {
@@ -440,7 +486,20 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 		},
 		response: n,
 	}
-	b.responseChan <- resp
+	// Check quitChan first to avoid sending to a dead bridge.
+	select {
+	case <-b.quitChan:
+		logrus.WithField("containerID", n.ContainerID).
+			Warn("bridge quit, dropping notification")
+		return
+	default:
+	}
+	select {
+	case b.responseChan <- resp:
+	case <-b.quitChan:
+		logrus.WithField("containerID", n.ContainerID).
+			Warn("bridge quit, dropping notification")
+	}
 }
 
 // setErrorForResponseBase modifies the passed-in MessageResponseBase to
