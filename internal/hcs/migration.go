@@ -48,7 +48,7 @@ func migrationCallbackHandler(eventPtr uintptr, ctx uintptr) uintptr {
 	}
 
 	e := (*computecore.HcsEvent)(unsafe.Pointer(eventPtr))
-	ch := *(*chan string)(unsafe.Pointer(ctx))
+	ch := *(*chan hcsschema.OperationSystemMigrationNotificationInfo)(unsafe.Pointer(ctx))
 
 	eventData := ""
 	if e.EventData != nil {
@@ -60,9 +60,21 @@ func migrationCallbackHandler(eventPtr uintptr, ctx uintptr) uintptr {
 		"event-data": eventData,
 	}).Debug("HCS migration notification")
 
+	var info hcsschema.OperationSystemMigrationNotificationInfo
+	if eventData != "" {
+		if err := json.Unmarshal([]byte(eventData), &info); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"event-type":    e.Type.String(),
+				"event-data":    eventData,
+				logrus.ErrorKey: err,
+			}).Warn("failed to unmarshal migration notification payload, dropping event")
+			return 0
+		}
+	}
+
 	// Non-blocking send to avoid blocking the HCS callback thread.
 	select {
-	case ch <- eventData:
+	case ch <- info:
 	default:
 		logrus.WithField("event-type", e.Type.String()).Warn("migration notification channel full, dropping event")
 	}
@@ -94,7 +106,7 @@ func (computeSystem *System) openMigrationHandle(ctx context.Context) error {
 
 	// Create the notification channel and store it on the struct.
 	computeSystem.migrationHandle = handle
-	computeSystem.migrationNotifyCh = make(chan string, migrationNotificationBufferSize)
+	computeSystem.migrationNotifyCh = make(chan hcsschema.OperationSystemMigrationNotificationInfo, migrationNotificationBufferSize)
 
 	// Pin the address of the notification channel field so it stays visible
 	// to the GC while HCS holds it as a uintptr callback context. Without
@@ -372,8 +384,8 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, resume b
 }
 
 // MigrationNotifications returns a read-only channel that receives live migration
-// event data strings. Returns an error if no migration handle is open.
-func (computeSystem *System) MigrationNotifications() (<-chan string, error) {
+// event payloads. Returns an error if no migration handle is open.
+func (computeSystem *System) MigrationNotifications() (<-chan hcsschema.OperationSystemMigrationNotificationInfo, error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 

@@ -116,3 +116,66 @@ type MigrationNetworkSettings struct {
 	// SessionID is the session ID associated with the socket connection between source and destination.
 	SessionID uint32 `json:"SessionId,omitempty"`
 }
+
+// OperationSystemMigrationNotificationInfo is a notification payload describing
+// the current state of an in-progress live migration operation. It is emitted
+// by HCS over the migration notification channel as the workflow progresses.
+type OperationSystemMigrationNotificationInfo struct {
+	// Origin indicates which side of the live migration this notification
+	// pertains to (source or destination).
+	Origin MigrationOrigin `json:"Origin,omitempty"`
+	// Event is the type of live migration event being reported.
+	Event MigrationEvent `json:"Event,omitempty"`
+	// Result is an optional outcome accompanying the event. It is typically
+	// populated for terminal events.
+	Result MigrationResult `json:"Result,omitempty"`
+	// AdditionalDetails carries extra event-specific information whose schema
+	// depends on the event being reported. Modeled as the HCS schema `Any` type.
+	AdditionalDetails *interface{} `json:"AdditionalDetails,omitempty"`
+}
+
+// MigrationEvent describes a live migration event reported by HCS.
+type MigrationEvent string
+
+const (
+	// MigrationEventUnknown indicates an unspecified or unrecognized event.
+	MigrationEventUnknown MigrationEvent = "Unknown"
+	// MigrationEventMigrationDone indicates that migration has completed.
+	MigrationEventMigrationDone MigrationEvent = "MigrationDone"
+	// MigrationEventBlackoutStarted indicates that the VM has entered the blackout phase.
+	MigrationEventBlackoutStarted MigrationEvent = "BlackoutStarted"
+	// MigrationEventOfflineDone indicates that taking the VM offline has completed.
+	MigrationEventOfflineDone MigrationEvent = "OfflineDone"
+	// MigrationEventBlackoutExited indicates that the VM has successfully started
+	// again after the blackout phase.
+	MigrationEventBlackoutExited MigrationEvent = "BlackoutExited"
+	// MigrationEventSetupDone indicates that the live migration setup has completed.
+	MigrationEventSetupDone MigrationEvent = "SetupDone"
+	// MigrationEventTransferInProgress indicates that the VM is still transferring
+	// memory and other necessary state.
+	MigrationEventTransferInProgress MigrationEvent = "TransferInProgress"
+	// MigrationEventMigrationRecoveryDone indicates that migration recovery has been performed.
+	MigrationEventMigrationRecoveryDone MigrationEvent = "MigrationRecoveryDone"
+	// MigrationEventMigrationFailed indicates that migration failed.
+	MigrationEventMigrationFailed MigrationEvent = "MigrationFailed"
+)
+
+// MigrationResult describes the possible result of a migration operation.
+type MigrationResult string
+
+const (
+	// MigrationResultInvalid indicates an invalid or unspecified result.
+	MigrationResultInvalid MigrationResult = "Invalid"
+	// MigrationResultSuccess indicates the migration operation succeeded.
+	MigrationResultSuccess MigrationResult = "Success"
+	// MigrationResultMigrationCancelled indicates the migration was cancelled.
+	MigrationResultMigrationCancelled MigrationResult = "MigrationCancelled"
+	// MigrationResultGuestInitiatedCancellation indicates the guest initiated the cancellation.
+	MigrationResultGuestInitiatedCancellation MigrationResult = "GuestInitiatedCancellation"
+	// MigrationResultSourceMigrationFailed indicates the migration failed on the source side.
+	MigrationResultSourceMigrationFailed MigrationResult = "SourceMigrationFailed"
+	// MigrationResultDestinationMigrationFailed indicates the migration failed on the destination side.
+	MigrationResultDestinationMigrationFailed MigrationResult = "DestinationMigrationFailed"
+	// MigrationResultMigrationRecoveryFailed indicates the migration recovery failed.
+	MigrationResultMigrationRecoveryFailed MigrationResult = "MigrationRecoveryFailed"
+)

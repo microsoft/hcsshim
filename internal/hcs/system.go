@@ -43,7 +43,7 @@ type System struct {
 
 	// Live Migration specific fields.
 	migrationHandle   computecore.HcsSystem
-	migrationNotifyCh chan string
+	migrationNotifyCh chan hcsschema.OperationSystemMigrationNotificationInfo
 	// migrationPinner pins &migrationNotifyCh while it is registered as the
 	// callback context with HCS, so the GC sees the cgo-held uintptr as a
 	// live reference. Unpinned in closeMigrationHandle after HCS guarantees
