@@ -170,15 +170,14 @@ message TransferSandboxResponse {
     // Monotonically increasing per-message counter on this stream. Useful
     // for de-duplication if the client reconnects mid-transfer.
     uint32 message_id = 1;
-    // Event-specific message describing the current migration notification.
-    string event = 2;
-    // Populated when `event` indicates an error or a timeout; empty
-    // otherwise.
-    string error = 3;
+    // Structured notification describing the current migration event. This
+    // mirrors the HCS OperationSystemMigrationNotificationInfo payload
+    // emitted by the underlying compute system as the transfer progresses.
+    MigrationNotification notification = 2;
     // Server-side timestamp of when the transfer began.
-    google.protobuf.Timestamp start_time = 4;
+    google.protobuf.Timestamp start_time = 3;
     // Server-side timestamp of when this particular update was produced.
-    google.protobuf.Timestamp update_time = 5;
+    google.protobuf.Timestamp update_time = 4;
 }
 
 message FinalizeSandboxRequest {

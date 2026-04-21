@@ -9,6 +9,7 @@ package migration
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -67,6 +68,200 @@ func (x MigrationMemoryTransport) Number() protoreflect.EnumNumber {
 // Deprecated: Use MigrationMemoryTransport.Descriptor instead.
 func (MigrationMemoryTransport) EnumDescriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{0}
+}
+
+// MigrationOrigin indicates which side of a live migration an operation or
+// notification pertains to.
+type MigrationOrigin int32
+
+const (
+	MigrationOrigin_MIGRATION_ORIGIN_UNSPECIFIED MigrationOrigin = 0
+	// Source side of the live migration.
+	MigrationOrigin_MIGRATION_ORIGIN_SOURCE MigrationOrigin = 1
+	// Destination side of the live migration.
+	MigrationOrigin_MIGRATION_ORIGIN_DESTINATION MigrationOrigin = 2
+)
+
+// Enum value maps for MigrationOrigin.
+var (
+	MigrationOrigin_name = map[int32]string{
+		0: "MIGRATION_ORIGIN_UNSPECIFIED",
+		1: "MIGRATION_ORIGIN_SOURCE",
+		2: "MIGRATION_ORIGIN_DESTINATION",
+	}
+	MigrationOrigin_value = map[string]int32{
+		"MIGRATION_ORIGIN_UNSPECIFIED": 0,
+		"MIGRATION_ORIGIN_SOURCE":      1,
+		"MIGRATION_ORIGIN_DESTINATION": 2,
+	}
+)
+
+func (x MigrationOrigin) Enum() *MigrationOrigin {
+	p := new(MigrationOrigin)
+	*p = x
+	return p
+}
+
+func (x MigrationOrigin) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MigrationOrigin) Descriptor() protoreflect.EnumDescriptor {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[1].Descriptor()
+}
+
+func (MigrationOrigin) Type() protoreflect.EnumType {
+	return &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[1]
+}
+
+func (x MigrationOrigin) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MigrationOrigin.Descriptor instead.
+func (MigrationOrigin) EnumDescriptor() ([]byte, []int) {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{1}
+}
+
+// MigrationEvent describes a live migration event reported by HCS during the
+// transfer phase of a live migration.
+type MigrationEvent int32
+
+const (
+	MigrationEvent_MIGRATION_EVENT_UNSPECIFIED MigrationEvent = 0
+	// Migration has completed.
+	MigrationEvent_MIGRATION_EVENT_MIGRATION_DONE MigrationEvent = 1
+	// The VM has entered the blackout phase.
+	MigrationEvent_MIGRATION_EVENT_BLACKOUT_STARTED MigrationEvent = 2
+	// Taking the VM offline has completed.
+	MigrationEvent_MIGRATION_EVENT_OFFLINE_DONE MigrationEvent = 3
+	// The VM has successfully started again after the blackout phase.
+	MigrationEvent_MIGRATION_EVENT_BLACKOUT_EXITED MigrationEvent = 4
+	// The live migration setup has completed.
+	MigrationEvent_MIGRATION_EVENT_SETUP_DONE MigrationEvent = 5
+	// The VM is still transferring memory and other necessary state.
+	MigrationEvent_MIGRATION_EVENT_TRANSFER_IN_PROGRESS MigrationEvent = 6
+	// Migration recovery has been performed.
+	MigrationEvent_MIGRATION_EVENT_MIGRATION_RECOVERY_DONE MigrationEvent = 7
+	// Migration failed.
+	MigrationEvent_MIGRATION_EVENT_MIGRATION_FAILED MigrationEvent = 8
+)
+
+// Enum value maps for MigrationEvent.
+var (
+	MigrationEvent_name = map[int32]string{
+		0: "MIGRATION_EVENT_UNSPECIFIED",
+		1: "MIGRATION_EVENT_MIGRATION_DONE",
+		2: "MIGRATION_EVENT_BLACKOUT_STARTED",
+		3: "MIGRATION_EVENT_OFFLINE_DONE",
+		4: "MIGRATION_EVENT_BLACKOUT_EXITED",
+		5: "MIGRATION_EVENT_SETUP_DONE",
+		6: "MIGRATION_EVENT_TRANSFER_IN_PROGRESS",
+		7: "MIGRATION_EVENT_MIGRATION_RECOVERY_DONE",
+		8: "MIGRATION_EVENT_MIGRATION_FAILED",
+	}
+	MigrationEvent_value = map[string]int32{
+		"MIGRATION_EVENT_UNSPECIFIED":             0,
+		"MIGRATION_EVENT_MIGRATION_DONE":          1,
+		"MIGRATION_EVENT_BLACKOUT_STARTED":        2,
+		"MIGRATION_EVENT_OFFLINE_DONE":            3,
+		"MIGRATION_EVENT_BLACKOUT_EXITED":         4,
+		"MIGRATION_EVENT_SETUP_DONE":              5,
+		"MIGRATION_EVENT_TRANSFER_IN_PROGRESS":    6,
+		"MIGRATION_EVENT_MIGRATION_RECOVERY_DONE": 7,
+		"MIGRATION_EVENT_MIGRATION_FAILED":        8,
+	}
+)
+
+func (x MigrationEvent) Enum() *MigrationEvent {
+	p := new(MigrationEvent)
+	*p = x
+	return p
+}
+
+func (x MigrationEvent) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MigrationEvent) Descriptor() protoreflect.EnumDescriptor {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[2].Descriptor()
+}
+
+func (MigrationEvent) Type() protoreflect.EnumType {
+	return &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[2]
+}
+
+func (x MigrationEvent) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MigrationEvent.Descriptor instead.
+func (MigrationEvent) EnumDescriptor() ([]byte, []int) {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{2}
+}
+
+// MigrationResult describes the possible result of a migration operation,
+// typically populated for terminal events such as MIGRATION_EVENT_MIGRATION_DONE
+// or MIGRATION_EVENT_MIGRATION_FAILED.
+type MigrationResult int32
+
+const (
+	MigrationResult_MIGRATION_RESULT_UNSPECIFIED                  MigrationResult = 0
+	MigrationResult_MIGRATION_RESULT_SUCCESS                      MigrationResult = 1
+	MigrationResult_MIGRATION_RESULT_MIGRATION_CANCELLED          MigrationResult = 2
+	MigrationResult_MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION MigrationResult = 3
+	MigrationResult_MIGRATION_RESULT_SOURCE_MIGRATION_FAILED      MigrationResult = 4
+	MigrationResult_MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED MigrationResult = 5
+	MigrationResult_MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED    MigrationResult = 6
+)
+
+// Enum value maps for MigrationResult.
+var (
+	MigrationResult_name = map[int32]string{
+		0: "MIGRATION_RESULT_UNSPECIFIED",
+		1: "MIGRATION_RESULT_SUCCESS",
+		2: "MIGRATION_RESULT_MIGRATION_CANCELLED",
+		3: "MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION",
+		4: "MIGRATION_RESULT_SOURCE_MIGRATION_FAILED",
+		5: "MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED",
+		6: "MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED",
+	}
+	MigrationResult_value = map[string]int32{
+		"MIGRATION_RESULT_UNSPECIFIED":                  0,
+		"MIGRATION_RESULT_SUCCESS":                      1,
+		"MIGRATION_RESULT_MIGRATION_CANCELLED":          2,
+		"MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION": 3,
+		"MIGRATION_RESULT_SOURCE_MIGRATION_FAILED":      4,
+		"MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED": 5,
+		"MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED":    6,
+	}
+)
+
+func (x MigrationResult) Enum() *MigrationResult {
+	p := new(MigrationResult)
+	*p = x
+	return p
+}
+
+func (x MigrationResult) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MigrationResult) Descriptor() protoreflect.EnumDescriptor {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[3].Descriptor()
+}
+
+func (MigrationResult) Type() protoreflect.EnumType {
+	return &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[3]
+}
+
+func (x MigrationResult) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MigrationResult.Descriptor instead.
+func (MigrationResult) EnumDescriptor() ([]byte, []int) {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{3}
 }
 
 type MigrationInitializeOptions struct {
@@ -377,11 +572,89 @@ func (x *MigrationCompressionSettings) GetThrottleWorkerCount() uint32 {
 	return 0
 }
 
+// MigrationNotification is a notification payload describing the current
+// state of an in-progress live migration operation. It mirrors the HCS
+// OperationSystemMigrationNotificationInfo schema.
+type MigrationNotification struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Origin indicates which side of the live migration this notification
+	// pertains to.
+	Origin MigrationOrigin `protobuf:"varint,1,opt,name=origin,proto3,enum=MigrationOrigin" json:"origin,omitempty"`
+	// Event is the type of live migration event being reported.
+	Event MigrationEvent `protobuf:"varint,2,opt,name=event,proto3,enum=MigrationEvent" json:"event,omitempty"`
+	// Result is an optional outcome accompanying the event. Typically
+	// populated for terminal events.
+	Result MigrationResult `protobuf:"varint,3,opt,name=result,proto3,enum=MigrationResult" json:"result,omitempty"`
+	// AdditionalDetails carries extra event-specific information whose
+	// schema depends on the event being reported.
+	AdditionalDetails *anypb.Any `protobuf:"bytes,4,opt,name=additional_details,json=additionalDetails,proto3" json:"additional_details,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *MigrationNotification) Reset() {
+	*x = MigrationNotification{}
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationNotification) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationNotification) ProtoMessage() {}
+
+func (x *MigrationNotification) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationNotification.ProtoReflect.Descriptor instead.
+func (*MigrationNotification) Descriptor() ([]byte, []int) {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *MigrationNotification) GetOrigin() MigrationOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return MigrationOrigin_MIGRATION_ORIGIN_UNSPECIFIED
+}
+
+func (x *MigrationNotification) GetEvent() MigrationEvent {
+	if x != nil {
+		return x.Event
+	}
+	return MigrationEvent_MIGRATION_EVENT_UNSPECIFIED
+}
+
+func (x *MigrationNotification) GetResult() MigrationResult {
+	if x != nil {
+		return x.Result
+	}
+	return MigrationResult_MIGRATION_RESULT_UNSPECIFIED
+}
+
+func (x *MigrationNotification) GetAdditionalDetails() *anypb.Any {
+	if x != nil {
+		return x.AdditionalDetails
+	}
+	return nil
+}
+
 var File_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto protoreflect.FileDescriptor
 
 const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc = "" +
 	"\n" +
-	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\"\xc1\x05\n" +
+	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\x1a\x19google/protobuf/any.proto\"\xc1\x05\n" +
 	"\x1aMigrationInitializeOptions\x12D\n" +
 	"\x10memory_transport\x18\x01 \x01(\x0e2\x19.MigrationMemoryTransportR\x0fmemoryTransport\x12r\n" +
 	"\x1fmemory_transfer_throttle_params\x18\x02 \x01(\v2&.MemoryMigrationTransferThrottleParamsH\x00R\x1cmemoryTransferThrottleParams\x88\x01\x01\x12U\n" +
@@ -415,10 +688,37 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ra
 	"1_blackout_time_threshold_for_cancelling_migration\"q\n" +
 	"\x1cMigrationCompressionSettings\x127\n" +
 	"\x15throttle_worker_count\x18\x01 \x01(\rH\x00R\x13throttleWorkerCount\x88\x01\x01B\x18\n" +
-	"\x16_throttle_worker_count*j\n" +
+	"\x16_throttle_worker_count\"\xd7\x01\n" +
+	"\x15MigrationNotification\x12(\n" +
+	"\x06origin\x18\x01 \x01(\x0e2\x10.MigrationOriginR\x06origin\x12%\n" +
+	"\x05event\x18\x02 \x01(\x0e2\x0f.MigrationEventR\x05event\x12(\n" +
+	"\x06result\x18\x03 \x01(\x0e2\x10.MigrationResultR\x06result\x12C\n" +
+	"\x12additional_details\x18\x04 \x01(\v2\x14.google.protobuf.AnyR\x11additionalDetails*j\n" +
 	"\x18MigrationMemoryTransport\x12*\n" +
 	"&MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED\x10\x00\x12\"\n" +
-	"\x1eMIGRATION_MEMORY_TRANSPORT_TCP\x10\x01B6Z4github.com/Microsoft/hcsshim/pkg/migration;migrationb\x06proto3"
+	"\x1eMIGRATION_MEMORY_TRANSPORT_TCP\x10\x01*r\n" +
+	"\x0fMigrationOrigin\x12 \n" +
+	"\x1cMIGRATION_ORIGIN_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17MIGRATION_ORIGIN_SOURCE\x10\x01\x12 \n" +
+	"\x1cMIGRATION_ORIGIN_DESTINATION\x10\x02*\xdf\x02\n" +
+	"\x0eMigrationEvent\x12\x1f\n" +
+	"\x1bMIGRATION_EVENT_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eMIGRATION_EVENT_MIGRATION_DONE\x10\x01\x12$\n" +
+	" MIGRATION_EVENT_BLACKOUT_STARTED\x10\x02\x12 \n" +
+	"\x1cMIGRATION_EVENT_OFFLINE_DONE\x10\x03\x12#\n" +
+	"\x1fMIGRATION_EVENT_BLACKOUT_EXITED\x10\x04\x12\x1e\n" +
+	"\x1aMIGRATION_EVENT_SETUP_DONE\x10\x05\x12(\n" +
+	"$MIGRATION_EVENT_TRANSFER_IN_PROGRESS\x10\x06\x12+\n" +
+	"'MIGRATION_EVENT_MIGRATION_RECOVERY_DONE\x10\a\x12$\n" +
+	" MIGRATION_EVENT_MIGRATION_FAILED\x10\b*\xbf\x02\n" +
+	"\x0fMigrationResult\x12 \n" +
+	"\x1cMIGRATION_RESULT_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18MIGRATION_RESULT_SUCCESS\x10\x01\x12(\n" +
+	"$MIGRATION_RESULT_MIGRATION_CANCELLED\x10\x02\x121\n" +
+	"-MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION\x10\x03\x12,\n" +
+	"(MIGRATION_RESULT_SOURCE_MIGRATION_FAILED\x10\x04\x121\n" +
+	"-MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED\x10\x05\x12.\n" +
+	"*MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED\x10\x06B6Z4github.com/Microsoft/hcsshim/pkg/migration;migrationb\x06proto3"
 
 var (
 	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescOnce sync.Once
@@ -432,25 +732,34 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_raw
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescData
 }
 
-var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_goTypes = []any{
 	(MigrationMemoryTransport)(0),                 // 0: MigrationMemoryTransport
-	(*MigrationInitializeOptions)(nil),            // 1: MigrationInitializeOptions
-	(*CompatibilityInfo)(nil),                     // 2: CompatibilityInfo
-	(*MemoryMigrationTransferThrottleParams)(nil), // 3: MemoryMigrationTransferThrottleParams
-	(*MigrationCompressionSettings)(nil),          // 4: MigrationCompressionSettings
+	(MigrationOrigin)(0),                          // 1: MigrationOrigin
+	(MigrationEvent)(0),                           // 2: MigrationEvent
+	(MigrationResult)(0),                          // 3: MigrationResult
+	(*MigrationInitializeOptions)(nil),            // 4: MigrationInitializeOptions
+	(*CompatibilityInfo)(nil),                     // 5: CompatibilityInfo
+	(*MemoryMigrationTransferThrottleParams)(nil), // 6: MemoryMigrationTransferThrottleParams
+	(*MigrationCompressionSettings)(nil),          // 7: MigrationCompressionSettings
+	(*MigrationNotification)(nil),                 // 8: MigrationNotification
+	(*anypb.Any)(nil),                             // 9: google.protobuf.Any
 }
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_depIdxs = []int32{
 	0, // 0: MigrationInitializeOptions.memory_transport:type_name -> MigrationMemoryTransport
-	3, // 1: MigrationInitializeOptions.memory_transfer_throttle_params:type_name -> MemoryMigrationTransferThrottleParams
-	4, // 2: MigrationInitializeOptions.compression_settings:type_name -> MigrationCompressionSettings
-	2, // 3: MigrationInitializeOptions.compatibility_data:type_name -> CompatibilityInfo
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 1: MigrationInitializeOptions.memory_transfer_throttle_params:type_name -> MemoryMigrationTransferThrottleParams
+	7, // 2: MigrationInitializeOptions.compression_settings:type_name -> MigrationCompressionSettings
+	5, // 3: MigrationInitializeOptions.compatibility_data:type_name -> CompatibilityInfo
+	1, // 4: MigrationNotification.origin:type_name -> MigrationOrigin
+	2, // 5: MigrationNotification.event:type_name -> MigrationEvent
+	3, // 6: MigrationNotification.result:type_name -> MigrationResult
+	9, // 7: MigrationNotification.additional_details:type_name -> google.protobuf.Any
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_init() }
@@ -466,8 +775,8 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ini
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc), len(file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   4,
+			NumEnums:      4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 option go_package = "github.com/Microsoft/hcsshim/pkg/migration;migration";
 
+import "google/protobuf/any.proto";
+
 // MigrationMemoryTransport is the transport protocol used for memory transfer during migration.
 enum MigrationMemoryTransport {
     MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED = 0;
@@ -57,4 +59,66 @@ message MigrationCompressionSettings {
     // Number of worker threads used for [de]compression. Values higher than what the host
     // and VM configuration can support will be adjusted. The value should be non-zero.
     optional uint32 throttle_worker_count = 1;
+}
+
+// MigrationOrigin indicates which side of a live migration an operation or
+// notification pertains to.
+enum MigrationOrigin {
+    MIGRATION_ORIGIN_UNSPECIFIED = 0;
+    // Source side of the live migration.
+    MIGRATION_ORIGIN_SOURCE = 1;
+    // Destination side of the live migration.
+    MIGRATION_ORIGIN_DESTINATION = 2;
+}
+
+// MigrationEvent describes a live migration event reported by HCS during the
+// transfer phase of a live migration.
+enum MigrationEvent {
+    MIGRATION_EVENT_UNSPECIFIED = 0;
+    // Migration has completed.
+    MIGRATION_EVENT_MIGRATION_DONE = 1;
+    // The VM has entered the blackout phase.
+    MIGRATION_EVENT_BLACKOUT_STARTED = 2;
+    // Taking the VM offline has completed.
+    MIGRATION_EVENT_OFFLINE_DONE = 3;
+    // The VM has successfully started again after the blackout phase.
+    MIGRATION_EVENT_BLACKOUT_EXITED = 4;
+    // The live migration setup has completed.
+    MIGRATION_EVENT_SETUP_DONE = 5;
+    // The VM is still transferring memory and other necessary state.
+    MIGRATION_EVENT_TRANSFER_IN_PROGRESS = 6;
+    // Migration recovery has been performed.
+    MIGRATION_EVENT_MIGRATION_RECOVERY_DONE = 7;
+    // Migration failed.
+    MIGRATION_EVENT_MIGRATION_FAILED = 8;
+}
+
+// MigrationResult describes the possible result of a migration operation,
+// typically populated for terminal events such as MIGRATION_EVENT_MIGRATION_DONE
+// or MIGRATION_EVENT_MIGRATION_FAILED.
+enum MigrationResult {
+    MIGRATION_RESULT_UNSPECIFIED = 0;
+    MIGRATION_RESULT_SUCCESS = 1;
+    MIGRATION_RESULT_MIGRATION_CANCELLED = 2;
+    MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION = 3;
+    MIGRATION_RESULT_SOURCE_MIGRATION_FAILED = 4;
+    MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED = 5;
+    MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED = 6;
+}
+
+// MigrationNotification is a notification payload describing the current
+// state of an in-progress live migration operation. It mirrors the HCS
+// OperationSystemMigrationNotificationInfo schema.
+message MigrationNotification {
+    // Origin indicates which side of the live migration this notification
+    // pertains to.
+    MigrationOrigin origin = 1;
+    // Event is the type of live migration event being reported.
+    MigrationEvent event = 2;
+    // Result is an optional outcome accompanying the event. Typically
+    // populated for terminal events.
+    MigrationResult result = 3;
+    // AdditionalDetails carries extra event-specific information whose
+    // schema depends on the event being reported.
+    google.protobuf.Any additional_details = 4;
 }

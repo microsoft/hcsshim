@@ -438,15 +438,14 @@ type TransferSandboxResponse struct {
 	// Monotonically increasing per-message counter on this stream. Useful
 	// for de-duplication if the client reconnects mid-transfer.
 	MessageID uint32 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	// Event-specific message describing the current migration notification.
-	Event string `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
-	// Populated when `event` indicates an error or a timeout; empty
-	// otherwise.
-	Error string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	// Structured notification describing the current migration event. This
+	// mirrors the HCS OperationSystemMigrationNotificationInfo payload
+	// emitted by the underlying compute system as the transfer progresses.
+	Notification *MigrationNotification `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
 	// Server-side timestamp of when the transfer began.
-	StartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	// Server-side timestamp of when this particular update was produced.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -488,18 +487,11 @@ func (x *TransferSandboxResponse) GetMessageID() uint32 {
 	return 0
 }
 
-func (x *TransferSandboxResponse) GetEvent() string {
+func (x *TransferSandboxResponse) GetNotification() *MigrationNotification {
 	if x != nil {
-		return x.Event
+		return x.Notification
 	}
-	return ""
-}
-
-func (x *TransferSandboxResponse) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
+	return nil
 }
 
 func (x *TransferSandboxResponse) GetStartTime() *timestamppb.Timestamp {
@@ -727,15 +719,14 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc = 
 	"\x16TransferSandboxRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x123\n" +
-	"\atimeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xdc\x01\n" +
+	"\atimeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xec\x01\n" +
 	"\x17TransferSandboxResponse\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\rR\tmessageId\x12\x14\n" +
-	"\x05event\x18\x02 \x01(\tR\x05event\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\x129\n" +
+	"message_id\x18\x01 \x01(\rR\tmessageId\x12:\n" +
+	"\fnotification\x18\x02 \x01(\v2\x16.MigrationNotificationR\fnotification\x129\n" +
 	"\n" +
-	"start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
-	"\vupdate_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
+	"\vupdate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\"`\n" +
 	"\x16FinalizeSandboxRequest\x12\x1d\n" +
 	"\n" +
@@ -790,7 +781,8 @@ var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_goTypes = []
 	(*MigrationInitializeOptions)(nil),      // 13: MigrationInitializeOptions
 	(*anypb.Any)(nil),                       // 14: google.protobuf.Any
 	(*durationpb.Duration)(nil),             // 15: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),           // 16: google.protobuf.Timestamp
+	(*MigrationNotification)(nil),           // 16: MigrationNotification
+	(*timestamppb.Timestamp)(nil),           // 17: google.protobuf.Timestamp
 }
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_depIdxs = []int32{
 	13, // 0: PrepareAndExportSandboxRequest.init_options:type_name -> MigrationInitializeOptions
@@ -798,26 +790,27 @@ var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_depIdxs = []
 	14, // 2: ImportSandboxRequest.config:type_name -> google.protobuf.Any
 	13, // 3: PrepareSandboxRequest.init_options:type_name -> MigrationInitializeOptions
 	15, // 4: TransferSandboxRequest.timeout:type_name -> google.protobuf.Duration
-	16, // 5: TransferSandboxResponse.start_time:type_name -> google.protobuf.Timestamp
-	16, // 6: TransferSandboxResponse.update_time:type_name -> google.protobuf.Timestamp
-	0,  // 7: FinalizeSandboxRequest.action:type_name -> FinalizeAction
-	1,  // 8: Migration.PrepareAndExportSandbox:input_type -> PrepareAndExportSandboxRequest
-	3,  // 9: Migration.ImportSandbox:input_type -> ImportSandboxRequest
-	5,  // 10: Migration.PrepareSandbox:input_type -> PrepareSandboxRequest
-	7,  // 11: Migration.TransferSandbox:input_type -> TransferSandboxRequest
-	9,  // 12: Migration.FinalizeSandbox:input_type -> FinalizeSandboxRequest
-	11, // 13: Migration.CreateDuplicateSocket:input_type -> CreateDuplicateSocketRequest
-	2,  // 14: Migration.PrepareAndExportSandbox:output_type -> PrepareAndExportSandboxResponse
-	4,  // 15: Migration.ImportSandbox:output_type -> ImportSandboxResponse
-	6,  // 16: Migration.PrepareSandbox:output_type -> PrepareSandboxResponse
-	8,  // 17: Migration.TransferSandbox:output_type -> TransferSandboxResponse
-	10, // 18: Migration.FinalizeSandbox:output_type -> FinalizeSandboxResponse
-	12, // 19: Migration.CreateDuplicateSocket:output_type -> CreateDuplicateSocketResponse
-	14, // [14:20] is the sub-list for method output_type
-	8,  // [8:14] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	16, // 5: TransferSandboxResponse.notification:type_name -> MigrationNotification
+	17, // 6: TransferSandboxResponse.start_time:type_name -> google.protobuf.Timestamp
+	17, // 7: TransferSandboxResponse.update_time:type_name -> google.protobuf.Timestamp
+	0,  // 8: FinalizeSandboxRequest.action:type_name -> FinalizeAction
+	1,  // 9: Migration.PrepareAndExportSandbox:input_type -> PrepareAndExportSandboxRequest
+	3,  // 10: Migration.ImportSandbox:input_type -> ImportSandboxRequest
+	5,  // 11: Migration.PrepareSandbox:input_type -> PrepareSandboxRequest
+	7,  // 12: Migration.TransferSandbox:input_type -> TransferSandboxRequest
+	9,  // 13: Migration.FinalizeSandbox:input_type -> FinalizeSandboxRequest
+	11, // 14: Migration.CreateDuplicateSocket:input_type -> CreateDuplicateSocketRequest
+	2,  // 15: Migration.PrepareAndExportSandbox:output_type -> PrepareAndExportSandboxResponse
+	4,  // 16: Migration.ImportSandbox:output_type -> ImportSandboxResponse
+	6,  // 17: Migration.PrepareSandbox:output_type -> PrepareSandboxResponse
+	8,  // 18: Migration.TransferSandbox:output_type -> TransferSandboxResponse
+	10, // 19: Migration.FinalizeSandbox:output_type -> FinalizeSandboxResponse
+	12, // 20: Migration.CreateDuplicateSocket:output_type -> CreateDuplicateSocketResponse
+	15, // [15:21] is the sub-list for method output_type
+	9,  // [9:15] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_init() }
