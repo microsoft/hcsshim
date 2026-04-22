@@ -44,7 +44,8 @@ const (
 )
 
 type Container struct {
-	id string
+	id        string
+	sandboxID string
 
 	vsock   transport.Transport
 	logPath string   // path to [logFile].
