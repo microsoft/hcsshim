@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option go_package = "github.com/Microsoft/hcsshim/pkg/migration;migration";
 
-import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
 
 // MemoryTransport is the transport protocol used for memory transfer during migration.
 enum MemoryTransport {
@@ -175,6 +175,16 @@ enum PhaseState {
     PHASE_STATE_RECOVERY_FAILED = 6;
 }
 
+// BlackoutExitedEventDetails carries additional details reported alongside
+// PHASE_BLACKOUT_EXITED, describing the blackout that just ended. Mirrors
+// the HCS MigrationBlackoutExitedEventDetails schema.
+message BlackoutExitedEventDetails {
+    // Duration of the blackout phase, in milliseconds.
+    uint64 blackout_duration_milliseconds = 1;
+    // Timestamp at which the blackout phase ended.
+    google.protobuf.Timestamp blackout_stop_timestamp = 2;
+}
+
 // Notification is a notification payload describing the current
 // state of an in-progress live migration operation. It mirrors the HCS
 // OperationSystemMigrationNotificationInfo schema.
@@ -187,7 +197,10 @@ message Notification {
     // State is an optional outcome accompanying the phase. Typically
     // populated for terminal phases.
     PhaseState state = 3;
-    // AdditionalDetails carries extra phase-specific information whose
-    // schema depends on the phase being reported.
-    google.protobuf.Any additional_details = 4;
+    // PhaseDetails carries extra phase-specific information whose concrete
+    // type depends on the phase being reported.
+    oneof phase_details {
+        // Details reported with PHASE_BLACKOUT_EXITED.
+        BlackoutExitedEventDetails blackout_exited = 4;
+    }
 }

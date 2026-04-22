@@ -9,7 +9,7 @@ package migration
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	anypb "google.golang.org/protobuf/types/known/anypb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -641,6 +641,63 @@ func (x *CompressionSettings) GetThrottleWorkerCount() uint32 {
 	return 0
 }
 
+// BlackoutExitedEventDetails carries additional details reported alongside
+// PHASE_BLACKOUT_EXITED, describing the blackout that just ended. Mirrors
+// the HCS MigrationBlackoutExitedEventDetails schema.
+type BlackoutExitedEventDetails struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Duration of the blackout phase, in milliseconds.
+	BlackoutDurationMilliseconds uint64 `protobuf:"varint,1,opt,name=blackout_duration_milliseconds,json=blackoutDurationMilliseconds,proto3" json:"blackout_duration_milliseconds,omitempty"`
+	// Timestamp at which the blackout phase ended.
+	BlackoutStopTimestamp *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=blackout_stop_timestamp,json=blackoutStopTimestamp,proto3" json:"blackout_stop_timestamp,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *BlackoutExitedEventDetails) Reset() {
+	*x = BlackoutExitedEventDetails{}
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlackoutExitedEventDetails) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlackoutExitedEventDetails) ProtoMessage() {}
+
+func (x *BlackoutExitedEventDetails) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlackoutExitedEventDetails.ProtoReflect.Descriptor instead.
+func (*BlackoutExitedEventDetails) Descriptor() ([]byte, []int) {
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BlackoutExitedEventDetails) GetBlackoutDurationMilliseconds() uint64 {
+	if x != nil {
+		return x.BlackoutDurationMilliseconds
+	}
+	return 0
+}
+
+func (x *BlackoutExitedEventDetails) GetBlackoutStopTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.BlackoutStopTimestamp
+	}
+	return nil
+}
+
 // Notification is a notification payload describing the current
 // state of an in-progress live migration operation. It mirrors the HCS
 // OperationSystemMigrationNotificationInfo schema.
@@ -654,16 +711,20 @@ type Notification struct {
 	// State is an optional outcome accompanying the phase. Typically
 	// populated for terminal phases.
 	State PhaseState `protobuf:"varint,3,opt,name=state,proto3,enum=PhaseState" json:"state,omitempty"`
-	// AdditionalDetails carries extra phase-specific information whose
-	// schema depends on the phase being reported.
-	AdditionalDetails *anypb.Any `protobuf:"bytes,4,opt,name=additional_details,json=additionalDetails,proto3" json:"additional_details,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// PhaseDetails carries extra phase-specific information whose concrete
+	// type depends on the phase being reported.
+	//
+	// Types that are valid to be assigned to PhaseDetails:
+	//
+	//	*Notification_BlackoutExited
+	PhaseDetails  isNotification_PhaseDetails `protobuf_oneof:"phase_details"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Notification) Reset() {
 	*x = Notification{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -675,7 +736,7 @@ func (x *Notification) String() string {
 func (*Notification) ProtoMessage() {}
 
 func (x *Notification) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -688,7 +749,7 @@ func (x *Notification) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Notification.ProtoReflect.Descriptor instead.
 func (*Notification) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{4}
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Notification) GetOrigin() Origin {
@@ -712,18 +773,38 @@ func (x *Notification) GetState() PhaseState {
 	return PhaseState_PHASE_STATE_UNSPECIFIED
 }
 
-func (x *Notification) GetAdditionalDetails() *anypb.Any {
+func (x *Notification) GetPhaseDetails() isNotification_PhaseDetails {
 	if x != nil {
-		return x.AdditionalDetails
+		return x.PhaseDetails
 	}
 	return nil
 }
+
+func (x *Notification) GetBlackoutExited() *BlackoutExitedEventDetails {
+	if x != nil {
+		if x, ok := x.PhaseDetails.(*Notification_BlackoutExited); ok {
+			return x.BlackoutExited
+		}
+	}
+	return nil
+}
+
+type isNotification_PhaseDetails interface {
+	isNotification_PhaseDetails()
+}
+
+type Notification_BlackoutExited struct {
+	// Details reported with PHASE_BLACKOUT_EXITED.
+	BlackoutExited *BlackoutExitedEventDetails `protobuf:"bytes,4,opt,name=blackout_exited,json=blackoutExited,proto3,oneof"`
+}
+
+func (*Notification_BlackoutExited) isNotification_PhaseDetails() {}
 
 var File_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto protoreflect.FileDescriptor
 
 const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc = "" +
 	"\n" +
-	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\x1a\x19google/protobuf/any.proto\"\x9d\x05\n" +
+	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x05\n" +
 	"\x11InitializeOptions\x12;\n" +
 	"\x10memory_transport\x18\x01 \x01(\x0e2\x10.MemoryTransportR\x0fmemoryTransport\x12i\n" +
 	"\x1fmemory_transfer_throttle_params\x18\x02 \x01(\v2\x1d.MemoryTransferThrottleParamsH\x00R\x1cmemoryTransferThrottleParams\x88\x01\x01\x12L\n" +
@@ -757,12 +838,16 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ra
 	"1_blackout_time_threshold_for_cancelling_migration\"h\n" +
 	"\x13CompressionSettings\x127\n" +
 	"\x15throttle_worker_count\x18\x01 \x01(\rH\x00R\x13throttleWorkerCount\x88\x01\x01B\x18\n" +
-	"\x16_throttle_worker_count\"\xb5\x01\n" +
+	"\x16_throttle_worker_count\"\xb6\x01\n" +
+	"\x1aBlackoutExitedEventDetails\x12D\n" +
+	"\x1eblackout_duration_milliseconds\x18\x01 \x01(\x04R\x1cblackoutDurationMilliseconds\x12R\n" +
+	"\x17blackout_stop_timestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x15blackoutStopTimestamp\"\xc9\x01\n" +
 	"\fNotification\x12\x1f\n" +
 	"\x06origin\x18\x01 \x01(\x0e2\a.OriginR\x06origin\x12\x1c\n" +
 	"\x05phase\x18\x02 \x01(\x0e2\x06.PhaseR\x05phase\x12!\n" +
-	"\x05state\x18\x03 \x01(\x0e2\v.PhaseStateR\x05state\x12C\n" +
-	"\x12additional_details\x18\x04 \x01(\v2\x14.google.protobuf.AnyR\x11additionalDetails*M\n" +
+	"\x05state\x18\x03 \x01(\x0e2\v.PhaseStateR\x05state\x12F\n" +
+	"\x0fblackout_exited\x18\x04 \x01(\v2\x1b.BlackoutExitedEventDetailsH\x00R\x0eblackoutExitedB\x0f\n" +
+	"\rphase_details*M\n" +
 	"\x0fMemoryTransport\x12 \n" +
 	"\x1cMEMORY_TRANSPORT_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14MEMORY_TRANSPORT_TCP\x10\x01*K\n" +
@@ -804,7 +889,7 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_raw
 }
 
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_goTypes = []any{
 	(MemoryTransport)(0),                 // 0: MemoryTransport
 	(Origin)(0),                          // 1: Origin
@@ -814,23 +899,25 @@ var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_goTy
 	(*CompatibilityInfo)(nil),            // 5: CompatibilityInfo
 	(*MemoryTransferThrottleParams)(nil), // 6: MemoryTransferThrottleParams
 	(*CompressionSettings)(nil),          // 7: CompressionSettings
-	(*Notification)(nil),                 // 8: Notification
-	(*anypb.Any)(nil),                    // 9: google.protobuf.Any
+	(*BlackoutExitedEventDetails)(nil),   // 8: BlackoutExitedEventDetails
+	(*Notification)(nil),                 // 9: Notification
+	(*timestamppb.Timestamp)(nil),        // 10: google.protobuf.Timestamp
 }
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_depIdxs = []int32{
-	0, // 0: InitializeOptions.memory_transport:type_name -> MemoryTransport
-	6, // 1: InitializeOptions.memory_transfer_throttle_params:type_name -> MemoryTransferThrottleParams
-	7, // 2: InitializeOptions.compression_settings:type_name -> CompressionSettings
-	5, // 3: InitializeOptions.compatibility_data:type_name -> CompatibilityInfo
-	1, // 4: Notification.origin:type_name -> Origin
-	2, // 5: Notification.phase:type_name -> Phase
-	3, // 6: Notification.state:type_name -> PhaseState
-	9, // 7: Notification.additional_details:type_name -> google.protobuf.Any
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	0,  // 0: InitializeOptions.memory_transport:type_name -> MemoryTransport
+	6,  // 1: InitializeOptions.memory_transfer_throttle_params:type_name -> MemoryTransferThrottleParams
+	7,  // 2: InitializeOptions.compression_settings:type_name -> CompressionSettings
+	5,  // 3: InitializeOptions.compatibility_data:type_name -> CompatibilityInfo
+	10, // 4: BlackoutExitedEventDetails.blackout_stop_timestamp:type_name -> google.protobuf.Timestamp
+	1,  // 5: Notification.origin:type_name -> Origin
+	2,  // 6: Notification.phase:type_name -> Phase
+	3,  // 7: Notification.state:type_name -> PhaseState
+	8,  // 8: Notification.blackout_exited:type_name -> BlackoutExitedEventDetails
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_init() }
@@ -841,13 +928,16 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ini
 	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[0].OneofWrappers = []any{}
 	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2].OneofWrappers = []any{}
 	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3].OneofWrappers = []any{}
+	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[5].OneofWrappers = []any{
+		(*Notification_BlackoutExited)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc), len(file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
