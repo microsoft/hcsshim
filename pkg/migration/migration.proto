@@ -132,7 +132,7 @@ message PrepareAndExportSandboxRequest {
     string session_id = 1;
     // Source-side options that control how live migration is initialized
     // on the compute system.
-    MigrationInitializeOptions init_options = 2;
+    InitializeOptions init_options = 2;
 }
 
 message PrepareAndExportSandboxResponse {
@@ -161,7 +161,7 @@ message PrepareSandboxRequest {
     string session_id = 1;
     // Destination-side options that control how live migration is
     // initialized when the HCS compute system is created.
-    MigrationInitializeOptions init_options = 2;
+    InitializeOptions init_options = 2;
 }
 
 message PrepareSandboxResponse {}
@@ -221,7 +221,7 @@ message NotificationsResponse {
     // Structured notification describing the current migration event. This
     // mirrors the HCS OperationSystemMigrationNotificationInfo payload
     // emitted by the underlying compute system as the transfer progresses.
-    MigrationNotification notification = 2;
+    Notification notification = 2;
     // Server-side timestamp of when the transfer began.
     google.protobuf.Timestamp start_time = 3;
     // Server-side timestamp of when this particular update was produced.

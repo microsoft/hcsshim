@@ -22,256 +22,323 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// MigrationMemoryTransport is the transport protocol used for memory transfer during migration.
-type MigrationMemoryTransport int32
+// MemoryTransport is the transport protocol used for memory transfer during migration.
+type MemoryTransport int32
 
 const (
-	MigrationMemoryTransport_MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED MigrationMemoryTransport = 0
+	MemoryTransport_MEMORY_TRANSPORT_UNSPECIFIED MemoryTransport = 0
 	// VM memory is copied over a TCP/IP connection.
-	MigrationMemoryTransport_MIGRATION_MEMORY_TRANSPORT_TCP MigrationMemoryTransport = 1
+	MemoryTransport_MEMORY_TRANSPORT_TCP MemoryTransport = 1
 )
 
-// Enum value maps for MigrationMemoryTransport.
+// Enum value maps for MemoryTransport.
 var (
-	MigrationMemoryTransport_name = map[int32]string{
-		0: "MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED",
-		1: "MIGRATION_MEMORY_TRANSPORT_TCP",
+	MemoryTransport_name = map[int32]string{
+		0: "MEMORY_TRANSPORT_UNSPECIFIED",
+		1: "MEMORY_TRANSPORT_TCP",
 	}
-	MigrationMemoryTransport_value = map[string]int32{
-		"MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED": 0,
-		"MIGRATION_MEMORY_TRANSPORT_TCP":         1,
+	MemoryTransport_value = map[string]int32{
+		"MEMORY_TRANSPORT_UNSPECIFIED": 0,
+		"MEMORY_TRANSPORT_TCP":         1,
 	}
 )
 
-func (x MigrationMemoryTransport) Enum() *MigrationMemoryTransport {
-	p := new(MigrationMemoryTransport)
+func (x MemoryTransport) Enum() *MemoryTransport {
+	p := new(MemoryTransport)
 	*p = x
 	return p
 }
 
-func (x MigrationMemoryTransport) String() string {
+func (x MemoryTransport) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (MigrationMemoryTransport) Descriptor() protoreflect.EnumDescriptor {
+func (MemoryTransport) Descriptor() protoreflect.EnumDescriptor {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[0].Descriptor()
 }
 
-func (MigrationMemoryTransport) Type() protoreflect.EnumType {
+func (MemoryTransport) Type() protoreflect.EnumType {
 	return &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[0]
 }
 
-func (x MigrationMemoryTransport) Number() protoreflect.EnumNumber {
+func (x MemoryTransport) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use MigrationMemoryTransport.Descriptor instead.
-func (MigrationMemoryTransport) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use MemoryTransport.Descriptor instead.
+func (MemoryTransport) EnumDescriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{0}
 }
 
-// MigrationOrigin indicates which side of a live migration an operation or
+// Origin indicates which side of a live migration an operation or
 // notification pertains to.
-type MigrationOrigin int32
+type Origin int32
 
 const (
-	MigrationOrigin_MIGRATION_ORIGIN_UNSPECIFIED MigrationOrigin = 0
+	Origin_ORIGIN_UNSPECIFIED Origin = 0
 	// Source side of the live migration.
-	MigrationOrigin_MIGRATION_ORIGIN_SOURCE MigrationOrigin = 1
+	Origin_ORIGIN_SOURCE Origin = 1
 	// Destination side of the live migration.
-	MigrationOrigin_MIGRATION_ORIGIN_DESTINATION MigrationOrigin = 2
+	Origin_ORIGIN_DESTINATION Origin = 2
 )
 
-// Enum value maps for MigrationOrigin.
+// Enum value maps for Origin.
 var (
-	MigrationOrigin_name = map[int32]string{
-		0: "MIGRATION_ORIGIN_UNSPECIFIED",
-		1: "MIGRATION_ORIGIN_SOURCE",
-		2: "MIGRATION_ORIGIN_DESTINATION",
+	Origin_name = map[int32]string{
+		0: "ORIGIN_UNSPECIFIED",
+		1: "ORIGIN_SOURCE",
+		2: "ORIGIN_DESTINATION",
 	}
-	MigrationOrigin_value = map[string]int32{
-		"MIGRATION_ORIGIN_UNSPECIFIED": 0,
-		"MIGRATION_ORIGIN_SOURCE":      1,
-		"MIGRATION_ORIGIN_DESTINATION": 2,
+	Origin_value = map[string]int32{
+		"ORIGIN_UNSPECIFIED": 0,
+		"ORIGIN_SOURCE":      1,
+		"ORIGIN_DESTINATION": 2,
 	}
 )
 
-func (x MigrationOrigin) Enum() *MigrationOrigin {
-	p := new(MigrationOrigin)
+func (x Origin) Enum() *Origin {
+	p := new(Origin)
 	*p = x
 	return p
 }
 
-func (x MigrationOrigin) String() string {
+func (x Origin) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (MigrationOrigin) Descriptor() protoreflect.EnumDescriptor {
+func (Origin) Descriptor() protoreflect.EnumDescriptor {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[1].Descriptor()
 }
 
-func (MigrationOrigin) Type() protoreflect.EnumType {
+func (Origin) Type() protoreflect.EnumType {
 	return &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[1]
 }
 
-func (x MigrationOrigin) Number() protoreflect.EnumNumber {
+func (x Origin) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use MigrationOrigin.Descriptor instead.
-func (MigrationOrigin) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use Origin.Descriptor instead.
+func (Origin) EnumDescriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{1}
 }
 
-// MigrationEvent describes a live migration event reported by HCS during the
+// Phase describes a live migration phase reported by HCS during the
 // transfer phase of a live migration.
-type MigrationEvent int32
+type Phase int32
 
 const (
-	MigrationEvent_MIGRATION_EVENT_UNSPECIFIED MigrationEvent = 0
-	// Migration has completed.
-	MigrationEvent_MIGRATION_EVENT_MIGRATION_DONE MigrationEvent = 1
-	// The VM has entered the blackout phase.
-	MigrationEvent_MIGRATION_EVENT_BLACKOUT_STARTED MigrationEvent = 2
-	// Taking the VM offline has completed.
-	MigrationEvent_MIGRATION_EVENT_OFFLINE_DONE MigrationEvent = 3
+	Phase_PHASE_UNSPECIFIED Phase = 0
+	// The live migration setup has completed on the HCS side. Reported
+	// by the source; after this, clients can either start the memory
+	// transfer or set up SMB before performing the memory transfer.
+	Phase_PHASE_SETUP_DONE Phase = 1
+	// The VM is transferring memory and other necessary state. Reported
+	// periodically by the source as a progress signal while the VM state
+	// is being transferred to the destination.
+	Phase_PHASE_TRANSFER_IN_PROGRESS Phase = 2
+	// The VM has entered the blackout phase. Reported by the source
+	// immediately before the VM is paused for the final state transfer;
+	// from this point on the VM is not running on either host.
+	Phase_PHASE_BLACKOUT_STARTED Phase = 3
+	// Taking the VM offline has completed. Reported by the source after
+	// VMWP has transitioned itself to the MigratingSuspended (MTS) state,
+	// but before waiting for the VMWP client to signal that it is ready
+	// to enter MTS state at its layer. Always paired with
+	// PhaseState = PHASE_STATE_SUCCESS; offline failures are reported via
+	// PHASE_FAILED instead.
+	Phase_PHASE_OFFLINE_DONE Phase = 4
 	// The VM has successfully started again after the blackout phase.
-	MigrationEvent_MIGRATION_EVENT_BLACKOUT_EXITED MigrationEvent = 4
-	// The live migration setup has completed.
-	MigrationEvent_MIGRATION_EVENT_SETUP_DONE MigrationEvent = 5
-	// The VM is still transferring memory and other necessary state.
-	MigrationEvent_MIGRATION_EVENT_TRANSFER_IN_PROGRESS MigrationEvent = 6
-	// Migration recovery has been performed.
-	MigrationEvent_MIGRATION_EVENT_MIGRATION_RECOVERY_DONE MigrationEvent = 7
-	// Migration failed.
-	MigrationEvent_MIGRATION_EVENT_MIGRATION_FAILED MigrationEvent = 8
+	Phase_PHASE_BLACKOUT_EXITED Phase = 5
+	// Migration has completed (terminal phase). The accompanying
+	// PhaseState describes whether the migration succeeded or failed,
+	// and on which side the failure was observed.
+	Phase_PHASE_DONE Phase = 6
+	// Migration recovery has been performed. Reported by the source
+	// after attempting to recover the VM following a failed or cancelled
+	// migration. The accompanying PhaseState is PHASE_STATE_SUCCESS if
+	// the VM was successfully resumed on the source, or
+	// PHASE_STATE_RECOVERY_FAILED if recovery itself failed.
+	Phase_PHASE_RECOVERY_DONE Phase = 7
+	// Migration failed (terminal phase). Reported by the source for
+	// non-success outcomes of the offline step (and equivalent failure
+	// points). The accompanying PhaseState carries the reason:
+	// PHASE_STATE_SOURCE_FAILED, PHASE_STATE_DESTINATION_FAILED,
+	// PHASE_STATE_CANCELLED, or PHASE_STATE_GUEST_INITIATED_CANCELLATION.
+	Phase_PHASE_FAILED Phase = 8
 )
 
-// Enum value maps for MigrationEvent.
+// Enum value maps for Phase.
 var (
-	MigrationEvent_name = map[int32]string{
-		0: "MIGRATION_EVENT_UNSPECIFIED",
-		1: "MIGRATION_EVENT_MIGRATION_DONE",
-		2: "MIGRATION_EVENT_BLACKOUT_STARTED",
-		3: "MIGRATION_EVENT_OFFLINE_DONE",
-		4: "MIGRATION_EVENT_BLACKOUT_EXITED",
-		5: "MIGRATION_EVENT_SETUP_DONE",
-		6: "MIGRATION_EVENT_TRANSFER_IN_PROGRESS",
-		7: "MIGRATION_EVENT_MIGRATION_RECOVERY_DONE",
-		8: "MIGRATION_EVENT_MIGRATION_FAILED",
+	Phase_name = map[int32]string{
+		0: "PHASE_UNSPECIFIED",
+		1: "PHASE_SETUP_DONE",
+		2: "PHASE_TRANSFER_IN_PROGRESS",
+		3: "PHASE_BLACKOUT_STARTED",
+		4: "PHASE_OFFLINE_DONE",
+		5: "PHASE_BLACKOUT_EXITED",
+		6: "PHASE_DONE",
+		7: "PHASE_RECOVERY_DONE",
+		8: "PHASE_FAILED",
 	}
-	MigrationEvent_value = map[string]int32{
-		"MIGRATION_EVENT_UNSPECIFIED":             0,
-		"MIGRATION_EVENT_MIGRATION_DONE":          1,
-		"MIGRATION_EVENT_BLACKOUT_STARTED":        2,
-		"MIGRATION_EVENT_OFFLINE_DONE":            3,
-		"MIGRATION_EVENT_BLACKOUT_EXITED":         4,
-		"MIGRATION_EVENT_SETUP_DONE":              5,
-		"MIGRATION_EVENT_TRANSFER_IN_PROGRESS":    6,
-		"MIGRATION_EVENT_MIGRATION_RECOVERY_DONE": 7,
-		"MIGRATION_EVENT_MIGRATION_FAILED":        8,
+	Phase_value = map[string]int32{
+		"PHASE_UNSPECIFIED":          0,
+		"PHASE_SETUP_DONE":           1,
+		"PHASE_TRANSFER_IN_PROGRESS": 2,
+		"PHASE_BLACKOUT_STARTED":     3,
+		"PHASE_OFFLINE_DONE":         4,
+		"PHASE_BLACKOUT_EXITED":      5,
+		"PHASE_DONE":                 6,
+		"PHASE_RECOVERY_DONE":        7,
+		"PHASE_FAILED":               8,
 	}
 )
 
-func (x MigrationEvent) Enum() *MigrationEvent {
-	p := new(MigrationEvent)
+func (x Phase) Enum() *Phase {
+	p := new(Phase)
 	*p = x
 	return p
 }
 
-func (x MigrationEvent) String() string {
+func (x Phase) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (MigrationEvent) Descriptor() protoreflect.EnumDescriptor {
+func (Phase) Descriptor() protoreflect.EnumDescriptor {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[2].Descriptor()
 }
 
-func (MigrationEvent) Type() protoreflect.EnumType {
+func (Phase) Type() protoreflect.EnumType {
 	return &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[2]
 }
 
-func (x MigrationEvent) Number() protoreflect.EnumNumber {
+func (x Phase) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use MigrationEvent.Descriptor instead.
-func (MigrationEvent) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use Phase.Descriptor instead.
+func (Phase) EnumDescriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{2}
 }
 
-// MigrationResult describes the possible result of a migration operation,
-// typically populated for terminal events such as MIGRATION_EVENT_MIGRATION_DONE
-// or MIGRATION_EVENT_MIGRATION_FAILED.
-type MigrationResult int32
+// PhaseState describes the possible state of a migration phase,
+// typically populated for terminal phases such as PHASE_DONE
+// or PHASE_FAILED.
+type PhaseState int32
 
 const (
-	MigrationResult_MIGRATION_RESULT_UNSPECIFIED                  MigrationResult = 0
-	MigrationResult_MIGRATION_RESULT_SUCCESS                      MigrationResult = 1
-	MigrationResult_MIGRATION_RESULT_MIGRATION_CANCELLED          MigrationResult = 2
-	MigrationResult_MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION MigrationResult = 3
-	MigrationResult_MIGRATION_RESULT_SOURCE_MIGRATION_FAILED      MigrationResult = 4
-	MigrationResult_MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED MigrationResult = 5
-	MigrationResult_MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED    MigrationResult = 6
+	// No state reported. Used as the default zero value and for
+	// non-terminal phases that do not carry an outcome.
+	PhaseState_PHASE_STATE_UNSPECIFIED PhaseState = 0
+	// The reported phase completed successfully. Emitted in several
+	// places, including:
+	//   - Phase = PHASE_DONE: by the source after a successful
+	//     migrate-to-suspended (MTS) workflow, and by the destination
+	//     once the VM has been fully restored on the target host.
+	//   - Phase = PHASE_OFFLINE_DONE: by the source after VMWP
+	//     successfully takes the VM offline so migration can continue.
+	//   - Phase = PHASE_RECOVERY_DONE: by the source after the VM has
+	//     been successfully rolled back to its pre-migration running
+	//     state following a failed or cancelled migration.
+	PhaseState_PHASE_STATE_SUCCESS PhaseState = 1
+	// Migration was cancelled. Reported with:
+	//   - Phase = PHASE_FAILED by the source when its offline step
+	//     observes a non-guest cancellation
+	//     (MigrationSourceOfflineCanceled).
+	//   - Phase = PHASE_DONE by the destination when, after the setup
+	//     phase has completed, the migration target detects a
+	//     cancellation (MigrationTargetCanceled).
+	PhaseState_PHASE_STATE_CANCELLED PhaseState = 2
+	// Migration was cancelled because the guest initiated a shutdown or
+	// reset of the VM. Reported by the source with Phase = PHASE_FAILED
+	// (MigrationSourceOfflineGuestCanceled). VMWP performs the
+	// shutdown/reset on its own; this state exists to inform clients
+	// that LM was cancelled as a result of guest action.
+	PhaseState_PHASE_STATE_GUEST_INITIATED_CANCELLATION PhaseState = 3
+	// Migration failed and the failure originated on the source. Reported
+	// with:
+	//   - Phase = PHASE_FAILED by the source when its offline step fails
+	//     (MigrationSourceOfflineFailed).
+	//   - Phase = PHASE_DONE by the source when, after the offline phase
+	//     but before the VM has been restored on the target, the source
+	//     fails for a reason that is not destination-attributable.
+	//   - Phase = PHASE_DONE by the destination when, after the setup
+	//     phase has completed, the migration target observes a
+	//     non-cancellation failure that came from the source.
+	PhaseState_PHASE_STATE_SOURCE_FAILED PhaseState = 4
+	// Migration failed and the failure originated on the destination.
+	// Reported by the source with:
+	//   - Phase = PHASE_FAILED when its offline step observes a
+	//     destination-side failure (MigrationSourceOfflineDestinationFailed).
+	//   - Phase = PHASE_DONE when, after the offline phase but before the
+	//     VM has been restored on the target, the source detects that
+	//     the destination failed
+	//     (m_FailureReason == FailureDestinationFailed).
+	PhaseState_PHASE_STATE_DESTINATION_FAILED PhaseState = 5
+	// Migration recovery failed. Reported by the source with
+	// Phase = PHASE_RECOVERY_DONE when the attempt to recover the VM
+	// after a failed or cancelled migration did not succeed (the source
+	// could not be returned to its pre-migration running state).
+	PhaseState_PHASE_STATE_RECOVERY_FAILED PhaseState = 6
 )
 
-// Enum value maps for MigrationResult.
+// Enum value maps for PhaseState.
 var (
-	MigrationResult_name = map[int32]string{
-		0: "MIGRATION_RESULT_UNSPECIFIED",
-		1: "MIGRATION_RESULT_SUCCESS",
-		2: "MIGRATION_RESULT_MIGRATION_CANCELLED",
-		3: "MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION",
-		4: "MIGRATION_RESULT_SOURCE_MIGRATION_FAILED",
-		5: "MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED",
-		6: "MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED",
+	PhaseState_name = map[int32]string{
+		0: "PHASE_STATE_UNSPECIFIED",
+		1: "PHASE_STATE_SUCCESS",
+		2: "PHASE_STATE_CANCELLED",
+		3: "PHASE_STATE_GUEST_INITIATED_CANCELLATION",
+		4: "PHASE_STATE_SOURCE_FAILED",
+		5: "PHASE_STATE_DESTINATION_FAILED",
+		6: "PHASE_STATE_RECOVERY_FAILED",
 	}
-	MigrationResult_value = map[string]int32{
-		"MIGRATION_RESULT_UNSPECIFIED":                  0,
-		"MIGRATION_RESULT_SUCCESS":                      1,
-		"MIGRATION_RESULT_MIGRATION_CANCELLED":          2,
-		"MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION": 3,
-		"MIGRATION_RESULT_SOURCE_MIGRATION_FAILED":      4,
-		"MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED": 5,
-		"MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED":    6,
+	PhaseState_value = map[string]int32{
+		"PHASE_STATE_UNSPECIFIED":                  0,
+		"PHASE_STATE_SUCCESS":                      1,
+		"PHASE_STATE_CANCELLED":                    2,
+		"PHASE_STATE_GUEST_INITIATED_CANCELLATION": 3,
+		"PHASE_STATE_SOURCE_FAILED":                4,
+		"PHASE_STATE_DESTINATION_FAILED":           5,
+		"PHASE_STATE_RECOVERY_FAILED":              6,
 	}
 )
 
-func (x MigrationResult) Enum() *MigrationResult {
-	p := new(MigrationResult)
+func (x PhaseState) Enum() *PhaseState {
+	p := new(PhaseState)
 	*p = x
 	return p
 }
 
-func (x MigrationResult) String() string {
+func (x PhaseState) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (MigrationResult) Descriptor() protoreflect.EnumDescriptor {
+func (PhaseState) Descriptor() protoreflect.EnumDescriptor {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[3].Descriptor()
 }
 
-func (MigrationResult) Type() protoreflect.EnumType {
+func (PhaseState) Type() protoreflect.EnumType {
 	return &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes[3]
 }
 
-func (x MigrationResult) Number() protoreflect.EnumNumber {
+func (x PhaseState) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use MigrationResult.Descriptor instead.
-func (MigrationResult) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use PhaseState.Descriptor instead.
+func (PhaseState) EnumDescriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{3}
 }
 
-type MigrationInitializeOptions struct {
+type InitializeOptions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// MemoryTransport specifies the transport protocol for memory transfer during migration.
-	MemoryTransport MigrationMemoryTransport `protobuf:"varint,1,opt,name=memory_transport,json=memoryTransport,proto3,enum=MigrationMemoryTransport" json:"memory_transport,omitempty"`
+	MemoryTransport MemoryTransport `protobuf:"varint,1,opt,name=memory_transport,json=memoryTransport,proto3,enum=MemoryTransport" json:"memory_transport,omitempty"`
 	// MemoryTransferThrottleParams specifies settings for throttling during memory transfer.
-	MemoryTransferThrottleParams *MemoryMigrationTransferThrottleParams `protobuf:"bytes,2,opt,name=memory_transfer_throttle_params,json=memoryTransferThrottleParams,proto3,oneof" json:"memory_transfer_throttle_params,omitempty"`
+	MemoryTransferThrottleParams *MemoryTransferThrottleParams `protobuf:"bytes,2,opt,name=memory_transfer_throttle_params,json=memoryTransferThrottleParams,proto3,oneof" json:"memory_transfer_throttle_params,omitempty"`
 	// CompressionSettings specifies additional settings when compression is enabled.
-	CompressionSettings *MigrationCompressionSettings `protobuf:"bytes,3,opt,name=compression_settings,json=compressionSettings,proto3,oneof" json:"compression_settings,omitempty"`
+	CompressionSettings *CompressionSettings `protobuf:"bytes,3,opt,name=compression_settings,json=compressionSettings,proto3,oneof" json:"compression_settings,omitempty"`
 	// ChecksumVerification enables memory checksum verification.
 	ChecksumVerification bool `protobuf:"varint,4,opt,name=checksum_verification,json=checksumVerification,proto3" json:"checksum_verification,omitempty"`
 	// PerfTracingEnabled enables performance tracing during migration.
@@ -286,20 +353,20 @@ type MigrationInitializeOptions struct {
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *MigrationInitializeOptions) Reset() {
-	*x = MigrationInitializeOptions{}
+func (x *InitializeOptions) Reset() {
+	*x = InitializeOptions{}
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MigrationInitializeOptions) String() string {
+func (x *InitializeOptions) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MigrationInitializeOptions) ProtoMessage() {}
+func (*InitializeOptions) ProtoMessage() {}
 
-func (x *MigrationInitializeOptions) ProtoReflect() protoreflect.Message {
+func (x *InitializeOptions) ProtoReflect() protoreflect.Message {
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -311,61 +378,61 @@ func (x *MigrationInitializeOptions) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MigrationInitializeOptions.ProtoReflect.Descriptor instead.
-func (*MigrationInitializeOptions) Descriptor() ([]byte, []int) {
+// Deprecated: Use InitializeOptions.ProtoReflect.Descriptor instead.
+func (*InitializeOptions) Descriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *MigrationInitializeOptions) GetMemoryTransport() MigrationMemoryTransport {
+func (x *InitializeOptions) GetMemoryTransport() MemoryTransport {
 	if x != nil {
 		return x.MemoryTransport
 	}
-	return MigrationMemoryTransport_MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED
+	return MemoryTransport_MEMORY_TRANSPORT_UNSPECIFIED
 }
 
-func (x *MigrationInitializeOptions) GetMemoryTransferThrottleParams() *MemoryMigrationTransferThrottleParams {
+func (x *InitializeOptions) GetMemoryTransferThrottleParams() *MemoryTransferThrottleParams {
 	if x != nil {
 		return x.MemoryTransferThrottleParams
 	}
 	return nil
 }
 
-func (x *MigrationInitializeOptions) GetCompressionSettings() *MigrationCompressionSettings {
+func (x *InitializeOptions) GetCompressionSettings() *CompressionSettings {
 	if x != nil {
 		return x.CompressionSettings
 	}
 	return nil
 }
 
-func (x *MigrationInitializeOptions) GetChecksumVerification() bool {
+func (x *InitializeOptions) GetChecksumVerification() bool {
 	if x != nil {
 		return x.ChecksumVerification
 	}
 	return false
 }
 
-func (x *MigrationInitializeOptions) GetPerfTracingEnabled() bool {
+func (x *InitializeOptions) GetPerfTracingEnabled() bool {
 	if x != nil {
 		return x.PerfTracingEnabled
 	}
 	return false
 }
 
-func (x *MigrationInitializeOptions) GetCancelIfBlackoutThresholdExceeds() bool {
+func (x *InitializeOptions) GetCancelIfBlackoutThresholdExceeds() bool {
 	if x != nil {
 		return x.CancelIfBlackoutThresholdExceeds
 	}
 	return false
 }
 
-func (x *MigrationInitializeOptions) GetPrepareMemoryTransferMode() bool {
+func (x *InitializeOptions) GetPrepareMemoryTransferMode() bool {
 	if x != nil {
 		return x.PrepareMemoryTransferMode
 	}
 	return false
 }
 
-func (x *MigrationInitializeOptions) GetCompatibilityData() *CompatibilityInfo {
+func (x *InitializeOptions) GetCompatibilityData() *CompatibilityInfo {
 	if x != nil {
 		return x.CompatibilityData
 	}
@@ -418,7 +485,7 @@ func (x *CompatibilityInfo) GetData() []byte {
 	return nil
 }
 
-type MemoryMigrationTransferThrottleParams struct {
+type MemoryTransferThrottleParams struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// A flag indicating if throttling should be skipped.
 	SkipThrottling *bool `protobuf:"varint,1,opt,name=skip_throttling,json=skipThrottling,proto3,oneof" json:"skip_throttling,omitempty"`
@@ -432,28 +499,30 @@ type MemoryMigrationTransferThrottleParams struct {
 	StartingBrownoutPassNumberForThrottling *uint32 `protobuf:"varint,5,opt,name=starting_brownout_pass_number_for_throttling,json=startingBrownoutPassNumberForThrottling,proto3,oneof" json:"starting_brownout_pass_number_for_throttling,omitempty"`
 	// Maximum number of memory transfer passes before forcing the VM to enter blackout.
 	MaximumNumberOfBrownoutTransferPasses *uint32 `protobuf:"varint,6,opt,name=maximum_number_of_brownout_transfer_passes,json=maximumNumberOfBrownoutTransferPasses,proto3,oneof" json:"maximum_number_of_brownout_transfer_passes,omitempty"`
-	// Expected duration for blackout transfer time.
+	// Expected duration, in milliseconds, for the blackout memory
+	// transfer to complete.
 	TargetBlackoutTransferTime *uint32 `protobuf:"varint,7,opt,name=target_blackout_transfer_time,json=targetBlackoutTransferTime,proto3,oneof" json:"target_blackout_transfer_time,omitempty"`
-	// Threshold for blackout duration prior to cancelling migration.
+	// Threshold, in milliseconds, for blackout duration prior to
+	// cancelling migration.
 	BlackoutTimeThresholdForCancellingMigration *uint32 `protobuf:"varint,8,opt,name=blackout_time_threshold_for_cancelling_migration,json=blackoutTimeThresholdForCancellingMigration,proto3,oneof" json:"blackout_time_threshold_for_cancelling_migration,omitempty"`
 	unknownFields                               protoimpl.UnknownFields
 	sizeCache                                   protoimpl.SizeCache
 }
 
-func (x *MemoryMigrationTransferThrottleParams) Reset() {
-	*x = MemoryMigrationTransferThrottleParams{}
+func (x *MemoryTransferThrottleParams) Reset() {
+	*x = MemoryTransferThrottleParams{}
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MemoryMigrationTransferThrottleParams) String() string {
+func (x *MemoryTransferThrottleParams) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MemoryMigrationTransferThrottleParams) ProtoMessage() {}
+func (*MemoryTransferThrottleParams) ProtoMessage() {}
 
-func (x *MemoryMigrationTransferThrottleParams) ProtoReflect() protoreflect.Message {
+func (x *MemoryTransferThrottleParams) ProtoReflect() protoreflect.Message {
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -465,68 +534,68 @@ func (x *MemoryMigrationTransferThrottleParams) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MemoryMigrationTransferThrottleParams.ProtoReflect.Descriptor instead.
-func (*MemoryMigrationTransferThrottleParams) Descriptor() ([]byte, []int) {
+// Deprecated: Use MemoryTransferThrottleParams.ProtoReflect.Descriptor instead.
+func (*MemoryTransferThrottleParams) Descriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetSkipThrottling() bool {
+func (x *MemoryTransferThrottleParams) GetSkipThrottling() bool {
 	if x != nil && x.SkipThrottling != nil {
 		return *x.SkipThrottling
 	}
 	return false
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetThrottlingScale() float64 {
+func (x *MemoryTransferThrottleParams) GetThrottlingScale() float64 {
 	if x != nil && x.ThrottlingScale != nil {
 		return *x.ThrottlingScale
 	}
 	return 0
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetMinimumThrottlePercentage() uint32 {
+func (x *MemoryTransferThrottleParams) GetMinimumThrottlePercentage() uint32 {
 	if x != nil && x.MinimumThrottlePercentage != nil {
 		return *x.MinimumThrottlePercentage
 	}
 	return 0
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetTargetNumberOfBrownoutTransferPasses() uint32 {
+func (x *MemoryTransferThrottleParams) GetTargetNumberOfBrownoutTransferPasses() uint32 {
 	if x != nil && x.TargetNumberOfBrownoutTransferPasses != nil {
 		return *x.TargetNumberOfBrownoutTransferPasses
 	}
 	return 0
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetStartingBrownoutPassNumberForThrottling() uint32 {
+func (x *MemoryTransferThrottleParams) GetStartingBrownoutPassNumberForThrottling() uint32 {
 	if x != nil && x.StartingBrownoutPassNumberForThrottling != nil {
 		return *x.StartingBrownoutPassNumberForThrottling
 	}
 	return 0
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetMaximumNumberOfBrownoutTransferPasses() uint32 {
+func (x *MemoryTransferThrottleParams) GetMaximumNumberOfBrownoutTransferPasses() uint32 {
 	if x != nil && x.MaximumNumberOfBrownoutTransferPasses != nil {
 		return *x.MaximumNumberOfBrownoutTransferPasses
 	}
 	return 0
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetTargetBlackoutTransferTime() uint32 {
+func (x *MemoryTransferThrottleParams) GetTargetBlackoutTransferTime() uint32 {
 	if x != nil && x.TargetBlackoutTransferTime != nil {
 		return *x.TargetBlackoutTransferTime
 	}
 	return 0
 }
 
-func (x *MemoryMigrationTransferThrottleParams) GetBlackoutTimeThresholdForCancellingMigration() uint32 {
+func (x *MemoryTransferThrottleParams) GetBlackoutTimeThresholdForCancellingMigration() uint32 {
 	if x != nil && x.BlackoutTimeThresholdForCancellingMigration != nil {
 		return *x.BlackoutTimeThresholdForCancellingMigration
 	}
 	return 0
 }
 
-type MigrationCompressionSettings struct {
+type CompressionSettings struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Number of worker threads used for [de]compression. Values higher than what the host
 	// and VM configuration can support will be adjusted. The value should be non-zero.
@@ -535,20 +604,20 @@ type MigrationCompressionSettings struct {
 	sizeCache           protoimpl.SizeCache
 }
 
-func (x *MigrationCompressionSettings) Reset() {
-	*x = MigrationCompressionSettings{}
+func (x *CompressionSettings) Reset() {
+	*x = CompressionSettings{}
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MigrationCompressionSettings) String() string {
+func (x *CompressionSettings) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MigrationCompressionSettings) ProtoMessage() {}
+func (*CompressionSettings) ProtoMessage() {}
 
-func (x *MigrationCompressionSettings) ProtoReflect() protoreflect.Message {
+func (x *CompressionSettings) ProtoReflect() protoreflect.Message {
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -560,52 +629,52 @@ func (x *MigrationCompressionSettings) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MigrationCompressionSettings.ProtoReflect.Descriptor instead.
-func (*MigrationCompressionSettings) Descriptor() ([]byte, []int) {
+// Deprecated: Use CompressionSettings.ProtoReflect.Descriptor instead.
+func (*CompressionSettings) Descriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *MigrationCompressionSettings) GetThrottleWorkerCount() uint32 {
+func (x *CompressionSettings) GetThrottleWorkerCount() uint32 {
 	if x != nil && x.ThrottleWorkerCount != nil {
 		return *x.ThrottleWorkerCount
 	}
 	return 0
 }
 
-// MigrationNotification is a notification payload describing the current
+// Notification is a notification payload describing the current
 // state of an in-progress live migration operation. It mirrors the HCS
 // OperationSystemMigrationNotificationInfo schema.
-type MigrationNotification struct {
+type Notification struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Origin indicates which side of the live migration this notification
 	// pertains to.
-	Origin MigrationOrigin `protobuf:"varint,1,opt,name=origin,proto3,enum=MigrationOrigin" json:"origin,omitempty"`
-	// Event is the type of live migration event being reported.
-	Event MigrationEvent `protobuf:"varint,2,opt,name=event,proto3,enum=MigrationEvent" json:"event,omitempty"`
-	// Result is an optional outcome accompanying the event. Typically
-	// populated for terminal events.
-	Result MigrationResult `protobuf:"varint,3,opt,name=result,proto3,enum=MigrationResult" json:"result,omitempty"`
-	// AdditionalDetails carries extra event-specific information whose
-	// schema depends on the event being reported.
+	Origin Origin `protobuf:"varint,1,opt,name=origin,proto3,enum=Origin" json:"origin,omitempty"`
+	// Phase is the live migration phase being reported.
+	Phase Phase `protobuf:"varint,2,opt,name=phase,proto3,enum=Phase" json:"phase,omitempty"`
+	// State is an optional outcome accompanying the phase. Typically
+	// populated for terminal phases.
+	State PhaseState `protobuf:"varint,3,opt,name=state,proto3,enum=PhaseState" json:"state,omitempty"`
+	// AdditionalDetails carries extra phase-specific information whose
+	// schema depends on the phase being reported.
 	AdditionalDetails *anypb.Any `protobuf:"bytes,4,opt,name=additional_details,json=additionalDetails,proto3" json:"additional_details,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *MigrationNotification) Reset() {
-	*x = MigrationNotification{}
+func (x *Notification) Reset() {
+	*x = Notification{}
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MigrationNotification) String() string {
+func (x *Notification) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MigrationNotification) ProtoMessage() {}
+func (*Notification) ProtoMessage() {}
 
-func (x *MigrationNotification) ProtoReflect() protoreflect.Message {
+func (x *Notification) ProtoReflect() protoreflect.Message {
 	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -617,33 +686,33 @@ func (x *MigrationNotification) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MigrationNotification.ProtoReflect.Descriptor instead.
-func (*MigrationNotification) Descriptor() ([]byte, []int) {
+// Deprecated: Use Notification.ProtoReflect.Descriptor instead.
+func (*Notification) Descriptor() ([]byte, []int) {
 	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *MigrationNotification) GetOrigin() MigrationOrigin {
+func (x *Notification) GetOrigin() Origin {
 	if x != nil {
 		return x.Origin
 	}
-	return MigrationOrigin_MIGRATION_ORIGIN_UNSPECIFIED
+	return Origin_ORIGIN_UNSPECIFIED
 }
 
-func (x *MigrationNotification) GetEvent() MigrationEvent {
+func (x *Notification) GetPhase() Phase {
 	if x != nil {
-		return x.Event
+		return x.Phase
 	}
-	return MigrationEvent_MIGRATION_EVENT_UNSPECIFIED
+	return Phase_PHASE_UNSPECIFIED
 }
 
-func (x *MigrationNotification) GetResult() MigrationResult {
+func (x *Notification) GetState() PhaseState {
 	if x != nil {
-		return x.Result
+		return x.State
 	}
-	return MigrationResult_MIGRATION_RESULT_UNSPECIFIED
+	return PhaseState_PHASE_STATE_UNSPECIFIED
 }
 
-func (x *MigrationNotification) GetAdditionalDetails() *anypb.Any {
+func (x *Notification) GetAdditionalDetails() *anypb.Any {
 	if x != nil {
 		return x.AdditionalDetails
 	}
@@ -654,11 +723,11 @@ var File_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto prot
 
 const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc = "" +
 	"\n" +
-	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\x1a\x19google/protobuf/any.proto\"\xc1\x05\n" +
-	"\x1aMigrationInitializeOptions\x12D\n" +
-	"\x10memory_transport\x18\x01 \x01(\x0e2\x19.MigrationMemoryTransportR\x0fmemoryTransport\x12r\n" +
-	"\x1fmemory_transfer_throttle_params\x18\x02 \x01(\v2&.MemoryMigrationTransferThrottleParamsH\x00R\x1cmemoryTransferThrottleParams\x88\x01\x01\x12U\n" +
-	"\x14compression_settings\x18\x03 \x01(\v2\x1d.MigrationCompressionSettingsH\x01R\x13compressionSettings\x88\x01\x01\x123\n" +
+	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\x1a\x19google/protobuf/any.proto\"\x9d\x05\n" +
+	"\x11InitializeOptions\x12;\n" +
+	"\x10memory_transport\x18\x01 \x01(\x0e2\x10.MemoryTransportR\x0fmemoryTransport\x12i\n" +
+	"\x1fmemory_transfer_throttle_params\x18\x02 \x01(\v2\x1d.MemoryTransferThrottleParamsH\x00R\x1cmemoryTransferThrottleParams\x88\x01\x01\x12L\n" +
+	"\x14compression_settings\x18\x03 \x01(\v2\x14.CompressionSettingsH\x01R\x13compressionSettings\x88\x01\x01\x123\n" +
 	"\x15checksum_verification\x18\x04 \x01(\bR\x14checksumVerification\x120\n" +
 	"\x14perf_tracing_enabled\x18\x05 \x01(\bR\x12perfTracingEnabled\x12N\n" +
 	"$cancel_if_blackout_threshold_exceeds\x18\x06 \x01(\bR cancelIfBlackoutThresholdExceeds\x12?\n" +
@@ -668,8 +737,8 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ra
 	"\x15_compression_settingsB\x15\n" +
 	"\x13_compatibility_data\"'\n" +
 	"\x11CompatibilityInfo\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\"\xce\a\n" +
-	"%MemoryMigrationTransferThrottleParams\x12,\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\"\xc5\a\n" +
+	"\x1cMemoryTransferThrottleParams\x12,\n" +
 	"\x0fskip_throttling\x18\x01 \x01(\bH\x00R\x0eskipThrottling\x88\x01\x01\x12.\n" +
 	"\x10throttling_scale\x18\x02 \x01(\x01H\x01R\x0fthrottlingScale\x88\x01\x01\x12C\n" +
 	"\x1bminimum_throttle_percentage\x18\x03 \x01(\rH\x02R\x19minimumThrottlePercentage\x88\x01\x01\x12\\\n" +
@@ -685,40 +754,42 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ra
 	"-_starting_brownout_pass_number_for_throttlingB-\n" +
 	"+_maximum_number_of_brownout_transfer_passesB \n" +
 	"\x1e_target_blackout_transfer_timeB3\n" +
-	"1_blackout_time_threshold_for_cancelling_migration\"q\n" +
-	"\x1cMigrationCompressionSettings\x127\n" +
+	"1_blackout_time_threshold_for_cancelling_migration\"h\n" +
+	"\x13CompressionSettings\x127\n" +
 	"\x15throttle_worker_count\x18\x01 \x01(\rH\x00R\x13throttleWorkerCount\x88\x01\x01B\x18\n" +
-	"\x16_throttle_worker_count\"\xd7\x01\n" +
-	"\x15MigrationNotification\x12(\n" +
-	"\x06origin\x18\x01 \x01(\x0e2\x10.MigrationOriginR\x06origin\x12%\n" +
-	"\x05event\x18\x02 \x01(\x0e2\x0f.MigrationEventR\x05event\x12(\n" +
-	"\x06result\x18\x03 \x01(\x0e2\x10.MigrationResultR\x06result\x12C\n" +
-	"\x12additional_details\x18\x04 \x01(\v2\x14.google.protobuf.AnyR\x11additionalDetails*j\n" +
-	"\x18MigrationMemoryTransport\x12*\n" +
-	"&MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED\x10\x00\x12\"\n" +
-	"\x1eMIGRATION_MEMORY_TRANSPORT_TCP\x10\x01*r\n" +
-	"\x0fMigrationOrigin\x12 \n" +
-	"\x1cMIGRATION_ORIGIN_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17MIGRATION_ORIGIN_SOURCE\x10\x01\x12 \n" +
-	"\x1cMIGRATION_ORIGIN_DESTINATION\x10\x02*\xdf\x02\n" +
-	"\x0eMigrationEvent\x12\x1f\n" +
-	"\x1bMIGRATION_EVENT_UNSPECIFIED\x10\x00\x12\"\n" +
-	"\x1eMIGRATION_EVENT_MIGRATION_DONE\x10\x01\x12$\n" +
-	" MIGRATION_EVENT_BLACKOUT_STARTED\x10\x02\x12 \n" +
-	"\x1cMIGRATION_EVENT_OFFLINE_DONE\x10\x03\x12#\n" +
-	"\x1fMIGRATION_EVENT_BLACKOUT_EXITED\x10\x04\x12\x1e\n" +
-	"\x1aMIGRATION_EVENT_SETUP_DONE\x10\x05\x12(\n" +
-	"$MIGRATION_EVENT_TRANSFER_IN_PROGRESS\x10\x06\x12+\n" +
-	"'MIGRATION_EVENT_MIGRATION_RECOVERY_DONE\x10\a\x12$\n" +
-	" MIGRATION_EVENT_MIGRATION_FAILED\x10\b*\xbf\x02\n" +
-	"\x0fMigrationResult\x12 \n" +
-	"\x1cMIGRATION_RESULT_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18MIGRATION_RESULT_SUCCESS\x10\x01\x12(\n" +
-	"$MIGRATION_RESULT_MIGRATION_CANCELLED\x10\x02\x121\n" +
-	"-MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION\x10\x03\x12,\n" +
-	"(MIGRATION_RESULT_SOURCE_MIGRATION_FAILED\x10\x04\x121\n" +
-	"-MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED\x10\x05\x12.\n" +
-	"*MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED\x10\x06B6Z4github.com/Microsoft/hcsshim/pkg/migration;migrationb\x06proto3"
+	"\x16_throttle_worker_count\"\xb5\x01\n" +
+	"\fNotification\x12\x1f\n" +
+	"\x06origin\x18\x01 \x01(\x0e2\a.OriginR\x06origin\x12\x1c\n" +
+	"\x05phase\x18\x02 \x01(\x0e2\x06.PhaseR\x05phase\x12!\n" +
+	"\x05state\x18\x03 \x01(\x0e2\v.PhaseStateR\x05state\x12C\n" +
+	"\x12additional_details\x18\x04 \x01(\v2\x14.google.protobuf.AnyR\x11additionalDetails*M\n" +
+	"\x0fMemoryTransport\x12 \n" +
+	"\x1cMEMORY_TRANSPORT_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14MEMORY_TRANSPORT_TCP\x10\x01*K\n" +
+	"\x06Origin\x12\x16\n" +
+	"\x12ORIGIN_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rORIGIN_SOURCE\x10\x01\x12\x16\n" +
+	"\x12ORIGIN_DESTINATION\x10\x02*\xde\x01\n" +
+	"\x05Phase\x12\x15\n" +
+	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10PHASE_SETUP_DONE\x10\x01\x12\x1e\n" +
+	"\x1aPHASE_TRANSFER_IN_PROGRESS\x10\x02\x12\x1a\n" +
+	"\x16PHASE_BLACKOUT_STARTED\x10\x03\x12\x16\n" +
+	"\x12PHASE_OFFLINE_DONE\x10\x04\x12\x19\n" +
+	"\x15PHASE_BLACKOUT_EXITED\x10\x05\x12\x0e\n" +
+	"\n" +
+	"PHASE_DONE\x10\x06\x12\x17\n" +
+	"\x13PHASE_RECOVERY_DONE\x10\a\x12\x10\n" +
+	"\fPHASE_FAILED\x10\b*\xef\x01\n" +
+	"\n" +
+	"PhaseState\x12\x1b\n" +
+	"\x17PHASE_STATE_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13PHASE_STATE_SUCCESS\x10\x01\x12\x19\n" +
+	"\x15PHASE_STATE_CANCELLED\x10\x02\x12,\n" +
+	"(PHASE_STATE_GUEST_INITIATED_CANCELLATION\x10\x03\x12\x1d\n" +
+	"\x19PHASE_STATE_SOURCE_FAILED\x10\x04\x12\"\n" +
+	"\x1ePHASE_STATE_DESTINATION_FAILED\x10\x05\x12\x1f\n" +
+	"\x1bPHASE_STATE_RECOVERY_FAILED\x10\x06B6Z4github.com/Microsoft/hcsshim/pkg/migration;migrationb\x06proto3"
 
 var (
 	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescOnce sync.Once
@@ -735,26 +806,26 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_raw
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_goTypes = []any{
-	(MigrationMemoryTransport)(0),                 // 0: MigrationMemoryTransport
-	(MigrationOrigin)(0),                          // 1: MigrationOrigin
-	(MigrationEvent)(0),                           // 2: MigrationEvent
-	(MigrationResult)(0),                          // 3: MigrationResult
-	(*MigrationInitializeOptions)(nil),            // 4: MigrationInitializeOptions
-	(*CompatibilityInfo)(nil),                     // 5: CompatibilityInfo
-	(*MemoryMigrationTransferThrottleParams)(nil), // 6: MemoryMigrationTransferThrottleParams
-	(*MigrationCompressionSettings)(nil),          // 7: MigrationCompressionSettings
-	(*MigrationNotification)(nil),                 // 8: MigrationNotification
-	(*anypb.Any)(nil),                             // 9: google.protobuf.Any
+	(MemoryTransport)(0),                 // 0: MemoryTransport
+	(Origin)(0),                          // 1: Origin
+	(Phase)(0),                           // 2: Phase
+	(PhaseState)(0),                      // 3: PhaseState
+	(*InitializeOptions)(nil),            // 4: InitializeOptions
+	(*CompatibilityInfo)(nil),            // 5: CompatibilityInfo
+	(*MemoryTransferThrottleParams)(nil), // 6: MemoryTransferThrottleParams
+	(*CompressionSettings)(nil),          // 7: CompressionSettings
+	(*Notification)(nil),                 // 8: Notification
+	(*anypb.Any)(nil),                    // 9: google.protobuf.Any
 }
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_depIdxs = []int32{
-	0, // 0: MigrationInitializeOptions.memory_transport:type_name -> MigrationMemoryTransport
-	6, // 1: MigrationInitializeOptions.memory_transfer_throttle_params:type_name -> MemoryMigrationTransferThrottleParams
-	7, // 2: MigrationInitializeOptions.compression_settings:type_name -> MigrationCompressionSettings
-	5, // 3: MigrationInitializeOptions.compatibility_data:type_name -> CompatibilityInfo
-	1, // 4: MigrationNotification.origin:type_name -> MigrationOrigin
-	2, // 5: MigrationNotification.event:type_name -> MigrationEvent
-	3, // 6: MigrationNotification.result:type_name -> MigrationResult
-	9, // 7: MigrationNotification.additional_details:type_name -> google.protobuf.Any
+	0, // 0: InitializeOptions.memory_transport:type_name -> MemoryTransport
+	6, // 1: InitializeOptions.memory_transfer_throttle_params:type_name -> MemoryTransferThrottleParams
+	7, // 2: InitializeOptions.compression_settings:type_name -> CompressionSettings
+	5, // 3: InitializeOptions.compatibility_data:type_name -> CompatibilityInfo
+	1, // 4: Notification.origin:type_name -> Origin
+	2, // 5: Notification.phase:type_name -> Phase
+	3, // 6: Notification.state:type_name -> PhaseState
+	9, // 7: Notification.additional_details:type_name -> google.protobuf.Any
 	8, // [8:8] is the sub-list for method output_type
 	8, // [8:8] is the sub-list for method input_type
 	8, // [8:8] is the sub-list for extension type_name

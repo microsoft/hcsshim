@@ -4,20 +4,20 @@ option go_package = "github.com/Microsoft/hcsshim/pkg/migration;migration";
 
 import "google/protobuf/any.proto";
 
-// MigrationMemoryTransport is the transport protocol used for memory transfer during migration.
-enum MigrationMemoryTransport {
-    MIGRATION_MEMORY_TRANSPORT_UNSPECIFIED = 0;
+// MemoryTransport is the transport protocol used for memory transfer during migration.
+enum MemoryTransport {
+    MEMORY_TRANSPORT_UNSPECIFIED = 0;
     // VM memory is copied over a TCP/IP connection.
-    MIGRATION_MEMORY_TRANSPORT_TCP = 1;
+    MEMORY_TRANSPORT_TCP = 1;
 }
 
-message MigrationInitializeOptions {
+message InitializeOptions {
     // MemoryTransport specifies the transport protocol for memory transfer during migration.
-    MigrationMemoryTransport memory_transport = 1;
+    MemoryTransport memory_transport = 1;
     // MemoryTransferThrottleParams specifies settings for throttling during memory transfer.
-    optional MemoryMigrationTransferThrottleParams memory_transfer_throttle_params = 2;
+    optional MemoryTransferThrottleParams memory_transfer_throttle_params = 2;
     // CompressionSettings specifies additional settings when compression is enabled.
-    optional MigrationCompressionSettings compression_settings = 3;
+    optional CompressionSettings compression_settings = 3;
     // ChecksumVerification enables memory checksum verification.
     bool checksum_verification = 4;
     // PerfTracingEnabled enables performance tracing during migration.
@@ -36,7 +36,7 @@ message CompatibilityInfo {
     bytes data = 1;
 }
 
-message MemoryMigrationTransferThrottleParams {
+message MemoryTransferThrottleParams {
     // A flag indicating if throttling should be skipped.
     optional bool skip_throttling = 1;
     // The scale of the throttling. The value is in percentage (1-100).
@@ -49,76 +49,145 @@ message MemoryMigrationTransferThrottleParams {
     optional uint32 starting_brownout_pass_number_for_throttling = 5;
     // Maximum number of memory transfer passes before forcing the VM to enter blackout.
     optional uint32 maximum_number_of_brownout_transfer_passes = 6;
-    // Expected duration for blackout transfer time.
+    // Expected duration, in milliseconds, for the blackout memory
+    // transfer to complete.
     optional uint32 target_blackout_transfer_time = 7;
-    // Threshold for blackout duration prior to cancelling migration.
+    // Threshold, in milliseconds, for blackout duration prior to
+    // cancelling migration.
     optional uint32 blackout_time_threshold_for_cancelling_migration = 8;
 }
 
-message MigrationCompressionSettings {
+message CompressionSettings {
     // Number of worker threads used for [de]compression. Values higher than what the host
     // and VM configuration can support will be adjusted. The value should be non-zero.
     optional uint32 throttle_worker_count = 1;
 }
 
-// MigrationOrigin indicates which side of a live migration an operation or
+// Origin indicates which side of a live migration an operation or
 // notification pertains to.
-enum MigrationOrigin {
-    MIGRATION_ORIGIN_UNSPECIFIED = 0;
+enum Origin {
+    ORIGIN_UNSPECIFIED = 0;
     // Source side of the live migration.
-    MIGRATION_ORIGIN_SOURCE = 1;
+    ORIGIN_SOURCE = 1;
     // Destination side of the live migration.
-    MIGRATION_ORIGIN_DESTINATION = 2;
+    ORIGIN_DESTINATION = 2;
 }
 
-// MigrationEvent describes a live migration event reported by HCS during the
+// Phase describes a live migration phase reported by HCS during the
 // transfer phase of a live migration.
-enum MigrationEvent {
-    MIGRATION_EVENT_UNSPECIFIED = 0;
-    // Migration has completed.
-    MIGRATION_EVENT_MIGRATION_DONE = 1;
-    // The VM has entered the blackout phase.
-    MIGRATION_EVENT_BLACKOUT_STARTED = 2;
-    // Taking the VM offline has completed.
-    MIGRATION_EVENT_OFFLINE_DONE = 3;
+enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // The live migration setup has completed on the HCS side. Reported
+    // by the source; after this, clients can either start the memory
+    // transfer or set up SMB before performing the memory transfer.
+    PHASE_SETUP_DONE = 1;
+    // The VM is transferring memory and other necessary state. Reported
+    // periodically by the source as a progress signal while the VM state
+    // is being transferred to the destination.
+    PHASE_TRANSFER_IN_PROGRESS = 2;
+    // The VM has entered the blackout phase. Reported by the source
+    // immediately before the VM is paused for the final state transfer;
+    // from this point on the VM is not running on either host.
+    PHASE_BLACKOUT_STARTED = 3;
+    // Taking the VM offline has completed. Reported by the source after
+    // VMWP has transitioned itself to the MigratingSuspended (MTS) state,
+    // but before waiting for the VMWP client to signal that it is ready
+    // to enter MTS state at its layer. Always paired with
+    // PhaseState = PHASE_STATE_SUCCESS; offline failures are reported via
+    // PHASE_FAILED instead.
+    PHASE_OFFLINE_DONE = 4;
     // The VM has successfully started again after the blackout phase.
-    MIGRATION_EVENT_BLACKOUT_EXITED = 4;
-    // The live migration setup has completed.
-    MIGRATION_EVENT_SETUP_DONE = 5;
-    // The VM is still transferring memory and other necessary state.
-    MIGRATION_EVENT_TRANSFER_IN_PROGRESS = 6;
-    // Migration recovery has been performed.
-    MIGRATION_EVENT_MIGRATION_RECOVERY_DONE = 7;
-    // Migration failed.
-    MIGRATION_EVENT_MIGRATION_FAILED = 8;
+    PHASE_BLACKOUT_EXITED = 5;
+    // Migration has completed (terminal phase). The accompanying
+    // PhaseState describes whether the migration succeeded or failed,
+    // and on which side the failure was observed.
+    PHASE_DONE = 6;
+    // Migration recovery has been performed. Reported by the source
+    // after attempting to recover the VM following a failed or cancelled
+    // migration. The accompanying PhaseState is PHASE_STATE_SUCCESS if
+    // the VM was successfully resumed on the source, or
+    // PHASE_STATE_RECOVERY_FAILED if recovery itself failed.
+    PHASE_RECOVERY_DONE = 7;
+    // Migration failed (terminal phase). Reported by the source for
+    // non-success outcomes of the offline step (and equivalent failure
+    // points). The accompanying PhaseState carries the reason:
+    // PHASE_STATE_SOURCE_FAILED, PHASE_STATE_DESTINATION_FAILED,
+    // PHASE_STATE_CANCELLED, or PHASE_STATE_GUEST_INITIATED_CANCELLATION.
+    PHASE_FAILED = 8;
 }
 
-// MigrationResult describes the possible result of a migration operation,
-// typically populated for terminal events such as MIGRATION_EVENT_MIGRATION_DONE
-// or MIGRATION_EVENT_MIGRATION_FAILED.
-enum MigrationResult {
-    MIGRATION_RESULT_UNSPECIFIED = 0;
-    MIGRATION_RESULT_SUCCESS = 1;
-    MIGRATION_RESULT_MIGRATION_CANCELLED = 2;
-    MIGRATION_RESULT_GUEST_INITIATED_CANCELLATION = 3;
-    MIGRATION_RESULT_SOURCE_MIGRATION_FAILED = 4;
-    MIGRATION_RESULT_DESTINATION_MIGRATION_FAILED = 5;
-    MIGRATION_RESULT_MIGRATION_RECOVERY_FAILED = 6;
+// PhaseState describes the possible state of a migration phase,
+// typically populated for terminal phases such as PHASE_DONE
+// or PHASE_FAILED.
+enum PhaseState {
+    // No state reported. Used as the default zero value and for
+    // non-terminal phases that do not carry an outcome.
+    PHASE_STATE_UNSPECIFIED = 0;
+    // The reported phase completed successfully. Emitted in several
+    // places, including:
+    //   - Phase = PHASE_DONE: by the source after a successful
+    //     migrate-to-suspended (MTS) workflow, and by the destination
+    //     once the VM has been fully restored on the target host.
+    //   - Phase = PHASE_OFFLINE_DONE: by the source after VMWP
+    //     successfully takes the VM offline so migration can continue.
+    //   - Phase = PHASE_RECOVERY_DONE: by the source after the VM has
+    //     been successfully rolled back to its pre-migration running
+    //     state following a failed or cancelled migration.
+    PHASE_STATE_SUCCESS = 1;
+    // Migration was cancelled. Reported with:
+    //   - Phase = PHASE_FAILED by the source when its offline step
+    //     observes a non-guest cancellation
+    //     (MigrationSourceOfflineCanceled).
+    //   - Phase = PHASE_DONE by the destination when, after the setup
+    //     phase has completed, the migration target detects a
+    //     cancellation (MigrationTargetCanceled).
+    PHASE_STATE_CANCELLED = 2;
+    // Migration was cancelled because the guest initiated a shutdown or
+    // reset of the VM. Reported by the source with Phase = PHASE_FAILED
+    // (MigrationSourceOfflineGuestCanceled). VMWP performs the
+    // shutdown/reset on its own; this state exists to inform clients
+    // that LM was cancelled as a result of guest action.
+    PHASE_STATE_GUEST_INITIATED_CANCELLATION = 3;
+    // Migration failed and the failure originated on the source. Reported
+    // with:
+    //   - Phase = PHASE_FAILED by the source when its offline step fails
+    //     (MigrationSourceOfflineFailed).
+    //   - Phase = PHASE_DONE by the source when, after the offline phase
+    //     but before the VM has been restored on the target, the source
+    //     fails for a reason that is not destination-attributable.
+    //   - Phase = PHASE_DONE by the destination when, after the setup
+    //     phase has completed, the migration target observes a
+    //     non-cancellation failure that came from the source.
+    PHASE_STATE_SOURCE_FAILED = 4;
+    // Migration failed and the failure originated on the destination.
+    // Reported by the source with:
+    //   - Phase = PHASE_FAILED when its offline step observes a
+    //     destination-side failure (MigrationSourceOfflineDestinationFailed).
+    //   - Phase = PHASE_DONE when, after the offline phase but before the
+    //     VM has been restored on the target, the source detects that
+    //     the destination failed
+    //     (m_FailureReason == FailureDestinationFailed).
+    PHASE_STATE_DESTINATION_FAILED = 5;
+    // Migration recovery failed. Reported by the source with
+    // Phase = PHASE_RECOVERY_DONE when the attempt to recover the VM
+    // after a failed or cancelled migration did not succeed (the source
+    // could not be returned to its pre-migration running state).
+    PHASE_STATE_RECOVERY_FAILED = 6;
 }
 
-// MigrationNotification is a notification payload describing the current
+// Notification is a notification payload describing the current
 // state of an in-progress live migration operation. It mirrors the HCS
 // OperationSystemMigrationNotificationInfo schema.
-message MigrationNotification {
+message Notification {
     // Origin indicates which side of the live migration this notification
     // pertains to.
-    MigrationOrigin origin = 1;
-    // Event is the type of live migration event being reported.
-    MigrationEvent event = 2;
-    // Result is an optional outcome accompanying the event. Typically
-    // populated for terminal events.
-    MigrationResult result = 3;
-    // AdditionalDetails carries extra event-specific information whose
-    // schema depends on the event being reported.
+    Origin origin = 1;
+    // Phase is the live migration phase being reported.
+    Phase phase = 2;
+    // State is an optional outcome accompanying the phase. Typically
+    // populated for terminal phases.
+    PhaseState state = 3;
+    // AdditionalDetails carries extra phase-specific information whose
+    // schema depends on the phase being reported.
     google.protobuf.Any additional_details = 4;
 }

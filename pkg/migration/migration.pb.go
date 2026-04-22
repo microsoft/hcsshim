@@ -93,7 +93,7 @@ type PrepareAndExportSandboxRequest struct {
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// Source-side options that control how live migration is initialized
 	// on the compute system.
-	InitOptions   *MigrationInitializeOptions `protobuf:"bytes,2,opt,name=init_options,json=initOptions,proto3" json:"init_options,omitempty"`
+	InitOptions   *InitializeOptions `protobuf:"bytes,2,opt,name=init_options,json=initOptions,proto3" json:"init_options,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -135,7 +135,7 @@ func (x *PrepareAndExportSandboxRequest) GetSessionID() string {
 	return ""
 }
 
-func (x *PrepareAndExportSandboxRequest) GetInitOptions() *MigrationInitializeOptions {
+func (x *PrepareAndExportSandboxRequest) GetInitOptions() *InitializeOptions {
 	if x != nil {
 		return x.InitOptions
 	}
@@ -290,7 +290,7 @@ type PrepareSandboxRequest struct {
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// Destination-side options that control how live migration is
 	// initialized when the HCS compute system is created.
-	InitOptions   *MigrationInitializeOptions `protobuf:"bytes,2,opt,name=init_options,json=initOptions,proto3" json:"init_options,omitempty"`
+	InitOptions   *InitializeOptions `protobuf:"bytes,2,opt,name=init_options,json=initOptions,proto3" json:"init_options,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,7 +332,7 @@ func (x *PrepareSandboxRequest) GetSessionID() string {
 	return ""
 }
 
-func (x *PrepareSandboxRequest) GetInitOptions() *MigrationInitializeOptions {
+func (x *PrepareSandboxRequest) GetInitOptions() *InitializeOptions {
 	if x != nil {
 		return x.InitOptions
 	}
@@ -616,7 +616,7 @@ type NotificationsResponse struct {
 	// Structured notification describing the current migration event. This
 	// mirrors the HCS OperationSystemMigrationNotificationInfo payload
 	// emitted by the underlying compute system as the transfer progresses.
-	Notification *MigrationNotification `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
+	Notification *Notification `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
 	// Server-side timestamp of when the transfer began.
 	StartTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	// Server-side timestamp of when this particular update was produced.
@@ -662,7 +662,7 @@ func (x *NotificationsResponse) GetMessageID() uint32 {
 	return 0
 }
 
-func (x *NotificationsResponse) GetNotification() *MigrationNotification {
+func (x *NotificationsResponse) GetNotification() *Notification {
 	if x != nil {
 		return x.Notification
 	}
@@ -781,22 +781,22 @@ var File_github_com_Microsoft_hcsshim_pkg_migration_migration_proto protoreflect
 
 const file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc = "" +
 	"\n" +
-	":github.com/Microsoft/hcsshim/pkg/migration/migration.proto\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1aBgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\"\x7f\n" +
+	":github.com/Microsoft/hcsshim/pkg/migration/migration.proto\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1aBgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\"v\n" +
 	"\x1ePrepareAndExportSandboxRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12>\n" +
-	"\finit_options\x18\x02 \x01(\v2\x1b.MigrationInitializeOptionsR\vinitOptions\"O\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x125\n" +
+	"\finit_options\x18\x02 \x01(\v2\x12.InitializeOptionsR\vinitOptions\"O\n" +
 	"\x1fPrepareAndExportSandboxResponse\x12,\n" +
 	"\x06config\x18\x01 \x01(\v2\x14.google.protobuf.AnyR\x06config\"c\n" +
 	"\x14ImportSandboxRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
 	"\x06config\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\x06config\"\x17\n" +
-	"\x15ImportSandboxResponse\"v\n" +
+	"\x15ImportSandboxResponse\"m\n" +
 	"\x15PrepareSandboxRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12>\n" +
-	"\finit_options\x18\x02 \x01(\v2\x1b.MigrationInitializeOptionsR\vinitOptions\"\x18\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x125\n" +
+	"\finit_options\x18\x02 \x01(\v2\x12.InitializeOptionsR\vinitOptions\"\x18\n" +
 	"\x16PrepareSandboxResponse\"l\n" +
 	"\x16TransferSandboxRequest\x12\x1d\n" +
 	"\n" +
@@ -810,11 +810,11 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc = 
 	"\x17FinalizeSandboxResponse\"5\n" +
 	"\x14NotificationsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\xea\x01\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\xe1\x01\n" +
 	"\x15NotificationsResponse\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\rR\tmessageId\x12:\n" +
-	"\fnotification\x18\x02 \x01(\v2\x16.MigrationNotificationR\fnotification\x129\n" +
+	"message_id\x18\x01 \x01(\rR\tmessageId\x121\n" +
+	"\fnotification\x18\x02 \x01(\v2\r.NotificationR\fnotification\x129\n" +
 	"\n" +
 	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
 	"\vupdate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -867,20 +867,20 @@ var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_goTypes = []
 	(*NotificationsResponse)(nil),           // 12: NotificationsResponse
 	(*CreateDuplicateSocketRequest)(nil),    // 13: CreateDuplicateSocketRequest
 	(*CreateDuplicateSocketResponse)(nil),   // 14: CreateDuplicateSocketResponse
-	(*MigrationInitializeOptions)(nil),      // 15: MigrationInitializeOptions
+	(*InitializeOptions)(nil),               // 15: InitializeOptions
 	(*anypb.Any)(nil),                       // 16: google.protobuf.Any
 	(*durationpb.Duration)(nil),             // 17: google.protobuf.Duration
-	(*MigrationNotification)(nil),           // 18: MigrationNotification
+	(*Notification)(nil),                    // 18: Notification
 	(*timestamppb.Timestamp)(nil),           // 19: google.protobuf.Timestamp
 }
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_depIdxs = []int32{
-	15, // 0: PrepareAndExportSandboxRequest.init_options:type_name -> MigrationInitializeOptions
+	15, // 0: PrepareAndExportSandboxRequest.init_options:type_name -> InitializeOptions
 	16, // 1: PrepareAndExportSandboxResponse.config:type_name -> google.protobuf.Any
 	16, // 2: ImportSandboxRequest.config:type_name -> google.protobuf.Any
-	15, // 3: PrepareSandboxRequest.init_options:type_name -> MigrationInitializeOptions
+	15, // 3: PrepareSandboxRequest.init_options:type_name -> InitializeOptions
 	17, // 4: TransferSandboxRequest.timeout:type_name -> google.protobuf.Duration
 	0,  // 5: FinalizeSandboxRequest.action:type_name -> FinalizeAction
-	18, // 6: NotificationsResponse.notification:type_name -> MigrationNotification
+	18, // 6: NotificationsResponse.notification:type_name -> Notification
 	19, // 7: NotificationsResponse.start_time:type_name -> google.protobuf.Timestamp
 	19, // 8: NotificationsResponse.update_time:type_name -> google.protobuf.Timestamp
 	1,  // 9: Migration.PrepareAndExportSandbox:input_type -> PrepareAndExportSandboxRequest
