@@ -3,7 +3,10 @@
 package hcs
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/computecore"
@@ -80,7 +83,9 @@ func expectNotification(t *testing.T, ch <-chan hcsschema.OperationSystemMigrati
 	t.Helper()
 	select {
 	case got := <-ch:
-		if got != want {
+		// OperationSystemMigrationNotificationInfo contains a json.RawMessage
+		// (a []byte) and is therefore not comparable with ==.
+		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("notification mismatch: got %+v want %+v", got, want)
 		}
 	default:
@@ -178,6 +183,19 @@ func TestMigrationCallbackHandler_Payloads(t *testing.T) {
 				Result: hcsschema.MigrationResultSuccess,
 			},
 		},
+		{
+			// AdditionalDetails is modeled as the HCS schema `Any` type and
+			// stored as json.RawMessage so callers can decode it into the
+			// concrete struct based on Event. Verify the raw bytes are
+			// preserved verbatim through the decode/forward path.
+			name:    "BlackoutExitedWithAdditionalDetails",
+			payload: `{"Event":"BlackoutExited","Result":"Success","AdditionalDetails":{"BlackoutDurationMilliseconds":1234,"BlackoutStopTimestamp":"2026-04-23T12:34:56Z"}}`,
+			want: hcsschema.OperationSystemMigrationNotificationInfo{
+				Event:             hcsschema.MigrationEventBlackoutExited,
+				Result:            hcsschema.MigrationResultSuccess,
+				AdditionalDetails: json.RawMessage(`{"BlackoutDurationMilliseconds":1234,"BlackoutStopTimestamp":"2026-04-23T12:34:56Z"}`),
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -207,6 +225,71 @@ func TestMigrationCallbackHandler_InvalidJSONDropped(t *testing.T) {
 	expectNoNotification(t, ch)
 }
 
+// TestMigrationCallbackHandler_AdditionalDetailsDecodes verifies that the
+// raw JSON captured in AdditionalDetails for a BlackoutExited event can be
+// decoded by the consumer into the concrete BlackoutExitedEventDetails struct.
+// This is the contract that motivates modeling AdditionalDetails as
+// json.RawMessage rather than a typed *interface{}.
+func TestMigrationCallbackHandler_AdditionalDetailsDecodes(t *testing.T) {
+	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
+	evt := allocCEvent(t, `{"Event":"BlackoutExited","Result":"Success","AdditionalDetails":{"BlackoutDurationMilliseconds":1234,"BlackoutStopTimestamp":"2026-04-23T12:34:56Z"}}`)
+	ctx := allocCChanCtx(t, ch)
+
+	if ret := migrationCallbackHandler(evt, ctx); ret != 0 {
+		t.Fatalf("expected 0, got %d", ret)
+	}
+
+	var got hcsschema.OperationSystemMigrationNotificationInfo
+	select {
+	case got = <-ch:
+	default:
+		t.Fatal("expected a notification on the channel")
+	}
+
+	if got.Event != hcsschema.MigrationEventBlackoutExited {
+		t.Fatalf("unexpected event: %q", got.Event)
+	}
+	if len(got.AdditionalDetails) == 0 {
+		t.Fatal("expected AdditionalDetails to be populated")
+	}
+
+	var details hcsschema.BlackoutExitedEventDetails
+	if err := json.Unmarshal(got.AdditionalDetails, &details); err != nil {
+		t.Fatalf("decode AdditionalDetails: %v", err)
+	}
+
+	wantTS, err := time.Parse(time.RFC3339, "2026-04-23T12:34:56Z")
+	if err != nil {
+		t.Fatalf("parse want timestamp: %v", err)
+	}
+	want := hcsschema.BlackoutExitedEventDetails{
+		BlackoutDurationMilliseconds: 1234,
+		BlackoutStopTimestamp:        wantTS,
+	}
+	if !details.BlackoutStopTimestamp.Equal(want.BlackoutStopTimestamp) ||
+		details.BlackoutDurationMilliseconds != want.BlackoutDurationMilliseconds {
+		t.Fatalf("decoded details mismatch: got %+v want %+v", details, want)
+	}
+}
+
+// TestMigrationCallbackHandler_AdditionalDetailsAbsent verifies that a
+// payload without an AdditionalDetails field results in a nil
+// json.RawMessage on the forwarded notification.
+func TestMigrationCallbackHandler_AdditionalDetailsAbsent(t *testing.T) {
+	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
+	evt := allocCEvent(t, `{"Event":"SetupDone"}`)
+	ctx := allocCChanCtx(t, ch)
+
+	if ret := migrationCallbackHandler(evt, ctx); ret != 0 {
+		t.Fatalf("expected 0, got %d", ret)
+	}
+
+	got := <-ch
+	if got.AdditionalDetails != nil {
+		t.Fatalf("expected nil AdditionalDetails, got %q", string(got.AdditionalDetails))
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Backpressure
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,7 +312,7 @@ func TestMigrationCallbackHandler_FullChannelDropsEvent(t *testing.T) {
 	}
 
 	// The original prefill must still be the only entry (new event dropped).
-	if got := <-ch; got != prefill {
+	if got := <-ch; !reflect.DeepEqual(got, prefill) {
 		t.Fatalf("expected prefill to remain, got %+v", got)
 	}
 	expectNoNotification(t, ch)

@@ -1,6 +1,9 @@
 package hcsschema
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // MigrationInitializeOptions is a set of options for the migration workflow.
 type MigrationInitializeOptions struct {
@@ -132,8 +135,11 @@ type OperationSystemMigrationNotificationInfo struct {
 	// populated for terminal events.
 	Result MigrationResult `json:"Result,omitempty"`
 	// AdditionalDetails carries extra event-specific information whose schema
-	// depends on the event being reported. Modeled as the HCS schema `Any` type.
-	AdditionalDetails *interface{} `json:"AdditionalDetails,omitempty"`
+	// depends on the event being reported. HCS models this as the schema `Any`
+	// type; we keep it as raw JSON so callers can decode it into the concrete
+	// event-specific struct (e.g. BlackoutExitedEventDetails for
+	// MigrationEventBlackoutExited) once they have inspected Event.
+	AdditionalDetails json.RawMessage `json:"AdditionalDetails,omitempty"`
 }
 
 // BlackoutExitedEventDetails carries additional details reported alongside
