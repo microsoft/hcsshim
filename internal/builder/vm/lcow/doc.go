@@ -15,7 +15,7 @@
 //   - Boot Configuration: Kernel, initrd, root filesystem, and boot file paths
 //   - CPU Configuration: Processor count, limits, and NUMA topology
 //   - Memory Configuration: Memory size, MMIO gaps, and memory affinity
-//   - Device Configuration: VPMem devices, vPCI devices, and SCSI controllers
+//   - Device Configuration: vPCI devices, and SCSI controllers
 //   - Storage Configuration: Storage QoS settings
 //   - Confidential Computing: Security policies, SNP settings, and encryption
 //   - Kernel Arguments: Command line parameters derived from all configuration sources

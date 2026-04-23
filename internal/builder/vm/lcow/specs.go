@@ -131,7 +131,7 @@ func BuildSandboxConfig(
 	// ===============================================================================
 
 	// This should be done after parsing boot options, as some device options may depend on boot settings (e.g., rootfs path).
-	vpmemCtrl, scsiCtrl, vpciDevices, err := parseDeviceOptions(
+	scsiCtrl, vpciDevices, err := parseDeviceOptions(
 		ctx,
 		spec.Annotations,
 		spec.Devices,
@@ -208,7 +208,6 @@ func BuildSandboxConfig(
 			spec.Annotations,
 			cpuConfig.Count,
 			bootOptions.LinuxKernelDirect != nil, // isKernelDirectBoot
-			vpmemCtrl != nil,                     // isVPMem
 			comPorts != nil,                      // hasConsole
 			filepath.Base(rootFsFullPath),
 		)
@@ -255,9 +254,8 @@ func BuildSandboxConfig(
 			},
 			StorageQoS: storageQOSConfig,
 			Devices: &hcsschema.Devices{
-				Scsi:        scsiCtrl,
-				VirtualPMem: vpmemCtrl,
-				VirtualPci:  vpciDevices,
+				Scsi:       scsiCtrl,
+				VirtualPci: vpciDevices,
 				HvSocket: &hcsschema.HvSocket2{
 					HvSocketConfig: hvSocketConfig,
 				},

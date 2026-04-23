@@ -416,7 +416,7 @@ func TestBuildSandboxConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "device options with VPMem",
+			name: "device options with VPMem are rejected by v2 shims",
 			opts: &runhcsoptions.Options{
 				SandboxPlatform:   "linux/amd64",
 				BootFilesRootPath: validBootFilesPath,
@@ -428,52 +428,28 @@ func TestBuildSandboxConfig(t *testing.T) {
 					shimannotations.VPMemNoMultiMapping: "true",
 				},
 			},
-			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
-				t.Helper()
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem == nil {
-					t.Errorf("expected VirtualPMem to be configured")
-					return
-				}
-				if vpmem.MaximumCount != 32 {
-					t.Errorf("expected VPMem count 32, got %v", vpmem.MaximumCount)
-				}
-				if vpmem.MaximumSizeBytes != 8589934592 {
-					t.Errorf("expected VPMem size 8589934592, got %v", vpmem.MaximumSizeBytes)
-				}
-				// VPMemNoMultiMapping=true means MultiMapping is disabled
-				if sandboxOpts.VPMEMMultiMapping != false {
-					t.Errorf("expected VPMem multi mapping false (no multi mapping true), got %v", sandboxOpts.VPMEMMultiMapping)
-				}
-			},
-		},
-		{
-			name: "VPMem count exceeds maximum",
-			opts: &runhcsoptions.Options{
-				SandboxPlatform:   "linux/amd64",
-				BootFilesRootPath: validBootFilesPath,
-			},
-			spec: &vm.Spec{
-				Annotations: map[string]string{
-					shimannotations.VPMemCount: "200",
-				},
-			},
 			wantErr:     true,
-			errContains: "vp_mem_device_count cannot be greater than",
+			errContains: "v2 shims do not support vPMem devices",
 		},
 		{
-			name: "VPMem size not aligned to 4096",
+			name: "VPMem size annotation alone does not enable VPMem",
 			opts: &runhcsoptions.Options{
 				SandboxPlatform:   "linux/amd64",
 				BootFilesRootPath: validBootFilesPath,
 			},
 			spec: &vm.Spec{
 				Annotations: map[string]string{
+					// VPMemSize alone (without VPMemCount) should be ignored since
+					// the default VPMem count is 0 in v2 shims.
 					shimannotations.VPMemSize: "12345",
 				},
 			},
-			wantErr:     true,
-			errContains: "vp_mem_size_bytes must be a multiple of 4096",
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if doc.VirtualMachine.Devices.VirtualPMem != nil {
+					t.Errorf("expected VirtualPMem to be unset, got %+v", doc.VirtualMachine.Devices.VirtualPMem)
+				}
+			},
 		},
 		{
 			name: "fully physically backed disables VPMem",
@@ -483,15 +459,16 @@ func TestBuildSandboxConfig(t *testing.T) {
 			},
 			spec: &vm.Spec{
 				Annotations: map[string]string{
+					// FullyPhysicallyBacked forces VPMem count to 0, so even with
+					// VPMemCount=64 no error is returned and VirtualPMem is unset.
 					shimannotations.FullyPhysicallyBacked: "true",
 					shimannotations.VPMemCount:            "64",
 				},
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem != nil && vpmem.MaximumCount != 0 {
-					t.Errorf("expected VPMem count 0 when fully physically backed, got %v", vpmem.MaximumCount)
+				if doc.VirtualMachine.Devices.VirtualPMem != nil {
+					t.Errorf("expected VirtualPMem to be unset when fully physically backed, got %+v", doc.VirtualMachine.Devices.VirtualPMem)
 				}
 			},
 		},
@@ -634,10 +611,10 @@ func TestBuildSandboxConfig(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				// In SNP mode, VPMem should be disabled
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem != nil && vpmem.MaximumCount != 0 {
-					t.Errorf("expected VPMem count 0 in SNP mode, got %v", vpmem.MaximumCount)
+				// In SNP mode, VPMem should be disabled (count forced to 0,
+				// so VirtualPMem controller is not configured).
+				if doc.VirtualMachine.Devices.VirtualPMem != nil {
+					t.Errorf("expected VirtualPMem to be unset in SNP mode, got %+v", doc.VirtualMachine.Devices.VirtualPMem)
 				}
 				// Memory should not allow overcommit
 				if doc.VirtualMachine.ComputeTopology.Memory.AllowOvercommit != false {
@@ -865,10 +842,9 @@ func TestBuildSandboxConfig(t *testing.T) {
 				if doc.VirtualMachine.Chipset.LinuxKernelDirect == nil {
 					t.Error("expected kernel direct boot (LinuxKernelDirect to be set)")
 				}
-				// VPMem should be 0 due to fully physically backed
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem != nil && vpmem.MaximumCount != 0 {
-					t.Errorf("expected VPMem count 0 (fully physically backed), got %v", vpmem.MaximumCount)
+				// VPMem should be unset due to fully physically backed forcing count to 0
+				if doc.VirtualMachine.Devices.VirtualPMem != nil {
+					t.Errorf("expected VirtualPMem to be unset (fully physically backed), got %+v", doc.VirtualMachine.Devices.VirtualPMem)
 				}
 			},
 		},
@@ -929,52 +905,6 @@ func TestBuildSandboxConfig_EdgeCases(t *testing.T) {
 				t.Helper()
 				if doc.VirtualMachine.ComputeTopology.Memory.SizeInMB != 1024 {
 					t.Errorf("expected default memory 1024MB, got %v", doc.VirtualMachine.ComputeTopology.Memory.SizeInMB)
-				}
-			},
-		},
-		{
-			name: "VPMem size exactly 4096",
-			opts: &runhcsoptions.Options{
-				SandboxPlatform:   "linux/amd64",
-				BootFilesRootPath: validBootFilesPath,
-			},
-			spec: &vm.Spec{
-				Annotations: map[string]string{
-					shimannotations.VPMemSize: "4096",
-				},
-			},
-			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
-				t.Helper()
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem == nil {
-					t.Error("expected VirtualPMem to be configured")
-					return
-				}
-				if vpmem.MaximumSizeBytes != 4096 {
-					t.Errorf("expected VPMem size 4096, got %v", vpmem.MaximumSizeBytes)
-				}
-			},
-		},
-		{
-			name: "VPMem count at maximum boundary",
-			opts: &runhcsoptions.Options{
-				SandboxPlatform:   "linux/amd64",
-				BootFilesRootPath: validBootFilesPath,
-			},
-			spec: &vm.Spec{
-				Annotations: map[string]string{
-					shimannotations.VPMemCount: "128",
-				},
-			},
-			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
-				t.Helper()
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem == nil {
-					t.Error("expected VirtualPMem to be configured")
-					return
-				}
-				if vpmem.MaximumCount != 128 {
-					t.Errorf("expected VPMem count 128, got %v", vpmem.MaximumCount)
 				}
 			},
 		},
@@ -1162,22 +1092,18 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 			},
 		},
 		{
-			name: "security policy with hardware bypass",
+			name: "security policy with hardware bypass rejects VPMem",
 			spec: &vm.Spec{
 				Annotations: map[string]string{
 					shimannotations.LCOWSecurityPolicy: "eyJ0ZXN0IjoidGVzdCJ9",
 					shimannotations.NoSecurityHardware: "true",
-					shimannotations.VPMemCount:         "64",
+					// With NoSecurityHardware=true the VM is not confidential, so
+					// VPMemCount is not forced to 0 and v2 shims reject the request.
+					shimannotations.VPMemCount: "64",
 				},
 			},
-			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
-				t.Helper()
-				// VPMem NOT disabled when no security hardware
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem == nil || vpmem.MaximumCount == 0 {
-					t.Error("expected VPMem NOT disabled when no security hardware")
-				}
-			},
+			wantErr:     true,
+			errContains: "v2 shims do not support vPMem devices",
 		},
 		{
 			name: "scratch encryption defaults to false when security hardware is bypassed",
@@ -1608,63 +1534,6 @@ func TestBuildSandboxConfig_BootOptions(t *testing.T) {
 				t.Helper()
 				if len(doc.VirtualMachine.Devices.Scsi) == 0 {
 					t.Error("expected SCSI controllers to be configured")
-				}
-			},
-		},
-		{
-			name: "VPMem boot from VHD",
-			opts: &runhcsoptions.Options{
-				SandboxPlatform:   "linux/amd64",
-				BootFilesRootPath: vhdOnlyPath,
-			},
-			spec: &vm.Spec{
-				Annotations: map[string]string{
-					shimannotations.VPMemCount: "32",
-				},
-			},
-			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
-				t.Helper()
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem == nil {
-					t.Fatal("expected VirtualPMem to be configured")
-				}
-				if len(vpmem.Devices) == 0 {
-					t.Error("expected VPMem device to be configured for rootfs")
-				}
-				dev, ok := vpmem.Devices["0"]
-				if !ok {
-					t.Fatal("expected VPMem device at index 0")
-				}
-				if !dev.ReadOnly {
-					t.Error("expected VPMem device to be read-only")
-				}
-				if dev.ImageFormat != "Vhd1" {
-					t.Errorf("expected image format Vhd1, got %s", dev.ImageFormat)
-				}
-			},
-		},
-		{
-			name: "VPMem with initrd boot creates controller but no devices",
-			opts: &runhcsoptions.Options{
-				SandboxPlatform:   "linux/amd64",
-				BootFilesRootPath: initrdOnlyPath,
-			},
-			spec: &vm.Spec{
-				Annotations: map[string]string{
-					shimannotations.VPMemCount: "32",
-				},
-			},
-			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
-				t.Helper()
-				vpmem := doc.VirtualMachine.Devices.VirtualPMem
-				if vpmem == nil {
-					t.Fatal("expected VirtualPMem controller to be created even with initrd boot")
-				}
-				if vpmem.MaximumCount != 32 {
-					t.Errorf("expected VPMem count 32, got %v", vpmem.MaximumCount)
-				}
-				if len(vpmem.Devices) != 0 {
-					t.Errorf("expected no VPMem devices with initrd boot, got %d", len(vpmem.Devices))
 				}
 			},
 		},

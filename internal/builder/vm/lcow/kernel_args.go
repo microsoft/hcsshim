@@ -24,7 +24,6 @@ func buildKernelArgs(
 	annotations map[string]string,
 	processorCount uint32,
 	kernelDirect bool,
-	isVPMem bool,
 	hasConsole bool,
 	rootFsFile string,
 ) (string, error) {
@@ -41,7 +40,7 @@ func buildKernelArgs(
 	var args []string
 
 	// 1. Root filesystem configuration.
-	rootfsArgs, err := buildRootfsArgs(ctx, annotations, rootFsFile, kernelDirect, isVPMem)
+	rootfsArgs, err := buildRootfsArgs(ctx, annotations, rootFsFile, kernelDirect)
 	if err != nil {
 		return "", err
 	}
@@ -95,12 +94,10 @@ func buildRootfsArgs(
 	annotations map[string]string,
 	rootFsFile string,
 	kernelDirect bool,
-	isVPMem bool,
 ) (string, error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"rootFsFile":   rootFsFile,
 		"kernelDirect": kernelDirect,
-		"isVPMem":      isVPMem,
 	}).Debug("buildRootfsArgs: starting rootfs args construction")
 
 	isInitrd := rootFsFile == vmutils.InitrdFile
@@ -113,11 +110,6 @@ func buildRootfsArgs(
 
 	// VHD boot
 	if isVHD {
-		// VPMem VHD(X) booting.
-		if isVPMem {
-			return "root=/dev/pmem0 ro rootwait init=/init", nil
-		}
-
 		// SCSI VHD booting with dm-verity.
 		dmVerityMode := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DmVerityMode, false)
 		if dmVerityMode {

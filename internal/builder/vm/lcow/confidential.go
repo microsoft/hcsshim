@@ -80,7 +80,7 @@ func parseConfidentialOptions(
 	}
 	log.G(ctx).WithField("dmVerityRootfsPath", dmVerityRootfsTemplatePath).Debug("DM Verity rootfs path configured")
 
-	// Note: VPMem and vPCI assigned devices are already disabled in parseDeviceOptions
+	// Note: vPCI assigned devices are already disabled in parseDeviceOptions
 	// when isConfidential is true.
 
 	chipset := &hcsschema.Chipset{}

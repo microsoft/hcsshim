@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -24,7 +23,7 @@ import (
 )
 
 // parseDeviceOptions parses device options from annotations and assigned devices.
-// isConfidential indicates if this is a confidential scenario, which affects VPMem and PCI device configuration.
+// isConfidential indicates if this is a confidential scenario, which affects PCI device configuration.
 // numaConfig is used to determine if NUMA affinity propagation should be enabled for vPCI devices.
 func parseDeviceOptions(
 	ctx context.Context,
@@ -34,7 +33,7 @@ func parseDeviceOptions(
 	isNumaEnabled bool,
 	isFullyPhysicallyBacked bool,
 	isConfidential bool,
-) (*hcsschema.VirtualPMemController, map[string]hcsschema.Scsi, map[string]hcsschema.VirtualPciDevice, error) {
+) (map[string]hcsschema.Scsi, map[string]hcsschema.VirtualPciDevice, error) {
 
 	log.G(ctx).WithFields(logrus.Fields{
 		"deviceCount":    len(devices),
@@ -43,64 +42,16 @@ func parseDeviceOptions(
 	}).Debug("parseDeviceOptions: starting device options parsing")
 
 	// ===============================Parse VPMem configuration===============================
-	vpmemCount := oci.ParseAnnotationsUint32(ctx, annotations, shimannotations.VPMemCount, vmutils.DefaultVPMEMCount)
-	vpmemSize := oci.ParseAnnotationsUint64(ctx, annotations, shimannotations.VPMemSize, vmutils.DefaultVPMemSizeBytes)
+	// By default, we should set vpmem count to 0.
+	vpmemCount := oci.ParseAnnotationsUint32(ctx, annotations, shimannotations.VPMemCount, 0)
 
 	// VPMem is not supported by the enlightened kernel for SNP (confidential VMs, and Hyper-V on arm64).
-	// Todo: Remove arm64 check once VPMem is supported by Hyper-V on arm64.
 	if isFullyPhysicallyBacked || isConfidential || runtime.GOARCH == "arm64" {
 		vpmemCount = 0
 	}
 
-	if vpmemCount > vmutils.MaxVPMEMCount {
-		return nil, nil, nil, fmt.Errorf("vp_mem_device_count cannot be greater than %d", vmutils.MaxVPMEMCount)
-	}
-
-	if vpmemCount > 0 && vpmemSize%4096 != 0 {
-		return nil, nil, nil, fmt.Errorf("vp_mem_size_bytes must be a multiple of 4096")
-	}
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"vpmemCount":     vpmemCount,
-		"vpmemSizeBytes": vpmemSize,
-	}).Debug("parsed VPMem configuration")
-
-	// Extract the rootfs file name.
-	rootFsFile := filepath.Base(rootFsFullPath)
-
-	// Create VPMem controller configuration
-	var vpMemController *hcsschema.VirtualPMemController
 	if vpmemCount > 0 {
-		// Initialize VPMem controller with specified count and size.
-		vpMemController = &hcsschema.VirtualPMemController{
-			MaximumCount:     vpmemCount,
-			MaximumSizeBytes: vpmemSize,
-		}
-
-		// If booting from VHD via VPMem, configure the VPMem device for rootfs
-		if rootFsFile == vmutils.VhdFile {
-			vpMemController.Devices = make(map[string]hcsschema.VirtualPMemDevice)
-
-			// Determine image format based on file extension.
-			// filepath.Ext returns the extension with the leading dot (e.g. ".vhdx").
-			imageFormat := "Vhd1"
-			if strings.HasSuffix(strings.ToLower(filepath.Ext(rootFsFile)), "vhdx") {
-				imageFormat = "Vhdx"
-			}
-
-			// Add rootfs VHD as VPMem device 0
-			vpMemController.Devices["0"] = hcsschema.VirtualPMemDevice{
-				HostPath:    rootFsFullPath,
-				ReadOnly:    true,
-				ImageFormat: imageFormat,
-			}
-
-			log.G(ctx).WithFields(logrus.Fields{
-				"device":      "0",
-				"path":        rootFsFullPath,
-				"imageFormat": imageFormat,
-			}).Debug("configured VPMem device for VHD rootfs boot")
-		}
+		return nil, nil, fmt.Errorf("v2 shims do not support vPMem devices")
 	}
 
 	// ===============================Parse SCSI configuration===============================
@@ -122,9 +73,11 @@ func parseDeviceOptions(
 		}
 	}
 
-	// If booting from VHD via SCSI (no VPMem), attach the rootfs VHD to SCSI controller 0, LUN 0
+	// If booting from VHD via SCSI, attach the rootfs VHD to SCSI controller 0, LUN 0
 	// For confidential Containers, rootFSFile will be DmVerityRootfsPath.
-	if vpmemCount == 0 && rootFsFile == vmutils.VhdFile {
+	// Extract the rootfs file name.
+	rootFsFile := filepath.Base(rootFsFullPath)
+	if rootFsFile == vmutils.VhdFile {
 		scsiControllers[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
 			Type_:    "VirtualDisk",
 			Path:     rootFsFullPath,
@@ -169,14 +122,14 @@ func parseDeviceOptions(
 			if d := getVPCIDevice(ctx, dev); d != nil {
 				key := deviceKey{instanceID: d.DeviceInstancePath, functionIndex: d.VirtualFunction}
 				if _, exists := seen[key]; exists {
-					return nil, nil, nil, fmt.Errorf("device %s with index %d is specified multiple times", d.DeviceInstancePath, d.VirtualFunction)
+					return nil, nil, fmt.Errorf("device %s with index %d is specified multiple times", d.DeviceInstancePath, d.VirtualFunction)
 				}
 				seen[key] = struct{}{}
 
 				// Generate a unique VMBus GUID for each vPCI device.
 				vmbusGUID, err := guid.NewV4()
 				if err != nil {
-					return nil, nil, nil, fmt.Errorf("failed to generate vmbus GUID for device %s: %w", d.DeviceInstancePath, err)
+					return nil, nil, fmt.Errorf("failed to generate vmbus GUID for device %s: %w", d.DeviceInstancePath, err)
 				}
 
 				vpciDevices[vmbusGUID.String()] = hcsschema.VirtualPciDevice{
@@ -196,7 +149,7 @@ func parseDeviceOptions(
 	}
 
 	log.G(ctx).Debug("parseDeviceOptions completed successfully")
-	return vpMemController, scsiControllers, vpciDevices, nil
+	return scsiControllers, vpciDevices, nil
 }
 
 // getVPCIDevice maps a WindowsDevice into the sandbox vPCIDevice format when supported.
