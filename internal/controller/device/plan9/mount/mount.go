@@ -94,7 +94,7 @@ func (m *Mount) MountToGuest(ctx context.Context, guest GuestPlan9Mounter) (stri
 		log.G(ctx).Debug("mounting Plan9 share in guest")
 
 		// Issue the guest mount via the GCS mapped directory API.
-		if err := guest.AddLCOWMappedDirectory(ctx, guestresource.LCOWMappedDirectory{
+		if err := guest.AddMappedDirectory(ctx, guestresource.LCOWMappedDirectory{
 			MountPath: m.guestPath,
 			ShareName: m.shareName,
 			Port:      vmutils.Plan9Port,
@@ -143,7 +143,7 @@ func (m *Mount) UnmountFromGuest(ctx context.Context, guest GuestPlan9Unmounter)
 			log.G(ctx).Debug("unmounting Plan9 share from guest")
 
 			// Last reference — issue the physical guest unmount.
-			if err := guest.RemoveLCOWMappedDirectory(ctx, guestresource.LCOWMappedDirectory{
+			if err := guest.RemoveMappedDirectory(ctx, guestresource.LCOWMappedDirectory{
 				MountPath: m.guestPath,
 				ShareName: m.shareName,
 				Port:      vmutils.Plan9Port,

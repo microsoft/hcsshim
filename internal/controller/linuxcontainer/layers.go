@@ -145,7 +145,7 @@ func (c *Controller) allocateLayers(
 		hcsLayers[i] = hcsschema.Layer{Path: roLayer.guestPath}
 	}
 
-	if err = c.guest.AddLCOWCombinedLayers(ctx, guestresource.LCOWCombinedLayers{
+	if err = c.guest.AddCombinedLayers(ctx, guestresource.LCOWCombinedLayers{
 		ContainerID:       c.gcsContainerID,
 		ContainerRootPath: c.layers.rootfsPath,
 		Layers:            hcsLayers,

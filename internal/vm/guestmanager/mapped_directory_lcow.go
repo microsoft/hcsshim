@@ -11,8 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// AddLCOWMappedDirectory maps a directory into LCOW guest.
-func (gm *Guest) AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+// AddMappedDirectory maps a directory into LCOW guest.
+func (gm *Guest) AddMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedDirectory,
@@ -28,8 +28,8 @@ func (gm *Guest) AddLCOWMappedDirectory(ctx context.Context, settings guestresou
 	return nil
 }
 
-// RemoveLCOWMappedDirectory unmaps a directory from LCOW guest.
-func (gm *Guest) RemoveLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+// RemoveMappedDirectory unmaps a directory from LCOW guest.
+func (gm *Guest) RemoveMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedDirectory,

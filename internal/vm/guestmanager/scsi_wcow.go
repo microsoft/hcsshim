@@ -11,8 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// AddWCOWMappedVirtualDisk maps a virtual disk into a WCOW guest.
-func (gm *Guest) AddWCOWMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error {
+// AddMappedVirtualDisk maps a virtual disk into a WCOW guest.
+func (gm *Guest) AddMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedVirtualDisk,
@@ -28,8 +28,8 @@ func (gm *Guest) AddWCOWMappedVirtualDisk(ctx context.Context, settings guestres
 	return nil
 }
 
-// AddWCOWMappedVirtualDiskForContainerScratch attaches a scratch disk in the WCOW guest.
-func (gm *Guest) AddWCOWMappedVirtualDiskForContainerScratch(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error {
+// AddMappedVirtualDiskForContainerScratch attaches a scratch disk in the WCOW guest.
+func (gm *Guest) AddMappedVirtualDiskForContainerScratch(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedVirtualDiskForContainerScratch,
@@ -45,8 +45,8 @@ func (gm *Guest) AddWCOWMappedVirtualDiskForContainerScratch(ctx context.Context
 	return nil
 }
 
-// RemoveWCOWMappedVirtualDisk unmaps a virtual disk from the WCOW guest.
-func (gm *Guest) RemoveWCOWMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error {
+// RemoveMappedVirtualDisk unmaps a virtual disk from the WCOW guest.
+func (gm *Guest) RemoveMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedVirtualDisk,

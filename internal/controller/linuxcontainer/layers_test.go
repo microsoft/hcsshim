@@ -109,7 +109,7 @@ func TestAllocateLayers_SingleReadOnlyLayer(t *testing.T) {
 	expectedRootfsPath := ospath.Join("linux", guestpath.LCOWV2RootPrefixInVM, c.gcsPodID, c.gcsContainerID, guestpath.RootfsPath)
 
 	guestCtrl.EXPECT().
-		AddLCOWCombinedLayers(gomock.Any(), guestresource.LCOWCombinedLayers{
+		AddCombinedLayers(gomock.Any(), guestresource.LCOWCombinedLayers{
 			ContainerID:       c.gcsContainerID,
 			ContainerRootPath: expectedRootfsPath,
 			Layers:            []hcsschema.Layer{{Path: "/dev/sda"}},
@@ -180,7 +180,7 @@ func TestAllocateLayers_MultipleReadOnlyLayers(t *testing.T) {
 
 	// Combine layers with both read-only layers.
 	guestCtrl.EXPECT().
-		AddLCOWCombinedLayers(gomock.Any(), gomock.Any()).
+		AddCombinedLayers(gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	if err := c.allocateLayers(t.Context(), layerFolders, nil, false); err != nil {
@@ -234,7 +234,7 @@ func TestAllocateLayers_ScratchEncryption(t *testing.T) {
 		Return("/dev/sdb", nil)
 
 	guestCtrl.EXPECT().
-		AddLCOWCombinedLayers(gomock.Any(), gomock.Any()).
+		AddCombinedLayers(gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	if err := c.allocateLayers(t.Context(), layerFolders, nil, true); err != nil {
@@ -417,7 +417,7 @@ func TestAllocateLayers_ScratchMapToGuestFailure(t *testing.T) {
 }
 
 // TestAllocateLayers_CombineLayersFailure verifies that an
-// AddLCOWCombinedLayers failure propagates the error and layersCombined remains
+// AddCombinedLayers failure propagates the error and layersCombined remains
 // false.
 func TestAllocateLayers_CombineLayersFailure(t *testing.T) {
 	stubResolvePath(t)
@@ -447,7 +447,7 @@ func TestAllocateLayers_CombineLayersFailure(t *testing.T) {
 
 	// CombineLayers fails.
 	guestCtrl.EXPECT().
-		AddLCOWCombinedLayers(gomock.Any(), gomock.Any()).
+		AddCombinedLayers(gomock.Any(), gomock.Any()).
 		Return(errCombineLayers)
 
 	err := c.allocateLayers(t.Context(), layerFolders, nil, false)
@@ -539,7 +539,7 @@ func TestAllocateLayers_RootfsMount(t *testing.T) {
 		Return("/dev/sdb", nil)
 
 	guestCtrl.EXPECT().
-		AddLCOWCombinedLayers(gomock.Any(), gomock.Any()).
+		AddCombinedLayers(gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	if err := c.allocateLayers(t.Context(), nil, rootfs, false); err != nil {

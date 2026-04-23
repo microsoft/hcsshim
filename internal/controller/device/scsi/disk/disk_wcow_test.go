@@ -21,11 +21,11 @@ type mockGuestSCSIMounter struct {
 	scratchFn func()
 }
 
-func (m *mockGuestSCSIMounter) AddWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
+func (m *mockGuestSCSIMounter) AddMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
 	return m.err
 }
 
-func (m *mockGuestSCSIMounter) AddWCOWMappedVirtualDiskForContainerScratch(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
+func (m *mockGuestSCSIMounter) AddMappedVirtualDiskForContainerScratch(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
 	if m.scratchFn != nil {
 		m.scratchFn()
 	}
@@ -36,7 +36,7 @@ type mockGuestSCSIUnmounter struct {
 	err error
 }
 
-func (m *mockGuestSCSIUnmounter) RemoveWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
+func (m *mockGuestSCSIUnmounter) RemoveMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
 	return m.err
 }
 

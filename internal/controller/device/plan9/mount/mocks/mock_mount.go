@@ -43,18 +43,18 @@ func (m *MockGuestPlan9Mounter) EXPECT() *MockGuestPlan9MounterMockRecorder {
 	return m.recorder
 }
 
-// AddLCOWMappedDirectory mocks base method.
-func (m *MockGuestPlan9Mounter) AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+// AddMappedDirectory mocks base method.
+func (m *MockGuestPlan9Mounter) AddMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLCOWMappedDirectory", ctx, settings)
+	ret := m.ctrl.Call(m, "AddMappedDirectory", ctx, settings)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AddLCOWMappedDirectory indicates an expected call of AddLCOWMappedDirectory.
-func (mr *MockGuestPlan9MounterMockRecorder) AddLCOWMappedDirectory(ctx, settings any) *gomock.Call {
+// AddMappedDirectory indicates an expected call of AddMappedDirectory.
+func (mr *MockGuestPlan9MounterMockRecorder) AddMappedDirectory(ctx, settings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLCOWMappedDirectory", reflect.TypeOf((*MockGuestPlan9Mounter)(nil).AddLCOWMappedDirectory), ctx, settings)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMappedDirectory", reflect.TypeOf((*MockGuestPlan9Mounter)(nil).AddMappedDirectory), ctx, settings)
 }
 
 // MockGuestPlan9Unmounter is a mock of GuestPlan9Unmounter interface.
@@ -81,16 +81,16 @@ func (m *MockGuestPlan9Unmounter) EXPECT() *MockGuestPlan9UnmounterMockRecorder 
 	return m.recorder
 }
 
-// RemoveLCOWMappedDirectory mocks base method.
-func (m *MockGuestPlan9Unmounter) RemoveLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+// RemoveMappedDirectory mocks base method.
+func (m *MockGuestPlan9Unmounter) RemoveMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveLCOWMappedDirectory", ctx, settings)
+	ret := m.ctrl.Call(m, "RemoveMappedDirectory", ctx, settings)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RemoveLCOWMappedDirectory indicates an expected call of RemoveLCOWMappedDirectory.
-func (mr *MockGuestPlan9UnmounterMockRecorder) RemoveLCOWMappedDirectory(ctx, settings any) *gomock.Call {
+// RemoveMappedDirectory indicates an expected call of RemoveMappedDirectory.
+func (mr *MockGuestPlan9UnmounterMockRecorder) RemoveMappedDirectory(ctx, settings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLCOWMappedDirectory", reflect.TypeOf((*MockGuestPlan9Unmounter)(nil).RemoveLCOWMappedDirectory), ctx, settings)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMappedDirectory", reflect.TypeOf((*MockGuestPlan9Unmounter)(nil).RemoveMappedDirectory), ctx, settings)
 }

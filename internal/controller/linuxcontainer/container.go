@@ -238,7 +238,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 			hcsLayers = append(hcsLayers, hcsschema.Layer{Path: layer.guestPath})
 		}
 
-		if err := c.guest.RemoveLCOWCombinedLayers(ctx, guestresource.LCOWCombinedLayers{
+		if err := c.guest.RemoveCombinedLayers(ctx, guestresource.LCOWCombinedLayers{
 			ContainerID:       c.gcsContainerID,
 			ContainerRootPath: c.layers.rootfsPath,
 			Layers:            hcsLayers,

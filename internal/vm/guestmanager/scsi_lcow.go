@@ -11,8 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// AddLCOWMappedVirtualDisk maps a virtual disk into a LCOW guest.
-func (gm *Guest) AddLCOWMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error {
+// AddMappedVirtualDisk maps a virtual disk into a LCOW guest.
+func (gm *Guest) AddMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedVirtualDisk,
@@ -28,8 +28,8 @@ func (gm *Guest) AddLCOWMappedVirtualDisk(ctx context.Context, settings guestres
 	return nil
 }
 
-// RemoveLCOWMappedVirtualDisk unmaps a virtual disk from the LCOW guest.
-func (gm *Guest) RemoveLCOWMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error {
+// RemoveMappedVirtualDisk unmaps a virtual disk from the LCOW guest.
+func (gm *Guest) RemoveMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeMappedVirtualDisk,

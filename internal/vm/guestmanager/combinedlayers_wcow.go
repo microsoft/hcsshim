@@ -11,8 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// AddWCOWCombinedLayers adds WCOW combined layers in the guest.
-func (gm *Guest) AddWCOWCombinedLayers(ctx context.Context, settings guestresource.WCOWCombinedLayers) error {
+// AddCombinedLayers adds WCOW combined layers in the guest.
+func (gm *Guest) AddCombinedLayers(ctx context.Context, settings guestresource.WCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeCombinedLayers,
@@ -28,8 +28,8 @@ func (gm *Guest) AddWCOWCombinedLayers(ctx context.Context, settings guestresour
 	return nil
 }
 
-// AddCWCOWCombinedLayers adds combined layers in the CWCOW guest.
-func (gm *Guest) AddCWCOWCombinedLayers(ctx context.Context, settings guestresource.CWCOWCombinedLayers) error {
+// AddConfidentialCombinedLayers adds combined layers in the CWCOW guest.
+func (gm *Guest) AddConfidentialCombinedLayers(ctx context.Context, settings guestresource.CWCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeCWCOWCombinedLayers,
@@ -45,8 +45,8 @@ func (gm *Guest) AddCWCOWCombinedLayers(ctx context.Context, settings guestresou
 	return nil
 }
 
-// RemoveWCOWCombinedLayers removes WCOW combined layers in the guest.
-func (gm *Guest) RemoveWCOWCombinedLayers(ctx context.Context, settings guestresource.WCOWCombinedLayers) error {
+// RemoveCombinedLayers removes WCOW combined layers in the guest.
+func (gm *Guest) RemoveCombinedLayers(ctx context.Context, settings guestresource.WCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeCombinedLayers,
@@ -62,8 +62,8 @@ func (gm *Guest) RemoveWCOWCombinedLayers(ctx context.Context, settings guestres
 	return nil
 }
 
-// RemoveCWCOWCombinedLayers removes combined layers in CWCOW guest.
-func (gm *Guest) RemoveCWCOWCombinedLayers(ctx context.Context, settings guestresource.CWCOWCombinedLayers) error {
+// RemoveConfidentialCombinedLayers removes combined layers in CWCOW guest.
+func (gm *Guest) RemoveConfidentialCombinedLayers(ctx context.Context, settings guestresource.CWCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeCWCOWCombinedLayers,

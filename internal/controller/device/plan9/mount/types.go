@@ -21,12 +21,12 @@ func (c Config) Equals(other Config) bool {
 
 // GuestPlan9Mounter mounts a Plan9 share inside an LCOW guest.
 type GuestPlan9Mounter interface {
-	// AddLCOWMappedDirectory maps a Plan9 share into the LCOW guest.
-	AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
+	// AddMappedDirectory maps a Plan9 share into the LCOW guest.
+	AddMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
 }
 
 // GuestPlan9Unmounter unmounts a Plan9 share from an LCOW guest.
 type GuestPlan9Unmounter interface {
-	// RemoveLCOWMappedDirectory unmaps a Plan9 share from the LCOW guest.
-	RemoveLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
+	// RemoveMappedDirectory unmaps a Plan9 share from the LCOW guest.
+	RemoveMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
 }

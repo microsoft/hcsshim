@@ -20,8 +20,8 @@ GCS connection:
 
 After the connection is established, use the manager interfaces for guest-side changes:
 
-	_ = g.AddLCOWNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{...})
-	_ = g.AddLCOWMappedVirtualDisk(ctx, guestresource.LCOWMappedVirtualDisk{...})
+	_ = g.AddNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{...})
+	_ = g.AddMappedVirtualDisk(ctx, guestresource.LCOWMappedVirtualDisk{...})
 
 # Layer Boundaries
 

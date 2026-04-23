@@ -11,8 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// AddLCOWNetworkInterface adds a network interface to the LCOW guest.
-func (gm *Guest) AddLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
+// AddNetworkInterface adds a network interface to the LCOW guest.
+func (gm *Guest) AddNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeNetwork,
@@ -28,8 +28,8 @@ func (gm *Guest) AddLCOWNetworkInterface(ctx context.Context, settings *guestres
 	return nil
 }
 
-// RemoveLCOWNetworkInterface removes a network interface from the LCOW guest.
-func (gm *Guest) RemoveLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
+// RemoveNetworkInterface removes a network interface from the LCOW guest.
+func (gm *Guest) RemoveNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeNetwork,

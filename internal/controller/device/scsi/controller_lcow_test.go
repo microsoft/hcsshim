@@ -18,11 +18,11 @@ type mockGuestOps struct {
 	ejectErr   error
 }
 
-func (m *mockGuestOps) AddLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+func (m *mockGuestOps) AddMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
 	return m.mountErr
 }
 
-func (m *mockGuestOps) RemoveLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+func (m *mockGuestOps) RemoveMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
 	return m.unmountErr
 }
 

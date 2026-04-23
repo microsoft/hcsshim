@@ -17,15 +17,15 @@ type mockGuestOps struct {
 	unmountErr error
 }
 
-func (m *mockGuestOps) AddWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
+func (m *mockGuestOps) AddMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
 	return m.mountErr
 }
 
-func (m *mockGuestOps) AddWCOWMappedVirtualDiskForContainerScratch(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
+func (m *mockGuestOps) AddMappedVirtualDiskForContainerScratch(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
 	return m.mountErr
 }
 
-func (m *mockGuestOps) RemoveWCOWMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
+func (m *mockGuestOps) RemoveMappedVirtualDisk(_ context.Context, _ guestresource.WCOWMappedVirtualDisk) error {
 	return m.unmountErr
 }
 

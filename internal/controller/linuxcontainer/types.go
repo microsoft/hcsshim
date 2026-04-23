@@ -27,8 +27,8 @@ type guest interface {
 	CreateContainer(ctx context.Context, cid string, config interface{}) (*gcs.Container, error)
 	DeleteContainerState(ctx context.Context, cid string) error
 
-	AddLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
-	RemoveLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
+	AddCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
+	RemoveCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
 }
 
 // scsiController abstracts host-side SCSI disk reservation and guest mapping.

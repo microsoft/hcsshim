@@ -15,10 +15,10 @@ import (
 // guestNetwork exposes linux guest network operations.
 // Implemented by guestmanager.Guest.
 type guestNetwork interface {
-	// AddLCOWNetworkInterface adds a network interface to the LCOW guest.
-	AddLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
-	// RemoveLCOWNetworkInterface removes a network interface from the LCOW guest.
-	RemoveLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
+	// AddNetworkInterface adds a network interface to the LCOW guest.
+	AddNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
+	// RemoveNetworkInterface removes a network interface from the LCOW guest.
+	RemoveNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
 }
 
 // addNetNSInsideGuest maps a host network namespace into the guest as a managed Guest Network Namespace.
@@ -61,7 +61,7 @@ func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, nicID stri
 
 		log.G(ctx).Tracef("built LCOW network adapter: %+v", lcowAdapter)
 
-		if err := c.guestNetwork.AddLCOWNetworkInterface(ctx, lcowAdapter); err != nil {
+		if err := c.guestNetwork.AddNetworkInterface(ctx, lcowAdapter); err != nil {
 			return fmt.Errorf("add NIC %s to guest (endpoint %s): %w", nicID, endpoint.Id, err)
 		}
 
@@ -78,7 +78,7 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 
 	if c.isNamespaceSupportedByGuest {
 		// 1. LCOW guest-side removal.
-		if err := c.guestNetwork.RemoveLCOWNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{
+		if err := c.guestNetwork.RemoveNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{
 			NamespaceID: c.namespaceID,
 			ID:          nicID,
 		}); err != nil {

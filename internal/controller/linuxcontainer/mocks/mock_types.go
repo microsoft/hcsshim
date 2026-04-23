@@ -50,18 +50,18 @@ func (m *Mockguest) EXPECT() *MockguestMockRecorder {
 	return m.recorder
 }
 
-// AddLCOWCombinedLayers mocks base method.
-func (m *Mockguest) AddLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
+// AddCombinedLayers mocks base method.
+func (m *Mockguest) AddCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLCOWCombinedLayers", ctx, settings)
+	ret := m.ctrl.Call(m, "AddCombinedLayers", ctx, settings)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AddLCOWCombinedLayers indicates an expected call of AddLCOWCombinedLayers.
-func (mr *MockguestMockRecorder) AddLCOWCombinedLayers(ctx, settings any) *gomock.Call {
+// AddCombinedLayers indicates an expected call of AddCombinedLayers.
+func (mr *MockguestMockRecorder) AddCombinedLayers(ctx, settings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLCOWCombinedLayers", reflect.TypeOf((*Mockguest)(nil).AddLCOWCombinedLayers), ctx, settings)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddCombinedLayers", reflect.TypeOf((*Mockguest)(nil).AddCombinedLayers), ctx, settings)
 }
 
 // Capabilities mocks base method.
@@ -107,18 +107,18 @@ func (mr *MockguestMockRecorder) DeleteContainerState(ctx, cid any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteContainerState", reflect.TypeOf((*Mockguest)(nil).DeleteContainerState), ctx, cid)
 }
 
-// RemoveLCOWCombinedLayers mocks base method.
-func (m *Mockguest) RemoveLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
+// RemoveCombinedLayers mocks base method.
+func (m *Mockguest) RemoveCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveLCOWCombinedLayers", ctx, settings)
+	ret := m.ctrl.Call(m, "RemoveCombinedLayers", ctx, settings)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RemoveLCOWCombinedLayers indicates an expected call of RemoveLCOWCombinedLayers.
-func (mr *MockguestMockRecorder) RemoveLCOWCombinedLayers(ctx, settings any) *gomock.Call {
+// RemoveCombinedLayers indicates an expected call of RemoveCombinedLayers.
+func (mr *MockguestMockRecorder) RemoveCombinedLayers(ctx, settings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLCOWCombinedLayers", reflect.TypeOf((*Mockguest)(nil).RemoveLCOWCombinedLayers), ctx, settings)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveCombinedLayers", reflect.TypeOf((*Mockguest)(nil).RemoveCombinedLayers), ctx, settings)
 }
 
 // MockscsiController is a mock of scsiController interface.

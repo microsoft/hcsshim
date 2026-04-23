@@ -49,12 +49,12 @@ type combinedGuest struct {
 	unmounter *mountmocks.MockGuestPlan9Unmounter
 }
 
-func (g *combinedGuest) AddLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
-	return g.mounter.AddLCOWMappedDirectory(ctx, settings)
+func (g *combinedGuest) AddMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+	return g.mounter.AddMappedDirectory(ctx, settings)
 }
 
-func (g *combinedGuest) RemoveLCOWMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
-	return g.unmounter.RemoveLCOWMappedDirectory(ctx, settings)
+func (g *combinedGuest) RemoveMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error {
+	return g.unmounter.RemoveMappedDirectory(ctx, settings)
 }
 
 type testController struct {
@@ -217,7 +217,7 @@ func TestMapToGuest_HappyPath(t *testing.T) {
 	id, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 
 	guestPath, err := tc.c.MapToGuest(tc.ctx, id)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestMapToGuest_GuestMountFails_RetryMapToGuest_Fails(t *testing.T) {
 
 	// First MapToGuest: VM add succeeds, guest mount fails.
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(errMount)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(errMount)
 
 	_, err := tc.c.MapToGuest(tc.ctx, id)
 	if err == nil {
@@ -289,7 +289,7 @@ func TestMapToGuest_GuestMountFails_UnmapFromGuest_CleansUp(t *testing.T) {
 
 	// MapToGuest: VM add succeeds, guest mount fails.
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(errMount)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(errMount)
 
 	_, err := tc.c.MapToGuest(tc.ctx, id)
 	if err == nil {
@@ -315,7 +315,7 @@ func TestMapToGuest_GuestMountFails_UnmapFromGuest_CleansUp(t *testing.T) {
 }
 
 // TestMapToGuest_SharedPath_VMAddCalledOnce verifies that when two reservations
-// share the same host path, AddPlan9 and AddLCOWMappedDirectory are each called
+// share the same host path, AddPlan9 and AddMappedDirectory are each called
 // exactly once — the second MapToGuest is a no-op that returns the existing
 // guest path.
 func TestMapToGuest_SharedPath_VMAddCalledOnce(t *testing.T) {
@@ -325,9 +325,9 @@ func TestMapToGuest_SharedPath_VMAddCalledOnce(t *testing.T) {
 	id1, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 	id2, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 
-	// AddPlan9 and AddLCOWMappedDirectory each called exactly once.
+	// AddPlan9 and AddMappedDirectory each called exactly once.
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	gp1, err := tc.c.MapToGuest(tc.ctx, id1)
 	if err != nil {
@@ -356,10 +356,10 @@ func TestUnmapFromGuest_HappyPath(t *testing.T) {
 	id, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	_, _ = tc.c.MapToGuest(tc.ctx, id)
 
-	tc.guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), gomock.Any()).Return(nil)
 
 	if err := tc.c.UnmapFromGuest(tc.ctx, id); err != nil {
@@ -383,11 +383,11 @@ func TestUnmapFromGuest_GuestUnmountFails_Retryable(t *testing.T) {
 	id, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	_, _ = tc.c.MapToGuest(tc.ctx, id)
 
 	// First unmap: guest unmount fails.
-	tc.guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(errUnmount)
+	tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(errUnmount)
 	if err := tc.c.UnmapFromGuest(tc.ctx, id); err == nil {
 		t.Fatal("expected error on failed guest unmount")
 	}
@@ -396,7 +396,7 @@ func TestUnmapFromGuest_GuestUnmountFails_Retryable(t *testing.T) {
 	}
 
 	// Retry succeeds.
-	tc.guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), gomock.Any()).Return(nil)
 	if err := tc.c.UnmapFromGuest(tc.ctx, id); err != nil {
 		t.Fatalf("retry UnmapFromGuest failed: %v", err)
@@ -414,11 +414,11 @@ func TestUnmapFromGuest_VMRemoveFails_Retryable(t *testing.T) {
 	id, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	_, _ = tc.c.MapToGuest(tc.ctx, id)
 
 	// First unmap: guest unmount succeeds, VM remove fails.
-	tc.guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), gomock.Any()).Return(errVMRemove)
 	if err := tc.c.UnmapFromGuest(tc.ctx, id); err == nil {
 		t.Fatal("expected error on failed VM remove")
@@ -446,7 +446,7 @@ func TestUnmapFromGuest_RefCounting_VMRemoveOnLastRef(t *testing.T) {
 	id2, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	_, _ = tc.c.MapToGuest(tc.ctx, id1)
 	_, _ = tc.c.MapToGuest(tc.ctx, id2)
 
@@ -459,7 +459,7 @@ func TestUnmapFromGuest_RefCounting_VMRemoveOnLastRef(t *testing.T) {
 	}
 
 	// Second unmap: last ref — guest unmount and VM remove issued.
-	tc.guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	if err := tc.c.UnmapFromGuest(tc.ctx, id2); err != nil {
 		t.Fatalf("second UnmapFromGuest: %v", err)
@@ -501,9 +501,9 @@ func TestFullLifecycle_ReuseAfterRelease(t *testing.T) {
 	// First full cycle.
 	id1, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	_, _ = tc.c.MapToGuest(tc.ctx, id1)
-	tc.guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), gomock.Any()).Return(nil)
 	_ = tc.c.UnmapFromGuest(tc.ctx, id1)
 
@@ -568,7 +568,7 @@ func TestUnmapFromGuest_AddToVMFails_MultipleReservations_AllDrain(t *testing.T)
 
 // TestUnmapFromGuest_GuestMountFails_MultipleReservations_AllDrain verifies
 // that when two callers reserve the same host path and MapToGuest fails at the
-// guest mount stage (AddToVM succeeds, AddLCOWMappedDirectory fails), the share
+// guest mount stage (AddToVM succeeds, AddMappedDirectory fails), the share
 // and mount stay in the controller's maps until all callers have called
 // UnmapFromGuest to drain their mount reservations.
 func TestUnmapFromGuest_GuestMountFails_MultipleReservations_AllDrain(t *testing.T) {
@@ -581,7 +581,7 @@ func TestUnmapFromGuest_GuestMountFails_MultipleReservations_AllDrain(t *testing
 
 	// First caller attempts MapToGuest — AddToVM succeeds, guest mount fails.
 	tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
-	tc.guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(errMount)
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(errMount)
 	_, err := tc.c.MapToGuest(tc.ctx, id1)
 	if err == nil {
 		t.Fatal("expected error when guest mount fails")

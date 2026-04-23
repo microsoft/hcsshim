@@ -496,7 +496,7 @@ func TestReleaseResources_AllResourceTypes(t *testing.T) {
 
 	// Expect combined layers removal.
 	guestCtrl.EXPECT().
-		RemoveLCOWCombinedLayers(gomock.Any(), guestresource.LCOWCombinedLayers{
+		RemoveCombinedLayers(gomock.Any(), guestresource.LCOWCombinedLayers{
 			ContainerID:       c.gcsContainerID,
 			ContainerRootPath: "/rootfs",
 			Layers:            []hcsschema.Layer{{Path: "/dev/ro0"}},
@@ -551,7 +551,7 @@ func TestReleaseResources_NoLayers(t *testing.T) {
 }
 
 // TestReleaseResources_LayersNotCombined verifies that when layers exist but
-// were not combined, RemoveLCOWCombinedLayers is not called.
+// were not combined, RemoveCombinedLayers is not called.
 func TestReleaseResources_LayersNotCombined(t *testing.T) {
 	t.Parallel()
 	c, scsiCtrl, _, _, _ := newContainerTestController(t)
@@ -565,7 +565,7 @@ func TestReleaseResources_LayersNotCombined(t *testing.T) {
 		roLayers:       []scsiReservation{{id: roGUID}},
 	}
 
-	// Only unmaps expected; no RemoveLCOWCombinedLayers call.
+	// Only unmaps expected; no RemoveCombinedLayers call.
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scratchGUID).Return(nil)
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUID).Return(nil)
 
@@ -653,7 +653,7 @@ func TestReleaseResources_MultipleROLayers(t *testing.T) {
 		},
 	}
 
-	guestCtrl.EXPECT().RemoveLCOWCombinedLayers(gomock.Any(), gomock.Any()).Return(nil)
+	guestCtrl.EXPECT().RemoveCombinedLayers(gomock.Any(), gomock.Any()).Return(nil)
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scratchGUID).Return(nil)
 	for _, g := range roGUIDs {
 		scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), g).Return(nil)
@@ -679,7 +679,7 @@ func TestReleaseResources_RemoveCombinedLayersFails(t *testing.T) {
 	}
 
 	wantErr := errors.New("remove combined layers failed")
-	guestCtrl.EXPECT().RemoveLCOWCombinedLayers(gomock.Any(), gomock.Any()).Return(wantErr)
+	guestCtrl.EXPECT().RemoveCombinedLayers(gomock.Any(), gomock.Any()).Return(wantErr)
 
 	err := c.releaseResources(t.Context())
 	if !errors.Is(err, wantErr) {

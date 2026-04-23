@@ -22,14 +22,14 @@ const (
 
 // GuestSCSIMounter mounts a virtual disk partition inside an LCOW guest.
 type GuestSCSIMounter interface {
-	// AddLCOWMappedVirtualDisk maps a virtual disk partition into the LCOW guest.
-	AddLCOWMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
+	// AddMappedVirtualDisk maps a virtual disk partition into the LCOW guest.
+	AddMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
 }
 
 // GuestSCSIUnmounter unmounts a virtual disk partition from an LCOW guest.
 type GuestSCSIUnmounter interface {
-	// RemoveLCOWMappedVirtualDisk unmaps a virtual disk partition from the LCOW guest.
-	RemoveLCOWMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
+	// RemoveMappedVirtualDisk unmaps a virtual disk partition from the LCOW guest.
+	RemoveMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
 }
 
 // Config describes how a partition of a SCSI disk should be mounted inside
@@ -94,7 +94,7 @@ func (m *Mount) mountReserved(ctx context.Context, guest GuestSCSIMounter) error
 		Filesystem:       m.config.Filesystem,
 		BlockDev:         m.config.BlockDev,
 	}
-	if err := guest.AddLCOWMappedVirtualDisk(ctx, settings); err != nil {
+	if err := guest.AddMappedVirtualDisk(ctx, settings); err != nil {
 		return fmt.Errorf("add LCOW mapped virtual disk controller=%d lun=%d: %w", m.controller, m.lun, err)
 	}
 
@@ -124,7 +124,7 @@ func (m *Mount) unmount(ctx context.Context, guest GuestSCSIUnmounter) error {
 		Filesystem:       m.config.Filesystem,
 		BlockDev:         m.config.BlockDev,
 	}
-	if err := guest.RemoveLCOWMappedVirtualDisk(ctx, settings); err != nil {
+	if err := guest.RemoveMappedVirtualDisk(ctx, settings); err != nil {
 		return fmt.Errorf("remove LCOW mapped virtual disk controller=%d lun=%d: %w", m.controller, m.lun, err)
 	}
 	return nil

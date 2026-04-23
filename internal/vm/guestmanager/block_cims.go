@@ -11,8 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// AddWCOWBlockCIMs adds WCOW block CIM mounts in the guest.
-func (gm *Guest) AddWCOWBlockCIMs(ctx context.Context, settings *guestresource.CWCOWBlockCIMMounts) error {
+// AddBlockCIMs adds WCOW block CIM mounts in the guest.
+func (gm *Guest) AddBlockCIMs(ctx context.Context, settings *guestresource.CWCOWBlockCIMMounts) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeWCOWBlockCims,
@@ -29,8 +29,8 @@ func (gm *Guest) AddWCOWBlockCIMs(ctx context.Context, settings *guestresource.C
 	return nil
 }
 
-// RemoveWCOWBlockCIMs removes WCOW block CIM mounts in the guest.
-func (gm *Guest) RemoveWCOWBlockCIMs(ctx context.Context, settings *guestresource.CWCOWBlockCIMMounts) error {
+// RemoveBlockCIMs removes WCOW block CIM mounts in the guest.
+func (gm *Guest) RemoveBlockCIMs(ctx context.Context, settings *guestresource.CWCOWBlockCIMMounts) error {
 	request := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeWCOWBlockCims,

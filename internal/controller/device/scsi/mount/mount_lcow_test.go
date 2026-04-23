@@ -16,7 +16,7 @@ type mockMounter struct {
 	err error
 }
 
-func (m *mockMounter) AddLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+func (m *mockMounter) AddMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
 	return m.err
 }
 
@@ -24,7 +24,7 @@ type mockUnmounter struct {
 	err error
 }
 
-func (m *mockUnmounter) RemoveLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+func (m *mockUnmounter) RemoveMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
 	return m.err
 }
 

@@ -25,7 +25,7 @@ type mockGuestSCSIMounter struct {
 	err error
 }
 
-func (m *mockGuestSCSIMounter) AddLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+func (m *mockGuestSCSIMounter) AddMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
 	return m.err
 }
 
@@ -33,7 +33,7 @@ type mockGuestSCSIUnmounter struct {
 	err error
 }
 
-func (m *mockGuestSCSIUnmounter) RemoveLCOWMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
+func (m *mockGuestSCSIUnmounter) RemoveMappedVirtualDisk(_ context.Context, _ guestresource.LCOWMappedVirtualDisk) error {
 	return m.err
 }
 

@@ -420,7 +420,7 @@ func TestMountToGuest_RequiresReservedMount(t *testing.T) {
 }
 
 // TestMountToGuest_HappyPath verifies a full ReserveMount → AddToVM →
-// MountToGuest flow: the guest AddLCOWMappedDirectory call succeeds and
+// MountToGuest flow: the guest AddMappedDirectory call succeeds and
 // MountToGuest returns a non-empty guest path.
 func TestMountToGuest_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -432,7 +432,7 @@ func TestMountToGuest_HappyPath(t *testing.T) {
 	_ = s.AddToVM(context.Background(), vmAdd)
 	_, _ = s.ReserveMount(context.Background(), mount.Config{})
 
-	guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	guestPath, err := s.MountToGuest(context.Background(), guestMount)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -460,10 +460,10 @@ func TestUnmountFromGuest_HappyPath(t *testing.T) {
 	_ = s.AddToVM(context.Background(), vmAdd)
 	_, _ = s.ReserveMount(context.Background(), mount.Config{})
 
-	guestMount.EXPECT().AddLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	_, _ = s.MountToGuest(context.Background(), guestMount)
 
-	guestUnmount.EXPECT().RemoveLCOWMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
 	if err := s.UnmountFromGuest(context.Background(), guestUnmount); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

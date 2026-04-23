@@ -20,17 +20,17 @@ const (
 
 // GuestSCSIMounter mounts a virtual disk partition inside an WCOW guest.
 type GuestSCSIMounter interface {
-	// AddWCOWMappedVirtualDisk maps a virtual disk into the WCOW guest.
-	AddWCOWMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
-	// AddWCOWMappedVirtualDiskForContainerScratch maps a virtual disk as a
+	// AddMappedVirtualDisk maps a virtual disk into the WCOW guest.
+	AddMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
+	// AddMappedVirtualDiskForContainerScratch maps a virtual disk as a
 	// container scratch disk into the WCOW guest.
-	AddWCOWMappedVirtualDiskForContainerScratch(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
+	AddMappedVirtualDiskForContainerScratch(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
 }
 
 // GuestSCSIUnmounter unmounts a virtual disk partition from an LCOW guest.
 type GuestSCSIUnmounter interface {
-	// RemoveWCOWMappedVirtualDisk unmaps a virtual disk from the WCOW guest.
-	RemoveWCOWMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
+	// RemoveMappedVirtualDisk unmaps a virtual disk from the WCOW guest.
+	RemoveMappedVirtualDisk(ctx context.Context, settings guestresource.WCOWMappedVirtualDisk) error
 }
 
 // Config describes how a partition of a SCSI disk should be mounted inside
@@ -68,11 +68,11 @@ func (m *Mount) mountReserved(ctx context.Context, guest GuestSCSIMounter) error
 
 	// FormatWithRefs disks use a separate scratch path to enable ReFS formatting.
 	if m.config.FormatWithRefs {
-		if err := guest.AddWCOWMappedVirtualDiskForContainerScratch(ctx, settings); err != nil {
+		if err := guest.AddMappedVirtualDiskForContainerScratch(ctx, settings); err != nil {
 			return fmt.Errorf("add WCOW mapped virtual disk for container scratch controller=%d lun=%d: %w", m.controller, m.lun, err)
 		}
 	} else {
-		if err := guest.AddWCOWMappedVirtualDisk(ctx, settings); err != nil {
+		if err := guest.AddMappedVirtualDisk(ctx, settings); err != nil {
 			return fmt.Errorf("add WCOW mapped virtual disk controller=%d lun=%d: %w", m.controller, m.lun, err)
 		}
 	}
@@ -94,7 +94,7 @@ func (m *Mount) unmount(ctx context.Context, guest GuestSCSIUnmounter) error {
 		ContainerPath: guestPath,
 		Lun:           int32(m.lun),
 	}
-	if err := guest.RemoveWCOWMappedVirtualDisk(ctx, settings); err != nil {
+	if err := guest.RemoveMappedVirtualDisk(ctx, settings); err != nil {
 		return fmt.Errorf("remove WCOW mapped virtual disk controller=%d lun=%d: %w", m.controller, m.lun, err)
 	}
 	return nil
