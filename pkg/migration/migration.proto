@@ -147,10 +147,16 @@ message ImportSandboxRequest {
     // Identifier for the migration session. Must match the session_id used
     // on the source for this LM.
     string session_id = 1;
+    // Identifier of the new sandbox being rehydrated on the destination.
+    // The destination shim is created by this RPC, so there is no prior
+    // channel through which to communicate the new sandbox id; it must be
+    // supplied here. The opaque config from the source will be applied to
+    // a new sandbox with this id.
+    string sandbox_id = 2;
     // Opaque config produced by PrepareAndExportSandbox on the source.
     // Forwarded verbatim by the caller; the destination shim is responsible
     // for decoding and applying it.
-    google.protobuf.Any config = 2;
+    google.protobuf.Any config = 3;
 }
 
 message ImportSandboxResponse {}

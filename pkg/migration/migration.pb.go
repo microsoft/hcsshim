@@ -195,10 +195,16 @@ type ImportSandboxRequest struct {
 	// Identifier for the migration session. Must match the session_id used
 	// on the source for this LM.
 	SessionID string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Identifier of the new sandbox being rehydrated on the destination.
+	// The destination shim is created by this RPC, so there is no prior
+	// channel through which to communicate the new sandbox id; it must be
+	// supplied here. The opaque config from the source will be applied to
+	// a new sandbox with this id.
+	SandboxID string `protobuf:"bytes,2,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
 	// Opaque config produced by PrepareAndExportSandbox on the source.
 	// Forwarded verbatim by the caller; the destination shim is responsible
 	// for decoding and applying it.
-	Config        *anypb.Any `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	Config        *anypb.Any `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -236,6 +242,13 @@ func (*ImportSandboxRequest) Descriptor() ([]byte, []int) {
 func (x *ImportSandboxRequest) GetSessionID() string {
 	if x != nil {
 		return x.SessionID
+	}
+	return ""
+}
+
+func (x *ImportSandboxRequest) GetSandboxID() string {
+	if x != nil {
+		return x.SandboxID
 	}
 	return ""
 }
@@ -787,11 +800,13 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_proto_rawDesc = 
 	"session_id\x18\x01 \x01(\tR\tsessionId\x125\n" +
 	"\finit_options\x18\x02 \x01(\v2\x12.InitializeOptionsR\vinitOptions\"O\n" +
 	"\x1fPrepareAndExportSandboxResponse\x12,\n" +
-	"\x06config\x18\x01 \x01(\v2\x14.google.protobuf.AnyR\x06config\"c\n" +
+	"\x06config\x18\x01 \x01(\v2\x14.google.protobuf.AnyR\x06config\"\x82\x01\n" +
 	"\x14ImportSandboxRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
-	"\x06config\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\x06config\"\x17\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x02 \x01(\tR\tsandboxId\x12,\n" +
+	"\x06config\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\x06config\"\x17\n" +
 	"\x15ImportSandboxResponse\"m\n" +
 	"\x15PrepareSandboxRequest\x12\x1d\n" +
 	"\n" +
