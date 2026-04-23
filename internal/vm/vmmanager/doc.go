@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 /*
 Package vmmanager manages host-side VM configuration and lifecycle for utility VMs (UVMs).

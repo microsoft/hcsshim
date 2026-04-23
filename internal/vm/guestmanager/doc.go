@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 /*
 Package guestmanager manages guest-side operations for utility VMs (UVMs) via the
