@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 // Package vpci provides a controller for managing virtual PCI (vPCI) device
 // assignments on a Utility VM (UVM). It handles assigning and removing

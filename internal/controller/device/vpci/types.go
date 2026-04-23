@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package vpci
 
@@ -8,7 +8,6 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // Device holds the configuration required to assign a vPCI device to the VM.
@@ -28,13 +27,6 @@ type vmVPCI interface {
 
 	// RemoveDevice removes the vPCI device identified by `vmBusGUID` from the Utility VM.
 	RemoveDevice(ctx context.Context, vmbusGUID guid.GUID) error
-}
-
-// linuxGuestVPCI exposes vPCI device operations in the LCOW guest.
-// Implemented by [guestmanager.Guest].
-type linuxGuestVPCI interface {
-	// AddVPCIDevice adds a vPCI device to the guest.
-	AddVPCIDevice(ctx context.Context, settings guestresource.LCOWMappedVPCIDevice) error
 }
 
 // ==============================================================================

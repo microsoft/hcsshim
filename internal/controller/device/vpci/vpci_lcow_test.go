@@ -36,7 +36,7 @@ var (
 // and that the device appears in both tracking maps.
 func TestReserve_NewDevice(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMocklinuxGuestVPCI(ctrl))
+	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMockguestVPCI(ctrl))
 	ctx := context.Background()
 
 	dev := newTestDevice()
@@ -62,7 +62,7 @@ func TestReserve_NewDevice(t *testing.T) {
 // same device returns the exact same GUID without creating a new entry.
 func TestReserve_SameDeviceTwice(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMocklinuxGuestVPCI(ctrl))
+	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMockguestVPCI(ctrl))
 	ctx := context.Background()
 
 	dev := newTestDevice()
@@ -86,7 +86,7 @@ func TestReserve_SameDeviceTwice(t *testing.T) {
 // treated as independent reservations.
 func TestReserve_DifferentVF(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMocklinuxGuestVPCI(ctrl))
+	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMockguestVPCI(ctrl))
 	ctx := context.Background()
 
 	dev0 := Device{DeviceInstanceID: "PCI\\VEN_1234&DEV_5678\\0", VirtualFunctionIndex: 0}
@@ -111,7 +111,7 @@ func TestReserve_DifferentVF(t *testing.T) {
 // with an unknown GUID.
 func TestAddToVM_NoReservation(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMocklinuxGuestVPCI(ctrl))
+	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMockguestVPCI(ctrl))
 	ctx := context.Background()
 
 	unknownGUID, _ := guid.NewV4()
@@ -125,7 +125,7 @@ func TestAddToVM_NoReservation(t *testing.T) {
 func TestAddToVM_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -153,7 +153,7 @@ func TestAddToVM_HappyPath(t *testing.T) {
 func TestAddToVM_Idempotent(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -184,7 +184,7 @@ func TestAddToVM_Idempotent(t *testing.T) {
 func TestAddToVM_HostFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -216,7 +216,7 @@ func TestAddToVM_HostFails(t *testing.T) {
 func TestAddToVM_StateRemoved(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -239,7 +239,7 @@ func TestAddToVM_StateRemoved(t *testing.T) {
 func TestAddToVM_GuestFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -268,7 +268,7 @@ func TestAddToVM_GuestFails(t *testing.T) {
 func TestAddToVM_InvalidDevice(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -294,7 +294,7 @@ func TestAddToVM_InvalidDevice(t *testing.T) {
 func TestAddToVM_ReservedTwice_ThenAdd(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -321,7 +321,7 @@ func TestAddToVM_ReservedTwice_ThenAdd(t *testing.T) {
 // TestRemoveFromVM_NoDevice verifies that removing an unknown GUID returns an error.
 func TestRemoveFromVM_NoDevice(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMocklinuxGuestVPCI(ctrl))
+	c := New(mocks.NewMockvmVPCI(ctrl), mocks.NewMockguestVPCI(ctrl))
 	ctx := context.Background()
 
 	unknownGUID, _ := guid.NewV4()
@@ -336,7 +336,7 @@ func TestRemoveFromVM_NoDevice(t *testing.T) {
 func TestRemoveFromVM_ReservedButNeverAdded(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -362,7 +362,7 @@ func TestRemoveFromVM_ReservedButNeverAdded(t *testing.T) {
 func TestRemoveFromVM_AfterHostAddFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -390,7 +390,7 @@ func TestRemoveFromVM_AfterHostAddFails(t *testing.T) {
 func TestRemoveFromVM_HappyPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -416,7 +416,7 @@ func TestRemoveFromVM_HappyPath(t *testing.T) {
 func TestRemoveFromVM_RefCounting(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -451,7 +451,7 @@ func TestRemoveFromVM_RefCounting(t *testing.T) {
 func TestRemoveFromVM_HostFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -484,7 +484,7 @@ func TestRemoveFromVM_HostFails(t *testing.T) {
 func TestRemoveFromVM_HostFails_ThenRetry(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -515,7 +515,7 @@ func TestRemoveFromVM_HostFails_ThenRetry(t *testing.T) {
 func TestRemoveFromVM_InvalidDevice_AfterGuestFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -549,7 +549,7 @@ func TestRemoveFromVM_InvalidDevice_AfterGuestFail(t *testing.T) {
 func TestReserve_AfterRemove(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -579,7 +579,7 @@ func TestReserve_AfterRemove(t *testing.T) {
 func TestReserve_AfterGuestFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -609,7 +609,7 @@ func TestReserve_AfterGuestFailure(t *testing.T) {
 func TestRemoveFromVM_AlreadyRemoved(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -639,7 +639,7 @@ func TestRemoveFromVM_AlreadyRemoved(t *testing.T) {
 func TestAddToVM_HCSSettings(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 
@@ -679,7 +679,7 @@ func TestAddToVM_HCSSettings(t *testing.T) {
 func TestAddToVM_GuestVMBusGUIDForwarded(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmVPCI(ctrl)
-	guest := mocks.NewMocklinuxGuestVPCI(ctrl)
+	guest := mocks.NewMockguestVPCI(ctrl)
 	c := New(vm, guest)
 	ctx := context.Background()
 

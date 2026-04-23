@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package vpci
 
@@ -30,20 +30,20 @@ type Controller struct {
 	// vmVPCI performs host-side vPCI device add/remove on the VM.
 	vmVPCI vmVPCI
 
-	// linuxGuestVPCI performs guest-side vPCI device setup for LCOW.
-	linuxGuestVPCI linuxGuestVPCI
+	// guestVPCI performs guest-side vPCI device setup.
+	guestVPCI guestVPCI
 }
 
 // New creates a ready-to-use [Controller].
 func New(
 	vmVPCI vmVPCI,
-	linuxGuestVPCI linuxGuestVPCI,
+	guestVPCI guestVPCI,
 ) *Controller {
 	return &Controller{
-		vmVPCI:         vmVPCI,
-		linuxGuestVPCI: linuxGuestVPCI,
-		devices:        make(map[guid.GUID]*deviceInfo),
-		deviceToGUID:   make(map[Device]guid.GUID),
+		vmVPCI:       vmVPCI,
+		guestVPCI:    guestVPCI,
+		devices:      make(map[guid.GUID]*deviceInfo),
+		deviceToGUID: make(map[Device]guid.GUID),
 	}
 }
 
