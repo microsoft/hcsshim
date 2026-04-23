@@ -1,3 +1,5 @@
+//go:build windows && lcow
+
 // Package lcow encapsulates the business logic to parse annotations, devices,
 // and runhcs options into an hcsschema.ComputeSystem document which will be used
 // by the shim to create UVMs (Utility VMs) via the Host Compute Service (HCS).
