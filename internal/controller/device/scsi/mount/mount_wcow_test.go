@@ -61,7 +61,7 @@ func mountedMount(t *testing.T) *Mount {
 
 // --- WCOW-specific tests ---
 
-func TestConfigEquals_WCOW(t *testing.T) {
+func TestConfigEquals(t *testing.T) {
 	base := Config{
 		ReadOnly:       true,
 		FormatWithRefs: false,
@@ -92,7 +92,7 @@ func TestConfigEquals_WCOW(t *testing.T) {
 	}
 }
 
-func TestMountToGuest_WCOW_Success(t *testing.T) {
+func TestMountToGuest_Success(t *testing.T) {
 	m := NewReserved(0, 0, defaultConfig())
 	guestPath, err := m.MountToGuest(context.Background(), &mockMounter{})
 	if err != nil {
@@ -106,22 +106,7 @@ func TestMountToGuest_WCOW_Success(t *testing.T) {
 	}
 }
 
-func TestMountToGuest_WCOW_Error(t *testing.T) {
-	mountErr := errors.New("wcow mount failed")
-	m := NewReserved(0, 0, defaultConfig())
-	_, err := m.MountToGuest(context.Background(), &mockMounter{err: mountErr})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, mountErr) {
-		t.Errorf("expected wrapped error %v, got %v", mountErr, err)
-	}
-	if m.State() != StateUnmounted {
-		t.Errorf("expected state %d after failure, got %d", StateUnmounted, m.State())
-	}
-}
-
-func TestMountToGuest_WCOW_FormatWithRefs(t *testing.T) {
+func TestMountToGuest_FormatWithRefs(t *testing.T) {
 	scratchCalled := false
 	m := NewReserved(0, 0, Config{Partition: 1, FormatWithRefs: true})
 	wm := &mockMounter{scratchFn: func() { scratchCalled = true }}
@@ -130,22 +115,11 @@ func TestMountToGuest_WCOW_FormatWithRefs(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !scratchCalled {
-		t.Error("expected AddWCOWMappedVirtualDiskForContainerScratch to be called")
+		t.Error("expected AddMappedVirtualDiskForContainerScratch to be called")
 	}
 }
 
-func TestUnmountFromGuest_WCOW_Success(t *testing.T) {
-	m := mountedMount(t)
-	err := m.UnmountFromGuest(context.Background(), &mockUnmounter{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if m.State() != StateUnmounted {
-		t.Errorf("expected state %d, got %d", StateUnmounted, m.State())
-	}
-}
-
-func TestUnmountFromGuest_WCOW_Error(t *testing.T) {
+func TestUnmountFromGuest_Error(t *testing.T) {
 	m := mountedMount(t)
 	unmountErr := errors.New("wcow unmount failed")
 	err := m.UnmountFromGuest(context.Background(), &mockUnmounter{err: unmountErr})

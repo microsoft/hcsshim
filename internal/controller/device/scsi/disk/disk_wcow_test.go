@@ -56,7 +56,7 @@ func newDefaultUnmounter() mount.GuestSCSIUnmounter {
 
 // --- WCOW-specific tests ---
 
-func TestMountPartitionToGuest_WCOW_Success(t *testing.T) {
+func TestMountPartitionToGuest_Success(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -72,7 +72,7 @@ func TestMountPartitionToGuest_WCOW_Success(t *testing.T) {
 	}
 }
 
-func TestMountPartitionToGuest_WCOW_MountError(t *testing.T) {
+func TestMountPartitionToGuest_MountError(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -85,7 +85,7 @@ func TestMountPartitionToGuest_WCOW_MountError(t *testing.T) {
 	}
 }
 
-func TestMountPartitionToGuest_WCOW_FormatWithRefs(t *testing.T) {
+func TestMountPartitionToGuest_FormatWithRefs(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1, FormatWithRefs: true}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -101,7 +101,7 @@ func TestMountPartitionToGuest_WCOW_FormatWithRefs(t *testing.T) {
 	}
 }
 
-func TestUnmountPartitionFromGuest_WCOW_Success(t *testing.T) {
+func TestUnmountPartitionFromGuest_Success(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -118,7 +118,7 @@ func TestUnmountPartitionFromGuest_WCOW_Success(t *testing.T) {
 	}
 }
 
-func TestUnmountPartitionFromGuest_WCOW_UnmountError(t *testing.T) {
+func TestUnmountPartitionFromGuest_UnmountError(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -139,7 +139,7 @@ func TestUnmountPartitionFromGuest_WCOW_UnmountError(t *testing.T) {
 	}
 }
 
-func TestUnmountPartitionFromGuest_WCOW_RemovesMountWhenFullyUnmounted(t *testing.T) {
+func TestUnmountPartitionFromGuest_RemovesMountWhenFullyUnmounted(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)

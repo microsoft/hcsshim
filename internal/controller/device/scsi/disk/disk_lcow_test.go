@@ -80,7 +80,7 @@ func TestDetachFromVM_EjectError(t *testing.T) {
 	}
 }
 
-func TestMountPartitionToGuest_LCOW_Success(t *testing.T) {
+func TestMountPartitionToGuest_Success(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -96,7 +96,7 @@ func TestMountPartitionToGuest_LCOW_Success(t *testing.T) {
 	}
 }
 
-func TestMountPartitionToGuest_LCOW_MountError(t *testing.T) {
+func TestMountPartitionToGuest_MountError(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -104,13 +104,12 @@ func TestMountPartitionToGuest_LCOW_MountError(t *testing.T) {
 		t.Fatalf("ReservePartition: %v", err)
 	}
 	_, err = d.MountPartitionToGuest(context.Background(), 1, &mockGuestSCSIMounter{err: errors.New("mount fail")})
-	if err != nil {
-		// This is expected - the mount error propagates.
-		return
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
 
-func TestUnmountPartitionFromGuest_LCOW_Success(t *testing.T) {
+func TestUnmountPartitionFromGuest_Success(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -127,7 +126,7 @@ func TestUnmountPartitionFromGuest_LCOW_Success(t *testing.T) {
 	}
 }
 
-func TestUnmountPartitionFromGuest_LCOW_UnmountError(t *testing.T) {
+func TestUnmountPartitionFromGuest_UnmountError(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -148,7 +147,7 @@ func TestUnmountPartitionFromGuest_LCOW_UnmountError(t *testing.T) {
 	}
 }
 
-func TestUnmountPartitionFromGuest_LCOW_RemovesMountWhenFullyUnmounted(t *testing.T) {
+func TestUnmountPartitionFromGuest_RemovesMountWhenFullyUnmounted(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)
@@ -174,7 +173,7 @@ func TestUnmountPartitionFromGuest_LCOW_RemovesMountWhenFullyUnmounted(t *testin
 	}
 }
 
-func TestUnmountPartitionFromGuest_LCOW_RetryAfterDetachFailure(t *testing.T) {
+func TestUnmountPartitionFromGuest_RetryAfterDetachFailure(t *testing.T) {
 	d := attachedDisk(t)
 	cfg := mount.Config{Partition: 1}
 	_, err := d.ReservePartition(context.Background(), cfg)

@@ -8,7 +8,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 )
 
-// guestVPCI exposes vPCI device operations in the LCOW guest.
+// guestVPCI exposes vPCI device operations in the guest.
 // Not applicable for WCOW guests.
 type guestVPCI interface{}
 

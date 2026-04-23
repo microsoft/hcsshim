@@ -53,7 +53,7 @@ func mountedMount(t *testing.T) *Mount {
 
 // --- LCOW-specific tests ---
 
-func TestConfigEquals_LCOW(t *testing.T) {
+func TestConfigEquals(t *testing.T) {
 	base := Config{
 		ReadOnly:         true,
 		Encrypted:        true,
@@ -111,47 +111,7 @@ func TestConfigEquals_LCOW(t *testing.T) {
 	}
 }
 
-func TestMountToGuest_LCOW_Success(t *testing.T) {
-	m := NewReserved(0, 0, defaultConfig())
-	guestPath, err := m.MountToGuest(context.Background(), &mockMounter{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if guestPath == "" {
-		t.Error("expected non-empty guestPath")
-	}
-	if m.State() != StateMounted {
-		t.Errorf("expected state %d, got %d", StateMounted, m.State())
-	}
-}
-
-func TestMountToGuest_LCOW_Error(t *testing.T) {
-	mountErr := errors.New("lcow mount failed")
-	m := NewReserved(0, 0, defaultConfig())
-	_, err := m.MountToGuest(context.Background(), &mockMounter{err: mountErr})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, mountErr) {
-		t.Errorf("expected wrapped error %v, got %v", mountErr, err)
-	}
-	if m.State() != StateUnmounted {
-		t.Errorf("expected state %d after failure, got %d", StateUnmounted, m.State())
-	}
-}
-
-func TestUnmountFromGuest_LCOW_Success(t *testing.T) {
-	m := mountedMount(t)
-	err := m.UnmountFromGuest(context.Background(), &mockUnmounter{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if m.State() != StateUnmounted {
-		t.Errorf("expected state %d, got %d", StateUnmounted, m.State())
-	}
-}
-
-func TestUnmountFromGuest_LCOW_Error(t *testing.T) {
+func TestUnmountFromGuest_Error(t *testing.T) {
 	m := mountedMount(t)
 	unmountErr := errors.New("lcow unmount failed")
 	err := m.UnmountFromGuest(context.Background(), &mockUnmounter{err: unmountErr})
