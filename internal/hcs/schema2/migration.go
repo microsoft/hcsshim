@@ -1,5 +1,7 @@
 package hcsschema
 
+import "time"
+
 // MigrationInitializeOptions is a set of options for the migration workflow.
 type MigrationInitializeOptions struct {
 	// Origin is the side of migration the workflow is performed on.
@@ -132,6 +134,16 @@ type OperationSystemMigrationNotificationInfo struct {
 	// AdditionalDetails carries extra event-specific information whose schema
 	// depends on the event being reported. Modeled as the HCS schema `Any` type.
 	AdditionalDetails *interface{} `json:"AdditionalDetails,omitempty"`
+}
+
+// BlackoutExitedEventDetails carries additional details reported alongside
+// MigrationEventBlackoutExited, describing the blackout that just ended.
+// Mirrors the HCS MigrationBlackoutExitedEventDetails schema.
+type BlackoutExitedEventDetails struct {
+	// BlackoutDurationMilliseconds is the duration of the blackout phase, in milliseconds.
+	BlackoutDurationMilliseconds uint64 `json:"BlackoutDurationMilliseconds,omitempty"`
+	// BlackoutStopTimestamp is the timestamp at which the blackout phase ended.
+	BlackoutStopTimestamp time.Time `json:"BlackoutStopTimestamp,omitempty"`
 }
 
 // MigrationEvent describes a live migration event reported by HCS.
