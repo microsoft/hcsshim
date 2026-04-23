@@ -304,7 +304,7 @@ func (s *Service) Stats(ctx context.Context, request *task.StatsRequest) (resp *
 // Connect reconnects to a running task.
 // This method is part of the instrumentation layer and business logic is included in connectInternal.
 func (s *Service) Connect(ctx context.Context, request *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Connect")
+	_, span := oc.StartSpan(ctx, "Connect")
 	defer span.End()
 	defer func() {
 		if resp != nil {

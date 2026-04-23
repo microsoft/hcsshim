@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	"github.com/Microsoft/hcsshim/internal/log"

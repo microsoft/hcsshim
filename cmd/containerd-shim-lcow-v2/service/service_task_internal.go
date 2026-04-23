@@ -9,8 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/controller/linuxcontainer"
-	"github.com/Microsoft/hcsshim/internal/controller/network"
+	container "github.com/Microsoft/hcsshim/internal/controller/linuxcontainer"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
 	"github.com/Microsoft/hcsshim/internal/controller/process"
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -34,7 +33,7 @@ import (
 )
 
 // getContainerController looks up the container controller for the given container ID.
-func (s *Service) getContainerController(containerID string) (*linuxcontainer.Controller, error) {
+func (s *Service) getContainerController(containerID string) (*container.Controller, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -118,7 +117,7 @@ func (s *Service) createInternal(ctx context.Context, request *task.CreateTaskRe
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var ctrCtrl *linuxcontainer.Controller
+	var ctrCtrl *container.Controller
 
 	switch ct {
 	case oci.KubernetesContainerTypeSandbox:
@@ -138,13 +137,10 @@ func (s *Service) createInternal(ctx context.Context, request *task.CreateTaskRe
 		}
 
 		// Create a new pod.
-		podCtrl := pod.New(sid, s.vmController)
+		podCtrl := pod.New(sid, spec.Windows.Network.NetworkNamespace, s.vmController)
 
 		// Setup network for the pod based on the provided namespace.
-		err = podCtrl.SetupNetwork(ctx, &network.SetupOptions{
-			NetworkNamespace:   spec.Windows.Network.NetworkNamespace,
-			PolicyBasedRouting: s.sandboxOptions.PolicyBasedRouting,
-		})
+		err = podCtrl.SetupNetwork(ctx)
 		if err != nil {
 			// No cleanup on failure since containerd will send a Delete request.
 			return nil, fmt.Errorf("failed to setup network for pod %s: %w", sid, err)
@@ -180,13 +176,20 @@ func (s *Service) createInternal(ctx context.Context, request *task.CreateTaskRe
 		return nil, fmt.Errorf("unsupported container type %q: %w", ct, errdefs.ErrInvalidArgument)
 	}
 
+	// Get EnableScratchEncryption option.
+	var enableScratchEncryption bool
+	sandboxOpts := s.vmController.SandboxOptions()
+	if sandboxOpts != nil {
+		enableScratchEncryption = sandboxOpts.EnableScratchEncryption
+	}
+
 	// Call Create on the container controller.
 	if err := ctrCtrl.Create(
 		ctx,
 		&spec,
 		request,
-		&linuxcontainer.CreateOpts{
-			IsScratchEncryptionEnabled: s.sandboxOptions.EnableScratchEncryption,
+		&container.CreateOpts{
+			IsScratchEncryptionEnabled: enableScratchEncryption,
 		},
 	); err != nil {
 		return nil, fmt.Errorf("failed to create container %s: %w", request.ID, err)
@@ -411,7 +414,7 @@ func (s *Service) killInternal(ctx context.Context, request *task.KillRequest) (
 
 	// If "all" is set and this is a sandbox (pod) container, collect all
 	// workload containers so we can fan out the kill to the entire pod.
-	var workloadContainers map[string]*linuxcontainer.Controller
+	var workloadContainers map[string]*container.Controller
 	if request.All {
 		if podCtrl, ok := s.getPodController(request.ID); ok {
 			workloadContainers = podCtrl.ListContainers()
