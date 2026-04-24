@@ -45,6 +45,15 @@ type System struct {
 	// the HCS server sent SystemExited with the new 2.18 Reboot enum value.
 	exitTypeMu sync.RWMutex
 	exitType   string
+
+	// container-reboot-v2 Stage 4 Sub-step B1: cached copy of the document
+	// this System was created with, so Sub-step B's handleReboot can reissue
+	// an identical CreateComputeSystem on the same ID after the silo
+	// destructs. Stored as raw JSON (not the pre-marshal interface{}) because
+	// the original document is a build-time tree of Go structs that's
+	// painful to round-trip; the bytes are what HCS actually sees. Exposed
+	// via CreateDocument().
+	createDocument json.RawMessage
 }
 
 var _ cow.Container = &System{}
@@ -81,6 +90,12 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 	}
 
 	hcsDocument := string(hcsDocumentB)
+
+	// container-reboot-v2 Stage 4 Sub-step B1: cache the exact bytes HCS sees,
+	// before any errors, so a later handleReboot can reissue the same document.
+	// Copy into a fresh slice since the caller-owned hcsDocumentB may alias a
+	// larger buffer or be reused by GC.
+	computeSystem.createDocument = append(json.RawMessage(nil), hcsDocumentB...)
 
 	var (
 		identity    syscall.Handle
@@ -368,6 +383,14 @@ func (computeSystem *System) ExitType() string {
 	computeSystem.exitTypeMu.RLock()
 	defer computeSystem.exitTypeMu.RUnlock()
 	return computeSystem.exitType
+}
+
+// CreateDocument returns the JSON body this System was originally created with.
+// Used by container-reboot-v2 Stage 4's handleReboot to reissue
+// HcsCreateComputeSystem with identical configuration after a silo reboot.
+// Returns nil for Systems created outside CreateComputeSystem (e.g. OpenComputeSystem).
+func (computeSystem *System) CreateDocument() json.RawMessage {
+	return computeSystem.createDocument
 }
 
 func (computeSystem *System) WaitError() error {

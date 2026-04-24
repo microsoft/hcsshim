@@ -661,13 +661,87 @@ func (ht *hcsTask) waitInitExit() {
 			log.G(ctx).
 				WithField("tid", ht.id).
 				WithField("reboot.exit_type", exitType).
-				Info("reboot-v2 Stage 4: would handle reboot here (no action; falling through to teardown)")
+				Info("reboot-v2 Stage 4: reboot observed; running B2 same-ID recreate probe")
+			ht.probeSameIDRecreate(ctx)
 		}
 	}
 	span.AddAttributes(trace.BoolAttribute("reboot.pending", rebootPending))
 
 	// Close the host and event the exit
 	ht.close(ctx)
+}
+
+// probeSameIDRecreate is a Stage 4 Sub-step B2 experiment — it does NOT yet
+// drive an actual restart. We want to answer a single question before writing
+// real handleReboot logic: does HCS accept CreateComputeSystem + Start with
+// the same container ID while the overlay layer is still mounted?
+//
+// Plan:
+//  1. Close the old *hcs.System handle so HCS sees no duplicate outstanding
+//     handle for this ID (the silo itself is already gone).
+//  2. Retrieve the cached hcsDocument (Sub-step B1).
+//  3. Call hcs.CreateComputeSystem with that doc on the same ID.
+//  4. Call Start on the new system.
+//  5. Log each outcome; on any failure, log the error explicitly so we can
+//     tell whether it's same-ID rejection, layer-not-found, namespace
+//     conflict, or something else.
+//  6. Terminate + Wait + Close the new system so the caller's ht.close(ctx)
+//     teardown proceeds normally on an empty slot.
+//
+// This runs BEFORE ht.close(ctx), so the overlay layer is still mounted via
+// the original resources.Resources. If B2 succeeds we know Sub-step B3 can
+// wire the new system into ht.c instead of throwing it away.
+func (ht *hcsTask) probeSameIDRecreate(ctx context.Context) {
+	oldSys, ok := ht.c.(*hcs.System)
+	if !ok {
+		log.G(ctx).Warn("reboot-v2 B2: ht.c is not *hcs.System; cannot recreate")
+		return
+	}
+	doc := oldSys.CreateDocument()
+	if len(doc) == 0 {
+		log.G(ctx).Warn("reboot-v2 B2: no cached create document; System was not created via CreateComputeSystem")
+		return
+	}
+	log.G(ctx).
+		WithField("tid", ht.id).
+		WithField("doc_bytes", len(doc)).
+		Info("reboot-v2 B2: closing old system handle before recreate probe")
+	if err := oldSys.Close(); err != nil {
+		log.G(ctx).WithError(err).Warn("reboot-v2 B2: old system Close failed (proceeding anyway)")
+	}
+
+	newSys, err := hcs.CreateComputeSystem(ctx, ht.id, doc)
+	if err != nil {
+		log.G(ctx).WithError(err).
+			WithField("tid", ht.id).
+			Warn("reboot-v2 B2: CreateComputeSystem FAILED — HCS rejected same-ID recreate")
+		return
+	}
+	log.G(ctx).
+		WithField("tid", ht.id).
+		Info("reboot-v2 B2: CreateComputeSystem SUCCEEDED on same ID; calling Start")
+
+	if err := newSys.Start(ctx); err != nil {
+		log.G(ctx).WithError(err).
+			WithField("tid", ht.id).
+			Warn("reboot-v2 B2: Start failed on recreated system")
+	} else {
+		log.G(ctx).
+			WithField("tid", ht.id).
+			Info("reboot-v2 B2: Start SUCCEEDED — full create+start cycle works on same ID")
+	}
+
+	// Cleanup: terminate + wait + close so the existing teardown path is not
+	// confused by our extra system hanging around.
+	if err := newSys.Terminate(ctx); err != nil {
+		log.G(ctx).WithError(err).Debug("reboot-v2 B2: cleanup Terminate returned error")
+	}
+	if err := newSys.Wait(); err != nil {
+		log.G(ctx).WithError(err).Debug("reboot-v2 B2: cleanup Wait returned error")
+	}
+	if err := newSys.Close(); err != nil {
+		log.G(ctx).WithError(err).Debug("reboot-v2 B2: cleanup Close returned error")
+	}
 }
 
 // waitForHostExit waits for the host virtual machine to exit. Once exited
