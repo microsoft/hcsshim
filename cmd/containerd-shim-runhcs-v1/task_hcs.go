@@ -28,6 +28,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/devguard"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
@@ -621,12 +622,49 @@ func (ht *hcsTask) waitInitExit() {
 	span.AddAttributes(
 		trace.StringAttribute("tid", ht.id),
 		trace.BoolAttribute("host", ht.host != nil),
-		trace.BoolAttribute("ownsHost", ht.ownsHost),
-		// container-reboot-v2 Stage 1 placeholder; Stage 4 flips this when dispatching to handleReboot.
-		trace.BoolAttribute("reboot.pending", false))
+		trace.BoolAttribute("ownsHost", ht.ownsHost))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()
+
+	// container-reboot-v2 Stage 4 Sub-step A: detect Reboot at the single
+	// task-scoped intercept point, independent of the processDone/WaitChannel
+	// race in hcsExec::waitForContainerExit. Gated by EnableShimRebootHandler
+	// so Stage 2/3 traces still pass even with the shim deployed; when the
+	// guard is OFF we just fall through to close() / teardown unchanged.
+	//
+	// Timing subtlety: ht.init.Wait() returns when the init PROCESS exits,
+	// but *hcs.System.waitBackground (which parses SystemExitStatus JSON into
+	// ExitType) runs on the system-level exit notification, a separate HCS
+	// callback. The two goroutines can complete in either order. Per
+	// cow.Container.ExitType() contract, the value is only defined AFTER
+	// WaitChannel() closes — so we must block on it before reading ExitType
+	// or risk a false negative. Empirical proof: Stage 4 initial run on
+	// 2026-04-23 read ExitType right after init.Wait() and got empty string
+	// 100% of the time, despite waitBackground setting "Reboot" ~22ms later.
+	//
+	// Stage 4 Sub-step B will replace this log with actual handleReboot logic
+	// (suppress close/teardown, drive a new CreateComputeSystem). Sub-step A
+	// is observation-only so we have a stable hook to extend.
+	rebootPending := false
+	if ht.c != nil && devguard.IsEnabled(devguard.EnableShimRebootHandler) {
+		select {
+		case <-ht.c.WaitChannel():
+			// waitBackground has finished; ExitType is now reliable.
+		case <-time.After(5 * time.Second):
+			log.G(ctx).
+				WithField("tid", ht.id).
+				Warn("reboot-v2 Stage 4: timed out waiting for compute system WaitChannel; ExitType may be empty")
+		}
+		if exitType := ht.c.ExitType(); exitType == "Reboot" {
+			rebootPending = true
+			log.G(ctx).
+				WithField("tid", ht.id).
+				WithField("reboot.exit_type", exitType).
+				Info("reboot-v2 Stage 4: would handle reboot here (no action; falling through to teardown)")
+		}
+	}
+	span.AddAttributes(trace.BoolAttribute("reboot.pending", rebootPending))
 
 	// Close the host and event the exit
 	ht.close(ctx)
