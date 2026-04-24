@@ -7,19 +7,16 @@ package ref
 
 import (
 	"errors"
-	"strings"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 // ParseDataPath returns a ref from the slash separated path s rooted at data.
 // All path segments are treated as identifier strings.
 func ParseDataPath(s string) (ast.Ref, error) {
-
-	s = "/" + strings.TrimPrefix(s, "/")
-
-	path, ok := storage.ParsePath(s)
+	path, ok := storage.ParsePath(util.WithPrefix(s, "/"))
 	if !ok {
 		return nil, errors.New("invalid path")
 	}
@@ -29,7 +26,7 @@ func ParseDataPath(s string) (ast.Ref, error) {
 
 // ArrayPath will take an ast.Array and build an ast.Ref using the ast.Terms in the Array
 func ArrayPath(a *ast.Array) ast.Ref {
-	var ref ast.Ref
+	ref := make(ast.Ref, 0, a.Len())
 
 	a.Foreach(func(term *ast.Term) {
 		ref = append(ref, term)
