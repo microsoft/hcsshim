@@ -661,8 +661,22 @@ func (ht *hcsTask) waitInitExit() {
 			log.G(ctx).
 				WithField("tid", ht.id).
 				WithField("reboot.exit_type", exitType).
-				Info("reboot-v2 Stage 4: reboot observed; running B2 same-ID recreate probe")
-			ht.probeSameIDRecreate(ctx)
+				Info("reboot-v2 Stage 4: reboot observed; attempting transparent restart (B3b)")
+			if err := ht.doHandleReboot(ctx); err != nil {
+				log.G(ctx).WithError(err).
+					WithField("tid", ht.id).
+					Warn("reboot-v2 B3b: handleReboot failed; falling through to teardown")
+				rebootPending = false // restart failed; normal exit semantics apply
+			} else {
+				span.AddAttributes(trace.BoolAttribute("reboot.pending", true))
+				log.G(ctx).
+					WithField("tid", ht.id).
+					Info("reboot-v2 B3b: transparent restart completed; suppressing teardown")
+				// IMPORTANT: return WITHOUT calling ht.close(ctx). The task
+				// continues to live under the new System; closeHost() is not
+				// invoked so no /tasks/exit event is published.
+				return
+			}
 		}
 	}
 	span.AddAttributes(trace.BoolAttribute("reboot.pending", rebootPending))
@@ -671,26 +685,131 @@ func (ht *hcsTask) waitInitExit() {
 	ht.close(ctx)
 }
 
-// probeSameIDRecreate is a Stage 4 Sub-step B2 experiment — it does NOT yet
-// drive an actual restart. We want to answer a single question before writing
-// real handleReboot logic: does HCS accept CreateComputeSystem + Start with
-// the same container ID while the overlay layer is still mounted?
+// doHandleReboot performs the Stage 4 Sub-step B3b transparent restart.
+// The container has exited with ExitType=Reboot (HCS told us via the V1
+// SystemExitStatus JSON). Old silo is gone but its compute-system ID slot
+// is free. Overlay layer and HNS endpoint both persist. We:
 //
-// Plan:
-//  1. Close the old *hcs.System handle so HCS sees no duplicate outstanding
-//     handle for this ID (the silo itself is already gone).
-//  2. Retrieve the cached hcsDocument (Sub-step B1).
-//  3. Call hcs.CreateComputeSystem with that doc on the same ID.
-//  4. Call Start on the new system.
-//  5. Log each outcome; on any failure, log the error explicitly so we can
-//     tell whether it's same-ID rejection, layer-not-found, namespace
-//     conflict, or something else.
-//  6. Terminate + Wait + Close the new system so the caller's ht.close(ctx)
-//     teardown proceeds normally on an empty slot.
+//  1. Close the old *hcs.System handle (silo already destructed kernel-side).
+//  2. Call hcs.CreateComputeSystem with the cached create document (B1) on
+//     the same ID. The overlay path and namespace GUID in the doc bind to
+//     the persisted state.
+//  3. Call newSys.Start().
+//  4. Spawn the original init process via cmd.Cmd with ht.taskSpec.Process,
+//     reusing the hcsExec's upstream stdio pipes.
+//  5. Reset ht.init's hcsExec state in-place under its sl lock:
+//       - Point c + p at the new System + cmd
+//       - Reset state=Running, pid=newPid, exitStatus=255, exitedAt=zero
+//       - Allocate fresh processDone / exited channels (old ones already
+//         closed by the exec's exit path; existing waiters already returned)
+//  6. Point ht.c at newSys so task-level operations target it.
+//  7. Respawn waitForExit so the new init process's lifecycle is tracked
+//     (including publishing a TaskExit event when the new init exits —
+//     same as a normal container exit).
 //
-// This runs BEFORE ht.close(ctx), so the overlay layer is still mounted via
-// the original resources.Resources. If B2 succeeds we know Sub-step B3 can
-// wire the new system into ht.c instead of throwing it away.
+// Known limitations of this first iteration (to address in B3c / Stage 5):
+//   - We do NOT re-spawn waitForContainerExit, so if the new silo reboots
+//     AGAIN, we fall through to the normal exit path rather than handling
+//     it recursively. Fine for single-reboot tests; needs looping for the
+//     ship version.
+//   - The /tasks/start event is NOT republished on restart, so external
+//     listeners don't know the PID changed. This is intentional (the task
+//     is logically "still running") but may need an annotation event.
+//   - If Start or the init spawn fails mid-way, the new System is leaked.
+//     Caller treats an error return as "fall through to teardown" which
+//     partially covers cleanup via ht.close(ctx).
+func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
+	oldSys, ok := ht.c.(*hcs.System)
+	if !ok {
+		return fmt.Errorf("ht.c is %T, not *hcs.System — cannot recreate", ht.c)
+	}
+	doc := oldSys.CreateDocument()
+	if len(doc) == 0 {
+		return fmt.Errorf("no cached create document; System not created via CreateComputeSystem")
+	}
+	oldExec, ok := ht.init.(*hcsExec)
+	if !ok {
+		return fmt.Errorf("ht.init is %T, not *hcsExec — cannot reset", ht.init)
+	}
+
+	log.G(ctx).
+		WithField("tid", ht.id).
+		WithField("doc_bytes", len(doc)).
+		Info("reboot-v2 B3b: closing old system handle")
+	if err := oldSys.Close(); err != nil {
+		log.G(ctx).WithError(err).Warn("reboot-v2 B3b: old system Close failed (proceeding anyway)")
+	}
+
+	newSys, err := hcs.CreateComputeSystem(ctx, ht.id, doc)
+	if err != nil {
+		return fmt.Errorf("CreateComputeSystem on same ID failed: %w", err)
+	}
+	log.G(ctx).WithField("tid", ht.id).Info("reboot-v2 B3b: new System created on same ID")
+
+	if err := newSys.Start(ctx); err != nil {
+		_ = newSys.Terminate(ctx)
+		_ = newSys.Wait()
+		_ = newSys.Close()
+		return fmt.Errorf("newSys.Start failed: %w", err)
+	}
+	log.G(ctx).WithField("tid", ht.id).Info("reboot-v2 B3b: new System started")
+
+	// Spawn the real init process. Reuse the existing upstream IO (pipes are
+	// containerd-owned and still open).
+	newCmd := &cmd.Cmd{
+		Host:                 newSys,
+		Stdin:                oldExec.io.Stdin(),
+		Stdout:               oldExec.io.Stdout(),
+		Stderr:               oldExec.io.Stderr(),
+		Log:                  log.G(ctx).WithFields(logrus.Fields{"tid": ht.id, "eid": ht.id, "reboot-v2": "b3b-init"}),
+		CopyAfterExitTimeout: time.Second,
+	}
+	if oldExec.isWCOW {
+		newCmd.Spec = ht.taskSpec.Process
+	}
+	if err := newCmd.Start(); err != nil {
+		_ = newSys.Terminate(ctx)
+		_ = newSys.Wait()
+		_ = newSys.Close()
+		return fmt.Errorf("new init cmd.Start failed: %w", err)
+	}
+	newPid := newCmd.Process.Pid()
+	log.G(ctx).
+		WithField("tid", ht.id).
+		WithField("new.pid", newPid).
+		Info("reboot-v2 B3b: new init process spawned")
+
+	// Swap state into the existing hcsExec under its lock.
+	oldExec.sl.Lock()
+	oldExec.c = newSys
+	oldExec.p = newCmd
+	oldExec.pid = newPid
+	oldExec.state = shimExecStateRunning
+	oldExec.exitStatus = 255
+	oldExec.exitedAt = time.Time{}
+	oldExec.processDone = make(chan struct{})
+	oldExec.processDoneOnce = sync.Once{}
+	oldExec.exited = make(chan struct{})
+	oldExec.exitedOnce = sync.Once{}
+	oldExec.sl.Unlock()
+
+	// Swap task-level container reference.
+	ht.c = newSys
+
+	// Respawn waitForExit so we track the new init process and publish
+	// TaskExit correctly when it ends. This is what startInternal does
+	// at the end of a normal Start() — we're replicating that step.
+	go oldExec.waitForExit()
+
+	log.G(ctx).
+		WithField("tid", ht.id).
+		WithField("new.pid", newPid).
+		Info("reboot-v2 B3b: task state swapped; container logically still Running")
+	return nil
+}
+
+// probeSameIDRecreate is retained as reference / fallback but unused in B3b.
+// Kept for git-history clarity during Stage 4 iteration.
 func (ht *hcsTask) probeSameIDRecreate(ctx context.Context) {
 	oldSys, ok := ht.c.(*hcs.System)
 	if !ok {
