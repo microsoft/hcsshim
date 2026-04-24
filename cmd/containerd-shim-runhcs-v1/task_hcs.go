@@ -239,6 +239,10 @@ func newHcsTask(
 		closed:         make(chan struct{}),
 		taskSpec:       s,
 		ioRetryTimeout: ioRetryTimeout,
+		reqStdin:       req.Stdin,
+		reqStdout:      req.Stdout,
+		reqStderr:      req.Stderr,
+		reqTerminal:    req.Terminal,
 	}
 	ht.init = newHcsExec(
 		ctx,
@@ -345,6 +349,16 @@ type hcsTask struct {
 
 	// ioRetryTimeout is the time for how long to try reconnecting to stdio pipes from containerd.
 	ioRetryTimeout time.Duration
+
+	// container-reboot-v2 Stage 4 B3c: stash the original CreateTask stdio
+	// paths so doHandleReboot can call NewUpstreamIO to obtain fresh pipe
+	// connections for the new init process. oldExec.io's underlying pipes
+	// are closed by the original init exit path before we get to restart,
+	// so reusing them makes the new init blind and deadlocks follow-up ops.
+	reqStdin    string
+	reqStdout   string
+	reqStderr   string
+	reqTerminal bool
 }
 
 func (ht *hcsTask) ID() string {
@@ -754,20 +768,40 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 	}
 	log.G(ctx).WithField("tid", ht.id).Info("reboot-v2 B3b: new System started")
 
-	// Spawn the real init process. Reuse the existing upstream IO (pipes are
-	// containerd-owned and still open).
+	// B3c: try to open fresh upstream IO pipes for the new init. The old
+	// exec's UpstreamIO was closed by the original init exit path, which
+	// causes containerd to tear down its server-side pipes too — so
+	// NewUpstreamIO typically fails with "system cannot find the file
+	// specified". In that case, fall back to nil stdio and run the new
+	// init headless. The process still runs and docker sees the container
+	// as Up; just no stdout/stderr visibility until a proper reattach
+	// mechanism lands (future work — likely needs a containerd API change
+	// or a shim-side pipe-republish protocol).
 	newCmd := &cmd.Cmd{
 		Host:                 newSys,
-		Stdin:                oldExec.io.Stdin(),
-		Stdout:               oldExec.io.Stdout(),
-		Stderr:               oldExec.io.Stderr(),
 		Log:                  log.G(ctx).WithFields(logrus.Fields{"tid": ht.id, "eid": ht.id, "reboot-v2": "b3b-init"}),
 		CopyAfterExitTimeout: time.Second,
+	}
+	var freshIO cmd.UpstreamIO
+	if fio, ioErr := cmd.NewUpstreamIO(ctx, ht.id, ht.reqStdout, ht.reqStderr, ht.reqStdin, ht.reqTerminal, ht.ioRetryTimeout); ioErr == nil {
+		freshIO = fio
+		newCmd.Stdin = fio.Stdin()
+		newCmd.Stdout = fio.Stdout()
+		newCmd.Stderr = fio.Stderr()
+		log.G(ctx).WithField("tid", ht.id).Info("reboot-v2 B3c: fresh upstream IO opened for new init")
+	} else {
+		log.G(ctx).
+			WithField("tid", ht.id).
+			WithError(ioErr).
+			Warn("reboot-v2 B3c: could not open fresh IO pipes; new init will run headless")
 	}
 	if oldExec.isWCOW {
 		newCmd.Spec = ht.taskSpec.Process
 	}
 	if err := newCmd.Start(); err != nil {
+		if freshIO != nil {
+			freshIO.Close(ctx)
+		}
 		_ = newSys.Terminate(ctx)
 		_ = newSys.Wait()
 		_ = newSys.Close()
@@ -779,10 +813,14 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 		WithField("new.pid", newPid).
 		Info("reboot-v2 B3b: new init process spawned")
 
-	// Swap state into the existing hcsExec under its lock.
+	// Swap state into the existing hcsExec under its lock, including the
+	// fresh upstream IO if we got one (nil = headless).
 	oldExec.sl.Lock()
 	oldExec.c = newSys
 	oldExec.p = newCmd
+	if freshIO != nil {
+		oldExec.io = freshIO
+	}
 	oldExec.pid = newPid
 	oldExec.state = shimExecStateRunning
 	oldExec.exitStatus = 255
@@ -801,10 +839,16 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 	// at the end of a normal Start() — we're replicating that step.
 	go oldExec.waitForExit()
 
+	// B3c reboot loop: respawn waitInitExit so a SECOND in-container
+	// reboot is also handled transparently. Each successful handleReboot
+	// spawns a fresh waiter for the next cycle. Normal (non-reboot) exits
+	// flow through close(ctx) as before.
+	go ht.waitInitExit()
+
 	log.G(ctx).
 		WithField("tid", ht.id).
 		WithField("new.pid", newPid).
-		Info("reboot-v2 B3b: task state swapped; container logically still Running")
+		Info("reboot-v2 B3c: task state swapped; container logically still Running; waiting for next exit")
 	return nil
 }
 
