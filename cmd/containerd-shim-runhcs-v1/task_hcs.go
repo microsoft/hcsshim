@@ -729,6 +729,54 @@ func (ht *hcsTask) probeSameIDRecreate(ctx context.Context) {
 		log.G(ctx).
 			WithField("tid", ht.id).
 			Info("reboot-v2 B2: Start SUCCEEDED — full create+start cycle works on same ID")
+
+		// Sub-step B3a: prove a fresh init process can be spawned in the
+		// recreated silo via cmd.Cmd, mirroring hcsExec.startInternal path.
+		// Using a benign spec (`cmd /c hostname`) instead of ht.taskSpec.Process
+		// — the task spec runs `shutdown /r` which would cascade into another
+		// reboot chain if re-executed on the new silo, and B3a is about
+		// proving mechanics, not semantic correctness. Real B3b will use the
+		// unmodified task spec once the cascade is prevented by the full
+		// state-machine swap.
+		probeSpec := &specs.Process{
+			Terminal: false,
+			Args:     []string{"cmd.exe", "/c", "hostname"},
+			Cwd:      `C:\`,
+		}
+		probeCmd := &cmd.Cmd{
+			Host:                 newSys,
+			Spec:                 probeSpec,
+			Log:                  log.G(ctx).WithField("reboot-v2", "b3a-init-spawn"),
+			CopyAfterExitTimeout: time.Second,
+		}
+		if err := probeCmd.Start(); err != nil {
+			log.G(ctx).WithError(err).
+				WithField("tid", ht.id).
+				Warn("reboot-v2 B3a: probe init-process Start FAILED")
+		} else {
+			pid := probeCmd.Process.Pid()
+			log.G(ctx).
+				WithField("tid", ht.id).
+				WithField("probe.pid", pid).
+				Info("reboot-v2 B3a: probe init-process spawned; waiting for exit")
+			waitCh := make(chan error, 1)
+			go func() { waitCh <- probeCmd.Wait() }()
+			select {
+			case werr := <-waitCh:
+				log.G(ctx).
+					WithField("tid", ht.id).
+					WithField("probe.pid", pid).
+					WithField("probe.exit_code", probeCmd.ExitState.ExitCode()).
+					WithError(werr).
+					Info("reboot-v2 B3a: probe init-process exited — full recreate+spawn cycle verified")
+			case <-time.After(10 * time.Second):
+				log.G(ctx).
+					WithField("tid", ht.id).
+					WithField("probe.pid", pid).
+					Warn("reboot-v2 B3a: probe init-process did not exit within 10s; proceeding to cleanup")
+				_, _ = probeCmd.Process.Kill(ctx)
+			}
+		}
 	}
 
 	// Cleanup: terminate + wait + close so the existing teardown path is not
