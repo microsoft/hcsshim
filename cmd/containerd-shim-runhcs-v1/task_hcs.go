@@ -675,20 +675,22 @@ func (ht *hcsTask) waitInitExit() {
 			log.G(ctx).
 				WithField("tid", ht.id).
 				WithField("reboot.exit_type", exitType).
-				Info("reboot-v2 Stage 4: reboot observed; attempting transparent restart (B3b)")
+				Info("reboot-v2: reboot observed; attempting transparent restart")
 			if err := ht.doHandleReboot(ctx); err != nil {
 				log.G(ctx).WithError(err).
 					WithField("tid", ht.id).
-					Warn("reboot-v2 B3b: handleReboot failed; falling through to teardown")
+					Warn("reboot-v2: handleReboot failed; falling through to teardown")
 				rebootPending = false // restart failed; normal exit semantics apply
 			} else {
 				span.AddAttributes(trace.BoolAttribute("reboot.pending", true))
 				log.G(ctx).
 					WithField("tid", ht.id).
-					Info("reboot-v2 B3b: transparent restart completed; suppressing teardown")
+					Info("reboot-v2: transparent restart completed; suppressing teardown")
 				// IMPORTANT: return WITHOUT calling ht.close(ctx). The task
 				// continues to live under the new System; closeHost() is not
-				// invoked so no /tasks/exit event is published.
+				// invoked so no /tasks/exit event is published. doHandleReboot
+				// respawned a fresh waitInitExit goroutine before returning,
+				// so the next in-container reboot is also handled.
 				return
 			}
 		}
@@ -699,39 +701,41 @@ func (ht *hcsTask) waitInitExit() {
 	ht.close(ctx)
 }
 
-// doHandleReboot performs the Stage 4 Sub-step B3b transparent restart.
-// The container has exited with ExitType=Reboot (HCS told us via the V1
-// SystemExitStatus JSON). Old silo is gone but its compute-system ID slot
-// is free. Overlay layer and HNS endpoint both persist. We:
+// doHandleReboot performs the transparent in-place container restart.
+// Called from waitInitExit when the container exits with ExitType=Reboot
+// (HCS told us via the V1 SystemExitStatus JSON). Old silo is gone but
+// its compute-system ID slot is free. Overlay layer and HNS endpoint
+// both persist. Steps:
 //
 //  1. Close the old *hcs.System handle (silo already destructed kernel-side).
-//  2. Call hcs.CreateComputeSystem with the cached create document (B1) on
-//     the same ID. The overlay path and namespace GUID in the doc bind to
-//     the persisted state.
+//  2. Call hcs.CreateComputeSystem with the cached create document on the
+//     same ID. Overlay path and namespace GUID in the doc bind to
+//     persisted kernel-side state automatically.
 //  3. Call newSys.Start().
-//  4. Spawn the original init process via cmd.Cmd with ht.taskSpec.Process,
-//     reusing the hcsExec's upstream stdio pipes.
-//  5. Reset ht.init's hcsExec state in-place under its sl lock:
-//       - Point c + p at the new System + cmd
+//  4. Open fresh upstream IO pipes via NewUpstreamIO with the cached
+//     containerd pipe paths. Fall back to headless (nil stdio) if the
+//     pipes are gone — containerd typically tears them down when the
+//     shim's client disconnects during the original exit path, and a
+//     proper reattach protocol needs a containerd-side change.
+//  5. Spawn the original init process via cmd.Cmd with ht.taskSpec.Process
+//     and the (fresh or nil) stdio.
+//  6. Reset ht.init's hcsExec state in-place under its sl lock:
+//       - Point c + p + io at the new System, cmd, and fresh IO
 //       - Reset state=Running, pid=newPid, exitStatus=255, exitedAt=zero
-//       - Allocate fresh processDone / exited channels (old ones already
-//         closed by the exec's exit path; existing waiters already returned)
-//  6. Point ht.c at newSys so task-level operations target it.
-//  7. Respawn waitForExit so the new init process's lifecycle is tracked
-//     (including publishing a TaskExit event when the new init exits —
-//     same as a normal container exit).
+//       - Allocate fresh processDone / exited channels + sync.Once values
+//  7. Point ht.c at newSys so task-level operations target it.
+//  8. Respawn waitForExit so the new init process's lifecycle is tracked.
+//  9. Respawn waitInitExit so a subsequent in-container reboot is also
+//     handled transparently (reboot loop).
 //
-// Known limitations of this first iteration (to address in B3c / Stage 5):
-//   - We do NOT re-spawn waitForContainerExit, so if the new silo reboots
-//     AGAIN, we fall through to the normal exit path rather than handling
-//     it recursively. Fine for single-reboot tests; needs looping for the
-//     ship version.
-//   - The /tasks/start event is NOT republished on restart, so external
-//     listeners don't know the PID changed. This is intentional (the task
-//     is logically "still running") but may need an annotation event.
-//   - If Start or the init spawn fails mid-way, the new System is leaked.
-//     Caller treats an error return as "fall through to teardown" which
-//     partially covers cleanup via ht.close(ctx).
+// Known gaps (non-blocking for end-to-end demo):
+//   - Stdio is not visible to containerd after the first restart; requires
+//     a containerd-side pipe-republish protocol or TaskRestart event type.
+//   - docker inspect reports the original PID because containerd caches
+//     it from the TaskCreate event; needs /tasks/start republish or new
+//     event topic.
+//   - If CreateComputeSystem or Start fails mid-way, resources are partially
+//     cleaned up; caller treats error as "fall through to teardown".
 func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 	oldSys, ok := ht.c.(*hcs.System)
 	if !ok {
@@ -749,16 +753,16 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 	log.G(ctx).
 		WithField("tid", ht.id).
 		WithField("doc_bytes", len(doc)).
-		Info("reboot-v2 B3b: closing old system handle")
+		Info("reboot-v2: closing old system handle")
 	if err := oldSys.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("reboot-v2 B3b: old system Close failed (proceeding anyway)")
+		log.G(ctx).WithError(err).Warn("reboot-v2: old system Close failed (proceeding anyway)")
 	}
 
 	newSys, err := hcs.CreateComputeSystem(ctx, ht.id, doc)
 	if err != nil {
 		return fmt.Errorf("CreateComputeSystem on same ID failed: %w", err)
 	}
-	log.G(ctx).WithField("tid", ht.id).Info("reboot-v2 B3b: new System created on same ID")
+	log.G(ctx).WithField("tid", ht.id).Info("reboot-v2: new System created on same ID")
 
 	if err := newSys.Start(ctx); err != nil {
 		_ = newSys.Terminate(ctx)
@@ -766,7 +770,7 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 		_ = newSys.Close()
 		return fmt.Errorf("newSys.Start failed: %w", err)
 	}
-	log.G(ctx).WithField("tid", ht.id).Info("reboot-v2 B3b: new System started")
+	log.G(ctx).WithField("tid", ht.id).Info("reboot-v2: new System started")
 
 	// B3c: try to open fresh upstream IO pipes for the new init. The old
 	// exec's UpstreamIO was closed by the original init exit path, which
@@ -788,12 +792,12 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 		newCmd.Stdin = fio.Stdin()
 		newCmd.Stdout = fio.Stdout()
 		newCmd.Stderr = fio.Stderr()
-		log.G(ctx).WithField("tid", ht.id).Info("reboot-v2 B3c: fresh upstream IO opened for new init")
+		log.G(ctx).WithField("tid", ht.id).Info("reboot-v2: fresh upstream IO opened for new init")
 	} else {
 		log.G(ctx).
 			WithField("tid", ht.id).
 			WithError(ioErr).
-			Warn("reboot-v2 B3c: could not open fresh IO pipes; new init will run headless")
+			Warn("reboot-v2: could not open fresh IO pipes; new init will run headless")
 	}
 	if oldExec.isWCOW {
 		newCmd.Spec = ht.taskSpec.Process
@@ -811,7 +815,7 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 	log.G(ctx).
 		WithField("tid", ht.id).
 		WithField("new.pid", newPid).
-		Info("reboot-v2 B3b: new init process spawned")
+		Info("reboot-v2: new init process spawned")
 
 	// Swap state into the existing hcsExec under its lock, including the
 	// fresh upstream IO if we got one (nil = headless).
@@ -848,111 +852,8 @@ func (ht *hcsTask) doHandleReboot(ctx context.Context) error {
 	log.G(ctx).
 		WithField("tid", ht.id).
 		WithField("new.pid", newPid).
-		Info("reboot-v2 B3c: task state swapped; container logically still Running; waiting for next exit")
+		Info("reboot-v2: task state swapped; container logically still Running; waiting for next exit")
 	return nil
-}
-
-// probeSameIDRecreate is retained as reference / fallback but unused in B3b.
-// Kept for git-history clarity during Stage 4 iteration.
-func (ht *hcsTask) probeSameIDRecreate(ctx context.Context) {
-	oldSys, ok := ht.c.(*hcs.System)
-	if !ok {
-		log.G(ctx).Warn("reboot-v2 B2: ht.c is not *hcs.System; cannot recreate")
-		return
-	}
-	doc := oldSys.CreateDocument()
-	if len(doc) == 0 {
-		log.G(ctx).Warn("reboot-v2 B2: no cached create document; System was not created via CreateComputeSystem")
-		return
-	}
-	log.G(ctx).
-		WithField("tid", ht.id).
-		WithField("doc_bytes", len(doc)).
-		Info("reboot-v2 B2: closing old system handle before recreate probe")
-	if err := oldSys.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("reboot-v2 B2: old system Close failed (proceeding anyway)")
-	}
-
-	newSys, err := hcs.CreateComputeSystem(ctx, ht.id, doc)
-	if err != nil {
-		log.G(ctx).WithError(err).
-			WithField("tid", ht.id).
-			Warn("reboot-v2 B2: CreateComputeSystem FAILED — HCS rejected same-ID recreate")
-		return
-	}
-	log.G(ctx).
-		WithField("tid", ht.id).
-		Info("reboot-v2 B2: CreateComputeSystem SUCCEEDED on same ID; calling Start")
-
-	if err := newSys.Start(ctx); err != nil {
-		log.G(ctx).WithError(err).
-			WithField("tid", ht.id).
-			Warn("reboot-v2 B2: Start failed on recreated system")
-	} else {
-		log.G(ctx).
-			WithField("tid", ht.id).
-			Info("reboot-v2 B2: Start SUCCEEDED — full create+start cycle works on same ID")
-
-		// Sub-step B3a: prove a fresh init process can be spawned in the
-		// recreated silo via cmd.Cmd, mirroring hcsExec.startInternal path.
-		// Using a benign spec (`cmd /c hostname`) instead of ht.taskSpec.Process
-		// — the task spec runs `shutdown /r` which would cascade into another
-		// reboot chain if re-executed on the new silo, and B3a is about
-		// proving mechanics, not semantic correctness. Real B3b will use the
-		// unmodified task spec once the cascade is prevented by the full
-		// state-machine swap.
-		probeSpec := &specs.Process{
-			Terminal: false,
-			Args:     []string{"cmd.exe", "/c", "hostname"},
-			Cwd:      `C:\`,
-		}
-		probeCmd := &cmd.Cmd{
-			Host:                 newSys,
-			Spec:                 probeSpec,
-			Log:                  log.G(ctx).WithField("reboot-v2", "b3a-init-spawn"),
-			CopyAfterExitTimeout: time.Second,
-		}
-		if err := probeCmd.Start(); err != nil {
-			log.G(ctx).WithError(err).
-				WithField("tid", ht.id).
-				Warn("reboot-v2 B3a: probe init-process Start FAILED")
-		} else {
-			pid := probeCmd.Process.Pid()
-			log.G(ctx).
-				WithField("tid", ht.id).
-				WithField("probe.pid", pid).
-				Info("reboot-v2 B3a: probe init-process spawned; waiting for exit")
-			waitCh := make(chan error, 1)
-			go func() { waitCh <- probeCmd.Wait() }()
-			select {
-			case werr := <-waitCh:
-				log.G(ctx).
-					WithField("tid", ht.id).
-					WithField("probe.pid", pid).
-					WithField("probe.exit_code", probeCmd.ExitState.ExitCode()).
-					WithError(werr).
-					Info("reboot-v2 B3a: probe init-process exited — full recreate+spawn cycle verified")
-			case <-time.After(10 * time.Second):
-				log.G(ctx).
-					WithField("tid", ht.id).
-					WithField("probe.pid", pid).
-					Warn("reboot-v2 B3a: probe init-process did not exit within 10s; proceeding to cleanup")
-				_, _ = probeCmd.Process.Kill(ctx)
-			}
-		}
-	}
-
-	// Cleanup: terminate + wait + close so the existing teardown path is not
-	// confused by our extra system hanging around.
-	if err := newSys.Terminate(ctx); err != nil {
-		log.G(ctx).WithError(err).Debug("reboot-v2 B2: cleanup Terminate returned error")
-	}
-	if err := newSys.Wait(); err != nil {
-		log.G(ctx).WithError(err).Debug("reboot-v2 B2: cleanup Wait returned error")
-	}
-	if err := newSys.Close(); err != nil {
-		log.G(ctx).WithError(err).Debug("reboot-v2 B2: cleanup Close returned error")
-	}
 }
 
 // waitForHostExit waits for the host virtual machine to exit. Once exited
