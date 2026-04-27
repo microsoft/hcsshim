@@ -70,9 +70,9 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	return c, nil
 }
 
-// CloneContainer just creates the wrappers and sets up notification requests for a
-// container that is already running inside the UVM (after cloning).
-func (gc *GuestConnection) CloneContainer(ctx context.Context, cid string) (_ *Container, err error) {
+// OpenContainer attaches a host-side wrapper to a container already
+// running inside the UVM.
+func (gc *GuestConnection) OpenContainer(_ context.Context, cid string) (_ *Container, err error) {
 	c := &Container{
 		gc:        gc,
 		id:        cid,
@@ -119,6 +119,67 @@ func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ co
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	return c.gc.exec(ctx, c.id, config)
+}
+
+// OpenProcessWithIO is the live-migration restore counterpart of
+// [Container.CreateProcess]: it attaches to a process already running
+// in this container, re-listens on the supplied vsock ports, and
+// pre-registers the source bridge's WaitForProcess id so the guest's
+// still-outstanding response is routed without arming a duplicate wait.
+func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort, stdoutPort, stderrPort uint32, waitCallID int64) (_ *Process, err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::Container::OpenProcessWithIO", oc.WithClientSpanKind)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", c.id),
+		trace.Int64Attribute("pid", int64(pid)),
+		trace.Int64Attribute("waitCallID", waitCallID))
+
+	if waitCallID == 0 {
+		return nil, fmt.Errorf("open process pid %d in container %s: waitCallID is required", pid, c.id)
+	}
+
+	p := &Process{
+		gc:         c.gc,
+		cid:        c.id,
+		id:         pid,
+		stdinPort:  stdinPort,
+		stdoutPort: stdoutPort,
+		stderrPort: stderrPort,
+	}
+	defer func() {
+		if err != nil {
+			p.Close()
+		}
+	}()
+
+	listen := func(port uint32) (*ioChannel, error) {
+		if port == 0 {
+			return nil, nil
+		}
+		l, err := c.gc.ioListenFn(port)
+		if err != nil {
+			return nil, fmt.Errorf("listen vsock port %d: %w", port, err)
+		}
+		return newIoChannel(l), nil
+	}
+	if p.stdin, err = listen(stdinPort); err != nil {
+		return nil, err
+	}
+	if p.stdout, err = listen(stdoutPort); err != nil {
+		return nil, err
+	}
+	if p.stderr, err = listen(stderrPort); err != nil {
+		return nil, err
+	}
+
+	p.waitCall, err = c.gc.brdg.PreregisterRPC(waitCallID, prot.RPCWaitForProcess, &p.waitResp)
+	if err != nil {
+		return nil, fmt.Errorf("preregister wait for pid %d in container %s (id %d): %w", pid, c.id, waitCallID, err)
+	}
+	go p.waitBackground()
+	log.G(ctx).WithField("pid", p.id).Debug("opened existing process with IO")
+	return p, nil
 }
 
 // ID returns the container's ID.

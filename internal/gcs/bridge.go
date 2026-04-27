@@ -531,3 +531,44 @@ func (brdg *bridge) sendRPC(buf *bytes.Buffer, enc *json.Encoder, call *rpc) err
 	}
 	return nil
 }
+
+// NextID returns the bridge's next request id. Used by the migration save
+// path so the destination can seed its counter above all source ids.
+func (brdg *bridge) NextID() int64 {
+	brdg.mu.Lock()
+	defer brdg.mu.Unlock()
+	return brdg.nextID
+}
+
+// SeedNextID raises the request id allocator to at least next. No-op if
+// already higher.
+func (brdg *bridge) SeedNextID(next int64) {
+	brdg.mu.Lock()
+	defer brdg.mu.Unlock()
+	if next > brdg.nextID {
+		brdg.nextID = next
+	}
+}
+
+// PreregisterRPC inserts a stub rpc into the response table without sending
+// anything. Used on the migration destination to adopt requests (today:
+// WaitForProcess) the source had outstanding in the guest, so their
+// eventual responses route normally.
+func (brdg *bridge) PreregisterRPC(id int64, proc prot.RPCProc, resp responseMessage) (*rpc, error) {
+	call := &rpc{
+		ch:   make(chan struct{}),
+		id:   id,
+		proc: proc,
+		resp: resp,
+	}
+	brdg.mu.Lock()
+	defer brdg.mu.Unlock()
+	if brdg.rpcs == nil {
+		return nil, ErrBridgeClosed
+	}
+	if _, dup := brdg.rpcs[id]; dup {
+		return nil, fmt.Errorf("preregister rpc: id %d already in use", id)
+	}
+	brdg.rpcs[id] = call
+	return call, nil
+}

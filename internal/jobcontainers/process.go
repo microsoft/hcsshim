@@ -197,6 +197,12 @@ func (p *JobProcess) Pid() int {
 	return p.cmd.Pid()
 }
 
+// MigrationState returns the zero value: job-container processes route
+// stdio over OS pipes and don't use a GCS bridge.
+func (p *JobProcess) MigrationState() cow.MigrationState {
+	return cow.MigrationState{}
+}
+
 // Close cleans up any state associated with the process but does not kill it.
 func (p *JobProcess) Close() error {
 	p.stdioLock.Lock()
