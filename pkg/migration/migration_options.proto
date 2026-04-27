@@ -26,14 +26,6 @@ message InitializeOptions {
     bool cancel_if_blackout_threshold_exceeds = 6;
     // PrepareMemoryTransferMode extends timeout for cross-version live migration.
     bool prepare_memory_transfer_mode = 7;
-    // CompatibilityData is the compatibility information required for the destination VM.
-    optional CompatibilityInfo compatibility_data = 8;
-}
-
-// CompatibilityInfo is opaque VM compatibility data, primarily used in migration.
-message CompatibilityInfo {
-    // Raw compatibility information.
-    bytes data = 1;
 }
 
 message MemoryTransferThrottleParams {

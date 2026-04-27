@@ -347,10 +347,8 @@ type InitializeOptions struct {
 	CancelIfBlackoutThresholdExceeds bool `protobuf:"varint,6,opt,name=cancel_if_blackout_threshold_exceeds,json=cancelIfBlackoutThresholdExceeds,proto3" json:"cancel_if_blackout_threshold_exceeds,omitempty"`
 	// PrepareMemoryTransferMode extends timeout for cross-version live migration.
 	PrepareMemoryTransferMode bool `protobuf:"varint,7,opt,name=prepare_memory_transfer_mode,json=prepareMemoryTransferMode,proto3" json:"prepare_memory_transfer_mode,omitempty"`
-	// CompatibilityData is the compatibility information required for the destination VM.
-	CompatibilityData *CompatibilityInfo `protobuf:"bytes,8,opt,name=compatibility_data,json=compatibilityData,proto3,oneof" json:"compatibility_data,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *InitializeOptions) Reset() {
@@ -432,59 +430,6 @@ func (x *InitializeOptions) GetPrepareMemoryTransferMode() bool {
 	return false
 }
 
-func (x *InitializeOptions) GetCompatibilityData() *CompatibilityInfo {
-	if x != nil {
-		return x.CompatibilityData
-	}
-	return nil
-}
-
-// CompatibilityInfo is opaque VM compatibility data, primarily used in migration.
-type CompatibilityInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Raw compatibility information.
-	Data          []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CompatibilityInfo) Reset() {
-	*x = CompatibilityInfo{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CompatibilityInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CompatibilityInfo) ProtoMessage() {}
-
-func (x *CompatibilityInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CompatibilityInfo.ProtoReflect.Descriptor instead.
-func (*CompatibilityInfo) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *CompatibilityInfo) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
 type MemoryTransferThrottleParams struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// A flag indicating if throttling should be skipped.
@@ -511,7 +456,7 @@ type MemoryTransferThrottleParams struct {
 
 func (x *MemoryTransferThrottleParams) Reset() {
 	*x = MemoryTransferThrottleParams{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -523,7 +468,7 @@ func (x *MemoryTransferThrottleParams) String() string {
 func (*MemoryTransferThrottleParams) ProtoMessage() {}
 
 func (x *MemoryTransferThrottleParams) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -536,7 +481,7 @@ func (x *MemoryTransferThrottleParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryTransferThrottleParams.ProtoReflect.Descriptor instead.
 func (*MemoryTransferThrottleParams) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{2}
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *MemoryTransferThrottleParams) GetSkipThrottling() bool {
@@ -606,7 +551,7 @@ type CompressionSettings struct {
 
 func (x *CompressionSettings) Reset() {
 	*x = CompressionSettings{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +563,7 @@ func (x *CompressionSettings) String() string {
 func (*CompressionSettings) ProtoMessage() {}
 
 func (x *CompressionSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +576,7 @@ func (x *CompressionSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompressionSettings.ProtoReflect.Descriptor instead.
 func (*CompressionSettings) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{3}
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CompressionSettings) GetThrottleWorkerCount() uint32 {
@@ -656,7 +601,7 @@ type BlackoutExitedEventDetails struct {
 
 func (x *BlackoutExitedEventDetails) Reset() {
 	*x = BlackoutExitedEventDetails{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -668,7 +613,7 @@ func (x *BlackoutExitedEventDetails) String() string {
 func (*BlackoutExitedEventDetails) ProtoMessage() {}
 
 func (x *BlackoutExitedEventDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -681,7 +626,7 @@ func (x *BlackoutExitedEventDetails) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlackoutExitedEventDetails.ProtoReflect.Descriptor instead.
 func (*BlackoutExitedEventDetails) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{4}
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *BlackoutExitedEventDetails) GetBlackoutDurationMilliseconds() uint64 {
@@ -724,7 +669,7 @@ type Notification struct {
 
 func (x *Notification) Reset() {
 	*x = Notification{}
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[5]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -736,7 +681,7 @@ func (x *Notification) String() string {
 func (*Notification) ProtoMessage() {}
 
 func (x *Notification) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[5]
+	mi := &file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -749,7 +694,7 @@ func (x *Notification) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Notification.ProtoReflect.Descriptor instead.
 func (*Notification) Descriptor() ([]byte, []int) {
-	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{5}
+	return file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Notification) GetOrigin() Origin {
@@ -804,7 +749,7 @@ var File_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto prot
 
 const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc = "" +
 	"\n" +
-	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x05\n" +
+	"Bgithub.com/Microsoft/hcsshim/pkg/migration/migration_options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x04\n" +
 	"\x11InitializeOptions\x12;\n" +
 	"\x10memory_transport\x18\x01 \x01(\x0e2\x10.MemoryTransportR\x0fmemoryTransport\x12i\n" +
 	"\x1fmemory_transfer_throttle_params\x18\x02 \x01(\v2\x1d.MemoryTransferThrottleParamsH\x00R\x1cmemoryTransferThrottleParams\x88\x01\x01\x12L\n" +
@@ -812,13 +757,9 @@ const file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ra
 	"\x15checksum_verification\x18\x04 \x01(\bR\x14checksumVerification\x120\n" +
 	"\x14perf_tracing_enabled\x18\x05 \x01(\bR\x12perfTracingEnabled\x12N\n" +
 	"$cancel_if_blackout_threshold_exceeds\x18\x06 \x01(\bR cancelIfBlackoutThresholdExceeds\x12?\n" +
-	"\x1cprepare_memory_transfer_mode\x18\a \x01(\bR\x19prepareMemoryTransferMode\x12F\n" +
-	"\x12compatibility_data\x18\b \x01(\v2\x12.CompatibilityInfoH\x02R\x11compatibilityData\x88\x01\x01B\"\n" +
+	"\x1cprepare_memory_transfer_mode\x18\a \x01(\bR\x19prepareMemoryTransferModeB\"\n" +
 	" _memory_transfer_throttle_paramsB\x17\n" +
-	"\x15_compression_settingsB\x15\n" +
-	"\x13_compatibility_data\"'\n" +
-	"\x11CompatibilityInfo\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\"\xc5\a\n" +
+	"\x15_compression_settings\"\xc5\a\n" +
 	"\x1cMemoryTransferThrottleParams\x12,\n" +
 	"\x0fskip_throttling\x18\x01 \x01(\bH\x00R\x0eskipThrottling\x88\x01\x01\x12.\n" +
 	"\x10throttling_scale\x18\x02 \x01(\x01H\x01R\x0fthrottlingScale\x88\x01\x01\x12C\n" +
@@ -889,35 +830,33 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_raw
 }
 
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_goTypes = []any{
 	(MemoryTransport)(0),                 // 0: MemoryTransport
 	(Origin)(0),                          // 1: Origin
 	(Phase)(0),                           // 2: Phase
 	(PhaseState)(0),                      // 3: PhaseState
 	(*InitializeOptions)(nil),            // 4: InitializeOptions
-	(*CompatibilityInfo)(nil),            // 5: CompatibilityInfo
-	(*MemoryTransferThrottleParams)(nil), // 6: MemoryTransferThrottleParams
-	(*CompressionSettings)(nil),          // 7: CompressionSettings
-	(*BlackoutExitedEventDetails)(nil),   // 8: BlackoutExitedEventDetails
-	(*Notification)(nil),                 // 9: Notification
-	(*timestamppb.Timestamp)(nil),        // 10: google.protobuf.Timestamp
+	(*MemoryTransferThrottleParams)(nil), // 5: MemoryTransferThrottleParams
+	(*CompressionSettings)(nil),          // 6: CompressionSettings
+	(*BlackoutExitedEventDetails)(nil),   // 7: BlackoutExitedEventDetails
+	(*Notification)(nil),                 // 8: Notification
+	(*timestamppb.Timestamp)(nil),        // 9: google.protobuf.Timestamp
 }
 var file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_depIdxs = []int32{
-	0,  // 0: InitializeOptions.memory_transport:type_name -> MemoryTransport
-	6,  // 1: InitializeOptions.memory_transfer_throttle_params:type_name -> MemoryTransferThrottleParams
-	7,  // 2: InitializeOptions.compression_settings:type_name -> CompressionSettings
-	5,  // 3: InitializeOptions.compatibility_data:type_name -> CompatibilityInfo
-	10, // 4: BlackoutExitedEventDetails.blackout_stop_timestamp:type_name -> google.protobuf.Timestamp
-	1,  // 5: Notification.origin:type_name -> Origin
-	2,  // 6: Notification.phase:type_name -> Phase
-	3,  // 7: Notification.state:type_name -> PhaseState
-	8,  // 8: Notification.blackout_exited:type_name -> BlackoutExitedEventDetails
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	0, // 0: InitializeOptions.memory_transport:type_name -> MemoryTransport
+	5, // 1: InitializeOptions.memory_transfer_throttle_params:type_name -> MemoryTransferThrottleParams
+	6, // 2: InitializeOptions.compression_settings:type_name -> CompressionSettings
+	9, // 3: BlackoutExitedEventDetails.blackout_stop_timestamp:type_name -> google.protobuf.Timestamp
+	1, // 4: Notification.origin:type_name -> Origin
+	2, // 5: Notification.phase:type_name -> Phase
+	3, // 6: Notification.state:type_name -> PhaseState
+	7, // 7: Notification.blackout_exited:type_name -> BlackoutExitedEventDetails
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_init() }
@@ -926,9 +865,9 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ini
 		return
 	}
 	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[0].OneofWrappers = []any{}
+	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[1].OneofWrappers = []any{}
 	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[2].OneofWrappers = []any{}
-	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[3].OneofWrappers = []any{}
-	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[5].OneofWrappers = []any{
+	file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_msgTypes[4].OneofWrappers = []any{
 		(*Notification_BlackoutExited)(nil),
 	}
 	type x struct{}
@@ -937,7 +876,7 @@ func file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_ini
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc), len(file_github_com_Microsoft_hcsshim_pkg_migration_migration_options_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   6,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
