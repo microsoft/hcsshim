@@ -144,30 +144,6 @@ func TestLCOW_AddEndpoint_HostFails_NotTracked(t *testing.T) {
 	}
 }
 
-// TestLCOW_AddEndpoint_HostOK_GuestFails_StillTracked verifies that when the
-// guest-side configuration fails AFTER a successful host AddNIC, the NIC is
-// still tracked. Teardown must still attempt to unwind the host-side NIC,
-// or the host UVM leaks the device.
-func TestLCOW_AddEndpoint_HostOK_GuestFails_StillTracked(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	c, vm, guest := newLCOWController(t, ctrl, true)
-
-	ep := newLCOWEndpoint("eth0")
-
-	gomock.InOrder(
-		vm.EXPECT().AddNIC(gomock.Any(), "nic-1", gomock.Any()).Return(nil),
-		guest.EXPECT().AddNetworkInterface(gomock.Any(), gomock.Any()).Return(errLCOWGuestAdd),
-	)
-
-	err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false)
-	if !errors.Is(err, errLCOWGuestAdd) {
-		t.Fatalf("expected guest add error to wrap, got: %v", err)
-	}
-	if _, ok := c.vmEndpoints["nic-1"]; !ok {
-		t.Error("expected nic-1 to be tracked so Teardown can unwind the host NIC")
-	}
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Remove endpoint tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,12 +323,11 @@ func TestLCOW_Teardown_HostRemoveFails_StateInvalid(t *testing.T) {
 // Half-setup recovery: Teardown unwinds host-side state after partial failures
 // ──────────────────────────────────────────────────────────────────────────
 
-// TestLCOW_AddEndpoint_HostOK_GuestFails_TeardownUnwindsHost is the paired
-// follow-on to TestLCOW_AddEndpoint_HostOK_GuestFails_StillTracked. It proves
-// the contract end-to-end: when the guest-side AddNetworkInterface fails after
-// a successful host AddNIC, the NIC stays tracked AND a subsequent Teardown
-// removes the host-side device. Without this verification the leak guarantee
-// is just an in-memory map assertion.
+// TestLCOW_AddEndpoint_HostOK_GuestFails_TeardownUnwindsHost covers the
+// half-setup recovery contract end-to-end: when the guest-side
+// AddNetworkInterface fails after a successful host AddNIC, the NIC must
+// remain tracked so a subsequent Teardown can remove the host-side device.
+// Otherwise the host UVM leaks the NIC.
 func TestLCOW_AddEndpoint_HostOK_GuestFails_TeardownUnwindsHost(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	c, vm, guest := newLCOWController(t, ctrl, true)
@@ -368,7 +343,7 @@ func TestLCOW_AddEndpoint_HostOK_GuestFails_TeardownUnwindsHost(t *testing.T) {
 		t.Fatalf("expected guest add error to wrap, got: %v", err)
 	}
 	if _, ok := c.vmEndpoints["nic-1"]; !ok {
-		t.Fatal("precondition: nic-1 must be tracked before Teardown")
+		t.Fatal("expected nic-1 to be tracked after guest-side failure so Teardown can unwind the host NIC")
 	}
 
 	// Teardown must run both legs: guest remove (best-effort, may no-op) and

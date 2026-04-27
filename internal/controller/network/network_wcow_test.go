@@ -149,35 +149,6 @@ func TestWCOW_AddEndpoint_HostFails_NotTracked(t *testing.T) {
 	}
 }
 
-// TestWCOW_AddEndpoint_FinalAddFails_StillTracked verifies that a failure of
-// the final guest Add (after host AddNIC succeeded) leaves the NIC tracked
-// so that Teardown unwinds the host-side device. Otherwise the UVM leaks
-// the NIC.
-func TestWCOW_AddEndpoint_FinalAddFails_StillTracked(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	c, vm, guest := newWCOWController(t, ctrl, true)
-
-	ep := newWCOWEndpoint("eth0")
-
-	gomock.InOrder(
-		guest.EXPECT().AddNetworkInterface(
-			gomock.Any(), "nic-1", guestrequest.RequestTypePreAdd, ep,
-		).Return(nil),
-		vm.EXPECT().AddNIC(gomock.Any(), "nic-1", gomock.Any()).Return(nil),
-		guest.EXPECT().AddNetworkInterface(
-			gomock.Any(), "nic-1", guestrequest.RequestTypeAdd, gomock.Nil(),
-		).Return(errWCOWGuestAdd),
-	)
-
-	err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false)
-	if !errors.Is(err, errWCOWGuestAdd) {
-		t.Fatalf("expected guest add error to wrap, got: %v", err)
-	}
-	if _, ok := c.vmEndpoints["nic-1"]; !ok {
-		t.Error("expected nic-1 to be tracked so Teardown can unwind the host NIC")
-	}
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Remove endpoint tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -314,11 +285,10 @@ func TestWCOW_Teardown_PartialFailure_RemainingAttempted(t *testing.T) {
 // Half-setup recovery: Teardown unwinds host-side state after partial failures
 // ─────────────────────────────────────────────────────────────────────────────
 
-// TestWCOW_AddEndpoint_FinalAddFails_TeardownUnwindsHost is the paired
-// follow-on to TestWCOW_AddEndpoint_FinalAddFails_StillTracked. The
-// half-setup state (PreAdd ok, host AddNIC ok, guest Add fail) leaves the
-// NIC tracked; this test proves Teardown then unwinds the host side, so the
-// UVM does not leak the device.
+// TestWCOW_AddEndpoint_FinalAddFails_TeardownUnwindsHost covers the
+// half-setup recovery contract end-to-end: PreAdd ok, host AddNIC ok, guest
+// Add fails. The NIC must remain tracked so a subsequent Teardown can
+// unwind the host-side device. Otherwise the UVM leaks the NIC.
 func TestWCOW_AddEndpoint_FinalAddFails_TeardownUnwindsHost(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	c, vm, guest := newWCOWController(t, ctrl, false)
@@ -339,7 +309,7 @@ func TestWCOW_AddEndpoint_FinalAddFails_TeardownUnwindsHost(t *testing.T) {
 		t.Fatalf("expected guest add error to wrap, got: %v", err)
 	}
 	if _, ok := c.vmEndpoints["nic-1"]; !ok {
-		t.Fatal("precondition: nic-1 must be tracked before Teardown")
+		t.Fatal("expected nic-1 to be tracked after guest-side failure so Teardown can unwind the host NIC")
 	}
 
 	// Teardown: guest Remove (best-effort), then host RemoveNIC.
