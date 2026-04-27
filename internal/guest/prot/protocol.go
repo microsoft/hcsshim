@@ -39,6 +39,11 @@ const (
 	messageVersionShift = 0
 )
 
+const (
+	// LinuxGcsVsockPort is the vsock port the GCS connects to on the host.
+	LinuxGcsVsockPort uint32 = 0x40000000
+)
+
 // MessageType is the type of the message.
 type MessageType uint32
 

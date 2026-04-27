@@ -24,6 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/bridge"
 	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
+	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
@@ -392,12 +393,6 @@ func main() {
 		logrus.WithError(err).Warn("Virtual pod support initialization failed")
 	}
 
-	const commandPort uint32 = 0x40000000
-
-	// Reconnect loop: on each iteration we create a fresh bridge+mux, dial the
-	// host, and serve until the connection drops. After a live migration the
-	// vsock connection breaks; we re-dial and continue.
-	//
 	// During live migration the VM is frozen and only wakes up when the host
 	// shim is ready, so the vsock port should be immediately available. We
 	// use a tight retry interval instead of exponential backoff.
@@ -418,6 +413,7 @@ func main() {
 	oomFile := os.NewFile(oom, "cefd")
 	defer oomFile.Close()
 
+	// Setup OOM monitoring for virtual-pods cgroup
 	virtualPodsOom, err := virtualPodsControl.OOMEventFD()
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to retrieve the virtual-pods cgroups oom eventfd")
@@ -425,6 +421,7 @@ func main() {
 	virtualPodsOomFile := os.NewFile(virtualPodsOom, "vp-oomfd")
 	defer virtualPodsOomFile.Close()
 
+	// time synchronization service
 	if !(*disableTimeSync) {
 		if err = startTimeSyncService(); err != nil {
 			logrus.WithError(err).Fatal("failed to start time synchronization service")
@@ -450,7 +447,7 @@ func main() {
 			bridgeIn = os.Stdin
 			bridgeOut = os.Stdout
 		} else {
-			bridgeCon, dialErr := tport.Dial(commandPort)
+			bridgeCon, dialErr := tport.Dial(prot.LinuxGcsVsockPort)
 			if dialErr != nil {
 				logrus.WithError(dialErr).Warn("failed to dial host, retrying")
 				time.Sleep(reconnectInterval)
