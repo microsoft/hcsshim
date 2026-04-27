@@ -106,6 +106,12 @@ const (
 	// LCOWPrivileged is used to specify that the container should be run in privileged mode.
 	LCOWPrivileged = "io.microsoft.virtualmachine.lcow.privileged"
 
+	// LCOWHostNetwork specifies that the container should share the UVM's (host) network
+	// namespace instead of creating its own. This is required for workloads that need
+	// to communicate with the kernel via network-namespace-scoped netlink sockets
+	// (e.g., iSCSI initiator using NETLINK_ISCSI).
+	LCOWHostNetwork = "io.microsoft.virtualmachine.lcow.hostnetwork"
+
 	// LCOWTeeLogPath specifies a path in the Linux uVM to write container's stdio to,
 	// in addition to the usual vsock pipes.
 	//

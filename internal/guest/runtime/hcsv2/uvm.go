@@ -744,6 +744,31 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
+	// Determine hostNetwork mode. For sandbox/standalone containers, check their
+	// own annotations. For workload containers, inherit from the sandbox so that
+	// only pod.snp.json needs the LCOWHostNetwork annotation — container.json
+	// does not need it (and the value is ignored if present).
+	var hostNetwork bool
+	if criType == "sandbox" || !isCRI {
+		hostNetwork = oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.LCOWHostNetwork, false)
+	} else if criType == "container" {
+		h.containersMutex.Lock()
+		if sandbox, ok := h.containers[sandboxID]; ok {
+			hostNetwork = oci.ParseAnnotationsBool(ctx, sandbox.spec.Annotations, annotations.LCOWHostNetwork, false)
+		}
+		h.containersMutex.Unlock()
+	}
+	if hostNetwork && settings.OCISpecification.Linux != nil {
+		filtered := settings.OCISpecification.Linux.Namespaces[:0]
+		for _, ns := range settings.OCISpecification.Linux.Namespaces {
+			if ns.Type != specs.NetworkNamespace {
+				filtered = append(filtered, ns)
+			}
+		}
+		settings.OCISpecification.Linux.Namespaces = filtered
+		log.G(ctx).WithField("cid", id).Info("Host network namespace enabled: removed network namespace from OCI spec")
+	}
+
 	// Create the BundlePath
 	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)
@@ -765,7 +790,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	c.container = con
 	c.initProcess = newProcess(c, settings.OCISpecification.Process, init, uint32(c.container.Pid()), true)
 
-	// Sandbox or standalone, move the networks to the container namespace
+	// Sandbox or standalone, set up networks.
 	if criType == "sandbox" || !isCRI {
 		ns, err := getNetworkNamespace(namespaceID)
 		// skip network activity for sandbox containers marked with skip uvm networking annotation
@@ -774,11 +799,22 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 		// standalone is not required to have a networking namespace setup
 		if ns != nil {
-			if err := ns.AssignContainerPid(ctx, c.container.Pid()); err != nil {
-				return nil, err
-			}
-			if err := ns.Sync(ctx); err != nil {
-				return nil, err
+			if hostNetwork {
+				// Host network mode: configure adapters in-place in the init
+				// network namespace (do NOT move them). This keeps eth0 visible
+				// to all containers sharing the init netns while still setting
+				// up IP addresses, routes, and gateways.
+				if err := ns.ConfigureInInitNS(ctx); err != nil {
+					return nil, err
+				}
+			} else {
+				// Normal mode: move adapters into the sandbox's network namespace.
+				if err := ns.AssignContainerPid(ctx, c.container.Pid()); err != nil {
+					return nil, err
+				}
+				if err := ns.Sync(ctx); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
