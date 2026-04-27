@@ -31,6 +31,21 @@ func (gm *Guest) CreateContainer(ctx context.Context, cid string, config interfa
 	return c, nil
 }
 
+// OpenContainer attaches a host-side wrapper to a container already
+// running inside the UVM. Counterpart of [CreateContainer] for the
+// live-migration restore path.
+func (gm *Guest) OpenContainer(ctx context.Context, cid string) (*gcs.Container, error) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	c, err := gm.gc.OpenContainer(ctx, cid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open container %s: %w", cid, err)
+	}
+
+	return c, nil
+}
+
 // DumpStacks requests a stack dump from the guest and returns it as a string.
 func (gm *Guest) DumpStacks(ctx context.Context) (string, error) {
 	gm.mu.Lock()

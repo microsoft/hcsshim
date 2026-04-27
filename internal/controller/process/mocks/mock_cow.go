@@ -130,6 +130,20 @@ func (mr *MockProcessMockRecorder) Kill(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Kill", reflect.TypeOf((*MockProcess)(nil).Kill), ctx)
 }
 
+// MigrationState mocks base method.
+func (m *MockProcess) MigrationState() cow.MigrationState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MigrationState")
+	ret0, _ := ret[0].(cow.MigrationState)
+	return ret0
+}
+
+// MigrationState indicates an expected call of MigrationState.
+func (mr *MockProcessMockRecorder) MigrationState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrationState", reflect.TypeOf((*MockProcess)(nil).MigrationState))
+}
+
 // Pid mocks base method.
 func (m *MockProcess) Pid() int {
 	m.ctrl.T.Helper()

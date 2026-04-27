@@ -161,3 +161,52 @@ func (gm *Guest) CloseConnection() error {
 	}
 	return err
 }
+
+// NextPort returns the active GCS connection's IO port allocator
+// floor, or 0 if no connection is active. Used by the live-migration
+// save path.
+func (gm *Guest) NextPort() uint32 {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	if gm.gc == nil {
+		return 0
+	}
+	return gm.gc.NextPort()
+}
+
+// SetNextPort raises the active GCS connection's IO port allocator
+// floor. No-op if no connection is active. Used by the live-migration
+// restore path to skip past vsock ports already in use by restored
+// processes.
+func (gm *Guest) SetNextPort(p uint32) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	if gm.gc == nil {
+		return
+	}
+	gm.gc.SetNextPort(p)
+}
+
+// BridgeNextID returns the bridge's next request id, or 0 if no
+// connection is active.
+func (gm *Guest) BridgeNextID() int64 {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	if gm.gc == nil {
+		return 0
+	}
+	return gm.gc.BridgeNextID()
+}
+
+// SeedBridgeNextID raises the bridge's request id allocator floor. No-op
+// if no connection is active.
+func (gm *Guest) SeedBridgeNextID(next int64) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	if gm.gc == nil {
+		return
+	}
+	gm.gc.SeedBridgeNextID(next)
+}

@@ -289,6 +289,10 @@ func (b *Bridge) AssignHandlers(mux *Mux, host *hcsv2.Host) {
 // messages and dispatches the appropriate handlers to handle each
 // event in an asynchronous manner.
 func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser) error {
+	// Each new connection starts unnegotiated, so the next NegotiateProtocol
+	// request dispatches to the PvInvalid handler registered in AssignHandlers.
+	b.protVer = prot.PvInvalid
+
 	requestChan := make(chan *Request)
 	requestErrChan := make(chan error)
 	b.responseChan = make(chan bridgeResponse)
