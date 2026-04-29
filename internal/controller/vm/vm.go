@@ -36,8 +36,8 @@ import (
 // and its associated resources.
 type Controller struct {
 	vmID  string
-	uvm   *vmmanager.UtilityVM
-	guest *guestmanager.Guest
+	uvm   vmLifetime
+	guest guestManager
 
 	// vmState tracks the current state of the VM lifecycle.
 	// Access must be guarded by mu.
@@ -80,7 +80,8 @@ func New() *Controller {
 // Guest returns the guest manager instance for this VM.
 // The guest manager provides access to guest-host communication.
 func (c *Controller) Guest() *guestmanager.Guest {
-	return c.guest
+	g, _ := c.guest.(*guestmanager.Guest)
+	return g
 }
 
 // State returns the current VM state.

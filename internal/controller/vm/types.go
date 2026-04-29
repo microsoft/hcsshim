@@ -12,6 +12,11 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 )
 
+// vmLifetime and guestManager are defined per-platform in vm_lcow.go and
+// vm_wcow.go because LCOW and WCOW expose different host- and guest-side
+// method shapes (Plan9 is LCOW-only on the host; vPCI guest, Plan9 guest,
+// network namespace, and HvSocket methods diverge across platforms).
+
 // CreateOptions contains the configuration needed to create a new VM.
 type CreateOptions struct {
 	// ID specifies the unique identifier for the VM.

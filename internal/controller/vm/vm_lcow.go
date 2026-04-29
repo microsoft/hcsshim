@@ -7,18 +7,73 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
 	"github.com/Microsoft/hcsshim/internal/controller/network"
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"golang.org/x/sync/errgroup"
 )
+
+// vmLifetime is the LCOW-flavoured seam over [*vmmanager.UtilityVM].
+// AddPlan9 / RemovePlan9 are LCOW-only on the host side, hence the per-platform split.
+type vmLifetime interface {
+	ID() string
+	RuntimeID() guid.GUID
+	Start(ctx context.Context) error
+	Wait(ctx context.Context) error
+	Terminate(ctx context.Context) error
+	Close(ctx context.Context) error
+	SetCPUGroup(ctx context.Context, settings *hcsschema.CpuGroup) error
+	UpdateCPULimits(ctx context.Context, settings *hcsschema.ProcessorLimits) error
+	UpdateMemory(ctx context.Context, memory uint64) error
+	PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error)
+	StartedTime() time.Time
+	StoppedTime() time.Time
+	ExitError() error
+
+	AddDevice(ctx context.Context, vmbusGUID guid.GUID, settings hcsschema.VirtualPciDevice) error
+	RemoveDevice(ctx context.Context, vmbusGUID guid.GUID) error
+
+	AddNIC(ctx context.Context, nicID string, settings *hcsschema.NetworkAdapter) error
+	RemoveNIC(ctx context.Context, nicID string, settings *hcsschema.NetworkAdapter) error
+
+	AddPlan9(ctx context.Context, settings hcsschema.Plan9Share) error
+	RemovePlan9(ctx context.Context, settings hcsschema.Plan9Share) error
+
+	AddSCSIDisk(ctx context.Context, disk hcsschema.Attachment, controller uint, lun uint) error
+	RemoveSCSIDisk(ctx context.Context, controller uint, lun uint) error
+}
+
+// guestManager is the LCOW-flavoured seam over [*guestmanager.Guest].
+type guestManager interface {
+	CreateConnection(ctx context.Context, gcsServiceID guid.GUID, opts ...guestmanager.ConfigOption) error
+	CloseConnection() error
+	AddSecurityPolicy(ctx context.Context, opts guestresource.ConfidentialOptions) error
+	InjectPolicyFragment(ctx context.Context, fragment guestresource.SecurityPolicyFragment) error
+	Capabilities() gcs.GuestDefinedCapabilities
+	DumpStacks(ctx context.Context) (string, error)
+	ExecIntoUVM(ctx context.Context, request *cmd.CmdProcessRequest) (int, error)
+
+	AddVPCIDevice(ctx context.Context, settings guestresource.LCOWMappedVPCIDevice) error
+	AddNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
+	RemoveNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
+	AddMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
+	RemoveMappedDirectory(ctx context.Context, settings guestresource.LCOWMappedDirectory) error
+	AddMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
+	RemoveMappedVirtualDisk(ctx context.Context, settings guestresource.LCOWMappedVirtualDisk) error
+	RemoveSCSIDevice(ctx context.Context, settings guestresource.SCSIDevice) error
+}
 
 // platformControllers holds platform-specific sub-controllers embedded in [Controller].
 // For LCOW, this includes the Plan9 file share controller.
