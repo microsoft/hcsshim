@@ -935,7 +935,7 @@ func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.Window
 			req.Weight = int32(*cpu.Shares)
 		}
 		if len(cpu.Affinity) > 0 {
-			// Create a temporary spec to reuse the existing ConvertCPUAffinity validation
+			// Validate and retrieve CPU affinity.
 			tempSpec := &specs.Spec{
 				Windows: &specs.Windows{
 					Resources: &specs.WindowsResources{
@@ -943,11 +943,18 @@ func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.Window
 					},
 				},
 			}
-			affinity, err := hcsoci.ConvertCPUAffinity(tempSpec)
+			affinities, err := hcsoci.ConvertCPUAffinity(tempSpec)
 			if err != nil {
 				return err
 			}
-			req.Affinity = affinity
+			groupAffs := make([]hcsschema.ProcessorGroupAffinity, len(affinities))
+			for i, a := range affinities {
+				groupAffs[i] = hcsschema.ProcessorGroupAffinity{
+					Mask:  a.Mask,
+					Group: uint16(a.Group),
+				}
+			}
+			req.GroupAffinities = groupAffs
 		}
 		return ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req)
 	}

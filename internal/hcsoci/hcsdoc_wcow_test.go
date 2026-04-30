@@ -3,10 +3,12 @@
 package hcsoci
 
 import (
-	"strings"
+	"errors"
 	"testing"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 func TestConvertCPUAffinity_Group0MaskSet(t *testing.T) {
@@ -22,16 +24,16 @@ func TestConvertCPUAffinity_Group0MaskSet(t *testing.T) {
 		},
 	}
 
-	affinity, err := ConvertCPUAffinity(s)
+	affinities, err := ConvertCPUAffinity(s)
 	if err != nil {
 		t.Fatalf("ConvertCPUAffinity failed: %v", err)
 	}
-	if affinity != 0x3 {
-		t.Fatalf("unexpected cpu affinity: got %d want %d", affinity, uint64(0x3))
+	if len(affinities) != 1 || affinities[0].Mask != 0x3 || affinities[0].Group != 0 {
+		t.Fatalf("unexpected cpu affinity: got %v", affinities)
 	}
 }
 
-func TestConvertCPUAffinity_MultiGroupRejected(t *testing.T) {
+func TestConvertCPUAffinity_MultiGroup(t *testing.T) {
 	s := &specs.Spec{
 		Windows: &specs.Windows{
 			Resources: &specs.WindowsResources{
@@ -45,16 +47,26 @@ func TestConvertCPUAffinity_MultiGroupRejected(t *testing.T) {
 		},
 	}
 
-	_, err := ConvertCPUAffinity(s)
-	if err == nil {
-		t.Fatal("expected error for multiple affinity entries")
-	}
-	if !strings.Contains(err.Error(), "multiple processor groups") {
-		t.Fatalf("unexpected error: %v", err)
+	affinities, err := ConvertCPUAffinity(s)
+	if osversion.Build() >= osversion.LTSC2022 {
+		// Multi-group is supported on WS2022+.
+		if err != nil {
+			t.Fatalf("expected success for multi-group on WS2022+, got: %v", err)
+		}
+		if len(affinities) != 2 {
+			t.Fatalf("expected 2 affinity entries, got %d", len(affinities))
+		}
+	} else {
+		if err == nil {
+			t.Fatal("expected error for multiple affinity entries on pre-WS2022")
+		}
+		if !errors.Is(err, ErrCPUAffinityMultipleGroupsNotSupported) {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	}
 }
 
-func TestConvertCPUAffinity_NonZeroGroupRejected(t *testing.T) {
+func TestConvertCPUAffinity_NonZeroGroup(t *testing.T) {
 	s := &specs.Spec{
 		Windows: &specs.Windows{
 			Resources: &specs.WindowsResources{
@@ -67,12 +79,22 @@ func TestConvertCPUAffinity_NonZeroGroupRejected(t *testing.T) {
 		},
 	}
 
-	_, err := ConvertCPUAffinity(s)
-	if err == nil {
-		t.Fatal("expected error for non-zero affinity group")
-	}
-	if !strings.Contains(err.Error(), "processor group") {
-		t.Fatalf("unexpected error: %v", err)
+	affinities, err := ConvertCPUAffinity(s)
+	if osversion.Build() >= osversion.LTSC2022 {
+		// Non-zero group is supported on WS2022+.
+		if err != nil {
+			t.Fatalf("expected success for non-zero group on WS2022+, got: %v", err)
+		}
+		if len(affinities) != 1 || affinities[0].Group != 1 {
+			t.Fatalf("unexpected affinity: got %v", affinities)
+		}
+	} else {
+		if err == nil {
+			t.Fatal("expected error for non-zero affinity group on pre-WS2022")
+		}
+		if !errors.Is(err, ErrCPUAffinityNonZeroGroupNotSupported) {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	}
 }
 
@@ -93,7 +115,7 @@ func TestConvertCPUAffinity_ZeroMaskRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for zero affinity mask")
 	}
-	if !strings.Contains(err.Error(), "mask must be non-zero") {
+	if !errors.Is(err, ErrCPUAffinityMaskZero) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -137,12 +159,12 @@ func TestConvertCPUAffinity_NoAffinity(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			affinity, err := ConvertCPUAffinity(tc.spec)
+			affinities, err := ConvertCPUAffinity(tc.spec)
 			if err != nil {
 				t.Fatalf("ConvertCPUAffinity failed: %v", err)
 			}
-			if affinity != 0 {
-				t.Fatalf("expected zero affinity, got %d", affinity)
+			if len(affinities) != 0 {
+				t.Fatalf("expected empty affinities, got %v", affinities)
 			}
 		})
 	}

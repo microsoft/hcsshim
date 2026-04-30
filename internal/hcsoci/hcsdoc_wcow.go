@@ -31,6 +31,22 @@ import (
 
 const createContainerSubdirectoryForProcessDumpSuffix = "{container_id}"
 
+// Sentinel errors returned by ConvertCPUAffinity.
+var (
+	// ErrCPUAffinityMultipleGroupsNotSupported is returned when multiple processor-group
+	// affinity entries are requested on a host older than Windows Server 2022 (build 20348),
+	// which does not support multi-group affinity for job object silos.
+	// On Windows Server 2022+, multiple processor groups are fully supported.
+	ErrCPUAffinityMultipleGroupsNotSupported = errors.New("cpu affinity with multiple processor groups requires Windows Server 2022 or later")
+	// ErrCPUAffinityNonZeroGroupNotSupported is returned when a non-zero processor group is
+	// requested on a host older than Windows Server 2022 (build 20348).
+	// On Windows Server 2022+, non-zero processor groups are fully supported.
+	ErrCPUAffinityNonZeroGroupNotSupported = errors.New("cpu affinity with a non-zero processor group requires Windows Server 2022 or later")
+	// ErrCPUAffinityMaskZero is returned when an affinity entry has a zero bitmask,
+	// which would select no processors and is always invalid.
+	ErrCPUAffinityMaskZero = errors.New("cpu affinity mask must be non-zero")
+)
+
 // A simple wrapper struct around the container mount configs that should be added to the
 // container.
 type mountsConfig struct {
@@ -97,26 +113,36 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 // ConvertCPUAffinity handles the logic of converting and validating the container's CPU affinity
 // specified in the OCI spec to what HCS expects.
 //
-// Returns the CPU affinity bitmask (0 if not specified) and any validation error.
-// Phase 2 limitations:
-//   - Multiple affinity entries are rejected
-//   - Non-zero processor groups are rejected
-func ConvertCPUAffinity(spec *specs.Spec) (uint64, error) {
+// Returns the validated affinity entries (nil if not specified) and any validation error.
+// Multiple processor groups and non-zero group numbers require Windows Server 2022
+// (build 20348) or later; on older hosts only a single entry for group 0 is accepted.
+func ConvertCPUAffinity(spec *specs.Spec) ([]specs.WindowsCPUGroupAffinity, error) {
 	if spec.Windows == nil || spec.Windows.Resources == nil || spec.Windows.Resources.CPU == nil || len(spec.Windows.Resources.CPU.Affinity) == 0 {
-		return 0, nil
+		return nil, nil
 	}
 
 	affinity := spec.Windows.Resources.CPU.Affinity
-	if len(affinity) != 1 {
-		return 0, fmt.Errorf("cpu affinity with multiple processor groups is not supported")
+
+	// Zero masks are never valid regardless of OS version.
+	for i, a := range affinity {
+		if a.Mask == 0 {
+			return nil, fmt.Errorf("%w: entry %d has zero mask", ErrCPUAffinityMaskZero, i)
+		}
 	}
-	if affinity[0].Group != 0 {
-		return 0, fmt.Errorf("cpu affinity processor group %d is not supported", affinity[0].Group)
+
+	// Determine whether multi-group features are needed: either multiple entries,
+	// or a single entry targeting a non-zero processor group.
+	multiGroup := len(affinity) > 1 || affinity[0].Group != 0
+
+	// Multiple processor groups are only supported on Windows Server 2022+.
+	if multiGroup && osversion.Build() < osversion.LTSC2022 {
+		if len(affinity) > 1 {
+			return nil, fmt.Errorf("%w: %d entries", ErrCPUAffinityMultipleGroupsNotSupported, len(affinity))
+		}
+		return nil, fmt.Errorf("%w: group %d", ErrCPUAffinityNonZeroGroupNotSupported, affinity[0].Group)
 	}
-	if affinity[0].Mask == 0 {
-		return 0, fmt.Errorf("cpu affinity mask must be non-zero")
-	}
-	return affinity[0].Mask, nil
+
+	return affinity, nil
 }
 
 // ConvertCPULimits handles the logic of converting and validating the containers CPU limits
@@ -209,6 +235,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		return nil, nil, err
 	}
 
+	// Validate and retrieve CPU affinity from the spec.
 	cpuAffinity, err := ConvertCPUAffinity(coi.Spec)
 	if err != nil {
 		return nil, nil, err
@@ -262,12 +289,22 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v1.ProcessorMaximum = int64(cpuLimit)
 	v1.ProcessorWeight = uint64(cpuWeight)
 
-	v2Container.Processor = &hcsschema.Processor{
-		Count:    cpuCount,
-		Maximum:  cpuLimit,
-		Weight:   cpuWeight,
-		Affinity: cpuAffinity,
+	v2Processor := &hcsschema.Processor{
+		Count:   cpuCount,
+		Maximum: cpuLimit,
+		Weight:  cpuWeight,
 	}
+	if len(cpuAffinity) > 0 {
+		groupAffs := make([]hcsschema.ProcessorGroupAffinity, len(cpuAffinity))
+		for i, a := range cpuAffinity {
+			groupAffs[i] = hcsschema.ProcessorGroupAffinity{
+				Mask:  a.Mask,
+				Group: uint16(a.Group),
+			}
+		}
+		v2Processor.GroupAffinities = groupAffs
+	}
+	v2Container.Processor = v2Processor
 
 	// Memory Resources
 	memoryMaxInMB := oci.ParseAnnotationsMemory(ctx, coi.Spec, annotations.ContainerMemorySizeInMB, 0)

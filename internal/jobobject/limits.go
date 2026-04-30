@@ -38,7 +38,11 @@ func (job *JobObject) SetResourceLimits(limits *JobLimits) error {
 		}
 	}
 
-	if limits.CPUAffinity != 0 {
+	if len(limits.GroupAffinities) > 0 {
+		if err := job.SetCPUGroupAffinities(limits.GroupAffinities); err != nil {
+			return fmt.Errorf("failed to set job object cpu group affinities: %w", err)
+		}
+	} else if limits.CPUAffinity != 0 {
 		if err := job.SetCPUAffinity(limits.CPUAffinity); err != nil {
 			return fmt.Errorf("failed to set job object cpu affinity: %w", err)
 		}
@@ -141,8 +145,89 @@ func (job *JobObject) GetCPULimit(rateControlType CPURateControlType) (uint32, e
 	return info.Value, nil
 }
 
+// SetCPUGroupAffinities sets the processor group affinities for the job object using
+// JobObjectGroupInformationEx, which supports multi-processor-group machines (WS2022+).
+// Each entry in affinities specifies a processor group number and a bitmask of processors
+// within that group. affinities must be non-empty.
+// https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-setinformationjobobject
+func (job *JobObject) SetCPUGroupAffinities(affinities []GroupAffinity) error {
+	if len(affinities) == 0 {
+		return errors.New("affinities must be non-empty")
+	}
+	winapiAffinities := make([]winapi.GROUP_AFFINITY, len(affinities))
+	for i, a := range affinities {
+		winapiAffinities[i] = winapi.GROUP_AFFINITY{
+			Mask:  uintptr(a.Mask),
+			Group: a.Group,
+		}
+	}
+
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if job.handle == 0 {
+		return ErrAlreadyClosed
+	}
+
+	if _, err := windows.SetInformationJobObject(
+		job.handle,
+		windows.JobObjectGroupInformationEx,
+		uintptr(unsafe.Pointer(&winapiAffinities[0])),
+		uint32(len(winapiAffinities))*uint32(unsafe.Sizeof(winapiAffinities[0])),
+	); err != nil {
+		return fmt.Errorf("failed to set cpu group affinities on job object: %w", err)
+	}
+	return nil
+}
+
+// GetCPUGroupAffinities returns the processor group affinities set on the job object.
+// https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-queryinformationjobobject
+func (job *JobObject) GetCPUGroupAffinities() ([]GroupAffinity, error) {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if job.handle == 0 {
+		return nil, ErrAlreadyClosed
+	}
+
+	// First call with a zero-length buffer to determine the required buffer size.
+	// This call is expected to fail with ERROR_INSUFFICIENT_BUFFER; we only care
+	// about the returned length.
+	var returnLen uint32
+	_ = winapi.QueryInformationJobObject(
+		job.handle,
+		windows.JobObjectGroupInformationEx,
+		nil,
+		0,
+		&returnLen,
+	)
+	if returnLen == 0 {
+		return nil, nil
+	}
+
+	count := returnLen / uint32(unsafe.Sizeof(winapi.GROUP_AFFINITY{}))
+	winapiAffinities := make([]winapi.GROUP_AFFINITY, count)
+	if err := winapi.QueryInformationJobObject(
+		job.handle,
+		windows.JobObjectGroupInformationEx,
+		unsafe.Pointer(&winapiAffinities[0]),
+		returnLen,
+		nil,
+	); err != nil {
+		return nil, fmt.Errorf("failed to query cpu group affinities on job object: %w", err)
+	}
+
+	result := make([]GroupAffinity, count)
+	for i, a := range winapiAffinities {
+		result[i] = GroupAffinity{Mask: uint64(a.Mask), Group: a.Group}
+	}
+	return result, nil
+}
+
 // SetCPUAffinity sets the processor affinity for the job object.
 // The affinity is passed in as a bitmask.
+// Note: this uses JOB_OBJECT_LIMIT_AFFINITY which is restricted to processor group 0.
+// For machines with more than 64 logical processors, use SetCPUGroupAffinities instead.
 func (job *JobObject) SetCPUAffinity(affinityBitMask uint64) error {
 	info, err := job.getExtendedInformation()
 	if err != nil {
