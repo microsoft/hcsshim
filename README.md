@@ -44,7 +44,7 @@ delta.tar.gz  initrd.img  rootfs.tar.gz
 
 ### Containerd Shim
 
-For info on the [Runtime V2 API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md).
+For info on the [Runtime V2 API](https://github.com/containerd/containerd/blob/main/docs/runtime-v2.md).
 
 Contrary to the typical Linux architecture of shim -> runc, the runhcs shim is used both to launch and manage the lifetime of containers.
 
@@ -80,13 +80,13 @@ shims for the other platforms will follow.
 
 V2 shims are dropped in alongside containerd in the same way as the V1 shim, but the
 API surface they expose is different. The V1 shim implemented only the containerd
-[Task API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md),
+[Task API](https://github.com/containerd/containerd/blob/main/docs/runtime-v2.md),
 and used it to manage both the utility VM (sandbox) lifecycle and the container/process
 (task) lifecycle through a single service. The V2 shim instead splits these
 responsibilities across the two APIs that containerd now provides for this purpose:
-the [Sandbox API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md#sandbox-api)
+the [Sandbox API](https://github.com/containerd/containerd/blob/main/docs/sandbox-api.md)
 is used to manage the utility VM, while the
-[Task API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md#task-api)
+[Task API](https://github.com/containerd/containerd/blob/main/docs/runtime-v2.md)
 is used to manage containers and processes running inside it. Internally the LCOW V2
 shim implements these as separate sandbox and task services (alongside an auxiliary
 `shimdiag` service used for diagnostics), with each shim instance backed 1:1 by a
