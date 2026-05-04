@@ -431,10 +431,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	if isVirtualPod {
 		sandboxID = virtualPodID
 	} else if criType == "container" {
-		sid := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
-		if sid != "" {
-			sandboxID = sid
-		}
+		sandboxID = settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 	}
 	c.sandboxID = sandboxID
 
@@ -1484,28 +1481,22 @@ func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec)
 
 // createPodInUVM allocates a cgroup for a pod and registers it in the host.
 func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec, nsID string) error {
-	h.containersMutex.Lock()
-	if _, exists := h.pods[sid]; exists {
-		h.containersMutex.Unlock()
-		return fmt.Errorf("pod %s already exists", sid)
-	}
-	h.containersMutex.Unlock()
-
 	cgroupPath := path.Join("/pods", sid)
 	resources := &specs.LinuxResources{}
 	if pSpec != nil && pSpec.Linux != nil && pSpec.Linux.Resources != nil {
 		resources = pSpec.Linux.Resources
 	}
+
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	if _, exists := h.pods[sid]; exists {
+		return fmt.Errorf("pod %s already exists", sid)
+	}
+
 	cgroupControl, err := cgroup.NewManager(cgroupPath, resources)
 	if err != nil {
 		return fmt.Errorf("failed to create cgroup for pod %s: %w", sid, err)
-	}
-	h.containersMutex.Lock()
-	defer h.containersMutex.Unlock()
-	// Double-check after cgroup creation in case of a race.
-	if _, exists := h.pods[sid]; exists {
-		_ = cgroupControl.Delete()
-		return fmt.Errorf("pod %s already exists", sid)
 	}
 	h.pods[sid] = &uvmPod{
 		sandboxID:        sid,
