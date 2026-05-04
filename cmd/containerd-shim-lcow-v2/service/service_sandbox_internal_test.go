@@ -14,14 +14,14 @@ import (
 	"go.uber.org/mock/gomock"
 	"golang.org/x/sys/windows"
 
+	sandboxsvc "github.com/containerd/containerd/api/runtime/sandbox/v1"
+	"github.com/containerd/containerd/v2/pkg/shutdown"
+
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v2/service/mocks"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
-	"github.com/Microsoft/hcsshim/internal/controller/vm"
-
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
-	sandboxsvc "github.com/containerd/containerd/api/runtime/sandbox/v1"
-	"github.com/containerd/containerd/v2/pkg/shutdown"
+	"github.com/Microsoft/hcsshim/internal/controller/vm"
 )
 
 // Sentinel errors used by the sandbox tests to assert that the service wraps
