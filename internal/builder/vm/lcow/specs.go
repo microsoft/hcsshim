@@ -289,9 +289,14 @@ func processAnnotations(ctx context.Context, opts *runhcsoptions.Options, annota
 	}
 
 	// Check for explicitly unsupported annotations.
-	ncProxy := oci.ParseAnnotationsString(annotations, shimannotations.NetworkConfigProxy, "")
-	if ncProxy != "" {
-		return fmt.Errorf("%s annotation is not supported", shimannotations.NetworkConfigProxy)
+	for _, key := range []string{
+		shimannotations.NetworkConfigProxy,
+		shimannotations.VPMemNoMultiMapping,
+		shimannotations.VirtualMachineKernelDrivers,
+	} {
+		if v := oci.ParseAnnotationsString(annotations, key, ""); v != "" {
+			return fmt.Errorf("%s annotation is not supported", key)
+		}
 	}
 
 	log.G(ctx).Debug("processAnnotations completed successfully")
