@@ -20,7 +20,7 @@ import (
 )
 
 // vmController is the subset of the VM controller that [Service] depends on.
-// Implemented by [*vm.Controller]. Tests substitute a mock.
+// Implemented by [*vm.Controller].
 type vmController interface {
 	// State returns the current VM lifecycle state.
 	State() vm.State

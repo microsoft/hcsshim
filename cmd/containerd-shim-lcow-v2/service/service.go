@@ -43,7 +43,7 @@ type Service struct {
 	sandboxID string
 
 	// vmController is responsible for managing the lifecycle of the underlying
-	// utility VM. Tests substitute a mock; production passes [*vm.Controller].
+	// utility VM.
 	vmController vmController
 
 	// podControllers maps podID -> PodController for each active pod.
