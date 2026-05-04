@@ -78,11 +78,19 @@ per-platform shims. Today only the LCOW shim
 ([`containerd-shim-lcow-v2`](./cmd/containerd-shim-lcow-v2)) has been published; additional
 shims for the other platforms will follow.
 
-From a caller's perspective, V2 shims implement the same containerd
-[Runtime V2 API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md)
-as the V1 shim and are dropped in alongside containerd in the same way. Internally the
-V2 shim is restructured around a sandbox / task / shimdiag service split, with the LCOW
-shim instance backed 1:1 by a Linux utility VM.
+V2 shims are dropped in alongside containerd in the same way as the V1 shim, but the
+API surface they expose is different. The V1 shim implemented only the containerd
+[Task API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md),
+and used it to manage both the utility VM (sandbox) lifecycle and the container/process
+(task) lifecycle through a single service. The V2 shim instead splits these
+responsibilities across the two APIs that containerd now provides for this purpose:
+the [Sandbox API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md#sandbox-api)
+is used to manage the utility VM, while the
+[Task API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md#task-api)
+is used to manage containers and processes running inside it. Internally the LCOW V2
+shim implements these as separate sandbox and task services (alongside an auxiliary
+`shimdiag` service used for diagnostics), with each shim instance backed 1:1 by a
+Linux utility VM.
 
 The LCOW V2 shim requires Windows Server 2025 (build 26100) or later.
 
