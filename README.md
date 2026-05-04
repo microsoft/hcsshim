@@ -68,6 +68,58 @@ To trial using the shim out with ctr.exe:
 C:\> ctr.exe run --runtime io.containerd.runhcs.v1 --rm mcr.microsoft.com/windows/nanoserver:2004 windows-test cmd /c "echo Hello World!"
 ```
 
+### Containerd Shim V2 (LCOW)
+
+`containerd-shim-lcow-v2` is the V2 rewrite of the Windows containerd shim. The V1 shim
+([`containerd-shim-runhcs-v1`](./cmd/containerd-shim-runhcs-v1)) is a single, monolithic
+binary that handles LCOW (Linux Containers on Windows), Hyper-V WCOW, process-isolated
+WCOW and host-process containers. In the V2 model that monolith is split into focused,
+per-platform shims. Today only the LCOW shim
+([`containerd-shim-lcow-v2`](./cmd/containerd-shim-lcow-v2)) has been published; additional
+shims for the other platforms will follow.
+
+From a caller's perspective, V2 shims implement the same containerd
+[Runtime V2 API](https://github.com/containerd/containerd/blob/main/core/runtime/v2/README.md)
+as the V1 shim and are dropped in alongside containerd in the same way. Internally the
+V2 shim is restructured around a sandbox / task / shimdiag service split, with the LCOW
+shim instance backed 1:1 by a Linux utility VM.
+
+The LCOW V2 shim requires Windows Server 2025 (build 26100) or later.
+
+#### Building
+
+The LCOW V2 shim sources are guarded by the `lcow` build tag, so the tag must be passed
+to `go build`:
+
+```powershell
+C:\> $env:GOOS="windows"
+C:\> go build -tags lcow .\cmd\containerd-shim-lcow-v2
+```
+
+Place the resulting `containerd-shim-lcow-v2.exe` in the same directory as `containerd.exe`,
+the same as for the V1 shim.
+
+#### Running unit tests
+
+The shim's unit tests (and the rest of the `lcow`-tagged packages) are run with the
+`lcow` build tag:
+
+```powershell
+C:\> go test -tags lcow ./...
+```
+
+#### Running parity tests
+
+The repository ships parity tests under [`./test/parity`](./test/parity) that feed
+identical inputs through the legacy V1 and the new V2 pipelines and assert that the
+resulting HCS ComputeSystem documents are equivalent. They live in the `test` Go
+module and are also built with the `lcow` tag:
+
+```powershell
+C:\> cd test
+C:\> go test -tags lcow ./parity/...
+```
+
 ## Contributing
 
 This project welcomes contributions and suggestions. Most contributions require you to agree to a
