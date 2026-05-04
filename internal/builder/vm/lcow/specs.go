@@ -289,6 +289,12 @@ func processAnnotations(ctx context.Context, opts *runhcsoptions.Options, annota
 	}
 
 	// Check for explicitly unsupported annotations.
+	//
+	// These annotations are only handled by the legacy uvm.CreateLCOW path
+	// (e.g. VirtualMachineKernelDrivers is still parsed in internal/hcsoci);
+	// the v2 shim builder has not implemented them yet. Returning an error
+	// here surfaces the gap so users can request the feature rather than
+	// silently having their annotation ignored.
 	for _, key := range []string{
 		shimannotations.NetworkConfigProxy,
 		shimannotations.VPMemNoMultiMapping,
