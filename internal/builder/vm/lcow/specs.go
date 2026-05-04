@@ -17,7 +17,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
-	"github.com/Microsoft/hcsshim/osversion"
 	shimannotations "github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
@@ -310,18 +309,7 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 		FullyPhysicallyBacked: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.FullyPhysicallyBacked, false),
 		PolicyBasedRouting:    oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
 		NoWritableFileShares:  oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
-		// Multi-mapping is enabled by default on 19H1+, can be disabled via annotation.
-		VPMEMMultiMapping: !(oci.ParseAnnotationsBool(ctx, annotations, shimannotations.VPMemNoMultiMapping, osversion.Build() < osversion.V19H1)),
 	}
-
-	// Parse the list of additional kernel drivers to be injected into the VM.
-	drivers := oci.ParseAnnotationCommaSeparated(shimannotations.VirtualMachineKernelDrivers, annotations)
-	for _, driver := range drivers {
-		if _, err := os.Stat(driver); err != nil {
-			return nil, fmt.Errorf("failed to find path to drivers at %s: %w", driver, err)
-		}
-	}
-	sandboxOptions.GuestDrivers = drivers
 
 	// Determine if this is a confidential VM early, as it affects boot options parsing
 	securityPolicy := oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicy, "")
