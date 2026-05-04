@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -80,12 +79,7 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 		}
 
 		count++
-		var msg string
-		if strings.HasPrefix(cgName, "/virtual-pods") {
-			msg = "memory usage for virtual pods cgroup exceeded threshold"
-		} else {
-			msg = "memory usage for cgroup exceeded threshold"
-		}
+		msg := "memory usage for cgroup exceeded threshold"
 
 		cgVersion := "v2"
 		if isV1 {
@@ -328,7 +322,7 @@ func main() {
 
 	// Setup the UVM cgroups to protect against a workload taking all available
 	// memory and causing the GCS to malfunction we create cgroups: gcs,
-	// containers, and virtual-pods for multi-pod support.
+	// containers, and pods for pod support.
 	//
 
 	// Write 1 to memory.use_hierarchy on the root cgroup to enable hierarchy
@@ -340,8 +334,7 @@ func main() {
 		}
 	}
 
-	// The containers cgroup is limited only by {Totalram - 75 MB
-	// (reservation)}.
+	// The pods cgroup is limited only by {Totalram - 75 MB (reservation)}.
 	//
 	// The gcs cgroup is not limited but an event will get logged if memory
 	// usage exceeds 50 MB.
@@ -349,28 +342,16 @@ func main() {
 	if err := syscall.Sysinfo(&sinfo); err != nil {
 		logrus.WithError(err).Fatal("failed to get sys info")
 	}
-	containersLimit := int64(sinfo.Totalram - *rootMemReserveBytes)
-	containersControl, err := cgroup.NewManager("/containers", &oci.LinuxResources{
+	podsLimit := int64(sinfo.Totalram - *rootMemReserveBytes)
+	podsControl, err := cgroup.NewManager("/pods", &oci.LinuxResources{
 		Memory: &oci.LinuxMemory{
-			Limit: &containersLimit,
+			Limit: &podsLimit,
 		},
 	})
 	if err != nil {
-		logrus.WithError(err).Fatal("failed to create containers cgroup")
+		logrus.WithError(err).Fatal("failed to create pods cgroup")
 	}
-	defer containersControl.Delete() //nolint:errcheck
-
-	// Create virtual-pods cgroup hierarchy for multi-pod support
-	// This will be the parent for all virtual pod cgroups: /containers/virtual-pods/{virtualSandboxID}
-	virtualPodsControl, err := cgroup.NewManager("/containers/virtual-pods", &oci.LinuxResources{
-		Memory: &oci.LinuxMemory{
-			Limit: &containersLimit, // Share the same limit as containers
-		},
-	})
-	if err != nil {
-		logrus.WithError(err).Fatal("failed to create containers/virtual-pods cgroup")
-	}
-	defer virtualPodsControl.Delete() //nolint:errcheck
+	defer podsControl.Delete() //nolint:errcheck
 
 	gcsControl, err := cgroup.NewManager("/gcs", &oci.LinuxResources{})
 	if err != nil {
@@ -388,10 +369,6 @@ func main() {
 	}
 
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
-	// Initialize virtual pod support in the host
-	if err := h.InitializeVirtualPodSupport(virtualPodsControl); err != nil {
-		logrus.WithError(err).Warn("Virtual pod support initialization failed")
-	}
 
 	// During live migration the VM is frozen and only wakes up when the host
 	// shim is ready, so the vsock port should be immediately available. We
@@ -406,20 +383,13 @@ func main() {
 	gefdFile := os.NewFile(gefd, "gefd")
 	defer gefdFile.Close()
 
-	oom, err := containersControl.OOMEventFD()
+	// Setup OOM monitoring for pods cgroup
+	podsOom, err := podsControl.OOMEventFD()
 	if err != nil {
-		logrus.WithError(err).Fatal("failed to retrieve the container cgroups oom eventfd")
+		logrus.WithError(err).Fatal("failed to retrieve the pods cgroups oom eventfd")
 	}
-	oomFile := os.NewFile(oom, "cefd")
-	defer oomFile.Close()
-
-	// Setup OOM monitoring for virtual-pods cgroup
-	virtualPodsOom, err := virtualPodsControl.OOMEventFD()
-	if err != nil {
-		logrus.WithError(err).Fatal("failed to retrieve the virtual-pods cgroups oom eventfd")
-	}
-	virtualPodsOomFile := os.NewFile(virtualPodsOom, "vp-oomfd")
-	defer virtualPodsOomFile.Close()
+	podsOomFile := os.NewFile(podsOom, "pods-oomfd")
+	defer podsOomFile.Close()
 
 	// time synchronization service
 	if !(*disableTimeSync) {
@@ -429,8 +399,7 @@ func main() {
 	}
 
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
-	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
-	go readMemoryEvents(startTime, virtualPodsOomFile, "/containers/virtual-pods", containersLimit, virtualPodsControl)
+	go readMemoryEvents(startTime, podsOomFile, "/pods", podsLimit, podsControl)
 
 	mux := bridge.NewBridgeMux()
 	b := bridge.New(mux, *v4)
