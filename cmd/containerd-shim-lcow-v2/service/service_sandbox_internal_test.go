@@ -16,6 +16,7 @@ import (
 
 	sandboxsvc "github.com/containerd/containerd/api/runtime/sandbox/v1"
 	"github.com/containerd/containerd/v2/pkg/shutdown"
+	"github.com/containerd/errdefs"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v2/service/mocks"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
@@ -560,8 +561,8 @@ func TestPingSandbox_NotImplemented(t *testing.T) {
 	svc, _ := newTestService(t)
 
 	_, err := svc.pingSandboxInternal(context.Background(), &sandboxsvc.PingRequest{})
-	if err == nil {
-		t.Fatal("expected ErrNotImplemented, got nil")
+	if !errors.Is(err, errdefs.ErrNotImplemented) {
+		t.Fatalf("expected ErrNotImplemented, got %v", err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -140,7 +141,7 @@ func TestDiagShare_RejectMissingHostPath(t *testing.T) {
 	svc, mockCtrl := newTestService(t)
 	mockCtrl.EXPECT().State().Return(vm.StateRunning)
 
-	missing := "Q:\\does-not-exist-" + t.Name()
+	missing := filepath.Join(t.TempDir(), "does-not-exist-"+t.Name())
 	_, err := svc.diagShareInternal(context.Background(), &shimdiag.ShareRequest{HostPath: missing})
 	if err == nil {
 		t.Fatal("expected error for missing host path, got nil")
