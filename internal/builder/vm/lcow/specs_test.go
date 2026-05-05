@@ -423,9 +423,8 @@ func TestBuildSandboxConfig(t *testing.T) {
 			},
 			spec: &vm.Spec{
 				Annotations: map[string]string{
-					shimannotations.VPMemCount:          "32",
-					shimannotations.VPMemSize:           "8589934592",
-					shimannotations.VPMemNoMultiMapping: "true",
+					shimannotations.VPMemCount: "32",
+					shimannotations.VPMemSize:  "8589934592",
 				},
 			},
 			wantErr:     true,
@@ -1238,6 +1237,26 @@ func TestBuildSandboxConfig_ErrorPaths(t *testing.T) {
 			spec: &vm.Spec{
 				Annotations: map[string]string{
 					shimannotations.NetworkConfigProxy: "some-proxy",
+				},
+			},
+			wantErr:     true,
+			errContains: "annotation is not supported",
+		},
+		{
+			name: "processAnnotations error - unsupported VPMemNoMultiMapping annotation",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.VPMemNoMultiMapping: "true",
+				},
+			},
+			wantErr:     true,
+			errContains: "annotation is not supported",
+		},
+		{
+			name: "processAnnotations error - unsupported VirtualMachineKernelDrivers annotation",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.VirtualMachineKernelDrivers: "/some/driver/path",
 				},
 			},
 			wantErr:     true,

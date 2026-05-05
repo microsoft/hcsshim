@@ -205,7 +205,6 @@ func checkSandboxOptionsParity(t *testing.T, legacyOpts *uvm.OptionsLCOW, sandbo
 		{"EnableScratchEncryption", legacyOpts.EnableScratchEncryption, sandboxOpts.EnableScratchEncryption},
 		{"PolicyBasedRouting", legacyOpts.PolicyBasedRouting, sandboxOpts.PolicyBasedRouting},
 		{"FullyPhysicallyBacked", legacyOpts.FullyPhysicallyBacked, sandboxOpts.FullyPhysicallyBacked},
-		{"VPMEMMultiMapping", !legacyOpts.VPMemNoMultiMapping, sandboxOpts.VPMEMMultiMapping},
 	}
 
 	for _, c := range checks {

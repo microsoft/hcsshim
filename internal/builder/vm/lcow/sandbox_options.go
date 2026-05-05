@@ -13,9 +13,6 @@ type SandboxOptions struct {
 	// EnableScratchEncryption enables encryption for scratch disks.
 	EnableScratchEncryption bool
 
-	// GuestDrivers lists guest drivers which need to be installed on the UVM.
-	GuestDrivers []string
-
 	// PolicyBasedRouting enables policy-based routing in the guest network stack.
 	PolicyBasedRouting bool
 
@@ -24,10 +21,6 @@ type SandboxOptions struct {
 
 	// FullyPhysicallyBacked indicates all memory allocations are backed by physical memory.
 	FullyPhysicallyBacked bool
-
-	// VPMEMMultiMapping indicates whether VPMem multi-mapping is enabled,
-	// which allows multiple VHDs to be mapped to a single VPMem device.
-	VPMEMMultiMapping bool
 
 	// ConfidentialConfig carries confidential computing fields that are not
 	// part of the HCS document but are needed for confidential VM setup.
