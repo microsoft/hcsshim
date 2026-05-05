@@ -525,16 +525,25 @@ void init_network(const char* iface, int domain) {
     close(s);
 }
 
-// inject boot-time entropy after reading it from a vsock port
+// inject boot-time entropy after reading it from a vsock port.
+// Failures are non-fatal: entropy seeding improves randomness quality
+// but the UVM can still function without it. On some kernels (e.g.,
+// Ubuntu 6.17), the vsock read may fail with ENOMEM after hv_sock
+// module load if the transport buffers are not yet fully initialized.
 void init_entropy(int port) {
     int s = openvsock(VMADDR_CID_HOST, port);
     if (s < 0) {
-        die("openvsock entropy");
+        warn("openvsock entropy");
+        dmesgWarn("entropy: failed to open vsock, skipping entropy seeding\n");
+        return;
     }
 
     int e = open("/dev/random", O_RDWR);
     if (e < 0) {
-        die("open /dev/random");
+        warn("open /dev/random");
+        dmesgWarn("entropy: failed to open /dev/random, skipping\n");
+        close(s);
+        return;
     }
 
     struct {
@@ -546,7 +555,9 @@ void init_entropy(int port) {
     for (;;) {
         ssize_t n = read(s, buf.buf, sizeof(buf.buf));
         if (n < 0) {
-            die("read entropy");
+            warn("read entropy");
+            dmesgWarn("entropy: vsock read failed, continuing without full entropy\n");
+            break;
         }
 
         if (n == 0) {
@@ -556,7 +567,9 @@ void init_entropy(int port) {
         buf.entropy_count = n * 8; // in bits
         buf.buf_size = n;          // in bytes
         if (ioctl(e, RNDADDENTROPY, &buf) < 0) {
-            die("ioctl(RNDADDENTROPY)");
+            warn("ioctl(RNDADDENTROPY)");
+            dmesgWarn("entropy: RNDADDENTROPY ioctl failed, continuing\n");
+            break;
         }
     }
 
