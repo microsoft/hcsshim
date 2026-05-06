@@ -542,19 +542,12 @@ func TestLCOWSandboxOptionsFieldParityNonDefault(t *testing.T) {
 			},
 		},
 		{
-			name: "VPMem no multi-mapping",
-			annotations: map[string]string{
-				shimannotations.VPMemNoMultiMapping: "true",
-			},
-		},
-		{
 			name: "all sandbox options non-default",
 			annotations: map[string]string{
 				shimannotations.LCOWEncryptedScratchDisk:  "true",
 				iannotations.NetworkingPolicyBasedRouting: "true",
 				shimannotations.FullyPhysicallyBacked:     "true",
 				shimannotations.DisableWritableFileShares: "true",
-				shimannotations.VPMemNoMultiMapping:       "true",
 				shimannotations.MemorySizeInMB:            "2048",
 			},
 		},
