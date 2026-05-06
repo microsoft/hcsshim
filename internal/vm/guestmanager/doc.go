@@ -16,6 +16,8 @@ GCS connection:
 
 	g, err := guestmanager.New(ctx, uvm)
 	if err != nil { // handle error }
+	if err := g.PrepareConnection(gcsServiceID); err != nil { // handle error }
+	// (start the UVM here)
 	if err := g.CreateConnection(ctx); err != nil { // handle error }
 
 After the connection is established, use the manager interfaces for guest-side changes:

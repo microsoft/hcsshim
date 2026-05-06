@@ -40,7 +40,7 @@ func (c *Controller) buildConfidentialOptions(_ context.Context) (*guestresource
 // This is a no-op implementation to satisfy the platform-specific interface.
 //
 // For comparison, LCOW VMs require entropy to be provided during boot.
-func (c *Controller) setupEntropyListener(_ context.Context, _ *errgroup.Group) {}
+func (c *Controller) setupEntropyListener(_ context.Context, _ *errgroup.Group) error { return nil }
 
 // setupLoggingListener sets up logging for WCOW UVMs.
 //
@@ -52,25 +52,22 @@ func (c *Controller) setupEntropyListener(_ context.Context, _ *errgroup.Group) 
 // The listener is configured to accept only one concurrent connection at a time
 // to prevent resource exhaustion, but will accept new connections if the current one is closed.
 // This supports scenarios where the logging service inside the VM needs to restart.
-func (c *Controller) setupLoggingListener(ctx context.Context, _ *errgroup.Group) {
+func (c *Controller) setupLoggingListener(ctx context.Context, _ *errgroup.Group) error {
+	baseListener, err := winio.ListenHvsock(&winio.HvsockAddr{
+		VMID:      c.uvm.RuntimeID(),
+		ServiceID: prot.WindowsLoggingHvsockServiceID,
+	})
+	if err != nil {
+		close(c.logOutputDone)
+		return fmt.Errorf("failed to listen for windows logging connections: %w", err)
+	}
+
 	// For Windows, the listener can receive a connection later (after VM starts),
 	// so we start the output handler in a goroutine with a non-timeout context.
 	// This allows the output handler to run independently of the VM creation lifecycle.
 	// This is useful for the case when the logging service is restarted.
 	go func() {
-		baseListener, err := winio.ListenHvsock(&winio.HvsockAddr{
-			VMID:      c.uvm.RuntimeID(),
-			ServiceID: prot.WindowsLoggingHvsockServiceID,
-		})
-		if err != nil {
-			// Close the output done channel to signal that logging setup
-			// has failed and no logs will be processed.
-			close(c.logOutputDone)
-			logrus.WithError(err).Error("failed to listen for windows logging connections")
-
-			// Return early due to error.
-			return
-		}
+		defer baseListener.Close()
 
 		// Use a WaitGroup to track active log processing goroutines.
 		// This ensures we wait for all log processing to complete before closing logOutputDone.
@@ -107,6 +104,8 @@ func (c *Controller) setupLoggingListener(ctx context.Context, _ *errgroup.Group
 		// Signal that log output processing has completed.
 		close(c.logOutputDone)
 	}()
+
+	return nil
 }
 
 // finalizeGCSConnection finalizes the GCS connection for WCOW UVMs.

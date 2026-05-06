@@ -192,8 +192,15 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 	// The guest needs to connect to predefined vsock ports.
 	// The host must already be listening on these ports before the guest attempts to connect,
 	// otherwise the connection would fail.
-	c.setupEntropyListener(gctx, g)
-	c.setupLoggingListener(gctx, g)
+	if err = c.setupEntropyListener(gctx, g); err != nil {
+		return fmt.Errorf("failed to set up entropy listener: %w", err)
+	}
+	if err = c.setupLoggingListener(gctx, g); err != nil {
+		return fmt.Errorf("failed to set up logging listener: %w", err)
+	}
+	if err = c.guest.PrepareConnection(opts.GCSServiceID); err != nil {
+		return fmt.Errorf("failed to prepare guest connection: %w", err)
+	}
 
 	err = c.uvm.Start(ctx)
 	if err != nil {
@@ -210,7 +217,7 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 		return err
 	}
 
-	err = c.guest.CreateConnection(ctx, opts.GCSServiceID, opts.ConfigOptions...)
+	err = c.guest.CreateConnection(ctx, opts.ConfigOptions...)
 	if err != nil {
 		return fmt.Errorf("failed to create guest connection: %w", err)
 	}

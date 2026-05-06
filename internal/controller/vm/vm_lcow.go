@@ -111,16 +111,18 @@ func (c *Controller) Plan9Controller() *plan9.Controller {
 // Linux VMs require entropy to initialize their random number generators during boot.
 // This method listens on a predefined vsock port and provides cryptographically secure
 // random data to the Linux init process when it connects.
-func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.Group) {
+func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.Group) error {
+	// The Linux guest will connect to this port during init to receive entropy.
+	entropyConn, err := winio.ListenHvsock(&winio.HvsockAddr{
+		VMID:      c.uvm.RuntimeID(),
+		ServiceID: winio.VsockServiceID(vmutils.LinuxEntropyVsockPort),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to listen on hvSocket for entropy: %w", err)
+	}
+
 	group.Go(func() error {
-		// The Linux guest will connect to this port during init to receive entropy.
-		entropyConn, err := winio.ListenHvsock(&winio.HvsockAddr{
-			VMID:      c.uvm.RuntimeID(),
-			ServiceID: winio.VsockServiceID(vmutils.LinuxEntropyVsockPort),
-		})
-		if err != nil {
-			return fmt.Errorf("failed to listen on hvSocket for entropy: %w", err)
-		}
+		defer entropyConn.Close()
 
 		// Prepare to provide entropy to the init process in the background. This
 		// must be done in a goroutine since, when using the internal bridge, the
@@ -135,13 +137,14 @@ func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.G
 		// Write the required amount of entropy to the connection.
 		// The init process will read this data and use it to seed the kernel's
 		// random number generator (CRNG).
-		_, err = io.CopyN(conn, rand.Reader, vmutils.LinuxEntropyBytes)
-		if err != nil {
+		if _, err = io.CopyN(conn, rand.Reader, vmutils.LinuxEntropyBytes); err != nil {
 			return fmt.Errorf("failed to write entropy to connection: %w", err)
 		}
 
 		return nil
 	})
+
+	return nil
 }
 
 // setupLoggingListener sets up logging for LCOW UVMs.
@@ -149,17 +152,19 @@ func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.G
 // This method establishes a vsock connection to receive log output from GCS
 // running inside the Linux VM. The logs are parsed and
 // forwarded to the host's logging system for monitoring and debugging.
-func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.Group) {
+func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.Group) error {
+	// The GCS will connect to this port to stream log output.
+	logConn, err := winio.ListenHvsock(&winio.HvsockAddr{
+		VMID:      c.uvm.RuntimeID(),
+		ServiceID: winio.VsockServiceID(vmutils.LinuxLogVsockPort),
+	})
+	if err != nil {
+		close(c.logOutputDone)
+		return fmt.Errorf("failed to listen on hvSocket for logs: %w", err)
+	}
+
 	group.Go(func() error {
-		// The GCS will connect to this port to stream log output.
-		logConn, err := winio.ListenHvsock(&winio.HvsockAddr{
-			VMID:      c.uvm.RuntimeID(),
-			ServiceID: winio.VsockServiceID(vmutils.LinuxLogVsockPort),
-		})
-		if err != nil {
-			close(c.logOutputDone)
-			return fmt.Errorf("failed to listen on hvSocket for logs: %w", err)
-		}
+		defer logConn.Close()
 
 		// Accept the connection from the GCS.
 		conn, err := vmmanager.AcceptConnection(ctx, c.uvm, logConn, true)
@@ -180,6 +185,8 @@ func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.G
 
 		return nil
 	})
+
+	return nil
 }
 
 // finalizeGCSConnection finalizes the GCS connection for LCOW VMs.
