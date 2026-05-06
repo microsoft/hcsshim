@@ -68,33 +68,80 @@ To trial using the shim out with ctr.exe:
 C:\> ctr.exe run --runtime io.containerd.runhcs.v1 --rm mcr.microsoft.com/windows/nanoserver:2004 windows-test cmd /c "echo Hello World!"
 ```
 
-### Containerd Shim V2 (LCOW)
+### Containerd Shim V2
 
-`containerd-shim-lcow-v2` is the V2 rewrite of the Windows containerd shim. The V1 shim
+The V2 shims are the rewrite of the Windows containerd shim. The V1 shim
 ([`containerd-shim-runhcs-v1`](./cmd/containerd-shim-runhcs-v1)) is a single, monolithic
 binary that handles LCOW (Linux Containers on Windows), Hyper-V WCOW, process-isolated
 WCOW and host-process containers. In the V2 model that monolith is split into focused,
-per-platform shims. Today only the LCOW shim
-([`containerd-shim-lcow-v2`](./cmd/containerd-shim-lcow-v2)) has been published; additional
-shims for the other platforms will follow.
+per-platform shims, each backed 1:1 by a sandbox:
+
+- [`containerd-shim-process-v2`](#containerd-shim-process-v2) — process-isolated Windows
+  Server containers (Argons) and Host Process Containers.
+- [`containerd-shim-wcow-v2`](#containerd-shim-wcow-v2) — Hyper-V isolated Windows
+  containers (UVM + Argons / Host Process Containers running inside the UVM).
+- [`containerd-shim-lcow-v2`](#containerd-shim-lcow-v2) — Linux Containers on Windows
+  (UVM + Linux containers).
 
 V2 shims are dropped in alongside containerd in the same way as the V1 shim, but the
 API surface they expose is different. The V1 shim implemented only the containerd
 [Task API](https://github.com/containerd/containerd/blob/main/docs/runtime-v2.md),
-and used it to manage both the utility VM (sandbox) lifecycle and the container/process
-(task) lifecycle through a single service. The V2 shim instead splits these
-responsibilities across the two APIs that containerd now provides for this purpose:
-the [Sandbox API](https://github.com/containerd/containerd/blob/main/docs/sandbox-api.md)
-is used to manage the utility VM, while the
+and used it to manage both the sandbox lifecycle and the container/process (task)
+lifecycle through a single service. Each V2 shim instead splits these responsibilities
+across the two APIs that containerd now provides for this purpose: the
+[Sandbox API](https://github.com/containerd/containerd/blob/main/docs/sandbox-api.md)
+is used to manage the sandbox, while the
 [Task API](https://github.com/containerd/containerd/blob/main/docs/runtime-v2.md)
-is used to manage containers and processes running inside it. Internally the LCOW V2
-shim implements these as separate sandbox and task services (alongside an auxiliary
-`shimdiag` service used for diagnostics), with each shim instance backed 1:1 by a
-Linux utility VM.
+is used to manage containers and processes running inside it. Internally each V2 shim
+implements these as separate sandbox and task services, alongside an auxiliary
+`shimdiag` service used for diagnostics.
 
-The LCOW V2 shim requires Windows Server 2025 (build 26100) or later.
+All three shims honor the same CRI pod model. A task annotated with
+`"io.kubernetes.cri.container-type": "sandbox"` is treated as the pause/infra container
+that creates the pod; sibling workload tasks set `"io.kubernetes.cri.container-type":
+"container"` and reference their pause via `"io.kubernetes.cri.sandbox-id"`. What a
+"sandbox" *physically* corresponds to depends on the shim, and is described in each
+subsection below.
 
-#### Building
+#### containerd-shim-process-v2
+
+- **Purpose:** runs Argons (process-isolated Windows Server containers) and Host
+  Process Containers — workloads that execute directly on the host with no utility VM.
+- **Sandbox:** a *pause container*. The pause container is a minimal, long-lived
+  container that owns the pod's shared resources (such as the network namespace) and
+  keeps them alive while sibling workload containers are started, stopped or replaced.
+  This is the standard Kubernetes pod model: the pause container is the sandbox that
+  the rest of the pod attaches to.
+- **Tasks:** the actual workload containers belonging to the pod, linked back to the
+  pause via the `io.kubernetes.cri.sandbox-id` annotation.
+- **Implementation:** coming soon.
+
+#### containerd-shim-wcow-v2
+
+- **Purpose:** runs Hyper-V isolated Windows containers — a Windows utility VM hosting
+  Argons and/or Host Process Containers inside it.
+- **Sandbox:** the Windows utility VM (UVM) itself, created on `RunPodSandbox` and torn
+  down when the pod is removed. Each shim instance is backed 1:1 by a single UVM.
+- **Tasks:** the Windows containers and processes running inside the UVM, identified
+  via the standard CRI annotations described above.
+- **Implementation:** coming soon.
+
+#### containerd-shim-lcow-v2
+
+- **Purpose:** runs Linux Containers on Windows — a Linux utility VM hosting Linux
+  containers.
+- **Sandbox:** the Linux UVM. Unlike `containerd-shim-wcow-v2`, LCOW supports running
+  *multiple pods in the same UVM*, so a single shim instance may host more than one
+  CRI pod's worth of containers. This is the key behavioral difference from the WCOW
+  V2 shim.
+- **Tasks:** Linux containers and processes running inside the UVM, identified via the
+  same CRI annotations described above.
+- **Implementation:** [`./cmd/containerd-shim-lcow-v2`](./cmd/containerd-shim-lcow-v2).
+  The sandbox service, task service and `shimdiag` service are wired up under that
+  directory (`main.go`, `manager.go`, `service/`).
+- **Platform requirement:** Windows Server 2025 (build 26100) or later.
+
+##### Building
 
 The LCOW V2 shim sources are guarded by the `lcow` build tag, so the tag must be passed
 to `go build`:
@@ -107,7 +154,7 @@ C:\> go build -tags lcow .\cmd\containerd-shim-lcow-v2
 Place the resulting `containerd-shim-lcow-v2.exe` in the same directory as `containerd.exe`,
 the same as for the V1 shim.
 
-#### Running unit tests
+##### Running unit tests
 
 The shim's unit tests (and the rest of the `lcow`-tagged packages) are run with the
 `lcow` build tag:
@@ -116,7 +163,7 @@ The shim's unit tests (and the rest of the `lcow`-tagged packages) are run with 
 C:\> go test -tags lcow ./...
 ```
 
-#### Running parity tests
+##### Running parity tests
 
 The repository ships parity tests under [`./test/parity`](./test/parity) that feed
 identical inputs through the legacy V1 and the new V2 pipelines and assert that the
