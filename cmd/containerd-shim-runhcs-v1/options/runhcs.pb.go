@@ -187,8 +187,9 @@ type Options struct {
 	// no_inherit_host_timezone specifies to skip inheriting the hosts time zone for WCOW UVMs and instead default to
 	// UTC.
 	NoInheritHostTimezone bool `protobuf:"varint,19,opt,name=no_inherit_host_timezone,json=noInheritHostTimezone,proto3" json:"no_inherit_host_timezone,omitempty"`
-	// scrub_logs enables removing environment variables and other potentially sensitive information from logs
-	ScrubLogs     bool `protobuf:"varint,20,opt,name=scrub_logs,json=scrubLogs,proto3" json:"scrub_logs,omitempty"`
+	// scrub_logs controls removing environment variables and other potentially sensitive information from logs.
+	// If unset, scrubbing is enabled by default. Set explicitly to false to disable.
+	ScrubLogs     *bool `protobuf:"varint,20,opt,name=scrub_logs,json=scrubLogs,proto3,oneof" json:"scrub_logs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -357,8 +358,8 @@ func (x *Options) GetNoInheritHostTimezone() bool {
 }
 
 func (x *Options) GetScrubLogs() bool {
-	if x != nil {
-		return x.ScrubLogs
+	if x != nil && x.ScrubLogs != nil {
+		return *x.ScrubLogs
 	}
 	return false
 }
@@ -373,9 +374,9 @@ type ProcessDetails struct {
 	MemoryCommitBytes            uint64                 `protobuf:"varint,4,opt,name=memory_commit_bytes,json=memoryCommitBytes,proto3" json:"memory_commit_bytes,omitempty"`
 	MemoryWorkingSetPrivateBytes uint64                 `protobuf:"varint,5,opt,name=memory_working_set_private_bytes,json=memoryWorkingSetPrivateBytes,proto3" json:"memory_working_set_private_bytes,omitempty"`
 	MemoryWorkingSetSharedBytes  uint64                 `protobuf:"varint,6,opt,name=memory_working_set_shared_bytes,json=memoryWorkingSetSharedBytes,proto3" json:"memory_working_set_shared_bytes,omitempty"`
-	ProcessID                    uint32                 `protobuf:"varint,7,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	ProcessID                    uint32                 `protobuf:"varint,7,opt,name=process_id,json=ProcessID,proto3" json:"process_id,omitempty"`
 	UserTime_100Ns               uint64                 `protobuf:"varint,8,opt,name=user_time_100_ns,json=userTime100Ns,proto3" json:"user_time_100_ns,omitempty"`
-	ExecID                       string                 `protobuf:"bytes,9,opt,name=exec_id,json=execId,proto3" json:"exec_id,omitempty"`
+	ExecID                       string                 `protobuf:"bytes,9,opt,name=exec_id,json=ExecID,proto3" json:"exec_id,omitempty"`
 	unknownFields                protoimpl.UnknownFields
 	sizeCache                    protoimpl.SizeCache
 }
@@ -477,7 +478,7 @@ var File_github_com_Microsoft_hcsshim_cmd_containerd_shim_runhcs_v1_options_runh
 
 const file_github_com_Microsoft_hcsshim_cmd_containerd_shim_runhcs_v1_options_runhcs_proto_rawDesc = "" +
 	"\n" +
-	"Ogithub.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options/runhcs.proto\x12\x14containerd.runhcs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd9\t\n" +
+	"Ogithub.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options/runhcs.proto\x12\x14containerd.runhcs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xed\t\n" +
 	"\aOptions\x12\x14\n" +
 	"\x05debug\x18\x01 \x01(\bR\x05debug\x12F\n" +
 	"\n" +
@@ -501,9 +502,9 @@ const file_github_com_Microsoft_hcsshim_cmd_containerd_shim_runhcs_v1_options_ru
 	"\tlog_level\x18\x10 \x01(\tR\blogLevel\x124\n" +
 	"\x17io_retry_timeout_in_sec\x18\x11 \x01(\x05R\x13ioRetryTimeoutInSec\x12\x82\x01\n" +
 	"\x1ddefault_container_annotations\x18\x12 \x03(\v2>.containerd.runhcs.v1.Options.DefaultContainerAnnotationsEntryR\x1bdefaultContainerAnnotations\x127\n" +
-	"\x18no_inherit_host_timezone\x18\x13 \x01(\bR\x15noInheritHostTimezone\x12\x1d\n" +
+	"\x18no_inherit_host_timezone\x18\x13 \x01(\bR\x15noInheritHostTimezone\x12\"\n" +
 	"\n" +
-	"scrub_logs\x18\x14 \x01(\bR\tscrubLogs\x1aN\n" +
+	"scrub_logs\x18\x14 \x01(\bH\x00R\tscrubLogs\x88\x01\x01\x1aN\n" +
 	" DefaultContainerAnnotationsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\")\n" +
@@ -514,7 +515,8 @@ const file_github_com_Microsoft_hcsshim_cmd_containerd_shim_runhcs_v1_options_ru
 	"\x10SandboxIsolation\x12\v\n" +
 	"\aPROCESS\x10\x00\x12\x0e\n" +
 	"\n" +
-	"HYPERVISOR\x10\x01\"\xb6\x03\n" +
+	"HYPERVISOR\x10\x01B\r\n" +
+	"\v_scrub_logs\"\xb6\x03\n" +
 	"\x0eProcessDetails\x12\x1d\n" +
 	"\n" +
 	"image_name\x18\x01 \x01(\tR\timageName\x129\n" +
@@ -570,6 +572,7 @@ func file_github_com_Microsoft_hcsshim_cmd_containerd_shim_runhcs_v1_options_run
 	if File_github_com_Microsoft_hcsshim_cmd_containerd_shim_runhcs_v1_options_runhcs_proto != nil {
 		return
 	}
+	file_github_com_Microsoft_hcsshim_cmd_containerd_shim_runhcs_v1_options_runhcs_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

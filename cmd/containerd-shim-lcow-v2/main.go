@@ -91,8 +91,10 @@ func setLogConfiguration() error {
 				logrus.SetLevel(lvl)
 			}
 
-			if opts.ScrubLogs {
-				log.SetScrubbing(true)
+			// Scrubbing is enabled by default (via init() in internal/log/scrub.go).
+			// Only disable if the option is explicitly set to false.
+			if opts.ScrubLogs != nil && !*opts.ScrubLogs {
+				log.SetScrubbing(false)
 			}
 		}
 		_ = os.Stdin.Close()

@@ -219,7 +219,10 @@ func buildGCSCommand(
 		gcsParts = append(gcsParts, "-disable-time-sync")
 	}
 
-	if opts != nil && opts.ScrubLogs {
+	// Scrubbing is enabled by default. Only pass -scrub-logs=false if explicitly disabled.
+	if opts != nil && opts.ScrubLogs != nil && !*opts.ScrubLogs {
+		gcsParts = append(gcsParts, "-scrub-logs=false")
+	} else {
 		gcsParts = append(gcsParts, "-scrub-logs")
 	}
 

@@ -20,6 +20,7 @@ import (
 	vm "github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"google.golang.org/protobuf/proto"
 )
 
 type specTestCase struct {
@@ -1638,16 +1639,47 @@ func TestBuildSandboxConfig_BootOptions(t *testing.T) {
 			},
 		},
 		{
-			name: "scrub logs option",
+			name: "scrub logs option enabled",
 			opts: &runhcsoptions.Options{
 				SandboxPlatform:   "linux/amd64",
 				BootFilesRootPath: vhdOnlyPath,
-				ScrubLogs:         true,
+				ScrubLogs:         proto.Bool(true),
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
 				if !strings.Contains(getKernelArgs(doc), "-scrub-logs") {
 					t.Error("expected -scrub-logs in kernel args")
+				}
+			},
+		},
+		{
+			name: "scrub logs option disabled",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: vhdOnlyPath,
+				ScrubLogs:         proto.Bool(false),
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !strings.Contains(getKernelArgs(doc), "-scrub-logs=false") {
+					t.Error("expected -scrub-logs=false in kernel args")
+				}
+			},
+		},
+		{
+			name: "scrub logs option unset",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: vhdOnlyPath,
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				args := getKernelArgs(doc)
+				if !strings.Contains(args, "-scrub-logs") {
+					t.Error("expected -scrub-logs in kernel args")
+				}
+				if strings.Contains(args, "-scrub-logs=false") {
+					t.Error("did not expect -scrub-logs=false in kernel args")
 				}
 			},
 		},
