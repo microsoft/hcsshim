@@ -72,18 +72,11 @@ C:\> ctr.exe run --runtime io.containerd.runhcs.v1 --rm mcr.microsoft.com/window
 
 The V2 shims are the rewrite of the Windows containerd shim. The V1 shim
 ([`containerd-shim-runhcs-v1`](./cmd/containerd-shim-runhcs-v1)) is a single, monolithic
-binary that handles LCOW (Linux Containers on Windows), Hyper-V WCOW, process-isolated
+binary that handles LCOW (Linux Containers on Windows), Hyper-V WCOW (Windows Containers on Windows), process-isolated
 WCOW and host-process containers. In the V2 model that monolith is split into focused,
-per-platform shims, each backed 1:1 by a sandbox:
+per-platform shims, each backed 1:1 by a sandbox.
 
-- [`containerd-shim-process-v2`](#containerd-shim-process-v2) — process-isolated Windows
-  Server containers (Argons) and Host Process Containers.
-- [`containerd-shim-wcow-v2`](#containerd-shim-wcow-v2) — Hyper-V isolated Windows
-  containers (UVM + Argons / Host Process Containers running inside the UVM).
-- [`containerd-shim-lcow-v2`](#containerd-shim-lcow-v2) — Linux Containers on Windows
-  (UVM + Linux containers).
-
-V2 shims are dropped in alongside containerd in the same way as the V1 shim, but the
+V2 shims are used with containerd in the same way as the V1 shim, but the
 API surface they expose is different. The V1 shim implemented only the containerd
 [Task API](https://github.com/containerd/containerd/blob/main/docs/runtime-v2.md),
 and used it to manage both the sandbox lifecycle and the container/process (task)
@@ -103,11 +96,34 @@ that creates the pod; sibling workload tasks set `"io.kubernetes.cri.container-t
 "sandbox" *physically* corresponds to depends on the shim, and is described in each
 subsection below.
 
+#### containerd-shim-lcow-v2
+
+- **Purpose:** Runs Linux Containers on Windows (LCOW) — a Linux utility VM hosting Linux
+  containers.
+- **Sandbox:** The Linux UVM. Each shim instance is backed 1:1 by a single UVM. This shim supports running
+  *multiple pods in the same UVM*, so a single shim instance may host more than one
+  CRI pods.
+- **Tasks:** Linux containers and processes running inside the UVM, identified via the
+  same CRI annotations described above.
+- **Implementation:** [`./cmd/containerd-shim-lcow-v2`](./cmd/containerd-shim-lcow-v2).
+- **Build Tag:** lcow
+- **Platform requirement:** Windows Server 2025 (build 26100) or later.
+
+#### containerd-shim-wcow-v2
+
+- **Purpose:** Runs Hyper-V isolated Windows containers (WCOW) — a Windows utility VM hosting
+  Process and/or Host Process Containers inside it.
+- **Sandbox:** The Windows utility VM (UVM). Each shim instance is backed 1:1 by a single UVM.
+- **Tasks:** the Windows containers and processes running inside the UVM, identified
+  via the standard CRI annotations described above.
+- **Implementation:** coming soon.
+- **Build Tag:** wcow
+
 #### containerd-shim-process-v2
 
-- **Purpose:** runs Argons (process-isolated Windows Server containers) and Host
+- **Purpose:** Runs Process-isolated Windows Server containers and Host
   Process Containers — workloads that execute directly on the host with no utility VM.
-- **Sandbox:** a *pause container*. The pause container is a minimal, long-lived
+- **Sandbox:** A *pause container*. The pause container is a minimal, long-lived
   container that owns the pod's shared resources (such as the network namespace) and
   keeps them alive while sibling workload containers are started, stopped or replaced.
   This is the standard Kubernetes pod model: the pause container is the sandbox that
@@ -115,36 +131,12 @@ subsection below.
 - **Tasks:** the actual workload containers belonging to the pod, linked back to the
   pause via the `io.kubernetes.cri.sandbox-id` annotation.
 - **Implementation:** coming soon.
-
-#### containerd-shim-wcow-v2
-
-- **Purpose:** runs Hyper-V isolated Windows containers — a Windows utility VM hosting
-  Argons and/or Host Process Containers inside it.
-- **Sandbox:** the Windows utility VM (UVM) itself, created on `RunPodSandbox` and torn
-  down when the pod is removed. Each shim instance is backed 1:1 by a single UVM.
-- **Tasks:** the Windows containers and processes running inside the UVM, identified
-  via the standard CRI annotations described above.
-- **Implementation:** coming soon.
-
-#### containerd-shim-lcow-v2
-
-- **Purpose:** runs Linux Containers on Windows — a Linux utility VM hosting Linux
-  containers.
-- **Sandbox:** the Linux UVM. Unlike `containerd-shim-wcow-v2`, LCOW supports running
-  *multiple pods in the same UVM*, so a single shim instance may host more than one
-  CRI pod's worth of containers. This is the key behavioral difference from the WCOW
-  V2 shim.
-- **Tasks:** Linux containers and processes running inside the UVM, identified via the
-  same CRI annotations described above.
-- **Implementation:** [`./cmd/containerd-shim-lcow-v2`](./cmd/containerd-shim-lcow-v2).
-  The sandbox service, task service and `shimdiag` service are wired up under that
-  directory (`main.go`, `manager.go`, `service/`).
-- **Platform requirement:** Windows Server 2025 (build 26100) or later.
+- **Build Tag:** process
 
 ##### Building
 
-The LCOW V2 shim sources are guarded by the `lcow` build tag, so the tag must be passed
-to `go build`:
+The V2 shim sources are guarded by the build tags as mentioned above, so the tag must be passed
+to `go build`. For example the `LCOW` shim has `lcow` tag-
 
 ```powershell
 C:\> $env:GOOS="windows"
@@ -156,8 +148,8 @@ the same as for the V1 shim.
 
 ##### Running unit tests
 
-The shim's unit tests (and the rest of the `lcow`-tagged packages) are run with the
-`lcow` build tag:
+The shim's unit tests (and the rest of the tagged packages) are run with the
+shim specific build tag:
 
 ```powershell
 C:\> go test -tags lcow ./...
@@ -168,7 +160,7 @@ C:\> go test -tags lcow ./...
 The repository ships parity tests under [`./test/parity`](./test/parity) that feed
 identical inputs through the legacy V1 and the new V2 pipelines and assert that the
 resulting HCS ComputeSystem documents are equivalent. They live in the `test` Go
-module and are also built with the `lcow` tag:
+module and are also built with the build tag:
 
 ```powershell
 C:\> cd test
