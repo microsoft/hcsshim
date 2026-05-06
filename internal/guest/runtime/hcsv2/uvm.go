@@ -95,6 +95,7 @@ type Host struct {
 	containersMutex sync.Mutex
 	containers      map[string]*Container
 	pods            map[string]*pod
+	stdioSlots      []*stdio.ConnSlot
 
 	externalProcessesMutex sync.Mutex
 	externalProcesses      map[int]*externalProcess
@@ -242,6 +243,72 @@ func (h *Host) SecurityOptions() *securitypolicy.SecurityOptions {
 
 func (h *Host) Transport() transport.Transport {
 	return h.vsock
+}
+
+// RegisterStdioSlots tracks per-process stdio so the bridge reconnect loop
+// can disconnect them after live migration. Called from container Start,
+// ExecProcess, and runExternalProcess after stdio.Connect. Any
+// *stdio.ConnSlot in the set is added to the registry; nil entries and
+// other transport.Connection types are ignored. Already-closed slots are
+// compacted out on each call to bound the slice's growth.
+func (h *Host) RegisterStdioSlots(set *stdio.ConnectionSet) {
+	if set == nil {
+		return
+	}
+	incoming := make([]*stdio.ConnSlot, 0, 3)
+	for _, c := range []transport.Connection{set.In, set.Out, set.Err} {
+		if slot, ok := c.(*stdio.ConnSlot); ok && slot != nil {
+			incoming = append(incoming, slot)
+		}
+	}
+	if len(incoming) == 0 {
+		return
+	}
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+	h.stdioSlots = compactStdioSlots(h.stdioSlots)
+	h.stdioSlots = append(h.stdioSlots, incoming...)
+}
+
+// DisconnectAllStdio drops the current connection on every tracked stdio
+// slot. Called from the GCS reconnect loop after the bridge connection is
+// lost. Relays park inside slot.Write until the host re-attaches stdio with
+// a fresh connection; the producing process pauses naturally when its
+// kernel pipe buffer fills.
+//
+// Each slot's Disconnect is wrapped in a recover so a single bad slot
+// cannot break the loop and leave the rest of the container stdio without
+// back pressure.
+func (h *Host) DisconnectAllStdio() {
+	h.containersMutex.Lock()
+	h.stdioSlots = compactStdioSlots(h.stdioSlots)
+	slots := append([]*stdio.ConnSlot(nil), h.stdioSlots...)
+	h.containersMutex.Unlock()
+	for _, s := range slots {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logrus.WithField("panic", r).Error("ConnSlot: Disconnect panicked")
+				}
+			}()
+			s.Disconnect()
+		}()
+	}
+}
+
+// compactStdioSlots returns a new slice with closed slots filtered out so
+// the registry does not grow unbounded over the UVM lifetime.
+func compactStdioSlots(slots []*stdio.ConnSlot) []*stdio.ConnSlot {
+	if len(slots) == 0 {
+		return slots[:0]
+	}
+	out := slots[:0]
+	for _, s := range slots {
+		if s.IsAlive() {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func (h *Host) RemoveContainer(id string) {
@@ -496,6 +563,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	c := &Container{
 		id:             id,
 		vsock:          h.vsock,
+		slotRegistry:   h,
 		spec:           settings.OCISpecification,
 		ociBundlePath:  settings.OCIBundlePath,
 		isSandbox:      criType == "sandbox",
@@ -1170,6 +1238,7 @@ func (h *Host) runExternalProcess(
 	if err != nil {
 		return -1, err
 	}
+	h.RegisterStdioSlots(stdioSet)
 	defer func() {
 		if err != nil {
 			stdioSet.Close()
