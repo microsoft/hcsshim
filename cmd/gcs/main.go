@@ -334,9 +334,20 @@ func main() {
 	// Write 1 to memory.use_hierarchy on the root cgroup to enable hierarchy
 	// support. This needs to be set before we create any cgroups as the write
 	// will fail otherwise. This is only needed for cgroup v1.
+	//
+	// On kernels where CONFIG_MEMCG_V1 is disabled (e.g. 6.18+), the v1
+	// memory controller does not exist and this path will be absent even
+	// though init fell back to v1 for other controllers. Without the memory
+	// controller, container memory limits cannot be enforced and a workload
+	// could OOM the entire UVM, so we still crash but with a diagnostic
+	// message pointing at the kernel config.
 	if !cgroup.IsCgroupV2() {
 		if err := os.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0644); err != nil {
-			logrus.WithError(err).Fatal("failed to enable hierarchy support for root cgroup")
+			if os.IsNotExist(err) {
+				logrus.WithError(err).Fatal("v1 memory controller not available; the kernel may lack CONFIG_MEMCG_V1 -- enable it or use a kernel with cgroup v2 + CONFIG_CGROUP_BPF")
+			} else {
+				logrus.WithError(err).Fatal("failed to enable hierarchy support for root cgroup")
+			}
 		}
 	}
 

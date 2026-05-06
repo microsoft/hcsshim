@@ -19,6 +19,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <sys/syscall.h>
+#include <linux/bpf.h>
 
 #ifdef MODULES
 #include <ftw.h>
@@ -312,7 +314,8 @@ void init_fs(const struct InitOp* ops, size_t count) {
     }
 }
 
-// Check if cgroup v2 should be disabled via kernel parameter
+// Check if cgroup v2 should be disabled via kernel/init parameter.
+// Recognizes "hcsshim.cgroup=v1" to force v1.
 bool is_cgroup_v2_disabled() {
     FILE* f = fopen("/proc/cmdline", "r");
     if (f == NULL) {
@@ -324,9 +327,9 @@ bool is_cgroup_v2_disabled() {
         // Kernel cmdline is space-separated; tokenize and match exactly.
         char* token = strtok(cmdline, " \n");
         while (token) {
-            if (strcmp(token, "cgroup_no_v2=all") == 0) {
+            if (strcmp(token, "hcsshim.cgroup=v1") == 0) {
                 fclose(f);
-                dmesgInfo("cgroup v2: disabled by kernel parameter cgroup_no_v2=all\n");
+                dmesgInfo("cgroup v2: disabled by kernel parameter hcsshim.cgroup=v1\n");
                 return true;
             }
             token = strtok(NULL, " \n");
@@ -392,16 +395,51 @@ bool try_init_cgroups_v2() {
     }
 
     // Check if controllers file appeared
-    if (access("/sys/fs/cgroup/cgroup.controllers", F_OK) == 0) {
-        dmesgInfo("cgroup v2: test mount successful, controllers found\n");
-        enable_subtree_control();
-        return true; // Leave it mounted, cgroup v2 is ready
+    if (access("/sys/fs/cgroup/cgroup.controllers", F_OK) != 0) {
+        dmesgInfo("cgroup v2: test mount succeeded but no controllers\n");
+        umount("/sys/fs/cgroup");
+        return false;
     }
 
-    // Mount worked but no controllers - clean up
-    dmesgInfo("cgroup v2: test mount succeeded but no controllers\n");
-    umount("/sys/fs/cgroup");
-    return false;
+    dmesgInfo("cgroup v2: test mount successful, controllers found\n");
+
+    // Probe BPF cgroup support. runc's cgroup v2 device controller requires
+    // BPF_PROG_QUERY on BPF_CGROUP_DEVICE. Detect this early and fall back
+    // to cgroup v1 if BPF cgroup is not available.
+    //
+    // Possible error codes from bpf(BPF_PROG_QUERY):
+    //   ENOSYS  — CONFIG_BPF_SYSCALL not set (no BPF syscall at all)
+    //   EINVAL  — BPF syscall exists but CONFIG_CGROUP_BPF not set, or
+    //             BPF_CGROUP_DEVICE attach type not recognized
+    //   EPERM   — BPF cgroup works, just no permission (means it's available)
+    //   0       — success, BPF cgroup works
+    //
+    // Only EPERM or success indicate BPF_CGROUP_DEVICE is functional.
+    int cgfd = open("/sys/fs/cgroup", O_RDONLY | O_DIRECTORY);
+    if (cgfd < 0) {
+        dmesgWarn("cgroup v2: cannot open /sys/fs/cgroup for BPF probe, falling back to v1\n");
+        umount("/sys/fs/cgroup");
+        return false;
+    }
+    {
+        union bpf_attr attr = {0};
+        attr.query.target_fd = cgfd;
+        attr.query.attach_type = BPF_CGROUP_DEVICE;
+        long ret = syscall(__NR_bpf, BPF_PROG_QUERY, &attr, sizeof(attr));
+        // Capture errno before close(), which may clobber it.
+        int err = errno;
+        close(cgfd);
+        if (ret < 0 && (err == ENOSYS || err == EINVAL)) {
+            dmesgWarn("cgroup v2: BPF cgroup not supported, falling back to v1\n");
+            umount("/sys/fs/cgroup");
+            return false;
+        }
+        // EPERM or success both mean BPF cgroup is functional.
+        dmesgInfo("cgroup v2: BPF cgroup probe ok\n");
+    }
+
+    enable_subtree_control();
+    return true; // Leave it mounted, cgroup v2 is ready
 }
 
 void init_cgroups_v1() {
@@ -423,6 +461,7 @@ void init_cgroups_v1() {
             break;
         }
     }
+    int mounted = 0;
     for (;;) {
         static const char base_path[] = "/sys/fs/cgroup/";
         char path[sizeof(base_path) - 1 + 64];
@@ -444,18 +483,23 @@ void init_cgroups_v1() {
             if (mount(name, path, "cgroup", MS_NODEV | MS_NOSUID | MS_NOEXEC, name) < 0) {
                 die2("mount", path);
             }
+            mounted++;
         }
     }
     fclose(f);
+    if (mounted == 0) {
+        die("cgroup init failed: v2 unavailable and no v1 controllers enabled");
+    }
 }
 
 void init_cgroups() {
     if (try_init_cgroups_v2()) {
         dmesgInfo("Using cgroup v2\n");
-    } else {
-        dmesgInfo("Using cgroup v1\n");
-        init_cgroups_v1();
+        return;
     }
+
+    dmesgInfo("Using cgroup v1\n");
+    init_cgroups_v1();
 }
 
 void init_network(const char* iface, int domain) {
@@ -481,16 +525,25 @@ void init_network(const char* iface, int domain) {
     close(s);
 }
 
-// inject boot-time entropy after reading it from a vsock port
+// inject boot-time entropy after reading it from a vsock port.
+// Failures are non-fatal: entropy seeding improves randomness quality
+// but the UVM can still function without it. On some kernels (e.g.,
+// Ubuntu 6.17), the vsock read may fail with ENOMEM after hv_sock
+// module load if the transport buffers are not yet fully initialized.
 void init_entropy(int port) {
     int s = openvsock(VMADDR_CID_HOST, port);
     if (s < 0) {
-        die("openvsock entropy");
+        warn("openvsock entropy");
+        dmesgWarn("entropy: failed to open vsock, skipping entropy seeding\n");
+        return;
     }
 
     int e = open("/dev/random", O_RDWR);
     if (e < 0) {
-        die("open /dev/random");
+        warn("open /dev/random");
+        dmesgWarn("entropy: failed to open /dev/random, skipping\n");
+        close(s);
+        return;
     }
 
     struct {
@@ -502,7 +555,9 @@ void init_entropy(int port) {
     for (;;) {
         ssize_t n = read(s, buf.buf, sizeof(buf.buf));
         if (n < 0) {
-            die("read entropy");
+            warn("read entropy");
+            dmesgWarn("entropy: vsock read failed, continuing without full entropy\n");
+            break;
         }
 
         if (n == 0) {
@@ -512,7 +567,9 @@ void init_entropy(int port) {
         buf.entropy_count = n * 8; // in bits
         buf.buf_size = n;          // in bytes
         if (ioctl(e, RNDADDENTROPY, &buf) < 0) {
-            die("ioctl(RNDADDENTROPY)");
+            warn("ioctl(RNDADDENTROPY)");
+            dmesgWarn("entropy: RNDADDENTROPY ioctl failed, continuing\n");
+            break;
         }
     }
 
