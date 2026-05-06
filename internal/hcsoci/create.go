@@ -129,7 +129,7 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"options": log.Format(ctx, createOptions),
+		"options": log.FormatScrub(ctx, createOptions, log.ScrubCreateOptions),
 		"schema":  log.Format(ctx, coi.actualSchemaVersion),
 	}).Debug("hcsshim::initializeCreateOptions")
 
