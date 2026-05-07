@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
 	"github.com/Microsoft/hcsshim/internal/controller/network"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
@@ -150,6 +151,13 @@ func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.G
 // running inside the Linux VM. The logs are parsed and
 // forwarded to the host's logging system for monitoring and debugging.
 func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.Group) {
+	// For live-migratable sandboxes, we skip logging socket.
+	if c.sandboxOptions != nil && c.sandboxOptions.LiveMigrationAllowed {
+		log.G(ctx).Info("skipping GCS log listener: pod is live-migratable")
+		close(c.logOutputDone)
+		return
+	}
+
 	group.Go(func() error {
 		// The GCS will connect to this port to stream log output.
 		logConn, err := winio.ListenHvsock(&winio.HvsockAddr{

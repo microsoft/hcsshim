@@ -209,6 +209,7 @@ func BuildSandboxConfig(
 			bootOptions.LinuxKernelDirect != nil, // isKernelDirectBoot
 			comPorts != nil,                      // hasConsole
 			filepath.Base(rootFsFullPath),
+			sandboxOptions.LiveMigrationAllowed,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to build kernel args: %w", err)
@@ -320,6 +321,7 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 		FullyPhysicallyBacked: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.FullyPhysicallyBacked, false),
 		PolicyBasedRouting:    oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
 		NoWritableFileShares:  oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
+		LiveMigrationAllowed:  oci.ParseAnnotationsBool(ctx, annotations, shimannotations.LiveMigrationAllowed, false),
 	}
 
 	// Determine if this is a confidential VM early, as it affects boot options parsing

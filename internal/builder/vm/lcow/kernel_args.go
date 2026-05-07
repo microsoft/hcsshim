@@ -26,6 +26,7 @@ func buildKernelArgs(
 	kernelDirect bool,
 	hasConsole bool,
 	rootFsFile string,
+	liveMigrationAllowed bool,
 ) (string, error) {
 
 	log.G(ctx).WithField("rootFsFile", rootFsFile).Debug("buildKernelArgs: starting kernel arguments construction")
@@ -80,7 +81,7 @@ func buildKernelArgs(
 	args = append(args, "brd.rd_nr=0", "pmtmr=0")
 
 	// 8. Init arguments (passed after "--" separator)
-	initArgs := buildInitArgs(ctx, opts, writableOverlayDirs, disableTimeSyncService, processDumpLocation, rootFsFile, hasConsole)
+	initArgs := buildInitArgs(ctx, opts, writableOverlayDirs, disableTimeSyncService, processDumpLocation, rootFsFile, hasConsole, liveMigrationAllowed)
 	args = append(args, "--", initArgs)
 
 	result := strings.Join(args, " ")
@@ -149,6 +150,7 @@ func buildInitArgs(
 	processDumpLocation string,
 	rootFsFile string,
 	hasConsole bool,
+	liveMigrationAllowed bool,
 ) string {
 	log.G(ctx).WithFields(logrus.Fields{
 		"rootFsFile": rootFsFile,
@@ -158,7 +160,7 @@ func buildInitArgs(
 	entropyArgs := fmt.Sprintf("-e %d", vmutils.LinuxEntropyVsockPort)
 
 	// Build GCS execution command
-	gcsCmd := buildGCSCommand(opts, disableTimeSyncService, processDumpLocation)
+	gcsCmd := buildGCSCommand(opts, disableTimeSyncService, processDumpLocation, liveMigrationAllowed)
 
 	// Construct init arguments
 	var initArgsList []string
@@ -192,14 +194,8 @@ func buildGCSCommand(
 	opts *runhcsoptions.Options,
 	disableTimeSyncService bool,
 	processDumpLocation string,
+	liveMigrationAllowed bool,
 ) string {
-	// Start with vsockexec wrapper
-	var cmdParts []string
-	cmdParts = append(cmdParts, "/bin/vsockexec")
-
-	// Add logging vsock port
-	cmdParts = append(cmdParts, fmt.Sprintf("-e %d", vmutils.LinuxLogVsockPort))
-
 	// Determine log level
 	logLevel := "info"
 	if opts != nil && opts.LogLevel != "" {
@@ -227,8 +223,15 @@ func buildGCSCommand(
 		gcsParts = append(gcsParts, "-core-dump-location", processDumpLocation)
 	}
 
-	// Combine vsockexec and GCS command
-	cmdParts = append(cmdParts, strings.Join(gcsParts, " "))
+	gcsCmd := strings.Join(gcsParts, " ")
 
-	return strings.Join(cmdParts, " ")
+	// Live-migratable pods skip vsockexec: the host does not run a log
+	// listener, so connect on LinuxLogVsockPort would stall init.
+	if liveMigrationAllowed {
+		return gcsCmd
+	}
+
+	// vsockexec `-e <port>` wires gcs's stderr to LinuxLogVsockPort, which
+	// the host listener reads and republishes.
+	return fmt.Sprintf("/bin/vsockexec -e %d %s", vmutils.LinuxLogVsockPort, gcsCmd)
 }
