@@ -26,4 +26,6 @@ runtime_logging := data.framework.runtime_logging
 load_fragment := data.framework.load_fragment
 scratch_mount := data.framework.scratch_mount
 scratch_unmount := data.framework.scratch_unmount
+mapped_directory_mount := data.framework.mapped_directory_mount
+mapped_directory_unmount := data.framework.mapped_directory_unmount
 reason := data.framework.reason

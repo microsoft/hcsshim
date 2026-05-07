@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -701,6 +702,13 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedVirtualDisk:
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("wcowMappedVirtualDisk { %v}", wcowMappedVirtualDisk)
+			if wcowMappedVirtualDisk.ContainerPath != "" {
+				matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, wcowMappedVirtualDisk.ContainerPath)
+				if merr != nil || !matched {
+					return fmt.Errorf("virtual disk mount path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
+						wcowMappedVirtualDisk.ContainerPath)
+				}
+			}
 
 		case guestresource.ResourceTypeHvSocket:
 			hvSocketAddress := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
@@ -709,6 +717,18 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedDirectory:
 			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.MappedDirectory)
 			log.G(ctx).Tracef("hcsschema.MappedDirectory { %v }", settings)
+			switch modifyGuestSettingsRequest.RequestType {
+			case guestrequest.RequestTypeAdd:
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceMappedDirectoryMountPolicy(
+					ctx, settings.ContainerPath, settings.ReadOnly); err != nil {
+					return fmt.Errorf("mapped directory mount is denied by policy: %w", err)
+				}
+			case guestrequest.RequestTypeRemove:
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceMappedDirectoryUnmountPolicy(
+					ctx, settings.ContainerPath); err != nil {
+					return fmt.Errorf("mapped directory unmount is denied by policy: %w", err)
+				}
+			}
 
 		case guestresource.ResourceTypeSecurityPolicy:
 			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.ConfidentialOptions)
@@ -866,6 +886,15 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedVirtualDiskForContainerScratch:
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("ResourceTypeMappedVirtualDiskForContainerScratch: { %v }", wcowMappedVirtualDisk)
+
+			// Validate the scratch disk mount path matches the expected pattern
+			if wcowMappedVirtualDisk.ContainerPath != "" {
+				matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, wcowMappedVirtualDisk.ContainerPath)
+				if merr != nil || !matched {
+					return fmt.Errorf("scratch disk mount path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
+						wcowMappedVirtualDisk.ContainerPath)
+				}
+			}
 
 			// This will return the volume path of the mounted scratch.
 			// Scratch disk should be >= 30 GB for refs formatter to work.
