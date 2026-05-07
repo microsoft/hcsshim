@@ -566,6 +566,36 @@ jobs:
           export GOTEST='gotestsum --format=standard-verbose --debug --'
           make integration
 
+      - name: Pre-create HNS NAT network
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Make sure HNS is healthy before we (or the CNI plugin) touch it.
+          Restart-Service -Force hns
+          Start-Sleep -Seconds 5
+
+          # HNS.psm1 is not present on the runner; pull the canonical copy
+          # from microsoft/SDN (the same module kube-proxy / containerd CI use)
+          # so that Get-HnsNetwork / New-HnsNetwork are available.
+          # Pinned to a specific commit for reproducibility (file has been
+          # stable in microsoft/SDN since 2018).
+          $hns = Join-Path $env:TEMP 'HNS.psm1'
+          Invoke-WebRequest -UseBasicParsing `
+            -Uri 'https://raw.githubusercontent.com/microsoft/SDN/710cad6fc9025c86e04ef5daa6eb53f577802448/Kubernetes/windows/hns.psm1' `
+            -OutFile $hns
+          Import-Module $hns -DisableNameChecking
+
+          # 172.19.208.0/20 matches the default subnet that Windows containers
+          # / HNS pick for the built-in 'nat' network on Server 2022, so
+          # pre-creating with the same range avoids conflicts with anything
+          # the CNI plugin or containerd may try to create later.
+          if (-not (Get-HnsNetwork | Where-Object { $_.Name -eq 'nat' })) {
+            New-HnsNetwork -Type NAT -Name nat `
+              -AddressPrefix 172.19.208.0/20 -Gateway 172.19.208.1 | Out-Null
+          }
+          Get-HnsNetwork | Format-Table Name,Type,@{n='Subnets';e={$_.Subnets.AddressPrefix}}
+
       - name: Run containerd CRI integration tests
         shell: bash
         working-directory: src/github.com/containerd/containerd
