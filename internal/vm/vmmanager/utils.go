@@ -24,7 +24,7 @@ func AcceptConnection(ctx context.Context, uvm vmWaiter, l net.Listener, closeCo
 		conn net.Conn
 		err  error
 	}
-	resultCh := make(chan acceptResult)
+	resultCh := make(chan acceptResult, 1)
 
 	go func() {
 		c, err := l.Accept()
@@ -45,6 +45,7 @@ func AcceptConnection(ctx context.Context, uvm vmWaiter, l net.Listener, closeCo
 		}
 		return res.conn, res.err
 	case <-ctx.Done():
+		_ = l.Close()
 		return nil, ctx.Err()
 	case <-vmExitCh:
 	}

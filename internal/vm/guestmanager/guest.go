@@ -5,6 +5,7 @@ package guestmanager
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
@@ -46,6 +47,8 @@ type Guest struct {
 	// gc is the active GCS connection to the guest.
 	// It will be nil if no connection is active.
 	gc *gcs.GuestConnection
+	// gcListener is bound by PrepareConnection and consumed by CreateConnection.
+	gcListener net.Listener
 }
 
 // New creates a new Guest Manager.
@@ -67,26 +70,22 @@ func WithInitializationState(state *gcs.InitialGuestState) ConfigOption {
 	}
 }
 
-// CreateConnection accepts the GCS connection and performs initial setup.
-func (gm *Guest) CreateConnection(ctx context.Context, GCSServiceID guid.GUID, opts ...ConfigOption) error {
+// PrepareConnection opens the host-side hvsock listener for the given GCS
+// service ID. Must be called before VM start so the host is listening when
+// the in-VM GCS dials. Idempotent for the same service ID.
+func (gm *Guest) PrepareConnection(GCSServiceID guid.GUID) error {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
-	// Return early if a connection is already active.
-	if gm.gc != nil {
-		// If the caller tried to connect to a different GCS service then error out.
+	// Idempotent if already prepared/connected with the same service ID.
+	if gm.gcListener != nil || gm.gc != nil {
 		if gm.gcsServiceID != GCSServiceID {
 			return fmt.Errorf("gcs service id mismatch: expected %s, got %s", gm.gcsServiceID, GCSServiceID)
 		}
 		return nil
 	}
 
-	gm.gcsServiceID = GCSServiceID
-
-	// The guest needs to connect to predefined GCS port.
-	// The host must already be listening on these port before the guest attempts to connect,
-	// otherwise the connection would fail.
-	vmConn, err := winio.ListenHvsock(&winio.HvsockAddr{
+	l, err := winio.ListenHvsock(&winio.HvsockAddr{
 		VMID:      gm.uvm.RuntimeID(),
 		ServiceID: GCSServiceID,
 	})
@@ -94,8 +93,30 @@ func (gm *Guest) CreateConnection(ctx context.Context, GCSServiceID guid.GUID, o
 		return fmt.Errorf("failed to listen for guest connection: %w", err)
 	}
 
-	// Accept the connection
-	conn, err := vmmanager.AcceptConnection(ctx, gm.uvm, vmConn, true)
+	gm.gcsServiceID = GCSServiceID
+	gm.gcListener = l
+	return nil
+}
+
+// CreateConnection accepts the GCS dial on the prepared listener and runs
+// the GCS protocol handshake. Must be called after VM start. Idempotent if
+// a connection already exists.
+func (gm *Guest) CreateConnection(ctx context.Context, opts ...ConfigOption) error {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	if gm.gc != nil {
+		return nil
+	}
+	if gm.gcListener == nil {
+		return fmt.Errorf("CreateConnection called before PrepareConnection")
+	}
+
+	// AcceptConnection takes ownership of the listener and closes it.
+	l := gm.gcListener
+	gm.gcListener = nil
+
+	conn, err := vmmanager.AcceptConnection(ctx, gm.uvm, l, true)
 	if err != nil {
 		return fmt.Errorf("failed to connect to GCS: %w", err)
 	}
@@ -134,6 +155,9 @@ func (gm *Guest) CloseConnection() error {
 		err = gm.gc.Close()
 		gm.gc = nil
 	}
-
+	if gm.gcListener != nil {
+		_ = gm.gcListener.Close()
+		gm.gcListener = nil
+	}
 	return err
 }

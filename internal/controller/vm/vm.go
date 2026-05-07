@@ -188,12 +188,30 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 	}()
 	defer cancel()
 
-	// we should set up the necessary listeners for guest-host communication.
-	// The guest needs to connect to predefined vsock ports.
-	// The host must already be listening on these ports before the guest attempts to connect,
-	// otherwise the connection would fail.
-	c.setupEntropyListener(gctx, g)
-	c.setupLoggingListener(gctx, g)
+	// Set up the host-side hvsock listeners for entropy and logs before
+	// starting the VM. The guest dials predefined vsock ports early in boot,
+	// so the listeners must be bound up front to avoid a race.
+	// Each setup call creates the listener synchronously and dispatches an
+	// accept goroutine onto the errgroup:
+	//   - entropy: writes seed bytes to the guest, then returns.
+	//   - logging: accepts the connection and spawns a long-running relay
+	//     for guest logs; the accept goroutine itself returns immediately.
+	//
+	// We intentionally wait on the error group after VM start but before
+	// establishing the GCS connection, to ensure entropy is seeded and the
+	// log channel is wired up first.
+	if err = c.setupEntropyListener(gctx, g); err != nil {
+		return fmt.Errorf("failed to set up entropy listener: %w", err)
+	}
+	if err = c.setupLoggingListener(gctx, g); err != nil {
+		return fmt.Errorf("failed to set up logging listener: %w", err)
+	}
+	// Open the host-side GCS hvsock listener before VM start so the host
+	// is listening when the in-VM GCS dials. Otherwise, GCS falls back to
+	// the internal HCS bridge and our accept hangs until timeout.
+	if err = c.guest.PrepareConnection(opts.GCSServiceID); err != nil {
+		return fmt.Errorf("failed to prepare guest connection: %w", err)
+	}
 
 	err = c.uvm.Start(ctx)
 	if err != nil {
@@ -210,7 +228,9 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 		return err
 	}
 
-	err = c.guest.CreateConnection(ctx, opts.GCSServiceID, opts.ConfigOptions...)
+	// VM is started, entropy is seeded and log channel is up. Accept the
+	// GCS dial on the prepared listener and run the GCS protocol handshake.
+	err = c.guest.CreateConnection(ctx, opts.ConfigOptions...)
 	if err != nil {
 		return fmt.Errorf("failed to create guest connection: %w", err)
 	}
