@@ -102,15 +102,15 @@ func TestVirtualPodRootFromOCIBundlePath(t *testing.T) {
 
 func TestVirtualPodRootMatchesLegacy(t *testing.T) {
 	// When OCIBundlePath uses the legacy prefix, the derived virtual pod root
-	// must match what VirtualPodRootDir() would have produced.
+	// must match the expected path under the legacy prefix.
 	ociBundlePath := "/run/gcs/c/container-id"
 	virtualPodID := "vpod-abc"
 
 	derived := filepath.Join(filepath.Dir(ociBundlePath), "virtual-pods", virtualPodID)
-	legacy := specGuest.VirtualPodRootDir(virtualPodID)
+	expected := "/run/gcs/c/virtual-pods/vpod-abc"
 
-	if derived != legacy {
-		t.Fatalf("derived %q != legacy %q — backwards compatibility broken", derived, legacy)
+	if derived != expected {
+		t.Fatalf("derived %q != expected %q — backwards compatibility broken", derived, expected)
 	}
 }
 
@@ -127,8 +127,8 @@ func TestSubdirectoryPaths(t *testing.T) {
 	if specGuest.SandboxHugePagesMountsDirFromRoot(sandboxRoot) != specGuest.HugePagesMountsDir("sandbox-xyz") {
 		t.Fatal("SandboxHugePagesMountsDirFromRoot doesn't match legacy HugePagesMountsDir")
 	}
-	if specGuest.SandboxLogsDirFromRoot(sandboxRoot) != specGuest.SandboxLogsDir("sandbox-xyz", "") {
-		t.Fatal("SandboxLogsDirFromRoot doesn't match legacy SandboxLogsDir")
+	if specGuest.SandboxLogsDirFromRoot(sandboxRoot) != filepath.Join(specGuest.SandboxRootDir("sandbox-xyz"), "logs") {
+		t.Fatal("SandboxLogsDirFromRoot doesn't match expected logs directory")
 	}
 }
 
@@ -171,12 +171,12 @@ func TestOldVsNewPathParity(t *testing.T) {
 		},
 		{
 			name:    "logs dir",
-			oldPath: specGuest.SandboxLogsDir(sandboxID, ""),
+			oldPath: filepath.Join(specGuest.SandboxRootDir(sandboxID), "logs"),
 			newPath: filepath.Join(sandboxRoot, "logs"),
 		},
 		{
 			name:    "log file path",
-			oldPath: specGuest.SandboxLogPath(sandboxID, "", "container.log"),
+			oldPath: filepath.Join(specGuest.SandboxRootDir(sandboxID), "logs", "container.log"),
 			newPath: filepath.Join(sandboxRoot, "logs", "container.log"),
 		},
 		{
@@ -213,42 +213,42 @@ func TestOldVsNewPathParity(t *testing.T) {
 	vpodCases := []pathCase{
 		{
 			name:    "virtual pod root",
-			oldPath: specGuest.VirtualPodRootDir(vpodID),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID),
 			newPath: vpodSandboxRoot,
 		},
 		{
 			name:    "virtual pod sandboxMounts",
-			oldPath: specGuest.VirtualPodMountsDir(vpodID),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID, "sandboxMounts"),
 			newPath: filepath.Join(vpodSandboxRoot, "sandboxMounts"),
 		},
 		{
 			name:    "virtual pod tmpfs mounts",
-			oldPath: specGuest.VirtualPodTmpfsMountsDir(vpodID),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID, "sandboxTmpfsMounts"),
 			newPath: filepath.Join(vpodSandboxRoot, "sandboxTmpfsMounts"),
 		},
 		{
 			name:    "virtual pod hugepages",
-			oldPath: specGuest.VirtualPodHugePagesMountsDir(vpodID),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID, "hugepages"),
 			newPath: filepath.Join(vpodSandboxRoot, "hugepages"),
 		},
 		{
 			name:    "virtual pod logs",
-			oldPath: specGuest.SandboxLogsDir(sandboxID, vpodID),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID, "logs"),
 			newPath: filepath.Join(vpodSandboxRoot, "logs"),
 		},
 		{
 			name:    "virtual pod hostname",
-			oldPath: filepath.Join(specGuest.VirtualPodRootDir(vpodID), "hostname"),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID, "hostname"),
 			newPath: filepath.Join(vpodSandboxRoot, "hostname"),
 		},
 		{
 			name:    "virtual pod hosts",
-			oldPath: filepath.Join(specGuest.VirtualPodRootDir(vpodID), "hosts"),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID, "hosts"),
 			newPath: filepath.Join(vpodSandboxRoot, "hosts"),
 		},
 		{
 			name:    "virtual pod resolv.conf",
-			oldPath: filepath.Join(specGuest.VirtualPodRootDir(vpodID), "resolv.conf"),
+			oldPath: filepath.Join("/run/gcs/c", "virtual-pods", vpodID, "resolv.conf"),
 			newPath: filepath.Join(vpodSandboxRoot, "resolv.conf"),
 		},
 	}
