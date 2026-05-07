@@ -374,9 +374,9 @@ type ProcessDetails struct {
 	MemoryCommitBytes            uint64                 `protobuf:"varint,4,opt,name=memory_commit_bytes,json=memoryCommitBytes,proto3" json:"memory_commit_bytes,omitempty"`
 	MemoryWorkingSetPrivateBytes uint64                 `protobuf:"varint,5,opt,name=memory_working_set_private_bytes,json=memoryWorkingSetPrivateBytes,proto3" json:"memory_working_set_private_bytes,omitempty"`
 	MemoryWorkingSetSharedBytes  uint64                 `protobuf:"varint,6,opt,name=memory_working_set_shared_bytes,json=memoryWorkingSetSharedBytes,proto3" json:"memory_working_set_shared_bytes,omitempty"`
-	ProcessID                    uint32                 `protobuf:"varint,7,opt,name=process_id,json=ProcessID,proto3" json:"process_id,omitempty"`
+	ProcessID                    uint32                 `protobuf:"varint,7,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
 	UserTime_100Ns               uint64                 `protobuf:"varint,8,opt,name=user_time_100_ns,json=userTime100Ns,proto3" json:"user_time_100_ns,omitempty"`
-	ExecID                       string                 `protobuf:"bytes,9,opt,name=exec_id,json=ExecID,proto3" json:"exec_id,omitempty"`
+	ExecID                       string                 `protobuf:"bytes,9,opt,name=exec_id,json=execId,proto3" json:"exec_id,omitempty"`
 	unknownFields                protoimpl.UnknownFields
 	sizeCache                    protoimpl.SizeCache
 }
