@@ -2127,3 +2127,158 @@ func TestBuildSandboxConfig_CPUClamping(t *testing.T) {
 		t.Errorf("expected processor count to be clamped to host count %d, got %d", hostCount, actualCount)
 	}
 }
+
+// TestBuildSandboxConfig_LiveMigration validates the wiring for the
+// io.microsoft.migration.support.enabled sandbox annotation. The annotation is parsed
+// into SandboxOptions.LiveMigrationSupportEnabled and threaded down into the kernel
+// command line: live-migratable sandboxes must skip the /bin/vsockexec wrapper
+// (which would otherwise stall init waiting for a host log listener that the
+// LM-enabled host does not run), while non-LM sandboxes must continue to use
+// vsockexec so that GCS stderr is forwarded over LinuxLogVsockPort.
+func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
+	ctx := context.Background()
+
+	validBootFilesPath := newBootFilesPath(t)
+	defaultOpts := defaultSandboxOpts(validBootFilesPath)
+
+	// Pre-format the vsockexec prefix once so the assertions are obviously
+	// driven by the same constant the production code uses.
+	vsockexecPrefix := fmt.Sprintf("/bin/vsockexec -e %d", vmutils.LinuxLogVsockPort)
+
+	tests := []specTestCase{
+		{
+			name: "live migration disabled by default",
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=false by default, got true")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, vsockexecPrefix) {
+					t.Errorf("expected vsockexec wrapper %q in kernel args (LM disabled), got %q", vsockexecPrefix, kernelArgs)
+				}
+				if !strings.Contains(kernelArgs, "/bin/gcs") {
+					t.Errorf("expected /bin/gcs in kernel args, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration explicitly disabled",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "false",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=false when annotation=\"false\", got true")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, vsockexecPrefix) {
+					t.Errorf("expected vsockexec wrapper %q in kernel args, got %q", vsockexecPrefix, kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration enabled drops vsockexec wrapper",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=true when annotation=\"true\", got false")
+				}
+				kernelArgs := getKernelArgs(doc)
+				// The vsockexec wrapper must not appear at all when LM is on:
+				// neither the prefix nor the binary path on its own.
+				if strings.Contains(kernelArgs, "vsockexec") {
+					t.Errorf("expected no vsockexec in kernel args when LM enabled, got %q", kernelArgs)
+				}
+				if strings.Contains(kernelArgs, fmt.Sprintf("-e %d", vmutils.LinuxLogVsockPort)) {
+					t.Errorf("expected no log vsock port (%d) wiring when LM enabled, got %q", vmutils.LinuxLogVsockPort, kernelArgs)
+				}
+				// /bin/gcs must still be invoked - just without the wrapper.
+				if !strings.Contains(kernelArgs, "/bin/gcs") {
+					t.Errorf("expected /bin/gcs in kernel args even when LM enabled, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration combined with debug log level",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: validBootFilesPath,
+				LogLevel:          "debug",
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=true, got false")
+				}
+				kernelArgs := getKernelArgs(doc)
+				// Other GCS flags must still be threaded through the command
+				// even when the vsockexec wrapper is removed.
+				if !strings.Contains(kernelArgs, "-loglevel debug") {
+					t.Errorf("expected -loglevel debug in kernel args when LM enabled, got %q", kernelArgs)
+				}
+				if strings.Contains(kernelArgs, "vsockexec") {
+					t.Errorf("expected no vsockexec when LM enabled, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration with disable time sync still drops vsockexec",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "true",
+					shimannotations.DisableLCOWTimeSyncService:  "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=true, got false")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, "-disable-time-sync") {
+					t.Errorf("expected -disable-time-sync flag in kernel args, got %q", kernelArgs)
+				}
+				if strings.Contains(kernelArgs, "vsockexec") {
+					t.Errorf("expected no vsockexec when LM enabled, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration invalid annotation value falls back to default (false)",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					// ParseAnnotationsBool returns the default value (false) on
+					// unparseable input, so the sandbox should behave like the
+					// default-disabled case rather than failing the build.
+					shimannotations.LiveMigrationSupportEnabled: "not-a-bool",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=false on invalid annotation value, got true")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, vsockexecPrefix) {
+					t.Errorf("expected vsockexec wrapper %q in kernel args, got %q", vsockexecPrefix, kernelArgs)
+				}
+			},
+		},
+	}
+
+	runTestCases(t, ctx, defaultOpts, tests)
+}
