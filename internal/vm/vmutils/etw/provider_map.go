@@ -92,8 +92,8 @@ func mergeLogSources(resultSources []Source, userSources []Source) []Source {
 	return resultSources
 }
 
-// decodeAndUnmarshalLogSources decodes a base64-encoded JSON string and unmarshals it into a LogSourcesInfo.
-func decodeAndUnmarshalLogSources(base64EncodedJSONLogConfig string) (LogSourcesInfo, error) {
+// DecodeAndUnmarshalLogSources decodes a base64-encoded JSON string and unmarshals it into a LogSourcesInfo.
+func DecodeAndUnmarshalLogSources(base64EncodedJSONLogConfig string) (LogSourcesInfo, error) {
 	jsonBytes, err := base64.StdEncoding.DecodeString(base64EncodedJSONLogConfig)
 	if err != nil {
 		return LogSourcesInfo{}, fmt.Errorf("error decoding base64 log config: %w", err)
@@ -174,9 +174,9 @@ func applyGUIDPolicy(sources []Source, includeGUIDs bool) ([]Source, error) {
 	return stripRedundantGUIDs(sources)
 }
 
-// marshalAndEncodeLogSources marshals the given LogSourcesInfo to JSON and encodes it as a base64 string.
+// MarshalAndEncodeLogSources marshals the given LogSourcesInfo to JSON and encodes it as a base64 string.
 // On error, it logs and returns the original fallback string.
-func marshalAndEncodeLogSources(logCfg LogSourcesInfo) (string, error) {
+func MarshalAndEncodeLogSources(logCfg LogSourcesInfo) (string, error) {
 	jsonBytes, err := json.Marshal(logCfg)
 	if err != nil {
 		return "", fmt.Errorf("error marshalling log config: %w", err)
@@ -194,7 +194,7 @@ func UpdateLogSources(base64EncodedJSONLogConfig string, useDefaultLogSources bo
 	}
 
 	if base64EncodedJSONLogConfig != "" {
-		userLogSources, err := decodeAndUnmarshalLogSources(base64EncodedJSONLogConfig)
+		userLogSources, err := DecodeAndUnmarshalLogSources(base64EncodedJSONLogConfig)
 		if err != nil {
 			return "", fmt.Errorf("failed to decode and unmarshal user log sources: %w", err)
 		}
@@ -208,7 +208,7 @@ func UpdateLogSources(base64EncodedJSONLogConfig string, useDefaultLogSources bo
 		return "", fmt.Errorf("failed to apply GUID policy: %w", err)
 	}
 
-	result, err := marshalAndEncodeLogSources(resultLogCfg)
+	result, err := MarshalAndEncodeLogSources(resultLogCfg)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal and encode log sources: %w", err)
 	}

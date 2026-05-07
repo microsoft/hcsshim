@@ -1299,6 +1299,14 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
     }
 }
 
+# Log provider validation for Windows containers
+default log_provider := {"allowed": false}
+
+log_provider := {"allowed": true} {
+    some allowed_provider in data.policy.allowed_log_providers
+    lower(input.providerName) == lower(allowed_provider)
+}
+
 # Registry changes validation
 default registry_changes := {"allowed": false}
 
@@ -1825,6 +1833,11 @@ errors["unencrypted scratch not allowed"] {
 errors["no scratch at path to unmount"] {
     input.rule == "scratch_unmount"
     not scratch_mounted(input.unmountTarget)
+}
+
+errors["log provider not allowed by policy"] {
+    input.rule == "log_provider"
+    not log_provider.allowed
 }
 
 errors[framework_version_error] {
