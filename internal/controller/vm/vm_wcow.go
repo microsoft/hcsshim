@@ -88,6 +88,8 @@ func (c *Controller) setupLoggingListener(ctx context.Context, _ *errgroup.Group
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				defer conn.Close()
+
 				logrus.Info("uvm output handler starting")
 
 				// Parse GCS log output and forward it to the host logging system.

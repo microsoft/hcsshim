@@ -175,6 +175,8 @@ func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.G
 
 		// Launch a separate goroutine to process logs for the lifetime of the VM.
 		go func() {
+			defer conn.Close()
+
 			// Parse GCS log output and forward it to the host logging system.
 			vmutils.ParseGCSLogrus(c.uvm.ID())(conn)
 

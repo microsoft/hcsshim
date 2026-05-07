@@ -198,6 +198,9 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 	if err = c.setupLoggingListener(gctx, g); err != nil {
 		return fmt.Errorf("failed to set up logging listener: %w", err)
 	}
+	// Prepare connection binds the vsock port to the VM so that GCS can connect to it as it
+	// starts. In the absence of this port at boot, the GCS will connect to internal HCS
+	// bridge and the connection will hang till timeout on our end.
 	if err = c.guest.PrepareConnection(opts.GCSServiceID); err != nil {
 		return fmt.Errorf("failed to prepare guest connection: %w", err)
 	}
@@ -217,6 +220,8 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 		return err
 	}
 
+	// At this point, the VM has booted and therefore, we are ready to
+	// negotiate the protocol with GCS and establish connection.
 	err = c.guest.CreateConnection(ctx, opts.ConfigOptions...)
 	if err != nil {
 		return fmt.Errorf("failed to create guest connection: %w", err)
