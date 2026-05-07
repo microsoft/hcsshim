@@ -70,8 +70,9 @@ func WithInitializationState(state *gcs.InitialGuestState) ConfigOption {
 	}
 }
 
-// PrepareConnection binds the GCS hvsock listener. Must be called before the VM
-// is started so the host is listening when the in-VM GCS dials.
+// PrepareConnection opens the host-side hvsock listener for the given GCS
+// service ID. Must be called before VM start so the host is listening when
+// the in-VM GCS dials. Idempotent for the same service ID.
 func (gm *Guest) PrepareConnection(GCSServiceID guid.GUID) error {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
@@ -97,8 +98,9 @@ func (gm *Guest) PrepareConnection(GCSServiceID guid.GUID) error {
 	return nil
 }
 
-// CreateConnection accepts on the prepared listener and runs the GCS protocol
-// handshake. Must be called after the VM has been started.
+// CreateConnection accepts the GCS dial on the prepared listener and runs
+// the GCS protocol handshake. Must be called after VM start. Idempotent if
+// a connection already exists.
 func (gm *Guest) CreateConnection(ctx context.Context, opts ...ConfigOption) error {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
