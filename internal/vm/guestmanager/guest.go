@@ -8,13 +8,11 @@ import (
 	"net"
 	"sync"
 
+	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
-
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,6 +23,9 @@ type uvm interface {
 	ID() string
 	// RuntimeID returns the Hyper-V VM GUID.
 	RuntimeID() guid.GUID
+	// AcceptConnection accepts a connection on l, aborting on ctx.Done() or
+	// VM exit.
+	AcceptConnection(ctx context.Context, l net.Listener, closeConnection bool) (net.Conn, error)
 	// Wait blocks until the VM exits or ctx is cancelled.
 	Wait(ctx context.Context) error
 	// ExitError returns the error that caused the VM to exit, if any.
@@ -116,7 +117,7 @@ func (gm *Guest) CreateConnection(ctx context.Context, opts ...ConfigOption) err
 	l := gm.gcListener
 	gm.gcListener = nil
 
-	conn, err := vmmanager.AcceptConnection(ctx, gm.uvm, l, true)
+	conn, err := gm.uvm.AcceptConnection(ctx, l, true)
 	if err != nil {
 		return fmt.Errorf("failed to connect to GCS: %w", err)
 	}

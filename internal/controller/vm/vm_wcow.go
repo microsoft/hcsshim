@@ -11,7 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
 	"github.com/sirupsen/logrus"
@@ -78,7 +78,7 @@ func (c *Controller) setupLoggingListener(ctx context.Context, _ *errgroup.Group
 
 		for {
 			// Accept a connection from the GCS.
-			conn, err := vmmanager.AcceptConnection(context.WithoutCancel(ctx), c.uvm, limitedListener, false)
+			conn, err := c.uvm.AcceptConnection(context.WithoutCancel(ctx), limitedListener, false)
 			if err != nil {
 				logrus.WithError(err).Error("failed to connect to log socket")
 				break
@@ -123,7 +123,8 @@ func (c *Controller) finalizeGCSConnection(ctx context.Context) error {
 
 	// Update the guest manager with the HvSocket address configuration.
 	// This enables the GCS to establish proper bidirectional communication.
-	err := c.guest.UpdateHvSocketAddress(ctx, hvsocketAddress)
+	guest := c.guest.(*guestmanager.Guest)
+	err := guest.UpdateHvSocketAddress(ctx, hvsocketAddress)
 	if err != nil {
 		return fmt.Errorf("failed to create GCS connection: %w", err)
 	}
