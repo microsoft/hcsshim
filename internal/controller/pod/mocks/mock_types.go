@@ -104,17 +104,18 @@ func (mr *MockvmControllerMockRecorder) RuntimeID() *gomock.Call {
 }
 
 // SCSIController mocks base method.
-func (m *MockvmController) SCSIController() *scsi.Controller {
+func (m *MockvmController) SCSIController(ctx context.Context) (*scsi.Controller, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SCSIController")
+	ret := m.ctrl.Call(m, "SCSIController", ctx)
 	ret0, _ := ret[0].(*scsi.Controller)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SCSIController indicates an expected call of SCSIController.
-func (mr *MockvmControllerMockRecorder) SCSIController() *gomock.Call {
+func (mr *MockvmControllerMockRecorder) SCSIController(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController), ctx)
 }
 
 // VPCIController mocks base method.

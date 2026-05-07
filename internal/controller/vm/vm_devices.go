@@ -11,11 +11,25 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
+	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 )
 
 // SCSIController returns the singleton SCSI device controller for this VM.
-func (c *Controller) SCSIController() *scsi.Controller {
-	return c.scsiController
+func (c *Controller) SCSIController(ctx context.Context) (*scsi.Controller, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.scsiController == nil {
+		uvm := c.uvm.(*vmmanager.UtilityVM)
+		guest := c.guest.(*guestmanager.Guest)
+		ctrl, err := newSCSIController(ctx, c.hcsDocument, uvm, guest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize SCSI controller: %w", err)
+		}
+		c.scsiController = ctrl
+	}
+	return c.scsiController, nil
 }
 
 // VPCIController returns the singleton vPCI device controller for this VM.
@@ -24,7 +38,9 @@ func (c *Controller) VPCIController() *vpci.Controller {
 	defer c.mu.Unlock()
 
 	if c.vpciController == nil {
-		c.vpciController = vpci.New(c.uvm, c.guest)
+		uvm := c.uvm.(*vmmanager.UtilityVM)
+		guest := c.guest.(*guestmanager.Guest)
+		c.vpciController = vpci.New(uvm, guest)
 	}
 
 	return c.vpciController

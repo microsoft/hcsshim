@@ -14,6 +14,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
@@ -39,7 +40,7 @@ func (c *Controller) SandboxOptions() *lcow.SandboxOptions {
 	return c.sandboxOptions
 }
 
-// buildConfig builds the HCS document for an LCOW VM by calling lcow.BuildSandboxConfig.
+// buildHCSConfig builds the HCS document for an LCOW VM by calling lcow.BuildSandboxConfig.
 // It also stores the sandbox options within the controller.
 func (c *Controller) buildHCSConfig(ctx context.Context, opts *CreateOptions) (*hcsschema.ComputeSystem, error) {
 	hcsDocument, sandboxOptions, err := lcow.BuildSandboxConfig(ctx, opts.Owner, opts.BundlePath, opts.ShimOpts, opts.SandboxSpec)
@@ -95,10 +96,12 @@ func (c *Controller) NetworkController(networkNamespaceID string) *network.Contr
 		policyBasedRouting = c.sandboxOptions.PolicyBasedRouting
 	}
 
+	uvm := c.uvm.(*vmmanager.UtilityVM)
+	guest := c.guest.(*guestmanager.Guest)
 	return network.New(&network.Options{
 		NetworkNamespace:   networkNamespaceID,
 		PolicyBasedRouting: policyBasedRouting,
-	}, c.uvm, c.guest, c.guest)
+	}, uvm, guest, guest)
 }
 
 // Plan9Controller returns the singleton controller which can be used
@@ -113,7 +116,9 @@ func (c *Controller) Plan9Controller() *plan9.Controller {
 			noWritableShares = c.sandboxOptions.NoWritableFileShares
 		}
 
-		c.plan9Controller = plan9.New(c.uvm, c.guest, noWritableShares)
+		uvm := c.uvm.(*vmmanager.UtilityVM)
+		guest := c.guest.(*guestmanager.Guest)
+		c.plan9Controller = plan9.New(uvm, guest, noWritableShares)
 	}
 
 	return c.plan9Controller
@@ -126,7 +131,7 @@ func (c *Controller) Plan9Controller() *plan9.Controller {
 // random data to the Linux init process when it connects.
 func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.Group) error {
 	// The Linux guest will connect to this port during init to receive entropy.
-	entropyConn, err := winio.ListenHvsock(&winio.HvsockAddr{
+	entropyConn, err := listenHVSock(&winio.HvsockAddr{
 		VMID:      c.uvm.RuntimeID(),
 		ServiceID: winio.VsockServiceID(vmutils.LinuxEntropyVsockPort),
 	})
@@ -141,7 +146,7 @@ func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.G
 		// must be done in a goroutine since, when using the internal bridge, the
 		// call to Start() will block until the GCS launches, and this cannot occur
 		// until the host accepts and closes the entropy connection.
-		conn, err := vmmanager.AcceptConnection(ctx, c.uvm, entropyConn, true)
+		conn, err := c.uvm.AcceptConnection(ctx, entropyConn, true)
 		if err != nil {
 			return fmt.Errorf("failed to accept connection on hvSocket for entropy: %w", err)
 		}
@@ -192,7 +197,7 @@ func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.G
 	}
 
 	// The GCS will connect to this port to stream log output.
-	logConn, err := winio.ListenHvsock(&winio.HvsockAddr{
+	logConn, err := listenHVSock(&winio.HvsockAddr{
 		VMID:      c.uvm.RuntimeID(),
 		ServiceID: winio.VsockServiceID(vmutils.LinuxLogVsockPort),
 	})
@@ -205,7 +210,7 @@ func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.G
 		defer logConn.Close()
 
 		// Accept the connection from the GCS.
-		conn, err := vmmanager.AcceptConnection(ctx, c.uvm, logConn, true)
+		conn, err := c.uvm.AcceptConnection(ctx, logConn, true)
 		if err != nil {
 			close(c.logOutputDone)
 			return fmt.Errorf("failed to accept connection on hvSocket for logs: %w", err)
