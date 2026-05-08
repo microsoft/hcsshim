@@ -1675,11 +1675,8 @@ func TestBuildSandboxConfig_BootOptions(t *testing.T) {
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
 				args := getKernelArgs(doc)
-				if !strings.Contains(args, "-scrub-logs") {
-					t.Error("expected -scrub-logs in kernel args")
-				}
-				if strings.Contains(args, "-scrub-logs=false") {
-					t.Error("did not expect -scrub-logs=false in kernel args")
+				if strings.Contains(args, "-scrub-logs") {
+					t.Error("did not expect -scrub-logs in kernel args when unset")
 				}
 			},
 		},
