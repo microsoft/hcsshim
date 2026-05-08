@@ -74,6 +74,12 @@ func BuildSandboxConfig(
 		return nil, nil, fmt.Errorf("failed to parse CPU parameters: %w", err)
 	}
 
+	// Parse resource partition ID.
+	resourcePartitionID, err := parseResourcePartitionOptions(ctx, spec.Annotations, cpuConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse resource partition parameters: %w", err)
+	}
+
 	// Parse memory configuration.
 	memoryConfig, err := parseMemoryOptions(ctx, opts, spec.Annotations, sandboxOptions.FullyPhysicallyBacked)
 	if err != nil {
@@ -251,7 +257,8 @@ func BuildSandboxConfig(
 				Processor: cpuConfig,
 				Numa:      numa,
 			},
-			StorageQoS: storageQOSConfig,
+			StorageQoS:          storageQOSConfig,
+			ResourcePartitionId: resourcePartitionID,
 			Devices: &hcsschema.Devices{
 				Scsi:       scsiCtrl,
 				VirtualPci: vpciDevices,

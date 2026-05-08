@@ -635,8 +635,8 @@ func MakeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	if opts.ResourcePartitionID != nil {
-		// TODO (maksiman): assign pod to resource partition and potentially do an OS version check before that
 		log.G(ctx).WithField("resource-partition-id", opts.ResourcePartitionID.String()).Debug("setting resource partition ID")
+		doc.VirtualMachine.ResourcePartitionId = opts.ResourcePartitionID.String()
 	}
 
 	// Add optional devices that were specified on the UVM spec

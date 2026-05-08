@@ -728,7 +728,12 @@ func TestBuildSandboxConfig(t *testing.T) {
 					shimannotations.ResourcePartitionID: "87654321-4321-8765-4321-876543218765",
 				},
 			},
-			// A valid GUID should be accepted without error.
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if doc.VirtualMachine.ResourcePartitionId != "87654321-4321-8765-4321-876543218765" {
+					t.Errorf("expected ResourcePartitionId %q, got %q", "87654321-4321-8765-4321-876543218765", doc.VirtualMachine.ResourcePartitionId)
+				}
+			},
 		},
 		{
 			name: "CPU group and resource partition conflict",
