@@ -76,30 +76,6 @@ func Format(ctx context.Context, v interface{}) string {
 	return string(b)
 }
 
-// FormatScrub formats a value as JSON and then applies a scrub function to remove
-// potentially sensitive information before logging.
-func FormatScrub(ctx context.Context, v interface{}, scrub func([]byte) ([]byte, error)) string {
-	b, err := encode(v)
-	if err != nil {
-		G(ctx).WithFields(logrus.Fields{
-			logrus.ErrorKey: err,
-			"type":          fmt.Sprintf("%T", v),
-		}).Debug("could not format value")
-		return ""
-	}
-
-	b, err = scrub(b)
-	if err != nil {
-		G(ctx).WithFields(logrus.Fields{
-			logrus.ErrorKey: err,
-			"type":          fmt.Sprintf("%T", v),
-		}).Debug("could not scrub value")
-		return ""
-	}
-
-	return string(b)
-}
-
 func encode(v interface{}) (_ []byte, err error) {
 	if m, ok := v.(proto.Message); ok {
 		// use canonical JSON encoding for protobufs (instead of [encoding/json])
