@@ -198,7 +198,7 @@ func (computeSystem *System) StartWithMigrationOptions(ctx context.Context, conf
 		return makeSystemError(computeSystem, operation, err, nil)
 	}
 
-	return computeSystem.start(ctx, op, string(raw))
+	return computeSystem.startV2(ctx, op, string(raw))
 }
 
 // InitializeLiveMigrationOnSource initializes a live migration on the source side with the given options.
