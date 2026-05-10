@@ -450,23 +450,6 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}()
 
-	// For workload containers, verify the pod exists and register the container.
-	// Sandbox containers register themselves after createPodInUVM creates the pod.
-	if isCRI && criType == "container" {
-		h.containersMutex.Lock()
-		pod, podExists := h.pods[sandboxID]
-		if !podExists {
-			h.containersMutex.Unlock()
-			return nil, fmt.Errorf("pod %s does not exist for workload container %s", sandboxID, id)
-		}
-		if _, exists := pod.containers[id]; exists {
-			h.containersMutex.Unlock()
-			return nil, fmt.Errorf("container %s already registered with pod %s", id, sandboxID)
-		}
-		pod.containers[id] = true
-		h.containersMutex.Unlock()
-	}
-
 	var namespaceID string
 	if isCRI {
 		switch criType {
@@ -510,22 +493,21 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			if err := h.createPodInUVM(sandboxID, settings.OCISpecification); err != nil {
 				return nil, err
 			}
-			// Register the sandbox container with its pod.
-			h.containersMutex.Lock()
-			if pod, exists := h.pods[sandboxID]; exists {
-				pod.containers[id] = true
-			}
-			h.containersMutex.Unlock()
 		case "container":
-			sid := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 			if h.HasSecurityPolicy() {
-				if err = checkValidContainerID(sid, "sandbox"); err != nil {
+				if err = checkValidContainerID(sandboxID, "sandbox"); err != nil {
 					return nil, err
 				}
 			}
-			if sid == "" {
-				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
+
+			if sandboxID == "" {
+				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sandboxID)
 			}
+
+			if err = h.createContainerInPod(sandboxID, id); err != nil {
+				return nil, err
+			}
+
 			sandboxRoot := h.resolveSandboxRoot(sandboxID)
 			c.sandboxRoot = sandboxRoot
 			if err = setupWorkloadContainerSpec(ctx, sandboxID, id, sandboxRoot, settings.OCISpecification, settings.OCIBundlePath); err != nil {
@@ -1523,11 +1505,33 @@ func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec) error {
 	h.pods[sid] = &uvmPod{
 		sandboxID:     sid,
 		cgroupControl: cgroupControl,
-		containers:    make(map[string]bool),
+		// Register the sandbox container with its pod.
+		containers: map[string]bool{sid: true},
 	}
 	logrus.WithFields(logrus.Fields{
 		"sandboxID":  sid,
 		"cgroupPath": cgroupPath,
 	}).Info("pod created in UVM")
+	return nil
+}
+
+func (h *Host) createContainerInPod(sandboxID string, containerID string) error {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	// Find the pod corresponding to the sandboxID.
+	pod, podExists := h.pods[sandboxID]
+	if !podExists {
+		return fmt.Errorf("pod %s does not exist for workload container %s", sandboxID, containerID)
+	}
+
+	// Validate that the container was not already registered.
+	if _, exists := pod.containers[containerID]; exists {
+		return fmt.Errorf("container %s already registered with pod %s", containerID, sandboxID)
+	}
+
+	// Register container with the pod.
+	pod.containers[containerID] = true
+
 	return nil
 }
