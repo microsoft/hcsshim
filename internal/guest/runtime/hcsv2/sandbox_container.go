@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,12 +120,13 @@ func setupSandboxContainerSpec(ctx context.Context, id, sandboxRoot string, spec
 	// also has a concept of a sandbox/shm file when the IPC NamespaceMode !=
 	// NODE.
 
-	// Set cgroup path under the pod.
+	// Set cgroup path under the pod. For virtual pods, the pod cgroup is keyed
+	// by the virtual pod ID rather than the sandbox container ID.
 	sandboxID := id
-	if vpID := spec.Annotations[annotations.VirtualPodID]; vpID != "" {
-		sandboxID = vpID
+	if virtualSandboxID != "" {
+		sandboxID = virtualSandboxID
 	}
-	spec.Linux.CgroupsPath = "/pods/" + sandboxID
+	spec.Linux.CgroupsPath = fmt.Sprintf(podCgroupPathFmt, sandboxID)
 
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil

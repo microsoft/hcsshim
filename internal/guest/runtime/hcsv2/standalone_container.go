@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -118,7 +119,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id, rootDir string, spec 
 	}
 
 	// Set cgroup path
-	spec.Linux.CgroupsPath = "/pods/" + id
+	spec.Linux.CgroupsPath = fmt.Sprintf(podCgroupPathFmt, id)
 
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil

@@ -73,13 +73,19 @@ func checkValidContainerID(id string, idType string) error {
 	return errors.Errorf("invalid %s id: %s (must match %s)", idType, id, validContainerIDRegex.String())
 }
 
+// Cgroup path formats for pod and container cgroups within the UVM.
+const (
+	// podCgroupPathFmt is the cgroup path for a pod (sandbox or standalone): /pods/{sandboxID}.
+	podCgroupPathFmt = "/pods/%s"
+	// containerCgroupPathFmt is the cgroup path for a workload container nested under its pod: /pods/{sandboxID}/{containerID}.
+	containerCgroupPathFmt = "/pods/%s/%s"
+)
+
 // uvmPod tracks pod-level state within the UVM.
 type uvmPod struct {
-	sandboxID        string
-	networkNamespace string
-	cgroupPath       string
-	cgroupControl    cgroup.Manager
-	containers       map[string]bool
+	sandboxID     string
+	cgroupControl cgroup.Manager
+	containers    map[string]bool
 }
 
 // Host is the structure tracking all UVM host state including all containers
@@ -444,6 +450,23 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}()
 
+	// For workload containers, verify the pod exists and register the container.
+	// Sandbox containers register themselves after createPodInUVM creates the pod.
+	if isCRI && criType == "container" {
+		h.containersMutex.Lock()
+		pod, podExists := h.pods[sandboxID]
+		if !podExists {
+			h.containersMutex.Unlock()
+			return nil, fmt.Errorf("pod %s does not exist for workload container %s", sandboxID, id)
+		}
+		if _, exists := pod.containers[id]; exists {
+			h.containersMutex.Unlock()
+			return nil, fmt.Errorf("container %s already registered with pod %s", id, sandboxID)
+		}
+		pod.containers[id] = true
+		h.containersMutex.Unlock()
+	}
+
 	var namespaceID string
 	if isCRI {
 		switch criType {
@@ -484,9 +507,15 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 
-			if err := h.createPodInUVM(sandboxID, settings.OCISpecification, namespaceID); err != nil {
+			if err := h.createPodInUVM(sandboxID, settings.OCISpecification); err != nil {
 				return nil, err
 			}
+			// Register the sandbox container with its pod.
+			h.containersMutex.Lock()
+			if pod, exists := h.pods[sandboxID]; exists {
+				pod.containers[id] = true
+			}
+			h.containersMutex.Unlock()
 		case "container":
 			sid := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 			if h.HasSecurityPolicy() {
@@ -523,13 +552,6 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		default:
 			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
 		}
-
-		// Register container with its pod.
-		h.containersMutex.Lock()
-		if pod, exists := h.pods[sandboxID]; exists {
-			pod.containers[id] = true
-		}
-		h.containersMutex.Unlock()
 	} else {
 		// Standalone container: no pod entry is created.
 		namespaceID = specGuest.GetNetworkNamespaceID(settings.OCISpecification)
@@ -1480,8 +1502,8 @@ func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec)
 }
 
 // createPodInUVM allocates a cgroup for a pod and registers it in the host.
-func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec, nsID string) error {
-	cgroupPath := path.Join("/pods", sid)
+func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec) error {
+	cgroupPath := fmt.Sprintf(podCgroupPathFmt, sid)
 	resources := &specs.LinuxResources{}
 	if pSpec != nil && pSpec.Linux != nil && pSpec.Linux.Resources != nil {
 		resources = pSpec.Linux.Resources
@@ -1499,11 +1521,9 @@ func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec, nsID string) error 
 		return fmt.Errorf("failed to create cgroup for pod %s: %w", sid, err)
 	}
 	h.pods[sid] = &uvmPod{
-		sandboxID:        sid,
-		networkNamespace: nsID,
-		cgroupPath:       cgroupPath,
-		cgroupControl:    cgroupControl,
-		containers:       make(map[string]bool),
+		sandboxID:     sid,
+		cgroupControl: cgroupControl,
+		containers:    make(map[string]bool),
 	}
 	logrus.WithFields(logrus.Fields{
 		"sandboxID":  sid,

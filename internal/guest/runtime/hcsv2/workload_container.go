@@ -225,7 +225,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id, sandboxRoot strin
 	}
 
 	// Set cgroup path under the sandbox's pod cgroup.
-	spec.Linux.CgroupsPath = "/pods/" + sbid + "/" + id
+	spec.Linux.CgroupsPath = fmt.Sprintf(containerCgroupPathFmt, sbid, id)
 
 	if spec.Windows != nil {
 		// we only support Nvidia gpus right now
