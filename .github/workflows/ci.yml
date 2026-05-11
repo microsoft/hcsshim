@@ -5,7 +5,6 @@ on:
 
 env:
   GO_BUILD_CMD: 'go build "-ldflags=-s -w -linkmode=external" -trimpath'
-  GO_BUILD_TEST_CMD: 'go test -mod=mod "-ldflags=-linkmode=external" -gcflags=all=-d=checkptr -c -tags functional'
 
   GOTESTSUM_VERSION: "latest"
 
@@ -13,22 +12,8 @@ env:
   GOTESTSUM_CMD_RAW: "gotestsum --format standard-verbose --debug --raw-command -- go tool test2json -t"
 
 jobs:
-  lint:
+  validate:
     runs-on: "windows-2022"
-    strategy:
-      fail-fast: false
-      matrix:
-        goos: [windows, linux]
-        root: ["", test] # cannot specify "./... ./test/..." unless in go workspace
-        tags: [""]
-        include:
-          # add LCOW/WCOW specific configurations
-          - goos: windows
-            root: ""
-            tags: lcow
-          - goos: windows
-            root: ""
-            tags: wcow
 
     steps:
       - name: Checkout
@@ -42,21 +27,58 @@ jobs:
           # sometimes go cache causes issues when linting
           cache: false
 
-      - name: Run golangci-lint
+      - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.11
-          args: >-
-            --verbose
-            --max-issues-per-linter=0
-            --max-same-issues=0
-            --modules-download-mode=readonly
-            --timeout=10m
-            --config=${{ github.workspace }}/.golangci.yml
-            ${{ case(matrix.tags != '', format('--build-tags {0}', matrix.tags), '') }}
-          working-directory: ${{ github.workspace }}/${{ matrix.root }}
-        env:
-          GOOS: ${{ matrix.goos }}
+          install-only: true
+
+      - name: Generate CMake
+        shell: pwsh
+        run: |
+          cmake -S "${{ github.workspace }}" --preset "x64-release"
+
+      - name: Verify Vendoring and Generated Filed
+        shell: pwsh
+        run: |
+          Write-Output "::group::cmake validate"
+          cmake --build "${{ github.workspace }}/out/x64-release/build" --target go_mod go_gen
+          Write-Output "::endgroup::"
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::CMake go mod and generate targets failed.'
+            exit $LASTEXITCODE
+          }
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error::Repo is not up to date. Please run ``go_mod`` and ``go_gen`` targets"
+            exit $LASTEXITCODE
+          }
+
+      - name: Lint
+        shell: pwsh
+        run: |
+          Write-Output "::group::cmake lint"
+          cmake --build "${{ github.workspace }}/out/x64-release/build" --target lint_all
+          Write-Output "::endgroup::"
+          if ( $LASTEXITCODE ) {
+            # don't exit immediately, still check for linter-changed files
+            Write-Output '::error::CMake linting target failed.'
+          }
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error::Repo is not linted correctly. Please run ``lint_all`` target"
+            exit $LASTEXITCODE
+          }
 
   protos:
     runs-on: "windows-2022"
@@ -110,9 +132,21 @@ jobs:
       - name: Run protobuild
         shell: powershell
         run: |
-          Write-Output "::group::protobuild"
-          .\scripts\Update-Proto.ps1
+          Write-Output "::group::generate cmake"
+          cmake -S "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim" --preset "x64-release"
           Write-Output "::endgroup::"
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not generate CMake build.'
+            exit $LASTEXITCODE
+          }
+
+          Write-Output "::group::cmake proto"
+          cmake --build "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim/out/x64-release/build" --target proto
+          Write-Output "::endgroup::"
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::CMake proto target failed.'
+            exit $LASTEXITCODE
+          }
 
           # look for any new files not previously tracked
           git add --all --intent-to-add .
@@ -121,129 +155,8 @@ jobs:
           Write-Output "::endgroup::"
         working-directory: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
 
-  verify-vendor:
-    runs-on: "windows-2022"
-    env:
-      GOPROXY: "https://proxy.golang.org,direct"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          show-progress: false
-
-      - name: Install Go
-        uses: ./.github/actions/setup-go
-        with:
-          fill-module-cache: true
-
-      - name: Validate go.mod and vendoring
-        shell: powershell
-        run: |
-          Write-Output "::group::go mod tidy"
-          go mod tidy -v -e
-          Write-Output "::endgroup::"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error title=Go Mod::Error running ``go mod tidy``"
-            exit $LASTEXITCODE
-          }
-
-          Write-Output "::group::go mod vendor"
-          go mod vendor -e
-          Write-Output "::endgroup::"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error title=Go Mod::Error running ``go mod vendor``"
-            exit $LASTEXITCODE
-          }
-
-          git add --all --intent-to-add .
-          Write-Output "::group::git diff"
-          git diff --stat --exit-code
-          Write-Output "::endgroup::"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error ::./go.mod is not up to date. Please run ``go mod tidy && go mod vendor`` "
-            exit $LASTEXITCODE
-          }
-
-      - name: Validate test/go.mod
-        shell: powershell
-        working-directory: test
-        run: |
-          Write-Output "::group::go mod tidy"
-          go mod tidy -v -e
-          Write-Output "::endgroup::"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error title=Go Mod::Error running ``go mod tidy``` from withing ``./test``"
-            exit $LASTEXITCODE
-          }
-
-          git add --all --intent-to-add .
-          Write-Output "::group::git diff"
-          git diff --stat --exit-code
-          Write-Output "::endgroup::"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error ::./test/go.mod is not up to date. Please run ``go mod tidy`` from within ``./test``"
-            exit $LASTEXITCODE
-          }
-
-  go-gen:
-    name: Go Generate
-    runs-on: "windows-2022"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          show-progress: false
-
-      - name: Install Go
-        uses: ./.github/actions/setup-go
-        with:
-          fill-module-cache: true
-
-      - name: Validate go generate
-        shell: powershell
-        run: |
-          Write-Output "::group::go generate"
-          go generate -x .\...
-          Write-Output "::endgroup::"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error title=Go Generate::Error running go generate."
-            exit $LASTEXITCODE
-          }
-
-          git add --all --intent-to-add .
-          Write-Output "::group::git diff"
-          git diff --stat --exit-code
-          Write-Output "::endgroup::"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error ::Generated files are not up to date. Please run ``go generate .\...``."
-            exit $LASTEXITCODE
-          }
-
-      - name: Validate go generate in test
-        shell: powershell
-        working-directory: test
-        run: |
-          Write-Output "::group::go generate"
-          go generate -x .\...
-          Write-Output "::endgroup::"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error title=Go Generate::Error running go generate."
-            exit $LASTEXITCODE
-          }
-
-          git add --all --intent-to-add .
-          Write-Output "::group::git diff"
-          git diff --stat --exit-code
-          Write-Output "::endgroup::"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error ::Generated files are not up to date. Please run ``go generate .\...`` from within ``./test``."
-            exit $LASTEXITCODE
-          }
-
   test-linux:
-    needs: [lint, protos, verify-vendor, go-gen]
+    needs: [validate, protos]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -268,13 +181,9 @@ jobs:
       - name: Run guest code unit tests
         run: ${{ env.GOTESTSUM_CMD }} -gcflags=all=-d=checkptr ./internal/guest/...
 
-      - name: Build gcs Testing Binary
-        run: ${{ env.GO_BUILD_TEST_CMD }} ./gcs
-        working-directory: test
-
   test-windows:
     name: test-windows (${{ matrix.name }})
-    needs: [lint, protos, verify-vendor, go-gen]
+    needs: [validate, protos]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -283,6 +192,7 @@ jobs:
         include:
           - name: "windows-2022"
             runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -319,12 +229,16 @@ jobs:
           # accept the eula
           & '${{ github.workspace }}/bin/psexec' -accepteula -nobanner cmd /c "exit 0"
 
-      - name: Generate Resource Object Files
+      - name: Build Testing Binaries
         shell: pwsh
         run: |
-          go generate -x ./cmd/...
-          cd test
-          go generate -x ./...
+          cmake -S "${{ github.workspace }}" --preset "x64-release"
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not generate CMake build.'
+            exit $LASTEXITCODE
+          }
+
+          cmake --build "${{ github.workspace }}/out/x64-release/build" --target build_all_test sample-logging-driver.exe
 
       # run tests
       - name: Test rego security policy
@@ -347,35 +261,13 @@ jobs:
         run: ${{ env.GOTESTSUM_CMD }} -mod=mod -ldflags=-linkmode=external -gcflags=all=-d=checkptr -tags lcow -timeout=10m ./parity/...
         working-directory: test
 
-      - name: Build and run containerd-shim-runhcs-v1 tests
+      - name: Run containerd-shim-runhcs-v1 tests
         shell: powershell
         run: |
-          Push-Location '..'
-          ${{ env.GO_BUILD_CMD }} -o ./test ./cmd/containerd-shim-runhcs-v1 2>&1
-          Pop-Location
+          ${{ env.GOTESTSUM_CMD_RAW }} ${{ github.workspace }}/out/x64-release/bin/containerd-shim-runhcs-v1.test.exe '-test.v'
 
-          if ( $LASTEXITCODE ) {
-            Write-Output '::error::Could not build containerd-shim-runhcs-v1.exe'
-            exit $LASTEXITCODE
-          }
-
-          ${{ env.GO_BUILD_TEST_CMD }} ./containerd-shim-runhcs-v1
-          if ( $LASTEXITCODE ) {
-            Write-Output '::error::Could not build containerd-shim-runhcs-v1.test.exe'
-            exit $LASTEXITCODE
-          }
-
-          ${{ env.GOTESTSUM_CMD_RAW }} ./containerd-shim-runhcs-v1.test.exe '-test.v'
-        working-directory: test
-
-      - name: Build and run functional testing binary
+      - name: Run functional testing binary
         run: |
-          ${{ env.GO_BUILD_TEST_CMD }} ./functional
-          if ( $LASTEXITCODE ) {
-            Write-Output '::error::Could not build functional.test.exe'
-            exit $LASTEXITCODE
-          }
-
           # PsExec doesn't load GOBIN into path, so resolve gotestsum path
           $gotestsum = Get-Command -Name 'gotestsum' -CommandType Application -ErrorAction 'Stop' |
             Select-Object -First 1 -ExpandProperty Source
@@ -393,7 +285,7 @@ jobs:
           }
 
           # Don't run Linux uVM (ie, nested virt) or LCOW integrity tests. Windows uVM tests will be run on 1ES runner pool.
-          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -exclude=LCOW,LCOWIntegrity -test.timeout=1h -test.v -log-level=info'
+          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ${{ github.workspace }}/out/x64-release/bin/functional.test.exe -exclude=LCOW,LCOWIntegrity -test.timeout=1h -test.v -log-level=info'
           $cmd = $cmd -replace '\bgo\b', $go
           $cmd = $cmd -replace '\bgotestsum\b', $gotestsum
           Write-Host "gotestsum command: $cmd"
@@ -407,32 +299,16 @@ jobs:
           Get-Content out.txt
 
           exit $ec
-        working-directory: test
-
-      # build testing binaries
-      - name: Build cri-containerd Testing Binary
-        run: ${{ env.GO_BUILD_TEST_CMD }} ./cri-containerd
-        working-directory: test
-      - name: Build runhcs Testing Binary
-        run: ${{ env.GO_BUILD_TEST_CMD }} ./runhcs
-        working-directory: test
-      - name: Build logging-driver Binary
-        run: ${{ env.GO_BUILD_CMD }} -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
-        working-directory: test
 
       - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: test_binaries_${{ matrix.name }}
           path: |
-            test/containerd-shim-runhcs-v1.test.exe
-            test/cri-containerd.test.exe
-            test/functional.test.exe
-            test/runhcs.test.exe
-            test/sample-logging-driver.exe
+            ${{ github.workspace }}/out/x64-release/bin/*
 
   integration-tests:
-    needs: [lint, protos, verify-vendor, go-gen]
+    needs: [validate, protos]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -550,9 +426,20 @@ jobs:
         working-directory: src/github.com/Microsoft/hcsshim
         shell: pwsh
         run: |
-          go generate -x ./cmd/containerd-shim-runhcs-v1
+          cmake -S '${{ github.workspace }}/src/github.com/Microsoft/hcsshim' --preset "x64-release"
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not generate CMake build.'
+            exit $LASTEXITCODE
+          }
+          cmake --build '${{ github.workspace }}/src/github.com/Microsoft/hcsshim/out/x64-release/build' --target shim
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::CMake shim target failed.'
+            exit $LASTEXITCODE
+          }
 
-          ${{ env.GO_BUILD_CMD }} -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
+          Copy-Item -Verbose -ErrorAction 'Stop' `
+            -Path '${{ github.workspace }}/src/github.com/Microsoft/hcsshim/out/x64-release/bin/containerd-shim-runhcs-v1.exe' `
+            -Destination '${{ github.workspace }}/src/github.com/containerd/containerd/bin/'
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
@@ -656,92 +543,31 @@ jobs:
       - name: Install Go
         uses: ./.github/actions/setup-go
 
-      - name: Set version info
+      - name: Build Binaries
         shell: pwsh
         run: |
-          # ignore errors since they won't affect build
-          try {
-            ./scripts/Set-VersionInfo.ps1
-          } catch {
-            Write-Output "::warning::Could not set hcsshim version info: $_"
-          } finally {
-            $LASTEXITCODE = 0
+          cmake -S "${{ github.workspace }}" --preset "x64-release"
+          if ( $LASTEXITCODE ) {
+            Write-Output '::error::Could not generate CMake build.'
+            exit $LASTEXITCODE
           }
 
-      - name: Generate Resource Object Files
-        shell: pwsh
-        run: |
-          go generate -x ./cmd/...
-          cd test
-          go generate -x ./...
+          cmake --build "${{ github.workspace }}/out/x64-release/build" --target build_all
 
+      # validation for (mostly) unused lcow-/wcow-tagged code
       - run: ${{ env.GO_BUILD_CMD }} -tags lcow ./...
         name: Build lcow tagged packages (shimV2)
       - run: ${{ env.GO_BUILD_CMD }} -tags wcow ./...
         name: Build wcow tagged packages (shimV2)
       - run: ${{ env.GO_BUILD_CMD }} ./...
         name: Build untagged packages
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/containerd-shim-runhcs-v1
-        name: Build containerd-shim-runhcs-v1.exe
-      - run: ${{ env.GO_BUILD_CMD }} -tags lcow ./cmd/containerd-shim-lcow-v2
-        name: Build containerd-shim-lcow-v2.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/device-util
-        name: Build device-util.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/jobobject-util
-        name: Build jobobject-util.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/mkuvmcim
-        name: Build mkuvmcim.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/ncproxy
-        name: Build ncproxy.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/runhcs
-        name: Build runhcs.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/shimdiag
-        name: Build shimdiag.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/tar2ext4
-        name: Build tar2ext4.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/wclayer
-        name: Build wclayer.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./cmd/gcs-sidecar
-        name: Build gcs-sidecar.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/grantvmgroupaccess
-        name: Build grantvmgroupaccess.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/hvsocketaddr
-        name: Build hvsocketaddr.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/networkagent
-        name: Build networkagent.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/rootfs
-        name: Build rootfs.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/securitypolicy
-        name: Build securitypolicy.exe
-      - run: go build "-ldflags=-s -w" -trimpath ./internal/tools/securitypolicy
-        name: Build securitypolicy
-        env:
-          GOOS: linux
-          GOARCH: amd64
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/uvmboot
-        name: Build uvmboot.exe
-      - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
-        name: Build zapdir.exe
 
       - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: binaries
           path: |
-            containerd-shim-runhcs-v1.exe
-            runhcs.exe
-            tar2ext4.exe
-            wclayer.exe
-            gcs-sidecar.exe
-            device-util.exe
-            ncproxy.exe
-            hvsocketaddr.exe
-            grantvmgroupaccess.exe
-            networkagent.exe
-            securitypolicy.exe
-            securitypolicy
-            uvmboot.exe
-            zapdir.exe
+            ${{ github.workspace }}/out/x64-release/bin/*
 
   build_gcs:
     needs: test-linux

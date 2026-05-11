@@ -51,7 +51,7 @@ param (
     # Application version.
     [ValidateNotNullOrEmpty()]
     [version]
-    $Version = '1.0.0.0',
+    $Version = '0.0.1.0',
 
     # Read version from internal\version\data\VERSION.
     # Falls back on $Version parameter if file is not found.
@@ -98,13 +98,13 @@ function Get-PackageVersion {
 
     $vf = Join-Path -Resolve $root $file -ErrorAction 'Ignore'
     if ( [string]::IsNullOrEmpty($vf) ) {
-        Write-Error "Version file $file does not exist" -ErrorAction 'Continue'
+        Write-Warning "Version file $file does not exist" -ErrorAction 'Continue'
         return
     }
 
     $s = (Get-Content $vf -ErrorAction 'Ignore').Trim()
     if ( [string]::IsNullOrWhiteSpace($s) ) {
-        Write-Error "Empty version file: ${vf}" -ErrorAction 'Continue'
+        Write-Warning "Empty version file: ${vf}" -ErrorAction 'Continue'
         return
     }
 
@@ -114,7 +114,7 @@ function Get-PackageVersion {
     try {
         $v = [semver]$s
     } catch {
-        Write-Error "Invalid version string: $s" -ErrorAction 'Continue'
+        Write-Warning "Invalid version string: $s" -ErrorAction 'Continue'
         return
     }
     [version]::new($v.Major, $v.Minor, $v.Patch, 0)

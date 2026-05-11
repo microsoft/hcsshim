@@ -1,0 +1,90 @@
+{
+    "version": 10,
+    "configurePresets": [
+        {
+            "$comment": [
+                "inheritable presents",
+                "note: Ninja doesn't support the target architecture setting, so set the value to 'external'"
+            ],
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/${presetName}/build",
+            "installDir": "${sourceDir}/out/${presetName}/install"
+        },
+        {
+            "name": "x64",
+            "description": "Build for targeting x86-64/AMD64 processors",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "environment": {
+                "GOARCH": "amd64"
+            },
+            "hidden": true
+        },
+        {
+            "name": "arm64",
+            "description": "Build for targeting ARM64 processors",
+            "architecture": {
+                "value": "arm64",
+                "strategy": "external"
+            },
+            "environment": {
+                "GOARCH": "arm64"
+            },
+            "hidden": true
+        },
+        {
+            "name": "debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            },
+            "hidden": true
+        },
+        {
+            "name": "release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            },
+            "hidden": true
+        },
+        {
+            "name": "x64-debug",
+            "displayName": "x64 Debug",
+            "inherits": [
+                "base",
+                "x64",
+                "debug"
+            ]
+        },
+        {
+            "name": "x64-release",
+            "displayName": "x64 Release",
+            "inherits": [
+                "base",
+                "x64",
+                "release"
+            ]
+        },
+        {
+            "name": "arm64-debug",
+            "displayName": "ARM64 Debug",
+            "inherits": [
+                "base",
+                "arm64",
+                "debug"
+            ]
+        },
+        {
+            "name": "arm64-release",
+            "displayName": "ARM64 Release",
+            "inherits": [
+                "base",
+                "arm64",
+                "release"
+            ]
+        }
+    ]
+}
