@@ -16,8 +16,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
-//go:generate pwsh -Command "../../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'uvmboot' -UseVersionFile -Architecture 'all'"
-
 const (
 	cpusArgName                 = "cpus"
 	memoryArgName               = "memory"
