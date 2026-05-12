@@ -841,8 +841,10 @@ func MakeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		opts.ExecCommandLine = fmt.Sprintf("%s -disable-time-sync", opts.ExecCommandLine)
 	}
 
-	if log.IsScrubbingEnabled() {
-		opts.ExecCommandLine += " -scrub-logs"
+	// Scrubbing is enabled by default in GCS. Only pass the flag when scrubbing
+	// has been explicitly disabled on the host to inform GCS to turn it off.
+	if !log.IsScrubbingEnabled() {
+		opts.ExecCommandLine += " -scrub-logs=false"
 	}
 
 	execCmdArgs += " " + opts.ExecCommandLine

@@ -5,6 +5,7 @@ package lcow
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -219,8 +220,9 @@ func buildGCSCommand(
 		gcsParts = append(gcsParts, "-disable-time-sync")
 	}
 
-	if opts != nil && opts.ScrubLogs {
-		gcsParts = append(gcsParts, "-scrub-logs")
+	// Scrubbing is enabled by default. Only pass the flag if explicitly set.
+	if opts != nil && opts.ScrubLogs != nil {
+		gcsParts = append(gcsParts, fmt.Sprintf("-scrub-logs=%s", strconv.FormatBool(*opts.ScrubLogs)))
 	}
 
 	if processDumpLocation != "" {

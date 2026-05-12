@@ -222,7 +222,7 @@ func main() {
 	disableTimeSync := flag.Bool("disable-time-sync",
 		false,
 		"If true do not run chronyd time synchronization service inside the UVM")
-	scrubLogs := flag.Bool("scrub-logs", false, "If true, scrub potentially sensitive information from logging")
+	scrubLogs := flag.Bool("scrub-logs", true, "If true, scrub potentially sensitive information from logging")
 	initialPolicyStance := flag.String("initial-policy-stance",
 		"allow",
 		"Stance: allow, deny.")

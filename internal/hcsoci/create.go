@@ -128,10 +128,17 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
 	}
 
-	log.G(ctx).WithFields(logrus.Fields{
-		"options": log.Format(ctx, createOptions),
-		"schema":  log.Format(ctx, coi.actualSchemaVersion),
-	}).Debug("hcsshim::initializeCreateOptions")
+	// Log create options if debug logging is enabled
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		if b, err := log.ScrubCreateOptions([]byte(log.Format(ctx, createOptions))); err != nil {
+			log.G(ctx).WithError(err).Warning("could not scrub CreateOptions")
+		} else {
+			log.G(ctx).WithFields(logrus.Fields{
+				"options": string(b),
+				"schema":  log.Format(ctx, coi.actualSchemaVersion),
+			}).Debug("hcsshim::initializeCreateOptions")
+		}
+	}
 
 	return coi, nil
 }
