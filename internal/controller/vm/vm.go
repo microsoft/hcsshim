@@ -24,7 +24,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	iwin "github.com/Microsoft/hcsshim/internal/windows"
 
-	"github.com/Microsoft/go-winio/pkg/process"
 	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -136,7 +135,7 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 
 	// Initialize the GuestManager for managing guest interactions.
 	// We will create the guest connection via GuestManager during StartVM.
-	c.guest = guestmanager.New(ctx, uvm)
+	c.guest = newGuestManager(ctx, uvm)
 
 	c.vmState = StateCreated
 	return nil
@@ -450,7 +449,7 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 
 	// Initialization of vmmemProcess to calculate stats properly for VA-backed UVMs.
 	if c.vmmemProcess == 0 {
-		vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
+		vmmemHandle, err := lookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
 		if err != nil {
 			return nil, fmt.Errorf("cannot get stats: %w", err)
 		}
@@ -471,7 +470,7 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 		// working set size for a VA-backed UVM. To work around this, we instead
 		// locate the vmmem process for the VM, and query that process's working set
 		// instead, which will be the working set for the VM.
-		memCounters, err := process.GetProcessMemoryInfo(c.vmmemProcess)
+		memCounters, err := getProcessMemoryInfo(c.vmmemProcess)
 		if err != nil {
 			return nil, err
 		}

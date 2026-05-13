@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/process"
 	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/gcs"
@@ -15,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	vmsandbox "github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -24,9 +26,19 @@ import (
 // allowing tests to swap in fakes without standing up a real VM.
 var (
 	// listenHVSock opens a host-side hvsock listener.
-	listenHVSock = winio.ListenHvsock
+	// The concrete winio.ListenHvsock returns *winio.HvsockListener which
+	// satisfies net.Listener. We use net.Listener here so tests can inject fakes.
+	listenHVSock = func(addr *winio.HvsockAddr) (net.Listener, error) {
+		return winio.ListenHvsock(addr)
+	}
 	// createVM creates the underlying utility VM via HCS.
 	createVM = vmmanager.Create
+	// newGuestManager constructs the guest manager for guest-host communication.
+	newGuestManager = guestmanager.New
+	// lookupVMMEM finds the vmmem process handle for a given VM.
+	lookupVMMEM = vmutils.LookupVMMEM
+	// getProcessMemoryInfo queries memory stats for a process handle.
+	getProcessMemoryInfo = process.GetProcessMemoryInfo
 )
 
 // CreateOptions contains the configuration needed to create a new VM.
