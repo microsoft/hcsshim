@@ -22,6 +22,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var (
+	// buildSandboxConfig builds the HCS compute system document for an LCOW sandbox.
+	buildSandboxConfig = lcow.BuildSandboxConfig
+	// parseUVMReferenceInfo reads and encodes UVM reference metadata.
+	parseUVMReferenceInfo = vmutils.ParseUVMReferenceInfo
+)
+
 // platformControllers holds platform-specific sub-controllers embedded in [Controller].
 // For LCOW, this includes the Plan9 file share controller.
 type platformControllers struct {
@@ -43,7 +50,7 @@ func (c *Controller) SandboxOptions() *lcow.SandboxOptions {
 // buildHCSConfig builds the HCS document for an LCOW VM by calling lcow.BuildSandboxConfig.
 // It also stores the sandbox options within the controller.
 func (c *Controller) buildHCSConfig(ctx context.Context, opts *CreateOptions) (*hcsschema.ComputeSystem, error) {
-	hcsDocument, sandboxOptions, err := lcow.BuildSandboxConfig(ctx, opts.Owner, opts.BundlePath, opts.ShimOpts, opts.SandboxSpec)
+	hcsDocument, sandboxOptions, err := buildSandboxConfig(ctx, opts.Owner, opts.BundlePath, opts.ShimOpts, opts.SandboxSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse sandbox spec: %w", err)
 	}
@@ -62,7 +69,7 @@ func (c *Controller) buildConfidentialOptions(ctx context.Context) (*guestresour
 
 	bootFilesPath := vmutils.DefaultLCOWOSBootFilesPath()
 
-	uvmReferenceInfoEncoded, err := vmutils.ParseUVMReferenceInfo(
+	uvmReferenceInfoEncoded, err := parseUVMReferenceInfo(
 		ctx,
 		bootFilesPath,
 		c.sandboxOptions.ConfidentialConfig.UvmReferenceInfoFile,

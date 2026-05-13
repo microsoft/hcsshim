@@ -53,7 +53,7 @@ func (c *Controller) setupEntropyListener(_ context.Context, _ *errgroup.Group) 
 // to prevent resource exhaustion, but will accept new connections if the current one is closed.
 // This supports scenarios where the logging service inside the VM needs to restart.
 func (c *Controller) setupLoggingListener(ctx context.Context, _ *errgroup.Group) error {
-	baseListener, err := winio.ListenHvsock(&winio.HvsockAddr{
+	baseListener, err := listenHVSock(&winio.HvsockAddr{
 		VMID:      c.uvm.RuntimeID(),
 		ServiceID: prot.WindowsLoggingHvsockServiceID,
 	})
