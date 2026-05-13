@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/controller/process"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -90,6 +91,9 @@ type Controller struct {
 
 	// ioRetryTimeout is the duration to retry IO relay operations before giving up.
 	ioRetryTimeout time.Duration
+
+	// isContainerStateDeleted tracks whether guest-side container state has been deleted.
+	isContainerStateDeleted bool
 }
 
 // New creates a ready-to-use Controller.
@@ -158,9 +162,8 @@ func (c *Controller) Create(ctx context.Context, spec *specs.Spec, opts *task.Cr
 			if releaseErr := c.releaseResources(ctx); releaseErr != nil {
 				log.G(ctx).WithError(releaseErr).Error("failed to release resources during create")
 			}
-			if closeErr := c.closeContainer(ctx); closeErr != nil {
-				log.G(ctx).WithError(closeErr).Error("failed to close container during create")
-			}
+			// Close the container handle.
+			c.closeContainer()
 		}
 	}()
 
@@ -200,17 +203,8 @@ func (c *Controller) Create(ctx context.Context, spec *specs.Spec, opts *task.Cr
 
 // closeContainer performs container teardown. It is safe to retry on
 // failure. Needs to be called while holding c.mu lock.
-func (c *Controller) closeContainer(ctx context.Context) error {
+func (c *Controller) closeContainer() {
 	if c.container != nil {
-		// Delete the guest-side container state if supported. If this
-		// fails, return early without nil'ing c.container so a retry
-		// re-issues the request.
-		if c.guest.Capabilities().IsDeleteContainerStateSupported() {
-			if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil {
-				return fmt.Errorf("delete container state: %w", err)
-			}
-		}
-
 		// Close the container handle. The calling code never returns error.
 		_ = c.container.Close()
 		c.container = nil
@@ -224,7 +218,6 @@ func (c *Controller) closeContainer(ctx context.Context) error {
 	default:
 		close(c.terminatedCh)
 	}
-	return nil
 }
 
 // releaseResources undoes each allocation in reverse order.
@@ -296,6 +289,20 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 		}
 	}
 
+	// After layer overlay has been removed, we can safely delete the
+	// bundle path inside the UVM for the container. Therefore, delete
+	// the guest-side container state if supported.
+	if !c.isContainerStateDeleted && c.guest.Capabilities().IsDeleteContainerStateSupported() {
+		// GCS bridge evicts the container from its host-state map even if the inner Delete fails,
+		// so retries will always return not-found.
+		if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !hcs.IsNotExist(err) {
+			return fmt.Errorf("delete container state: %w", err)
+		}
+
+		// Set isContainerStateDeleted to true so that we do not retry this post successful delete.
+		c.isContainerStateDeleted = true
+	}
+
 	return nil
 }
 
@@ -345,12 +352,7 @@ func (c *Controller) handleInitProcessExit(ctx context.Context, initProcess *pro
 
 	c.mu.Lock()
 	c.state = StateStopped
-	if err := c.closeContainer(ctx); err != nil {
-		// Leave state as StateStopped so DeleteProcess can retry the
-		// teardown. The exit event below still informs the caller that
-		// the init process is gone.
-		log.G(ctx).WithError(err).Error("failed to close container after init exit")
-	}
+	c.closeContainer()
 	c.mu.Unlock()
 
 	// Publish the exit event after teardown is complete.
@@ -549,7 +551,7 @@ func (c *Controller) KillProcess(ctx context.Context, execID string, signal uint
 	// When "all" is requested, deliver the signal to every additional exec
 	// on a best-effort basis. Errors are logged but do not prevent the
 	// target process from being signaled.
-	if all {
+	if all || execID == "" {
 		for eid, proc := range c.processes {
 			if eid == "" {
 				// The init process is signaled as the explicit target below.
@@ -616,12 +618,11 @@ func (c *Controller) DeleteProcess(ctx context.Context, execID string) (*task.St
 		// For containers that were created but never started, handleInitProcessExit
 		// was never launched, so closeContainer was never called. Perform full
 		// teardown now. closeContainer is retriable.
-		if err = c.closeContainer(ctx); err != nil {
-			return nil, fmt.Errorf("close container %s: %w", c.containerID, err)
-		}
 		if err = c.releaseResources(ctx); err != nil {
 			return nil, fmt.Errorf("releasing resources for container %s: %w", c.containerID, err)
 		}
+		// Close container handle after the resources are released.
+		c.closeContainer()
 	}
 
 	// Remove the process entry only after all fallible operations have

@@ -5,6 +5,7 @@ package linuxcontainer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/linuxcontainer/mocks"
 	"github.com/Microsoft/hcsshim/internal/controller/process"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
@@ -517,6 +519,10 @@ func TestReleaseResources_AllResourceTypes(t *testing.T) {
 	// Expect VPCI device removal.
 	vpciCtrl.EXPECT().RemoveFromVM(gomock.Any(), deviceGUID).Return(nil)
 
+	// Capabilities is queried to decide whether to call DeleteContainerState.
+	// Default zero-value caps report no support, so DeleteContainerState is skipped.
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
+
 	if err := c.releaseResources(t.Context()); err != nil {
 		t.Fatalf("releaseResources returned error: %v", err)
 	}
@@ -538,12 +544,13 @@ func TestReleaseResources_AllResourceTypes(t *testing.T) {
 // case where no layers were allocated (only additional resources).
 func TestReleaseResources_NoLayers(t *testing.T) {
 	t.Parallel()
-	c, scsiCtrl, _, _, _ := newContainerTestController(t)
+	c, scsiCtrl, _, _, guestCtrl := newContainerTestController(t)
 
 	scsiGUID, _ := guid.NewV4()
 	c.scsiResources = []guid.GUID{scsiGUID}
 
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(nil)
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
 
 	if err := c.releaseResources(t.Context()); err != nil {
 		t.Fatalf("releaseResources returned error: %v", err)
@@ -554,7 +561,7 @@ func TestReleaseResources_NoLayers(t *testing.T) {
 // were not combined, RemoveCombinedLayers is not called.
 func TestReleaseResources_LayersNotCombined(t *testing.T) {
 	t.Parallel()
-	c, scsiCtrl, _, _, _ := newContainerTestController(t)
+	c, scsiCtrl, _, _, guestCtrl := newContainerTestController(t)
 
 	roGUID, _ := guid.NewV4()
 	scratchGUID, _ := guid.NewV4()
@@ -568,6 +575,7 @@ func TestReleaseResources_LayersNotCombined(t *testing.T) {
 	// Only unmaps expected; no RemoveCombinedLayers call.
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scratchGUID).Return(nil)
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), roGUID).Return(nil)
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
 
 	if err := c.releaseResources(t.Context()); err != nil {
 		t.Fatalf("releaseResources returned error: %v", err)
@@ -578,7 +586,7 @@ func TestReleaseResources_LayersNotCombined(t *testing.T) {
 // invoked multiple times without panicking.
 func TestReleaseResources_Idempotent(t *testing.T) {
 	t.Parallel()
-	c, scsiCtrl, _, _, _ := newContainerTestController(t)
+	c, scsiCtrl, _, _, guestCtrl := newContainerTestController(t)
 
 	scsiGUID, _ := guid.NewV4()
 	c.scsiResources = []guid.GUID{scsiGUID}
@@ -586,6 +594,9 @@ func TestReleaseResources_Idempotent(t *testing.T) {
 	// The implementation does not clear the slice on success, so a second
 	// call will retry the unmap. Both calls succeed.
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(nil).Times(2)
+	// Capabilities returns no support → DeleteContainerState is skipped, but
+	// the gating call itself happens once per releaseResources invocation.
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{}).Times(2)
 
 	if err := c.releaseResources(t.Context()); err != nil {
 		t.Fatalf("first releaseResources returned error: %v", err)
@@ -658,6 +669,7 @@ func TestReleaseResources_MultipleROLayers(t *testing.T) {
 	for _, g := range roGUIDs {
 		scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), g).Return(nil)
 	}
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
 
 	if err := c.releaseResources(t.Context()); err != nil {
 		t.Fatalf("releaseResources returned error: %v", err)
@@ -762,9 +774,11 @@ func TestReleaseResources_ROLayerUnmapMidwayFails(t *testing.T) {
 // when no resources were allocated.
 func TestReleaseResources_NoResources(t *testing.T) {
 	t.Parallel()
-	c, _, _, _, _ := newContainerTestController(t)
+	c, _, _, _, guestCtrl := newContainerTestController(t)
 
-	// No mock calls expected.
+	// Capabilities is still queried at the end to gate DeleteContainerState.
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
+
 	if err := c.releaseResources(t.Context()); err != nil {
 		t.Fatalf("releaseResources returned error: %v", err)
 	}
@@ -780,9 +794,7 @@ func TestCloseContainer_IdempotentViaFlags(t *testing.T) {
 	c, _, _, _, _ := newContainerTestController(t)
 
 	// No container, no layers — closeContainer should just close terminatedCh.
-	if err := c.closeContainer(t.Context()); err != nil {
-		t.Fatalf("closeContainer returned error: %v", err)
-	}
+	c.closeContainer()
 
 	// Verify terminatedCh is closed.
 	select {
@@ -792,8 +804,88 @@ func TestCloseContainer_IdempotentViaFlags(t *testing.T) {
 	}
 
 	// Second call must be a no-op (no panic from double-close on terminatedCh).
-	if err := c.closeContainer(t.Context()); err != nil {
-		t.Fatalf("second closeContainer returned error: %v", err)
+	c.closeContainer()
+}
+
+// TestReleaseResources_DeleteContainerStateCalled verifies that, when the
+// guest reports DeleteContainerStateSupported, releaseResources issues the
+// DeleteContainerState RPC after all other resources are released and sets
+// isContainerStateDeleted so subsequent calls do not re-issue it.
+func TestReleaseResources_DeleteContainerStateCalled(t *testing.T) {
+	t.Parallel()
+	c, _, _, _, guestCtrl := newContainerTestController(t)
+
+	caps := &gcs.LCOWGuestDefinedCapabilities{}
+	caps.DeleteContainerStateSupported = true
+
+	gomock.InOrder(
+		guestCtrl.EXPECT().Capabilities().Return(caps),
+		guestCtrl.EXPECT().DeleteContainerState(gomock.Any(), c.gcsContainerID).Return(nil),
+	)
+
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("releaseResources returned error: %v", err)
+	}
+	if !c.isContainerStateDeleted {
+		t.Fatal("isContainerStateDeleted should be true after successful DeleteContainerState")
+	}
+
+	// A second call must not re-issue DeleteContainerState (the short-circuit
+	// on isContainerStateDeleted skips the Capabilities lookup entirely).
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("second releaseResources returned error: %v", err)
+	}
+}
+
+// TestReleaseResources_DeleteContainerStateFails verifies that when
+// DeleteContainerState fails the error is surfaced and isContainerStateDeleted
+// remains false so a subsequent releaseResources call retries the RPC.
+func TestReleaseResources_DeleteContainerStateFails(t *testing.T) {
+	t.Parallel()
+	c, _, _, _, guestCtrl := newContainerTestController(t)
+
+	caps := &gcs.LCOWGuestDefinedCapabilities{}
+	caps.DeleteContainerStateSupported = true
+
+	wantErr := errors.New("delete container state failed")
+	guestCtrl.EXPECT().Capabilities().Return(caps)
+	guestCtrl.EXPECT().DeleteContainerState(gomock.Any(), c.gcsContainerID).Return(wantErr)
+
+	err := c.releaseResources(t.Context())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("releaseResources error = %v, want %v", err, wantErr)
+	}
+	if c.isContainerStateDeleted {
+		t.Fatal("isContainerStateDeleted must remain false after failed DeleteContainerState")
+	}
+}
+
+// TestReleaseResources_DeleteContainerStateNotFoundIsSuccess verifies that a
+// "compute system does not exist" error from DeleteContainerState is treated
+// as success. This matters because the GCS bridge removes the container from
+// its host-state map even when its inner Delete() fails, so any retry of the
+// RPC will always come back with "not found" — looping forever would otherwise
+// be the consequence.
+func TestReleaseResources_DeleteContainerStateNotFoundIsSuccess(t *testing.T) {
+	t.Parallel()
+	c, _, _, _, guestCtrl := newContainerTestController(t)
+
+	caps := &gcs.LCOWGuestDefinedCapabilities{}
+	caps.DeleteContainerStateSupported = true
+
+	guestCtrl.EXPECT().Capabilities().Return(caps)
+	// The bridge's response Result code is wrapped through windows.Errno
+	// (= syscall.Errno) so errors.Is against hcs.ErrComputeSystemDoesNotExist
+	// matches.
+	guestCtrl.EXPECT().
+		DeleteContainerState(gomock.Any(), c.gcsContainerID).
+		Return(fmt.Errorf("guest RPC failure: %w", hcs.ErrComputeSystemDoesNotExist))
+
+	if err := c.releaseResources(t.Context()); err != nil {
+		t.Fatalf("releaseResources returned error for not-found: %v", err)
+	}
+	if !c.isContainerStateDeleted {
+		t.Fatal("isContainerStateDeleted should be true even when the guest reports the container is gone")
 	}
 }
 
@@ -915,5 +1007,89 @@ func TestKillProcess_AllowedInPostCreatedStates(t *testing.T) {
 				t.Errorf("KillProcess should not reject %s containers, got: %v", tc.state, err)
 			}
 		})
+	}
+}
+
+// TestKillProcess_EmptyExecIDFansOutToAllExecs verifies the new fan-out
+// semantics: when KillProcess is invoked with an empty exec ID, the signal
+// is delivered to every additional exec in the container in addition to
+// init. This mirrors the "kill the whole container" behavior used by the
+// delete path and is the change introduced by re-sequencing teardown.
+func TestKillProcess_EmptyExecIDFansOutToAllExecs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		all  bool
+	}{
+		// Pre-existing behavior: all=true fans out.
+		{name: "all=true", all: true},
+		// New behavior introduced by this commit: execID=="" alone fans out.
+		{name: "all=false", all: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, _, _, _, guestCtrl := newContainerTestController(t)
+			c.state = StateRunning
+
+			c.processes[""] = process.New(testContainerID, "", nil, 0)
+			c.processes["exec-1"] = process.New(testContainerID, "exec-1", nil, 0)
+			c.processes["exec-2"] = process.New(testContainerID, "exec-2", nil, 0)
+
+			// SIGTERM (15) with no signal support → nil signalOptions →
+			// terminate path inside process.Kill.
+			guestCtrl.EXPECT().
+				Capabilities().
+				Return(&gcs.LCOWGuestDefinedCapabilities{})
+
+			if err := c.KillProcess(t.Context(), "", 15, tc.all); err != nil {
+				t.Fatalf("KillProcess(\"\", 15, %v) returned error: %v", tc.all, err)
+			}
+
+			// Init plus every exec must be terminated. Map iteration order is
+			// unspecified, but every entry is required to flip — so just walk
+			// the map and assert.
+			for execID, proc := range c.processes {
+				if got, want := proc.State(), process.StateTerminated; got != want {
+					t.Errorf("process %q state = %s, want %s", execID, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestKillProcess_NonEmptyExecIDDoesNotFanOut verifies that when KillProcess
+// targets a specific exec ID, the fan-out path is NOT taken. This guards the
+// boundary of the new `if all || execID == ""` condition: a targeted kill
+// must affect only the named exec.
+func TestKillProcess_NonEmptyExecIDDoesNotFanOut(t *testing.T) {
+	t.Parallel()
+	c, _, _, _, guestCtrl := newContainerTestController(t)
+	c.state = StateRunning
+
+	c.processes[""] = process.New(testContainerID, "", nil, 0)
+	c.processes["exec-1"] = process.New(testContainerID, "exec-1", nil, 0)
+	c.processes["exec-2"] = process.New(testContainerID, "exec-2", nil, 0)
+
+	guestCtrl.EXPECT().
+		Capabilities().
+		Return(&gcs.LCOWGuestDefinedCapabilities{})
+
+	if err := c.KillProcess(t.Context(), "exec-1", 15, false); err != nil {
+		t.Fatalf("KillProcess(\"exec-1\", 15, false) returned error: %v", err)
+	}
+
+	// Only exec-1 is expected to be terminated; init and exec-2 stay put.
+	wantStates := map[string]process.State{
+		"":       process.StateNotCreated,
+		"exec-1": process.StateTerminated,
+		"exec-2": process.StateNotCreated,
+	}
+	for execID, want := range wantStates {
+		if got := c.processes[execID].State(); got != want {
+			t.Errorf("process %q state = %s, want %s", execID, got, want)
+		}
 	}
 }
