@@ -81,8 +81,8 @@ const (
 	containerCgroupPathFmt = "/pods/%s/%s"
 )
 
-// uvmPod tracks pod-level state within the UVM.
-type uvmPod struct {
+// pod tracks pod-level state within the UVM.
+type pod struct {
 	sandboxID     string
 	cgroupControl cgroup.Manager
 	containers    map[string]bool
@@ -94,7 +94,7 @@ type Host struct {
 	// containersMutex guards both containers and pods maps.
 	containersMutex sync.Mutex
 	containers      map[string]*Container
-	pods            map[string]*uvmPod
+	pods            map[string]*pod
 
 	externalProcessesMutex sync.Mutex
 	externalProcesses      map[int]*externalProcess
@@ -128,7 +128,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 	return &Host{
 		containers:        make(map[string]*Container),
 		externalProcesses: make(map[int]*externalProcess),
-		pods:              make(map[string]*uvmPod),
+		pods:              make(map[string]*pod),
 		sandboxRoots:      make(map[string]string),
 		rtime:             rtime,
 		vsock:             vsock,
@@ -1502,7 +1502,7 @@ func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec) error {
 	if err != nil {
 		return fmt.Errorf("failed to create cgroup for pod %s: %w", sid, err)
 	}
-	h.pods[sid] = &uvmPod{
+	h.pods[sid] = &pod{
 		sandboxID:     sid,
 		cgroupControl: cgroupControl,
 		// Register the sandbox container with its pod.
