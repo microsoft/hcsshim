@@ -44,7 +44,10 @@ const (
 )
 
 type Container struct {
+	// id is the unique container identifier.
 	id string
+	// sandboxID is the pod this container belongs to. For sandbox containers, sandboxID == id.
+	sandboxID string
 
 	vsock   transport.Transport
 	logPath string   // path to [logFile].
