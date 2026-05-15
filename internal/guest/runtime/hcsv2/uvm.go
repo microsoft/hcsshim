@@ -486,7 +486,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 
-			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxRoot, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 
@@ -528,7 +528,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					_ = os.RemoveAll(settings.OCIBundlePath)
 				}
 			}()
-			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxRoot, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 		default:
@@ -547,7 +547,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				_ = os.RemoveAll(settings.OCIBundlePath)
 			}
 		}()
-		if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer,
+		if err := securitypolicy.ExtendPolicyWithNetworkingMounts(c.sandboxRoot, h.securityOptions.PolicyEnforcer,
 			settings.OCISpecification); err != nil {
 			return nil, err
 		}
