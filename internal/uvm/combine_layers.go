@@ -19,6 +19,19 @@ func (uvm *UtilityVM) CombineLayersWCOW(ctx context.Context, layerPaths []hcssch
 		return errNotSupported
 	}
 
+	// FilterType was added to the CombinedLayers HCS schema in version 2.9.
+	// Inbox GCS (vmcomputeagent.exe) on older Windows hosts (e.g. Windows
+	// Server 2022) ships a pre-2.9 schema and uses a strict JSON unmarshaller
+	// that rejects unknown fields with HCS_E_INVALID_JSON ("$.FilterType").
+	// Since WCIFS is the default behavior on the GCS side when the field is
+	// absent, drop the value here so the `omitempty` JSON tag removes it from
+	// the wire format. This preserves behavior on newer GCS (which also defaults
+	// to WCIFS) while remaining compatible with older inbox GCS.
+	// See: https://github.com/microsoft/hcsshim/issues/2714
+	if filterType == hcsschema.WCIFS {
+		filterType = ""
+	}
+
 	var modifyRequest *hcsschema.ModifySettingRequest
 	if uvm.HasConfidentialPolicy() {
 		modifyRequest = &hcsschema.ModifySettingRequest{
