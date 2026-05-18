@@ -190,38 +190,38 @@ func (job *JobObject) GetCPUGroupAffinities() ([]GroupAffinity, error) {
 		return nil, ErrAlreadyClosed
 	}
 
-	// First call with a zero-length buffer to determine the required buffer size.
-	// This call is expected to fail with ERROR_INSUFFICIENT_BUFFER; we only care
-	// about the returned length.
-	var returnLen uint32
-	_ = winapi.QueryInformationJobObject(
-		job.handle,
-		windows.JobObjectGroupInformationEx,
-		nil,
-		0,
-		&returnLen,
-	)
-	if returnLen == 0 {
-		return nil, nil
+	// QueryInformationJobObject(JobObjectGroupInformationEx) returns one
+	// GROUP_AFFINITY per processor group assigned to the job. Most machines
+	// have a single processor group; start with 1 and grow on
+	// ERROR_INSUFFICIENT_BUFFER.
+	count := uint32(1)
+	for {
+		winapiAffinities := make([]winapi.GROUP_AFFINITY, count)
+		var returnLen uint32
+		err := winapi.QueryInformationJobObject(
+			job.handle,
+			windows.JobObjectGroupInformationEx,
+			unsafe.Pointer(&winapiAffinities[0]),
+			count*uint32(unsafe.Sizeof(winapiAffinities[0])),
+			&returnLen,
+		)
+		if err == nil {
+			actualCount := returnLen / uint32(unsafe.Sizeof(winapiAffinities[0]))
+			result := make([]GroupAffinity, actualCount)
+			for i, a := range winapiAffinities[:actualCount] {
+				result[i] = GroupAffinity{Mask: uint64(a.Mask), Group: a.Group}
+			}
+			return result, nil
+		}
+		if !errors.Is(err, windows.ERROR_INSUFFICIENT_BUFFER) {
+			return nil, fmt.Errorf("failed to query cpu group affinities on job object: %w", err)
+		}
+		newCount := returnLen / uint32(unsafe.Sizeof(winapiAffinities[0]))
+		if newCount <= count {
+			return nil, fmt.Errorf("failed to query cpu group affinities on job object: buffer size did not grow (%d -> %d entries)", count, newCount)
+		}
+		count = newCount
 	}
-
-	count := returnLen / uint32(unsafe.Sizeof(winapi.GROUP_AFFINITY{}))
-	winapiAffinities := make([]winapi.GROUP_AFFINITY, count)
-	if err := winapi.QueryInformationJobObject(
-		job.handle,
-		windows.JobObjectGroupInformationEx,
-		unsafe.Pointer(&winapiAffinities[0]),
-		returnLen,
-		nil,
-	); err != nil {
-		return nil, fmt.Errorf("failed to query cpu group affinities on job object: %w", err)
-	}
-
-	result := make([]GroupAffinity, count)
-	for i, a := range winapiAffinities {
-		result[i] = GroupAffinity{Mask: uint64(a.Mask), Group: a.Group}
-	}
-	return result, nil
 }
 
 // SetCPUAffinity sets the processor affinity for the job object.
