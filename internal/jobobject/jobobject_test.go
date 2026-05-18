@@ -423,21 +423,17 @@ func TestSilo(t *testing.T) {
 }
 
 func TestGetCPUGroupAffinitiesNoAffinitySet(t *testing.T) {
-	// Verify that querying group affinities on a job that has never had any set
-	// returns an empty (non-error) result rather than panicking or erroring.
+	// Verify that querying group affinities on a job that has never had any
+	// explicitly set does not error. Windows returns the system default affinity
+	// (all processors in the available groups), so the result is non-empty.
 	job, err := Create(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer job.Close()
 
-	got, err := job.GetCPUGroupAffinities()
-	if err != nil {
+	if _, err := job.GetCPUGroupAffinities(); err != nil {
 		t.Fatalf("unexpected error querying group affinities on unaffinied job: %v", err)
-	}
-	// No explicit affinity set; expect either nil or an empty slice.
-	if len(got) != 0 {
-		t.Fatalf("expected no affinity entries on fresh job, got %d: %v", len(got), got)
 	}
 }
 
