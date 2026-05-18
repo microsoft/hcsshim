@@ -1,22 +1,24 @@
-//go:build windows
+//go:build windows && lcow
 
 package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
+	"github.com/Microsoft/hcsshim/internal/controller/pod"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shim"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 
 	sandboxsvc "github.com/containerd/containerd/api/runtime/sandbox/v1"
-	tasksvc "github.com/containerd/containerd/api/runtime/task/v3"
+	tasksvc "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/shutdown"
+	"github.com/containerd/errdefs"
 	"github.com/containerd/ttrpc"
 )
 
@@ -29,7 +31,7 @@ const (
 // All Service methods (sandbox, task, and shimdiag) operate on this shared struct.
 type Service struct {
 	// mu is used to synchronize access to shared state within the Service.
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// publisher is used to publish events from the shim to containerd.
 	publisher shim.Publisher
@@ -40,12 +42,16 @@ type Service struct {
 	// For LCOW shim, sandboxID corresponds 1-1 with the UtilityVM managed by the shim.
 	sandboxID string
 
-	// sandboxOptions contains parsed, shim-level configuration for the sandbox
-	// such as architecture and confidential-compute settings.
-	sandboxOptions *lcow.SandboxOptions
-
 	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
-	vmController vm.Controller
+	vmController *vm.Controller
+
+	// podControllers maps podID -> PodController for each active pod.
+	podControllers map[string]*pod.Controller
+
+	// containerPodMapping maps containerID -> podID, allowing callers to look up
+	// which pod a container belongs to and then retrieve the corresponding controller
+	// from podControllers.
+	containerPodMapping map[string]string
 
 	// shutdown manages graceful shutdown operations and allows registration of cleanup callbacks.
 	shutdown shutdown.Service
@@ -56,10 +62,12 @@ var _ shim.TTRPCService = (*Service)(nil)
 // NewService creates a new instance of the Service with the shared state.
 func NewService(ctx context.Context, eventsPublisher shim.Publisher, sd shutdown.Service) *Service {
 	svc := &Service{
-		publisher:    eventsPublisher,
-		events:       make(chan interface{}, 128), // Buffered channel for events
-		vmController: vm.NewController(),
-		shutdown:     sd,
+		publisher:           eventsPublisher,
+		events:              make(chan interface{}, 128), // Buffered channel for events
+		vmController:        vm.New(),
+		podControllers:      make(map[string]*pod.Controller),
+		containerPodMapping: make(map[string]string),
+		shutdown:            sd,
 	}
 
 	go svc.forward(ctx, eventsPublisher)
@@ -83,9 +91,17 @@ func NewService(ctx context.Context, eventsPublisher shim.Publisher, sd shutdown
 // RegisterTTRPC registers the Task, Sandbox, and ShimDiag TTRPC services on
 // the provided server so that containerd can call into the shim over TTRPC.
 func (s *Service) RegisterTTRPC(server *ttrpc.Server) error {
-	tasksvc.RegisterTTRPCTaskService(server, s)
+	tasksvc.RegisterTaskService(server, s)
 	sandboxsvc.RegisterTTRPCSandboxService(server, s)
 	shimdiag.RegisterShimDiagService(server, s)
+	return nil
+}
+
+// ensureVMRunning returns an error if the VM is not in the running state.
+func (s *Service) ensureVMRunning() error {
+	if state := s.vmController.State(); state != vm.StateRunning {
+		return fmt.Errorf("vm is not running (state: %s): %w", state, errdefs.ErrFailedPrecondition)
+	}
 	return nil
 }
 
@@ -96,10 +112,6 @@ func (s *Service) SandboxID() string {
 
 // send enqueues an event onto the internal events channel so that it can be
 // forwarded to containerd asynchronously by the forward goroutine.
-//
-// TODO: wire up send() for task events once task lifecycle methods are implemented.
-//
-//nolint:unused
 func (s *Service) send(evt interface{}) {
 	s.events <- evt
 }

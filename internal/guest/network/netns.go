@@ -181,7 +181,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *guestres
 			addrsStr = append(addrsStr, fmt.Sprintf("%v", addr))
 		}
 
-		entry.WithField("addresses", addrsStr).Debugf("%v: %s[idx=%d,type=%s] is %v",
+		entry.WithField("addresses", strings.Join(addrsStr, "; ")).Debugf("%v: %s[idx=%d,type=%s] is %v",
 			curNS, attr.Name, attr.Index, link.Type(), attr.OperState)
 	}
 
@@ -209,7 +209,7 @@ func configureLink(ctx context.Context,
 		addr.IP = ip
 		log.G(ctx).WithFields(logrus.Fields{
 			"allocatedIP": ip,
-			"IP":          addr,
+			"IP":          addr.String(),
 		}).Debugf("parsed ip address %s/%d", ipConfig.IPAddress, ipConfig.PrefixLength)
 		ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
 		if err := netlinkAddrAdd(link, ipAddr); err != nil {
@@ -237,7 +237,7 @@ func configureLink(ctx context.Context,
 	}
 
 	for _, r := range adapter.Routes {
-		log.G(ctx).WithField("route", r).Debugf("adding a route to interface %s", link.Attrs().Name)
+		log.G(ctx).WithField("route", log.Format(ctx, r)).Debugf("adding a route to interface %s", link.Attrs().Name)
 
 		if (r.DestinationPrefix == ipv4GwDestination || r.DestinationPrefix == ipv6GwDestination) &&
 			(r.NextHop == ipv4EmptyGw || r.NextHop == ipv6EmptyGw) {

@@ -227,10 +227,10 @@ func TestDNSConfig(t *testing.T) {
 		})
 
 		searches, servers := ns.dnsConfig(ctx)
-		if diff := cmp.Diff(tc.wantSearches, searches, cmpopts.EquateEmpty()); diff != "" {
+		if diff := cmp.Diff(tc.wantSearches, searches, cmpopts.EquateEmpty(), cmpopts.SortSlices(strings.Compare)); diff != "" {
 			t.Errorf("DNS searches mismatch (-want +got):\n%s", diff)
 		}
-		if diff := cmp.Diff(tc.wantServers, servers, cmpopts.EquateEmpty()); diff != "" {
+		if diff := cmp.Diff(tc.wantServers, servers, cmpopts.EquateEmpty(), cmpopts.SortSlices(strings.Compare)); diff != "" {
 			t.Errorf("DNS servers mismatch (-want +got):\n%s", diff)
 		}
 

@@ -17,7 +17,7 @@ const (
 	CriticalPressure
 )
 
-func registerMemoryEvent(cgDir string, evName string, arg string) (<-chan struct{}, error) {
+func registerMemoryEvent(cgDir, evName, arg string) (<-chan struct{}, error) {
 	evFile, err := os.Open(filepath.Join(cgDir, evName))
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func registerMemoryEvent(cgDir string, evName string, arg string) (<-chan struct
 			}
 			// When a cgroup is destroyed, an event is sent to eventfd.
 			// So if the control path is gone, return instead of notifying.
-			if _, err := os.Lstat(eventControlPath); os.IsNotExist(err) {
+			if _, err := os.Lstat(eventControlPath); errors.Is(err, os.ErrNotExist) {
 				return
 			}
 			ch <- struct{}{}

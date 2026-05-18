@@ -531,6 +531,25 @@ const (
 	ContainerGPUCapabilities = "io.microsoft.container.gpu.capabilities"
 )
 
+// Live Migration annotations.
+const (
+	// LiveMigrationAllowed is a gatekeeping annotation scoped to a pod/sandbox that indicates
+	// the pod is intended to be live-migratable. When set on a pod, any container within that
+	// pod which requests a feature incompatible with live migration will fail to be created.
+	//
+	// For example, if a pod is started with this annotation and a container within it
+	// subsequently requests a plan9 share (which is not compatible with live migration),
+	// the container creation will be failed.
+	LiveMigrationAllowed = "io.microsoft.migration.allowed"
+
+	// LiveMigrationSourceContainerID is used only on the destination node during a live
+	// migration. It is set on the NewTask request to identify the corresponding container
+	// ID on the source node. The NewTask request will include the new resource paths for
+	// the container identified by this annotation, allowing the destination to correlate
+	// the migrated container with its original identity on the source.
+	LiveMigrationSourceContainerID = "io.microsoft.migration.source-container-id"
+)
+
 // Expansion annotations.
 const (
 	// DisableUnsafeOperations disables several unsafe operations, such as writable

@@ -35,11 +35,38 @@ const (
 	AlgorithmES512 Algorithm = -36
 
 	// PureEdDSA by RFC 8152.
+	//
+	// Deprecated: use AlgorithmEdDSA instead, which has
+	// the same value but with a more accurate name.
 	AlgorithmEd25519 Algorithm = -8
+
+	// PureEdDSA by RFC 8152.
+	AlgorithmEdDSA Algorithm = -8
+
+	// Reserved value.
+	AlgorithmReserved Algorithm = 0
+)
+
+// Algorithms known, but not supported by this library.
+//
+// Signers and Verifiers requiring the algorithms below are not
+// directly supported by this library. They need to be provided
+// as an external [cose.Signer] or [cose.Verifier] implementation.
+//
+// An example use case where RS256 is allowed and used is in
+// WebAuthn: https://www.w3.org/TR/webauthn-2/#sctn-sample-registration.
+const (
+	// RSASSA-PKCS1-v1_5 using SHA-256 by RFC 8812.
+	AlgorithmRS256 Algorithm = -257
+
+	// RSASSA-PKCS1-v1_5 using SHA-384 by RFC 8812.
+	AlgorithmRS384 Algorithm = -258
+
+	// RSASSA-PKCS1-v1_5 using SHA-512 by RFC 8812.
+	AlgorithmRS512 Algorithm = -259
 )
 
 // Algorithm represents an IANA algorithm entry in the COSE Algorithms registry.
-// Algorithms with string values are not supported.
 //
 // # See Also
 //
@@ -57,18 +84,26 @@ func (a Algorithm) String() string {
 		return "PS384"
 	case AlgorithmPS512:
 		return "PS512"
+	case AlgorithmRS256:
+		return "RS256"
+	case AlgorithmRS384:
+		return "RS384"
+	case AlgorithmRS512:
+		return "RS512"
 	case AlgorithmES256:
 		return "ES256"
 	case AlgorithmES384:
 		return "ES384"
 	case AlgorithmES512:
 		return "ES512"
-	case AlgorithmEd25519:
+	case AlgorithmEdDSA:
 		// As stated in RFC 8152 8.2, only the pure EdDSA version is used for
 		// COSE.
 		return "EdDSA"
+	case AlgorithmReserved:
+		return "Reserved"
 	default:
-		return "unknown algorithm value " + strconv.Itoa(int(a))
+		return "Algorithm(" + strconv.Itoa(int(a)) + ")"
 	}
 }
 

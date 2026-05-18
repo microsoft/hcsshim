@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 The Decred developers
+// Copyright (c) 2020-2024 The Decred developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -46,6 +46,8 @@ const (
 	//
 	// The group order of the curve per [SECG] is:
 	// 0xffffffff ffffffff ffffffff fffffffe baaedce6 af48a03b bfd25e8c d0364141
+	//
+	// nolint: dupword
 	orderWordZero  uint32 = 0xd0364141
 	orderWordOne   uint32 = 0xbfd25e8c
 	orderWordTwo   uint32 = 0xaf48a03b
@@ -65,10 +67,10 @@ const (
 	orderComplementWordOne   uint32 = ^orderWordOne
 	orderComplementWordTwo   uint32 = ^orderWordTwo
 	orderComplementWordThree uint32 = ^orderWordThree
-	//orderComplementWordFour  uint32 = ^orderWordFour  // unused
-	//orderComplementWordFive  uint32 = ^orderWordFive  // unused
-	//orderComplementWordSix   uint32 = ^orderWordSix   // unused
-	//orderComplementWordSeven uint32 = ^orderWordSeven // unused
+	// orderComplementWordFour  uint32 = ^orderWordFour  // unused
+	// orderComplementWordFive  uint32 = ^orderWordFive  // unused
+	// orderComplementWordSix   uint32 = ^orderWordSix   // unused
+	// orderComplementWordSeven uint32 = ^orderWordSeven // unused
 
 	// These fields provide convenient access to each of the words of the
 	// secp256k1 curve group order N / 2 to improve code readability and avoid
@@ -76,6 +78,8 @@ const (
 	//
 	// The half order of the secp256k1 curve group is:
 	// 0x7fffffff ffffffff ffffffff ffffffff 5d576e73 57a4501d dfe92f46 681b20a0
+	//
+	// nolint: dupword
 	halfOrderWordZero  uint32 = 0x681b20a0
 	halfOrderWordOne   uint32 = 0xdfe92f46
 	halfOrderWordTwo   uint32 = 0x57a4501d
@@ -364,8 +368,8 @@ func (s *ModNScalar) SetByteSlice(b []byte) bool {
 }
 
 // PutBytesUnchecked unpacks the scalar to a 32-byte big-endian value directly
-// into the passed byte slice in constant time.  The target slice must must have
-// at least 32 bytes available or it will panic.
+// into the passed byte slice in constant time.  The target slice must have at
+// least 32 bytes available or it will panic.
 //
 // There is a similar function, PutBytes, which unpacks the scalar into a
 // 32-byte array directly.  This version is provided since it can be useful to
@@ -659,7 +663,7 @@ func (s *ModNScalar) reduce512(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11,
 	//
 	// Technically the max possible value here is (N-1)^2 since the two scalars
 	// being multiplied are always mod N.  Nevertheless, it is safer to consider
-	// it to be (2^256-1)^2 = 2^512 - 2^256 + 1 since it is the product of two
+	// it to be (2^256-1)^2 = 2^512 - 2^257 + 1 since it is the product of two
 	// 256-bit values.
 	//
 	// The algorithm is to reduce the result modulo the prime by subtracting

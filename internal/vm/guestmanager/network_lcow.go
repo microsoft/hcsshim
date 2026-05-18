@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package guestmanager
 
@@ -11,18 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// LCOWNetworkManager exposes guest network operations.
-type LCOWNetworkManager interface {
-	// AddLCOWNetworkInterface adds a network interface to the LCOW guest.
-	AddLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
-	// RemoveLCOWNetworkInterface removes a network interface from the LCOW guest.
-	RemoveLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error
-}
-
-var _ LCOWNetworkManager = (*Guest)(nil)
-
-// AddLCOWNetworkInterface adds a network interface to the LCOW guest.
-func (gm *Guest) AddLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
+// AddNetworkInterface adds a network interface to the LCOW guest.
+func (gm *Guest) AddNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeNetwork,
@@ -38,8 +28,8 @@ func (gm *Guest) AddLCOWNetworkInterface(ctx context.Context, settings *guestres
 	return nil
 }
 
-// RemoveLCOWNetworkInterface removes a network interface from the LCOW guest.
-func (gm *Guest) RemoveLCOWNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
+// RemoveNetworkInterface removes a network interface from the LCOW guest.
+func (gm *Guest) RemoveNetworkInterface(ctx context.Context, settings *guestresource.LCOWNetworkAdapter) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeNetwork,

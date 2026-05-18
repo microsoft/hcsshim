@@ -325,9 +325,12 @@ func Test_Rego_EnforceVerifiedCIMSPolicy_Multiple_Instances_Same_Container(t *te
 
 		for i := 1; i <= containersToCreate; i++ {
 			arg := "command " + strconv.Itoa(i)
+			// layers = individual layer hashes, mounted_cim = merged CIM hash
+			// The runtime sends hashesToVerify=layers (reversed) and mountedCim=merged
 			c := &securityPolicyWindowsContainer{
-				Command: []string{arg},
-				Layers:  []string{"1", "2"},
+				Command:    []string{arg},
+				Layers:     []string{"layer1", "layer2"},
+				MountedCim: []string{"merged_hash"},
 			}
 
 			constraints.containers = append(constraints.containers, c)
@@ -347,8 +350,10 @@ func Test_Rego_EnforceVerifiedCIMSPolicy_Multiple_Instances_Same_Container(t *te
 				layerHashes[len(container.Layers)-1-i] = layer
 			}
 
+			// The runtime sends individual layers as hashesToVerify
+			// and the merged CIM hash separately
 			id := testDataGenerator.uniqueContainerID()
-			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes)
+			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes, container.MountedCim)
 			if err != nil {
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}

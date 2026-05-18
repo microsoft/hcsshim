@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 // containerd-shim-lcow-v2 is a containerd shim implementation for Linux Containers on Windows (LCOW).
 package main
@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shim"
+	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
@@ -23,7 +24,7 @@ import (
 )
 
 // Add a manifest to get proper Windows version detection.
-//go:generate go tool github.com/josephspurrier/goversioninfo/cmd/goversioninfo -platform-specific
+//go:generate pwsh -Command "../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'containerd-shim-lcow-v2' -UseVersionFile -Architecture 'all'"
 
 func main() {
 	logrus.AddHook(log.NewHook())
@@ -39,6 +40,13 @@ func main() {
 	// If we encounter an error, we exit with non-zero code.
 	if err := setLogConfiguration(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%s: %s", service.ShimName, err)
+		os.Exit(1)
+	}
+
+	// This shim is supported on Windows Build 26100 and later.
+	if osversion.Build() < osversion.V25H1Server {
+		_, _ = fmt.Fprintf(os.Stderr,
+			"%s: Windows version [%v] is not supported", service.ShimName, osversion.Build())
 		os.Exit(1)
 	}
 
@@ -83,8 +91,10 @@ func setLogConfiguration() error {
 				logrus.SetLevel(lvl)
 			}
 
-			if opts.ScrubLogs {
-				log.SetScrubbing(true)
+			// Scrubbing is enabled by default (via init() in internal/log/scrub.go).
+			// Only disable if the option is explicitly set to false.
+			if opts.ScrubLogs != nil && !*opts.ScrubLogs {
+				log.SetScrubbing(false)
 			}
 		}
 		_ = os.Stdin.Close()

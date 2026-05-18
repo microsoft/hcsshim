@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && wcow
 
 package guestmanager
 
@@ -10,14 +10,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
-
-// WCOWDirectoryManager exposes mapped directory operations in the WCOW guest.
-type WCOWDirectoryManager interface {
-	// AddMappedDirectory maps a directory into the WCOW guest.
-	AddMappedDirectory(ctx context.Context, settings *hcsschema.MappedDirectory) error
-}
-
-var _ WCOWDirectoryManager = (*Guest)(nil)
 
 // AddMappedDirectory maps a directory into the guest.
 func (gm *Guest) AddMappedDirectory(ctx context.Context, settings *hcsschema.MappedDirectory) error {

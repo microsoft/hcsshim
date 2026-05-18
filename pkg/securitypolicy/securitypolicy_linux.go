@@ -18,12 +18,8 @@ import (
 //nolint:unused
 const osType = "linux"
 
-func ExtendPolicyWithNetworkingMounts(sandboxID string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {
-	roSpec := &oci.Spec{
-		Root:        spec.Root,
-		Annotations: spec.Annotations,
-	}
-	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
+func ExtendPolicyWithNetworkingMounts(sandboxRoot string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {
+	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMountsFromRoot(sandboxRoot, spec)
 	if err := enforcer.ExtendDefaultMounts(networkingMounts); err != nil {
 		return err
 	}
@@ -77,10 +73,18 @@ func DefaultCRIMounts() []oci.Mount {
 		// cgroup mount is always added by default, regardless if it is present
 		// in the mount constraints or not. If the user chooses to override it,
 		// then a corresponding mount constraint should be present.
+		// Both cgroup v1 and v2 mount types are included so the policy accepts
+		// either filesystem type depending on the kernel's cgroup version.
 		{
 			Source:      "cgroup",
 			Destination: "/sys/fs/cgroup",
 			Type:        "cgroup",
+			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "ro"},
+		},
+		{
+			Source:      "cgroup2",
+			Destination: "/sys/fs/cgroup",
+			Type:        "cgroup2",
 			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "ro"},
 		},
 	}
@@ -94,6 +98,12 @@ func DefaultCRIPrivilegedMounts() []oci.Mount {
 			Source:      "cgroup",
 			Destination: "/sys/fs/cgroup",
 			Type:        "cgroup",
+			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "rw"},
+		},
+		{
+			Source:      "cgroup2",
+			Destination: "/sys/fs/cgroup",
+			Type:        "cgroup2",
 			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "rw"},
 		},
 		{

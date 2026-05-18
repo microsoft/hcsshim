@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package guestmanager
 
@@ -11,18 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// LCOWLayersManager exposes combined layer operations in the LCOW guest.
-type LCOWLayersManager interface {
-	// AddLCOWCombinedLayers adds combined layers to the LCOW guest.
-	AddLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
-	// RemoveLCOWCombinedLayers removes combined layers from the LCOW guest.
-	RemoveLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
-}
-
-var _ LCOWLayersManager = (*Guest)(nil)
-
-// AddLCOWCombinedLayers adds LCOW combined layers in the guest.
-func (gm *Guest) AddLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
+// AddCombinedLayers adds LCOW combined layers in the guest.
+func (gm *Guest) AddCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeCombinedLayers,
@@ -38,8 +28,8 @@ func (gm *Guest) AddLCOWCombinedLayers(ctx context.Context, settings guestresour
 	return nil
 }
 
-// RemoveLCOWCombinedLayers removes LCOW combined layers in the guest.
-func (gm *Guest) RemoveLCOWCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
+// RemoveCombinedLayers removes LCOW combined layers in the guest.
+func (gm *Guest) RemoveCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
 	modifyRequest := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypeCombinedLayers,

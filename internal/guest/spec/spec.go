@@ -37,45 +37,6 @@ func networkingMountPaths() []string {
 	}
 }
 
-// GenerateWorkloadContainerNetworkMounts generates an array of specs.Mount
-// required for container networking. Original spec is left untouched and
-// it's the responsibility of a caller to update it.
-func GenerateWorkloadContainerNetworkMounts(sandboxID string, spec *oci.Spec) []oci.Mount {
-	var nMounts []oci.Mount
-
-	// In multipod mode, the sandbox writes networking files (resolv.conf, hostname, hosts)
-	// under the virtual pod root directory. Use VirtualPodAwareSandboxRootDir to ensure
-	// workload containers mount from the correct path.
-	virtualSandboxID := spec.Annotations[annotations.VirtualPodID]
-	rootDir := VirtualPodAwareSandboxRootDir(sandboxID, virtualSandboxID)
-
-	logrus.WithFields(logrus.Fields{
-		"sandboxID":        sandboxID,
-		"virtualSandboxID": virtualSandboxID,
-		"rootDir":          rootDir,
-	}).Info("GenerateWorkloadContainerNetworkMounts: resolved mount source root directory")
-
-	for _, mountPath := range networkingMountPaths() {
-		// Don't override if the mount is present in the spec
-		if MountPresent(mountPath, spec.Mounts) {
-			continue
-		}
-		options := []string{"bind"}
-		if spec.Root != nil && spec.Root.Readonly {
-			options = append(options, "ro")
-		}
-		trimmedMountPath := strings.TrimPrefix(mountPath, "/etc/")
-		mt := oci.Mount{
-			Destination: mountPath,
-			Type:        "bind",
-			Source:      filepath.Join(rootDir, trimmedMountPath),
-			Options:     options,
-		}
-		nMounts = append(nMounts, mt)
-	}
-	return nMounts
-}
-
 // MountPresent checks if mountPath is present in the specMounts array.
 func MountPresent(mountPath string, specMounts []oci.Mount) bool {
 	for _, m := range specMounts {
@@ -91,42 +52,9 @@ func SandboxRootDir(sandboxID string) string {
 	return filepath.Join(guestpath.LCOWRootPrefixInUVM, sandboxID)
 }
 
-// VirtualPodRootDir returns the virtual pod root directory inside UVM/host.
-// This is used when multiple pods share a UVM via virtualSandboxID.
-func VirtualPodRootDir(virtualSandboxID string) string {
-	// Ensure virtualSandboxID is a relative path to prevent directory traversal
-	sanitizedID := filepath.Clean(virtualSandboxID)
-	if filepath.IsAbs(sanitizedID) || strings.Contains(sanitizedID, "..") {
-		return ""
-	}
-	return filepath.Join(guestpath.LCOWRootPrefixInUVM, "virtual-pods", sanitizedID)
-}
-
-// VirtualPodAwareSandboxRootDir returns the appropriate root directory based on whether
-// the sandbox is part of a virtual pod or traditional single-pod setup.
-func VirtualPodAwareSandboxRootDir(sandboxID, virtualSandboxID string) string {
-	if virtualSandboxID != "" {
-		return VirtualPodRootDir(virtualSandboxID)
-	}
-	return SandboxRootDir(sandboxID)
-}
-
 // SandboxMountsDir returns sandbox mounts directory inside UVM/host.
 func SandboxMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "sandboxMounts")
-}
-
-// VirtualPodMountsDir returns virtual pod mounts directory inside UVM/host.
-func VirtualPodMountsDir(virtualSandboxID string) string {
-	return filepath.Join(VirtualPodRootDir(virtualSandboxID), "sandboxMounts")
-}
-
-// VirtualPodAwareSandboxMountsDir returns the appropriate mounts directory.
-func VirtualPodAwareSandboxMountsDir(sandboxID, virtualSandboxID string) string {
-	if virtualSandboxID != "" {
-		return VirtualPodMountsDir(virtualSandboxID)
-	}
-	return SandboxMountsDir(sandboxID)
 }
 
 // SandboxTmpfsMountsDir returns sandbox tmpfs mounts directory inside UVM.
@@ -134,35 +62,9 @@ func SandboxTmpfsMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "sandboxTmpfsMounts")
 }
 
-// VirtualPodTmpfsMountsDir returns virtual pod tmpfs mounts directory inside UVM/host.
-func VirtualPodTmpfsMountsDir(virtualSandboxID string) string {
-	return filepath.Join(VirtualPodRootDir(virtualSandboxID), "sandboxTmpfsMounts")
-}
-
-// VirtualPodAwareSandboxTmpfsMountsDir returns the appropriate tmpfs mounts directory.
-func VirtualPodAwareSandboxTmpfsMountsDir(sandboxID, virtualSandboxID string) string {
-	if virtualSandboxID != "" {
-		return VirtualPodTmpfsMountsDir(virtualSandboxID)
-	}
-	return SandboxTmpfsMountsDir(sandboxID)
-}
-
 // HugePagesMountsDir returns hugepages mounts directory inside UVM.
 func HugePagesMountsDir(sandboxID string) string {
 	return filepath.Join(SandboxRootDir(sandboxID), "hugepages")
-}
-
-// VirtualPodHugePagesMountsDir returns virtual pod hugepages mounts directory.
-func VirtualPodHugePagesMountsDir(virtualSandboxID string) string {
-	return filepath.Join(VirtualPodRootDir(virtualSandboxID), "hugepages")
-}
-
-// VirtualPodAwareHugePagesMountsDir returns the appropriate hugepages directory.
-func VirtualPodAwareHugePagesMountsDir(sandboxID, virtualSandboxID string) string {
-	if virtualSandboxID != "" {
-		return VirtualPodHugePagesMountsDir(virtualSandboxID)
-	}
-	return HugePagesMountsDir(sandboxID)
 }
 
 // SandboxMountSource returns sandbox mount path inside UVM.
@@ -172,31 +74,11 @@ func SandboxMountSource(sandboxID, path string) string {
 	return filepath.Join(mountsDir, subPath)
 }
 
-// VirtualPodAwareSandboxMountSource returns mount source path for virtual pod aware containers.
-func VirtualPodAwareSandboxMountSource(sandboxID, virtualSandboxID, path string) string {
-	if virtualSandboxID != "" {
-		mountsDir := VirtualPodMountsDir(virtualSandboxID)
-		subPath := strings.TrimPrefix(path, guestpath.SandboxMountPrefix)
-		return filepath.Join(mountsDir, subPath)
-	}
-	return SandboxMountSource(sandboxID, path)
-}
-
 // SandboxTmpfsMountSource returns sandbox tmpfs mount path inside UVM.
 func SandboxTmpfsMountSource(sandboxID, path string) string {
 	tmpfsMountDir := SandboxTmpfsMountsDir(sandboxID)
 	subPath := strings.TrimPrefix(path, guestpath.SandboxTmpfsMountPrefix)
 	return filepath.Join(tmpfsMountDir, subPath)
-}
-
-// VirtualPodAwareSandboxTmpfsMountSource returns tmpfs mount source path for virtual pod aware containers.
-func VirtualPodAwareSandboxTmpfsMountSource(sandboxID, virtualSandboxID, path string) string {
-	if virtualSandboxID != "" {
-		mountsDir := VirtualPodTmpfsMountsDir(virtualSandboxID)
-		subPath := strings.TrimPrefix(path, guestpath.SandboxTmpfsMountPrefix)
-		return filepath.Join(mountsDir, subPath)
-	}
-	return SandboxTmpfsMountSource(sandboxID, path)
 }
 
 // HugePagesMountSource returns hugepages mount path inside UVM.
@@ -206,28 +88,69 @@ func HugePagesMountSource(sandboxID, path string) string {
 	return filepath.Join(mountsDir, subPath)
 }
 
-// VirtualPodAwareHugePagesMountSource returns hugepages mount source for virtual pod aware containers.
-func VirtualPodAwareHugePagesMountSource(sandboxID, virtualSandboxID, path string) string {
-	if virtualSandboxID != "" {
-		mountsDir := VirtualPodHugePagesMountsDir(virtualSandboxID)
-		subPath := strings.TrimPrefix(path, guestpath.HugePagesMountPrefix)
-		return filepath.Join(mountsDir, subPath)
+// Root-based path helpers. These accept a pre-resolved sandbox root directory
+// and are used by the guest-side sandbox root mapping for Shim v2 / multi-pod support.
+
+// SandboxMountsDirFromRoot returns the sandbox mounts directory for a given root.
+func SandboxMountsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "sandboxMounts")
+}
+
+// SandboxTmpfsMountsDirFromRoot returns the sandbox tmpfs mounts directory for a given root.
+func SandboxTmpfsMountsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "sandboxTmpfsMounts")
+}
+
+// SandboxHugePagesMountsDirFromRoot returns the hugepages directory for a given root.
+func SandboxHugePagesMountsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "hugepages")
+}
+
+// SandboxLogsDirFromRoot returns the logs directory for a given root.
+func SandboxLogsDirFromRoot(sandboxRoot string) string {
+	return filepath.Join(sandboxRoot, "logs")
+}
+
+// SandboxMountSourceFromRoot resolves a sandbox:// mount source from a given root.
+func SandboxMountSourceFromRoot(sandboxRoot, mountPath string) string {
+	subPath := strings.TrimPrefix(mountPath, guestpath.SandboxMountPrefix)
+	return filepath.Join(SandboxMountsDirFromRoot(sandboxRoot), subPath)
+}
+
+// SandboxTmpfsMountSourceFromRoot resolves a sandbox-tmp:// mount source from a given root.
+func SandboxTmpfsMountSourceFromRoot(sandboxRoot, mountPath string) string {
+	subPath := strings.TrimPrefix(mountPath, guestpath.SandboxTmpfsMountPrefix)
+	return filepath.Join(SandboxTmpfsMountsDirFromRoot(sandboxRoot), subPath)
+}
+
+// HugePagesMountSourceFromRoot resolves a hugepages:// mount source from a given root.
+func HugePagesMountSourceFromRoot(sandboxRoot, mountPath string) string {
+	subPath := strings.TrimPrefix(mountPath, guestpath.HugePagesMountPrefix)
+	return filepath.Join(SandboxHugePagesMountsDirFromRoot(sandboxRoot), subPath)
+}
+
+// GenerateWorkloadContainerNetworkMountsFromRoot generates networking mounts
+// using a pre-resolved sandbox root directory.
+func GenerateWorkloadContainerNetworkMountsFromRoot(sandboxRoot string, spec *oci.Spec) []oci.Mount {
+	var nMounts []oci.Mount
+	for _, mountPath := range networkingMountPaths() {
+		if MountPresent(mountPath, spec.Mounts) {
+			continue
+		}
+		options := []string{"bind"}
+		if spec.Root != nil && spec.Root.Readonly {
+			options = append(options, "ro")
+		}
+		trimmedMountPath := strings.TrimPrefix(mountPath, "/etc/")
+		mt := oci.Mount{
+			Destination: mountPath,
+			Type:        "bind",
+			Source:      filepath.Join(sandboxRoot, trimmedMountPath),
+			Options:     options,
+		}
+		nMounts = append(nMounts, mt)
 	}
-	return HugePagesMountSource(sandboxID, path)
-}
-
-// SandboxLogsDir returns the logs directory inside the UVM for forwarding container stdio to.
-//
-// Virtual pod aware.
-func SandboxLogsDir(sandboxID, virtualSandboxID string) string {
-	return filepath.Join(VirtualPodAwareSandboxRootDir(sandboxID, virtualSandboxID), "logs")
-}
-
-// SandboxLogPath returns the log path inside the UVM.
-//
-// Virtual pod aware.
-func SandboxLogPath(sandboxID, virtualSandboxID, path string) string {
-	return filepath.Join(SandboxLogsDir(sandboxID, virtualSandboxID), path)
+	return nMounts
 }
 
 // GetNetworkNamespaceID returns the `ToLower` of

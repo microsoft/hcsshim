@@ -145,7 +145,7 @@ func (p *Process) Close() error {
 
 // CloseStdin causes the process to read EOF on its stdin stream.
 func (p *Process) CloseStdin(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::CloseStdin") //nolint:ineffassign,staticcheck
+	_, span := oc.StartSpan(ctx, "gcs::Process::CloseStdin")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -159,7 +159,7 @@ func (p *Process) CloseStdin(ctx context.Context) (err error) {
 }
 
 func (p *Process) CloseStdout(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
+	_, span := oc.StartSpan(ctx, "gcs::Process::CloseStdout")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -170,7 +170,7 @@ func (p *Process) CloseStdout(ctx context.Context) (err error) {
 }
 
 func (p *Process) CloseStderr(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
+	_, span := oc.StartSpan(ctx, "gcs::Process::CloseStderr")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

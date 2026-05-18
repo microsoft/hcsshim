@@ -1157,11 +1157,12 @@ func (policy *regoEnforcer) EnforceScratchUnmountPolicy(ctx context.Context, scr
 	return nil
 }
 
-func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string) error {
+func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) error {
 	log.G(ctx).Tracef("Enforcing verified cims in securitypolicy pkg %+v", layerHashes)
 	input := inputData{
 		"containerID": containerID,
 		"layerHashes": layerHashes,
+		"mountedCim":  mountedCim,
 	}
 
 	_, err := policy.enforce(ctx, "mount_cims", input)

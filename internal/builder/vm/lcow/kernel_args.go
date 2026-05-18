@@ -1,10 +1,11 @@
-//go:build windows
+//go:build windows && lcow
 
 package lcow
 
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -24,7 +25,6 @@ func buildKernelArgs(
 	annotations map[string]string,
 	processorCount uint32,
 	kernelDirect bool,
-	isVPMem bool,
 	hasConsole bool,
 	rootFsFile string,
 ) (string, error) {
@@ -41,7 +41,7 @@ func buildKernelArgs(
 	var args []string
 
 	// 1. Root filesystem configuration.
-	rootfsArgs, err := buildRootfsArgs(ctx, annotations, rootFsFile, kernelDirect, isVPMem)
+	rootfsArgs, err := buildRootfsArgs(ctx, annotations, rootFsFile, kernelDirect)
 	if err != nil {
 		return "", err
 	}
@@ -95,12 +95,10 @@ func buildRootfsArgs(
 	annotations map[string]string,
 	rootFsFile string,
 	kernelDirect bool,
-	isVPMem bool,
 ) (string, error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"rootFsFile":   rootFsFile,
 		"kernelDirect": kernelDirect,
-		"isVPMem":      isVPMem,
 	}).Debug("buildRootfsArgs: starting rootfs args construction")
 
 	isInitrd := rootFsFile == vmutils.InitrdFile
@@ -113,11 +111,6 @@ func buildRootfsArgs(
 
 	// VHD boot
 	if isVHD {
-		// VPMem VHD(X) booting.
-		if isVPMem {
-			return "root=/dev/pmem0 ro rootwait init=/init", nil
-		}
-
 		// SCSI VHD booting with dm-verity.
 		dmVerityMode := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DmVerityMode, false)
 		if dmVerityMode {
@@ -227,8 +220,9 @@ func buildGCSCommand(
 		gcsParts = append(gcsParts, "-disable-time-sync")
 	}
 
-	if opts != nil && opts.ScrubLogs {
-		gcsParts = append(gcsParts, "-scrub-logs")
+	// Scrubbing is enabled by default. Only pass the flag if explicitly set.
+	if opts != nil && opts.ScrubLogs != nil {
+		gcsParts = append(gcsParts, fmt.Sprintf("-scrub-logs=%s", strconv.FormatBool(*opts.ScrubLogs)))
 	}
 
 	if processDumpLocation != "" {

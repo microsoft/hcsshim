@@ -23,6 +23,17 @@ type Signer interface {
 	Sign(rand io.Reader, content []byte) ([]byte, error)
 }
 
+// DigestSigner is an interface for private keys to sign digested COSE signatures.
+type DigestSigner interface {
+	// Algorithm returns the signing algorithm associated with the private key.
+	Algorithm() Algorithm
+
+	// SignDigest signs message digest with the private key, possibly using
+	// entropy from rand.
+	// The resulting signature should follow RFC 8152 section 8.
+	SignDigest(rand io.Reader, digest []byte) ([]byte, error)
+}
+
 // NewSigner returns a signer with a given signing key.
 // The signing key can be a golang built-in crypto private key, a key in HSM, or
 // a remote KMS.
@@ -34,9 +45,12 @@ type Signer interface {
 // public key of type `*rsa.PublicKey`, `*ecdsa.PublicKey`, or
 // `ed25519.PublicKey` are accepted.
 //
+// The returned signer for rsa and ecdsa keys also implements `cose.DigestSigner`.
+//
 // Note: `*rsa.PrivateKey`, `*ecdsa.PrivateKey`, and `ed25519.PrivateKey`
 // implement `crypto.Signer`.
 func NewSigner(alg Algorithm, key crypto.Signer) (Signer, error) {
+	var errReason string
 	switch alg {
 	case AlgorithmPS256, AlgorithmPS384, AlgorithmPS512:
 		vk, ok := key.Public().(*rsa.PublicKey)
@@ -68,14 +82,19 @@ func NewSigner(alg Algorithm, key crypto.Signer) (Signer, error) {
 			key:    vk,
 			signer: key,
 		}, nil
-	case AlgorithmEd25519:
+	case AlgorithmEdDSA:
 		if _, ok := key.Public().(ed25519.PublicKey); !ok {
 			return nil, fmt.Errorf("%v: %w", alg, ErrInvalidPubKey)
 		}
 		return &ed25519Signer{
 			key: key,
 		}, nil
+	case AlgorithmReserved:
+		errReason = "can't be implemented"
+	case AlgorithmRS256, AlgorithmRS384, AlgorithmRS512:
+		errReason = "no built-in implementation available"
 	default:
-		return nil, ErrAlgorithmNotSupported
+		errReason = "unknown algorithm"
 	}
+	return nil, fmt.Errorf("can't create new Signer for %s: %s: %w", alg, errReason, ErrAlgorithmNotSupported)
 }

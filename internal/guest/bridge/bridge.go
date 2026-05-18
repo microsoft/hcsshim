@@ -189,6 +189,71 @@ type Bridge struct {
 	hasQuitPending atomic.Bool
 
 	protVer prot.ProtocolVersion
+
+	// notifyMu guards connected and pendingNotifications.
+	notifyMu sync.Mutex
+	// connected is true while ListenAndServe is running and responseChan
+	// is valid. When false, notifications are queued in pendingNotifications.
+	connected bool
+	// pendingNotifications holds container exit notifications that arrived
+	// while the bridge was disconnected. They are drained when ListenAndServe
+	// reconnects.
+	pendingNotifications []*prot.ContainerNotification
+}
+
+// New creates a Bridge. Container exit notifications are queued while
+// disconnected and drained on reconnect.
+func New(handler Handler, enableV4 bool) *Bridge {
+	return &Bridge{
+		Handler:  handler,
+		EnableV4: enableV4,
+	}
+}
+
+// publishNotification routes a container exit notification to the bridge.
+// If the bridge is disconnected, the notification is queued and will be
+// drained when ListenAndServe reconnects.
+func (b *Bridge) publishNotification(n *prot.ContainerNotification) {
+	b.notifyMu.Lock()
+	if !b.connected {
+		logrus.WithField("containerID", n.ContainerID).
+			Warn("bridge not connected, queueing container notification")
+		b.pendingNotifications = append(b.pendingNotifications, n)
+		b.notifyMu.Unlock()
+		return
+	}
+	b.notifyMu.Unlock()
+	b.PublishNotification(n)
+}
+
+// drainPendingNotifications sends any queued notifications through the bridge.
+// Must be called after responseChan is valid and the response writer goroutine
+// is running.
+func (b *Bridge) drainPendingNotifications() {
+	b.notifyMu.Lock()
+	b.connected = true
+	drain := b.pendingNotifications
+	b.pendingNotifications = nil
+	b.notifyMu.Unlock()
+
+	for _, n := range drain {
+		logrus.WithField("containerID", n.ContainerID).
+			Info("draining queued container notification")
+		b.PublishNotification(n)
+	}
+}
+
+// disconnectNotifications marks the bridge as disconnected so future
+// publishNotification calls queue instead of sending.
+func (b *Bridge) disconnectNotifications() {
+	b.notifyMu.Lock()
+	b.connected = false
+	b.notifyMu.Unlock()
+}
+
+// ShutdownRequested returns true if the bridge has been asked to shut down.
+func (b *Bridge) ShutdownRequested() bool {
+	return b.hasQuitPending.Load()
 }
 
 // AssignHandlers creates and assigns the appropriate bridge
@@ -230,13 +295,17 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	responseErrChan := make(chan error)
 	b.quitChan = make(chan bool)
 
-	defer close(b.quitChan)
+	// Defers execute in LIFO order. We close quitChan first to stop the
+	// read loop, then disconnect notifications (so any late publishNotification
+	// calls queue instead of sending to a closing responseChan), then tear
+	// down the remaining channels and connections.
+	defer bridgeIn.Close()
+	defer close(requestErrChan)
+	defer close(requestChan)
 	defer bridgeOut.Close()
 	defer close(responseErrChan)
-	defer close(b.responseChan)
-	defer close(requestChan)
-	defer close(requestErrChan)
-	defer bridgeIn.Close()
+	defer b.disconnectNotifications()
+	defer close(b.quitChan)
 
 	// Receive bridge requests and schedule them to be processed.
 	go func() {
@@ -395,6 +464,9 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 		}
 		responseErrChan <- resperr
 	}()
+
+	// Drain queued notifications now that the response writer is running.
+	b.drainPendingNotifications()
 
 	select {
 	case err := <-requestErrChan:

@@ -1,11 +1,11 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 // Package vm provides a controller for managing the lifecycle of a Utility VM (UVM).
 //
 // A Utility VM is a lightweight virtual machine used to host Linux (LCOW) or
 // Windows (WCOW) containers. This package abstracts the VM lifecycle —
-// creation, startup, stats collection, and termination — behind the [Controller]
-// interface, with [Manager] as the primary implementation.
+// creation, startup, stats collection, and termination — with the [Controller]
+// as the primary implementation.
 //
 // # Lifecycle
 //
@@ -33,7 +33,7 @@
 //
 // State descriptions:
 //
-//   - [StateNotCreated]: initial state after [NewController] is called.
+//   - [StateNotCreated]: initial state after [New] is called.
 //   - [StateCreated]: after [Controller.CreateVM] succeeds; the VM exists but has not started.
 //   - [StateRunning]: after [Controller.StartVM] succeeds; the guest OS is up and the
 //     Guest Compute Service (GCS) connection is established.
@@ -51,11 +51,14 @@
 //
 // # Usage
 //
-//	ctrl := vm.NewController()
+//	ctrl := vm.New()
 //
 //	if err := ctrl.CreateVM(ctx, &vm.CreateOptions{
 //	    ID:          "my-uvm",
-//	    HCSDocument: doc,
+//	    Owner:       "my-shim",
+//	    BundlePath:  bundlePath,
+//	    ShimOpts:    shimOpts,
+//	    SandboxSpec: sandboxSpec,
 //	}); err != nil {
 //	    // handle error
 //	}

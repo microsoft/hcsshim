@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && (lcow || wcow)
 
 package vmmanager
 
@@ -7,15 +7,24 @@ import (
 	"net"
 )
 
+// vmWaiter exposes the subset of VM lifecycle needed by [AcceptConnection]:
+// Implemented by [UtilityVM].
+type vmWaiter interface {
+	// Wait blocks until the VM exits or ctx is cancelled.
+	Wait(ctx context.Context) error
+	// ExitError returns the error that caused the VM to exit, if any.
+	ExitError() error
+}
+
 // AcceptConnection accepts a connection and then closes a listener.
 // It monitors ctx.Done() and uvm.Wait() for early termination.
-func AcceptConnection(ctx context.Context, uvm LifetimeManager, l net.Listener, closeConnection bool) (net.Conn, error) {
+func AcceptConnection(ctx context.Context, uvm vmWaiter, l net.Listener, closeConnection bool) (net.Conn, error) {
 	// Channel to capture the accept result
 	type acceptResult struct {
 		conn net.Conn
 		err  error
 	}
-	resultCh := make(chan acceptResult)
+	resultCh := make(chan acceptResult, 1)
 
 	go func() {
 		c, err := l.Accept()
@@ -36,6 +45,7 @@ func AcceptConnection(ctx context.Context, uvm LifetimeManager, l net.Listener, 
 		}
 		return res.conn, res.err
 	case <-ctx.Done():
+		_ = l.Close()
 		return nil, ctx.Err()
 	case <-vmExitCh:
 	}

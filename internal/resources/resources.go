@@ -121,6 +121,8 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 				log.G(ctx).Warn(err)
 			}
 			r.addedNetNSToVM = false
+		} else {
+			log.G(ctx).Debug("skipping network teardown during resource release")
 		}
 	}
 
@@ -134,14 +136,14 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		case *uvm.NetworkEndpoints:
 			if r.createdNetNS {
 				if err := r.resources[i].Release(ctx); err != nil {
-					log.G(ctx).WithError(err).Error("failed to release container resource")
+					log.G(ctx).WithError(err).Error("failed to release container network endpoints resource")
 					releaseErr = true
 				}
 				r.createdNetNS = false
 			}
 		case *credentials.CCGResource:
 			if err := r.resources[i].Release(ctx); err != nil {
-				log.G(ctx).WithError(err).Error("failed to release container resource")
+				log.G(ctx).WithError(err).Error("failed to release container credential resource")
 				releaseErr = true
 			}
 		default:

@@ -20,7 +20,6 @@ import (
 	"syscall"
 	"time"
 
-	cgroups "github.com/containerd/cgroups/v3/cgroup1"
 	cgroup1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	"github.com/mattn/go-shellwords"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -30,6 +29,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/debug"
+	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
@@ -73,31 +73,38 @@ func checkValidContainerID(id string, idType string) error {
 	return errors.Errorf("invalid %s id: %s (must match %s)", idType, id, validContainerIDRegex.String())
 }
 
-// VirtualPod represents a virtual pod that shares a UVM/Sandbox with other pods
-type VirtualPod struct {
-	VirtualSandboxID string
-	MasterSandboxID  string
-	NetworkNamespace string
-	CgroupPath       string
-	CgroupControl    cgroups.Cgroup
-	Containers       map[string]bool // containerID -> exists
-	CreatedAt        time.Time
+// Cgroup path formats for pod and container cgroups within the UVM.
+const (
+	// podCgroupPathFmt is the cgroup path for a pod (sandbox or standalone): /pods/{sandboxID}.
+	podCgroupPathFmt = "/pods/%s"
+	// containerCgroupPathFmt is the cgroup path for a workload container nested under its pod: /pods/{sandboxID}/{containerID}.
+	containerCgroupPathFmt = "/pods/%s/%s"
+)
+
+// pod tracks pod-level state within the UVM.
+type pod struct {
+	sandboxID     string
+	cgroupControl cgroup.Manager
+	containers    map[string]bool
 }
 
 // Host is the structure tracking all UVM host state including all containers
 // and processes.
 type Host struct {
+	// containersMutex guards both containers and pods maps.
 	containersMutex sync.Mutex
 	containers      map[string]*Container
+	pods            map[string]*pod
 
 	externalProcessesMutex sync.Mutex
 	externalProcesses      map[int]*externalProcess
 
-	// Virtual pod support for multi-pod scenarios
-	virtualPodsMutex        sync.Mutex
-	virtualPods             map[string]*VirtualPod // virtualSandboxID -> VirtualPod
-	containerToVirtualPod   map[string]string      // containerID -> virtualSandboxID
-	virtualPodsCgroupParent cgroups.Cgroup         // Parent cgroup for all virtual pods
+	// sandboxRoots maps sandboxID to the resolved sandbox root directory.
+	// Populated via registerSandboxRoot during sandbox creation using
+	// the host-provided OCIBundlePath as source of truth.
+	// Lock ordering: containersMutex -> sandboxRootsMutex (never reverse).
+	sandboxRootsMutex sync.RWMutex
+	sandboxRoots      map[string]string
 
 	rtime            runtime.Runtime
 	vsock            transport.Transport
@@ -119,16 +126,70 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		logWriter,
 	)
 	return &Host{
-		containers:            make(map[string]*Container),
-		externalProcesses:     make(map[int]*externalProcess),
-		virtualPods:           make(map[string]*VirtualPod),
-		containerToVirtualPod: make(map[string]string),
-		rtime:                 rtime,
-		vsock:                 vsock,
-		devNullTransport:      &transport.DevNullTransport{},
-		hostMounts:            newHostMounts(),
-		securityOptions:       securityPolicyOptions,
+		containers:        make(map[string]*Container),
+		externalProcesses: make(map[int]*externalProcess),
+		pods:              make(map[string]*pod),
+		sandboxRoots:      make(map[string]string),
+		rtime:             rtime,
+		vsock:             vsock,
+		devNullTransport:  &transport.DevNullTransport{},
+		hostMounts:        newHostMounts(),
+		securityOptions:   securityPolicyOptions,
 	}
+}
+
+// registerSandboxRoot stores the resolved sandbox root directory for a given sandbox ID.
+// For virtual pods, it derives the shared root from OCIBundlePath's parent directory.
+func (h *Host) registerSandboxRoot(sandboxID, ociBundlePath, virtualPodID string) (string, error) {
+	var sandboxRoot string
+
+	if virtualPodID != "" {
+		// Validate virtualPodID to prevent path traversal.
+		cleanID := filepath.Clean(virtualPodID)
+		if filepath.IsAbs(cleanID) || strings.Contains(cleanID, "..") {
+			return "", errors.Errorf("invalid virtual pod ID %q: path traversal attempt", virtualPodID)
+		}
+		sandboxRoot = filepath.Join(filepath.Dir(ociBundlePath), "virtual-pods", cleanID)
+	} else {
+		sandboxRoot = ociBundlePath
+	}
+
+	h.sandboxRootsMutex.Lock()
+	defer h.sandboxRootsMutex.Unlock()
+	h.sandboxRoots[sandboxID] = sandboxRoot
+
+	logrus.WithFields(logrus.Fields{
+		"sandboxID":   sandboxID,
+		"sandboxRoot": sandboxRoot,
+	}).Debug("registered sandbox root")
+
+	return sandboxRoot, nil
+}
+
+// resolveSandboxRoot returns the resolved sandbox root for the given sandbox ID.
+// Falls back to legacy path derivation if no mapping exists.
+func (h *Host) resolveSandboxRoot(sandboxID string) string {
+	h.sandboxRootsMutex.RLock()
+	root, ok := h.sandboxRoots[sandboxID]
+	h.sandboxRootsMutex.RUnlock()
+	if ok {
+		return root
+	}
+	// Fallback to legacy derivation for backwards compatibility.
+	// TODO: remove fallback after shim v1 sunset
+	fallback := specGuest.SandboxRootDir(sandboxID)
+	logrus.WithFields(logrus.Fields{
+		"sandboxID": sandboxID,
+		"fallback":  fallback,
+	}).Warn("sandbox root not found in mapping, falling back to legacy path derivation")
+	return fallback
+}
+
+// unregisterSandboxRoot removes the sandbox root mapping for a given sandbox ID.
+func (h *Host) unregisterSandboxRoot(sandboxID string) {
+	h.sandboxRootsMutex.Lock()
+	defer h.sandboxRootsMutex.Unlock()
+	delete(h.sandboxRoots, sandboxID)
 }
 
 func (h *Host) SecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
@@ -152,25 +213,44 @@ func (h *Host) RemoveContainer(id string) {
 		return
 	}
 
-	// Check if this container is part of a virtual pod
-	virtualPodID, isVirtualPod := c.spec.Annotations[annotations.VirtualPodID]
-	if isVirtualPod {
-		// Remove from virtual pod tracking
-		h.RemoveContainerFromVirtualPod(id)
-		// Network namespace cleanup is handled in virtual pod cleanup when last container is removed.
-		logrus.WithFields(logrus.Fields{
-			"containerID":  id,
-			"virtualPodID": virtualPodID,
-		}).Info("Container removed from virtual pod")
-	} else {
-		// delete the network namespace for standalone and sandbox containers
-		criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
-		if !isCRI || criType == "sandbox" {
-			_ = RemoveNetworkNamespace(context.Background(), id)
+	criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
+
+	// Do NOT call RemoveNetworkNamespace for virtual pod sandbox containers.
+	// The host-driven teardown path (TearDownNetworking → RemoveNetNS → removeNIC)
+	// removes adapters first and then the namespace. Calling it here would fail
+	// with "contains adapters" because the host hasn't removed them yet.
+	virtualPodID := c.spec.Annotations[annotations.VirtualPodID]
+	isVirtualPodSandbox := virtualPodID != "" && id == virtualPodID
+	if !isVirtualPodSandbox && (!isCRI || criType == "sandbox") {
+		if err := RemoveNetworkNamespace(context.Background(), id); err != nil {
+			logrus.WithError(err).WithField(logfields.ContainerID, id).Warn("failed to remove network namespace")
 		}
 	}
 
 	delete(h.containers, id)
+
+	// Clean up pod tracking. For standalone containers, sandboxID == id but
+	// no pod entry exists (createPodInUVM is only called for CRI sandboxes),
+	// so the lookup returns false and the block is skipped.
+	if pod, exists := h.pods[c.sandboxID]; exists {
+		delete(pod.containers, id)
+		// When the sandbox container itself is removed, tear down the pod.
+		if id == c.sandboxID {
+			if pod.cgroupControl != nil {
+				if err := pod.cgroupControl.Delete(); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"sandboxID": c.sandboxID,
+					}).WithError(err).Warn("failed to delete pod cgroup")
+				}
+			}
+			delete(h.pods, c.sandboxID)
+		}
+	}
+
+	// Clean up the sandbox root mapping for sandbox containers.
+	if c.isSandbox {
+		h.unregisterSandboxRoot(id)
+	}
 }
 
 func (h *Host) GetCreatedContainer(id string) (*Container, error) {
@@ -199,10 +279,11 @@ func (h *Host) AddContainer(id string, c *Container) error {
 	return nil
 }
 
-func setupSandboxMountsPath(id string) (err error) {
-	mountPath := specGuest.SandboxMountsDir(id)
+// setupSandboxMountsPath creates the sandboxMounts directory from a resolved root.
+func setupSandboxMountsPath(sandboxRoot string) (err error) {
+	mountPath := specGuest.SandboxMountsDirFromRoot(sandboxRoot)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create sandboxMounts dir in sandbox %v", id)
+		return errors.Wrapf(err, "failed to create sandboxMounts dir at %v", mountPath)
 	}
 	defer func() {
 		if err != nil {
@@ -213,10 +294,11 @@ func setupSandboxMountsPath(id string) (err error) {
 	return storage.MountRShared(mountPath)
 }
 
-func setupSandboxTmpfsMountsPath(id string) (err error) {
-	tmpfsDir := specGuest.SandboxTmpfsMountsDir(id)
+// setupSandboxTmpfsMountsPath creates the sandbox tmpfs mounts directory from a resolved root.
+func setupSandboxTmpfsMountsPath(sandboxRoot string) (err error) {
+	tmpfsDir := specGuest.SandboxTmpfsMountsDirFromRoot(sandboxRoot)
 	if err := os.MkdirAll(tmpfsDir, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create sandbox tmpfs mounts dir in sandbox %v", id)
+		return errors.Wrapf(err, "failed to create sandbox tmpfs mounts dir at %v", tmpfsDir)
 	}
 
 	defer func() {
@@ -237,26 +319,21 @@ func setupSandboxTmpfsMountsPath(id string) (err error) {
 	return storage.MountRShared(tmpfsDir)
 }
 
-func setupSandboxHugePageMountsPath(id string) error {
-	mountPath := specGuest.HugePagesMountsDir(id)
+// setupSandboxHugePageMountsPath creates the hugepages mounts directory from a resolved root.
+func setupSandboxHugePageMountsPath(sandboxRoot string) error {
+	mountPath := specGuest.SandboxHugePagesMountsDirFromRoot(sandboxRoot)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create hugepage Mounts dir in sandbox %v", id)
+		return errors.Wrapf(err, "failed to create hugepage mounts dir at %v", mountPath)
 	}
 
 	return storage.MountRShared(mountPath)
 }
 
-// setupSandboxLogDir creates the directory to house all redirected stdio logs from containers.
-//
-// Virtual pod aware.
-func setupSandboxLogDir(sandboxID, virtualSandboxID string) error {
-	mountPath := specGuest.SandboxLogsDir(sandboxID, virtualSandboxID)
+// setupSandboxLogDir creates the directory to house all redirected stdio logs from a resolved root.
+func setupSandboxLogDir(sandboxRoot string) error {
+	mountPath := specGuest.SandboxLogsDirFromRoot(sandboxRoot)
 	if err := mkdirAllModePerm(mountPath); err != nil {
-		id := sandboxID
-		if virtualSandboxID != "" {
-			id = virtualSandboxID
-		}
-		return errors.Wrapf(err, "failed to create sandbox logs dir in sandbox %v", id)
+		return errors.Wrapf(err, "failed to create sandbox logs dir at %v", mountPath)
 	}
 	return nil
 }
@@ -313,7 +390,8 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 
 	// Check for virtual pod annotation
-	virtualPodID, isVirtualPod := settings.OCISpecification.Annotations[annotations.VirtualPodID]
+	virtualPodID := settings.OCISpecification.Annotations[annotations.VirtualPodID]
+	isVirtualPod := virtualPodID != ""
 
 	if h.HasSecurityPolicy() {
 		if err = checkValidContainerID(id, "container"); err != nil {
@@ -333,9 +411,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		criType = "sandbox"
 		isCRI = true
 		logrus.WithFields(logrus.Fields{
-			"containerID":     id,
-			"virtualPodID":    virtualPodID,
-			"originalCriType": settings.OCISpecification.Annotations[annotations.KubernetesContainerType],
+			logfields.ContainerID:      id,
+			logfields.VirtualSandboxID: virtualPodID,
+			"originalCriType":          settings.OCISpecification.Annotations[annotations.KubernetesContainerType],
 		}).Info("Virtual pod first container detected - treating as sandbox container")
 	}
 
@@ -351,6 +429,18 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	}
 	c.setStatus(containerCreating)
 
+	// Resolve sandboxID early so all downstream code uses the correct value.
+	// For sandbox containers, sandboxID == id (or virtualPodID for virtual pods).
+	// For workload containers, sandboxID comes from the KubernetesSandboxID annotation.
+	// For standalone containers, sandboxID == id.
+	sandboxID := id
+	if isVirtualPod {
+		sandboxID = virtualPodID
+	} else if criType == "container" {
+		sandboxID = settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
+	}
+	c.sandboxID = sandboxID
+
 	if err := h.AddContainer(id, c); err != nil {
 		return nil, err
 	}
@@ -360,53 +450,20 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}()
 
-	// Handle virtual pod logic
-	if isVirtualPod && isCRI {
-		logrus.WithFields(logrus.Fields{
-			"containerID":  id,
-			"virtualPodID": virtualPodID,
-			"criType":      criType,
-		}).Info("Processing container for virtual pod")
-
-		if criType == "sandbox" {
-			// This is a virtual pod sandbox - create the virtual pod if it doesn't exist
-			if _, exists := h.GetVirtualPod(virtualPodID); !exists {
-				// Use the network namespace ID from the current container spec
-				// Virtual pods share the same network namespace
-				networkNamespace := specGuest.GetNetworkNamespaceID(settings.OCISpecification)
-				if networkNamespace == "" {
-					networkNamespace = fmt.Sprintf("virtual-pod-%s", virtualPodID)
-				}
-
-				if err := h.CreateVirtualPod(ctx, virtualPodID, virtualPodID, networkNamespace, settings.OCISpecification); err != nil {
-					return nil, errors.Wrapf(err, "failed to create virtual pod %s", virtualPodID)
-				}
-			}
-		}
-
-		// Add this container to the virtual pod
-		if err := h.AddContainerToVirtualPod(id, virtualPodID); err != nil {
-			return nil, errors.Wrapf(err, "failed to add container %s to virtual pod %s", id, virtualPodID)
-		}
-	}
-
-	// Normally we would be doing policy checking here at the start of our
-	// "policy gated function". However, we can't for create container as we
-	// need a properly correct sandboxID which might be changed by the code
-	// below that determines the sandboxID. This is a bit of future proofing
-	// as currently for our single use case, the sandboxID is the same as the
-	// container id
-
 	var namespaceID string
-	// for sandbox container sandboxID is same as container id
-	sandboxID := id
 	if isCRI {
 		switch criType {
 		case "sandbox":
-			// Capture namespaceID if any because setupSandboxContainerSpec clears the Windows section.
 			namespaceID = specGuest.GetNetworkNamespaceID(settings.OCISpecification)
 
-			err = setupSandboxContainerSpec(ctx, id, settings.OCISpecification)
+			// Resolve the sandbox root from OCIBundlePath.
+			sandboxRoot, err := h.registerSandboxRoot(id, settings.OCIBundlePath, virtualPodID)
+			if err != nil {
+				return nil, err
+			}
+			c.sandboxRoot = sandboxRoot
+
+			err = setupSandboxContainerSpec(ctx, id, sandboxRoot, settings.OCISpecification)
 			if err != nil {
 				return nil, err
 			}
@@ -416,48 +473,44 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				}
 			}()
 
-			if isVirtualPod {
-				// For virtual pods, create virtual pod specific paths
-				if err = setupVirtualPodMountsPath(virtualPodID); err != nil {
-					return nil, err
-				}
-				if err = setupVirtualPodTmpfsMountsPath(virtualPodID); err != nil {
-					return nil, err
-				}
-				if err = setupVirtualPodHugePageMountsPath(virtualPodID); err != nil {
-					return nil, err
-				}
-			} else {
-				// Traditional sandbox setup
-				if err = setupSandboxMountsPath(id); err != nil {
-					return nil, err
-				}
-				if err = setupSandboxTmpfsMountsPath(id); err != nil {
-					return nil, err
-				}
-				if err = setupSandboxHugePageMountsPath(id); err != nil {
-					return nil, err
-				}
+			if err = setupSandboxMountsPath(sandboxRoot); err != nil {
+				return nil, err
 			}
-			if err = setupSandboxLogDir(id, virtualPodID); err != nil {
+			if err = setupSandboxTmpfsMountsPath(sandboxRoot); err != nil {
+				return nil, err
+			}
+			if err = setupSandboxHugePageMountsPath(sandboxRoot); err != nil {
+				return nil, err
+			}
+			if err = setupSandboxLogDir(sandboxRoot); err != nil {
 				return nil, err
 			}
 
-			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxRoot, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+				return nil, err
+			}
+
+			if err := h.createPodInUVM(sandboxID, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 		case "container":
-			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
-			sandboxID = sid
 			if h.HasSecurityPolicy() {
-				if err = checkValidContainerID(sid, "sandbox"); err != nil {
+				if err = checkValidContainerID(sandboxID, "sandbox"); err != nil {
 					return nil, err
 				}
 			}
-			if !ok || sid == "" {
-				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
+
+			if sandboxID == "" {
+				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sandboxID)
 			}
-			if err = setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification, settings.OCIBundlePath); err != nil {
+
+			if err = h.createContainerInPod(sandboxID, id); err != nil {
+				return nil, err
+			}
+
+			sandboxRoot := h.resolveSandboxRoot(sandboxID)
+			c.sandboxRoot = sandboxRoot
+			if err = setupWorkloadContainerSpec(ctx, sandboxID, id, sandboxRoot, settings.OCISpecification, settings.OCIBundlePath); err != nil {
 				return nil, err
 			}
 
@@ -475,16 +528,18 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					_ = os.RemoveAll(settings.OCIBundlePath)
 				}
 			}()
-			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxRoot, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 		default:
 			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
 		}
 	} else {
-		// Capture namespaceID if any because setupStandaloneContainerSpec clears the Windows section.
+		// Standalone container: no pod entry is created.
 		namespaceID = specGuest.GetNetworkNamespaceID(settings.OCISpecification)
-		if err := setupStandaloneContainerSpec(ctx, id, settings.OCISpecification); err != nil {
+		// Standalone uses OCIBundlePath directly as its root.
+		c.sandboxRoot = settings.OCIBundlePath
+		if err := setupStandaloneContainerSpec(ctx, id, settings.OCIBundlePath, settings.OCISpecification); err != nil {
 			return nil, err
 		}
 		defer func() {
@@ -492,7 +547,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				_ = os.RemoveAll(settings.OCIBundlePath)
 			}
 		}()
-		if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer,
+		if err := securitypolicy.ExtendPolicyWithNetworkingMounts(c.sandboxRoot, h.securityOptions.PolicyEnforcer,
 			settings.OCISpecification); err != nil {
 			return nil, err
 		}
@@ -504,7 +559,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Mounts = append(settings.OCISpecification.Mounts, specs.Mount{
 			Destination: logDirMount,
 			Type:        "bind",
-			Source:      specGuest.SandboxLogsDir(sandboxID, virtualPodID),
+			Source:      specGuest.SandboxLogsDirFromRoot(c.sandboxRoot),
 			Options:     []string{"bind"},
 		})
 	}
@@ -559,9 +614,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			return nil, errors.Errorf("teeing container stdio to log path %q denied due to policy not allowing stdio access", logPath)
 		}
 
-		c.logPath = specGuest.SandboxLogPath(sandboxID, virtualPodID, logPath)
+		logsDir := specGuest.SandboxLogsDirFromRoot(c.sandboxRoot)
+		c.logPath = filepath.Join(logsDir, logPath)
 		// verify the logpath is still under the correct directory
-		if !strings.HasPrefix(c.logPath, specGuest.SandboxLogsDir(sandboxID, virtualPodID)) {
+		if !strings.HasPrefix(c.logPath, logsDir+"/") {
 			return nil, errors.Errorf("log path %v is not within sandbox's log dir", c.logPath)
 		}
 
@@ -598,7 +654,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, err
 	}
 
-	con, err := h.rtime.CreateContainer(id, settings.OCIBundlePath, nil)
+	con, err := h.rtime.CreateContainer(sandboxID, id, settings.OCIBundlePath, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create container")
 	}
@@ -1368,7 +1424,14 @@ func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestre
 		// container or not so it must always call `Sync`.
 		return ns.Sync(ctx)
 	case guestrequest.RequestTypeRemove:
-		ns := GetOrAddNetworkNamespace(na.ID)
+		ns, err := getNetworkNamespace(na.NamespaceID)
+		if err != nil {
+			log.G(ctx).WithFields(logrus.Fields{
+				logfields.NamespaceID: na.NamespaceID,
+				"adapterID":           na.ID,
+			}).WithError(err).Warn("namespace not found for adapter removal, skipping")
+			return nil
+		}
 		if err := ns.RemoveAdapter(ctx, na.ID); err != nil {
 			return err
 		}
@@ -1420,221 +1483,55 @@ func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec)
 	return oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false)
 }
 
-// Virtual Pod Management Methods
-
-// InitializeVirtualPodSupport sets up the parent cgroup for virtual pods
-func (h *Host) InitializeVirtualPodSupport(virtualPodsCgroup cgroups.Cgroup) {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	h.virtualPodsCgroupParent = virtualPodsCgroup
-	logrus.Info("Virtual pod support initialized")
-}
-
-// CreateVirtualPod creates a new virtual pod with its own cgroup and network namespace
-func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string, pSpec *specs.Spec) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	// Check if virtual pod already exists
-	if _, exists := h.virtualPods[virtualSandboxID]; exists {
-		return fmt.Errorf("virtual pod %s already exists", virtualSandboxID)
-	}
-
-	// Create cgroup path for this virtual pod under the parent cgroup
-	parentPath := ""
-	if h.virtualPodsCgroupParent != nil {
-		if pather, ok := h.virtualPodsCgroupParent.(interface{ Path() string }); ok {
-			parentPath = pather.Path()
-		} else {
-			parentPath = "/containers/virtual-pods" // fallback for default behavior
-		}
-	} else {
-		parentPath = "/containers/virtual-pods" // fallback for default behavior
-	}
-	cgroupPath := path.Join(parentPath, virtualSandboxID)
-
-	// Create the cgroup for this virtual pod with resource limits if provided
+// createPodInUVM allocates a cgroup for a pod and registers it in the host.
+func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec) error {
+	cgroupPath := fmt.Sprintf(podCgroupPathFmt, sid)
 	resources := &specs.LinuxResources{}
 	if pSpec != nil && pSpec.Linux != nil && pSpec.Linux.Resources != nil {
 		resources = pSpec.Linux.Resources
-		logrus.WithFields(logrus.Fields{
-			"virtualSandboxID": virtualSandboxID,
-		}).Info("Creating virtual pod with specified resources")
-	} else {
-		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Creating pod cgroup with default resources as none were specified")
 	}
 
-	cgroupControl, err := cgroups.New(cgroups.StaticPath(cgroupPath), resources)
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	if _, exists := h.pods[sid]; exists {
+		return fmt.Errorf("pod %s already exists", sid)
+	}
+
+	cgroupControl, err := cgroup.NewManager(cgroupPath, resources)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create cgroup for virtual pod %s", virtualSandboxID)
+		return fmt.Errorf("failed to create cgroup for pod %s: %w", sid, err)
 	}
-
-	// Create virtual pod structure
-	virtualPod := &VirtualPod{
-		VirtualSandboxID: virtualSandboxID,
-		MasterSandboxID:  masterSandboxID,
-		NetworkNamespace: networkNamespace,
-		CgroupPath:       cgroupPath,
-		CgroupControl:    cgroupControl,
-		Containers:       make(map[string]bool),
-		CreatedAt:        time.Now(),
+	h.pods[sid] = &pod{
+		sandboxID:     sid,
+		cgroupControl: cgroupControl,
+		// Register the sandbox container with its pod.
+		containers: map[string]bool{sid: true},
 	}
-
-	h.virtualPods[virtualSandboxID] = virtualPod
-
 	logrus.WithFields(logrus.Fields{
-		"virtualSandboxID": virtualSandboxID,
-		"masterSandboxID":  masterSandboxID,
-		"cgroupPath":       cgroupPath,
-		"networkNamespace": networkNamespace,
-	}).Info("Virtual pod created successfully")
-
+		"sandboxID":  sid,
+		"cgroupPath": cgroupPath,
+	}).Info("pod created in UVM")
 	return nil
 }
 
-// CreateVirtualPodWithoutMemoryLimit creates a virtual pod without memory limits (backward compatibility)
-func (h *Host) CreateVirtualPodWithoutMemoryLimit(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string) error {
-	return h.CreateVirtualPod(ctx, virtualSandboxID, masterSandboxID, networkNamespace, nil)
-}
+func (h *Host) createContainerInPod(sandboxID string, containerID string) error {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
 
-// GetVirtualPod retrieves a virtual pod by its virtualSandboxID
-func (h *Host) GetVirtualPod(virtualSandboxID string) (*VirtualPod, bool) {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	vp, exists := h.virtualPods[virtualSandboxID]
-	return vp, exists
-}
-
-// AddContainerToVirtualPod associates a container with a virtual pod
-func (h *Host) AddContainerToVirtualPod(containerID, virtualSandboxID string) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	// Check if virtual pod exists
-	vp, exists := h.virtualPods[virtualSandboxID]
-	if !exists {
-		return fmt.Errorf("virtual pod %s does not exist", virtualSandboxID)
+	// Find the pod corresponding to the sandboxID.
+	pod, podExists := h.pods[sandboxID]
+	if !podExists {
+		return fmt.Errorf("pod %s does not exist for workload container %s", sandboxID, containerID)
 	}
 
-	// Add container to virtual pod
-	vp.Containers[containerID] = true
-	h.containerToVirtualPod[containerID] = virtualSandboxID
+	// Validate that the container was not already registered.
+	if _, exists := pod.containers[containerID]; exists {
+		return fmt.Errorf("container %s already registered with pod %s", containerID, sandboxID)
+	}
 
-	logrus.WithFields(logrus.Fields{
-		"containerID":      containerID,
-		"virtualSandboxID": virtualSandboxID,
-	}).Info("Container added to virtual pod")
+	// Register container with the pod.
+	pod.containers[containerID] = true
 
 	return nil
-}
-
-// RemoveContainerFromVirtualPod removes a container from a virtual pod
-func (h *Host) RemoveContainerFromVirtualPod(containerID string) {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	virtualSandboxID, exists := h.containerToVirtualPod[containerID]
-	if !exists {
-		return // Container not in any virtual pod
-	}
-
-	// Remove from virtual pod
-	if vp, vpExists := h.virtualPods[virtualSandboxID]; vpExists {
-		delete(vp.Containers, containerID)
-
-		// If this is the sandbox container, delete the network namespace
-		if containerID == virtualSandboxID && vp.NetworkNamespace != "" {
-			if err := RemoveNetworkNamespace(context.Background(), vp.NetworkNamespace); err != nil {
-				logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-					Warn("Failed to remove virtual pod network namespace (sandbox container removal)")
-			}
-		}
-
-		// If this was the last container, cleanup the virtual pod
-		if len(vp.Containers) == 0 {
-			h.cleanupVirtualPod(virtualSandboxID)
-		}
-	}
-
-	delete(h.containerToVirtualPod, containerID)
-
-	logrus.WithFields(logrus.Fields{
-		"containerID":      containerID,
-		"virtualSandboxID": virtualSandboxID,
-	}).Info("Container removed from virtual pod")
-}
-
-// cleanupVirtualPod removes a virtual pod and its cgroup (should be called with mutex held)
-func (h *Host) cleanupVirtualPod(virtualSandboxID string) {
-	if vp, exists := h.virtualPods[virtualSandboxID]; exists {
-		// Delete the cgroup
-		if err := vp.CgroupControl.Delete(); err != nil {
-			logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-				Warn("Failed to delete virtual pod cgroup")
-		}
-
-		// Clean up network namespace if this is the last virtual pod using it
-		// Only remove if this virtual pod was managing the network namespace
-		if vp.NetworkNamespace != "" {
-			// For virtual pods, the network namespace is shared, so we only clean it up
-			// when the virtual pod itself is being destroyed
-			if err := RemoveNetworkNamespace(context.Background(), vp.NetworkNamespace); err != nil {
-				logrus.WithError(err).WithField("virtualSandboxID", virtualSandboxID).
-					Warn("Failed to remove virtual pod network namespace")
-			}
-		}
-
-		delete(h.virtualPods, virtualSandboxID)
-
-		logrus.WithField("virtualSandboxID", virtualSandboxID).Info("Virtual pod cleaned up")
-	}
-}
-
-// setupVirtualPodMountsPath creates mount directories for virtual pods
-func setupVirtualPodMountsPath(virtualSandboxID string) (err error) {
-	// Create virtual pod specific mount path using the new path generation functions
-	mountPath := specGuest.VirtualPodMountsDir(virtualSandboxID)
-	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create virtual pod mounts dir in sandbox %v", virtualSandboxID)
-	}
-	defer func() {
-		if err != nil {
-			_ = os.RemoveAll(mountPath)
-		}
-	}()
-
-	return storage.MountRShared(mountPath)
-}
-
-func setupVirtualPodTmpfsMountsPath(virtualSandboxID string) (err error) {
-	tmpfsDir := specGuest.VirtualPodTmpfsMountsDir(virtualSandboxID)
-	if err := os.MkdirAll(tmpfsDir, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create virtual pod tmpfs mounts dir in sandbox %v", virtualSandboxID)
-	}
-
-	defer func() {
-		if err != nil {
-			_ = os.RemoveAll(tmpfsDir)
-		}
-	}()
-
-	// mount a tmpfs at the tmpfsDir
-	// this ensures that the tmpfsDir is a mount point and not just a directory
-	// we don't care if it is already mounted, so ignore EBUSY
-	if err := unix.Mount("tmpfs", tmpfsDir, "tmpfs", 0, ""); err != nil && !errors.Is(err, unix.EBUSY) {
-		return errors.Wrapf(err, "failed to mount tmpfs at %s", tmpfsDir)
-	}
-
-	return storage.MountRShared(tmpfsDir)
-}
-
-func setupVirtualPodHugePageMountsPath(virtualSandboxID string) error {
-	mountPath := specGuest.VirtualPodHugePagesMountsDir(virtualSandboxID)
-	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create virtual pod hugepage mounts dir %v", virtualSandboxID)
-	}
-
-	return storage.MountRShared(mountPath)
 }

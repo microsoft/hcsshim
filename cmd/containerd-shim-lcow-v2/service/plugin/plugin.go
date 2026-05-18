@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package plugin
 
@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v2/service"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/shim"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	hcsversion "github.com/Microsoft/hcsshim/internal/version"
@@ -30,7 +31,7 @@ const (
 var svc *service.Service
 
 func init() {
-	// Provider ID: 64F6FC7F-8326-5EE8-B890-3734AE584136
+	// Provider ID: A6BD4B70-8A0B-5913-5C8E-E2780DC7F06F
 	// Provider and hook aren't closed explicitly, as they will exist until process exit.
 	provider, err := etw.NewProvider(etwProviderName, etwCallback)
 	if err != nil {
@@ -106,7 +107,7 @@ func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, m
 		if err != nil {
 			return
 		}
-		log := logrus.WithField("sandboxID", svc.SandboxID())
+		log := logrus.WithField(logfields.SandboxID, svc.SandboxID())
 		log.WithField("stack", resp.Stacks).Info("goroutine stack dump")
 		if resp.GuestStacks != "" {
 			log.WithField("stack", resp.GuestStacks).Info("guest stack dump")

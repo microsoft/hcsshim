@@ -7,18 +7,20 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 
-	cgroups "github.com/containerd/cgroups/v3/cgroup1"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
+	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
@@ -30,7 +32,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 // containerStatus has been introduced to enable parallel container creation
@@ -46,7 +47,10 @@ const (
 )
 
 type Container struct {
+	// id is the unique container identifier.
 	id string
+	// sandboxID is the pod this container belongs to. For sandbox containers, sandboxID == id.
+	sandboxID string
 
 	vsock   transport.Transport
 	logPath string   // path to [logFile].
@@ -77,6 +81,10 @@ type Container struct {
 	// of this container is located. Usually, this is either `/run/gcs/c/<containerID>` or
 	// `/run/gcs/c/<UVMID>/container_<containerID>` if scratch is shared with UVM scratch.
 	scratchDirPath string
+
+	// sandboxRoot is the root directory of the pod within the guest.
+	// Used during cleanup to unmount sandbox-specific paths.
+	sandboxRoot string
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (_ int, err error) {
@@ -229,25 +237,19 @@ func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
 func (c *Container) Delete(ctx context.Context) error {
 	entity := log.G(ctx).WithField(logfields.ContainerID, c.id)
 	entity.Info("opengcs::Container::Delete")
-	if c.isSandbox {
-		// Check if this is a virtual pod
-		virtualSandboxID := ""
-		if c.spec != nil && c.spec.Annotations != nil {
-			virtualSandboxID = c.spec.Annotations[annotations.VirtualPodID]
-		}
-
-		// remove user mounts in sandbox container - use virtual pod aware paths
-		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareSandboxMountsDir(c.id, virtualSandboxID), true); err != nil {
+	if c.isSandbox && c.sandboxRoot != "" {
+		// remove user mounts in sandbox container
+		if err := storage.UnmountAllInPath(ctx, specGuest.SandboxMountsDirFromRoot(c.sandboxRoot), true); err != nil {
 			entity.WithError(err).Error("failed to unmount sandbox mounts")
 		}
 
-		// remove user mounts in tmpfs sandbox container - use virtual pod aware paths
-		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareSandboxTmpfsMountsDir(c.id, virtualSandboxID), true); err != nil {
+		// remove tmpfs mounts in sandbox container
+		if err := storage.UnmountAllInPath(ctx, specGuest.SandboxTmpfsMountsDirFromRoot(c.sandboxRoot), true); err != nil {
 			entity.WithError(err).Error("failed to unmount tmpfs sandbox mounts")
 		}
 
-		// remove hugepages mounts in sandbox container - use virtual pod aware paths
-		if err := storage.UnmountAllInPath(ctx, specGuest.VirtualPodAwareHugePagesMountsDir(c.id, virtualSandboxID), true); err != nil {
+		// remove hugepages mounts in sandbox container
+		if err := storage.UnmountAllInPath(ctx, specGuest.SandboxHugePagesMountsDirFromRoot(c.sandboxRoot), true); err != nil {
 			entity.WithError(err).Error("failed to unmount hugepages mounts")
 		}
 	}
@@ -270,6 +272,16 @@ func (c *Container) Delete(ctx context.Context) error {
 			retErr = fmt.Errorf("errors deleting container oci bundle dir: %w; %w", retErr, err)
 		} else {
 			retErr = err
+		}
+	}
+
+	// For V2 sandbox containers, remove the now-empty pod directory
+	// (parent of c.ociBundlePath, e.g. /run/gcs/pods/<podID>).
+	if c.isSandbox && strings.HasPrefix(c.ociBundlePath, guestpath.LCOWV2RootPrefixInVM) {
+		podDir := filepath.Dir(c.ociBundlePath)
+		if err := os.Remove(podDir); err != nil && !os.IsNotExist(err) {
+			entity.WithError(err).WithField("podDir", podDir).
+				Warn("failed to remove pod directory after sandbox delete")
 		}
 	}
 
@@ -308,18 +320,13 @@ func (c *Container) setExitType(signal syscall.Signal) {
 }
 
 // GetStats returns the cgroup metrics for the container.
+// Works with both cgroup v1 and v2 systems.
 func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	_, span := oc.StartSpan(ctx, "opengcs::Container::GetStats")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	cgroupPath := c.spec.Linux.CgroupsPath
-	cg, err := cgroups.Load(cgroups.StaticPath(cgroupPath))
-	if err != nil {
-		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
-	}
-
-	return cg.Stat(cgroups.IgnoreNotExist)
+	return cgroup.LoadAndStat(c.spec.Linux.CgroupsPath)
 }
 
 func (c *Container) modifyContainerConstraints(ctx context.Context, _ guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {

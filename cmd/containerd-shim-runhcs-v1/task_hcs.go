@@ -188,9 +188,11 @@ func newHcsTask(
 	ownsParent bool,
 	req *task.CreateTaskRequest,
 	s *specs.Spec) (_ shimTask, err error) {
-	log.G(ctx).WithFields(logrus.Fields{
-		"tid":        req.ID,
-		"ownsParent": ownsParent,
+	ctx, entry := log.SetEntry(ctx, logrus.Fields{logfields.TaskID: req.ID})
+	entry.WithFields(logrus.Fields{
+		"hasHost":      parent != nil,
+		"isVirtualPod": s.Annotations != nil && s.Annotations[annotations.VirtualPodID] != "",
+		"ownsHost":     ownsParent,
 	}).Debug("newHcsTask")
 
 	owner := filepath.Base(os.Args[0])
@@ -495,22 +497,30 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 	}
 
 	if eid == "" {
+		entry := log.G(ctx).WithFields(logrus.Fields{
+			logfields.TaskID: ht.id,
+			logfields.ExecID: eid,
+		})
+
 		// We are killing the init task, so we expect the container to be
 		// stopped after this.
 		//
 		// The task process may have already exited, and the status set to
 		// shimExecStateExited, but resources may still be in the process
 		// of being cleaned up. Wait for ht.closed to be closed. This signals
-		// that waitInitExit() has finished destroying container resources,
-		// and layers were umounted.
+		// that [hcsTask.waitInitExit]/[hcsTask.waitForHostExit] has finished destroying
+		// container resources and that layers were umounted.
 		// If the shim exits before resources are cleaned up, those resources
 		// will remain locked and untracked, which leads to lingering sandboxes
 		// and container resources like base vhdx.
+		const timeout = 30 * time.Second
+		entry.WithField(logfields.Timeout, timeout).Trace("waiting for task to be closed")
 		select {
-		case <-time.After(30 * time.Second):
-			log.G(ctx).Error("timed out waiting for resource cleanup")
+		case <-time.After(timeout):
+			entry.WithField(logfields.Timeout, timeout).Error("timed out waiting for task to close while deleting init exec")
 			return 0, 0, time.Time{}, errors.Wrap(hcs.ErrTimeout, "waiting for container resource cleanup")
 		case <-ht.closed:
+			entry.Trace("received task close signal")
 		}
 
 		// The init task has now exited. A ForceExit() has already been sent to
@@ -608,7 +618,10 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 func (ht *hcsTask) waitInitExit() {
 	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitInitExit")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+	span.AddAttributes(
+		trace.StringAttribute("tid", ht.id),
+		trace.BoolAttribute("host", ht.host != nil),
+		trace.BoolAttribute("ownsHost", ht.ownsHost))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()
@@ -627,7 +640,10 @@ func (ht *hcsTask) waitInitExit() {
 func (ht *hcsTask) waitForHostExit() {
 	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitForHostExit")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+	span.AddAttributes(
+		trace.StringAttribute("tid", ht.id),
+		trace.BoolAttribute("host", ht.host != nil),
+		trace.BoolAttribute("ownsHost", ht.ownsHost))
 
 	err := ht.host.WaitCtx(ctx)
 	if err != nil {
@@ -655,13 +671,16 @@ func (ht *hcsTask) waitForHostExit() {
 // == nil`.
 func (ht *hcsTask) close(ctx context.Context) {
 	ht.closeOnce.Do(func() {
-		log.G(ctx).Debug("hcsTask::closeOnce")
+		entry := log.G(ctx)
+		entry.Debug("hcsTask::closeOnce")
 
 		// ht.c should never be nil for a real task but in testing we stub
 		// this to avoid a nil dereference. We really should introduce a
 		// method or interface for ht.c operations that we can stub for
 		// testing.
 		if ht.c != nil {
+			const tearDownTimeout = 30 * time.Second
+
 			// Do our best attempt to tear down the container.
 			// TODO: unify timeout select statements and use [ht.c.WaitCtx] and [context.WithTimeout]
 			var werr error
@@ -670,52 +689,63 @@ func (ht *hcsTask) close(ctx context.Context) {
 				werr = ht.c.Wait()
 				close(ch)
 			}()
+
 			err := ht.c.Shutdown(ctx)
 			if err != nil {
-				log.G(ctx).WithError(err).Error("failed to shutdown container")
+				entry.WithError(err).Error("failed to shutdown container")
 			} else {
-				t := time.NewTimer(time.Second * 30)
+				t := time.NewTimer(tearDownTimeout)
 				select {
 				case <-ch:
 					err = werr
 					t.Stop()
 					if err != nil {
-						log.G(ctx).WithError(err).Error("failed to wait for container shutdown")
+						entry.WithError(err).Error("failed to wait for container shutdown")
 					}
 				case <-t.C:
 					err = hcs.ErrTimeout
-					log.G(ctx).WithError(err).Error("failed to wait for container shutdown")
+					entry.WithFields(logrus.Fields{
+						logfields.Timeout: tearDownTimeout,
+						logrus.ErrorKey:   err,
+					}).Error("timed out while waiting for container shutdown")
 				}
 			}
 
 			if err != nil {
 				err = ht.c.Terminate(ctx)
 				if err != nil {
-					log.G(ctx).WithError(err).Error("failed to terminate container")
+					entry.WithError(err).Error("failed to terminate container")
 				} else {
-					t := time.NewTimer(time.Second * 30)
+					t := time.NewTimer(tearDownTimeout)
 					select {
 					case <-ch:
 						err = werr
 						t.Stop()
 						if err != nil {
-							log.G(ctx).WithError(err).Error("failed to wait for container terminate")
+							entry.WithError(err).Error("failed to wait for container terminate")
 						}
 					case <-t.C:
-						log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container terminate")
+						entry.WithFields(logrus.Fields{
+							logfields.Timeout: tearDownTimeout,
+							logrus.ErrorKey:   hcs.ErrTimeout,
+						}).Error("timed out while waiting for container terminate")
 					}
 				}
 			}
 
 			// Release any resources associated with the container.
+			entry.Trace("starting task resource cleanup")
+
 			if err := resources.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
-				log.G(ctx).WithError(err).Error("failed to release container resources")
+				entry.WithError(err).Error("failed to release container resources")
 			}
 
 			// Close the container handle invalidating all future access.
 			if err := ht.c.Close(); err != nil {
-				log.G(ctx).WithError(err).Error("failed to close container")
+				entry.WithError(err).Error("failed to close container")
 			}
+
+			entry.Trace("task resource cleanup completed")
 		}
 		ht.closeHost(ctx)
 	})
@@ -730,11 +760,12 @@ func (ht *hcsTask) close(ctx context.Context) {
 // This call is idempotent and safe to call multiple times.
 func (ht *hcsTask) closeHost(ctx context.Context) {
 	ht.closeHostOnce.Do(func() {
-		log.G(ctx).Debug("hcsTask::closeHostOnce")
+		entry := log.G(ctx)
+		entry.Debug("hcsTask::closeHostOnce")
 
 		if ht.ownsHost && ht.host != nil {
 			if err := ht.host.Close(); err != nil {
-				log.G(ctx).WithError(err).Error("failed host vm shutdown")
+				entry.WithError(err).Error("failed host vm shutdown")
 			}
 		}
 		// Send the `init` exec exit notification always.
@@ -750,7 +781,7 @@ func (ht *hcsTask) closeHost(ctx context.Context) {
 				ExitStatus:  exit.ExitStatus,
 				ExitedAt:    exit.ExitedAt,
 			}); err != nil {
-			log.G(ctx).WithError(err).Error("failed to publish TaskExitEventTopic")
+			entry.WithError(err).Error("failed to publish TaskExitEventTopic")
 		}
 		close(ht.closed)
 	})

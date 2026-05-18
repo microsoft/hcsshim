@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && wcow
 
 package vmmanager
 
@@ -10,18 +10,6 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
-
-// VMSocketManager manages configuration for a hypervisor socket transport. This includes sockets such as
-// HvSocket and Vsock.
-type VMSocketManager interface {
-	// UpdateHvSocketService will update the configuration for the HvSocket service with the specified `serviceID`.
-	UpdateHvSocketService(ctx context.Context, serviceID string, config *hcsschema.HvSocketServiceConfig) error
-
-	// RemoveHvSocketService will remove the HvSocket service with the specified `serviceID` from the Utility VM.
-	RemoveHvSocketService(ctx context.Context, serviceID string) error
-}
-
-var _ VMSocketManager = (*UtilityVM)(nil)
 
 // UpdateHvSocketService calls HCS to update/create the hvsocket service for
 // the UVM. Takes in a service ID and the hvsocket service configuration. If there is no

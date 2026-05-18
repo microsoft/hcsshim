@@ -288,8 +288,8 @@ func prepareCommonConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWC
 	}
 
 	if opts.ResourcePartitionID != nil {
-		// TODO (maksiman): assign pod to resource partition and potentially do an OS version check before that
 		log.G(ctx).WithField("resource-partition-id", opts.ResourcePartitionID.String()).Debug("setting resource partition ID")
+		doc.VirtualMachine.ResourcePartitionId = opts.ResourcePartitionID.String()
 	}
 
 	maps.Copy(doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable, opts.AdditionalHyperVConfig)

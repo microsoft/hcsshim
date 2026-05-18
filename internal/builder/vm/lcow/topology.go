@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package lcow
 
@@ -56,21 +56,6 @@ func parseCPUOptions(ctx context.Context, opts *runhcsoptions.Options, annotatio
 		cpu.CpuGroup = &hcsschema.CpuGroup{Id: cpuGroupID}
 	}
 
-	// Resource Partition ID parsing.
-	resourcePartitionID := oci.ParseAnnotationsString(annotations, shimannotations.ResourcePartitionID, "")
-	if resourcePartitionID != "" {
-		log.G(ctx).WithField("resourcePartitionID", resourcePartitionID).Debug("setting resource partition ID")
-
-		if _, err = guid.FromString(resourcePartitionID); err != nil {
-			return nil, fmt.Errorf("failed to parse resource_partition_id %q to GUID: %w", resourcePartitionID, err)
-		}
-
-		// CPU group and resource partition are mutually exclusive.
-		if cpuGroupID != "" {
-			return nil, fmt.Errorf("cpu_group_id and resource_partition_id cannot be set at the same time")
-		}
-	}
-
 	log.G(ctx).WithFields(logrus.Fields{
 		"processorCount":  count,
 		"processorLimit":  limit,
@@ -79,6 +64,28 @@ func parseCPUOptions(ctx context.Context, opts *runhcsoptions.Options, annotatio
 	}).Debug("parseCPUOptions completed successfully")
 
 	return cpu, nil
+}
+
+// parseResourcePartitionOptions parses the resource partition ID annotation and validates it.
+// Resource partition ID and CPU group ID are mutually exclusive.
+func parseResourcePartitionOptions(ctx context.Context, annotations map[string]string, cpuConfig *hcsschema.VirtualMachineProcessor) (string, error) {
+	resourcePartitionID := oci.ParseAnnotationsString(annotations, shimannotations.ResourcePartitionID, "")
+	if resourcePartitionID == "" {
+		return "", nil
+	}
+
+	log.G(ctx).WithField("resourcePartitionID", resourcePartitionID).Debug("setting resource partition ID")
+
+	if _, err := guid.FromString(resourcePartitionID); err != nil {
+		return "", fmt.Errorf("failed to parse resource_partition_id %q to GUID: %w", resourcePartitionID, err)
+	}
+
+	// CPU group and resource partition are mutually exclusive.
+	if cpuConfig.CpuGroup != nil {
+		return "", fmt.Errorf("cpu_group_id and resource_partition_id cannot be set at the same time")
+	}
+
+	return resourcePartitionID, nil
 }
 
 // parseMemoryOptions parses memory options from annotations and options.

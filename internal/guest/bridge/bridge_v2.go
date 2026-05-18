@@ -123,7 +123,7 @@ func (b *Bridge) createContainerV2(r *Request) (_ RequestResponse, err error) {
 			Result:     0,
 			ResultInfo: "",
 		}
-		b.PublishNotification(notification)
+		b.publishNotification(notification)
 	}()
 
 	return &prot.ContainerCreateResponse{}, nil

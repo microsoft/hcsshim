@@ -304,6 +304,7 @@ type WindowsContainer struct {
 	Command          CommandArgs                    `json:"command"`
 	EnvRules         EnvRules                       `json:"env_rules"`
 	Layers           Layers                         `json:"layers"`
+	MountedCim       []string                       `json:"mounted_cim"`
 	WorkingDir       string                         `json:"working_dir"`
 	ExecProcesses    []WindowsExecProcessConfig     `json:"-"`
 	Signals          []guestrequest.SignalValueWCOW `json:"-"`

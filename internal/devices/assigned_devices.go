@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
+	vpciCtrl "github.com/Microsoft/hcsshim/internal/controller/device/vpci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/pkg/errors"
@@ -45,7 +46,7 @@ func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID string, 
 		if err != nil {
 			return vpci, nil, errors.Wrapf(err, "failed to assign device %s of type %s to pod %s", deviceID, idType, vm.ID())
 		}
-		vmBusInstanceID := vm.GetAssignedDeviceVMBUSInstanceID(vpci.VMBusGUID)
+		vmBusInstanceID := vpciCtrl.GetAssignedDeviceVMBUSInstanceID(vpci.VMBusGUID)
 		log.G(ctx).WithField("vmbus id", vmBusInstanceID).Info("vmbus instance ID")
 
 		locationPaths, err = getChildrenDeviceLocationPaths(ctx, vm, vmBusInstanceID, deviceUtilPath)

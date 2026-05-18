@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package vmparity
 
@@ -102,6 +102,10 @@ func TestLCOWDocumentParity(t *testing.T) {
 			if legacySpec.Annotations == nil {
 				legacySpec.Annotations = map[string]string{}
 			}
+			// The v2 builder does not support vPMem devices and always routes the
+			// rootfs through SCSI. Disable vPMem on the legacy side so the resulting
+			// HCS documents are directly comparable.
+			legacySpec.Annotations[shimannotations.VPMemCount] = "0"
 			legacyDoc, legacyOpts, err := buildLegacyLCOWDocument(ctx, legacySpec, shimOpts, bootDir)
 			if err != nil {
 				t.Fatalf("failed to build legacy LCOW document: %v", err)
@@ -201,7 +205,6 @@ func checkSandboxOptionsParity(t *testing.T, legacyOpts *uvm.OptionsLCOW, sandbo
 		{"EnableScratchEncryption", legacyOpts.EnableScratchEncryption, sandboxOpts.EnableScratchEncryption},
 		{"PolicyBasedRouting", legacyOpts.PolicyBasedRouting, sandboxOpts.PolicyBasedRouting},
 		{"FullyPhysicallyBacked", legacyOpts.FullyPhysicallyBacked, sandboxOpts.FullyPhysicallyBacked},
-		{"VPMEMMultiMapping", !legacyOpts.VPMemNoMultiMapping, sandboxOpts.VPMEMMultiMapping},
 	}
 
 	for _, c := range checks {

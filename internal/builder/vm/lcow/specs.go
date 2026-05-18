@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package lcow
 
@@ -17,7 +17,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
-	"github.com/Microsoft/hcsshim/osversion"
 	shimannotations "github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
@@ -73,6 +72,12 @@ func BuildSandboxConfig(
 	cpuConfig, err := parseCPUOptions(ctx, opts, spec.Annotations)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse CPU parameters: %w", err)
+	}
+
+	// Parse resource partition ID.
+	resourcePartitionID, err := parseResourcePartitionOptions(ctx, spec.Annotations, cpuConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse resource partition parameters: %w", err)
 	}
 
 	// Parse memory configuration.
@@ -131,7 +136,7 @@ func BuildSandboxConfig(
 	// ===============================================================================
 
 	// This should be done after parsing boot options, as some device options may depend on boot settings (e.g., rootfs path).
-	vpmemCtrl, scsiCtrl, vpciDevices, err := parseDeviceOptions(
+	scsiCtrl, vpciDevices, err := parseDeviceOptions(
 		ctx,
 		spec.Annotations,
 		spec.Devices,
@@ -208,7 +213,6 @@ func BuildSandboxConfig(
 			spec.Annotations,
 			cpuConfig.Count,
 			bootOptions.LinuxKernelDirect != nil, // isKernelDirectBoot
-			vpmemCtrl != nil,                     // isVPMem
 			comPorts != nil,                      // hasConsole
 			filepath.Base(rootFsFullPath),
 		)
@@ -253,11 +257,11 @@ func BuildSandboxConfig(
 				Processor: cpuConfig,
 				Numa:      numa,
 			},
-			StorageQoS: storageQOSConfig,
+			StorageQoS:          storageQOSConfig,
+			ResourcePartitionId: resourcePartitionID,
 			Devices: &hcsschema.Devices{
-				Scsi:        scsiCtrl,
-				VirtualPMem: vpmemCtrl,
-				VirtualPci:  vpciDevices,
+				Scsi:       scsiCtrl,
+				VirtualPci: vpciDevices,
 				HvSocket: &hcsschema.HvSocket2{
 					HvSocketConfig: hvSocketConfig,
 				},
@@ -292,9 +296,20 @@ func processAnnotations(ctx context.Context, opts *runhcsoptions.Options, annota
 	}
 
 	// Check for explicitly unsupported annotations.
-	ncProxy := oci.ParseAnnotationsString(annotations, shimannotations.NetworkConfigProxy, "")
-	if ncProxy != "" {
-		return fmt.Errorf("%s annotation is not supported", shimannotations.NetworkConfigProxy)
+	//
+	// These annotations are only handled by the legacy uvm.CreateLCOW path
+	// (e.g. VirtualMachineKernelDrivers is still parsed in internal/hcsoci);
+	// the v2 shim builder has not implemented them yet. Returning an error
+	// here surfaces the gap so users can request the feature rather than
+	// silently having their annotation ignored.
+	for _, key := range []string{
+		shimannotations.NetworkConfigProxy,
+		shimannotations.VPMemNoMultiMapping,
+		shimannotations.VirtualMachineKernelDrivers,
+	} {
+		if v := oci.ParseAnnotationsString(annotations, key, ""); v != "" {
+			return fmt.Errorf("%s annotation is not supported", key)
+		}
 	}
 
 	log.G(ctx).Debug("processAnnotations completed successfully")
@@ -312,18 +327,7 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 		FullyPhysicallyBacked: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.FullyPhysicallyBacked, false),
 		PolicyBasedRouting:    oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
 		NoWritableFileShares:  oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
-		// Multi-mapping is enabled by default on 19H1+, can be disabled via annotation.
-		VPMEMMultiMapping: !(oci.ParseAnnotationsBool(ctx, annotations, shimannotations.VPMemNoMultiMapping, osversion.Build() < osversion.V19H1)),
 	}
-
-	// Parse the list of additional kernel drivers to be injected into the VM.
-	drivers := oci.ParseAnnotationCommaSeparated(shimannotations.VirtualMachineKernelDrivers, annotations)
-	for _, driver := range drivers {
-		if _, err := os.Stat(driver); err != nil {
-			return nil, fmt.Errorf("failed to find path to drivers at %s: %w", driver, err)
-		}
-	}
-	sandboxOptions.GuestDrivers = drivers
 
 	// Determine if this is a confidential VM early, as it affects boot options parsing
 	securityPolicy := oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicy, "")

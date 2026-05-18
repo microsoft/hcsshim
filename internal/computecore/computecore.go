@@ -94,34 +94,6 @@ import (
 // errVmcomputeOperationPending is an error encountered when the operation is being completed asynchronously
 const errVmcomputeOperationPending = syscall.Errno(0xC0370103)
 
-// HcsSystem is the handle associated with a created compute system.
-type HcsSystem syscall.Handle
-
-// HcsProcess is the handle associated with a created process in a compute
-// system.
-type HcsProcess syscall.Handle
-
-// HcsOperation is the handle associated with an operation on a compute system.
-type HcsOperation syscall.Handle
-
-// HcsCallback is the handle associated with the function to call when events
-// occur.
-type HcsCallback syscall.Handle
-
-// HcsProcessInformation is the structure used when creating or getting process
-// info.
-type HcsProcessInformation struct {
-	// ProcessID is the pid of the created process.
-	ProcessID uint32
-	_         uint32 // reserved padding
-	// StdInput is the handle associated with the stdin of the process.
-	StdInput syscall.Handle
-	// StdOutput is the handle associated with the stdout of the process.
-	StdOutput syscall.Handle
-	// StdError is the handle associated with the stderr of the process.
-	StdError syscall.Handle
-}
-
 func execute(ctx gcontext.Context, timeout time.Duration, f func() error) error {
 	now := time.Now()
 	if timeout > 0 {

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && wcow
 
 package guestmanager
 
@@ -11,20 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
-
-// WCOWNetworkManager exposes guest network operations.
-type WCOWNetworkManager interface {
-	// AddNetworkNamespace adds a network namespace to the WCOW guest.
-	AddNetworkNamespace(ctx context.Context, settings *hcn.HostComputeNamespace) error
-	// RemoveNetworkNamespace removes a network namespace from the WCOW guest.
-	RemoveNetworkNamespace(ctx context.Context, settings *hcn.HostComputeNamespace) error
-	// AddNetworkInterface adds a network interface to the WCOW guest.
-	AddNetworkInterface(ctx context.Context, adapterID string, requestType guestrequest.RequestType, settings *hcn.HostComputeEndpoint) error
-	// RemoveNetworkInterface removes a network interface from the WCOW guest.
-	RemoveNetworkInterface(ctx context.Context, adapterID string, requestType guestrequest.RequestType, settings *hcn.HostComputeEndpoint) error
-}
-
-var _ WCOWNetworkManager = (*Guest)(nil)
 
 // AddNetworkNamespace adds a network namespace in the guest.
 func (gm *Guest) AddNetworkNamespace(ctx context.Context, settings *hcn.HostComputeNamespace) error {

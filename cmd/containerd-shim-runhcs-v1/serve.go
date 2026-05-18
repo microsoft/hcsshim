@@ -161,9 +161,10 @@ var serveCommand = cli.Command{
 
 		os.Stdin.Close()
 
-		// enable scrubbing
-		if shimOpts.ScrubLogs {
-			hcslog.SetScrubbing(true)
+		// Scrubbing is enabled by default (via init() in internal/log/scrub.go).
+		// Only disable if the option is explicitly set to false.
+		if shimOpts.ScrubLogs != nil && !*shimOpts.ScrubLogs {
+			hcslog.SetScrubbing(false)
 		}
 
 		// Force the cli.ErrWriter to be os.Stdout for this. We use stderr for

@@ -13,7 +13,7 @@ type ed25519Signer struct {
 
 // Algorithm returns the signing algorithm associated with the private key.
 func (es *ed25519Signer) Algorithm() Algorithm {
-	return AlgorithmEd25519
+	return AlgorithmEdDSA
 }
 
 // Sign signs message content with the private key, possibly using entropy from
@@ -34,7 +34,7 @@ type ed25519Verifier struct {
 
 // Algorithm returns the signing algorithm associated with the public key.
 func (ev *ed25519Verifier) Algorithm() Algorithm {
-	return AlgorithmEd25519
+	return AlgorithmEdDSA
 }
 
 // Verify verifies message content with the public key, returning nil for

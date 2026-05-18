@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && wcow
 
 package vmmanager
 
@@ -10,17 +10,6 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
-
-// VSMBManager manages adding virtual smb shares to a Utility VM.
-type VSMBManager interface {
-	// AddVSMB adds a virtual smb share to a running Utility VM.
-	AddVSMB(ctx context.Context, settings hcsschema.VirtualSmbShare) error
-
-	// RemoveVSMB removes a virtual smb share from a running Utility VM.
-	RemoveVSMB(ctx context.Context, settings hcsschema.VirtualSmbShare) error
-}
-
-var _ VSMBManager = (*UtilityVM)(nil)
 
 func (uvm *UtilityVM) AddVSMB(ctx context.Context, settings hcsschema.VirtualSmbShare) error {
 	modification := &hcsschema.ModifySettingRequest{

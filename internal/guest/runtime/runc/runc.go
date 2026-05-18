@@ -31,8 +31,8 @@ func setSubreaper(i int) error {
 }
 
 // NewRuntime instantiates a new runcRuntime struct.
-func NewRuntime(logBasePath string) (runtime.Runtime, error) {
-	rtime := &runcRuntime{runcLogBasePath: logBasePath}
+func NewRuntime() (runtime.Runtime, error) {
+	rtime := &runcRuntime{}
 	if err := rtime.initialize(); err != nil {
 		return nil, err
 	}
@@ -42,26 +42,21 @@ func NewRuntime(logBasePath string) (runtime.Runtime, error) {
 // runcRuntime is an implementation of the Runtime interface which uses runC as
 // the container runtime.
 type runcRuntime struct {
-	runcLogBasePath string
 }
 
 var _ runtime.Runtime = &runcRuntime{}
 
 // initialize sets up any state necessary for the runcRuntime to function.
 func (r *runcRuntime) initialize() error {
-	paths := [2]string{containerFilesDir, r.runcLogBasePath}
-	for _, p := range paths {
-		_, err := os.Stat(p)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-			if err := os.MkdirAll(p, 0700); err != nil {
-				return errors.Wrapf(err, "failed making runC container files directory %s", p)
-			}
+	_, err := os.Stat(containerFilesDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.MkdirAll(containerFilesDir, 0700); err != nil {
+			return errors.Wrapf(err, "failed making runC container files directory %s", containerFilesDir)
 		}
 	}
-
 	return nil
 }
 
@@ -69,8 +64,8 @@ func (r *runcRuntime) initialize() error {
 // bundlePath.
 // bundlePath should be a path to an OCI bundle containing a config.json file
 // and a rootfs for the container.
-func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c runtime.Container, err error) {
-	c, err = r.runCreateCommand(id, bundlePath, stdioSet)
+func (r *runcRuntime) CreateContainer(sandboxID, id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c runtime.Container, err error) {
+	c, err = r.runCreateCommand(sandboxID, id, bundlePath, stdioSet)
 	if err != nil {
 		return nil, err
 	}
@@ -154,8 +149,8 @@ func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 }
 
 // runCreateCommand sets up the arguments for calling runc create.
-func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (runtime.Container, error) {
-	c := &container{r: r, id: id}
+func (r *runcRuntime) runCreateCommand(sandboxID, id string, bundlePath string, stdioSet *stdio.ConnectionSet) (runtime.Container, error) {
+	c := &container{r: r, sandboxID: sandboxID, id: id, bundlePath: bundlePath}
 	if err := r.makeContainerDir(id); err != nil {
 		return nil, err
 	}

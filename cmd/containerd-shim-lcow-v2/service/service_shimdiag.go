@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && lcow
 
 package service
 
@@ -7,11 +7,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 
 	"github.com/containerd/errdefs/pkg/errgrpc"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -34,6 +36,9 @@ func (s *Service) DiagExecInHost(ctx context.Context, request *shimdiag.ExecProc
 		trace.StringAttribute(logfields.Stdout, request.Stdout),
 		trace.StringAttribute(logfields.Stderr, request.Stderr))
 
+	// Set the sandbox ID in the logger context for all subsequent logs in this request.
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, s.sandboxID))
+
 	r, e := s.diagExecInHostInternal(ctx, request)
 	return r, errgrpc.ToGRPC(e)
 }
@@ -48,6 +53,9 @@ func (s *Service) DiagTasks(ctx context.Context, request *shimdiag.TasksRequest)
 	span.AddAttributes(
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.BoolAttribute(logfields.Execs, request.Execs))
+
+	// Set the sandbox ID in the logger context for all subsequent logs in this request.
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, s.sandboxID))
 
 	r, e := s.diagTasksInternal(ctx, request)
 	return r, errgrpc.ToGRPC(e)
@@ -66,20 +74,26 @@ func (s *Service) DiagShare(ctx context.Context, request *shimdiag.ShareRequest)
 		trace.StringAttribute(logfields.UVMPath, request.UvmPath),
 		trace.BoolAttribute(logfields.ReadOnly, request.ReadOnly))
 
+	// Set the sandbox ID in the logger context for all subsequent logs in this request.
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, s.sandboxID))
+
 	r, e := s.diagShareInternal(ctx, request)
 	return r, errgrpc.ToGRPC(e)
 }
 
 // DiagStacks returns the stack traces of all goroutines in the shim.
 // This method is part of the instrumentation layer and business logic is included in diagStacksInternal.
-func (s *Service) DiagStacks(ctx context.Context, request *shimdiag.StacksRequest) (resp *shimdiag.StacksResponse, err error) {
+func (s *Service) DiagStacks(ctx context.Context, _ *shimdiag.StacksRequest) (resp *shimdiag.StacksResponse, err error) {
 	ctx, span := oc.StartSpan(ctx, "DiagStacks")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute(logfields.SandboxID, s.sandboxID))
 
-	r, e := s.diagStacksInternal(ctx, request)
+	// Set the sandbox ID in the logger context for all subsequent logs in this request.
+	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SandboxID, s.sandboxID))
+
+	r, e := s.diagStacksInternal(ctx)
 	return r, errgrpc.ToGRPC(e)
 }
 

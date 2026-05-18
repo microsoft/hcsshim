@@ -10,6 +10,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
@@ -18,6 +19,20 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// platformControllers holds platform-specific sub-controllers embedded in [Controller].
+// For WCOW, no additional controllers are needed as of now (VSMB will be added later).
+type platformControllers struct{} //nolint:unused // embedded in Controller for cross-platform compatibility with LCOW
+
+// buildHCSConfig builds the HCS document for a WCOW VM.
+func (c *Controller) buildHCSConfig(_ context.Context, _ *CreateOptions) (*hcsschema.ComputeSystem, error) {
+	return nil, fmt.Errorf("WCOW buildHCSConfig not yet implemented")
+}
+
+// buildConfidentialOptions builds confidential options for WCOW VMs.
+func (c *Controller) buildConfidentialOptions(_ context.Context) (*guestresource.ConfidentialOptions, error) {
+	return nil, nil
+}
+
 // setupEntropyListener sets up entropy for WCOW (Windows Containers on Windows) VMs.
 //
 // For WCOW, entropy setup is not required. Windows VMs have their own internal
@@ -25,7 +40,7 @@ import (
 // This is a no-op implementation to satisfy the platform-specific interface.
 //
 // For comparison, LCOW VMs require entropy to be provided during boot.
-func (c *Manager) setupEntropyListener(_ context.Context, _ *errgroup.Group) {}
+func (c *Controller) setupEntropyListener(_ context.Context, _ *errgroup.Group) error { return nil }
 
 // setupLoggingListener sets up logging for WCOW UVMs.
 //
@@ -37,25 +52,22 @@ func (c *Manager) setupEntropyListener(_ context.Context, _ *errgroup.Group) {}
 // The listener is configured to accept only one concurrent connection at a time
 // to prevent resource exhaustion, but will accept new connections if the current one is closed.
 // This supports scenarios where the logging service inside the VM needs to restart.
-func (c *Manager) setupLoggingListener(ctx context.Context, _ *errgroup.Group) {
+func (c *Controller) setupLoggingListener(ctx context.Context, _ *errgroup.Group) error {
+	baseListener, err := winio.ListenHvsock(&winio.HvsockAddr{
+		VMID:      c.uvm.RuntimeID(),
+		ServiceID: prot.WindowsLoggingHvsockServiceID,
+	})
+	if err != nil {
+		close(c.logOutputDone)
+		return fmt.Errorf("failed to listen for windows logging connections: %w", err)
+	}
+
 	// For Windows, the listener can receive a connection later (after VM starts),
 	// so we start the output handler in a goroutine with a non-timeout context.
 	// This allows the output handler to run independently of the VM creation lifecycle.
 	// This is useful for the case when the logging service is restarted.
 	go func() {
-		baseListener, err := winio.ListenHvsock(&winio.HvsockAddr{
-			VMID:      c.uvm.RuntimeID(),
-			ServiceID: prot.WindowsLoggingHvsockServiceID,
-		})
-		if err != nil {
-			// Close the output done channel to signal that logging setup
-			// has failed and no logs will be processed.
-			close(c.logOutputDone)
-			logrus.WithError(err).Error("failed to listen for windows logging connections")
-
-			// Return early due to error.
-			return
-		}
+		defer baseListener.Close()
 
 		// Use a WaitGroup to track active log processing goroutines.
 		// This ensures we wait for all log processing to complete before closing logOutputDone.
@@ -76,6 +88,8 @@ func (c *Manager) setupLoggingListener(ctx context.Context, _ *errgroup.Group) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				defer conn.Close()
+
 				logrus.Info("uvm output handler starting")
 
 				// Parse GCS log output and forward it to the host logging system.
@@ -92,11 +106,13 @@ func (c *Manager) setupLoggingListener(ctx context.Context, _ *errgroup.Group) {
 		// Signal that log output processing has completed.
 		close(c.logOutputDone)
 	}()
+
+	return nil
 }
 
 // finalizeGCSConnection finalizes the GCS connection for WCOW UVMs.
 // This is called after CreateConnection succeeds and before the VM is considered fully started.
-func (c *Manager) finalizeGCSConnection(ctx context.Context) error {
+func (c *Controller) finalizeGCSConnection(ctx context.Context) error {
 	// Prepare the HvSocket address configuration for the external GCS connection.
 	// The LocalAddress is the VM's runtime ID, and the ParentAddress is the
 	// predefined host ID for Windows GCS communication.

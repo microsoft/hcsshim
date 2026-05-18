@@ -1,21 +1,22 @@
-//go:build windows
+//go:build windows && lcow
 
 package service
 
 import (
 	"context"
+	"os"
 
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 
-	"github.com/containerd/containerd/api/runtime/task/v3"
+	"github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/errdefs/pkg/errgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // Ensure Service implements the TTRPCTaskService interface at compile time.
-var _ task.TTRPCTaskService = &Service{}
+var _ task.TaskService = &Service{}
 
 // State returns the current state of a task or process.
 // This method is part of the instrumentation layer and business logic is included in stateInternal.
@@ -303,7 +304,7 @@ func (s *Service) Stats(ctx context.Context, request *task.StatsRequest) (resp *
 // Connect reconnects to a running task.
 // This method is part of the instrumentation layer and business logic is included in connectInternal.
 func (s *Service) Connect(ctx context.Context, request *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Connect")
+	_, span := oc.StartSpan(ctx, "Connect")
 	defer span.End()
 	defer func() {
 		if resp != nil {
@@ -319,8 +320,13 @@ func (s *Service) Connect(ctx context.Context, request *task.ConnectRequest) (re
 		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
 		trace.StringAttribute(logfields.ID, request.ID))
 
-	r, e := s.connectInternal(ctx, request)
-	return r, errgrpc.ToGRPC(e)
+	// We treat the shim/task as the same pid on the Windows host.
+	pid := uint32(os.Getpid())
+
+	return &task.ConnectResponse{
+		ShimPid: pid,
+		TaskPid: pid,
+	}, nil
 }
 
 // Shutdown gracefully shuts down the Service.

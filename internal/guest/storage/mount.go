@@ -16,6 +16,7 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
@@ -131,12 +132,23 @@ func UnmountPath(ctx context.Context, target string, removeTarget bool) (err err
 		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
 	}
 
-	if err := unixUnmount(target, 0); err != nil {
-		// If `Unmount` returns `EINVAL` it's not mounted. Just delete the
-		// folder.
-		if !gerrors.Is(err, unix.EINVAL) {
+	// Loop to handle stacked mounts (e.g. tmpfs + bind mount from MountRShared).
+	// Each Unmount call only peels one layer off the stack, so we must keep
+	// unmounting until EINVAL tells us nothing is mounted anymore.
+	const maxUnmountAttempts = 5
+	unmounted := false
+	for i := 0; i < maxUnmountAttempts; i++ {
+		if err := unixUnmount(target, 0); err != nil {
+			// EINVAL means it's not mounted — we're done unmounting.
+			if gerrors.Is(err, unix.EINVAL) {
+				unmounted = true
+				break
+			}
 			return errors.Wrapf(err, "failed to unmount path '%s'", target)
 		}
+	}
+	if !unmounted {
+		log.G(ctx).WithField("target", target).Warnf("path still mounted after %d unmount attempts", maxUnmountAttempts)
 	}
 	if removeTarget {
 		return osRemoveAll(target)

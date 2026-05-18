@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/computecore"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -38,6 +40,15 @@ type System struct {
 	os, typ, owner string
 	startTime      time.Time
 	stopTime       time.Time
+
+	// Live Migration specific fields.
+	migrationHandle   computecore.HcsSystem
+	migrationNotifyCh chan hcsschema.OperationSystemMigrationNotificationInfo
+	// migrationPinner pins &migrationNotifyCh while it is registered as the
+	// callback context with HCS, so the GC sees the cgo-held uintptr as a
+	// live reference. Unpinned in closeMigrationHandle after HCS guarantees
+	// no further callbacks will fire.
+	migrationPinner runtime.Pinner
 }
 
 var _ cow.Container = &System{}
@@ -191,7 +202,7 @@ func GetComputeSystems(ctx context.Context, q schema1.ComputeSystemQuery) ([]sch
 	return computeSystems, nil
 }
 
-// Start synchronously starts the computeSystem.
+// Start synchronously starts the computeSystem using HCS V1 API.
 func (computeSystem *System) Start(ctx context.Context) (err error) {
 	operation := "hcs::System::Start"
 
@@ -217,6 +228,40 @@ func (computeSystem *System) Start(ctx context.Context) (err error) {
 	if err != nil {
 		return makeSystemError(computeSystem, operation, err, events)
 	}
+	computeSystem.startTime = time.Now()
+	return nil
+}
+
+// startV2 is the implementation used by StartWithMigrationOptions to start the compute system
+// using HCS V2 APIs.
+// The caller provides a pre-created computecore operation (with any resources already
+// attached) and the JSON-encoded options string to pass to HcsStartComputeSystem.
+//
+// The caller MUST hold computeSystem.handleLock and verify the handle is valid
+// before calling this method.
+func (computeSystem *System) startV2(ctx context.Context, op computecore.HcsOperation, opts string) (err error) {
+	operation := "hcs::System::Start"
+
+	// hcsStartComputeSystemContext is an async operation. Start the outer span
+	// here to measure the full start time.
+	ctx, span := oc.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+
+	if err := computecore.HcsStartComputeSystem(
+		ctx,
+		computecore.HcsSystem(computeSystem.handle),
+		op,
+		opts,
+	); err != nil {
+		return makeSystemError(computeSystem, operation, err, nil)
+	}
+
+	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
+		return makeSystemError(computeSystem, operation, err, nil)
+	}
+
 	computeSystem.startTime = time.Now()
 	return nil
 }
@@ -574,6 +619,54 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 	return hcsProperties, nil
 }
 
+// PropertiesV3 returns the requested compute system properties using a V2 schema property query.
+// Unlike [System.PropertiesV2], this method accepts a full [hcsschema.PropertyQuery] directly,
+// giving the caller more control over the query structure. The query is forwarded to HCS as-is
+// without any in-proc optimisations such as that is V2.
+func (computeSystem *System) PropertiesV3(ctx context.Context, query *hcsschema.PropertyQuery) (_ *hcsschema.Properties, err error) {
+	operation := "hcs::System::PropertiesV3"
+
+	ctx, span := oc.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
+
+	if computeSystem.handle == 0 {
+		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+	}
+
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.ContainerID: computeSystem.id,
+		"propertyTypes":       query.PropertyTypes,
+		"propertyQueries":     query.Queries,
+	}).Debug("querying compute system properties via PropertiesV3")
+
+	queryBytes, err := json.Marshal(query)
+	if err != nil {
+		return nil, makeSystemError(computeSystem, operation, err, nil)
+	}
+
+	propertiesJSON, resultJSON, err := vmcompute.HcsGetComputeSystemProperties(ctx, computeSystem.handle, string(queryBytes))
+	events := processHcsResult(ctx, resultJSON)
+	if err != nil {
+		return nil, makeSystemError(computeSystem, operation, err, events)
+	}
+
+	if propertiesJSON == "" {
+		return nil, ErrUnexpectedValue
+	}
+
+	props := &hcsschema.Properties{}
+	if err := json.Unmarshal([]byte(propertiesJSON), props); err != nil {
+		return nil, makeSystemError(computeSystem, operation, err, nil)
+	}
+
+	return props, nil
+}
+
 // Pause pauses the execution of the computeSystem. This feature is not enabled in TP5.
 func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	operation := "hcs::System::Pause"
@@ -786,6 +879,9 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 		computeSystem.waitError = ErrAlreadyClosed
 		close(computeSystem.waitBlock)
 	})
+
+	// Clean up migration handle if it was opened.
+	computeSystem.closeMigrationHandle(ctx)
 
 	return nil
 }

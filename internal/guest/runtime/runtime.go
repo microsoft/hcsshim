@@ -79,6 +79,6 @@ type Container interface {
 // Runtime is the interface defining commands over an OCI container runtime,
 // such as runC.
 type Runtime interface {
-	CreateContainer(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c Container, err error)
+	CreateContainer(sandboxID, id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c Container, err error)
 	ListContainerStates() ([]ContainerState, error)
 }

@@ -1,4 +1,4 @@
-# Example of who to set the version/git information in ./internal/version so
+# Set the version/git information in ./internal/version so
 # that the binaries will report the appropriate information.
 
 $ErrorActionPreference = 'Continue'
