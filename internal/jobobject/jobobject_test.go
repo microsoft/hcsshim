@@ -422,6 +422,105 @@ func TestSilo(t *testing.T) {
 	defer job.Close()
 }
 
+func TestSetCPUGroupAffinitiesRoundtrip(t *testing.T) {
+	job, err := Create(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	want := []GroupAffinity{
+		{Group: 0, Mask: 0x1},
+	}
+	if err := job.SetCPUGroupAffinities(want); err != nil {
+		t.Fatalf("failed to set CPU group affinities: %v", err)
+	}
+
+	got, err := job.GetCPUGroupAffinities()
+	if err != nil {
+		t.Fatalf("failed to get CPU group affinities: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d affinity entries, got %d", len(want), len(got))
+	}
+	if got[0].Group != want[0].Group || got[0].Mask != want[0].Mask {
+		t.Fatalf("expected affinity {Group: %d, Mask: %#x}, got {Group: %d, Mask: %#x}",
+			want[0].Group, want[0].Mask, got[0].Group, got[0].Mask)
+	}
+}
+
+func TestSetCPUGroupAffinitiesEmpty(t *testing.T) {
+	job, err := Create(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	if err := job.SetCPUGroupAffinities(nil); err == nil {
+		t.Fatal("expected error when setting empty group affinities, got nil")
+	}
+}
+
+func TestSetResourceLimitsGroupAffinities(t *testing.T) {
+	job, err := Create(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	want := []GroupAffinity{
+		{Group: 0, Mask: 0x1},
+	}
+	if err := job.SetResourceLimits(&JobLimits{GroupAffinities: want}); err != nil {
+		t.Fatalf("failed to set resource limits with group affinities: %v", err)
+	}
+
+	got, err := job.GetCPUGroupAffinities()
+	if err != nil {
+		t.Fatalf("failed to get CPU group affinities: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d affinity entries, got %d", len(want), len(got))
+	}
+	if got[0].Group != want[0].Group || got[0].Mask != want[0].Mask {
+		t.Fatalf("expected affinity {Group: %d, Mask: %#x}, got {Group: %d, Mask: %#x}",
+			want[0].Group, want[0].Mask, got[0].Group, got[0].Mask)
+	}
+}
+
+func TestSetResourceLimitsGroupAffinitiesTakesPrecedence(t *testing.T) {
+	// When both GroupAffinities and CPUAffinity are non-zero, GroupAffinities
+	// should be applied and CPUAffinity should be ignored.
+	job, err := Create(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	wantGroup := []GroupAffinity{
+		{Group: 0, Mask: 0x1},
+	}
+	limits := &JobLimits{
+		GroupAffinities: wantGroup,
+		CPUAffinity:     0x3, // should be ignored
+	}
+	if err := job.SetResourceLimits(limits); err != nil {
+		t.Fatalf("failed to set resource limits: %v", err)
+	}
+
+	got, err := job.GetCPUGroupAffinities()
+	if err != nil {
+		t.Fatalf("failed to get CPU group affinities: %v", err)
+	}
+	if len(got) != len(wantGroup) {
+		t.Fatalf("expected %d affinity entries, got %d", len(wantGroup), len(got))
+	}
+	if got[0].Group != wantGroup[0].Group || got[0].Mask != wantGroup[0].Mask {
+		t.Fatalf("expected affinity {Group: %d, Mask: %#x}, got {Group: %d, Mask: %#x}",
+			wantGroup[0].Group, wantGroup[0].Mask, got[0].Group, got[0].Mask)
+	}
+}
+
 func TestSiloFileBinding(t *testing.T) {
 	// Can't use osversion as the binary needs to be manifested for it to work.
 	// Just stat for the bindflt dll.
