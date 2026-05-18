@@ -606,38 +606,71 @@ func TestReleaseResources_Idempotent(t *testing.T) {
 	}
 }
 
-// TestReleaseResources_StopsOnFirstError verifies that releaseResources
-// returns the first error encountered and does not proceed to subsequent
-// resource categories.
+// TestReleaseResources_StopsOnFirstError verifies the chain's response to an
+// error at the SCSI-extras unmap leg. A real failure short-circuits the chain
+// (plan9/vpci skipped, slice retained for retry). Any "already-gone" error —
+// the GCS bridge being closed or the VM no longer being available — is
+// tolerated and the chain proceeds through the remaining categories.
 func TestReleaseResources_StopsOnFirstError(t *testing.T) {
 	t.Parallel()
-	c, scsiCtrl, _, _, _ := newContainerTestController(t)
 
-	scsiGUID, _ := guid.NewV4()
-	plan9GUID, _ := guid.NewV4()
-	deviceGUID, _ := guid.NewV4()
-
-	c.scsiResources = []guid.GUID{scsiGUID}
-	c.plan9Resources = []guid.GUID{plan9GUID}
-	c.devices = []guid.GUID{deviceGUID}
-
-	// SCSI unmap fails; plan9/vpci should not be invoked.
-	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(errUnmapSCSI)
-
-	err := c.releaseResources(t.Context())
-	if !errors.Is(err, errUnmapSCSI) {
-		t.Fatalf("releaseResources error = %v, want %v", err, errUnmapSCSI)
+	cases := []struct {
+		name      string
+		scsiErr   error
+		wantStops bool
+	}{
+		{name: "RealError_StopsChain", scsiErr: errUnmapSCSI, wantStops: true},
+		{name: "BridgeClosed_Continues", scsiErr: fmt.Errorf("transport gone: %w", gcs.ErrBridgeClosed)},
+		{name: "ComputeSystemDoesNotExist_Continues", scsiErr: fmt.Errorf("hcs::System::Modify: %w", hcs.ErrComputeSystemDoesNotExist)},
+		{name: "VmcomputeAlreadyStopped_Continues", scsiErr: fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeAlreadyStopped)},
+		{name: "VmcomputeOperationInvalidState_Continues", scsiErr: fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeOperationInvalidState)},
+		{name: "AlreadyClosed_Continues", scsiErr: fmt.Errorf("hcs::System::Modify: %w", hcs.ErrAlreadyClosed)},
 	}
 
-	// Failed scsi entry is retained for retry; plan9 and devices unchanged.
-	if len(c.scsiResources) != 1 {
-		t.Errorf("scsiResources len = %d, want 1 (retained for retry)", len(c.scsiResources))
-	}
-	if len(c.plan9Resources) != 1 {
-		t.Errorf("plan9Resources len = %d, want 1 (untouched)", len(c.plan9Resources))
-	}
-	if len(c.devices) != 1 {
-		t.Errorf("devices len = %d, want 1 (untouched)", len(c.devices))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, scsiCtrl, plan9Ctrl, vpciCtrl, guestCtrl := newContainerTestController(t)
+
+			scsiGUID, _ := guid.NewV4()
+			plan9GUID, _ := guid.NewV4()
+			deviceGUID, _ := guid.NewV4()
+
+			c.scsiResources = []guid.GUID{scsiGUID}
+			c.plan9Resources = []guid.GUID{plan9GUID}
+			c.devices = []guid.GUID{deviceGUID}
+
+			scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(tc.scsiErr)
+
+			if !tc.wantStops {
+				// Tolerated error: the chain must proceed through plan9, vpci,
+				// and the DeleteContainerState capability gate.
+				plan9Ctrl.EXPECT().UnmapFromGuest(gomock.Any(), plan9GUID).Return(nil)
+				vpciCtrl.EXPECT().RemoveFromVM(gomock.Any(), deviceGUID).Return(nil)
+				guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
+			}
+
+			err := c.releaseResources(t.Context())
+			if tc.wantStops {
+				if !errors.Is(err, tc.scsiErr) {
+					t.Fatalf("releaseResources error = %v, want %v", err, tc.scsiErr)
+				}
+				// Failed scsi entry retained; plan9 and devices untouched.
+				if len(c.scsiResources) != 1 {
+					t.Errorf("scsiResources len = %d, want 1 (retained for retry)", len(c.scsiResources))
+				}
+				if len(c.plan9Resources) != 1 {
+					t.Errorf("plan9Resources len = %d, want 1 (untouched)", len(c.plan9Resources))
+				}
+				if len(c.devices) != 1 {
+					t.Errorf("devices len = %d, want 1 (untouched)", len(c.devices))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("releaseResources error = %v, want nil for tolerated error", err)
+			}
+		})
 	}
 }
 
@@ -860,32 +893,47 @@ func TestReleaseResources_DeleteContainerStateFails(t *testing.T) {
 	}
 }
 
-// TestReleaseResources_DeleteContainerStateNotFoundIsSuccess verifies that a
-// "compute system does not exist" error from DeleteContainerState is treated
-// as success. This matters because the GCS bridge removes the container from
-// its host-state map even when its inner Delete() fails, so any retry of the
-// RPC will always come back with "not found" — looping forever would otherwise
-// be the consequence.
-func TestReleaseResources_DeleteContainerStateNotFoundIsSuccess(t *testing.T) {
+// TestReleaseResources_DeleteContainerState_ToleratesAlreadyGone verifies
+// that any error indicating the resource is already gone is treated as a
+// successful delete: the GCS bridge being closed (so the in-guest agent
+// cannot answer) and any of the HCS conditions that surface when the VM has
+// already exited or is in an invalid state for further modifications. In all
+// cases the chain must complete and isContainerStateDeleted must flip so a
+// retry does not re-issue the RPC.
+func TestReleaseResources_DeleteContainerState_ToleratesAlreadyGone(t *testing.T) {
 	t.Parallel()
-	c, _, _, _, guestCtrl := newContainerTestController(t)
 
-	caps := &gcs.LCOWGuestDefinedCapabilities{}
-	caps.DeleteContainerStateSupported = true
-
-	guestCtrl.EXPECT().Capabilities().Return(caps)
-	// The bridge's response Result code is wrapped through windows.Errno
-	// (= syscall.Errno) so errors.Is against hcs.ErrComputeSystemDoesNotExist
-	// matches.
-	guestCtrl.EXPECT().
-		DeleteContainerState(gomock.Any(), c.gcsContainerID).
-		Return(fmt.Errorf("guest RPC failure: %w", hcs.ErrComputeSystemDoesNotExist))
-
-	if err := c.releaseResources(t.Context()); err != nil {
-		t.Fatalf("releaseResources returned error for not-found: %v", err)
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "BridgeClosed", err: fmt.Errorf("transport gone: %w", gcs.ErrBridgeClosed)},
+		{name: "ComputeSystemDoesNotExist", err: fmt.Errorf("guest RPC failure: %w", hcs.ErrComputeSystemDoesNotExist)},
+		{name: "VmcomputeAlreadyStopped", err: fmt.Errorf("guest RPC failure: %w", hcs.ErrVmcomputeAlreadyStopped)},
+		{name: "VmcomputeOperationInvalidState", err: fmt.Errorf("guest RPC failure: %w", hcs.ErrVmcomputeOperationInvalidState)},
+		{name: "AlreadyClosed", err: fmt.Errorf("guest RPC failure: %w", hcs.ErrAlreadyClosed)},
 	}
-	if !c.isContainerStateDeleted {
-		t.Fatal("isContainerStateDeleted should be true even when the guest reports the container is gone")
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, _, _, _, guestCtrl := newContainerTestController(t)
+
+			caps := &gcs.LCOWGuestDefinedCapabilities{}
+			caps.DeleteContainerStateSupported = true
+
+			guestCtrl.EXPECT().Capabilities().Return(caps)
+			guestCtrl.EXPECT().
+				DeleteContainerState(gomock.Any(), c.gcsContainerID).
+				Return(tc.err)
+
+			if err := c.releaseResources(t.Context()); err != nil {
+				t.Fatalf("releaseResources returned error: %v", err)
+			}
+			if !c.isContainerStateDeleted {
+				t.Fatal("isContainerStateDeleted should be true when the guest reports the container is gone")
+			}
+		})
 	}
 }
 

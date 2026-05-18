@@ -4,13 +4,16 @@ package network
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
 	"github.com/sirupsen/logrus"
 )
@@ -55,7 +58,10 @@ func (c *Controller) removeNetNSInsideGuest(ctx context.Context, namespaceID str
 			return fmt.Errorf("get network namespace %s: %w", namespaceID, err)
 		}
 
-		if err := c.guestNetwork.RemoveNetworkNamespace(ctx, hcnNamespace); err != nil {
+		// If the GCS bridge is already closed (e.g. the guest agent crashed), the
+		// namespace will be torn down with the VM, so treat that as success and let
+		// teardown continue.
+		if err = c.guestNetwork.RemoveNetworkNamespace(ctx, hcnNamespace); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) {
 			return fmt.Errorf("remove network namespace %s from guest: %w", namespaceID, err)
 		}
 	}
@@ -119,7 +125,7 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 		nicID,
 		guestrequest.RequestTypeRemove,
 		nil,
-	); err != nil {
+	); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) {
 		return fmt.Errorf("remove NIC %s from guest (endpoint %s): %w", nicID, endpoint.Id, err)
 	}
 
@@ -129,7 +135,7 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 	if err := c.vmNetwork.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
 		EndpointId: endpoint.Id,
 		MacAddress: endpoint.MacAddress,
-	}); err != nil {
+	}); err != nil && !vmutils.IsVMNotAvailableError(err) {
 		return fmt.Errorf("remove NIC %s from host (endpoint %s): %w", nicID, endpoint.Id, err)
 	}
 
