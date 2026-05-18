@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 
 	"github.com/containerd/typeurl/v2"
@@ -60,4 +61,14 @@ func UnmarshalRuntimeOptions(ctx context.Context, options *anypb.Any) (*runhcsop
 	}
 
 	return shimOpts, nil
+}
+
+// IsVMNotAvailableError reports whether err indicates the underlying compute system is
+// no longer available for modification — either it has stopped, no longer
+// exists, or is in an invalid state for further modifications..
+func IsVMNotAvailableError(err error) bool {
+	return hcs.IsNotExist(err) ||
+		hcs.IsAlreadyStopped(err) ||
+		hcs.IsAlreadyClosed(err) ||
+		hcs.IsOperationInvalidState(err)
 }

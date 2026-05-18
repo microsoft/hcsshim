@@ -4,12 +4,15 @@ package network
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 // guestNetwork exposes linux guest network operations.
@@ -81,7 +84,7 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 		if err := c.guestNetwork.RemoveNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{
 			NamespaceID: c.namespaceID,
 			ID:          nicID,
-		}); err != nil {
+		}); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) {
 			return fmt.Errorf("remove NIC %s from guest: %w", nicID, err)
 		}
 
@@ -92,7 +95,7 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 	if err := c.vmNetwork.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
 		EndpointId: endpoint.Id,
 		MacAddress: endpoint.MacAddress,
-	}); err != nil {
+	}); err != nil && !vmutils.IsVMNotAvailableError(err) {
 		return fmt.Errorf("remove NIC %s from host (endpoint %s): %w", nicID, endpoint.Id, err)
 	}
 

@@ -4,6 +4,7 @@ package linuxcontainer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/controller/process"
 	"github.com/Microsoft/hcsshim/internal/gcs"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -25,7 +25,7 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/runtime/task/v3"
 	containerdtypes "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
@@ -220,6 +220,14 @@ func (c *Controller) closeContainer() {
 	}
 }
 
+// isResourceAlreadyReleased reports whether a teardown failure indicates the
+// resource is already gone — either the in-guest agent died (so guest-side
+// state went with it) or the VM itself has exited (so host-side state went
+// with it). Either way, teardown can move on instead of retrying.
+func isResourceAlreadyReleased(err error) bool {
+	return errors.Is(err, gcs.ErrBridgeClosed) || vmutils.IsVMNotAvailableError(err)
+}
+
 // releaseResources undoes each allocation in reverse order.
 // It is idempotent — subsequent calls after the first are no-ops.
 func (c *Controller) releaseResources(ctx context.Context) error {
@@ -236,7 +244,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 			ContainerRootPath: c.layers.rootfsPath,
 			Layers:            hcsLayers,
 			ScratchPath:       c.layers.scratch.guestPath,
-		}); err != nil {
+		}); err != nil && !isResourceAlreadyReleased(err) {
 			return fmt.Errorf("remove combined layers from guest: %w", err)
 		}
 
@@ -248,7 +256,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 	// unmapped on a prior call.
 	var zeroGUID guid.GUID
 	if c.layers != nil && c.layers.scratch.id != zeroGUID {
-		if err := c.scsi.UnmapFromGuest(ctx, c.layers.scratch.id); err != nil {
+		if err := c.scsi.UnmapFromGuest(ctx, c.layers.scratch.id); err != nil && !isResourceAlreadyReleased(err) {
 			return fmt.Errorf("unmap scratch layer: %w", err)
 		}
 		c.layers.scratch = scsiReservation{}
@@ -258,7 +266,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 	// resumes from the first failure.
 	if c.layers != nil {
 		for i, layer := range c.layers.roLayers {
-			if err := c.scsi.UnmapFromGuest(ctx, layer.id); err != nil {
+			if err := c.scsi.UnmapFromGuest(ctx, layer.id); err != nil && !isResourceAlreadyReleased(err) {
 				c.layers.roLayers = c.layers.roLayers[i:]
 				return fmt.Errorf("unmap ro layer: %w", err)
 			}
@@ -267,7 +275,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 
 	// Unmap additional SCSI mounts.
 	for i, id := range c.scsiResources {
-		if err := c.scsi.UnmapFromGuest(ctx, id); err != nil {
+		if err := c.scsi.UnmapFromGuest(ctx, id); err != nil && !isResourceAlreadyReleased(err) {
 			c.scsiResources = c.scsiResources[i:]
 			return fmt.Errorf("unmap scsi resource: %w", err)
 		}
@@ -275,7 +283,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 
 	// Unmap Plan9 shares.
 	for i, id := range c.plan9Resources {
-		if err := c.plan9.UnmapFromGuest(ctx, id); err != nil {
+		if err := c.plan9.UnmapFromGuest(ctx, id); err != nil && !isResourceAlreadyReleased(err) {
 			c.plan9Resources = c.plan9Resources[i:]
 			return fmt.Errorf("unmap plan9 share: %w", err)
 		}
@@ -283,7 +291,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 
 	// Remove VPCI devices.
 	for i, id := range c.devices {
-		if err := c.vpci.RemoveFromVM(ctx, id); err != nil {
+		if err := c.vpci.RemoveFromVM(ctx, id); err != nil && !isResourceAlreadyReleased(err) {
 			c.devices = c.devices[i:]
 			return fmt.Errorf("remove vpci device: %w", err)
 		}
@@ -295,7 +303,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 	if !c.isContainerStateDeleted && c.guest.Capabilities().IsDeleteContainerStateSupported() {
 		// GCS bridge evicts the container from its host-state map even if the inner Delete fails,
 		// so retries will always return not-found.
-		if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !hcs.IsNotExist(err) {
+		if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !isResourceAlreadyReleased(err) {
 			return fmt.Errorf("delete container state: %w", err)
 		}
 

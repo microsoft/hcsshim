@@ -60,7 +60,7 @@ type bridge struct {
 	waitCh  chan struct{}
 }
 
-var errBridgeClosed = fmt.Errorf("bridge closed: %w", net.ErrClosed)
+var ErrBridgeClosed = fmt.Errorf("bridge closed: %w", net.ErrClosed)
 
 const (
 	// bridgeFailureTimeout is the default value for bridge.Timeout
@@ -103,9 +103,11 @@ func (brdg *bridge) kill(err error) {
 	}
 	brdg.closed = true
 	brdg.mu.Unlock()
-	brdg.brdgErr = err
 	if err != nil {
-		brdg.log.WithError(err).Error("bridge forcibly terminating")
+		// Wrap the cause so callers can recognize this as a closed-bridge
+		// failure and stop retrying.
+		brdg.brdgErr = fmt.Errorf("%w: %w", ErrBridgeClosed, err)
+		brdg.log.WithError(brdg.brdgErr).Error("bridge forcibly terminating")
 	} else {
 		brdg.log.Debug("bridge terminating")
 	}
@@ -147,7 +149,7 @@ func (brdg *bridge) AsyncRPC(ctx context.Context, proc prot.RPCProc, req request
 	case <-brdg.waitCh:
 		err := brdg.brdgErr
 		if err == nil {
-			err = errBridgeClosed
+			err = ErrBridgeClosed
 		}
 		return nil, err
 	case <-ctx.Done():
@@ -244,7 +246,7 @@ func (brdg *bridge) recvLoopRoutine() {
 	brdg.rpcs = nil
 	brdg.mu.Unlock()
 	for _, call := range rpcs {
-		call.complete(errBridgeClosed)
+		call.complete(ErrBridgeClosed)
 	}
 }
 
@@ -422,7 +424,7 @@ func (brdg *bridge) sendRPC(buf *bytes.Buffer, enc *json.Encoder, call *rpc) err
 	brdg.mu.Lock()
 	if brdg.rpcs == nil {
 		brdg.mu.Unlock()
-		call.complete(errBridgeClosed)
+		call.complete(ErrBridgeClosed)
 		return nil
 	}
 	id := brdg.nextID

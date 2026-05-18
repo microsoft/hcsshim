@@ -12,6 +12,7 @@ import (
 	container "github.com/Microsoft/hcsshim/internal/controller/linuxcontainer"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
 	"github.com/Microsoft/hcsshim/internal/controller/process"
+	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -23,7 +24,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/runtime/task/v3"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -69,10 +70,6 @@ func (s *Service) getPodController(podID string) (*pod.Controller, bool) {
 
 // stateInternal returns the current status of a process within a container.
 func (s *Service) stateInternal(_ context.Context, request *task.StateRequest) (*task.StateResponse, error) {
-	if err := s.ensureVMRunning(); err != nil {
-		return nil, err
-	}
-
 	// Look up the container controller for the requested container.
 	ctrCtrl, err := s.getContainerController(request.ID)
 	if err != nil {
@@ -277,10 +274,6 @@ func (s *Service) startInternal(ctx context.Context, request *task.StartRequest)
 
 // deleteInternal deletes a process, container, or pod sandbox depending on the request.
 func (s *Service) deleteInternal(ctx context.Context, request *task.DeleteRequest) (*task.DeleteResponse, error) {
-	if err := s.ensureVMRunning(); err != nil {
-		return nil, err
-	}
-
 	// Look up the container controller for the target ID.
 	ctrCtrl, err := s.getContainerController(request.ID)
 	if err != nil {
@@ -328,7 +321,7 @@ func (s *Service) deleteInternal(ctx context.Context, request *task.DeleteReques
 		// left should be the sandbox container itself (request.ID).
 		remaining := podCtrl.ListContainers()
 		delete(remaining, request.ID) // exclude the sandbox container itself
-		if len(remaining) > 0 {
+		if len(remaining) > 0 && s.vmController.State() == vm.StateRunning {
 			return nil, fmt.Errorf("cannot delete sandbox container %s: %d workload container(s) still exist in the pod: %w",
 				request.ID, len(remaining), errdefs.ErrFailedPrecondition)
 		}
