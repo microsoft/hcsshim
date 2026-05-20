@@ -188,14 +188,14 @@ func Test_IsJobContainer(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "WCOW Hyper-V isolated with HostProcess=true (not a JobContainer)",
+			name: "WCOW Hyper-V isolated with HostProcess=true",
 			spec: &specs.Spec{
 				Windows: &specs.Windows{
 					HyperV: &specs.WindowsHyperV{},
 				},
 				Annotations: map[string]string{annotations.HostProcessContainer: "true"},
 			},
-			expected: false,
+			expected: true,
 		},
 		{
 			name: "LCOW without Windows (not a JobContainer)",
@@ -218,77 +218,11 @@ func Test_IsJobContainer(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
-// IsIsolatedJobContainer tests
+// Cross-property tests: IsJobContainer combined with IsIsolated to differentiate
+// process-isolated HPC from hypervisor-isolated HPC.
 // -----------------------------------------------------------------------------
 
-func Test_IsIsolatedJobContainer(t *testing.T) {
-	tests := []struct {
-		name     string
-		spec     *specs.Spec
-		expected bool
-	}{
-		{
-			name: "WCOW Hyper-V isolated with HostProcess=true",
-			spec: &specs.Spec{
-				Windows: &specs.Windows{
-					HyperV: &specs.WindowsHyperV{},
-				},
-				Annotations: map[string]string{annotations.HostProcessContainer: "true"},
-			},
-			expected: true,
-		},
-		{
-			name: "WCOW Hyper-V isolated with HostProcess=false",
-			spec: &specs.Spec{
-				Windows: &specs.Windows{
-					HyperV: &specs.WindowsHyperV{},
-				},
-				Annotations: map[string]string{annotations.HostProcessContainer: "false"},
-			},
-			expected: false,
-		},
-		{
-			name: "WCOW Hyper-V isolated with HostProcess missing",
-			spec: &specs.Spec{
-				Windows: &specs.Windows{
-					HyperV: &specs.WindowsHyperV{},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "WCOW process-isolated with HostProcess=true (not isolated job)",
-			spec: &specs.Spec{
-				Windows:     &specs.Windows{},
-				Annotations: map[string]string{annotations.HostProcessContainer: "true"},
-			},
-			expected: false,
-		},
-		{
-			name: "LCOW without Windows (not an isolated job container)",
-			spec: &specs.Spec{
-				Linux: &specs.Linux{},
-			},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			actual := IsIsolatedJobContainer(tt.spec)
-			if actual != tt.expected {
-				t.Fatalf("IsIsolatedJobContainer() = %v, expected %v", actual, tt.expected)
-			}
-		})
-	}
-}
-
-// -----------------------------------------------------------------------------
-// Cross-property tests (consistency / mutual exclusivity)
-// -----------------------------------------------------------------------------
-
-func Test_JobContainer_And_IsolatedJobContainer_MutualExclusion(t *testing.T) {
+func Test_JobContainer_IsolationDifferentiation(t *testing.T) {
 	// Process-isolated WCOW HostProcess=true
 	processJob := &specs.Spec{
 		Windows:     &specs.Windows{},
@@ -297,8 +231,8 @@ func Test_JobContainer_And_IsolatedJobContainer_MutualExclusion(t *testing.T) {
 	if !IsJobContainer(processJob) {
 		t.Fatal("expected IsJobContainer to be true for process-isolated HostProcess=true")
 	}
-	if IsIsolatedJobContainer(processJob) {
-		t.Fatal("expected IsIsolatedJobContainer to be false for process-isolated HostProcess=true")
+	if IsIsolated(processJob) {
+		t.Fatal("expected IsIsolated to be false for process-isolated HostProcess=true")
 	}
 
 	// Hyper-V isolated WCOW HostProcess=true
@@ -308,10 +242,10 @@ func Test_JobContainer_And_IsolatedJobContainer_MutualExclusion(t *testing.T) {
 		},
 		Annotations: map[string]string{annotations.HostProcessContainer: "true"},
 	}
-	if IsJobContainer(hyperVJob) {
-		t.Fatal("expected IsJobContainer to be false for Hyper-V isolated HostProcess=true")
+	if !IsJobContainer(hyperVJob) {
+		t.Fatal("expected IsJobContainer to be true for Hyper-V isolated HostProcess=true")
 	}
-	if !IsIsolatedJobContainer(hyperVJob) {
-		t.Fatal("expected IsIsolatedJobContainer to be true for Hyper-V isolated HostProcess=true")
+	if !IsIsolated(hyperVJob) {
+		t.Fatal("expected IsIsolated to be true for Hyper-V isolated HostProcess=true")
 	}
 }

@@ -151,7 +151,7 @@ func createContainer(
 
 	// For Job Container which runs on host, we create the same using shim logic.
 	// If the request was for job container within UVM, then the request is passed along to GCS.
-	if oci.IsJobContainer(s) {
+	if oci.IsJobContainer(s) && !oci.IsIsolated(s) {
 		opts := jobcontainers.CreateOptions{WCOWLayers: wcowLayers}
 		container, resources, err = jobcontainers.Create(ctx, id, s, opts)
 		if err != nil {
@@ -216,7 +216,7 @@ func newHcsTask(
 
 	// For Isolated Job containers, we need special handling wherein if the command line
 	// is not specified, then we add 'cmd /C' by default.
-	if oci.IsIsolatedJobContainer(s) {
+	if oci.IsJobContainer(s) && oci.IsIsolated(s) {
 		handleProcessArgsForIsolatedJobContainer(s, s.Process)
 	}
 
@@ -372,7 +372,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
 	}
 
-	if oci.IsIsolatedJobContainer(ht.taskSpec) {
+	if oci.IsJobContainer(ht.taskSpec) && oci.IsIsolated(ht.taskSpec) {
 		handleProcessArgsForIsolatedJobContainer(ht.taskSpec, spec)
 	}
 
@@ -1027,6 +1027,23 @@ func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath st
 	return ht.c.Modify(ctx, modification)
 }
 
+// handleProcessArgsForIsolatedJobContainer adjusts the process spec for a
+// HostProcess container running inside a hypervisor-isolated UVM.
+//
+// Why the "cmd /c" wrap:
+//   - For a regular WCOW container, the guest creates the workload process
+//     from within the container silo, so the silo's filesystem view (including
+//     the bind-mounted container rootfs) is in scope for path resolution.
+//   - For a HostProcess container the guest creates the process from outside
+//     the silo and only attaches it to the silo's job object after creation.
+//     Executable-name resolution therefore uses the launcher's view (System32,
+//     Windows, PATH) and cannot see binaries that live only inside the
+//     container rootfs, nor resolve shell builtins like `echo`, `dir`, `set`,
+//     redirection, etc. Anything not present as a real .exe on the standard
+//     search path would fail with ERROR_FILE_NOT_FOUND.
+//   - cmd.exe always exists under System32 (so the launcher can find it) and,
+//     once joined to the silo's job, runs inside the container's filesystem
+//     view where it can resolve builtins and any rootfs-relative binary.
 func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, specs *specs.Process) {
 	if specs.CommandLine != "" && !strings.HasPrefix(strings.TrimSpace(strings.ToLower(specs.CommandLine)), "cmd") {
 		specs.CommandLine = fmt.Sprintf("cmd /c %s", specs.CommandLine)

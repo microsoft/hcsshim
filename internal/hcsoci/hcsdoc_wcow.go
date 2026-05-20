@@ -501,8 +501,9 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		AddValues: registryAdd,
 	}
 
-	if oci.IsIsolatedJobContainer(coi.Spec) {
-		v2Container.IsolationType = "HostProcess"
+	if oci.IsJobContainer(coi.Spec) && oci.IsIsolated(coi.Spec) {
+		// Set the isolation type to host process.
+		v2Container.IsolationType = hcsschema.IsolationTypeHostProcess
 
 		// If the customer specified a custom rootfs path then use that instead of default c:\hpc.
 		if customRootFsPath, ok := coi.Spec.Annotations[annotations.HostProcessRootfsLocation]; ok {
@@ -511,6 +512,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 				return nil, nil, err
 			}
 
+			// Set the path for container root filesystem.
 			v2Container.Storage.PrivilegedContainerRootPath = customRootFsPathSanitized
 		}
 	}

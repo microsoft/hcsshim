@@ -482,15 +482,25 @@ func (p *pod) DeleteTask(ctx context.Context, tid string) error {
 	return nil
 }
 
+// updateConfigForHostProcessContainer validates and adjusts a container spec
+// against the pod sandbox spec for HostProcess (HPC) scenarios:
+//   - Rejects a hypervisor-isolated HPC inside a non-HPC sandbox.
+//   - Rejects a non-HPC container inside a process-isolated HPC sandbox
+//     (all containers in such a pod must share the host job/network).
+//   - Propagates HPC pod-level annotations (e.g. inherit-user, rootfs
+//     location) onto each container, since CRI only delivers them at pod
+//     create time.
+//   - Forces HostProcessInheritUser=false on a non-privileged container in a
+//     privileged hypervisor-isolated sandbox so it can't inherit SYSTEM.
 func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
-	if !oci.IsIsolatedJobContainer(p.spec) && oci.IsIsolatedJobContainer(s) {
+	isProcessIsolatedPrivilegedSandbox := oci.IsJobContainer(p.spec) && !oci.IsIsolated(p.spec)
+	isHypervisorIsolatedPrivilegedSandbox := oci.IsJobContainer(p.spec) && oci.IsIsolated(p.spec)
+	isProcessIsolatedPrivilegedContainer := oci.IsJobContainer(s) && !oci.IsIsolated(s)
+	isHypervisorIsolatedPrivilegedContainer := oci.IsJobContainer(s) && oci.IsIsolated(s)
+
+	if !isHypervisorIsolatedPrivilegedSandbox && isHypervisorIsolatedPrivilegedContainer {
 		return errors.New("cannot create a host process container inside sandbox which has missing annotation: microsoft.com/hostprocess-container")
 	}
-
-	isProcessIsolatedPrivilegedSandbox := oci.IsJobContainer(p.spec)
-	isHypervisorIsolatedPrivilegedSandbox := oci.IsIsolatedJobContainer(p.spec)
-	isProcessIsolatedPrivilegedContainer := oci.IsJobContainer(s)
-	isHypervisorIsolatedPrivilegedContainer := oci.IsIsolatedJobContainer(s)
 
 	if isProcessIsolatedPrivilegedSandbox || (isHypervisorIsolatedPrivilegedSandbox && isHypervisorIsolatedPrivilegedContainer) {
 		if isProcessIsolatedPrivilegedSandbox && !isProcessIsolatedPrivilegedContainer {
@@ -499,10 +509,9 @@ func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
 			//
 			// There will need to be OS work needed to support this scenario, so for now we need to block on
 			// this.
-
-			// IsJobContainer returns true if there was no hypervisor isolation and request was for HPCs.
-			// Therefore, in this request we check if the pod was a process isolated HPC pod but the
-			// container spec is not job container spec.
+			//
+			// If the pod sandbox is a process-isolated HPC then the container must also be a
+			// process-isolated HPC.
 			return errors.New("cannot create a normal process isolated container if the pod sandbox is a job container running on host")
 		}
 

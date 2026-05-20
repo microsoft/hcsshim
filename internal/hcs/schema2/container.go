@@ -9,6 +9,19 @@
 
 package hcsschema
 
+// IsolationType describes the isolation mode of a container.
+type IsolationType string
+
+const (
+	// IsolationTypeProcess is a fully process-isolated, namespace-isolated
+	// Windows Server container.
+	IsolationTypeProcess IsolationType = "Process"
+
+	// IsolationTypeHostProcess is a privileged (Windows) HostProcess
+	// container that shares the host namespace.
+	IsolationTypeHostProcess IsolationType = "HostProcess"
+)
+
 type Container struct {
 	GuestOs *GuestOs `json:"GuestOs,omitempty"`
 
@@ -34,5 +47,5 @@ type Container struct {
 
 	AdditionalDeviceNamespace *ContainerDefinitionDevice `json:"AdditionalDeviceNamespace,omitempty"`
 
-	IsolationType string `json:"IsolationType,omitempty"`
+	IsolationType IsolationType `json:"IsolationType,omitempty"`
 }
