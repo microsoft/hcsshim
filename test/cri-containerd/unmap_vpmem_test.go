@@ -28,6 +28,7 @@ const (
 // leave it intact and recycle, the bug no longer surfaces.
 func Test_Force_LayerUnmap_Not_In_Order(t *testing.T) {
 	requireFeatures(t, featureLCOW)
+	requireV1Only(t)
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, ubuntu2004LargeLayers, ubuntu2204LargeLayers})
 

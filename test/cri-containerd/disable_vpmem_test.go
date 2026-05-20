@@ -28,6 +28,7 @@ func uniqueRef() string {
 
 func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 	requireFeatures(t, featureLCOW)
+	requireV1Only(t)
 
 	ubuntu70Image := "cplatpublic.azurecr.io/ubuntu70extra:18.04"
 	alpine70Image := "cplatpublic.azurecr.io/alpine70extra:latest"

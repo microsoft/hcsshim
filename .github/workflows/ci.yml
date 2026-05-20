@@ -383,6 +383,56 @@ jobs:
           exit $ec
         working-directory: test
 
+      # Run the v2 LCOW functional tests against the v2 vm.Controller
+      # end-to-end. The chokepoint in defaultLCOWOptions auto-skips every
+      # v1 LCOW test under -feature LCOWV2, so this invocation effectively
+      # runs only the TestLCOW_V2_* surface (and any future v2-aware tests).
+      # Marked continue-on-error: true while this surface is being grown so
+      # a v2-specific failure does not block the v1 pipeline.
+      #
+      # NOTE: Functional tests build HCS documents directly via
+      # internal/builder/vm/lcow and create v2 controllers in-process — they
+      # do NOT exercise the CRI -> containerd -> shim path. CRI v2 testing
+      # (Test_V2_LCOW_* in test/cri-containerd) requires a separate CI step
+      # that starts containerd with `snapshotter = "windows-lcow"` set on
+      # both `runhcs-lcow` AND `runhcs-lcow-v2` runtime blocks (the mapping
+      # logic lives in the containerd CRI plugin). That step is intentionally
+      # deferred to a follow-up PR alongside the integration-tests v2 setup.
+      - name: Build and run functional testing binary (LCOWV2)
+        continue-on-error: true
+        run: |
+          if ( -not (Test-Path './functional.test.exe') ) {
+            Write-Output '::warning::functional.test.exe missing; skipping LCOWV2 run'
+            exit 0
+          }
+
+          $gotestsum = Get-Command -Name 'gotestsum' -CommandType Application -ErrorAction 'Stop' |
+            Select-Object -First 1 -ExpandProperty Source
+          $go = Get-Command -Name 'go' -CommandType Application -ErrorAction Stop |
+            Select-Object -First 1 -ExpandProperty Source
+
+          # LCOWV2 implies LCOW in TestMain so featureLCOW-gated tests would
+          # also be reachable, but defaultLCOWOptions calls requireV1Only so
+          # they skip cleanly. Net effect: only TestLCOW_V2_* tests actually
+          # execute, exercising the v2 controller end-to-end.
+          $cmd = '${{ env.GOTESTSUM_CMD_RAW }} ./functional.test.exe -feature=LCOWV2 -exclude=LCOWIntegrity -test.timeout=1h -test.v -log-level=info'
+          $cmd = $cmd -replace '\bgo\b', $go
+          $cmd = $cmd -replace '\bgotestsum\b', $gotestsum
+          Write-Host "gotestsum command: $cmd"
+
+          psexec -nobanner -w (Get-Location) -s cmd /c "$cmd > v2-out.txt 2>&1"
+          $ec = $LASTEXITCODE
+
+          Get-Content v2-out.txt
+
+          exit $ec
+        working-directory: test
+
+      # Build the v2 LCOW shim binary so it is included in test_binaries
+      # artifact uploads and available to anyone reproducing v2 test runs.
+      - name: Build containerd-shim-lcow-v2 binary
+        run: ${{ env.GO_BUILD_CMD }} -tags lcow -o test/containerd-shim-lcow-v2.exe ./cmd/containerd-shim-lcow-v2
+
       # build testing binaries
       - name: Build cri-containerd Testing Binary
         run: ${{ env.GO_BUILD_TEST_CMD }} ./cri-containerd
@@ -400,6 +450,7 @@ jobs:
           name: test_binaries_${{ matrix.name }}
           path: |
             test/containerd-shim-runhcs-v1.test.exe
+            test/containerd-shim-lcow-v2.exe
             test/cri-containerd.test.exe
             test/functional.test.exe
             test/runhcs.test.exe
