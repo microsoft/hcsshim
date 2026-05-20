@@ -105,6 +105,8 @@ func translateGOARCH(s string) string {
 		return "x86"
 	case "amd64":
 		return "x86_64"
+	case "arm64":
+		return "aarch64"
 	}
 	return s
 }
