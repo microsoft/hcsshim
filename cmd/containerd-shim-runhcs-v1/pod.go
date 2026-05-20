@@ -484,31 +484,27 @@ func (p *pod) DeleteTask(ctx context.Context, tid string) error {
 
 // updateConfigForHostProcessContainer validates and adjusts a container spec
 // against the pod sandbox spec for HostProcess (HPC) scenarios:
-//   - Rejects a hypervisor-isolated HPC inside a non-HPC sandbox.
+//   - Rejects a hypervisor-isolated HPC when the parent UVM does not
+//     advertise HostProcess container support.
 //   - Rejects a non-HPC container inside a process-isolated HPC sandbox
 //     (all containers in such a pod must share the host job/network).
 //   - Propagates HPC pod-level annotations (e.g. inherit-user, rootfs
 //     location) onto each container, since CRI only delivers them at pod
 //     create time.
-//   - Forces HostProcessInheritUser=false on a non-privileged container in a
-//     privileged hypervisor-isolated sandbox so it can't inherit SYSTEM.
+//   - Clears HostProcessInheritUser on any non-hypervisor-isolated-HPC
+//     container so a propagated annotation can't grant it SYSTEM.
 func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
 	isProcessIsolatedPrivilegedSandbox := oci.IsJobContainer(p.spec) && !oci.IsIsolated(p.spec)
-	isHypervisorIsolatedPrivilegedSandbox := oci.IsJobContainer(p.spec) && oci.IsIsolated(p.spec)
 	isProcessIsolatedPrivilegedContainer := oci.IsJobContainer(s) && !oci.IsIsolated(s)
 	isHypervisorIsolatedPrivilegedContainer := oci.IsJobContainer(s) && oci.IsIsolated(s)
 
-	if !isHypervisorIsolatedPrivilegedSandbox && isHypervisorIsolatedPrivilegedContainer {
-		return errors.New("cannot create a host process container inside sandbox which has missing annotation: microsoft.com/hostprocess-container")
-	}
-
-	// If the UVM does not support HPCs, then we reject HPC calls.
+	// Reject hypervisor-isolated HPCs when the UVM doesn't support them.
 	if isHypervisorIsolatedPrivilegedContainer &&
 		p.host != nil && !p.host.HostProcessContainerSupported() {
 		return fmt.Errorf("UVM does not support HostProcess containers")
 	}
 
-	if isProcessIsolatedPrivilegedSandbox || (isHypervisorIsolatedPrivilegedSandbox && isHypervisorIsolatedPrivilegedContainer) {
+	if isProcessIsolatedPrivilegedSandbox || isHypervisorIsolatedPrivilegedContainer {
 		if isProcessIsolatedPrivilegedSandbox && !isProcessIsolatedPrivilegedContainer {
 			// This is a short circuit to make sure that all containers in a pod will have
 			// the same IP address/be added to the same compartment.
@@ -532,9 +528,7 @@ func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
 		)
 	}
 
-	if isHypervisorIsolatedPrivilegedSandbox &&
-		!isHypervisorIsolatedPrivilegedContainer &&
-		s.Annotations[annotations.HostProcessInheritUser] != "" {
+	if !isHypervisorIsolatedPrivilegedContainer && s.Annotations[annotations.HostProcessInheritUser] != "" {
 		// If the hypervisor isolated sandbox was privileged but the container is non-privileged, then
 		// we will explicitly disable the annotation which allows privileged user with the exec.
 		s.Annotations[annotations.HostProcessInheritUser] = "false"
