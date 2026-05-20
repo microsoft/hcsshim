@@ -92,6 +92,28 @@ func (es *IncludeExcludeStringSet) IsSet(s string) bool {
 	return false
 }
 
+// IncludesExplicit reports whether the include flag (e.g. -feature) was used
+// explicitly on the command line. When false, [Strings] resolves from the
+// defaults and IsSet is permissive for any default value not excluded.
+//
+// This is useful for callers that need to know whether to apply an implication
+// rule (e.g. "feature A implies feature B") without breaking the default-when-
+// unset semantics.
+func (es *IncludeExcludeStringSet) IncludesExplicit() bool {
+	return es.inc != nil && es.inc.Len() > 0
+}
+
+// Include adds s to the include set, mirroring the effect of passing -<flag> s
+// on the command line. Intended for tests that need one feature flag to imply
+// another after [flag.Parse] has returned. Safe to call when the include flag
+// is already explicitly set; ignored when the underlying include set is nil.
+func (es *IncludeExcludeStringSet) Include(s string) {
+	if es.inc == nil {
+		return
+	}
+	_ = es.inc.Set(s)
+}
+
 // StringSet is a type to be used with the standard library's flag.Var
 // function as a custom flag value, similar to "github.com/urfave/cli".StringSet,
 // but it only tracks unique instances.

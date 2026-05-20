@@ -92,6 +92,7 @@ const (
 	// container and uVM types.
 
 	featureLCOW          = "LCOW"          // Linux containers or uVM tests; requires [featureUVM]
+	featureLCOWV2        = "LCOWV2"        // v2 LCOW controller tests; requires [featureUVM]
 	featureLCOWIntegrity = "LCOWIntegrity" // Linux confidential/policy tests
 	featureWCOW          = "WCOW"          // Windows containers or uVM tests
 	featureUVM           = "uVM"           // tests that create a utility VM
@@ -109,6 +110,7 @@ const (
 
 var allFeatures = []string{
 	featureLCOW,
+	featureLCOWV2,
 	featureLCOWIntegrity,
 	featureWCOW,
 	featureUVM,
@@ -141,6 +143,14 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+
+	// LCOWV2 implies LCOW: the v2 shim IS an LCOW runtime, so a run gated
+	// only on `-feature LCOWV2` should still execute tests that gate on
+	// `featureLCOW`. Mirrors the pattern in the CRI test suite and the
+	// azcri repo.
+	if flagFeatures.IncludesExplicit() && flagFeatures.IsSet(featureLCOWV2) {
+		flagFeatures.Include(featureLCOW)
+	}
 
 	if err := runTests(m); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -278,6 +288,14 @@ func requireAnyFeature(tb testing.TB, features ...string) {
 
 func defaultLCOWOptions(ctx context.Context, tb testing.TB) *uvm.OptionsLCOW {
 	tb.Helper()
+
+	// Every caller of defaultLCOWOptions is on the v1 path: the returned
+	// *uvm.OptionsLCOW only feeds testuvm.CreateLCOW / CreateAndStartLCOWFromOpts
+	// which build a *uvm.UtilityVM (v1 controller). The v2 controller does not
+	// consume *uvm.OptionsLCOW. Skip here so the whole v1 LCOW test surface
+	// short-circuits cleanly under `-feature LCOWV2`. Individual tests do not
+	// need to repeat requireV1Only.
+	requireV1Only(tb)
 
 	opts := testuvm.DefaultLCOWOptions(ctx, tb, testName(tb), hcsOwner)
 	if p := *flagLinuxBootFilesPath; p != "" {

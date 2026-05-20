@@ -46,6 +46,7 @@ func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
 	defer cancel()
 
 	requireFeatures(t, featureLCOW)
+	requireV1Only(t)
 
 	// use ubuntu to make sure that multiple container layers will be mapped properly
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, ubuntu1804})
@@ -101,6 +102,7 @@ func Test_Many_Container_Layers_Supported_On_VPMem(t *testing.T) {
 	defer cancel()
 
 	requireFeatures(t, featureLCOW)
+	requireV1Only(t)
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers, ubuntu70ExtraLayers})
 
@@ -132,6 +134,7 @@ func Test_Annotation_Disable_Multi_Mapping(t *testing.T) {
 	defer cancel()
 
 	requireFeatures(t, featureLCOW)
+	requireV1Only(t)
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers})
 

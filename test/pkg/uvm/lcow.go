@@ -32,6 +32,17 @@ var lcowOSBootFilesOnce = sync.OnceValues(func() (string, error) {
 	return "", nil
 })
 
+// LCOWBootFilesPath returns the absolute path to the LinuxBootFiles directory
+// found alongside containerd.exe on the PATH or at C:\ContainerPlat. Returns
+// an empty string (and no error) if no such directory exists.
+//
+// Exported for v2 controller tests that build HCS documents directly via
+// internal/builder/vm/lcow.BuildSandboxConfig and cannot use
+// [DefaultLCOWOptions] (which returns the v1 *uvm.OptionsLCOW type).
+func LCOWBootFilesPath() (string, error) {
+	return lcowOSBootFilesOnce()
+}
+
 // DefaultLCOWOptions returns default options for a bootable LCOW uVM, but first checks
 // if `containerd.exe` is in the path, or C:\ContainerPlat\LinuxBootFiles exists, and
 // prefers those paths above the default boot path set by [uvm.NewDefaultOptionsLCOW]

@@ -29,6 +29,7 @@ const (
 
 	// TODO: remove lcow when shim only tests are relocated
 	lcowRuntimeHandler                = "runhcs-lcow"
+	lcowV2RuntimeHandler              = "runhcs-lcow-v2"
 	wcowProcessRuntimeHandler         = "runhcs-wcow-process"
 	wcowHypervisorRuntimeHandler      = "runhcs-wcow-hypervisor"
 	wcowHypervisor17763RuntimeHandler = "runhcs-wcow-hypervisor-17763"
@@ -98,6 +99,7 @@ var (
 // Make sure you update allFeatures below with any new features you add.
 const (
 	featureLCOW               = "LCOW"
+	featureLCOWV2             = "LCOWV2"
 	featureWCOWProcess        = "WCOWProcess"
 	featureWCOWHypervisor     = "WCOWHypervisor"
 	featureHostProcess        = "HostProcess"
@@ -109,6 +111,7 @@ const (
 
 var allFeatures = []string{
 	featureLCOW,
+	featureLCOWV2,
 	featureWCOWProcess,
 	featureWCOWHypervisor,
 	featureHostProcess,
@@ -120,6 +123,15 @@ var allFeatures = []string{
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// LCOWV2 implies LCOW: the v2 shim IS an LCOW runtime, so a run gated
+	// only on `-feature LCOWV2` should still execute tests that gate on
+	// `featureLCOW`. Without this implication, the same test suite would
+	// need parallel `-feature LCOW` and `-feature LCOWV2` invocations OR
+	// every LCOW-gated test would have to be rewritten to accept either
+	// flag. Mirrors the pattern established in the azcri test suite.
+	if flagFeatures.IncludesExplicit() && flagFeatures.IsSet(featureLCOWV2) {
+		flagFeatures.Include(featureLCOW)
+	}
 	os.Exit(m.Run())
 }
 
@@ -205,10 +217,23 @@ func pullRequiredLCOWImages(tb testing.TB, images []string, opts ...SandboxConfi
 	opts = append(opts, WithSandboxLabels(map[string]string{
 		"sandbox-platform": "linux/amd64",
 	}))
-	pullRequiredImagesWithOptions(tb, images, opts...)
+	// Set RuntimeHandler on ImageSpec so containerd CRI picks the LCOW
+	// runtime's configured snapshotter (windows-lcow) and platform
+	// (linux/amd64) rather than the default windows/amd64. The sandbox-
+	// platform label alone is not honored by modern containerd (≥2.0).
+	pullRequiredImagesWithRuntime(tb, images, lcowRuntimeHandlerForTest(tb), opts...)
 }
 
 func pullRequiredImagesWithOptions(tb testing.TB, images []string, opts ...SandboxConfigOpt) {
+	tb.Helper()
+	pullRequiredImagesWithRuntime(tb, images, "", opts...)
+}
+
+// pullRequiredImagesWithRuntime pulls each image with the given runtime
+// handler set on the CRI ImageSpec. Empty runtimeHandler means use the
+// containerd default. Tests pulling LCOW images should pass the LCOW handler
+// so containerd selects the windows-lcow snapshotter and linux/amd64 platform.
+func pullRequiredImagesWithRuntime(tb testing.TB, images []string, runtimeHandler string, opts ...SandboxConfigOpt) {
 	tb.Helper()
 	if len(images) < 1 {
 		return
@@ -228,7 +253,8 @@ func pullRequiredImagesWithOptions(tb testing.TB, images []string, opts ...Sandb
 	for _, image := range images {
 		_, err := client.PullImage(ctx, &runtime.PullImageRequest{
 			Image: &runtime.ImageSpec{
-				Image: image,
+				Image:          image,
+				RuntimeHandler: runtimeHandler,
 			},
 			SandboxConfig: sb,
 		})
