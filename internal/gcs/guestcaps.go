@@ -104,3 +104,7 @@ func (w *WCOWGuestDefinedCapabilities) IsDeleteContainerStateSupported() bool {
 func (w *WCOWGuestDefinedCapabilities) IsLogForwardingSupported() bool {
 	return w.LogForwardingSupported
 }
+
+func (w *WCOWGuestDefinedCapabilities) IsHostProcessContainerSupported() bool {
+	return w.HostProcessContainerSupported
+}

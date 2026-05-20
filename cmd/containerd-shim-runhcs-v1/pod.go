@@ -502,6 +502,12 @@ func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
 		return errors.New("cannot create a host process container inside sandbox which has missing annotation: microsoft.com/hostprocess-container")
 	}
 
+	// If the UVM does not support HPCs, then we reject HPC calls.
+	if isHypervisorIsolatedPrivilegedContainer &&
+		p.host != nil && !p.host.HostProcessContainerSupported() {
+		return fmt.Errorf("UVM does not support HostProcess containers")
+	}
+
 	if isProcessIsolatedPrivilegedSandbox || (isHypervisorIsolatedPrivilegedSandbox && isHypervisorIsolatedPrivilegedContainer) {
 		if isProcessIsolatedPrivilegedSandbox && !isProcessIsolatedPrivilegedContainer {
 			// This is a short circuit to make sure that all containers in a pod will have

@@ -21,6 +21,17 @@ func (uvm *UtilityVM) DeleteContainerStateSupported() bool {
 	return uvm.guestCaps.IsDeleteContainerStateSupported()
 }
 
+// HostProcessContainerSupported returns if the WCOW UVM supports
+// running host process containers.
+func (uvm *UtilityVM) HostProcessContainerSupported() bool {
+	if uvm.OS() != "windows" {
+		return false
+	}
+
+	wcaps := gcs.GetWCOWCapabilities(uvm.gc.Capabilities())
+	return wcaps != nil && wcaps.HostProcessContainerSupported
+}
+
 // Capabilities returns the protocol version and the guest defined capabilities.
 // This should only be used for testing.
 func (uvm *UtilityVM) Capabilities() (uint32, gcs.GuestDefinedCapabilities) {
