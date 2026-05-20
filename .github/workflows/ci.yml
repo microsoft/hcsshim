@@ -36,7 +36,13 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1
+          # v2.1.0 has a known typechecker bug that fails to resolve
+          # cross-module imports under `working-directory: test/` when those
+          # imports point back into the parent module via a `replace`
+          # directive. Symptom: `could not import ... (-: build constraints
+          # exclude all Go files in ...)` on `(windows, test)` despite the
+          # files matching the active build tags + GOOS. Fixed in v2.5+.
+          version: v2.5
           args: >-
             --verbose
             --max-issues-per-linter=0
