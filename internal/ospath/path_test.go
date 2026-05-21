@@ -1,20 +1,11 @@
 package ospath
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestSanitize(t *testing.T) {
-	// Create a temp folder and file to simulate "already exists"
-	existingDir := t.TempDir()
-	existingFile := filepath.Join(existingDir, "exists.txt")
-	if err := os.WriteFile(existingFile, []byte("data"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	tests := []struct {
 		name               string
 		path               string
@@ -24,8 +15,8 @@ func TestSanitize(t *testing.T) {
 	}{
 		{
 			name:         "valid path",
-			path:         filepath.Join(existingDir, "test"),
-			expectedPath: filepath.Join(existingDir, "test"),
+			path:         `C:\custom\hpc`,
+			expectedPath: `C:\custom\hpc`,
 		},
 		{
 			name:              "empty path",
@@ -33,7 +24,7 @@ func TestSanitize(t *testing.T) {
 			expectedErrPrefix: errUnsafePath.Error(),
 		},
 		{
-			name:               "path traversal",
+			name:               "path traversal normalizes into disallowed",
 			path:               `C:\foo\..\Windows`,
 			disallowedPrefixes: []string{`C:\Windows`},
 			expectedErrPrefix:  errUnsafePath.Error(),
@@ -44,20 +35,34 @@ func TestSanitize(t *testing.T) {
 			expectedErrPrefix: errUnsafePath.Error(),
 		},
 		{
-			name:               "disallowed prefix",
+			name:               "disallowed prefix - subpath",
 			path:               `C:\Windows\System32`,
 			disallowedPrefixes: []string{`C:\Windows`},
 			expectedErrPrefix:  errUnsafePath.Error(),
 		},
 		{
-			name:              "existing folder",
-			path:              existingDir,
-			expectedErrPrefix: "already exists",
+			name:               "disallowed prefix - exact match",
+			path:               `C:\Windows`,
+			disallowedPrefixes: []string{`C:\Windows`},
+			expectedErrPrefix:  errUnsafePath.Error(),
 		},
 		{
-			name:              "existing file",
-			path:              existingFile,
-			expectedErrPrefix: "already exists",
+			name:               "disallowed prefix - case insensitive",
+			path:               `C:\windows\System32`,
+			disallowedPrefixes: []string{`C:\Windows`},
+			expectedErrPrefix:  errUnsafePath.Error(),
+		},
+		{
+			name:               "similarly-named sibling - allowed",
+			path:               `C:\WindowsBackup`,
+			disallowedPrefixes: []string{`C:\Windows`},
+			expectedPath:       `C:\WindowsBackup`,
+		},
+		{
+			name:               "no disallowed prefixes - allowed",
+			path:               `C:\hpc`,
+			disallowedPrefixes: nil,
+			expectedPath:       `C:\hpc`,
 		},
 	}
 

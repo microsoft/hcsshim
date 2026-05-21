@@ -1044,19 +1044,35 @@ func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath st
 //   - cmd.exe always exists under System32 (so the launcher can find it) and,
 //     once joined to the silo's job, runs inside the container's filesystem
 //     view where it can resolve builtins and any rootfs-relative binary.
-func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, specs *specs.Process) {
-	if specs.CommandLine != "" && !strings.HasPrefix(strings.TrimSpace(strings.ToLower(specs.CommandLine)), "cmd") {
-		specs.CommandLine = fmt.Sprintf("cmd /c %s", specs.CommandLine)
+func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, p *specs.Process) {
+	if p == nil {
+		return
 	}
-	if len(specs.Args) > 0 && strings.TrimSpace(strings.ToLower(specs.Args[0])) != "cmd" {
-		specs.Args = append([]string{"cmd", "/c"}, specs.Args...)
+
+	// Match "cmd" / "cmd.exe" as a complete first token, including absolute
+	// paths like `C:\Windows\System32\cmd.exe`.
+	if p.CommandLine != "" {
+		fields := strings.Fields(p.CommandLine)
+		base := ""
+		if len(fields) > 0 {
+			base = strings.ToLower(filepath.Base(fields[0]))
+		}
+		if base != "cmd" && base != "cmd.exe" {
+			p.CommandLine = fmt.Sprintf("cmd /c %s", p.CommandLine)
+		}
+	}
+	if len(p.Args) > 0 {
+		base := strings.ToLower(filepath.Base(strings.TrimSpace(p.Args[0])))
+		if base != "cmd" && base != "cmd.exe" {
+			p.Args = append([]string{"cmd", "/c"}, p.Args...)
+		}
 	}
 
 	// HostProcessInheritUser is set to explicit true or false during container create.
-	if taskSpec.Annotations[annotations.HostProcessInheritUser] == "true" {
+	if taskSpec != nil && taskSpec.Annotations[annotations.HostProcessInheritUser] == "true" {
 		// For privileged containers within the sandbox, if the annotation to inherit user is set
 		// we will set the user to NT AUTHORITY\SYSTEM.
-		specs.User.Username = `NT AUTHORITY\SYSTEM`
+		p.User.Username = `NT AUTHORITY\SYSTEM`
 	}
 }
 

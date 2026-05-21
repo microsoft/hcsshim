@@ -491,8 +491,8 @@ func (p *pod) DeleteTask(ctx context.Context, tid string) error {
 //   - Propagates HPC pod-level annotations (e.g. inherit-user, rootfs
 //     location) onto each container, since CRI only delivers them at pod
 //     create time.
-//   - Clears HostProcessInheritUser on any non-hypervisor-isolated-HPC
-//     container so a propagated annotation can't grant it SYSTEM.
+//   - Clears HostProcessInheritUser on any non-HPC container so a stray or
+//     propagated annotation can't grant it SYSTEM.
 func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
 	isProcessIsolatedPrivilegedSandbox := oci.IsJobContainer(p.spec) && !oci.IsIsolated(p.spec)
 	isProcessIsolatedPrivilegedContainer := oci.IsJobContainer(s) && !oci.IsIsolated(s)
@@ -528,9 +528,9 @@ func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
 		)
 	}
 
-	if !isHypervisorIsolatedPrivilegedContainer && s.Annotations[annotations.HostProcessInheritUser] != "" {
-		// If the hypervisor isolated sandbox was privileged but the container is non-privileged, then
-		// we will explicitly disable the annotation which allows privileged user with the exec.
+	// Non-HPC containers must never carry HostProcessInheritUser - it would
+	// otherwise grant SYSTEM to a non-privileged exec.
+	if !oci.IsJobContainer(s) && s.Annotations[annotations.HostProcessInheritUser] != "" {
 		s.Annotations[annotations.HostProcessInheritUser] = "false"
 	}
 

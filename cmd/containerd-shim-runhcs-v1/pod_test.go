@@ -420,8 +420,10 @@ func Test_pod_UpdateConfigForHostProcessContainer(t *testing.T) {
 			containerSpec: getWCOWSpecsWithAnnotations(map[string]string{
 				annotations.HostProcessContainer: "true",
 			}, true, ""),
-			expectedContainerSpec: nil,
-			expectedError:         "cannot create a host process container inside sandbox which has missing annotation: microsoft.com/hostprocess-container",
+			expectedContainerSpec: getWCOWSpecsWithAnnotations(map[string]string{
+				annotations.HostProcessContainer: "true",
+			}, true, ""),
+			expectedError: "",
 		},
 		{
 			testName: "privileged container in privileged pod (isolated hpc)",

@@ -2,8 +2,6 @@ package ospath
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -44,23 +42,17 @@ func Sanitize(path string, disallowedPrefixes []string) (string, error) {
 		return "", errUnsafePath
 	}
 
-	// Check if the path is not in the disallowed paths.
+	// Reject if cleanPath equals or is under any disallowed prefix. Compare
+	// case-insensitively (Windows) and enforce a path-separator boundary so
+	// `C:\Windows` does not block `C:\WindowsBackup`.
+	lowerPath := strings.ToLower(cleanPath)
 	for _, prefix := range disallowedPrefixes {
-		if strings.HasPrefix(cleanPath, prefix) {
+		lowerPrefix := strings.ToLower(filepath.Clean(prefix))
+		if lowerPath == lowerPrefix ||
+			strings.HasPrefix(lowerPath, lowerPrefix+`\`) ||
+			strings.HasPrefix(lowerPath, lowerPrefix+`/`) {
 			return "", errUnsafePath
 		}
-	}
-
-	// Reject if the path already exists (file/dir/symlink/junction).
-	// Use Lstat so we do not follow symlinks.
-	var err error
-	if _, err = os.Lstat(cleanPath); err == nil {
-		// Path exists
-		return "", fmt.Errorf("%w: path %q already exists", errUnsafePath, cleanPath)
-	}
-	if !os.IsNotExist(err) {
-		// Unexpected error (e.g., permission issues)
-		return "", fmt.Errorf("%w: error checking existence for %q: %w", errUnsafePath, cleanPath, err)
 	}
 
 	return cleanPath, nil

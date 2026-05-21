@@ -410,6 +410,40 @@ func Test_handleProcessArgsForIsolatedJobContainer(t *testing.T) {
 			expectedCmdLine: "",
 			expectedArgs:    []string{},
 		},
+		{
+			name:            "CommandLine 'cmdkey ...' – not cmd, gets prefixed",
+			specs:           &specs.Process{CommandLine: "cmdkey /list"},
+			expectedCmdLine: "cmd /c cmdkey /list",
+		},
+		{
+			name:            "CommandLine 'cmdtool foo' – not cmd, gets prefixed",
+			specs:           &specs.Process{CommandLine: "cmdtool foo"},
+			expectedCmdLine: "cmd /c cmdtool foo",
+		},
+		{
+			name:         "Args starts with 'cmd.exe' – unchanged",
+			specs:        &specs.Process{Args: []string{"cmd.exe", "/c", "echo", "hi"}},
+			expectedArgs: []string{"cmd.exe", "/c", "echo", "hi"},
+		},
+		{
+			name:         "Args starts with 'cmdkey' – not cmd, gets prefixed",
+			specs:        &specs.Process{Args: []string{"cmdkey", "/list"}},
+			expectedArgs: []string{"cmd", "/c", "cmdkey", "/list"},
+		},
+		{
+			name:            "CommandLine absolute path to cmd.exe – unchanged",
+			specs:           &specs.Process{CommandLine: `C:\Windows\System32\cmd.exe /c echo hi`},
+			expectedCmdLine: `C:\Windows\System32\cmd.exe /c echo hi`,
+		},
+		{
+			name:         "Args[0] absolute path to cmd.exe – unchanged",
+			specs:        &specs.Process{Args: []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "hi"}},
+			expectedArgs: []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "hi"},
+		},
+		{
+			name:  "Nil Process – no panic",
+			specs: nil,
+		},
 		// --- User inheritance behavior ---
 		{
 			name:             "HostProcessInheritUser=true – sets Username to NT AUTHORITY\\SYSTEM",
@@ -455,6 +489,10 @@ func Test_handleProcessArgsForIsolatedJobContainer(t *testing.T) {
 			taskSpec := &specs.Spec{Annotations: tt.taskAnnotations}
 
 			handleProcessArgsForIsolatedJobContainer(taskSpec, tt.specs)
+
+			if tt.specs == nil {
+				return
+			}
 
 			if tt.specs.CommandLine != tt.expectedCmdLine {
 				t.Errorf("CommandLine mismatch:  got:  %q  want: %q", tt.specs.CommandLine, tt.expectedCmdLine)
