@@ -15,9 +15,4 @@ type Processor struct {
 	Maximum int32 `json:"Maximum,omitempty"`
 
 	Weight int32 `json:"Weight,omitempty"`
-
-	// GroupAffinities specifies the processor group affinity for the container.
-	// Each entry pins the container to the given set of processors within a processor group.
-	// Requires Windows Server 2022 (build 20348) or later.
-	GroupAffinities []ProcessorGroupAffinity `json:"GroupAffinities,omitempty"`
 }

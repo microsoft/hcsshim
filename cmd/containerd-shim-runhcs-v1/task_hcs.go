@@ -934,28 +934,6 @@ func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.Window
 		if cpu.Shares != nil {
 			req.Weight = int32(*cpu.Shares)
 		}
-		if len(cpu.Affinity) > 0 {
-			// Validate and retrieve CPU affinity.
-			tempSpec := &specs.Spec{
-				Windows: &specs.Windows{
-					Resources: &specs.WindowsResources{
-						CPU: cpu,
-					},
-				},
-			}
-			affinities, err := hcsoci.ConvertCPUAffinity(tempSpec)
-			if err != nil {
-				return err
-			}
-			groupAffs := make([]hcsschema.ProcessorGroupAffinity, len(affinities))
-			for i, a := range affinities {
-				groupAffs[i] = hcsschema.ProcessorGroupAffinity{
-					Mask:  a.Mask,
-					Group: uint16(a.Group),
-				}
-			}
-			req.GroupAffinities = groupAffs
-		}
 		return ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req)
 	}
 

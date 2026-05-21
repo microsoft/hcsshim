@@ -235,12 +235,6 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		return nil, nil, err
 	}
 
-	// Validate and retrieve CPU affinity from the spec.
-	cpuAffinity, err := ConvertCPUAffinity(coi.Spec)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	if coi.HostingSystem != nil && coi.ScaleCPULimitsToSandbox && cpuLimit > 0 {
 		// When ScaleCPULimitsToSandbox is set and we are running in a UVM, we assume
 		// the CPU limit has been calculated based on the number of processors on the
@@ -289,22 +283,11 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v1.ProcessorMaximum = int64(cpuLimit)
 	v1.ProcessorWeight = uint64(cpuWeight)
 
-	v2Processor := &hcsschema.Processor{
+	v2Container.Processor = &hcsschema.Processor{
 		Count:   cpuCount,
 		Maximum: cpuLimit,
 		Weight:  cpuWeight,
 	}
-	if len(cpuAffinity) > 0 {
-		groupAffs := make([]hcsschema.ProcessorGroupAffinity, len(cpuAffinity))
-		for i, a := range cpuAffinity {
-			groupAffs[i] = hcsschema.ProcessorGroupAffinity{
-				Mask:  a.Mask,
-				Group: uint16(a.Group),
-			}
-		}
-		v2Processor.GroupAffinities = groupAffs
-	}
-	v2Container.Processor = v2Processor
 
 	// Memory Resources
 	memoryMaxInMB := oci.ParseAnnotationsMemory(ctx, coi.Spec, annotations.ContainerMemorySizeInMB, 0)
