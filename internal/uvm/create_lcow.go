@@ -954,7 +954,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 
 	// HCS config for SNP isolated vm is quite different to the usual case
 	var doc *hcsschema.ComputeSystem
-	if opts.SecurityPolicyEnabled {
+	if opts.GuestStateFilePath != "" {
 		doc, err = makeLCOWSecurityDoc(ctx, opts, uvm)
 		if logrus.IsLevelEnabled(logrus.TraceLevel) {
 			log.G(ctx).WithFields(logrus.Fields{
