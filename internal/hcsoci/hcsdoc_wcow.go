@@ -110,13 +110,13 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 	return &config, nil
 }
 
-// ConvertCPUAffinity handles the logic of converting and validating the container's CPU affinity
-// specified in the OCI spec to what HCS expects.
+// ValidateCPUAffinity handles the logic of validating the container's CPU affinity
+// specified in the OCI spec.
 //
 // Returns the validated affinity entries (nil if not specified) and any validation error.
 // Multiple processor groups and non-zero group numbers require Windows Server 2022
 // (build 20348) or later; on older hosts only a single entry for group 0 is accepted.
-func ConvertCPUAffinity(spec *specs.Spec) ([]specs.WindowsCPUGroupAffinity, error) {
+func ValidateCPUAffinity(spec *specs.Spec) ([]specs.WindowsCPUGroupAffinity, error) {
 	if spec.Windows == nil || spec.Windows.Resources == nil || spec.Windows.Resources.CPU == nil || len(spec.Windows.Resources.CPU.Affinity) == 0 {
 		return nil, nil
 	}
