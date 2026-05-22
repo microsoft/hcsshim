@@ -64,6 +64,22 @@ func TestSanitize(t *testing.T) {
 			disallowedPrefixes: nil,
 			expectedPath:       `C:\hpc`,
 		},
+		{
+			name:               "relative parent traversal",
+			path:               `..\..\Windows\System32`,
+			disallowedPrefixes: []string{`C:\Windows`},
+			expectedErrPrefix:  errUnsafePath.Error(),
+		},
+		{
+			name:              "drive-relative path",
+			path:              `C:foo\bar`,
+			expectedErrPrefix: errUnsafePath.Error(),
+		},
+		{
+			name:              "rooted not absolute",
+			path:              `\foo`,
+			expectedErrPrefix: errUnsafePath.Error(),
+		},
 	}
 
 	for _, tt := range tests {

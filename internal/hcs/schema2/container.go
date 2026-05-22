@@ -13,10 +13,6 @@ package hcsschema
 type IsolationType string
 
 const (
-	// IsolationTypeProcess is a fully process-isolated, namespace-isolated
-	// Windows Server container.
-	IsolationTypeProcess IsolationType = "Process"
-
 	// IsolationTypeHostProcess is a privileged (Windows) HostProcess
 	// container that shares the host namespace.
 	IsolationTypeHostProcess IsolationType = "HostProcess"

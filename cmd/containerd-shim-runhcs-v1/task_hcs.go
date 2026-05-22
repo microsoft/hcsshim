@@ -1049,9 +1049,11 @@ func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, p *specs.Pro
 		return
 	}
 
-	// Match "cmd" / "cmd.exe" as a complete first token, including absolute
-	// paths like `C:\Windows\System32\cmd.exe`.
-	if p.CommandLine != "" {
+	// Wrap the process invocation with "cmd /c" so it runs via cmd.exe. Only mutate
+	// whichever of CommandLine/Args will actually be used (CommandLine wins if set),
+	// and skip if it already invokes cmd.
+	switch {
+	case p.CommandLine != "":
 		fields := strings.Fields(p.CommandLine)
 		base := ""
 		if len(fields) > 0 {
@@ -1060,8 +1062,7 @@ func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, p *specs.Pro
 		if base != "cmd" && base != "cmd.exe" {
 			p.CommandLine = fmt.Sprintf("cmd /c %s", p.CommandLine)
 		}
-	}
-	if len(p.Args) > 0 {
+	case len(p.Args) > 0:
 		base := strings.ToLower(filepath.Base(strings.TrimSpace(p.Args[0])))
 		if base != "cmd" && base != "cmd.exe" {
 			p.Args = append([]string{"cmd", "/c"}, p.Args...)

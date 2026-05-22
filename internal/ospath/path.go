@@ -42,6 +42,15 @@ func Sanitize(path string, disallowedPrefixes []string) (string, error) {
 		return "", errUnsafePath
 	}
 
+	// Require an absolute Windows path (drive letter + separator) so relative paths like
+	// `..\..\Windows\System32` cannot bypass the absolute-prefix checks below.
+	if len(cleanPath) < 3 || cleanPath[1] != ':' ||
+		(cleanPath[2] != '\\' && cleanPath[2] != '/') ||
+		((cleanPath[0] < 'a' || cleanPath[0] > 'z') &&
+			(cleanPath[0] < 'A' || cleanPath[0] > 'Z')) {
+		return "", errUnsafePath
+	}
+
 	// Reject if cleanPath equals or is under any disallowed prefix. Compare
 	// case-insensitively (Windows) and enforce a path-separator boundary so
 	// `C:\Windows` does not block `C:\WindowsBackup`.
