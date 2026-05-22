@@ -276,9 +276,11 @@ func (n *namespace) ConfigureInInitNS(ctx context.Context) (err error) {
 	n.m.Lock()
 	defer n.m.Unlock()
 
+	// Mirror Sync()'s multi-NIC handling so host-network and non-host-network
+	// pods behave identically with respect to policy-based routing.
 	for i, a := range n.nics {
-		if i > 0 {
-			a.adapter.EnableLowMetric = true
+		if a.adapter.PolicyBasedRouting {
+			a.adapter.EnableLowMetric = (i > 0)
 		}
 		if err = a.configureInPlace(ctx); err != nil {
 			return err
