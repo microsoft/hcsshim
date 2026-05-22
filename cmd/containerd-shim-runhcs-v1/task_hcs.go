@@ -149,7 +149,9 @@ func createContainer(
 		return nil, nil, err
 	}
 
-	if oci.IsJobContainer(s) {
+	// For Job Container which runs on host, we create the same using shim logic.
+	// If the request was for job container within UVM, then the request is passed along to GCS.
+	if oci.IsJobContainer(s) && !oci.IsIsolated(s) {
 		opts := jobcontainers.CreateOptions{WCOWLayers: wcowLayers}
 		container, resources, err = jobcontainers.Create(ctx, id, s, opts)
 		if err != nil {
@@ -210,6 +212,12 @@ func newHcsTask(
 			return nil, err
 		}
 		shimOpts = v.(*runhcsopts.Options)
+	}
+
+	// For Isolated Job containers, we need special handling wherein if the command line
+	// is not specified, then we add 'cmd /C' by default.
+	if oci.IsJobContainer(s) && oci.IsIsolated(s) {
+		handleProcessArgsForIsolatedJobContainer(s, s.Process)
 	}
 
 	// Default to an infinite timeout (zero value)
@@ -362,6 +370,10 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 
 	if ht.init.State() != shimExecStateRunning {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
+	}
+
+	if oci.IsJobContainer(ht.taskSpec) && oci.IsIsolated(ht.taskSpec) {
+		handleProcessArgsForIsolatedJobContainer(ht.taskSpec, spec)
 	}
 
 	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal, ht.ioRetryTimeout)
@@ -1013,6 +1025,56 @@ func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath st
 		Settings:     settings,
 	}
 	return ht.c.Modify(ctx, modification)
+}
+
+// handleProcessArgsForIsolatedJobContainer adjusts the process spec for a
+// HostProcess container running inside a hypervisor-isolated UVM.
+//
+// Why the "cmd /c" wrap:
+//   - For a regular WCOW container, the guest creates the workload process
+//     from within the container silo, so the silo's filesystem view (including
+//     the bind-mounted container rootfs) is in scope for path resolution.
+//   - For a HostProcess container the guest creates the process from outside
+//     the silo and only attaches it to the silo's job object after creation.
+//     Executable-name resolution therefore uses the launcher's view (System32,
+//     Windows, PATH) and cannot see binaries that live only inside the
+//     container rootfs, nor resolve shell builtins like `echo`, `dir`, `set`,
+//     redirection, etc. Anything not present as a real .exe on the standard
+//     search path would fail with ERROR_FILE_NOT_FOUND.
+//   - cmd.exe always exists under System32 (so the launcher can find it) and,
+//     once joined to the silo's job, runs inside the container's filesystem
+//     view where it can resolve builtins and any rootfs-relative binary.
+func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, p *specs.Process) {
+	if p == nil {
+		return
+	}
+
+	// Wrap the process invocation with "cmd /c" so it runs via cmd.exe. Only mutate
+	// whichever of CommandLine/Args will actually be used (CommandLine wins if set),
+	// and skip if it already invokes cmd.
+	switch {
+	case p.CommandLine != "":
+		fields := strings.Fields(p.CommandLine)
+		base := ""
+		if len(fields) > 0 {
+			base = strings.ToLower(filepath.Base(fields[0]))
+		}
+		if base != "cmd" && base != "cmd.exe" {
+			p.CommandLine = fmt.Sprintf("cmd /c %s", p.CommandLine)
+		}
+	case len(p.Args) > 0:
+		base := strings.ToLower(filepath.Base(strings.TrimSpace(p.Args[0])))
+		if base != "cmd" && base != "cmd.exe" {
+			p.Args = append([]string{"cmd", "/c"}, p.Args...)
+		}
+	}
+
+	// HostProcessInheritUser is set to explicit true or false during container create.
+	if taskSpec != nil && taskSpec.Annotations[annotations.HostProcessInheritUser] == "true" {
+		// For privileged containers within the sandbox, if the annotation to inherit user is set
+		// we will set the user to NT AUTHORITY\SYSTEM.
+		p.User.Username = `NT AUTHORITY\SYSTEM`
+	}
 }
 
 func isMountTypeSupported(hostPath, mountType string) bool {
