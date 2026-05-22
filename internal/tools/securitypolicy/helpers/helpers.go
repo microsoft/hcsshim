@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -74,6 +75,10 @@ func DefaultContainerConfigs() []sp.ContainerConfig {
 		ImageName:     "k8s.gcr.io/pause:3.1",
 		Command:       []string{"/pause"},
 		AllowElevated: true,
+		Signals: []syscall.Signal{
+			syscall.SIGKILL,
+			syscall.SIGTERM,
+		},
 	}
 	return []sp.ContainerConfig{pause}
 }
