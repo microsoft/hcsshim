@@ -1111,7 +1111,7 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 			errContains: "v2 shims do not support vPMem devices",
 		},
 		{
-			name: "scratch encryption defaults to false when security hardware is bypassed",
+			name: "scratch encryption defaults to true when security hardware is bypassed",
 			spec: &vm.Spec{
 				Annotations: map[string]string{
 					shimannotations.LCOWSecurityPolicy: "eyJ0ZXN0IjoidGVzdCJ9",
@@ -1120,10 +1120,10 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				// When NoSecurityHardware is true, isConfidential is false,
-				// so EnableScratchEncryption defaults to false
-				if sandboxOpts.EnableScratchEncryption != false {
-					t.Error("expected scratch encryption disabled by default when security hardware is bypassed")
+				// When NoSecurityHardware is true but a security policy is present,
+				// ConfidentialConfig is still set, so EnableScratchEncryption defaults to true
+				if sandboxOpts.EnableScratchEncryption != true {
+					t.Error("expected scratch encryption enabled by default when security policy is present")
 				}
 			},
 		},
@@ -1149,6 +1149,45 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 				t.Helper()
 				if sandboxOpts.EnableScratchEncryption != false {
 					t.Error("expected scratch encryption disabled without security policy")
+				}
+			},
+		},
+		{
+			name: "no-security-hardware sets ConfidentialConfig but uses standard HCS doc",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LCOWSecurityPolicy:         "eyJ0ZXN0IjoidGVzdCJ9",
+					shimannotations.LCOWSecurityPolicyEnforcer: "rego",
+					shimannotations.NoSecurityHardware:         "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				// ConfidentialConfig should be set for policy plumbing
+				if sandboxOpts.ConfidentialConfig == nil {
+					t.Fatal("expected ConfidentialConfig to be set even with no-security-hardware")
+				}
+				if sandboxOpts.ConfidentialConfig.SecurityPolicy != "eyJ0ZXN0IjoidGVzdCJ9" {
+					t.Errorf("expected security policy to be set, got %q", sandboxOpts.ConfidentialConfig.SecurityPolicy)
+				}
+				if sandboxOpts.ConfidentialConfig.SecurityPolicyEnforcer != "rego" {
+					t.Errorf("expected security policy enforcer 'rego', got %q", sandboxOpts.ConfidentialConfig.SecurityPolicyEnforcer)
+				}
+				if !sandboxOpts.NoSecurityHardware {
+					t.Error("expected NoSecurityHardware to be true")
+				}
+				// HCS doc should use standard schema (V21), not SNP schema (V25)
+				if doc.SchemaVersion.Major != 2 || doc.SchemaVersion.Minor != 1 {
+					t.Errorf("expected schema V2.1 for no-security-hardware, got V%d.%d", doc.SchemaVersion.Major, doc.SchemaVersion.Minor)
+				}
+				// GuestState should NOT be set (no SNP boot)
+				if doc.VirtualMachine.GuestState != nil {
+					t.Error("expected no GuestState in no-security-hardware mode")
+				}
+				// Standard boot options should be used (kernel direct or UEFI)
+				chipset := doc.VirtualMachine.Chipset
+				if chipset.LinuxKernelDirect == nil && chipset.Uefi == nil {
+					t.Error("expected standard boot options in no-security-hardware mode")
 				}
 			},
 		},
