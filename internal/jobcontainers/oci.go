@@ -42,7 +42,7 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 
 	// Validate and retrieve CPU affinity using the shared helper, which enforces the
 	// OS version gate for multi-group support (WS2022+).
-	affinities, err := hcsoci.ConvertCPUAffinity(s)
+	affinities, err := hcsoci.ValidateCPUAffinity(s)
 	if err != nil {
 		return nil, err
 	}

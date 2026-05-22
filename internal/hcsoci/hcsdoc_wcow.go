@@ -31,7 +31,7 @@ import (
 
 const createContainerSubdirectoryForProcessDumpSuffix = "{container_id}"
 
-// Sentinel errors returned by ConvertCPUAffinity.
+// Sentinel errors returned by ValidateCPUAffinity.
 var (
 	// ErrCPUAffinityMultipleGroupsNotSupported is returned when multiple processor-group
 	// affinity entries are requested on a host older than Windows Server 2022 (build 20348),

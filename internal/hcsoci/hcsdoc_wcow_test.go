@@ -11,7 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
-func TestConvertCPUAffinity_Group0MaskSet(t *testing.T) {
+func TestValidateCPUAffinity_Group0MaskSet(t *testing.T) {
 	s := &specs.Spec{
 		Windows: &specs.Windows{
 			Resources: &specs.WindowsResources{
@@ -24,16 +24,16 @@ func TestConvertCPUAffinity_Group0MaskSet(t *testing.T) {
 		},
 	}
 
-	affinities, err := ConvertCPUAffinity(s)
+	affinities, err := ValidateCPUAffinity(s)
 	if err != nil {
-		t.Fatalf("ConvertCPUAffinity failed: %v", err)
+		t.Fatalf("ValidateCPUAffinity failed: %v", err)
 	}
 	if len(affinities) != 1 || affinities[0].Mask != 0x3 || affinities[0].Group != 0 {
 		t.Fatalf("unexpected cpu affinity: got %v", affinities)
 	}
 }
 
-func TestConvertCPUAffinity_MultiGroup(t *testing.T) {
+func TestValidateCPUAffinity_MultiGroup(t *testing.T) {
 	s := &specs.Spec{
 		Windows: &specs.Windows{
 			Resources: &specs.WindowsResources{
@@ -47,7 +47,7 @@ func TestConvertCPUAffinity_MultiGroup(t *testing.T) {
 		},
 	}
 
-	affinities, err := ConvertCPUAffinity(s)
+	affinities, err := ValidateCPUAffinity(s)
 	if osversion.Build() >= osversion.LTSC2022 {
 		// Multi-group is supported on WS2022+.
 		if err != nil {
@@ -66,7 +66,7 @@ func TestConvertCPUAffinity_MultiGroup(t *testing.T) {
 	}
 }
 
-func TestConvertCPUAffinity_NonZeroGroup(t *testing.T) {
+func TestValidateCPUAffinity_NonZeroGroup(t *testing.T) {
 	s := &specs.Spec{
 		Windows: &specs.Windows{
 			Resources: &specs.WindowsResources{
@@ -79,7 +79,7 @@ func TestConvertCPUAffinity_NonZeroGroup(t *testing.T) {
 		},
 	}
 
-	affinities, err := ConvertCPUAffinity(s)
+	affinities, err := ValidateCPUAffinity(s)
 	if osversion.Build() >= osversion.LTSC2022 {
 		// Non-zero group is supported on WS2022+.
 		if err != nil {
@@ -98,7 +98,7 @@ func TestConvertCPUAffinity_NonZeroGroup(t *testing.T) {
 	}
 }
 
-func TestConvertCPUAffinity_ZeroMaskRejected(t *testing.T) {
+func TestValidateCPUAffinity_ZeroMaskRejected(t *testing.T) {
 	s := &specs.Spec{
 		Windows: &specs.Windows{
 			Resources: &specs.WindowsResources{
@@ -111,7 +111,7 @@ func TestConvertCPUAffinity_ZeroMaskRejected(t *testing.T) {
 		},
 	}
 
-	_, err := ConvertCPUAffinity(s)
+	_, err := ValidateCPUAffinity(s)
 	if err == nil {
 		t.Fatal("expected error for zero affinity mask")
 	}
@@ -120,7 +120,7 @@ func TestConvertCPUAffinity_ZeroMaskRejected(t *testing.T) {
 	}
 }
 
-func TestConvertCPUAffinity_NoAffinity(t *testing.T) {
+func TestValidateCPUAffinity_NoAffinity(t *testing.T) {
 	testCases := []struct {
 		name string
 		spec *specs.Spec
@@ -159,9 +159,9 @@ func TestConvertCPUAffinity_NoAffinity(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			affinities, err := ConvertCPUAffinity(tc.spec)
+			affinities, err := ValidateCPUAffinity(tc.spec)
 			if err != nil {
-				t.Fatalf("ConvertCPUAffinity failed: %v", err)
+				t.Fatalf("ValidateCPUAffinity failed: %v", err)
 			}
 			if len(affinities) != 0 {
 				t.Fatalf("expected empty affinities, got %v", affinities)
