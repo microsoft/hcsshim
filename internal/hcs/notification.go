@@ -27,9 +27,8 @@ const migrationNotificationBufferSize = 16
 // live Go pointer, we register a numeric ID that maps to the real context in
 // notificationContexts.
 //
-// Registrations use HcsEventOptionEnableOperationCallbacks |
-// HcsEventOptionEnableLiveMigrationEvents. The package never attaches a
-// per-operation callback.
+// Registrations use HcsEventOptionEnableLiveMigrationEvents.
+// The package never attaches a per-operation callback.
 var (
 	notificationNextID   atomic.Uint64
 	notificationContexts sync.Map // uint64 -> *notificationContext
@@ -56,7 +55,7 @@ type notificationState struct {
 	closeOnce sync.Once
 	exited    chan struct{}
 	closed    chan struct{}
-	raw       string
+	raw       json.RawMessage
 }
 
 func newNotificationState() *notificationState {
@@ -68,7 +67,7 @@ func newNotificationState() *notificationState {
 
 // signalExit records a real exit event and unblocks waitBackground. Safe to
 // call multiple times; only the first wins.
-func (s *notificationState) signalExit(raw string) {
+func (s *notificationState) signalExit(raw json.RawMessage) {
 	s.exitOnce.Do(func() {
 		s.raw = raw
 		close(s.exited)
@@ -149,7 +148,7 @@ func notificationHandler(eventPtr uintptr, ctx uintptr) uintptr {
 		// closed here.
 		case computecore.HcsEventTypeSystemExited, computecore.HcsEventTypeProcessExited:
 			if nc.state != nil {
-				nc.state.signalExit(eventData)
+				nc.state.signalExit(json.RawMessage(eventData))
 			}
 		case computecore.HcsEventTypeGroupLiveMigration:
 			// Forward to the system's migration channel, if one was
@@ -157,7 +156,7 @@ func notificationHandler(eventPtr uintptr, ctx uintptr) uintptr {
 			// both logged-and-dropped: the HCS callback thread must
 			// never block, and a malformed payload can't be acted on.
 			if nc.migrationCh != nil {
-				dispatchMigrationEvent(nc.migrationCh, e.Type, eventData)
+				dispatchMigrationEvent(nc.migrationCh, e.Type, json.RawMessage(eventData))
 			}
 		}
 	}
@@ -169,13 +168,13 @@ func notificationHandler(eventPtr uintptr, ctx uintptr) uintptr {
 // dispatchMigrationEvent decodes a GroupLiveMigration EventData payload and
 // non-blocking-sends it on ch. An empty payload yields the zero value (HCS
 // occasionally delivers LM events with a nil EventData pointer).
-func dispatchMigrationEvent(ch chan<- hcsschema.OperationSystemMigrationNotificationInfo, eventType computecore.HcsEventType, eventData string) {
+func dispatchMigrationEvent(ch chan<- hcsschema.OperationSystemMigrationNotificationInfo, eventType computecore.HcsEventType, eventData json.RawMessage) {
 	var info hcsschema.OperationSystemMigrationNotificationInfo
-	if eventData != "" {
-		if err := json.Unmarshal([]byte(eventData), &info); err != nil {
+	if len(eventData) > 0 {
+		if err := json.Unmarshal(eventData, &info); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"event-type":    eventType.String(),
-				"event-data":    eventData,
+				"event-data":    string(eventData),
 				logrus.ErrorKey: err,
 			}).Warn("failed to unmarshal migration notification payload, dropping event")
 			return

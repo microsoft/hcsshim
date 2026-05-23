@@ -44,7 +44,7 @@ func (computeSystem *System) StartWithMigrationOptions(ctx context.Context, conf
 	defer computeSystem.handleLock.Unlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	opts, err := json.Marshal(hcsschema.StartOptions{
@@ -53,17 +53,17 @@ func (computeSystem *System) StartWithMigrationOptions(ctx context.Context, conf
 		},
 	})
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
-	resultJSON, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	_, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
 		if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, resourcepaths.LiveMigrationSocketURI, config.Socket); err != nil {
 			return err
 		}
 		return computecore.HcsStartComputeSystem(ctx, computeSystem.handle, op, string(opts))
 	})
 	if callErr != nil {
-		return makeSystemError(computeSystem, operation, callErr, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, callErr)
 	}
 	computeSystem.startTime = time.Now()
 	return nil
@@ -83,7 +83,7 @@ func (computeSystem *System) InitializeLiveMigrationOnSource(ctx context.Context
 	defer computeSystem.handleLock.Unlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	if options == nil {
@@ -91,21 +91,21 @@ func (computeSystem *System) InitializeLiveMigrationOnSource(ctx context.Context
 	}
 	optionsJSON, err := json.Marshal(options)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Issue the initialize call and wait for completion.
 	if err = computecore.HcsInitializeLiveMigrationOnSource(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err = computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
@@ -129,18 +129,18 @@ func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, con
 	defer computeSystem.handleLock.Unlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Attach the migration socket to the operation before starting.
 	if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, resourcepaths.LiveMigrationSocketURI, config.Socket); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	options := hcsschema.MigrationStartOptions{
@@ -148,15 +148,15 @@ func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, con
 	}
 	optionsJSON, err := json.Marshal(options)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	// Issue the start call and wait for completion.
 	if err := computecore.HcsStartLiveMigrationOnSource(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
@@ -174,7 +174,7 @@ func (computeSystem *System) StartLiveMigrationTransfer(ctx context.Context, opt
 	defer computeSystem.handleLock.Unlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	if options == nil {
@@ -182,21 +182,21 @@ func (computeSystem *System) StartLiveMigrationTransfer(ctx context.Context, opt
 	}
 	optionsJSON, err := json.Marshal(options)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Begin the memory transfer and wait for completion.
 	if err := computecore.HcsStartLiveMigrationTransfer(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
@@ -215,7 +215,7 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, resume b
 	defer computeSystem.handleLock.Unlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	// Choose whether to resume or stop the VM after migration.
@@ -225,21 +225,21 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, resume b
 	}
 	optionsJSON, err := json.Marshal(hcsschema.MigrationFinalizedOptions{FinalizedOperation: finalOp})
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Finalize the migration and wait for completion.
 	if err := computecore.HcsFinalizeLiveMigration(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }

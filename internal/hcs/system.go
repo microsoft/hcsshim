@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -97,13 +98,15 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 		}
 	}()
 
-	resultJSON, createErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	createCtx, cancel := context.WithTimeout(ctx, timeout.SystemCreate)
+	defer cancel()
+	_, createErr := runOperation(createCtx, func(op computecore.HcsOperation) error {
 		var hErr error
 		computeSystem.handle, hErr = computecore.HcsCreateComputeSystem(ctx, id, hcsDocument, op, nil)
 		return hErr
 	})
 	if createErr != nil {
-		return nil, makeSystemError(computeSystem, operation, createErr, processHcsResult(ctx, resultJSON))
+		return nil, makeSystemError(computeSystem, operation, createErr)
 	}
 
 	computeSystem.registerNotification(ctx)
@@ -121,7 +124,7 @@ func OpenComputeSystem(ctx context.Context, id string) (*System, error) {
 	computeSystem := newSystem(id)
 	handle, err := computecore.HcsOpenComputeSystem(ctx, id, syscall.GENERIC_ALL)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 	computeSystem.handle = handle
 	defer func() {
@@ -146,7 +149,7 @@ func (computeSystem *System) registerNotification(ctx context.Context) {
 	id := registerNotificationContext(computeSystem.id, 0, computeSystem.notify, computeSystem.migrationNotifyCh)
 	if err := computecore.HcsSetComputeSystemCallback(
 		ctx, computeSystem.handle,
-		computecore.HcsEventOptionEnableOperationCallbacks|computecore.HcsEventOptionEnableLiveMigrationEvents,
+		computecore.HcsEventOptionEnableLiveMigrationEvents,
 		uintptr(id), notificationCallback,
 	); err != nil {
 		unregisterNotificationContext(id)
@@ -197,7 +200,7 @@ func GetComputeSystems(ctx context.Context, q schema1.ComputeSystemQuery) ([]sch
 		return computecore.HcsEnumerateComputeSystems(ctx, query, op)
 	})
 	if err != nil {
-		return nil, &HcsError{Op: operation, Err: err, Events: processHcsResult(ctx, resultJSON)}
+		return nil, &HcsError{Op: operation, Err: err, Events: eventsFromError(err)}
 	}
 	if resultJSON == "" {
 		return nil, ErrUnexpectedValue
@@ -219,20 +222,22 @@ func (computeSystem *System) Start(ctx context.Context) (err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	// Prevent starting an exited system: we do not recreate waitBlock or
 	// rerun waitBackground, so we have no way to be notified of it closing again.
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	resultJSON, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	startCtx, cancel := context.WithTimeout(ctx, timeout.SystemStart)
+	defer cancel()
+	_, callErr := runOperation(startCtx, func(op computecore.HcsOperation) error {
 		return computecore.HcsStartComputeSystem(ctx, computeSystem.handle, op, "")
 	})
 	if callErr != nil {
-		return makeSystemError(computeSystem, operation, callErr, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, callErr)
 	}
 	computeSystem.startTime = time.Now()
 	return nil
@@ -245,8 +250,8 @@ func (computeSystem *System) ID() string {
 
 // Shutdown requests a compute system shutdown.
 func (computeSystem *System) Shutdown(ctx context.Context) error {
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	operation := "hcs::System::Shutdown"
 
@@ -254,22 +259,22 @@ func (computeSystem *System) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	resultJSON, err := runOperation(ctx, func(op computecore.HcsOperation) error {
+	err := submitOperation(ctx, func(op computecore.HcsOperation) error {
 		return computecore.HcsShutDownComputeSystem(ctx, computeSystem.handle, op, "")
 	})
 	if err != nil &&
 		!errors.Is(err, ErrVmcomputeAlreadyStopped) &&
 		!errors.Is(err, ErrComputeSystemDoesNotExist) &&
 		!errors.Is(err, ErrVmcomputeOperationPending) {
-		return makeSystemError(computeSystem, operation, err, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
 
 // Terminate requests a compute system terminate.
 func (computeSystem *System) Terminate(ctx context.Context) error {
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	operation := "hcs::System::Terminate"
 
@@ -277,14 +282,14 @@ func (computeSystem *System) Terminate(ctx context.Context) error {
 		return nil
 	}
 
-	resultJSON, err := runOperation(ctx, func(op computecore.HcsOperation) error {
+	err := submitOperation(ctx, func(op computecore.HcsOperation) error {
 		return computecore.HcsTerminateComputeSystem(ctx, computeSystem.handle, op, "")
 	})
 	if err != nil &&
 		!errors.Is(err, ErrVmcomputeAlreadyStopped) &&
 		!errors.Is(err, ErrComputeSystemDoesNotExist) &&
 		!errors.Is(err, ErrVmcomputeOperationPending) {
-		return makeSystemError(computeSystem, operation, err, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
@@ -317,16 +322,16 @@ func (computeSystem *System) waitBackground() {
 
 	// Real exit notification path: parse SystemExitStatus and publish.
 	var err error
-	if raw := computeSystem.notify.raw; raw != "" {
+	if raw := computeSystem.notify.raw; len(raw) > 0 {
 		var status struct {
 			Status   int32  `json:"Status"`
 			ExitType string `json:"ExitType"`
 		}
-		if uErr := json.Unmarshal([]byte(raw), &status); uErr != nil {
-			log.G(ctx).WithError(uErr).WithField("exit-data", raw).Warning("failed to parse SystemExitStatus")
+		if uErr := json.Unmarshal(raw, &status); uErr != nil {
+			log.G(ctx).WithError(uErr).WithField("exit-data", string(raw)).Warning("failed to parse SystemExitStatus")
 		} else if status.ExitType == "UnexpectedExit" {
 			log.G(ctx).Debug("unexpected system exit")
-			computeSystem.exitError = makeSystemError(computeSystem, operation, ErrVmcomputeUnexpectedExit, nil)
+			computeSystem.exitError = makeSystemError(computeSystem, operation, ErrVmcomputeUnexpectedExit)
 		}
 	}
 	computeSystem.closedWaitOnce.Do(func() {
@@ -386,18 +391,18 @@ func (computeSystem *System) ExitError() error {
 
 // Properties returns the requested container properties targeting a V1 schema container.
 func (computeSystem *System) Properties(ctx context.Context, types ...schema1.PropertyType) (*schema1.ContainerProperties, error) {
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	operation := "hcs::System::Properties"
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	queryBytes, err := json.Marshal(schema1.PropertyQuery{PropertyTypes: types})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 	query := string(queryBytes)
 
@@ -405,7 +410,7 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 		return computecore.HcsGetComputeSystemProperties(ctx, computeSystem.handle, op, query)
 	})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, processHcsResult(ctx, propertiesJSON))
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 
 	if propertiesJSON == "" {
@@ -413,7 +418,7 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 	}
 	properties := &schema1.ContainerProperties{}
 	if err := json.Unmarshal([]byte(propertiesJSON), properties); err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 
 	return properties, nil
@@ -535,12 +540,12 @@ func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []h
 	operation := "hcs::System::PropertiesV2"
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	queryBytes, err := json.Marshal(hcsschema.PropertyQuery{PropertyTypes: types})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 	query := string(queryBytes)
 
@@ -548,7 +553,7 @@ func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []h
 		return computecore.HcsGetComputeSystemProperties(ctx, computeSystem.handle, op, query)
 	})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, processHcsResult(ctx, propertiesJSON))
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 
 	if propertiesJSON == "" {
@@ -556,7 +561,7 @@ func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []h
 	}
 	props := &hcsschema.Properties{}
 	if err := json.Unmarshal([]byte(propertiesJSON), props); err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 
 	return props, nil
@@ -564,8 +569,8 @@ func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []h
 
 // PropertiesV2 returns the requested compute systems properties targeting a V2 schema compute system.
 func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	// Let HCS tally up the total for VM based queries instead of querying ourselves.
 	if computeSystem.typ != "container" {
@@ -628,11 +633,11 @@ func (computeSystem *System) PropertiesV3(ctx context.Context, query *hcsschema.
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
@@ -643,7 +648,7 @@ func (computeSystem *System) PropertiesV3(ctx context.Context, query *hcsschema.
 
 	queryBytes, err := json.Marshal(query)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 	queryStr := string(queryBytes)
 
@@ -651,7 +656,7 @@ func (computeSystem *System) PropertiesV3(ctx context.Context, query *hcsschema.
 		return computecore.HcsGetComputeSystemProperties(ctx, computeSystem.handle, op, queryStr)
 	})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, processHcsResult(ctx, propertiesJSON))
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 
 	if propertiesJSON == "" {
@@ -660,7 +665,7 @@ func (computeSystem *System) PropertiesV3(ctx context.Context, query *hcsschema.
 
 	props := &hcsschema.Properties{}
 	if err := json.Unmarshal([]byte(propertiesJSON), props); err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 
 	return props, nil
@@ -675,18 +680,20 @@ func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	resultJSON, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	pauseCtx, cancel := context.WithTimeout(ctx, timeout.SystemPause)
+	defer cancel()
+	_, callErr := runOperation(pauseCtx, func(op computecore.HcsOperation) error {
 		return computecore.HcsPauseComputeSystem(ctx, computeSystem.handle, op, "")
 	})
 	if callErr != nil {
-		return makeSystemError(computeSystem, operation, callErr, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, callErr)
 	}
 	return nil
 }
@@ -700,18 +707,20 @@ func (computeSystem *System) Resume(ctx context.Context) (err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	resultJSON, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	resumeCtx, cancel := context.WithTimeout(ctx, timeout.SystemResume)
+	defer cancel()
+	_, callErr := runOperation(resumeCtx, func(op computecore.HcsOperation) error {
 		return computecore.HcsResumeComputeSystem(ctx, computeSystem.handle, op, "")
 	})
 	if callErr != nil {
-		return makeSystemError(computeSystem, operation, callErr, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, callErr)
 	}
 	return nil
 }
@@ -731,18 +740,20 @@ func (computeSystem *System) Save(ctx context.Context, options interface{}) (err
 	}
 	saveOptionsStr := string(saveOptions)
 
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	resultJSON, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	saveCtx, cancel := context.WithTimeout(ctx, timeout.SystemSave)
+	defer cancel()
+	_, callErr := runOperation(saveCtx, func(op computecore.HcsOperation) error {
 		return computecore.HcsSaveComputeSystem(ctx, computeSystem.handle, op, saveOptionsStr)
 	})
 	if callErr != nil {
-		return makeSystemError(computeSystem, operation, callErr, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, callErr)
 	}
 	return nil
 }
@@ -758,16 +769,16 @@ func (computeSystem *System) Save(ctx context.Context, options interface{}) (err
 // exit and surfaces as HCS_E_PROCESS_ALREADY_STOPPED, which would wrongly
 // fail the create.
 func (computeSystem *System) createProcess(ctx context.Context, operation string, c interface{}) (*Process, *computecore.HcsProcessInformation, error) {
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	if computeSystem.handle == 0 {
-		return nil, nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return nil, nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	configurationb, err := json.Marshal(c)
 	if err != nil {
-		return nil, nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, nil, makeSystemError(computeSystem, operation, err)
 	}
 	configuration := string(configurationb)
 
@@ -781,7 +792,7 @@ func (computeSystem *System) createProcess(ctx context.Context, operation string
 	}
 
 	var processHandle computecore.HcsProcess
-	processInfo, resultJSON, createErr := runProcessOperation(ctx, func(op computecore.HcsOperation) error {
+	processInfo, _, createErr := runProcessOperation(ctx, func(op computecore.HcsOperation) error {
 		var hErr error
 		processHandle, hErr = computecore.HcsCreateProcess(ctx, computeSystem.handle, configuration, op, nil)
 		return hErr
@@ -790,16 +801,16 @@ func (computeSystem *System) createProcess(ctx context.Context, operation string
 		// No handle means the create itself failed; only a failed wait with
 		// a live handle is the recoverable sync-completion case.
 		if processHandle == 0 {
-			return nil, nil, makeSystemError(computeSystem, operation, createErr, processHcsResult(ctx, resultJSON))
+			return nil, nil, makeSystemError(computeSystem, operation, createErr)
 		}
 
 		log.G(ctx).WithError(createErr).Debug("HcsCreateProcess wait failed; falling back to HcsGetProcessInfo")
-		processInfo, resultJSON, createErr = runProcessOperation(ctx, func(op computecore.HcsOperation) error {
+		processInfo, _, createErr = runProcessOperation(ctx, func(op computecore.HcsOperation) error {
 			return computecore.HcsGetProcessInfo(ctx, processHandle, op)
 		})
 		if createErr != nil {
 			computecore.HcsCloseProcess(ctx, processHandle)
-			return nil, nil, makeSystemError(computeSystem, operation, createErr, processHcsResult(ctx, resultJSON))
+			return nil, nil, makeSystemError(computeSystem, operation, createErr)
 		}
 	}
 
@@ -822,7 +833,7 @@ func (computeSystem *System) CreateProcess(ctx context.Context, c interface{}) (
 
 	pipes, err := makeOpenFiles([]syscall.Handle{processInfo.StdInput, processInfo.StdOutput, processInfo.StdError})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 	process.stdin = pipes[0]
 	process.stdout = pipes[1]
@@ -837,18 +848,18 @@ func (computeSystem *System) CreateProcess(ctx context.Context, c interface{}) (
 
 // OpenProcess gets an interface to an existing process within the computeSystem.
 func (computeSystem *System) OpenProcess(ctx context.Context, pid int) (*Process, error) {
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	operation := "hcs::System::OpenProcess"
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	processHandle, err := computecore.HcsOpenProcess(ctx, computeSystem.handle, uint32(pid), syscall.GENERIC_ALL)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, err, nil)
+		return nil, makeSystemError(computeSystem, operation, err)
 	}
 
 	process := newProcess(processHandle, pid, computeSystem)
@@ -902,13 +913,13 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 
 // Modify the System by sending a request to HCS
 func (computeSystem *System) Modify(ctx context.Context, config interface{}) error {
-	computeSystem.handleLock.Lock()
-	defer computeSystem.handleLock.Unlock()
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 
 	operation := "hcs::System::Modify"
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	requestBytes, err := json.Marshal(config)
@@ -918,11 +929,11 @@ func (computeSystem *System) Modify(ctx context.Context, config interface{}) err
 
 	requestJSON := string(requestBytes)
 
-	resultJSON, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	_, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
 		return computecore.HcsModifyComputeSystem(ctx, computeSystem.handle, op, requestJSON, 0)
 	})
 	if callErr != nil {
-		return makeSystemError(computeSystem, operation, callErr, processHcsResult(ctx, resultJSON))
+		return makeSystemError(computeSystem, operation, callErr)
 	}
 	return nil
 }

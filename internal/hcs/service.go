@@ -20,7 +20,8 @@ func GetServiceProperties(ctx context.Context, q hcsschema.PropertyQuery) (*hcss
 	}
 	propertiesJSON, err := computecore.HcsGetServiceProperties(ctx, string(queryb))
 	if err != nil {
-		return nil, &HcsError{Op: operation, Err: err, Events: processHcsResult(ctx, propertiesJSON)}
+		err = wrapHcsResult(ctx, err, propertiesJSON)
+		return nil, &HcsError{Op: operation, Err: err, Events: eventsFromError(err)}
 	}
 
 	if propertiesJSON == "" {
@@ -43,7 +44,8 @@ func ModifyServiceSettings(ctx context.Context, settings hcsschema.ModificationR
 	}
 	resultJSON, err := computecore.HcsModifyServiceSettings(ctx, string(settingsJSON))
 	if err != nil {
-		return &HcsError{Op: operation, Err: err, Events: processHcsResult(ctx, resultJSON)}
+		err = wrapHcsResult(ctx, err, resultJSON)
+		return &HcsError{Op: operation, Err: err, Events: eventsFromError(err)}
 	}
 	return nil
 }

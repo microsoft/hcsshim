@@ -99,14 +99,35 @@ type ErrorEvent struct {
 	EventID    uint16 `json:"EventId,omitempty"`
 	Flags      uint32 `json:"Flags,omitempty"`
 	Source     string `json:"Source,omitempty"`
-	//Data       []EventData `json:"Data,omitempty"`  // Omit this as HCS doesn't encode this well. It's more confusing to include. It is however logged in debug mode (see processHcsResult function)
+	//Data       []EventData `json:"Data,omitempty"`  // Omit this as HCS doesn't encode this well. It's more confusing to include.
 }
 
+// hcsResult mirrors the HCS [ResultError] document and implements [error]
+// so callers can recover it via [errors.As]. The unexported cause keeps
+// [errors.Is] working against the underlying syscall errno.
+//
+// [ResultError]: https://learn.microsoft.com/en-us/virtualization/api/hcs/schemareference#ResultError
 type hcsResult struct {
-	Error        int32
-	ErrorMessage string
+	// ErrorCode mirrors the "Error" JSON field; renamed to avoid colliding
+	// with the [hcsResult.Error] method.
+	ErrorCode    int32        `json:"Error,omitempty"`
+	ErrorMessage string       `json:"ErrorMessage,omitempty"`
 	ErrorEvents  []ErrorEvent `json:"ErrorEvents,omitempty"`
+
+	cause error
 }
+
+func (r *hcsResult) Error() string {
+	if r.cause != nil {
+		return r.cause.Error()
+	}
+	if r.ErrorMessage != "" {
+		return r.ErrorMessage
+	}
+	return fmt.Sprintf("hcs result: 0x%08x", uint32(r.ErrorCode))
+}
+
+func (r *hcsResult) Unwrap() error { return r.cause }
 
 func (ev *ErrorEvent) String() string {
 	evs := "[Event Detail: " + ev.Message
@@ -129,14 +150,26 @@ func (ev *ErrorEvent) String() string {
 	return evs
 }
 
-func processHcsResult(ctx context.Context, resultJSON string) []ErrorEvent {
-	if resultJSON != "" {
-		result := &hcsResult{}
-		if err := json.Unmarshal([]byte(resultJSON), result); err != nil {
-			log.G(ctx).WithError(err).Warning("Could not unmarshal HCS result")
-			return nil
-		}
-		return result.ErrorEvents
+// wrapHcsResult attaches the parsed HCS ResultError document to err so
+// callers can recover it via `errors.As(err, new(*hcsResult))`. Returns
+// err unchanged when the document is empty or unparseable.
+func wrapHcsResult(ctx context.Context, err error, resultJSON string) error {
+	if err == nil || resultJSON == "" {
+		return err
+	}
+	r := &hcsResult{cause: err}
+	if jerr := json.Unmarshal([]byte(resultJSON), r); jerr != nil {
+		log.G(ctx).WithError(jerr).Warning("Could not unmarshal HCS result")
+		return err
+	}
+	return r
+}
+
+// eventsFromError returns the ErrorEvents from any wrapped HCS result in err.
+func eventsFromError(err error) []ErrorEvent {
+	var r *hcsResult
+	if errors.As(err, &r) {
+		return r.ErrorEvents
 	}
 	return nil
 }
@@ -201,7 +234,7 @@ func (e *SystemError) Error() string {
 	return s
 }
 
-func makeSystemError(system *System, op string, err error, events []ErrorEvent) error {
+func makeSystemError(system *System, op string, err error) error {
 	// Don't double wrap errors
 	var e *SystemError
 	if errors.As(err, &e) {
@@ -213,7 +246,7 @@ func makeSystemError(system *System, op string, err error, events []ErrorEvent) 
 		HcsError: HcsError{
 			Op:     op,
 			Err:    err,
-			Events: events,
+			Events: eventsFromError(err),
 		},
 	}
 }
@@ -235,7 +268,7 @@ func (e *ProcessError) Error() string {
 	return s
 }
 
-func makeProcessError(process *Process, op string, err error, events []ErrorEvent) error {
+func makeProcessError(process *Process, op string, err error) error {
 	// Don't double wrap errors
 	var e *ProcessError
 	if errors.As(err, &e) {
@@ -247,7 +280,7 @@ func makeProcessError(process *Process, op string, err error, events []ErrorEven
 		HcsError: HcsError{
 			Op:     op,
 			Err:    err,
-			Events: events,
+			Events: eventsFromError(err),
 		},
 	}
 }

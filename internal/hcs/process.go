@@ -100,13 +100,13 @@ func (process *Process) processSignalResult(ctx context.Context, err error) (boo
 //
 // For WCOW `guestresource.SignalProcessOptionsWCOW`.
 func (process *Process) Signal(ctx context.Context, options interface{}) (bool, error) {
-	process.handleLock.Lock()
-	defer process.handleLock.Unlock()
+	process.handleLock.RLock()
+	defer process.handleLock.RUnlock()
 
 	operation := "hcs::Process::Signal"
 
 	if process.handle == 0 {
-		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return false, makeProcessError(process, operation, ErrAlreadyClosed)
 	}
 
 	optionsb, err := json.Marshal(options)
@@ -115,29 +115,29 @@ func (process *Process) Signal(ctx context.Context, options interface{}) (bool, 
 	}
 	optionsStr := string(optionsb)
 
-	resultJSON, sigErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	_, sigErr := runOperation(ctx, func(op computecore.HcsOperation) error {
 		return computecore.HcsSignalProcess(ctx, process.handle, op, optionsStr)
 	})
 	delivered, sigErr := process.processSignalResult(ctx, sigErr)
 	if sigErr != nil {
-		sigErr = makeProcessError(process, operation, sigErr, processHcsResult(ctx, resultJSON))
+		sigErr = makeProcessError(process, operation, sigErr)
 	}
 	return delivered, sigErr
 }
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
 func (process *Process) Kill(ctx context.Context) (bool, error) {
-	process.handleLock.Lock()
-	defer process.handleLock.Unlock()
+	process.handleLock.RLock()
+	defer process.handleLock.RUnlock()
 
 	operation := "hcs::Process::Kill"
 
 	if process.handle == 0 {
-		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return false, makeProcessError(process, operation, ErrAlreadyClosed)
 	}
 
 	if process.stopped() {
-		return false, makeProcessError(process, operation, ErrProcessAlreadyStopped, nil)
+		return false, makeProcessError(process, operation, ErrProcessAlreadyStopped)
 	}
 
 	if process.killSignalDelivered {
@@ -181,7 +181,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 	}
 	defer newProcessHandle.Close()
 
-	resultJSON, killErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	_, killErr := runOperation(ctx, func(op computecore.HcsOperation) error {
 		return computecore.HcsTerminateProcess(ctx, newProcessHandle.handle, op, "")
 	})
 	if killErr != nil {
@@ -208,7 +208,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 	}
 	delivered, killErr := newProcessHandle.processSignalResult(ctx, killErr)
 	if killErr != nil {
-		killErr = makeProcessError(newProcessHandle, operation, killErr, processHcsResult(ctx, resultJSON))
+		killErr = makeProcessError(newProcessHandle, operation, killErr)
 	}
 
 	process.killSignalDelivered = delivered
@@ -245,10 +245,10 @@ func (process *Process) waitBackground() {
 	// Real exit notification path: parse ProcessStatus and publish.
 	exitCode := -1
 	var err error
-	if raw := process.notify.raw; raw != "" {
+	if raw := process.notify.raw; len(raw) > 0 {
 		properties := &hcsschema.ProcessStatus{}
-		if uErr := json.Unmarshal([]byte(raw), properties); uErr != nil {
-			err = makeProcessError(process, operation, uErr, nil)
+		if uErr := json.Unmarshal(raw, properties); uErr != nil {
+			err = makeProcessError(process, operation, uErr)
 		} else if properties.LastWaitResult != 0 {
 			log.G(ctx).WithField("wait-result", properties.LastWaitResult).Warning("non-zero last wait result")
 		} else {
@@ -284,13 +284,13 @@ func (process *Process) stopped() bool {
 
 // ResizeConsole resizes the console of the process.
 func (process *Process) ResizeConsole(ctx context.Context, width, height uint16) error {
-	process.handleLock.Lock()
-	defer process.handleLock.Unlock()
+	process.handleLock.RLock()
+	defer process.handleLock.RUnlock()
 
 	operation := "hcs::Process::ResizeConsole"
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return makeProcessError(process, operation, ErrAlreadyClosed)
 	}
 	modifyRequest := hcsschema.ProcessModifyRequest{
 		Operation: guestrequest.ModifyProcessConsoleSize,
@@ -306,11 +306,11 @@ func (process *Process) ResizeConsole(ctx context.Context, width, height uint16)
 	}
 	modifyRequestStr := string(modifyRequestb)
 
-	resultJSON, modErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+	_, modErr := runOperation(ctx, func(op computecore.HcsOperation) error {
 		return computecore.HcsModifyProcess(ctx, process.handle, op, modifyRequestStr)
 	})
 	if modErr != nil {
-		return makeProcessError(process, operation, modErr, processHcsResult(ctx, resultJSON))
+		return makeProcessError(process, operation, modErr)
 	}
 
 	return nil
@@ -320,7 +320,7 @@ func (process *Process) ResizeConsole(ctx context.Context, width, height uint16)
 // already terminated.
 func (process *Process) ExitCode() (int, error) {
 	if !process.stopped() {
-		return -1, makeProcessError(process, "hcs::Process::ExitCode", ErrInvalidProcessState, nil)
+		return -1, makeProcessError(process, "hcs::Process::ExitCode", ErrInvalidProcessState)
 	}
 	if process.waitError != nil {
 		return -1, process.waitError
@@ -340,11 +340,11 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 		trace.StringAttribute("cid", process.SystemID()),
 		trace.Int64Attribute("pid", int64(process.processID)))
 
-	process.handleLock.Lock()
-	defer process.handleLock.Unlock()
+	process.handleLock.RLock()
+	defer process.handleLock.RUnlock()
 
 	if process.handle == 0 {
-		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed)
 	}
 
 	process.stdioLock.Lock()
@@ -356,16 +356,16 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 		return stdin, stdout, stderr, nil
 	}
 
-	processInfo, resultJSON, err := runProcessOperation(ctx, func(op computecore.HcsOperation) error {
+	processInfo, _, err := runProcessOperation(ctx, func(op computecore.HcsOperation) error {
 		return computecore.HcsGetProcessInfo(ctx, process.handle, op)
 	})
 	if err != nil {
-		return nil, nil, nil, makeProcessError(process, operation, err, processHcsResult(ctx, resultJSON))
+		return nil, nil, nil, makeProcessError(process, operation, err)
 	}
 
 	pipes, err := makeOpenFiles([]syscall.Handle{processInfo.StdInput, processInfo.StdOutput, processInfo.StdError})
 	if err != nil {
-		return nil, nil, nil, makeProcessError(process, operation, err, nil)
+		return nil, nil, nil, makeProcessError(process, operation, err)
 	}
 
 	return pipes[0], pipes[1], pipes[2], nil
@@ -390,11 +390,11 @@ func (process *Process) CloseStdin(ctx context.Context) (err error) {
 		trace.StringAttribute("cid", process.SystemID()),
 		trace.Int64Attribute("pid", int64(process.processID)))
 
-	process.handleLock.Lock()
-	defer process.handleLock.Unlock()
+	process.handleLock.RLock()
+	defer process.handleLock.RUnlock()
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return makeProcessError(process, operation, ErrAlreadyClosed)
 	}
 
 	// HcsModifyProcess request to close stdin will fail if the process has already exited
@@ -412,11 +412,11 @@ func (process *Process) CloseStdin(ctx context.Context) (err error) {
 		}
 		modifyRequestStr := string(modifyRequestb)
 
-		resultJSON, modErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+		_, modErr := runOperation(ctx, func(op computecore.HcsOperation) error {
 			return computecore.HcsModifyProcess(ctx, process.handle, op, modifyRequestStr)
 		})
 		if modErr != nil {
-			return makeProcessError(process, operation, modErr, processHcsResult(ctx, resultJSON))
+			return makeProcessError(process, operation, modErr)
 		}
 	}
 
