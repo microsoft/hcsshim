@@ -805,10 +805,13 @@ func (computeSystem *System) createProcess(ctx context.Context, operation string
 		}
 
 		log.G(ctx).WithError(createErr).Debug("HcsCreateProcess wait failed; falling back to HcsGetProcessInfo")
-		processInfo, _, createErr = runProcessOperation(ctx, func(op computecore.HcsOperation) error {
+		var recoverErr error
+		processInfo, _, recoverErr = runProcessOperation(ctx, func(op computecore.HcsOperation) error {
 			return computecore.HcsGetProcessInfo(ctx, processHandle, op)
 		})
-		if createErr != nil {
+		if recoverErr != nil {
+			// Recovery error (e.g. RPC_E_NULL_CONTEXT_HANDLE on a stale handle)
+			// hides the real cause; surface the original create-wait error.
 			computecore.HcsCloseProcess(ctx, processHandle)
 			return nil, nil, makeSystemError(computeSystem, operation, createErr)
 		}
