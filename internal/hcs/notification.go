@@ -36,48 +36,29 @@ var (
 	notificationCallback = syscall.NewCallback(notificationHandler)
 )
 
-// notificationState is the rendezvous between the HCS callback thread and
-// waitBackground. waitBackground must NOT poll the HCS handle directly: that
-// races with Close and can fault.
-//
-// HCS does not synthesize a final exit notification when HcsCloseProcess /
-// HcsCloseComputeSystem unregisters the callback, so a single "wait
-// finished" channel cannot distinguish a real exit from a Close. We expose
-// two channels and let waitBackground select on them:
-//
-//   - exited: closed by signalExit on a terminal {System,Process}Exited
-//     event; raw holds the event's JSON payload.
-//   - closed: closed by signalClosed from Close; nothing further will
-//     arrive, so waitBackground must return without publishing a
-//     synthetic exit (which would surface to consumers as exit_code=255).
+// notificationState carries a real exit event from the HCS callback to the
+// owner's waitBackground goroutine. The callback runs on an HCS thread and
+// must not block, so it only stores the raw payload and closes `exited`;
+// waitBackground parses it.
 type notificationState struct {
-	exitOnce  sync.Once
-	closeOnce sync.Once
-	exited    chan struct{}
-	closed    chan struct{}
-	raw       json.RawMessage
+	exitOnce sync.Once
+	exited   chan struct{}
+	raw      json.RawMessage
 }
 
 func newNotificationState() *notificationState {
 	return &notificationState{
 		exited: make(chan struct{}),
-		closed: make(chan struct{}),
 	}
 }
 
-// signalExit records a real exit event and unblocks waitBackground. Safe to
-// call multiple times; only the first wins.
+// signalExit hands a terminal exit event to waitBackground. Safe to call
+// multiple times; only the first call records the payload.
 func (s *notificationState) signalExit(raw json.RawMessage) {
 	s.exitOnce.Do(func() {
 		s.raw = raw
 		close(s.exited)
 	})
-}
-
-// signalClosed unblocks waitBackground without recording an exit. Call from
-// Close when no terminal event was observed. Safe to call multiple times.
-func (s *notificationState) signalClosed() {
-	s.closeOnce.Do(func() { close(s.closed) })
 }
 
 // notificationContext is the per-handle data resolved from the callback's
@@ -144,8 +125,7 @@ func notificationHandler(eventPtr uintptr, ctx uintptr) uintptr {
 			source = "process"
 		}
 		switch e.Type {
-		// Only terminal events count as a real exit; do NOT signal
-		// closed here.
+		// Only terminal exit events propagate to waitBackground.
 		case computecore.HcsEventTypeSystemExited, computecore.HcsEventTypeProcessExited:
 			if nc.state != nil {
 				nc.state.signalExit(json.RawMessage(eventData))

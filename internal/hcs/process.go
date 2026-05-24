@@ -236,7 +236,7 @@ func (process *Process) waitBackground() {
 		trace.Int64Attribute("pid", int64(process.processID)))
 
 	select {
-	case <-process.notify.closed:
+	case <-process.waitBlock:
 		log.G(ctx).Debug("process waitBackground returning without exit notification (handle closed)")
 		return
 	case <-process.notify.exited:
@@ -518,14 +518,14 @@ func (process *Process) Close() (err error) {
 	unregisterNotificationContext(process.notificationID)
 	process.notificationID = 0
 
-	// Wake waitBackground so its goroutine can return. We do NOT close
-	// process.waitBlock: Wait() and ExitCode() treat that channel
-	// closing as proof the process exited, and would publish exitCode=-1
-	// (rendered as 255 by containerd) for a process that may still be
-	// running.
-	process.notify.signalClosed()
-
+	// Release Wait/ExitCode callers with ErrAlreadyClosed
+	// and unblock waitBackground.
 	process.handle = 0
+	process.closedWaitOnce.Do(func() {
+		process.exitCode = -1
+		process.waitError = ErrAlreadyClosed
+		close(process.waitBlock)
+	})
 
 	return nil
 }

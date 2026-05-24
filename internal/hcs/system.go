@@ -314,7 +314,7 @@ func (computeSystem *System) waitBackground() {
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
 	select {
-	case <-computeSystem.notify.closed:
+	case <-computeSystem.waitBlock:
 		log.G(ctx).Debug("system waitBackground returning without exit notification (handle closed)")
 		return
 	case <-computeSystem.notify.exited:
@@ -903,13 +903,14 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 	unregisterNotificationContext(computeSystem.notificationID)
 	computeSystem.notificationID = 0
 
-	// Wake waitBackground so it can return. We do NOT close
-	// computeSystem.waitBlock: that channel is the public "system
-	// exited" signal (via WaitChannel/Wait), and closing it for a
-	// still-running system fakes an exit to callers.
-	computeSystem.notify.signalClosed()
-
+	// Release Wait/WaitChannel callers with ErrAlreadyClosed
+	// and unblock waitBackground.
 	computeSystem.handle = 0
+	computeSystem.closedWaitOnce.Do(func() {
+		computeSystem.waitError = ErrAlreadyClosed
+		computeSystem.stopTime = time.Now()
+		close(computeSystem.waitBlock)
+	})
 
 	return nil
 }
