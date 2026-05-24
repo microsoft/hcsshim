@@ -126,7 +126,7 @@ func setupSandboxContainerSpec(ctx context.Context, id, sandboxRoot string, spec
 	if virtualSandboxID != "" {
 		sandboxID = virtualSandboxID
 	}
-	spec.Linux.CgroupsPath = fmt.Sprintf(podCgroupPathFmt, sandboxID)
+	spec.Linux.CgroupsPath = fmt.Sprintf(containerCgroupPathFmt, sandboxID, id)
 
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil
