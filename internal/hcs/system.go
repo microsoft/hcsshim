@@ -109,7 +109,9 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 		return nil, makeSystemError(computeSystem, operation, createErr)
 	}
 
-	computeSystem.registerNotification(ctx)
+	if err = computeSystem.registerNotification(ctx); err != nil {
+		return nil, makeSystemError(computeSystem, operation, err)
+	}
 	go computeSystem.waitBackground()
 	if err = computeSystem.getCachedProperties(ctx); err != nil {
 		return nil, err
@@ -126,13 +128,17 @@ func OpenComputeSystem(ctx context.Context, id string) (*System, error) {
 	if err != nil {
 		return nil, makeSystemError(computeSystem, operation, err)
 	}
+
 	computeSystem.handle = handle
 	defer func() {
 		if err != nil {
 			computeSystem.Close()
 		}
 	}()
-	computeSystem.registerNotification(ctx)
+	if err = computeSystem.registerNotification(ctx); err != nil {
+		return nil, makeSystemError(computeSystem, operation, err)
+	}
+
 	go computeSystem.waitBackground()
 	if err = computeSystem.getCachedProperties(ctx); err != nil {
 		return nil, err
@@ -141,11 +147,9 @@ func OpenComputeSystem(ctx context.Context, id string) (*System, error) {
 }
 
 // registerNotification registers the package-wide HCS notification callback
-// on this system's primary handle. Failures are logged only: the callback
-// is purely diagnostic and must not prevent the system from being used.
-// Must be called BEFORE waitBackground starts so notifications are not
-// missed.
-func (computeSystem *System) registerNotification(ctx context.Context) {
+// on this system's primary handle. Must be called BEFORE waitBackground
+// starts so notifications are not missed.
+func (computeSystem *System) registerNotification(ctx context.Context) error {
 	id := registerNotificationContext(computeSystem.id, 0, computeSystem.notify, computeSystem.migrationNotifyCh)
 	if err := computecore.HcsSetComputeSystemCallback(
 		ctx, computeSystem.handle,
@@ -153,10 +157,10 @@ func (computeSystem *System) registerNotification(ctx context.Context) {
 		uintptr(id), notificationCallback,
 	); err != nil {
 		unregisterNotificationContext(id)
-		log.G(ctx).WithError(err).Warn("failed to register HCS system notification callback")
-		return
+		return err
 	}
 	computeSystem.notificationID = id
+	return nil
 }
 
 func (computeSystem *System) getCachedProperties(ctx context.Context) error {
@@ -313,16 +317,18 @@ func (computeSystem *System) waitBackground() {
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
+	var raw json.RawMessage
+	var err error
 	select {
 	case <-computeSystem.waitBlock:
 		log.G(ctx).Debug("system waitBackground returning without exit notification (handle closed)")
 		return
-	case <-computeSystem.notify.exited:
+	case raw = <-computeSystem.notify.exit:
+	case abortErr := <-computeSystem.notify.abort:
+		err = makeSystemError(computeSystem, operation, abortErr)
 	}
 
-	// Real exit notification path: parse SystemExitStatus and publish.
-	var err error
-	if raw := computeSystem.notify.raw; len(raw) > 0 {
+	if err == nil && len(raw) > 0 {
 		var status struct {
 			Status   int32  `json:"Status"`
 			ExitType string `json:"ExitType"`
@@ -843,7 +849,9 @@ func (computeSystem *System) CreateProcess(ctx context.Context, c interface{}) (
 	process.stderr = pipes[2]
 	process.hasCachedStdio = true
 
-	process.registerNotification(ctx)
+	if err = process.registerNotification(ctx); err != nil {
+		return nil, makeSystemError(computeSystem, operation, err)
+	}
 	go process.waitBackground()
 
 	return process, nil
@@ -866,7 +874,14 @@ func (computeSystem *System) OpenProcess(ctx context.Context, pid int) (*Process
 	}
 
 	process := newProcess(processHandle, pid, computeSystem)
-	process.registerNotification(ctx)
+	defer func() {
+		if err != nil {
+			_ = process.Close()
+		}
+	}()
+	if err = process.registerNotification(ctx); err != nil {
+		return nil, makeSystemError(computeSystem, operation, err)
+	}
 	go process.waitBackground()
 
 	return process, nil

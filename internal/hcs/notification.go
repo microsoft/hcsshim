@@ -36,28 +36,35 @@ var (
 	notificationCallback = syscall.NewCallback(notificationHandler)
 )
 
-// notificationState carries a real exit event from the HCS callback to the
-// owner's waitBackground goroutine. The callback runs on an HCS thread and
-// must not block, so it only stores the raw payload and closes `exited`;
-// waitBackground parses it.
+// notificationState rendezvous a terminal HCS event with waitBackground.
+// Exactly one of exit (normal exit + payload) or abort (abnormal termination)
+// is signaled. Both channels are buffered(1) and closed after send.
 type notificationState struct {
-	exitOnce sync.Once
-	exited   chan struct{}
-	raw      json.RawMessage
+	signalOnce sync.Once
+	exit       chan json.RawMessage
+	abort      chan error
 }
 
 func newNotificationState() *notificationState {
 	return &notificationState{
-		exited: make(chan struct{}),
+		exit:  make(chan json.RawMessage, 1),
+		abort: make(chan error, 1),
 	}
 }
 
-// signalExit hands a terminal exit event to waitBackground. Safe to call
-// multiple times; only the first call records the payload.
+// signalExit delivers a normal exit payload. First signal wins.
 func (s *notificationState) signalExit(raw json.RawMessage) {
-	s.exitOnce.Do(func() {
-		s.raw = raw
-		close(s.exited)
+	s.signalOnce.Do(func() {
+		s.exit <- raw
+		close(s.exit)
+	})
+}
+
+// signalAbort delivers an abnormal-termination error. First signal wins.
+func (s *notificationState) signalAbort(err error) {
+	s.signalOnce.Do(func() {
+		s.abort <- err
+		close(s.abort)
 	})
 }
 
@@ -125,16 +132,17 @@ func notificationHandler(eventPtr uintptr, ctx uintptr) uintptr {
 			source = "process"
 		}
 		switch e.Type {
-		// Only terminal exit events propagate to waitBackground.
 		case computecore.HcsEventTypeSystemExited, computecore.HcsEventTypeProcessExited:
 			if nc.state != nil {
 				nc.state.signalExit(json.RawMessage(eventData))
 			}
+		case computecore.HcsEventTypeServiceDisconnect:
+			if nc.state != nil {
+				nc.state.signalAbort(ErrUnexpectedProcessAbort)
+			}
 		case computecore.HcsEventTypeGroupLiveMigration:
 			// Forward to the system's migration channel, if one was
-			// registered. Decoding failures and a full channel are
-			// both logged-and-dropped: the HCS callback thread must
-			// never block, and a malformed payload can't be acted on.
+			// registered.
 			if nc.migrationCh != nil {
 				dispatchMigrationEvent(nc.migrationCh, e.Type, json.RawMessage(eventData))
 			}

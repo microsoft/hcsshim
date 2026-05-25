@@ -235,17 +235,19 @@ func (process *Process) waitBackground() {
 		trace.StringAttribute("cid", process.SystemID()),
 		trace.Int64Attribute("pid", int64(process.processID)))
 
+	var raw json.RawMessage
+	exitCode := -1
+	var err error
 	select {
 	case <-process.waitBlock:
 		log.G(ctx).Debug("process waitBackground returning without exit notification (handle closed)")
 		return
-	case <-process.notify.exited:
+	case raw = <-process.notify.exit:
+	case abortErr := <-process.notify.abort:
+		err = makeProcessError(process, operation, abortErr)
 	}
 
-	// Real exit notification path: parse ProcessStatus and publish.
-	exitCode := -1
-	var err error
-	if raw := process.notify.raw; len(raw) > 0 {
+	if err == nil && len(raw) > 0 {
 		properties := &hcsschema.ProcessStatus{}
 		if uErr := json.Unmarshal(raw, properties); uErr != nil {
 			err = makeProcessError(process, operation, uErr)
@@ -531,9 +533,9 @@ func (process *Process) Close() (err error) {
 }
 
 // registerNotification registers the package-wide HCS notification callback
-// on this process handle. Failures are logged only: missing the diagnostic
-// callback must not break process operation.
-func (process *Process) registerNotification(ctx context.Context) {
+// on this process handle. Must be called BEFORE waitBackground starts so
+// notifications are not missed.
+func (process *Process) registerNotification(ctx context.Context) error {
 	id := registerNotificationContext(process.SystemID(), process.processID, process.notify, nil)
 	if err := computecore.HcsSetProcessCallback(
 		ctx, process.handle,
@@ -541,8 +543,8 @@ func (process *Process) registerNotification(ctx context.Context) {
 		uintptr(id), notificationCallback,
 	); err != nil {
 		unregisterNotificationContext(id)
-		log.G(ctx).WithError(err).Warn("failed to register HCS process notification callback")
-		return
+		return err
 	}
 	process.notificationID = id
+	return nil
 }
