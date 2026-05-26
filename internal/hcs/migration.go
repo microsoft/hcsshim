@@ -201,9 +201,8 @@ func (computeSystem *System) StartLiveMigrationTransfer(ctx context.Context, opt
 	return nil
 }
 
-// FinalizeLiveMigration completes the live migration workflow. If resume is true the VM
-// is resumed on the destination; otherwise it is stopped.
-func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, resume bool) (err error) {
+// FinalizeLiveMigration completes the live migration workflow.
+func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, opts *hcsschema.MigrationFinalizedOptions) (err error) {
 	operation := "hcs::System::FinalizeLiveMigration"
 
 	ctx, span := oc.StartSpan(ctx, operation)
@@ -218,12 +217,10 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, resume b
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	// Choose whether to resume or stop the VM after migration.
-	finalOp := hcsschema.MigrationFinalOperationStop
-	if resume {
-		finalOp = hcsschema.MigrationFinalOperationResume
+	if opts == nil {
+		opts = &hcsschema.MigrationFinalizedOptions{}
 	}
-	optionsJSON, err := json.Marshal(hcsschema.MigrationFinalizedOptions{FinalizedOperation: finalOp})
+	optionsJSON, err := json.Marshal(opts)
 	if err != nil {
 		return makeSystemError(computeSystem, operation, err)
 	}
