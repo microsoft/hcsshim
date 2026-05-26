@@ -260,7 +260,7 @@ func TestSetResourceLimitsCPUAffinity(t *testing.T) {
 	defer job.Close()
 
 	limits := &JobLimits{CPUAffinity: 0x3}
-	if err := job.SetResourceLimits(limits); err != nil {
+	if err := job.SetResourceLimits(context.Background(), limits); err != nil {
 		t.Fatalf("failed to set resource limits with cpu affinity: %v", err)
 	}
 
@@ -486,7 +486,7 @@ func TestSetResourceLimitsGroupAffinities(t *testing.T) {
 	want := []GroupAffinity{
 		{Group: 0, Mask: 0x1},
 	}
-	if err := job.SetResourceLimits(&JobLimits{GroupAffinities: want}); err != nil {
+	if err := job.SetResourceLimits(context.Background(), &JobLimits{GroupAffinities: want}); err != nil {
 		t.Fatalf("failed to set resource limits with group affinities: %v", err)
 	}
 
@@ -519,7 +519,7 @@ func TestSetResourceLimitsGroupAffinitiesTakesPrecedence(t *testing.T) {
 		GroupAffinities: wantGroup,
 		CPUAffinity:     0x3, // should be ignored
 	}
-	if err := job.SetResourceLimits(limits); err != nil {
+	if err := job.SetResourceLimits(context.Background(), limits); err != nil {
 		t.Fatalf("failed to set resource limits: %v", err)
 	}
 

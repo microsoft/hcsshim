@@ -3,10 +3,12 @@
 package jobobject
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"golang.org/x/sys/windows"
 )
@@ -20,7 +22,7 @@ func isFlagSet(flag, controlFlags uint32) bool {
 }
 
 // SetResourceLimits sets resource limits on the job object (cpu, memory, storage).
-func (job *JobObject) SetResourceLimits(limits *JobLimits) error {
+func (job *JobObject) SetResourceLimits(ctx context.Context, limits *JobLimits) error {
 	// Go through and check what limits were specified and apply them to the job.
 	if limits.MemoryLimitInBytes != 0 {
 		if err := job.SetMemoryLimit(limits.MemoryLimitInBytes); err != nil {
@@ -36,6 +38,10 @@ func (job *JobObject) SetResourceLimits(limits *JobLimits) error {
 		if err := job.SetCPULimit(WeightBased, limits.CPUWeight); err != nil {
 			return fmt.Errorf("failed to set job object cpu limit: %w", err)
 		}
+	}
+
+	if len(limits.GroupAffinities) > 0 && limits.CPUAffinity != 0 {
+		log.G(ctx).WithField("limits", log.Format(ctx, limits)).Warn("both group and CPU affinity set; CPU affinity will be overridden")
 	}
 
 	if len(limits.GroupAffinities) > 0 {
