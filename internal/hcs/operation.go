@@ -4,6 +4,8 @@ package hcs
 
 import (
 	"context"
+	"errors"
+	"syscall"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/computecore"
@@ -12,6 +14,11 @@ import (
 // infiniteTimeout is the milliseconds value passed to
 // HcsWaitForOperationResult to wait forever (Win32 INFINITE, 0xFFFFFFFF).
 const infiniteTimeout = ^uint32(0)
+
+// hcsErrOperationTimeout is HCS_E_OPERATION_TIMEOUT, returned by
+// HcsWaitForOperationResult when the wait elapses while HCS is still
+// tracking the operation.
+const hcsErrOperationTimeout = syscall.Errno(0x80370118)
 
 // waitTimeoutMs derives the TimeoutMs argument for HcsWaitForOperationResult
 // from ctx's deadline. With no deadline (or one already past) it falls back
@@ -38,9 +45,8 @@ func waitTimeoutMs(ctx context.Context) uint32 {
 // describing the error events). The operation is always closed before return.
 //
 // The wait is bounded by ctx's deadline (if any); otherwise it waits forever.
-// ctx cancellation is otherwise stripped via context.WithoutCancel because
-// abandoning the syscall while HCS still owns the operation handle leads to
-// use-after-free crashes (EXCEPTION_ACCESS_VIOLATION) inside computecore.dll.
+// ctx cancellation is stripped via context.WithoutCancel; see computecore.execute
+// for why HCS syscalls cannot be abandoned mid-flight.
 func runOperation(ctx context.Context, fn func(op computecore.HcsOperation) error) (resultDoc string, err error) {
 	timeoutMs := waitTimeoutMs(ctx)
 	syscallCtx := context.WithoutCancel(ctx)
@@ -58,6 +64,11 @@ func runOperation(ctx context.Context, fn func(op computecore.HcsOperation) erro
 		return doc, wrapHcsResult(ctx, fnErr, doc)
 	}
 	doc, waitErr := computecore.HcsWaitForOperationResult(syscallCtx, op, timeoutMs)
+	if errors.Is(waitErr, hcsErrOperationTimeout) {
+		// Wait deadline elapsed but HCS is still tracking the request;
+		// ask it to abort so the operation does not outlive this call.
+		_ = computecore.HcsCancelOperation(syscallCtx, op)
+	}
 	return doc, wrapHcsResult(ctx, waitErr, doc)
 }
 
@@ -79,6 +90,9 @@ func runProcessOperation(ctx context.Context, fn func(op computecore.HcsOperatio
 		return info, doc, wrapHcsResult(ctx, fnErr, doc)
 	}
 	info, doc, waitErr := computecore.HcsWaitForOperationResultAndProcessInfo(syscallCtx, op, timeoutMs)
+	if errors.Is(waitErr, hcsErrOperationTimeout) {
+		_ = computecore.HcsCancelOperation(syscallCtx, op)
+	}
 	return info, doc, wrapHcsResult(ctx, waitErr, doc)
 }
 
