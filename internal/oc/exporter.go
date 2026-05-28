@@ -30,6 +30,16 @@ var _ trace.Exporter = &LogrusExporter{}
 // `s.Status.Code != 0` in which case it will be written at `logrus.ErrorLevel`
 // providing `s.Status.Message` as the error value.
 func (le *LogrusExporter) ExportSpan(s *trace.SpanData) {
+	// Currently certain spans could flood logs like stats call:
+	// There are two stats spans generated for every call - one by
+	// the interceptor call and second by the service.Stats()
+	// call itself. We can start by not logging the interceptor
+	// span as it doesn't have any additional information.
+	switch s.Name {
+	case "containerd.task.v2.Task.Stats":
+		return
+	}
+
 	if s.DroppedAnnotationCount > 0 {
 		logrus.WithFields(logrus.Fields{
 			"name":            s.Name,
