@@ -57,10 +57,9 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		return errors.Wrap(err, "failed to unmarshal createContainer")
 	}
 
-	// containerConfig can be of type uvnConfig or hcsschema.HostedSystem or guestresource.CWCOWHostedSystem
+	// containerConfig can be of type uvmConfig or guestresource.CWCOWHostedSystem
 	var (
 		uvmConfig               prot.UvmConfig
-		hostedSystemConfig      hcsschema.HostedSystem
 		cwcowHostedSystemConfig guestresource.CWCOWHostedSystem
 	)
 	if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &uvmConfig); err == nil &&
@@ -68,11 +67,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		systemType := uvmConfig.SystemType
 		timeZoneInformation := uvmConfig.TimeZoneInformation
 		log.G(ctx).Tracef("createContainer: uvmConfig: {systemType: %v, timeZoneInformation: %v}}", systemType, timeZoneInformation)
-	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &hostedSystemConfig); err == nil &&
-		hostedSystemConfig.SchemaVersion != nil && hostedSystemConfig.Container != nil {
-		schemaVersion := hostedSystemConfig.SchemaVersion
-		container := hostedSystemConfig.Container
-		log.G(ctx).Tracef("rpcCreate: HostedSystemConfig: {schemaVersion: %v, container: %v}}", schemaVersion, container)
 	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &cwcowHostedSystemConfig); err == nil &&
 		cwcowHostedSystemConfig.Spec.Version != "" && cwcowHostedSystemConfig.CWCOWHostedSystem.Container != nil {
 		cwcowHostedSystem := cwcowHostedSystemConfig.CWCOWHostedSystem
@@ -551,21 +545,44 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 			switch settings.RPCType {
 			case guestrequest.RPCModifyServiceSettings, guestrequest.RPCStartLogForwarding, guestrequest.RPCStopLogForwarding:
 				log.G(req.ctx).Tracef("%v request received for LogForwardService, proceeding with policy enforcement for log sources", settings.RPCType)
-				// Enforce the policy for log sources in the request and update the settings with allowed log sources.
-				// For cwcow, the sidecar-GCS will verify the allowed log sources against policy and append the necessary GUIDs to the ones allowed. Rest are dropped.
-				// The Enforcer will have to unmarshal the log sources, enforce the policy and then marshal it back to a Base64 encoded JSON string which is what inbox GCS expects.
-				// It can query etw.GetDefaultLogSources to get the default log sources if the policy allows, and allow providers matching the default list during policy enforcement.
-				// This is because the log sources can be a combination of default and user specified log sources for which GUIDs need to be appended based on the policy enforcement.
 				if settings.Settings != "" {
-					// <EXAMPLE CALL>
-					// allowedLogSources, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogForwardServiceSettingsPolicy(req.ctx, settings.LogSources)
+					// Decode the base64-encoded log sources config
+					logSources, err := etw.DecodeAndUnmarshalLogSources(settings.Settings)
+					if err != nil {
+						return fmt.Errorf("failed to decode log sources: %w", err)
+					}
 
-					// For now, we are skipping the policy enforcement and allowing all log sources as the policy enforcer implementation is in progress. We will add the enforcement back once it's implemented.
-					allowedLogSources := settings.Settings // This is Base64 encoded JSON string of log sources
-					log.G(req.ctx).Tracef("Allowed log sources after policy enforcement: %v", allowedLogSources)
+					// Filter providers against policy — keep only those allowed
+					var filteredSources []etw.Source
+					for _, source := range logSources.LogConfig.Sources {
+						var allowedProviders []etw.EtwProvider
+						for _, provider := range source.Providers {
+							if err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogProviderPolicy(
+								req.ctx, provider.ProviderName); err != nil {
+								log.G(req.ctx).Tracef("Log provider %q denied by policy", provider.ProviderName)
+								continue
+							}
+							allowedProviders = append(allowedProviders, provider)
+						}
+						if len(allowedProviders) > 0 {
+							filteredSources = append(filteredSources, etw.Source{
+								Type:      source.Type,
+								Providers: allowedProviders,
+							})
+						}
+					}
 
-					// Update the allowed log sources in the settings. This will be forwarded to inbox GCS which expects the log sources in a JSON string format with GUIDs for providers included.
-					allowedLogSources, err := etw.UpdateLogSources(allowedLogSources, false, true)
+					filteredLogSources := etw.LogSourcesInfo{
+						LogConfig: etw.LogConfig{Sources: filteredSources},
+					}
+
+					// Re-encode and apply GUID resolution
+					encodedFiltered, err := etw.MarshalAndEncodeLogSources(filteredLogSources)
+					if err != nil {
+						return fmt.Errorf("failed to encode filtered log sources: %w", err)
+					}
+
+					allowedLogSources, err := etw.UpdateLogSources(encodedFiltered, false, true)
 					if err != nil {
 						return fmt.Errorf("failed to update log sources: %w", err)
 					}

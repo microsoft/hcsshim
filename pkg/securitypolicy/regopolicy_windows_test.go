@@ -1514,3 +1514,113 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 	_ = sandboxID
 	return m
 }
+
+// Tests for log provider enforcement
+
+func Test_Rego_EnforceLogProviderPolicy_Allowed_Windows(t *testing.T) {
+	rego := fmt.Sprintf(`package policy
+	api_version := "%s"
+	framework_version := "%s"
+
+	allowed_log_providers := [
+		"microsoft.windows.hyperv.compute",
+		"microsoft-windows-guest-network-service",
+	]
+
+	log_provider := data.framework.log_provider
+	`, apiVersion, frameworkVersion)
+
+	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+	err = policy.EnforceLogProviderPolicy(ctx, "microsoft.windows.hyperv.compute")
+	if err != nil {
+		t.Errorf("expected allowed provider to pass: %v", err)
+	}
+}
+
+func Test_Rego_EnforceLogProviderPolicy_Denied_Windows(t *testing.T) {
+	rego := fmt.Sprintf(`package policy
+	api_version := "%s"
+	framework_version := "%s"
+
+	allowed_log_providers := [
+		"microsoft.windows.hyperv.compute",
+	]
+
+	log_provider := data.framework.log_provider
+	`, apiVersion, frameworkVersion)
+
+	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+	err = policy.EnforceLogProviderPolicy(ctx, "some-malicious-provider")
+	if err == nil {
+		t.Errorf("expected unknown provider to be denied")
+	}
+}
+
+func Test_Rego_EnforceLogProviderPolicy_CaseInsensitive_Windows(t *testing.T) {
+	rego := fmt.Sprintf(`package policy
+	api_version := "%s"
+	framework_version := "%s"
+
+	allowed_log_providers := [
+		"microsoft.windows.hyperv.compute",
+	]
+
+	log_provider := data.framework.log_provider
+	`, apiVersion, frameworkVersion)
+
+	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+	err = policy.EnforceLogProviderPolicy(ctx, "Microsoft.Windows.Hyperv.Compute")
+	if err != nil {
+		t.Errorf("expected case-insensitive match to pass: %v", err)
+	}
+}
+
+func Test_Rego_EnforceLogProviderPolicy_OpenDoor_AllowsAll_Windows(t *testing.T) {
+	policy, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+	err = policy.EnforceLogProviderPolicy(ctx, "any-provider-at-all")
+	if err != nil {
+		t.Errorf("open door should allow any provider: %v", err)
+	}
+}
+
+func Test_Rego_EnforceLogProviderPolicy_EmptyAllowList_DeniesAll_Windows(t *testing.T) {
+	rego := fmt.Sprintf(`package policy
+	api_version := "%s"
+	framework_version := "%s"
+
+	allowed_log_providers := []
+
+	log_provider := data.framework.log_provider
+	`, apiVersion, frameworkVersion)
+
+	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+	err = policy.EnforceLogProviderPolicy(ctx, "microsoft.windows.hyperv.compute")
+	if err == nil {
+		t.Errorf("expected empty allow list to deny all providers")
+	}
+}

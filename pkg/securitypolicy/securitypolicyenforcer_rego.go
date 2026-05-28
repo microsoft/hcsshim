@@ -1188,6 +1188,14 @@ func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, co
 	return err
 }
 
+func (policy *regoEnforcer) EnforceLogProviderPolicy(ctx context.Context, providerName string) error {
+	input := inputData{
+		"providerName": providerName,
+	}
+	_, err := policy.enforce(ctx, "log_provider", input)
+	return err
+}
+
 func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return GetAllUserInfo(process, rootPath)
 }
