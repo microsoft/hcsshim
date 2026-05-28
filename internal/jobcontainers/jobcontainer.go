@@ -203,7 +203,7 @@ func Create(ctx context.Context, id string, s *specs.Spec, createOpts CreateOpti
 	}
 
 	// Set resource limits on the job object based off of oci spec.
-	if err := container.job.SetResourceLimits(limits); err != nil {
+	if err := container.job.SetResourceLimits(ctx, limits); err != nil {
 		return nil, nil, fmt.Errorf("failed to set resource limits: %w", err)
 	}
 
