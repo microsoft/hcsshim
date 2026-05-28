@@ -334,9 +334,10 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 	noSecurityHardware := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.NoSecurityHardware, false)
 	if securityPolicy != "" && !noSecurityHardware {
 		sandboxOptions.ConfidentialConfig = &ConfidentialConfig{
-			SecurityPolicy:         securityPolicy,
-			SecurityPolicyEnforcer: oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicyEnforcer, ""),
-			UvmReferenceInfoFile:   oci.ParseAnnotationsString(annotations, shimannotations.LCOWReferenceInfoFile, vmutils.DefaultUVMReferenceInfoFile),
+			SecurityPolicy:                   securityPolicy,
+			SecurityPolicyEnforcer:           oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicyEnforcer, ""),
+			UvmReferenceInfoFile:             oci.ParseAnnotationsString(annotations, shimannotations.LCOWReferenceInfoFile, vmutils.DefaultUVMReferenceInfoFile),
+			UvmHashEnvelopeReferenceInfoFile: oci.ParseAnnotationsString(annotations, shimannotations.UVMHashEnvelopeReferenceInfoFile, vmutils.DefaultUVMHashEnvelopeReferenceInfoFile),
 		}
 
 		log.G(ctx).WithFields(logrus.Fields{
