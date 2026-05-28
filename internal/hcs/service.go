@@ -6,8 +6,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/Microsoft/hcsshim/internal/computecore"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/vmcompute"
 )
 
 // GetServiceProperties returns properties of the host compute service.
@@ -18,10 +18,10 @@ func GetServiceProperties(ctx context.Context, q hcsschema.PropertyQuery) (*hcss
 	if err != nil {
 		return nil, err
 	}
-	propertiesJSON, resultJSON, err := vmcompute.HcsGetServiceProperties(ctx, string(queryb))
-	events := processHcsResult(ctx, resultJSON)
+	propertiesJSON, err := computecore.HcsGetServiceProperties(ctx, string(queryb))
 	if err != nil {
-		return nil, &HcsError{Op: operation, Err: err, Events: events}
+		err = wrapHcsResult(ctx, err, propertiesJSON)
+		return nil, &HcsError{Op: operation, Err: err, Events: eventsFromError(err)}
 	}
 
 	if propertiesJSON == "" {
@@ -42,10 +42,10 @@ func ModifyServiceSettings(ctx context.Context, settings hcsschema.ModificationR
 	if err != nil {
 		return err
 	}
-	resultJSON, err := vmcompute.HcsModifyServiceSettings(ctx, string(settingsJSON))
-	events := processHcsResult(ctx, resultJSON)
+	resultJSON, err := computecore.HcsModifyServiceSettings(ctx, string(settingsJSON))
 	if err != nil {
-		return &HcsError{Op: operation, Err: err, Events: events}
+		err = wrapHcsResult(ctx, err, resultJSON)
+		return &HcsError{Op: operation, Err: err, Events: eventsFromError(err)}
 	}
 	return nil
 }

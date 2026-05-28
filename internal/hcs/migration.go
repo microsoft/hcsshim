@@ -7,20 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"syscall"
-	"unsafe"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/computecore"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/oc"
 
-	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
-	"golang.org/x/sys/windows"
 )
-
-// migrationNotificationBufferSize is the capacity of the LM notification channel.
-const migrationNotificationBufferSize = 16
 
 // MigrationConfig holds parameters for starting a compute system as a live migration
 // destination, or for initiating the source side of a live migration.
@@ -29,124 +24,6 @@ type MigrationConfig struct {
 	Socket syscall.Handle
 	// SessionID identifies the migration session.
 	SessionID uint32
-}
-
-// migrationCallback is the syscall callback registered with HcsSetComputeSystemCallback
-// for live migration events. It receives events and dispatches them to the channel
-// stored in the System via the callbackContext pointer.
-var migrationCallback = syscall.NewCallback(migrationCallbackHandler)
-
-// migrationCallbackHandler is invoked by computecore.dll for live migration events.
-// ctx is &computeSystem.migrationNotifyCh, kept alive across the cgo boundary by
-// computeSystem.migrationPinner (unpinned only after HcsCloseComputeSystem has
-// drained any in-flight callbacks). The notification channel is never closed.
-// Skipping the close keeps tear-down trivially safe and removes the only
-// thing that could turn a channel send into a panic.
-func migrationCallbackHandler(eventPtr uintptr, ctx uintptr) uintptr {
-	if eventPtr == 0 || ctx == 0 {
-		return 0
-	}
-
-	e := (*computecore.HcsEvent)(unsafe.Pointer(eventPtr))
-	ch := *(*chan hcsschema.OperationSystemMigrationNotificationInfo)(unsafe.Pointer(ctx))
-
-	eventData := ""
-	if e.EventData != nil {
-		eventData = windows.UTF16PtrToString(e.EventData)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"event-type": e.Type.String(),
-		"event-data": eventData,
-	}).Debug("HCS migration notification")
-
-	var info hcsschema.OperationSystemMigrationNotificationInfo
-	if eventData != "" {
-		if err := json.Unmarshal([]byte(eventData), &info); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"event-type":    e.Type.String(),
-				"event-data":    eventData,
-				logrus.ErrorKey: err,
-			}).Warn("failed to unmarshal migration notification payload, dropping event")
-			return 0
-		}
-	}
-
-	// Non-blocking send to avoid blocking the HCS callback thread.
-	select {
-	case ch <- info:
-	default:
-		logrus.WithField("event-type", e.Type.String()).Warn("migration notification channel full, dropping event")
-	}
-
-	return 0
-}
-
-// openMigrationHandle opens a computecore handle to the same system and
-// registers a callback for live migration events. It populates
-// computeSystem.migrationHandle and computeSystem.migrationNotifyCh.
-//
-// The caller MUST hold computeSystem.handleLock.
-func (computeSystem *System) openMigrationHandle(ctx context.Context) error {
-	if computeSystem.migrationHandle != 0 {
-		// Already open — idempotent.
-		return nil
-	}
-
-	// Sanity check: the primary handle must be valid.
-	if computeSystem.handle == 0 {
-		return ErrAlreadyClosed
-	}
-
-	// Open a second handle via computecore for LM operations and events.
-	handle, err := computecore.HcsOpenComputeSystem(ctx, computeSystem.id, syscall.GENERIC_ALL)
-	if err != nil {
-		return err
-	}
-
-	// Create the notification channel and store it on the struct.
-	computeSystem.migrationHandle = handle
-	computeSystem.migrationNotifyCh = make(chan hcsschema.OperationSystemMigrationNotificationInfo, migrationNotificationBufferSize)
-
-	// Pin the address of the notification channel field so it stays visible
-	// to the GC while HCS holds it as a uintptr callback context. Without
-	// pinning, this would violate cgo's pointer-passing rules.
-	computeSystem.migrationPinner.Pin(&computeSystem.migrationNotifyCh)
-
-	// Register the callback.
-	if err := computecore.HcsSetComputeSystemCallback(ctx, handle, computecore.HcsEventOptionEnableLiveMigrationEvents, uintptr(unsafe.Pointer(&computeSystem.migrationNotifyCh)), migrationCallback); err != nil {
-		computeSystem.migrationPinner.Unpin()
-		computeSystem.migrationNotifyCh = nil
-		computeSystem.migrationHandle = 0
-		computecore.HcsCloseComputeSystem(ctx, handle)
-		return err
-	}
-	return nil
-}
-
-// closeMigrationHandle unregisters the LM callback and closes the migration
-// handle.
-//
-// The caller MUST hold computeSystem.handleLock.
-func (computeSystem *System) closeMigrationHandle(ctx context.Context) {
-	if computeSystem.migrationHandle == 0 {
-		return
-	}
-
-	// Unregister callback by passing zeros, then close the compute system.
-	// HcsCloseComputeSystem waits for any in-flight callbacks to return, so
-	// after it completes no callback can still be reading the pinned
-	// channel pointer and it is safe to Unpin.
-	_ = computecore.HcsSetComputeSystemCallback(ctx, computeSystem.migrationHandle, computecore.HcsEventOptionNone, 0, 0)
-	computecore.HcsCloseComputeSystem(ctx, computeSystem.migrationHandle)
-	computeSystem.migrationHandle = 0
-
-	computeSystem.migrationPinner.Unpin()
-
-	// Drop the channel reference. The channel is intentionally not closed:
-	// consumers signal end-of-stream via the System's context, so a close
-	// would add no information and would only complicate tear-down.
-	computeSystem.migrationNotifyCh = nil
 }
 
 // StartWithMigrationOptions synchronously starts the compute system as a live
@@ -158,50 +35,42 @@ func (computeSystem *System) StartWithMigrationOptions(ctx context.Context, conf
 
 	operation := "hcs::System::Start"
 
+	ctx, span := oc.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	// Open the migration handle for LM events and operations.
-	if err := computeSystem.openMigrationHandle(ctx); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
-	}
-	defer func() {
-		if err != nil {
-			computeSystem.closeMigrationHandle(ctx)
-		}
-	}()
-
-	// Create a computecore operation to track the start request.
-	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
-	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
-	}
-	defer computecore.HcsCloseOperation(ctx, op)
-
-	// Attach the live migration socket to the operation.
-	if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, resourcepaths.LiveMigrationSocketURI, config.Socket); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
-	}
-
-	// Build start options with destination migration settings.
-	options := hcsschema.StartOptions{
+	opts, err := json.Marshal(hcsschema.StartOptions{
 		DestinationMigrationOptions: &hcsschema.MigrationStartOptions{
 			NetworkSettings: &hcsschema.MigrationNetworkSettings{SessionID: config.SessionID},
 		},
-	}
-	raw, err := json.Marshal(options)
+	})
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
-	return computeSystem.startV2(ctx, op, string(raw))
+	_, callErr := runOperation(ctx, func(op computecore.HcsOperation) error {
+		if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, resourcepaths.LiveMigrationSocketURI, config.Socket); err != nil {
+			return err
+		}
+		return computecore.HcsStartComputeSystem(ctx, computeSystem.handle, op, string(opts))
+	})
+	if callErr != nil {
+		return makeSystemError(computeSystem, operation, callErr)
+	}
+	computeSystem.startTime = time.Now()
+	return nil
 }
 
-// InitializeLiveMigrationOnSource initializes a live migration on the source side with the given options.
+// InitializeLiveMigrationOnSource prepares the source compute system for a
+// live migration. Must be called on the source before StartLiveMigrationOnSource.
 func (computeSystem *System) InitializeLiveMigrationOnSource(ctx context.Context, options *hcsschema.MigrationInitializeOptions) (err error) {
 	operation := "hcs::System::InitializeLiveMigrationOnSource"
 
@@ -213,42 +82,37 @@ func (computeSystem *System) InitializeLiveMigrationOnSource(ctx context.Context
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
 
-	// Open the migration handle for LM events and operations.
-	if err = computeSystem.openMigrationHandle(ctx); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
-	defer func() {
-		if err != nil {
-			computeSystem.closeMigrationHandle(ctx)
-		}
-	}()
 
 	if options == nil {
 		options = &hcsschema.MigrationInitializeOptions{}
 	}
 	optionsJSON, err := json.Marshal(options)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Issue the initialize call and wait for completion.
-	if err = computecore.HcsInitializeLiveMigrationOnSource(ctx, computeSystem.migrationHandle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+	if err = computecore.HcsInitializeLiveMigrationOnSource(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err = computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
 
-// StartLiveMigrationOnSource starts the live migration on the source side using the provided
-// transport socket and session ID.
+// StartLiveMigrationOnSource begins the source-side migration using the given
+// transport socket and session ID. Blocks until HCS accepts the start;
+// transfer progress is observed via MigrationNotifications.
 func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, config *MigrationConfig) (err error) {
 	if config == nil {
 		return errors.New("migration config must not be nil")
@@ -264,19 +128,19 @@ func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, con
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
 
-	if computeSystem.migrationHandle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Attach the migration socket to the operation before starting.
 	if err := computecore.HcsAddResourceToOperation(ctx, op, computecore.HcsResourceTypeSocket, resourcepaths.LiveMigrationSocketURI, config.Socket); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	options := hcsschema.MigrationStartOptions{
@@ -284,15 +148,15 @@ func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, con
 	}
 	optionsJSON, err := json.Marshal(options)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	// Issue the start call and wait for completion.
-	if err := computecore.HcsStartLiveMigrationOnSource(ctx, computeSystem.migrationHandle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+	if err := computecore.HcsStartLiveMigrationOnSource(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
@@ -309,8 +173,8 @@ func (computeSystem *System) StartLiveMigrationTransfer(ctx context.Context, opt
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
 
-	if computeSystem.migrationHandle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
 	if options == nil {
@@ -318,28 +182,27 @@ func (computeSystem *System) StartLiveMigrationTransfer(ctx context.Context, opt
 	}
 	optionsJSON, err := json.Marshal(options)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Begin the memory transfer and wait for completion.
-	if err := computecore.HcsStartLiveMigrationTransfer(ctx, computeSystem.migrationHandle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+	if err := computecore.HcsStartLiveMigrationTransfer(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	return nil
 }
 
-// FinalizeLiveMigration completes the live migration workflow. If resume is true the VM
-// is resumed on the destination; otherwise it is stopped.
-func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, resume bool) (err error) {
+// FinalizeLiveMigration completes the live migration workflow.
+func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, opts *hcsschema.MigrationFinalizedOptions) (err error) {
 	operation := "hcs::System::FinalizeLiveMigration"
 
 	ctx, span := oc.StartSpan(ctx, operation)
@@ -350,47 +213,42 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, resume b
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
 
-	if computeSystem.migrationHandle == 0 {
-		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	// Choose whether to resume or stop the VM after migration.
-	finalOp := hcsschema.MigrationFinalOperationStop
-	if resume {
-		finalOp = hcsschema.MigrationFinalOperationResume
+	if opts == nil {
+		opts = &hcsschema.MigrationFinalizedOptions{}
 	}
-	optionsJSON, err := json.Marshal(hcsschema.MigrationFinalizedOptions{FinalizedOperation: finalOp})
+	optionsJSON, err := json.Marshal(opts)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 
 	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
 	defer computecore.HcsCloseOperation(ctx, op)
 
 	// Finalize the migration and wait for completion.
-	if err := computecore.HcsFinalizeLiveMigration(ctx, computeSystem.migrationHandle, op, string(optionsJSON)); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+	if err := computecore.HcsFinalizeLiveMigration(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
+		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return makeSystemError(computeSystem, operation, err)
 	}
-
-	// Migration is complete — release the migration handle and callback.
-	computeSystem.closeMigrationHandle(ctx)
 	return nil
 }
 
-// MigrationNotifications returns a read-only channel that receives live migration
-// event payloads. Returns an error if no migration handle is open.
-func (computeSystem *System) MigrationNotifications() (<-chan hcsschema.OperationSystemMigrationNotificationInfo, error) {
-	computeSystem.handleLock.RLock()
-	defer computeSystem.handleLock.RUnlock()
-
-	if computeSystem.migrationHandle == 0 {
-		return nil, errors.New("migration handle not open; call StartWithMigrationOptions or InitializeLiveMigrationOnSource first")
-	}
-	return computeSystem.migrationNotifyCh, nil
+// MigrationNotifications returns a read-only channel of live migration events
+// for this System. The channel exists for the System's lifetime and is safe
+// to subscribe to before any migration call, so callers do not miss early
+// events such as SetupDone.
+//
+// The channel is never closed; callers signal end-of-stream via their own
+// context. Sends are non-blocking (buffer size migrationNotificationBufferSize)
+// and events are dropped on overflow, so consumers must drain promptly.
+func (computeSystem *System) MigrationNotifications() <-chan hcsschema.OperationSystemMigrationNotificationInfo {
+	return computeSystem.migrationNotifyCh
 }

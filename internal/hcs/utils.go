@@ -14,12 +14,20 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// makeOpenFiles calls winio.NewOpenFile for each handle in a slice but closes all the handles
-// if there is an error.
+// makeOpenFiles wraps each handle in input as an overlapped I/O file, returning
+// a parallel slice (typically the stdin/stdout/stderr of a compute-system
+// process). On any wrap failure, all opened files are closed and the
+// remaining unwrapped handles are closed before returning the error.
+//
+// Handles equal to 0 (NULL) or INVALID_HANDLE_VALUE are treated as "not
+// present" and map to a nil entry in the result. HCS APIs such as
+// HcsGetProcessInfo use INVALID_HANDLE_VALUE to indicate std streams the
+// caller did not request; passing that value to NewOpenFile would
+// incorrectly bind the sentinel as if it were a valid pipe handle.
 func makeOpenFiles(hs []syscall.Handle) (_ []io.ReadWriteCloser, err error) {
 	fs := make([]io.ReadWriteCloser, len(hs))
 	for i, h := range hs {
-		if h != syscall.Handle(0) {
+		if h != syscall.Handle(0) && h != syscall.Handle(windows.InvalidHandle) {
 			if err == nil {
 				fs[i], err = winio.NewOpenFile(windows.Handle(h))
 			}
