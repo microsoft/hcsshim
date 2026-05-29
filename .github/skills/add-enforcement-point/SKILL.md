@@ -38,7 +38,22 @@ for background on the trust model, modules, metadata, and revertable sections.
   pre-dates this enforcement point (`use_framework: false` case) or has no
   rule defined.
 
-## 2. Register the enforcement point
+## 2. Whether to extend an existing enforcement point or create a new one
+
+Prefer introducing a new enforcement point over adding a new input field to
+an existing one, even when the new operation can be considered a variant of an
+existing one. A customer policy that pre-dates the change may have its own
+hand-written rule for the existing enforcement point that does not look at the new field;
+silently widening the input set can mean that their rule still evaluates to `allowed`,
+even for a request it never considered and would not have intended to allow.
+
+You may consider extending an existing point if the new field makes the
+enforcement less restrictive (i.e. add in more ways to allow an operation,
+additional allowed fs types / options etc when the existing check is already
+comparing the input with a set of allowed values), in a way such that anything
+that would be denied by an old policy would still be denied.
+
+## 3. Register the enforcement point
 
 Edit [pkg/securitypolicy/api.rego](../../pkg/securitypolicy/api.rego) and
 add an entry to `enforcement_points`. Bump the api `version` if you're
@@ -60,7 +75,7 @@ introducing a new version (and update `version_api`). Choose
   Customers who want the feature must regenerate their policy with the
   new tooling.
 
-## 3. Implement in framework.rego
+## 4. Implement in framework.rego
 
 In [pkg/securitypolicy/framework.rego](../../pkg/securitypolicy/framework.rego):
 
@@ -82,8 +97,14 @@ In [pkg/securitypolicy/framework.rego](../../pkg/securitypolicy/framework.rego):
 - Bump `version` (and `version_framework`) if you broke compatibility, and
   add a corresponding `check_*` / `apply_defaults` shim so older policies
   keep working.
+- Add a "delegation" for your new rule in the default / test rego
+  files:
+  - [pkg/securitypolicy/policy.rego](../../pkg/securitypolicy/policy.rego):
+    add `<your_point> := data.framework.<your_point>`.
+  - [pkg/securitypolicy/open_door.rego](../../pkg/securitypolicy/open_door.rego):
+    add `<your_point> := {"allowed": true}`.
 
-## 4. Add error rules
+## 5. Add error rules
 
 For every narrowing step, add `errors["human readable reason"] { input.rule == "<your_point>"; <condition that means the step failed> }`. These are
 queried via `data.policy.reason` on a deny to build the structured error
@@ -93,7 +114,7 @@ Also extend `error_objects` if your decision produces a useful set of
 candidate objects (containers, processes, fragments) that should appear in
 the denial.
 
-## 5. Wire the Go side
+## 6. Wire the Go side
 
 In [pkg/securitypolicy/securitypolicyenforcer.go](../../pkg/securitypolicy/securitypolicyenforcer.go),
 add the method to the `SecurityPolicyEnforcer` interface. Implement it as a
@@ -125,7 +146,7 @@ func (policy *regoEnforcer) EnforceMyThingPolicy(ctx context.Context, ...) (...,
   (`StartRevertableSection` + `commitOrRollbackPolicyRevSection`) and make
   sure the underlying operation cleans up partial state on its own failure.
 
-## 6. Call from the handler
+## 7. Call from the handler
 
 Linux: add the call in the appropriate handler in
 [internal/guest/runtime/hcsv2/uvm.go](../../internal/guest/runtime/hcsv2/uvm.go)
@@ -140,7 +161,7 @@ is enforced **before** it is forwarded to the inbox GCS, and that any
 rewriting (env filtering, etc.) happens after enforcement so the forwarded
 payload reflects what was approved.
 
-## 7. Tests
+## 8. Tests
 
 Add enforcer-level tests (build-tagged `rego`) in
 [pkg/securitypolicy/regopolicy_linux_test.go](../../pkg/securitypolicy/regopolicy_linux_test.go)
@@ -154,7 +175,7 @@ so the api.rego registration is exercised. Remember to run tests with
 `go test -tags rego ./pkg/securitypolicy/...` — without the tag they are
 silently skipped.
 
-## 8. Compatibility checklist
+## 9. Compatibility checklist
 
 - Did you bump `version_api` / `version_framework` if the change is
   observable to existing policies?
