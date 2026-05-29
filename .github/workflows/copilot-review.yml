@@ -1,0 +1,82 @@
+# Auto-request GitHub Copilot review on PRs that touch v2 shim code.
+#
+# Copilot review is guidance-only (non-blocking). CI remains the enforcement gate.
+# The path filter ensures Copilot is NOT invoked on unrelated PRs (docs, scripts, etc.).
+
+name: Copilot Review (V2 Shim)
+
+on:
+  pull_request:
+    paths:
+      # Shim binaries
+      - "cmd/containerd-shim-runhcs-v1/**"
+      - "cmd/containerd-shim-lcow-v2/**"
+      # Core shim internals
+      - "internal/hcsoci/**"
+      - "internal/uvm/**"
+      - "internal/layers/**"
+      - "internal/hcs/**"
+      - "internal/gcs/**"
+      - "internal/cow/**"
+      - "internal/resources/**"
+      - "internal/jobcontainers/**"
+      - "internal/guest/**"
+      - "internal/shim/**"
+      # VM controller & manager interfaces
+      - "internal/controller/**"
+      - "internal/vm/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  copilot-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request Copilot Review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+
+            // Check if Copilot is already a reviewer to avoid duplicate requests.
+            const reviews = await github.rest.pulls.listRequestedReviewers({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            const alreadyRequested = reviews.data.users.some(
+              (u) => u.login === 'copilot-pull-request-reviewer'
+            );
+            if (alreadyRequested) {
+              core.info('Copilot review already requested ΓÇö skipping.');
+              return;
+            }
+
+            // Request Copilot as a reviewer.
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                reviewers: ['copilot-pull-request-reviewer'],
+              });
+              core.info(`Copilot review requested on PR #${pr.number}`);
+            } catch (err) {
+              // Non-fatal: Copilot may not be enabled on the repo.
+              core.warning(`Could not request Copilot review: ${err.message}`);
+            }
+
+            // Add a label to indicate Copilot review was requested.
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: ['copilot-review'],
+              });
+            } catch (err) {
+              core.info(`Could not add label: ${err.message}`);
+            }
