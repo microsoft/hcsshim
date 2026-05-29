@@ -1,6 +1,6 @@
 ---
 name: review-confidential-security
-description: Review a commit, PR, or local diff for confidential-containers (C-LCOW / C-WCOW) security regressions. Use when the user asks to "audit", "security review", "check for confidentiality bugs", or otherwise vet changes that touch GCS, gcs-sidecar, the security policy, OCI spec handling, or any host-driven request path in hcsshim.
+description: Review a commit, PR, or local diff for confidential (C-LCOW / C-WCOW) enforcement security regressions. Use when the user asks to "audit", "security review", "check for confidentiality / enforcement bugs", or otherwise vet changes that touch GCS, gcs-sidecar, the security policy, OCI spec handling, or any host-driven request path in hcsshim.
 ---
 
 # Reviewing a change for confidential-containers security bugs
@@ -8,7 +8,8 @@ description: Review a commit, PR, or local diff for confidential-containers (C-L
 Before starting, read
 [.github/instructions/about-confidential-containers.instructions.md](../../.github/instructions/about-confidential-containers.instructions.md)
 for the trust model and the existing hardening conventions you must not
-regress.
+regress.  Note that this skill is only about confidential enforcement. If you're
+doing a general PR review, consider other bugs too, including on the host.
 
 ## 1. Get the diff
 
@@ -39,7 +40,28 @@ Out-of-scope (host-only, or guest code that only executes on non-confidential
 mode) changes do not have to be covered by this review because we assume the
 host can be malicious anyway.
 
-## 3. Checklist — apply to every changed file in scope
+## 3. What counts as a confidential enforcement bug
+
+A finding is only a confidential enforcement bug if a **malicious host** can
+cause an outcome that the **policy author did not sanction**. The trust
+model (see the instructions file) puts the policy author and the container
+inside the boundary, so:
+
+- Bug: host bypasses or weakens a policy check, reads/modifies data in the
+  container in a way the user does not intend, or tricks the container into doing
+  something it wouldn't otherwise do.
+- Not a bug: the policy can allow something dangerous; a privileged container
+  can escape into the rest of the UVM, etc.
+
+When something looks like a policy bypass, ask: *does this work without the user
+needing to open doors in the security policy?* If no, it's not a confidential
+bug.
+
+(Obviously, a non-confidential-security-policy-enforcement-related bug is still
+a bug and can be severe, like unprivileged containers gaining privilege with a
+malicious image / OCI spec, and worse case, escaping to the host, etc)
+
+## 4. Checklist — apply to every changed file in scope
 
 Treat **everything** coming from the host as adversarial: bridge message
 fields, OCI spec fields (annotations, env, args, mounts, hooks, devices,
@@ -105,7 +127,7 @@ For each new or modified host-facing input field, ask:
     branches in the Rego enforcer get updated? Does the gcs-sidecar dispatch
     cover the same cases as the GCS?
 
-## 4. Produce the review
+## 5. Produce the review
 
 For confirmed or very likely vulnerability:
 Include the file, line range, what unintended action can the host achieve, if

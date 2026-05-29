@@ -34,6 +34,10 @@ policy. This functionality backs C-ACI, the confidential SKU of ACI.
   The sidecar is the only enforcement boundary — anything passed unchecked
   through to the inbox GCS is effectively trusted.
 
+Note that the only untrusted party as far as the confidential model is concerned
+is the host. The policy author, the policy itself, and the container workload
+are all inside the trust boundary:
+
 ## Rego modules
 
 The interpreter (see [internal/regopolicyinterpreter](internal/regopolicyinterpreter))
