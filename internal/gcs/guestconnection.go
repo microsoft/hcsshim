@@ -265,6 +265,27 @@ func (gc *GuestConnection) newIoChannel() (*ioChannel, uint32, error) {
 	return newIoChannel(l), port, nil
 }
 
+// SetNextPort raises the new-process IO port allocator floor. Called
+// by the live-migration restore path after [Connect] to skip past
+// vsock ports already in use by restored processes. Never goes
+// backwards.
+func (gc *GuestConnection) SetNextPort(p uint32) {
+	gc.mu.Lock()
+	defer gc.mu.Unlock()
+	if p > gc.nextPort {
+		gc.nextPort = p
+	}
+}
+
+// NextPort returns the current allocator floor. Used by the
+// live-migration save path to record what [SetNextPort] should be
+// seeded with on the destination.
+func (gc *GuestConnection) NextPort() uint32 {
+	gc.mu.Lock()
+	defer gc.mu.Unlock()
+	return gc.nextPort
+}
+
 func (gc *GuestConnection) requestNotify(cid string, ch chan struct{}) error {
 	gc.mu.Lock()
 	defer gc.mu.Unlock()

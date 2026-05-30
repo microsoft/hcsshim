@@ -27,6 +27,10 @@ type Process interface {
 	CloseStderr(ctx context.Context) error
 	// Pid returns the process ID.
 	Pid() int
+	// IOPorts returns the host-side vsock ports allocated for this
+	// process's stdio relay, or zeros for hosts that don't use vsock
+	// (WCOW HCS, job containers). Used by the live-migration save path.
+	IOPorts() (stdin, stdout, stderr uint32)
 	// Stdio returns the stdio streams for a process. These may be nil if a stream
 	// was not requested during CreateProcess.
 	Stdio() (_ io.Writer, _ io.Reader, _ io.Reader)

@@ -115,6 +115,22 @@ func (mr *MockProcessMockRecorder) ExitCode() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitCode", reflect.TypeOf((*MockProcess)(nil).ExitCode))
 }
 
+// IOPorts mocks base method.
+func (m *MockProcess) IOPorts() (uint32, uint32, uint32) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IOPorts")
+	ret0, _ := ret[0].(uint32)
+	ret1, _ := ret[1].(uint32)
+	ret2, _ := ret[2].(uint32)
+	return ret0, ret1, ret2
+}
+
+// IOPorts indicates an expected call of IOPorts.
+func (mr *MockProcessMockRecorder) IOPorts() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IOPorts", reflect.TypeOf((*MockProcess)(nil).IOPorts))
+}
+
 // Kill mocks base method.
 func (m *MockProcess) Kill(ctx context.Context) (bool, error) {
 	m.ctrl.T.Helper()

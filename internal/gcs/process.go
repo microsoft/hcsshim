@@ -34,6 +34,9 @@ type Process struct {
 	stdin, stdout, stderr *ioChannel
 	stdinCloseWriteOnce   sync.Once
 	stdinCloseWriteErr    error
+	// stdinPort, stdoutPort, stderrPort record the vsock ports that
+	// gc.exec allocated for this process's stdio relay.
+	stdinPort, stdoutPort, stderrPort uint32
 }
 
 var _ cow.Process = &Process{}
@@ -100,6 +103,9 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		g := winio.VsockServiceID(vsockSettings.StdErr)
 		hvsockSettings.StdErr = &g
 	}
+	// Snapshot the per-stream vsock ports so the live-migration snapshot
+	// can re-establish the same host-side listeners on the destination.
+	p.stdinPort, p.stdoutPort, p.stderrPort = vsockSettings.StdIn, vsockSettings.StdOut, vsockSettings.StdErr
 
 	var resp prot.ContainerExecuteProcessResponse
 	err = gc.brdg.RPC(ctx, prot.RPCExecuteProcess, &req, &resp, false)
@@ -131,14 +137,20 @@ func (p *Process) Close() error {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	if err := p.stdin.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("close stdin failed")
+	if p.stdin != nil {
+		if err := p.stdin.Close(); err != nil {
+			log.G(ctx).WithError(err).Warn("close stdin failed")
+		}
 	}
-	if err := p.stdout.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("close stdout failed")
+	if p.stdout != nil {
+		if err := p.stdout.Close(); err != nil {
+			log.G(ctx).WithError(err).Warn("close stdout failed")
+		}
 	}
-	if err := p.stderr.Close(); err != nil {
-		log.G(ctx).WithError(err).Warn("close stderr failed")
+	if p.stderr != nil {
+		if err := p.stderr.Close(); err != nil {
+			log.G(ctx).WithError(err).Warn("close stderr failed")
+		}
 	}
 	return nil
 }
@@ -209,6 +221,13 @@ func (p *Process) Kill(ctx context.Context) (_ bool, err error) {
 // Pid returns the process ID.
 func (p *Process) Pid() int {
 	return int(p.id)
+}
+
+// IOPorts returns the host-side vsock ports allocated for this process's
+// stdin/stdout/stderr relay (zero if the corresponding stream was not
+// opened).
+func (p *Process) IOPorts() (stdin, stdout, stderr uint32) {
+	return p.stdinPort, p.stdoutPort, p.stderrPort
 }
 
 // ResizeConsole requests that the pty associated with the process resize its

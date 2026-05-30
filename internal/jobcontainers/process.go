@@ -197,6 +197,12 @@ func (p *JobProcess) Pid() int {
 	return p.cmd.Pid()
 }
 
+// IOPorts always returns zeros: job-container processes route stdio
+// over OS pipes, not vsock. Implemented to satisfy [cow.Process].
+func (p *JobProcess) IOPorts() (stdin, stdout, stderr uint32) {
+	return 0, 0, 0
+}
+
 // Close cleans up any state associated with the process but does not kill it.
 func (p *JobProcess) Close() error {
 	p.stdioLock.Lock()

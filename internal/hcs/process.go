@@ -57,6 +57,12 @@ func (process *Process) Pid() int {
 	return process.processID
 }
 
+// IOPorts always returns zeros: HCS processes route stdio over named
+// pipes, not vsock. Implemented to satisfy [cow.Process].
+func (process *Process) IOPorts() (stdin, stdout, stderr uint32) {
+	return 0, 0, 0
+}
+
 // SystemID returns the ID of the process's compute system.
 func (process *Process) SystemID() string {
 	return process.system.ID()

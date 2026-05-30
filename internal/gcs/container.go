@@ -5,6 +5,7 @@ package gcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -67,9 +68,9 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	return c, nil
 }
 
-// CloneContainer just creates the wrappers and sets up notification requests for a
-// container that is already running inside the UVM (after cloning).
-func (gc *GuestConnection) CloneContainer(ctx context.Context, cid string) (_ *Container, err error) {
+// OpenContainer attaches a host-side wrapper to a container already
+// running inside the UVM.
+func (gc *GuestConnection) OpenContainer(_ context.Context, cid string) (_ *Container, err error) {
 	c := &Container{
 		gc:        gc,
 		id:        cid,
@@ -116,6 +117,66 @@ func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ co
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	return c.gc.exec(ctx, c.id, config)
+}
+
+// OpenProcessWithIO is the live-migration restore counterpart of
+// [Container.CreateProcess]: it attaches to a process already running
+// in this container and re-listens on the supplied vsock ports.
+func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort, stdoutPort, stderrPort uint32) (_ *Process, err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::Container::OpenProcessWithIO", oc.WithClientSpanKind)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", c.id),
+		trace.Int64Attribute("pid", int64(pid)))
+
+	p := &Process{
+		gc:         c.gc,
+		cid:        c.id,
+		id:         pid,
+		stdinPort:  stdinPort,
+		stdoutPort: stdoutPort,
+		stderrPort: stderrPort,
+	}
+	defer func() {
+		if err != nil {
+			p.Close()
+		}
+	}()
+
+	listen := func(port uint32) (*ioChannel, error) {
+		if port == 0 {
+			return nil, nil
+		}
+		l, err := c.gc.ioListenFn(port)
+		if err != nil {
+			return nil, fmt.Errorf("listen vsock port %d: %w", port, err)
+		}
+		return newIoChannel(l), nil
+	}
+	if p.stdin, err = listen(stdinPort); err != nil {
+		return nil, err
+	}
+	if p.stdout, err = listen(stdoutPort); err != nil {
+		return nil, err
+	}
+	if p.stderr, err = listen(stderrPort); err != nil {
+		return nil, err
+	}
+
+	// Subscribe to the process exit notification.
+	waitReq := prot.ContainerWaitForProcess{
+		RequestBase: makeRequest(ctx, c.id),
+		ProcessID:   p.id,
+		TimeoutInMs: 0xffffffff,
+	}
+	p.waitCall, err = c.gc.brdg.AsyncRPC(ctx, prot.RPCWaitForProcess, &waitReq, &p.waitResp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait on existing process pid %d in container %s: %w", pid, c.id, err)
+	}
+	go p.waitBackground()
+	log.G(ctx).WithField("pid", p.id).Debug("opened existing process with IO")
+	return p, nil
 }
 
 // ID returns the container's ID.
