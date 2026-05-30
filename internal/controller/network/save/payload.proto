@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package hcsshim.controller.network.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/network/save;save";
+
+// =============================================================================
+// Lifecycle stage enum
+//
+// Stage mirrors the Go State type used by the network controller. The zero
+// value matches the Go iota-zero value (NotConfigured).
+// =============================================================================
+
+enum Stage {
+  STAGE_NOT_CONFIGURED = 0;
+  STAGE_CONFIGURED     = 1;
+  STAGE_INVALID        = 2;
+  STAGE_TORN_DOWN      = 3;
+}
+
+// Payload is the migration payload owned by the network controller. It is the
+// top-level message wrapped in an [anypb.Any] when handed off between source
+// and destination shims.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // namespace_id is the HCN compartment / namespace GUID.
+  string namespace_id = 2;
+
+  // policy_based_routing records whether PBR was enabled when the network
+  // was set up.
+  bool policy_based_routing = 3;
+
+  // is_namespace_supported_by_guest records whether the guest GCS supports
+  // namespace-based endpoint attach.
+  bool is_namespace_supported_by_guest = 4;
+
+  // state is the network lifecycle stage.
+  Stage state = 5;
+
+  // vm_endpoints is keyed by per-VM vNIC GUID and contains the HNS endpoint
+  // bound to each NIC slot of the VM.
+  map<string, EndpointBinding> vm_endpoints = 6;
+}
+
+// EndpointBinding describes a single HNS/HCN endpoint bound to a VM vNIC.
+message EndpointBinding {
+  // endpoint_id is the HNS/HCN HostComputeEndpoint identifier bound to the
+  // NIC.
+  string endpoint_id = 1;
+
+  // mac_address is the endpoint's MAC address.
+  string mac_address = 2;
+
+  // endpoint_name is the endpoint's HNS/HCN name.
+  string endpoint_name = 3;
+}
