@@ -21,11 +21,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
-	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	iwin "github.com/Microsoft/hcsshim/internal/windows"
 
-	"github.com/Microsoft/go-winio/pkg/process"
 	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -36,8 +34,8 @@ import (
 // and its associated resources.
 type Controller struct {
 	vmID  string
-	uvm   *vmmanager.UtilityVM
-	guest *guestmanager.Guest
+	uvm   utilityVM
+	guest guestManager
 
 	// vmState tracks the current state of the VM lifecycle.
 	// Access must be guarded by mu.
@@ -45,6 +43,9 @@ type Controller struct {
 
 	// mu guards the concurrent access to the Controller's fields and operations.
 	mu sync.RWMutex
+
+	// hcsDocument is the HCS compute system document used to create the VM.
+	hcsDocument *hcsschema.ComputeSystem
 
 	// logOutputDone is closed when the GCS log output processing goroutine completes.
 	logOutputDone chan struct{}
@@ -80,7 +81,7 @@ func New() *Controller {
 // Guest returns the guest manager instance for this VM.
 // The guest manager provides access to guest-host communication.
 func (c *Controller) Guest() *guestmanager.Guest {
-	return c.guest
+	return c.guest.(*guestmanager.Guest)
 }
 
 // State returns the current VM state.
@@ -122,7 +123,7 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	}
 
 	// Create the VM via vmmanager.
-	uvm, err := vmmanager.Create(ctx, opts.ID, hcsDocument)
+	uvm, err := createVM(ctx, opts.ID, hcsDocument)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %w", err)
 	}
@@ -130,17 +131,11 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	// Set the Controller parameters after successful creation.
 	c.vmID = opts.ID
 	c.uvm = uvm
+	c.hcsDocument = hcsDocument
 
 	// Initialize the GuestManager for managing guest interactions.
 	// We will create the guest connection via GuestManager during StartVM.
-	c.guest = guestmanager.New(ctx, uvm)
-
-	// Eager initialize the SCSI controller as opposed to all other controllers.
-	// This is because we always use SCSI for attaching scratch VHDs.
-	c.scsiController, err = newSCSIController(ctx, hcsDocument, c.uvm, c.guest)
-	if err != nil {
-		return fmt.Errorf("failed to initialize SCSI controller: %w", err)
-	}
+	c.guest = newGuestManager(ctx, uvm)
 
 	c.vmState = StateCreated
 	return nil
@@ -464,7 +459,7 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 
 	// Initialization of vmmemProcess to calculate stats properly for VA-backed UVMs.
 	if c.vmmemProcess == 0 {
-		vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
+		vmmemHandle, err := lookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
 		if err != nil {
 			return nil, fmt.Errorf("cannot get stats: %w", err)
 		}
@@ -485,7 +480,7 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 		// working set size for a VA-backed UVM. To work around this, we instead
 		// locate the vmmem process for the VM, and query that process's working set
 		// instead, which will be the working set for the VM.
-		memCounters, err := process.GetProcessMemoryInfo(c.vmmemProcess)
+		memCounters, err := getProcessMemoryInfo(c.vmmemProcess)
 		if err != nil {
 			return nil, err
 		}
