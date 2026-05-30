@@ -12,8 +12,10 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -58,6 +60,10 @@ type regoEnforcer struct {
 	maxErrorMessageLength int
 	// OS type
 	osType string
+	// Mutex to ensure only one revertable section is active
+	revertableSectionLock sync.Mutex
+	// Saved metadata for the revertable section
+	savedMetadata rpi.SavedMetadata
 }
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
@@ -710,6 +716,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		Umask:                umask,
 		Capabilities:         capabilities,
 		SeccompProfileSHA256: seccompProfileSHA256,
+		LinuxDevices:         []oci.LinuxDevice{},
 	}
 	return policy.EnforceCreateContainerPolicyV2(ctx, containerID, argList, envList, workingDir, mounts, user, opts)
 }
@@ -747,6 +754,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 			"sandboxDir":           SandboxMountsDir(opts.SandboxID),
 			"hugePagesDir":         HugePagesMountsDir(opts.SandboxID),
 			"mounts":               appendMountData([]interface{}{}, mounts),
+			"devices":              appendDeviceData([]interface{}{}, opts.LinuxDevices),
 			"privileged":           opts.Privileged,
 			"noNewPrivileges":      opts.NoNewPrivileges,
 			"user":                 user.toInput(),
@@ -833,6 +841,22 @@ func appendMountData(mountData []interface{}, mounts []oci.Mount) []interface{} 
 	}
 
 	return mountData
+}
+
+func appendDeviceData(deviceData []interface{}, devices []oci.LinuxDevice) []interface{} {
+	for _, device := range devices {
+		deviceData = append(deviceData, inputData{
+			"path":     device.Path,
+			"type":     device.Type,
+			"major":    device.Major,
+			"minor":    device.Minor,
+			"fileMode": device.FileMode,
+			"uid":      device.UID,
+			"gid":      device.GID,
+		})
+	}
+
+	return deviceData
 }
 
 func (policy *regoEnforcer) ExtendDefaultMounts(mounts []oci.Mount) error {
@@ -1190,4 +1214,82 @@ func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, co
 
 func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return GetAllUserInfo(process, rootPath)
+}
+
+type revertableSectionHandle struct {
+	// policy is cleared once this struct is "used", to prevent accidental
+	// duplicate Commit/Rollback calls.
+	policy *regoEnforcer
+}
+
+func (policy *regoEnforcer) inRevertableSection() bool {
+	succ := policy.revertableSectionLock.TryLock()
+	if succ {
+		// since nobody else has the lock, we're not in fact in a revertable
+		// section.
+		policy.revertableSectionLock.Unlock()
+		return false
+	}
+	// somebody else (i.e. the caller) has the lock, so we're in a revertable
+	// section.  Don't unlock it here!
+	return true
+}
+
+// Starts a revertable section by saving the current policy state.  If another
+// revertable section is already active, this will wait until that one is
+// finished.
+func (policy *regoEnforcer) StartRevertableSection() (RevertableSectionHandle, error) {
+	policy.revertableSectionLock.Lock()
+	var err error
+	policy.savedMetadata, err = policy.rego.SaveMetadata()
+	if err != nil {
+		err = errors.Wrapf(err, "unable to save metadata for revertable section")
+		policy.revertableSectionLock.Unlock()
+		return &revertableSectionHandle{}, err
+	}
+	// Keep policy.revertableSectionLock locked until the end of the section.
+	sh := &revertableSectionHandle{
+		policy: policy,
+	}
+	return sh, nil
+}
+
+func (sh *revertableSectionHandle) Commit() {
+	if sh.policy == nil {
+		gcs.UnrecoverableError(errors.New("revertable section handle already used"))
+	}
+
+	policy := sh.policy
+	sh.policy = nil
+	lockSucc := policy.revertableSectionLock.TryLock()
+	if lockSucc {
+		gcs.UnrecoverableError(errors.New("not in a revertable section"))
+	} else {
+		// somebody else (i.e. the caller) has the lock, so we're in a revertable
+		// section.  Clear the saved metadata just in case, then unlock to exit the
+		// section.
+		policy.savedMetadata = rpi.SavedMetadata{}
+		policy.revertableSectionLock.Unlock()
+	}
+}
+
+func (sh *revertableSectionHandle) Rollback() {
+	if sh.policy == nil {
+		gcs.UnrecoverableError(errors.New("revertable section handle already used"))
+	}
+
+	policy := sh.policy
+	sh.policy = nil
+	lockSucc := policy.revertableSectionLock.TryLock()
+	if lockSucc {
+		gcs.UnrecoverableError(errors.New("not in a revertable section"))
+	} else {
+		// somebody else (i.e. the caller) has the lock, so we're in a revertable
+		// section.  Restore the saved metadata, then unlock to exit the section.
+		err := policy.rego.RestoreMetadata(policy.savedMetadata)
+		if err != nil {
+			gcs.UnrecoverableError(errors.Wrap(err, "unable to restore metadata for revertable section"))
+		}
+		policy.revertableSectionLock.Unlock()
+	}
 }

@@ -99,6 +99,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 			log.G(ctx).WithError(err).Error("failed to wait for runc process")
 		}
 		p.exitCode = exitCode
+		c.terminated.Store(true)
 		log.G(ctx).WithField("exitCode", p.exitCode).Debug("process exited")
 
 		// Free any process waiters
