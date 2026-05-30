@@ -65,10 +65,12 @@ func BuildSandboxConfig(
 		return nil, nil, fmt.Errorf("failed to parse sandbox options: %w", err)
 	}
 
+	noSecurityHardware := oci.ParseAnnotationsBool(ctx, spec.Annotations, shimannotations.NoSecurityHardware, false)
+
 	// isConfidentialSNP is true when we have a security policy AND real SNP hardware.
 	// This gates SNP-specific HCS document construction (schema V25, confidential boot, etc.).
 	// When no-security-hardware is set, we still plumb the policy but use the standard HCS doc.
-	isConfidentialSNP := sandboxOptions.ConfidentialConfig != nil && !sandboxOptions.NoSecurityHardware
+	isConfidentialSNP := sandboxOptions.ConfidentialConfig != nil && !noSecurityHardware
 
 	// ================== Parse Topology (CPU, Memory, NUMA) options =================
 	// ===============================================================================
@@ -336,19 +338,14 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 
 	// Determine if this is a confidential VM early, as it affects boot options parsing
 	securityPolicy := oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicy, "")
-	noSecurityHardware := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.NoSecurityHardware, false)
 	if len(securityPolicy) > 0 {
 		sandboxOptions.ConfidentialConfig = &ConfidentialConfig{
 			SecurityPolicy:         securityPolicy,
 			SecurityPolicyEnforcer: oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicyEnforcer, "rego"),
 			UvmReferenceInfoFile:   oci.ParseAnnotationsString(annotations, shimannotations.LCOWReferenceInfoFile, vmutils.DefaultUVMReferenceInfoFile),
 		}
-		sandboxOptions.NoSecurityHardware = noSecurityHardware
 
-		log.G(ctx).WithFields(logrus.Fields{
-			"securityPolicy":     securityPolicy,
-			"noSecurityHardware": noSecurityHardware,
-		}).Debug("determined confidential VM mode")
+		log.G(ctx).Debug("found security policy")
 	}
 
 	// Default for enable_scratch_encryption is false for non-confidential VMs,

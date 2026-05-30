@@ -22,11 +22,6 @@ type SandboxOptions struct {
 	// FullyPhysicallyBacked indicates all memory allocations are backed by physical memory.
 	FullyPhysicallyBacked bool
 
-	// NoSecurityHardware indicates that SNP hardware is not available. When true,
-	// the security policy is still plumbed to the GCS but the HCS document uses the
-	// standard (non-SNP) format.
-	NoSecurityHardware bool
-
 	// ConfidentialConfig carries confidential computing fields that are not
 	// part of the HCS document but are needed for confidential VM setup.
 	ConfidentialConfig *ConfidentialConfig

@@ -1173,9 +1173,6 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 				if sandboxOpts.ConfidentialConfig.SecurityPolicyEnforcer != "rego" {
 					t.Errorf("expected security policy enforcer 'rego', got %q", sandboxOpts.ConfidentialConfig.SecurityPolicyEnforcer)
 				}
-				if !sandboxOpts.NoSecurityHardware {
-					t.Error("expected NoSecurityHardware to be true")
-				}
 				// HCS doc should use standard schema (V21), not SNP schema (V25)
 				if doc.SchemaVersion.Major != 2 || doc.SchemaVersion.Minor != 1 {
 					t.Errorf("expected schema V2.1 for no-security-hardware, got V%d.%d", doc.SchemaVersion.Major, doc.SchemaVersion.Minor)
