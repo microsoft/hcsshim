@@ -1,0 +1,11 @@
+{
+  "keys": [
+    {
+      "crv": "P-384",
+      "kid": "a7ad3b7729516ca443fa472a0f2faa4a984ee3da7eafd17f98dcffbac4a6a10f",
+      "kty": "EC",
+      "x": "m0kQ1A_uqHWuP9fdGSKatSq2brcAJ6-q3aZ5P35wjbgtNnlm2u-NLF1qM-yC4I2n",
+      "y": "J9cJFrdWvUf6PCMkrWFTgB16uEq4mSMCI4NPVytnwYX6xNnuJ2GTrPtafKYg1VNi"
+    }
+  ]
+}
