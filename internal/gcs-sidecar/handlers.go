@@ -585,10 +585,26 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 
 					payload := settings.Settings
 					if len(keptNames) != len(requestedNames) {
-						// Subset kept. Trim each source's provider list to
-						// only the allowed names, then re-encode for the
-						// inbox GCS. Empty sources are preserved to keep the
-						// shape stable; inbox GCS handles them as no-ops.
+						// Subset kept. Surface the drop so operators have a
+						// breadcrumb — under allow_log_provider_dropping the
+						// pod boots silently, and forwardlogs may itself be
+						// off, so without this warning the trim is invisible.
+						dropped := make([]string, 0, len(requestedNames)-len(keptNames))
+						for _, name := range requestedNames {
+							if _, ok := keepSet[name]; !ok {
+								dropped = append(dropped, name)
+							}
+						}
+						log.G(req.ctx).WithFields(map[string]interface{}{
+							"requested": requestedNames,
+							"kept":      keptNames,
+							"dropped":   dropped,
+						}).Warn("log providers trimmed by policy (allow_log_provider_dropping)")
+
+						// Trim each source's provider list to only the
+						// allowed names, then re-encode for the inbox GCS.
+						// Empty sources are preserved to keep the shape
+						// stable; inbox GCS handles them as no-ops.
 						trimmed := logSources
 						for i := range trimmed.LogConfig.Sources {
 							src := &trimmed.LogConfig.Sources[i]
