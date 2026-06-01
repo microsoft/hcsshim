@@ -4,7 +4,6 @@
 package bridge
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -603,7 +602,11 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 						dropped = append(dropped, name)
 					}
 
-					payload := settings.Settings
+					// Trim happens in-place on the parsed structure so we can
+					// hand it to UpdateLogSourcesFromInfo without a redundant
+					// base64-decode + JSON-unmarshal round-trip (we already
+					// decoded above for enforcement).
+					trimmed := logSources
 					if len(dropped) > 0 {
 						// Surface the drop so operators have a breadcrumb —
 						// under allow_log_provider_dropping the pod boots
@@ -616,10 +619,8 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 						}).Warn("log providers trimmed by policy (allow_log_provider_dropping)")
 
 						// Trim each source's provider list to only the
-						// allowed names, then re-encode for the inbox GCS.
-						// Empty sources are preserved to keep the shape
-						// stable; inbox GCS handles them as no-ops.
-						trimmed := logSources
+						// allowed names. Empty sources are preserved to keep
+						// the shape stable; inbox GCS handles them as no-ops.
 						for i := range trimmed.LogConfig.Sources {
 							src := &trimmed.LogConfig.Sources[i]
 							filtered := make([]etw.EtwProvider, 0, len(src.Providers))
@@ -630,17 +631,12 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 							}
 							src.Providers = filtered
 						}
-						trimmedJSON, err := json.Marshal(trimmed)
-						if err != nil {
-							return fmt.Errorf("failed to marshal trimmed log sources: %w", err)
-						}
-						payload = base64.StdEncoding.EncodeToString(trimmedJSON)
 					}
 
 					// Apply GUID resolution (and any other inbox-GCS prep)
 					// against the policy-trimmed payload and hand off to
 					// inbox GCS.
-					allowedLogSources, err := etw.UpdateLogSources(payload, false, true)
+					allowedLogSources, err := etw.UpdateLogSourcesFromInfo(trimmed, false, true)
 					if err != nil {
 						return fmt.Errorf("failed to update log sources: %w", err)
 					}
