@@ -240,7 +240,7 @@ func ociEnvToProcessParamEnv(envs []string) map[string]string {
 func rewriteExecRequest(req *request, r prot.ContainerExecuteProcess, params hcsschema.ProcessParameters) (*request, error) {
 	r.Settings.ProcessParameters.Value = &params
 
-	buf, err := json.Marshal(r)
+	buf, err := json.Marshal(&r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal updated exec request: %w", err)
 	}
