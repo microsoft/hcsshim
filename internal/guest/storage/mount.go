@@ -127,6 +127,7 @@ func UnmountPath(ctx context.Context, target string, removeTarget bool) (err err
 
 	if _, err := osStat(target); err != nil {
 		if os.IsNotExist(err) {
+			log.G(ctx).WithField("target", target).Warnf("UnmountPath called for non-existent path")
 			return nil
 		}
 		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
