@@ -84,3 +84,29 @@ func TestLockDown_StickyAgainstSetConfidentialOptions(t *testing.T) {
 		t.Errorf("after LockDown + SetConfidentialOptions: enforcer was replaced; got %T, want ClosedDoor", opts.PolicyEnforcer)
 	}
 }
+
+// TestLockDown_StickyFromBootClosedDoor covers the boot-time case the
+// sidecar actually hits: the enforcer is already a ClosedDoor instance (the
+// PSP fail-close default in cmd/gcs-sidecar/main.go) and PolicyEnforcerSet
+// is still false because no user policy has been loaded yet. LockDown must
+// still flip PolicyEnforcerSet so that a follow-up SetConfidentialOptions
+// is refused, otherwise a permissive policy could replace the closed door.
+func TestLockDown_StickyFromBootClosedDoor(t *testing.T) {
+	opts := NewSecurityOptions(&ClosedDoorSecurityPolicyEnforcer{}, false, "", io.Discard)
+	ctx := context.Background()
+
+	opts.LockDown(ctx)
+
+	if !opts.PolicyEnforcerSet {
+		t.Fatal("expected PolicyEnforcerSet=true after LockDown on a boot-time ClosedDoor enforcer; otherwise SetConfidentialOptions would still accept a fresh policy")
+	}
+
+	err := opts.SetConfidentialOptions(ctx, "", "", "")
+	if err == nil {
+		t.Fatal("expected SetConfidentialOptions to refuse after LockDown on a boot-time ClosedDoor enforcer")
+	}
+
+	if _, ok := opts.PolicyEnforcer.(*ClosedDoorSecurityPolicyEnforcer); !ok {
+		t.Errorf("after LockDown + SetConfidentialOptions: enforcer was replaced; got %T, want ClosedDoor", opts.PolicyEnforcer)
+	}
+}
