@@ -539,6 +539,15 @@ func (policy *regoEnforcer) EnforceRWDeviceMountPolicy(ctx context.Context, targ
 	return err
 }
 
+func (policy *regoEnforcer) EnforceMountBlockDevicePolicy(ctx context.Context, target string) error {
+	input := inputData{
+		"target": target,
+	}
+
+	_, err := policy.enforce(ctx, "mount_blockdev", input)
+	return err
+}
+
 func (policy *regoEnforcer) EnforceOverlayMountPolicy(ctx context.Context, containerID string, layerPaths []string, target string) error {
 	input := inputData{
 		"containerID": containerID,
@@ -827,6 +836,15 @@ func (policy *regoEnforcer) EnforceRWDeviceUnmountPolicy(ctx context.Context, un
 	}
 
 	_, err := policy.enforce(ctx, "rw_unmount_device", input)
+	return err
+}
+
+func (policy *regoEnforcer) EnforceUnmountBlockDevicePolicy(ctx context.Context, unmountTarget string) error {
+	input := inputData{
+		"unmountTarget": unmountTarget,
+	}
+
+	_, err := policy.enforce(ctx, "unmount_blockdev", input)
 	return err
 }
 

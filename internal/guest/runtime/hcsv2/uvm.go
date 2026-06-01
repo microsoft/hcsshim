@@ -1334,7 +1334,11 @@ func (h *Host) modifyMappedVirtualDisk(
 					)
 				}
 			}
-			if mvd.ReadOnly {
+			if mvd.BlockDev {
+				if err = securityPolicy.EnforceMountBlockDevicePolicy(ctx, mvd.MountPath); err != nil {
+					return errors.Wrapf(err, "creating blockdev symlink at %s (-> scsi controller %d lun %d) denied by policy", mvd.MountPath, mvd.Controller, mvd.Lun)
+				}
+			} else if mvd.ReadOnly {
 				var deviceHash string
 				if verityInfo != nil {
 					deviceHash = verityInfo.RootDigest
@@ -1399,7 +1403,11 @@ func (h *Host) modifyMappedVirtualDisk(
 		return nil
 	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
-			if mvd.ReadOnly {
+			if mvd.BlockDev {
+				if err = securityPolicy.EnforceUnmountBlockDevicePolicy(ctx, mvd.MountPath); err != nil {
+					return fmt.Errorf("removing blockdev symlink at %s (-> scsi controller %d lun %d) denied by policy: %w", mvd.MountPath, mvd.Controller, mvd.Lun, err)
+				}
+			} else if mvd.ReadOnly {
 				if err = securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
 					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
 				}
