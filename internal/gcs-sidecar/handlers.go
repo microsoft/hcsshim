@@ -583,18 +583,32 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 						keepSet[name] = struct{}{}
 					}
 
-					payload := settings.Settings
-					if len(keptNames) != len(requestedNames) {
-						// Subset kept. Surface the drop so operators have a
-						// breadcrumb — under allow_log_provider_dropping the
-						// pod boots silently, and forwardlogs may itself be
-						// off, so without this warning the trim is invisible.
-						dropped := make([]string, 0, len(requestedNames)-len(keptNames))
-						for _, name := range requestedNames {
-							if _, ok := keepSet[name]; !ok {
-								dropped = append(dropped, name)
-							}
+					// Detect trimming by scanning requested names against
+					// keepSet. We cannot use len(kept) != len(requested):
+					// the rego enforcer returns providers_to_keep via a set
+					// (see getProvidersToKeep → keepSet.toArray()), so a
+					// duplicate-name request like [A, A, B] returns [A, B]
+					// even when nothing was dropped, which would otherwise
+					// trip a false-positive warning and a needless re-marshal.
+					dropped := make([]string, 0)
+					seenDropped := make(map[string]struct{})
+					for _, name := range requestedNames {
+						if _, ok := keepSet[name]; ok {
+							continue
 						}
+						if _, dup := seenDropped[name]; dup {
+							continue
+						}
+						seenDropped[name] = struct{}{}
+						dropped = append(dropped, name)
+					}
+
+					payload := settings.Settings
+					if len(dropped) > 0 {
+						// Surface the drop so operators have a breadcrumb —
+						// under allow_log_provider_dropping the pod boots
+						// silently, and forwardlogs may itself be off, so
+						// without this warning the trim is invisible.
 						log.G(req.ctx).WithFields(map[string]interface{}{
 							"requested": requestedNames,
 							"kept":      keptNames,

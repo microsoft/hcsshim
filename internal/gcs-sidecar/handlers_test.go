@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	"github.com/sirupsen/logrus"
 )
 
 // buildModifySettingsRequest creates a serialized ModifySettings request message
@@ -520,5 +521,67 @@ func TestModifyServiceSettings_LogForward_PolicyDropping_TrimsForwardedPayload(t
 	}
 	if sawDropped {
 		t.Errorf("expected dropped provider %q to be absent from forwarded payload", dropped)
+	}
+}
+
+// captureHook is a tiny logrus hook that records every entry it sees.
+// Used by TestModifyServiceSettings_LogForward_PolicyDropping_NoFalsePositive
+// to assert the "log providers trimmed by policy" Warn is *not* emitted when
+// the only reason kept and requested differ is set-deduplication.
+type captureHook struct {
+	entries []*logrus.Entry
+}
+
+func (h *captureHook) Levels() []logrus.Level { return logrus.AllLevels }
+func (h *captureHook) Fire(e *logrus.Entry) error {
+	h.entries = append(h.entries, e)
+	return nil
+}
+
+// TestModifyServiceSettings_LogForward_PolicyDropping_NoFalsePositive guards
+// against a false-positive trim warning + needless re-marshal when the
+// enforcer returns a deduplicated set. The rego implementation builds
+// providers_to_keep via a stringSet (see getProvidersToKeep), so a request
+// with duplicate provider names like [A, A] comes back as [A] even when
+// nothing was actually dropped. Detection must be based on "some requested
+// name is missing from keepSet", not len(kept) != len(requested).
+func TestModifyServiceSettings_LogForward_PolicyDropping_NoFalsePositive(t *testing.T) {
+	name := "microsoft.windows.hyperv.compute"
+	enforcer := &droppingLogProviderEnforcer{
+		allowed: map[string]struct{}{name: {}},
+	}
+	b := newTestBridge(enforcer)
+
+	// Two copies of the same allowed provider. dedup in the enforcer means
+	// kept=[name] while requested=[name, name]; the lengths differ but the
+	// set of requested names is fully covered, so this is NOT a trim.
+	payload := buildLogForwardServiceRequest(t, name, name)
+	req := newModifyServiceSettingsRequest(payload)
+
+	hook := &captureHook{}
+	logrus.AddHook(hook)
+	defer func() {
+		// logrus has no public RemoveHook; reset all hooks to clear ours.
+		logrus.StandardLogger().ReplaceHooks(logrus.LevelHooks{})
+	}()
+
+	if err := b.modifyServiceSettings(req); err != nil {
+		t.Fatalf("modifyServiceSettings under dropping enforcer (dedup) returned error: %v", err)
+	}
+
+	// Must forward to GCS.
+	select {
+	case <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for request to be forwarded to GCS")
+	}
+
+	// Must NOT have emitted the trim warning: nothing was actually dropped.
+	for _, e := range hook.entries {
+		if e.Level == logrus.WarnLevel &&
+			e.Message == "log providers trimmed by policy (allow_log_provider_dropping)" {
+			t.Errorf("false-positive trim warning emitted on a dedup-only mismatch (kept=%v requested=%v dropped=%v)",
+				e.Data["kept"], e.Data["requested"], e.Data["dropped"])
+		}
 	}
 }
