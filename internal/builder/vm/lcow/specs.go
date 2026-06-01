@@ -65,6 +65,13 @@ func BuildSandboxConfig(
 		return nil, nil, fmt.Errorf("failed to parse sandbox options: %w", err)
 	}
 
+	noSecurityHardware := oci.ParseAnnotationsBool(ctx, spec.Annotations, shimannotations.NoSecurityHardware, false)
+
+	// isConfidentialSNP is true when we have a security policy AND real SNP hardware.
+	// This gates SNP-specific HCS document construction (schema V25, confidential boot, etc.).
+	// When no-security-hardware is set, we still plumb the policy but use the standard HCS doc.
+	isConfidentialSNP := sandboxOptions.ConfidentialConfig != nil && !noSecurityHardware
+
 	// ================== Parse Topology (CPU, Memory, NUMA) options =================
 	// ===============================================================================
 
@@ -89,7 +96,7 @@ func BuildSandboxConfig(
 	// Parse NUMA settings only for non-confidential VMs.
 	var numa *hcsschema.Numa
 	var numaProcessors *hcsschema.NumaProcessors
-	if sandboxOptions.ConfidentialConfig == nil {
+	if !isConfidentialSNP {
 		numa, numaProcessors, err = parseNUMAOptions(
 			ctx,
 			spec.Annotations,
@@ -121,11 +128,11 @@ func BuildSandboxConfig(
 	// ================== Parse Boot options =========================================
 	// ===============================================================================
 
-	// For confidential VMs, we don't use the standard boot options - the UEFI secure boot
+	// For SNP confidential VMs, we don't use the standard boot options - the UEFI secure boot
 	// settings will be set by parseConfidentialOptions.
 	bootOptions := &hcsschema.Chipset{}
 	var rootFsFullPath string
-	if sandboxOptions.ConfidentialConfig == nil {
+	if !isConfidentialSNP {
 		bootOptions, rootFsFullPath, err = parseBootOptions(ctx, opts, spec.Annotations)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to parse boot options: %w", err)
@@ -141,9 +148,9 @@ func BuildSandboxConfig(
 		spec.Annotations,
 		spec.Devices,
 		rootFsFullPath,
-		numa != nil && numaProcessors != nil,     // isNumaEnabled
-		sandboxOptions.FullyPhysicallyBacked,     // isFullyPhysicallyBacked
-		sandboxOptions.ConfidentialConfig != nil, // isConfidential
+		numa != nil && numaProcessors != nil, // isNumaEnabled
+		sandboxOptions.FullyPhysicallyBacked, // isFullyPhysicallyBacked
+		isConfidentialSNP,                    // isConfidential
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse device options: %w", err)
@@ -156,7 +163,7 @@ func BuildSandboxConfig(
 	hvSocketConfig, comPorts, err := setAdditionalOptions(
 		ctx,
 		spec.Annotations,
-		sandboxOptions.ConfidentialConfig != nil, // isConfidential
+		isConfidentialSNP, // isConfidential
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse additional parameters: %w", err)
@@ -169,7 +176,7 @@ func BuildSandboxConfig(
 	var securitySettings *hcsschema.SecuritySettings
 	var guestState *hcsschema.GuestState
 	var filesToCleanOnError []string
-	if sandboxOptions.ConfidentialConfig != nil {
+	if isConfidentialSNP {
 		bootOptions,
 			securitySettings,
 			guestState,
@@ -204,9 +211,9 @@ func BuildSandboxConfig(
 	// ===============================================================================
 
 	// Build the kernel command line after all options are parsed.
-	// For confidential VMs (SNP mode), kernel args are embedded in VMGS file, so skip this.
+	// For SNP confidential VMs, kernel args are embedded in VMGS file, so skip this.
 	var kernelArgs string
-	if sandboxOptions.ConfidentialConfig == nil {
+	if !isConfidentialSNP {
 		kernelArgs, err = buildKernelArgs(
 			ctx,
 			opts,
@@ -238,7 +245,7 @@ func BuildSandboxConfig(
 	// Use Schema V21 for non-confidential cases.
 	// Use Schema V25 for confidential cases.
 	schema := schemaversion.SchemaV21()
-	if sandboxOptions.ConfidentialConfig != nil {
+	if isConfidentialSNP {
 		schema = schemaversion.SchemaV25()
 	}
 
@@ -331,18 +338,14 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 
 	// Determine if this is a confidential VM early, as it affects boot options parsing
 	securityPolicy := oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicy, "")
-	noSecurityHardware := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.NoSecurityHardware, false)
-	if securityPolicy != "" && !noSecurityHardware {
+	if len(securityPolicy) > 0 {
 		sandboxOptions.ConfidentialConfig = &ConfidentialConfig{
 			SecurityPolicy:         securityPolicy,
-			SecurityPolicyEnforcer: oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicyEnforcer, ""),
+			SecurityPolicyEnforcer: oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicyEnforcer, "rego"),
 			UvmReferenceInfoFile:   oci.ParseAnnotationsString(annotations, shimannotations.LCOWReferenceInfoFile, vmutils.DefaultUVMReferenceInfoFile),
 		}
 
-		log.G(ctx).WithFields(logrus.Fields{
-			"securityPolicy":     securityPolicy,
-			"noSecurityHardware": noSecurityHardware,
-		}).Debug("determined confidential VM mode")
+		log.G(ctx).Debug("found security policy")
 	}
 
 	// Default for enable_scratch_encryption is false for non-confidential VMs,
