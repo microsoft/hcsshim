@@ -19,6 +19,7 @@ type securityPolicyInternal struct {
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
+	AllowLogProviderDropping         bool
 }
 
 // Internal version of Windows SecurityPolicy
@@ -32,6 +33,7 @@ type securityPolicyWindowsInternal struct {
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
+	AllowLogProviderDropping         bool
 }
 
 type securityPolicyFragment struct {
@@ -97,6 +99,7 @@ func newSecurityPolicyInternal(
 	allowDropEnvironmentVariables bool,
 	allowUnencryptedScratch bool,
 	allowDropCapabilities bool,
+	allowLogProviderDropping bool,
 ) (*securityPolicyInternal, error) {
 	containersInternal, err := containersToInternal(containers)
 	if err != nil {
@@ -113,6 +116,7 @@ func newSecurityPolicyInternal(
 		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowDropCapabilities,
+		AllowLogProviderDropping:         allowLogProviderDropping,
 	}, nil
 }
 

@@ -4,6 +4,7 @@
 package bridge
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -546,43 +547,70 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 			case guestrequest.RPCModifyServiceSettings, guestrequest.RPCStartLogForwarding, guestrequest.RPCStopLogForwarding:
 				log.G(req.ctx).Tracef("%v request received for LogForwardService, proceeding with policy enforcement for log sources", settings.RPCType)
 				if settings.Settings != "" {
-					// Decode the base64-encoded log sources config
+					// Decode the base64-encoded log sources config so we can
+					// enforce policy on the requested provider list.
 					logSources, err := etw.DecodeAndUnmarshalLogSources(settings.Settings)
 					if err != nil {
 						return fmt.Errorf("failed to decode log sources: %w", err)
 					}
 
-					// Filter providers against policy — keep only those allowed
-					var filteredSources []etw.Source
+					// Collect every requested provider name and ask the
+					// enforcer to validate them as a batch. The enforcer's
+					// behaviour depends on allow_log_provider_dropping in the
+					// active policy:
+					//   - false (default, fail-close): any disallowed provider
+					//     causes the call to be denied.
+					//   - true: disallowed providers are silently dropped and
+					//     the kept subset is returned for forwarding.
+					var requestedNames []string
 					for _, source := range logSources.LogConfig.Sources {
-						var allowedProviders []etw.EtwProvider
 						for _, provider := range source.Providers {
-							if err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogProviderPolicy(
-								req.ctx, provider.ProviderName); err != nil {
-								log.G(req.ctx).Tracef("Log provider %q denied by policy", provider.ProviderName)
-								continue
-							}
-							allowedProviders = append(allowedProviders, provider)
-						}
-						if len(allowedProviders) > 0 {
-							filteredSources = append(filteredSources, etw.Source{
-								Type:      source.Type,
-								Providers: allowedProviders,
-							})
+							requestedNames = append(requestedNames, provider.ProviderName)
 						}
 					}
 
-					filteredLogSources := etw.LogSourcesInfo{
-						LogConfig: etw.LogConfig{Sources: filteredSources},
-					}
-
-					// Re-encode and apply GUID resolution
-					encodedFiltered, err := etw.MarshalAndEncodeLogSources(filteredLogSources)
+					keptNames, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogProviderPolicy(
+						req.ctx, requestedNames)
 					if err != nil {
-						return fmt.Errorf("failed to encode filtered log sources: %w", err)
+						b.hostState.securityOptions.LockDown(req.ctx)
+						return fmt.Errorf("log providers denied by policy: %w", err)
 					}
 
-					allowedLogSources, err := etw.UpdateLogSources(encodedFiltered, false, true)
+					// Build a quick lookup for the kept set so we can trim the
+					// LogSourcesInfo to only those providers the policy allowed.
+					keepSet := make(map[string]struct{}, len(keptNames))
+					for _, name := range keptNames {
+						keepSet[name] = struct{}{}
+					}
+
+					payload := settings.Settings
+					if len(keptNames) != len(requestedNames) {
+						// Subset kept. Trim each source's provider list to
+						// only the allowed names, then re-encode for the
+						// inbox GCS. Empty sources are preserved to keep the
+						// shape stable; inbox GCS handles them as no-ops.
+						trimmed := logSources
+						for i := range trimmed.LogConfig.Sources {
+							src := &trimmed.LogConfig.Sources[i]
+							filtered := make([]etw.EtwProvider, 0, len(src.Providers))
+							for _, p := range src.Providers {
+								if _, ok := keepSet[p.ProviderName]; ok {
+									filtered = append(filtered, p)
+								}
+							}
+							src.Providers = filtered
+						}
+						trimmedJSON, err := json.Marshal(trimmed)
+						if err != nil {
+							return fmt.Errorf("failed to marshal trimmed log sources: %w", err)
+						}
+						payload = base64.StdEncoding.EncodeToString(trimmedJSON)
+					}
+
+					// Apply GUID resolution (and any other inbox-GCS prep)
+					// against the policy-trimmed payload and hand off to
+					// inbox GCS.
+					allowedLogSources, err := etw.UpdateLogSources(payload, false, true)
 					if err != nil {
 						return fmt.Errorf("failed to update log sources: %w", err)
 					}

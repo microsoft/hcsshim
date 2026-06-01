@@ -174,9 +174,9 @@ func applyGUIDPolicy(sources []Source, includeGUIDs bool) ([]Source, error) {
 	return stripRedundantGUIDs(sources)
 }
 
-// MarshalAndEncodeLogSources marshals the given LogSourcesInfo to JSON and encodes it as a base64 string.
+// marshalAndEncodeLogSources marshals the given LogSourcesInfo to JSON and encodes it as a base64 string.
 // On error, it logs and returns the original fallback string.
-func MarshalAndEncodeLogSources(logCfg LogSourcesInfo) (string, error) {
+func marshalAndEncodeLogSources(logCfg LogSourcesInfo) (string, error) {
 	jsonBytes, err := json.Marshal(logCfg)
 	if err != nil {
 		return "", fmt.Errorf("error marshalling log config: %w", err)
@@ -208,7 +208,7 @@ func UpdateLogSources(base64EncodedJSONLogConfig string, useDefaultLogSources bo
 		return "", fmt.Errorf("failed to apply GUID policy: %w", err)
 	}
 
-	result, err := MarshalAndEncodeLogSources(resultLogCfg)
+	result, err := marshalAndEncodeLogSources(resultLogCfg)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal and encode log sources: %w", err)
 	}

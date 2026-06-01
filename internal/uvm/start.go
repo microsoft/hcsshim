@@ -289,11 +289,28 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	if uvm.OS() == "windows" && uvm.logForwardingEnabled {
 		// If the UVM is Windows and log forwarding is enabled, set the log sources
 		// and start the log forwarding service.
+		//
+		// For confidential (CWCOW) UVMs, a failure here may be a policy
+		// violation (e.g. log_provider denied by the rego). In that case we
+		// must fail-close: return the error so the deferred
+		// uvm.hcsSystem.Terminate above tears the UVM down rather than
+		// leaving it half-initialised with a known-violating log
+		// configuration. For non-confidential WCOW, log-forwarding is
+		// best-effort (transient ETW issues, missing providers, etc. must
+		// not abort UVM start), so preserve the original log-and-continue
+		// behaviour.
+		failClose := uvm.HasConfidentialPolicy()
 		if err := uvm.SetLogSources(ctx); err != nil {
 			e.WithError(err).Error("failed to set log sources")
+			if failClose {
+				return fmt.Errorf("failed to set log sources: %w", err)
+			}
 		}
 		if err := uvm.StartLogForwarding(ctx); err != nil {
 			e.WithError(err).Error("failed to start log forwarding")
+			if failClose {
+				return fmt.Errorf("failed to start log forwarding: %w", err)
+			}
 		}
 	}
 

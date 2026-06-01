@@ -1517,76 +1517,84 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 
 // Tests for log provider enforcement
 
-func Test_Rego_EnforceLogProviderPolicy_Allowed_Windows(t *testing.T) {
+// newLogProviderTestPolicy builds a Rego policy whose allowed_log_providers
+// list contains the given providers and returns the compiled enforcer.
+// Pass no providers to get an empty allow-list.
+//
+// allow_log_provider_dropping is left unset so the test exercises the
+// default fail-close mode. Use newLogProviderTestPolicyWithDropping to flip
+// the mode.
+func newLogProviderTestPolicy(t *testing.T, allowedProviders ...string) *regoEnforcer {
+	t.Helper()
+	return newLogProviderTestPolicyWithDropping(t, false, allowedProviders...)
+}
+
+// newLogProviderTestPolicyWithDropping is the more general helper used by the
+// mode-specific tests. It compiles a Rego policy that defines
+// allowed_log_providers, sets allow_log_provider_dropping to dropping, and
+// routes log_provider through the framework rule.
+func newLogProviderTestPolicyWithDropping(t *testing.T, dropping bool, allowedProviders ...string) *regoEnforcer {
+	t.Helper()
+	var listLines string
+	for _, p := range allowedProviders {
+		listLines += fmt.Sprintf("\t\t%q,\n", p)
+	}
 	rego := fmt.Sprintf(`package policy
 	api_version := "%s"
 	framework_version := "%s"
 
+	allow_log_provider_dropping := %t
+
 	allowed_log_providers := [
-		"microsoft.windows.hyperv.compute",
-		"microsoft-windows-guest-network-service",
-	]
+%s	]
 
 	log_provider := data.framework.log_provider
-	`, apiVersion, frameworkVersion)
+	`, apiVersion, frameworkVersion, dropping, listLines)
 
 	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
 	if err != nil {
 		t.Fatalf("failed to create policy: %v", err)
 	}
+	return policy
+}
 
-	ctx := context.Background()
-	err = policy.EnforceLogProviderPolicy(ctx, "microsoft.windows.hyperv.compute")
+func Test_Rego_EnforceLogProviderPolicy_Allowed_Windows(t *testing.T) {
+	policy := newLogProviderTestPolicy(t,
+		"microsoft.windows.hyperv.compute",
+		"microsoft-windows-guest-network-service",
+	)
+
+	kept, err := policy.EnforceLogProviderPolicy(context.Background(),
+		[]string{"microsoft.windows.hyperv.compute"})
 	if err != nil {
 		t.Errorf("expected allowed provider to pass: %v", err)
+	}
+	if len(kept) != 1 || kept[0] != "microsoft.windows.hyperv.compute" {
+		t.Errorf("expected kept=[microsoft.windows.hyperv.compute]; got %v", kept)
 	}
 }
 
 func Test_Rego_EnforceLogProviderPolicy_Denied_Windows(t *testing.T) {
-	rego := fmt.Sprintf(`package policy
-	api_version := "%s"
-	framework_version := "%s"
+	policy := newLogProviderTestPolicy(t, "microsoft.windows.hyperv.compute")
 
-	allowed_log_providers := [
-		"microsoft.windows.hyperv.compute",
-	]
-
-	log_provider := data.framework.log_provider
-	`, apiVersion, frameworkVersion)
-
-	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
-	if err != nil {
-		t.Fatalf("failed to create policy: %v", err)
-	}
-
-	ctx := context.Background()
-	err = policy.EnforceLogProviderPolicy(ctx, "some-malicious-provider")
+	_, err := policy.EnforceLogProviderPolicy(context.Background(),
+		[]string{"some-malicious-provider"})
 	if err == nil {
 		t.Errorf("expected unknown provider to be denied")
 	}
 }
 
 func Test_Rego_EnforceLogProviderPolicy_CaseInsensitive_Windows(t *testing.T) {
-	rego := fmt.Sprintf(`package policy
-	api_version := "%s"
-	framework_version := "%s"
+	policy := newLogProviderTestPolicy(t, "microsoft.windows.hyperv.compute")
 
-	allowed_log_providers := [
-		"microsoft.windows.hyperv.compute",
-	]
-
-	log_provider := data.framework.log_provider
-	`, apiVersion, frameworkVersion)
-
-	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
-	if err != nil {
-		t.Fatalf("failed to create policy: %v", err)
-	}
-
-	ctx := context.Background()
-	err = policy.EnforceLogProviderPolicy(ctx, "Microsoft.Windows.Hyperv.Compute")
+	kept, err := policy.EnforceLogProviderPolicy(context.Background(),
+		[]string{"Microsoft.Windows.Hyperv.Compute"})
 	if err != nil {
 		t.Errorf("expected case-insensitive match to pass: %v", err)
+	}
+	// Rego preserves the input casing; we just confirm the name survived.
+	if len(kept) != 1 || kept[0] != "Microsoft.Windows.Hyperv.Compute" {
+		t.Errorf("expected kept=[Microsoft.Windows.Hyperv.Compute]; got %v", kept)
 	}
 }
 
@@ -1597,21 +1605,42 @@ func Test_Rego_EnforceLogProviderPolicy_OpenDoor_AllowsAll_Windows(t *testing.T)
 	}
 
 	ctx := context.Background()
-	err = policy.EnforceLogProviderPolicy(ctx, "any-provider-at-all")
+	kept, err := policy.EnforceLogProviderPolicy(ctx, []string{"any-provider-at-all"})
 	if err != nil {
 		t.Errorf("open door should allow any provider: %v", err)
+	}
+	if len(kept) != 1 || kept[0] != "any-provider-at-all" {
+		t.Errorf("open door should keep the requested provider; got %v", kept)
 	}
 }
 
 func Test_Rego_EnforceLogProviderPolicy_EmptyAllowList_DeniesAll_Windows(t *testing.T) {
+	policy := newLogProviderTestPolicy(t)
+
+	_, err := policy.EnforceLogProviderPolicy(context.Background(),
+		[]string{"microsoft.windows.hyperv.compute"})
+	if err == nil {
+		t.Errorf("expected empty allow list to deny all providers")
+	}
+}
+
+// Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows pins
+// the non-regression behaviour for policies authored before log_provider was
+// introduced (api.rego entry: introducedVersion=0.11.0, default_results.allowed=true).
+// Such policies omit allowed_log_providers entirely; EnforceLogProviderPolicy
+// must return the input list unchanged with no error so existing CWCOW/WCOW
+// policies do not break when the framework gains the new enforcement point.
+func Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows(t *testing.T) {
+	// A pre-feature policy does not define log_provider at all (it was
+	// authored before the rule existed). The version-gated default_results
+	// path only fires when the policy has no rule for the enforcement
+	// point — including `log_provider := data.framework.log_provider`
+	// here would shadow the default and route through the framework rule,
+	// which defaults to deny.
 	rego := fmt.Sprintf(`package policy
-	api_version := "%s"
+	api_version := "0.10.0"
 	framework_version := "%s"
-
-	allowed_log_providers := []
-
-	log_provider := data.framework.log_provider
-	`, apiVersion, frameworkVersion)
+	`, frameworkVersion)
 
 	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
 	if err != nil {
@@ -1619,8 +1648,78 @@ func Test_Rego_EnforceLogProviderPolicy_EmptyAllowList_DeniesAll_Windows(t *test
 	}
 
 	ctx := context.Background()
-	err = policy.EnforceLogProviderPolicy(ctx, "microsoft.windows.hyperv.compute")
+	kept, err := policy.EnforceLogProviderPolicy(ctx,
+		[]string{"any-provider-not-in-any-list"})
+	if err != nil {
+		t.Errorf("expected pre-0.11.0 policy to allow any provider via default_results: %v", err)
+	}
+	// default_results.providers_to_keep is null, so getProvidersToKeep
+	// returns the input list unchanged.
+	if len(kept) != 1 || kept[0] != "any-provider-not-in-any-list" {
+		t.Errorf("expected kept=[any-provider-not-in-any-list]; got %v", kept)
+	}
+}
+
+// Test_Rego_EnforceLogProviderPolicy_EmptyProviderName_Denied_Windows pins
+// the behaviour for the host-scrubbed-unknown-provider edge case: when the
+// providerName is the empty string, no allow-list entry can match (allow-lists
+// never contain ""), so enforcement must deny.
+func Test_Rego_EnforceLogProviderPolicy_EmptyProviderName_Denied_Windows(t *testing.T) {
+	policy := newLogProviderTestPolicy(t, "microsoft.windows.hyperv.compute")
+
+	_, err := policy.EnforceLogProviderPolicy(context.Background(), []string{""})
 	if err == nil {
-		t.Errorf("expected empty allow list to deny all providers")
+		t.Errorf("expected empty providerName to be denied")
+	}
+}
+
+// Test_Rego_EnforceLogProviderPolicy_Dropping_KeepsSubset_Windows exercises
+// the silent-drop mode: when allow_log_provider_dropping := true the call
+// allows even if some requested providers are not on the allow-list, and only
+// the matching subset is returned.
+func Test_Rego_EnforceLogProviderPolicy_Dropping_KeepsSubset_Windows(t *testing.T) {
+	policy := newLogProviderTestPolicyWithDropping(t, true,
+		"microsoft.windows.hyperv.compute",
+		"microsoft-windows-guest-network-service",
+	)
+
+	kept, err := policy.EnforceLogProviderPolicy(context.Background(), []string{
+		"microsoft.windows.hyperv.compute",
+		"some-bogus-provider",
+		"microsoft-windows-guest-network-service",
+	})
+	if err != nil {
+		t.Errorf("dropping mode should allow regardless of unknown providers: %v", err)
+	}
+
+	keptSet := make(map[string]struct{}, len(kept))
+	for _, n := range kept {
+		keptSet[n] = struct{}{}
+	}
+	if _, ok := keptSet["microsoft.windows.hyperv.compute"]; !ok {
+		t.Errorf("expected 'microsoft.windows.hyperv.compute' kept; got %v", kept)
+	}
+	if _, ok := keptSet["microsoft-windows-guest-network-service"]; !ok {
+		t.Errorf("expected 'microsoft-windows-guest-network-service' kept; got %v", kept)
+	}
+	if _, ok := keptSet["some-bogus-provider"]; ok {
+		t.Errorf("expected 'some-bogus-provider' to be dropped; got %v", kept)
+	}
+}
+
+// Test_Rego_EnforceLogProviderPolicy_FailClose_AnyMissDenies_Windows confirms
+// the inverse of the dropping test: with allow_log_provider_dropping := false
+// (default) even one unknown provider in a batch fails the entire call.
+func Test_Rego_EnforceLogProviderPolicy_FailClose_AnyMissDenies_Windows(t *testing.T) {
+	policy := newLogProviderTestPolicyWithDropping(t, false,
+		"microsoft.windows.hyperv.compute",
+	)
+
+	_, err := policy.EnforceLogProviderPolicy(context.Background(), []string{
+		"microsoft.windows.hyperv.compute",
+		"some-bogus-provider",
+	})
+	if err == nil {
+		t.Errorf("fail-close mode should deny when any provider is unknown")
 	}
 }

@@ -5,6 +5,7 @@ package bridge
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -325,5 +327,198 @@ func TestModifySettings_PolicyFragment_TypeAssertionFailure(t *testing.T) {
 	err := b.modifySettings(req)
 	if err == nil {
 		t.Fatal("expected error for empty fragment, got nil")
+	}
+}
+
+// buildLogForwardServiceRequest builds a serialized ServiceModificationRequest
+// for the LogForwardService with the given provider names baked into a
+// base64-encoded LogSourcesInfo payload.
+func buildLogForwardServiceRequest(t *testing.T, providerNames ...string) []byte {
+	t.Helper()
+
+	providers := make([]etw.EtwProvider, 0, len(providerNames))
+	for _, name := range providerNames {
+		providers = append(providers, etw.EtwProvider{ProviderName: name})
+	}
+	info := etw.LogSourcesInfo{
+		LogConfig: etw.LogConfig{
+			Sources: []etw.Source{{
+				Type:      "etw",
+				Providers: providers,
+			}},
+		},
+	}
+	infoBytes, err := json.Marshal(info)
+	if err != nil {
+		t.Fatalf("failed to marshal log sources: %v", err)
+	}
+	encoded := base64.StdEncoding.EncodeToString(infoBytes)
+
+	inner := &guestrequest.LogForwardServiceRPCRequest{
+		RPCType:  guestrequest.RPCModifyServiceSettings,
+		Settings: encoded,
+	}
+	req := prot.ServiceModificationRequest{
+		RequestBase: prot.RequestBase{
+			ContainerID: UVMContainerID,
+			ActivityID:  guid.GUID{},
+		},
+		PropertyType: string(prot.LogForwardService),
+		Settings:     inner,
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+	return b
+}
+
+// newModifyServiceSettingsRequest wraps the given LogForwardService payload
+// in a bridge `request` ready for modifyServiceSettings.
+func newModifyServiceSettingsRequest(payload []byte) *request {
+	return &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifyServiceSettings),
+			Size: uint32(len(payload)) + prot.HdrSize,
+			ID:   1,
+		},
+		activityID: guid.GUID{},
+		message:    payload,
+	}
+}
+
+// TestModifyServiceSettings_LogForward_PolicyAllow_ForwardsToGCS verifies that
+// when every requested provider is allowed by policy, the call succeeds and
+// the (possibly GUID-resolved) request is forwarded to inbox GCS.
+func TestModifyServiceSettings_LogForward_PolicyAllow_ForwardsToGCS(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	// Use a provider that is in the known etw_map so UpdateLogSources's GUID
+	// resolution succeeds.
+	payload := buildLogForwardServiceRequest(t, "microsoft.windows.hyperv.compute")
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err != nil {
+		t.Fatalf("modifyServiceSettings with allowed provider returned error: %v", err)
+	}
+
+	select {
+	case <-b.sendToGCSCh:
+		// Forwarded to GCS as expected.
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for request to be forwarded to GCS")
+	}
+}
+
+// TestModifyServiceSettings_LogForward_PolicyDeny_ReturnsErrorAndLocksDown
+// verifies that when any requested provider is denied by policy, the call
+// fails (no forward to GCS) and the sidecar enforcer is locked down to
+// closed-door so subsequent requests also deny.
+func TestModifyServiceSettings_LogForward_PolicyDeny_ReturnsErrorAndLocksDown(t *testing.T) {
+	b := newTestBridge(&securitypolicy.ClosedDoorSecurityPolicyEnforcer{})
+
+	payload := buildLogForwardServiceRequest(t, "microsoft.windows.hyperv.compute")
+	req := newModifyServiceSettingsRequest(payload)
+
+	err := b.modifyServiceSettings(req)
+	if err == nil {
+		t.Fatal("expected modifyServiceSettings to fail under ClosedDoor enforcer")
+	}
+
+	// The request must NOT have been forwarded to GCS.
+	select {
+	case fwd := <-b.sendToGCSCh:
+		t.Fatalf("denied request must not be forwarded to GCS: %+v", fwd)
+	default:
+		// Good.
+	}
+
+	// Enforcer should now be locked down. (ClosedDoor was already installed;
+	// LockDown's idempotency check keeps the same instance, so we verify the
+	// type rather than identity.)
+	if _, ok := b.hostState.securityOptions.PolicyEnforcer.(*securitypolicy.ClosedDoorSecurityPolicyEnforcer); !ok {
+		t.Errorf("after deny: expected ClosedDoor enforcer, got %T", b.hostState.securityOptions.PolicyEnforcer)
+	}
+}
+
+// droppingLogProviderEnforcer is a test stub that approves only the configured
+// allow-list of provider names; any others are silently dropped from the
+// returned subset. It mirrors the regoEnforcer's behaviour under
+// allow_log_provider_dropping := true and never returns an error.
+type droppingLogProviderEnforcer struct {
+	securitypolicy.OpenDoorSecurityPolicyEnforcer
+	allowed map[string]struct{}
+}
+
+func (e *droppingLogProviderEnforcer) EnforceLogProviderPolicy(_ context.Context, providerNames []string) ([]string, error) {
+	kept := make([]string, 0, len(providerNames))
+	for _, name := range providerNames {
+		if _, ok := e.allowed[name]; ok {
+			kept = append(kept, name)
+		}
+	}
+	return kept, nil
+}
+
+// TestModifyServiceSettings_LogForward_PolicyDropping_TrimsForwardedPayload
+// verifies the silent-drop path in the sidecar: when the enforcer returns a
+// strict subset of the requested providers, the call succeeds and the payload
+// forwarded to inbox GCS contains only the kept providers (not the original
+// disallowed ones).
+func TestModifyServiceSettings_LogForward_PolicyDropping_TrimsForwardedPayload(t *testing.T) {
+	kept := "microsoft.windows.hyperv.compute"
+	dropped := "some-bogus-provider"
+	enforcer := &droppingLogProviderEnforcer{
+		allowed: map[string]struct{}{kept: {}},
+	}
+	b := newTestBridge(enforcer)
+
+	payload := buildLogForwardServiceRequest(t, kept, dropped)
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err != nil {
+		t.Fatalf("modifyServiceSettings under dropping enforcer returned error: %v", err)
+	}
+
+	var forwarded request
+	select {
+	case forwarded = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for request to be forwarded to GCS")
+	}
+
+	// Decode the forwarded request back into LogSourcesInfo and confirm the
+	// disallowed provider has been stripped while the allowed one survives.
+	var fwdReq prot.ServiceModificationRequest
+	fwdReq.Settings = &guestrequest.LogForwardServiceRPCRequest{}
+	if err := json.Unmarshal(forwarded.message, &fwdReq); err != nil {
+		t.Fatalf("failed to unmarshal forwarded request: %v", err)
+	}
+	innerSettings, ok := fwdReq.Settings.(*guestrequest.LogForwardServiceRPCRequest)
+	if !ok {
+		t.Fatalf("forwarded settings has unexpected type: %T", fwdReq.Settings)
+	}
+	logSources, err := etw.DecodeAndUnmarshalLogSources(innerSettings.Settings)
+	if err != nil {
+		t.Fatalf("failed to decode forwarded log sources: %v", err)
+	}
+
+	var sawKept, sawDropped bool
+	for _, src := range logSources.LogConfig.Sources {
+		for _, p := range src.Providers {
+			if p.ProviderName == kept {
+				sawKept = true
+			}
+			if p.ProviderName == dropped {
+				sawDropped = true
+			}
+		}
+	}
+	if !sawKept {
+		t.Errorf("expected forwarded payload to contain kept provider %q", kept)
+	}
+	if sawDropped {
+		t.Errorf("expected dropped provider %q to be absent from forwarded payload", dropped)
 	}
 }
