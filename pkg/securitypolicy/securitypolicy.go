@@ -205,10 +205,17 @@ type CapabilitiesConfig struct {
 }
 
 //go:embed version_api
-var apiVersion string
+var apiVersionRaw string
 
 //go:embed version_framework
-var frameworkVersion string
+var frameworkVersionRaw string
+
+// Trim whitespace so the embedded version files are tolerant of trailing
+// newlines added by editors.
+var (
+	apiVersion       = strings.TrimSpace(apiVersionRaw)
+	frameworkVersion = strings.TrimSpace(frameworkVersionRaw)
+)
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
 // strings slice.
