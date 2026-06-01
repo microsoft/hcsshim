@@ -331,14 +331,14 @@ func TestModifySettings_PolicyFragment_TypeAssertionFailure(t *testing.T) {
 // Tests for environment variable filtering helpers (envlist persistence)
 
 func TestOciEnvToProcessParamEnv_Basic(t *testing.T) {
-	input := []string{"FOO=bar", "PATH=/usr/bin", "EMPTY="}
+	input := []string{"FOO=bar", `PATH=C:\Windows\System32`, "EMPTY="}
 	result := ociEnvToProcessParamEnv(input)
 
 	if result["FOO"] != "bar" {
 		t.Errorf("FOO = %q, want %q", result["FOO"], "bar")
 	}
-	if result["PATH"] != "/usr/bin" {
-		t.Errorf("PATH = %q, want %q", result["PATH"], "/usr/bin")
+	if result["PATH"] != `C:\Windows\System32` {
+		t.Errorf("PATH = %q, want %q", result["PATH"], `C:\Windows\System32`)
 	}
 	if result["EMPTY"] != "" {
 		t.Errorf("EMPTY = %q, want %q", result["EMPTY"], "")
@@ -392,7 +392,7 @@ func TestOciEnvToProcessParamEnv_Nil(t *testing.T) {
 func TestProcessParamEnvToOCIEnv_Roundtrip(t *testing.T) {
 	original := map[string]string{
 		"FOO":  "bar",
-		"PATH": "/usr/bin",
+		"PATH": `C:\Windows\System32`,
 	}
 
 	ociEnv := processParamEnvToOCIEnv(original)
