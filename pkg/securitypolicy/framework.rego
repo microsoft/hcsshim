@@ -112,6 +112,14 @@ rw_unmount_device := {"metadata": [removeRWDevice], "allowed": true} {
     }
 }
 
+# blockdev mounts (which are symlinks created at the mount point pointing to
+# /dev/sdX instead of an actual mounted filesystem) are not supported on C-ACI
+# and thus the framework currently denies them unconditionally.
+
+default mount_blockdev := {"allowed": false}
+
+default unmount_blockdev := {"allowed": false}
+
 layerPaths_ok(layers) {
     length := count(layers)
     count(input.layerPaths) == length
@@ -1417,6 +1425,10 @@ reason := {
 ################################################################
 # Error messages
 ################################################################
+
+errors["blockdev mounts are not supported"] {
+    input.rule in ["mount_blockdev", "unmount_blockdev"]
+}
 
 errors["deviceHash not found"] {
     input.rule == "mount_device"
