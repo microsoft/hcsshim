@@ -92,8 +92,8 @@ func mergeLogSources(resultSources []Source, userSources []Source) []Source {
 	return resultSources
 }
 
-// decodeAndUnmarshalLogSources decodes a base64-encoded JSON string and unmarshals it into a LogSourcesInfo.
-func decodeAndUnmarshalLogSources(base64EncodedJSONLogConfig string) (LogSourcesInfo, error) {
+// DecodeAndUnmarshalLogSources decodes a base64-encoded JSON string and unmarshals it into a LogSourcesInfo.
+func DecodeAndUnmarshalLogSources(base64EncodedJSONLogConfig string) (LogSourcesInfo, error) {
 	jsonBytes, err := base64.StdEncoding.DecodeString(base64EncodedJSONLogConfig)
 	if err != nil {
 		return LogSourcesInfo{}, fmt.Errorf("error decoding base64 log config: %w", err)
@@ -188,19 +188,29 @@ func marshalAndEncodeLogSources(logCfg LogSourcesInfo) (string, error) {
 // configuration and returns the updated log sources as a base64 encoded JSON string.
 // If there is an error in the process, it returns the original user provided log sources string.
 func UpdateLogSources(base64EncodedJSONLogConfig string, useDefaultLogSources bool, includeGUIDs bool) (string, error) {
+	var userLogSources LogSourcesInfo
+	if base64EncodedJSONLogConfig != "" {
+		var err error
+		userLogSources, err = DecodeAndUnmarshalLogSources(base64EncodedJSONLogConfig)
+		if err != nil {
+			return "", fmt.Errorf("failed to decode and unmarshal user log sources: %w", err)
+		}
+	}
+	return UpdateLogSourcesFromInfo(userLogSources, useDefaultLogSources, includeGUIDs)
+}
+
+// UpdateLogSourcesFromInfo is the parsed-input variant of UpdateLogSources for
+// callers that already have a LogSourcesInfo in hand (e.g. the gcs-sidecar
+// after it decoded the payload for policy enforcement) and want to avoid a
+// second base64-decode + JSON-unmarshal round-trip.
+//
+// An empty userLogSources is equivalent to passing "" to UpdateLogSources.
+func UpdateLogSourcesFromInfo(userLogSources LogSourcesInfo, useDefaultLogSources bool, includeGUIDs bool) (string, error) {
 	var resultLogCfg LogSourcesInfo
 	if useDefaultLogSources {
 		resultLogCfg = defaultLogSourcesInfo
 	}
-
-	if base64EncodedJSONLogConfig != "" {
-		userLogSources, err := decodeAndUnmarshalLogSources(base64EncodedJSONLogConfig)
-		if err != nil {
-			return "", fmt.Errorf("failed to decode and unmarshal user log sources: %w", err)
-		}
-		resultLogCfg.LogConfig.Sources = mergeLogSources(resultLogCfg.LogConfig.Sources, userLogSources.LogConfig.Sources)
-
-	}
+	resultLogCfg.LogConfig.Sources = mergeLogSources(resultLogCfg.LogConfig.Sources, userLogSources.LogConfig.Sources)
 
 	var err error
 	resultLogCfg.LogConfig.Sources, err = applyGUIDPolicy(resultLogCfg.LogConfig.Sources, includeGUIDs)
