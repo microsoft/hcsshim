@@ -1299,6 +1299,35 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
     }
 }
 
+# Mapped directory (VSMB share) validation for Windows containers
+default mapped_directory_mount := {"allowed": false}
+
+mapped_directory_mounted(target) {
+    data.metadata.mapped_directories[target]
+}
+
+mapped_directory_mount := {"metadata": [add_mapped_dir], "allowed": true} {
+    not mapped_directory_mounted(input.containerPath)
+    input.readOnly
+    add_mapped_dir := {
+        "name": "mapped_directories",
+        "action": "add",
+        "key": input.containerPath,
+        "value": {"readOnly": input.readOnly},
+    }
+}
+
+default mapped_directory_unmount := {"allowed": false}
+
+mapped_directory_unmount := {"metadata": [remove_mapped_dir], "allowed": true} {
+    mapped_directory_mounted(input.unmountTarget)
+    remove_mapped_dir := {
+        "name": "mapped_directories",
+        "action": "remove",
+        "key": input.unmountTarget,
+    }
+}
+
 # Registry changes validation
 default registry_changes := {"allowed": false}
 
@@ -1825,6 +1854,21 @@ errors["unencrypted scratch not allowed"] {
 errors["no scratch at path to unmount"] {
     input.rule == "scratch_unmount"
     not scratch_mounted(input.unmountTarget)
+}
+
+errors["mapped directory already mounted at path"] {
+    input.rule == "mapped_directory_mount"
+    mapped_directory_mounted(input.containerPath)
+}
+
+errors["writable mapped directory not allowed"] {
+    input.rule == "mapped_directory_mount"
+    not input.readOnly
+}
+
+errors["no mapped directory at path to unmount"] {
+    input.rule == "mapped_directory_unmount"
+    not mapped_directory_mounted(input.unmountTarget)
 }
 
 errors[framework_version_error] {

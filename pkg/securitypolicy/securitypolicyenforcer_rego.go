@@ -1157,6 +1157,23 @@ func (policy *regoEnforcer) EnforceScratchUnmountPolicy(ctx context.Context, scr
 	return nil
 }
 
+func (policy *regoEnforcer) EnforceMappedDirectoryMountPolicy(ctx context.Context, containerPath string, readOnly bool) error {
+	input := inputData{
+		"containerPath": containerPath,
+		"readOnly":      readOnly,
+	}
+	_, err := policy.enforce(ctx, "mapped_directory_mount", input)
+	return err
+}
+
+func (policy *regoEnforcer) EnforceMappedDirectoryUnmountPolicy(ctx context.Context, containerPath string) error {
+	input := inputData{
+		"unmountTarget": containerPath,
+	}
+	_, err := policy.enforce(ctx, "mapped_directory_unmount", input)
+	return err
+}
+
 func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) error {
 	log.G(ctx).Tracef("Enforcing verified cims in securitypolicy pkg %+v", layerHashes)
 	input := inputData{

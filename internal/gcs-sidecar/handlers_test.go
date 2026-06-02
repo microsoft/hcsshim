@@ -327,3 +327,83 @@ func TestModifySettings_PolicyFragment_TypeAssertionFailure(t *testing.T) {
 		t.Fatal("expected error for empty fragment, got nil")
 	}
 }
+
+// Tests for environment variable filtering helpers (envlist persistence)
+
+func TestOciEnvToProcessParamEnv_Basic(t *testing.T) {
+	input := []string{"FOO=bar", "PATH=/usr/bin", "EMPTY="}
+	result := ociEnvToProcessParamEnv(input)
+
+	if result["FOO"] != "bar" {
+		t.Errorf("FOO = %q, want %q", result["FOO"], "bar")
+	}
+	if result["PATH"] != "/usr/bin" {
+		t.Errorf("PATH = %q, want %q", result["PATH"], "/usr/bin")
+	}
+	if result["EMPTY"] != "" {
+		t.Errorf("EMPTY = %q, want %q", result["EMPTY"], "")
+	}
+	if len(result) != 3 {
+		t.Errorf("len = %d, want 3", len(result))
+	}
+}
+
+func TestOciEnvToProcessParamEnv_ValueWithEquals(t *testing.T) {
+	input := []string{"CONN=host=db;port=5432"}
+	result := ociEnvToProcessParamEnv(input)
+
+	if result["CONN"] != "host=db;port=5432" {
+		t.Errorf("CONN = %q, want %q", result["CONN"], "host=db;port=5432")
+	}
+}
+
+func TestOciEnvToProcessParamEnv_MalformedSkipped(t *testing.T) {
+	input := []string{"GOOD=value", "NOEQUALS", "ALSO_GOOD=yes"}
+	result := ociEnvToProcessParamEnv(input)
+
+	if len(result) != 2 {
+		t.Errorf("len = %d, want 2 (malformed entry should be skipped)", len(result))
+	}
+	if result["GOOD"] != "value" {
+		t.Errorf("GOOD = %q, want %q", result["GOOD"], "value")
+	}
+	if result["ALSO_GOOD"] != "yes" {
+		t.Errorf("ALSO_GOOD = %q, want %q", result["ALSO_GOOD"], "yes")
+	}
+}
+
+func TestOciEnvToProcessParamEnv_Empty(t *testing.T) {
+	result := ociEnvToProcessParamEnv([]string{})
+	if len(result) != 0 {
+		t.Errorf("len = %d, want 0", len(result))
+	}
+}
+
+func TestOciEnvToProcessParamEnv_Nil(t *testing.T) {
+	result := ociEnvToProcessParamEnv(nil)
+	if result == nil {
+		t.Error("result should be non-nil empty map, got nil")
+	}
+	if len(result) != 0 {
+		t.Errorf("len = %d, want 0", len(result))
+	}
+}
+
+func TestProcessParamEnvToOCIEnv_Roundtrip(t *testing.T) {
+	original := map[string]string{
+		"FOO":  "bar",
+		"PATH": "/usr/bin",
+	}
+
+	ociEnv := processParamEnvToOCIEnv(original)
+	roundtripped := ociEnvToProcessParamEnv(ociEnv)
+
+	if len(roundtripped) != len(original) {
+		t.Fatalf("roundtrip len = %d, want %d", len(roundtripped), len(original))
+	}
+	for k, v := range original {
+		if roundtripped[k] != v {
+			t.Errorf("roundtrip[%q] = %q, want %q", k, roundtripped[k], v)
+		}
+	}
+}
