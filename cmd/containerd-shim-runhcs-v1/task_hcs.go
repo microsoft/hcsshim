@@ -931,7 +931,11 @@ func (ht *hcsTask) updateTaskContainerResources(ctx context.Context, data interf
 func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.WindowsCPUResources) error {
 	// if host is 20h2+ then we can make a request directly to hcs
 	if osversion.Get().Build >= osversion.V20H2 {
+		// Count/Maximum/Shares live on the HCS Processor schema. Only send a modify
+		// request when at least one of them is set, so an affinity-only update does
+		// not push an empty (no-op) request to HCS.
 		req := &hcsschema.Processor{}
+		hasRateControl := false
 		if cpu.Count != nil {
 			procCount := int32(*cpu.Count)
 			hostProcs := processorinfo.ProcessorCount()
@@ -939,23 +943,73 @@ func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.Window
 				hostProcs = ht.host.ProcessorCount()
 			}
 			req.Count = hcsoci.NormalizeProcessorCount(ctx, ht.id, procCount, hostProcs)
+			hasRateControl = true
 		}
 		if cpu.Maximum != nil {
 			req.Maximum = int32(*cpu.Maximum)
+			hasRateControl = true
 		}
 		if cpu.Shares != nil {
 			req.Weight = int32(*cpu.Shares)
+			hasRateControl = true
 		}
-		return ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req)
+		if hasRateControl {
+			if err := ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req); err != nil {
+				return err
+			}
+		}
+
+		// CPU affinity is not part of the HCS Processor schema, so it has to be
+		// applied out of band (the silo's job object for Argon). A no-op when unset.
+		if len(cpu.Affinity) > 0 {
+			return ht.updateWCOWContainerCPUAffinity(ctx, cpu.Affinity)
+		}
+		return nil
 	}
 
 	return errdefs.ErrNotImplemented
 }
 
+// updateWCOWContainerCPUAffinity honors a post-start change to
+// spec.Windows.Resources.CPU.Affinity for an HCS-backed WCOW container.
+//
+// For process-isolated (Argon) containers this re-pins the silo's job object, using
+// the same race-free mechanism as create-time: the Windows kernel re-applies the new
+// mask to every process already in the silo and to every future joiner.
+//
+// Hypervisor-isolated (Xenon) containers require swapping the UVM's CPU group instead;
+// that is not yet implemented, so this returns ErrNotImplemented rather than silently
+// dropping the request.
+func (ht *hcsTask) updateWCOWContainerCPUAffinity(ctx context.Context, affinity []specs.WindowsCPUGroupAffinity) error {
+	validated, err := hcsoci.ValidateCPUAffinityEntries(affinity)
+	if err != nil {
+		return err
+	}
+	if len(validated) == 0 {
+		return nil
+	}
+
+	if ht.host != nil {
+		// Xenon: UVM-level CPU-group swap is out of scope here (Track A).
+		return fmt.Errorf("cpu affinity update for hypervisor-isolated containers is not supported: %w", errdefs.ErrNotImplemented)
+	}
+
+	system, ok := ht.c.(*hcs.System)
+	if !ok {
+		return fmt.Errorf("cpu affinity update requires an HCS-backed container, got %T", ht.c)
+	}
+	return system.SetSiloCPUGroupAffinities(ctx, hcsoci.ToJobObjectAffinities(validated))
+}
+
 func isValidWindowsCPUResources(c *specs.WindowsCPUResources) bool {
-	return (c.Count != nil && (c.Shares == nil && c.Maximum == nil)) ||
+	// Exactly one of the mutually-exclusive rate controls (Count/Shares/Maximum).
+	exactlyOneRateControl := (c.Count != nil && (c.Shares == nil && c.Maximum == nil)) ||
 		(c.Shares != nil && (c.Count == nil && c.Maximum == nil)) ||
 		(c.Maximum != nil && (c.Count == nil && c.Shares == nil))
+	// An affinity-only update carries no rate control; accept it on its own so that
+	// CPU affinity can be changed after the container has started.
+	affinityOnly := len(c.Affinity) > 0 && c.Count == nil && c.Shares == nil && c.Maximum == nil
+	return exactlyOneRateControl || affinityOnly
 }
 
 func (ht *hcsTask) updateWCOWResources(ctx context.Context, resources *specs.WindowsResources, annotations map[string]string) error {

@@ -32,21 +32,8 @@ import (
 
 const createContainerSubdirectoryForProcessDumpSuffix = "{container_id}"
 
-// Sentinel errors returned by ValidateCPUAffinity.
-var (
-	// ErrCPUAffinityMultipleGroupsNotSupported is returned when multiple processor-group
-	// affinity entries are requested on a host older than Windows Server 2022 (build 20348),
-	// which does not support multi-group affinity for job object silos.
-	// On Windows Server 2022+, multiple processor groups are fully supported.
-	ErrCPUAffinityMultipleGroupsNotSupported = errors.New("cpu affinity with multiple processor groups requires Windows Server 2022 or later")
-	// ErrCPUAffinityNonZeroGroupNotSupported is returned when a non-zero processor group is
-	// requested on a host older than Windows Server 2022 (build 20348).
-	// On Windows Server 2022+, non-zero processor groups are fully supported.
-	ErrCPUAffinityNonZeroGroupNotSupported = errors.New("cpu affinity with a non-zero processor group requires Windows Server 2022 or later")
-	// ErrCPUAffinityMaskZero is returned when an affinity entry has a zero bitmask,
-	// which would select no processors and is always invalid.
-	ErrCPUAffinityMaskZero = errors.New("cpu affinity mask must be non-zero")
-)
+// CPU affinity validation (ValidateCPUAffinity / ValidateCPUAffinityEntries) and its
+// sentinel errors live in cpuaffinity.go, shared with the HostProcess container path.
 
 // A simple wrapper struct around the container mount configs that should be added to the
 // container.
@@ -109,41 +96,6 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 	}
 	config.mdsv2 = append(config.mdsv2, coi.windowsAdditionalMounts...)
 	return &config, nil
-}
-
-// ValidateCPUAffinity handles the logic of validating the container's CPU affinity
-// specified in the OCI spec.
-//
-// Returns the validated affinity entries (nil if not specified) and any validation error.
-// Multiple processor groups and non-zero group numbers require Windows Server 2022
-// (build 20348) or later; on older hosts only a single entry for group 0 is accepted.
-func ValidateCPUAffinity(spec *specs.Spec) ([]specs.WindowsCPUGroupAffinity, error) {
-	if spec.Windows == nil || spec.Windows.Resources == nil || spec.Windows.Resources.CPU == nil || len(spec.Windows.Resources.CPU.Affinity) == 0 {
-		return nil, nil
-	}
-
-	affinity := spec.Windows.Resources.CPU.Affinity
-
-	// Zero masks are never valid regardless of OS version.
-	for i, a := range affinity {
-		if a.Mask == 0 {
-			return nil, fmt.Errorf("%w: entry %d has zero mask", ErrCPUAffinityMaskZero, i)
-		}
-	}
-
-	// Determine whether multi-group features are needed: either multiple entries,
-	// or a single entry targeting a non-zero processor group.
-	multiGroup := len(affinity) > 1 || affinity[0].Group != 0
-
-	// Multiple processor groups are only supported on Windows Server 2022+.
-	if multiGroup && osversion.Build() < osversion.LTSC2022 {
-		if len(affinity) > 1 {
-			return nil, fmt.Errorf("%w: %d entries", ErrCPUAffinityMultipleGroupsNotSupported, len(affinity))
-		}
-		return nil, fmt.Errorf("%w: group %d", ErrCPUAffinityNonZeroGroupNotSupported, affinity[0].Group)
-	}
-
-	return affinity, nil
 }
 
 // ConvertCPULimits handles the logic of converting and validating the containers CPU limits

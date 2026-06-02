@@ -357,6 +357,17 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	if err != nil {
 		return nil, r, err
 	}
+
+	// Process-isolated (Argon) containers run in a server silo on the host. HCS does not
+	// honor CPU affinity on the container Processor schema, so pin the silo's job object
+	// directly, after create but before the caller starts the container. Xenon (UVM-backed)
+	// containers are handled separately at the UVM layer and are skipped here.
+	if coi.HostingSystem == nil {
+		if err := applyArgonCPUAffinity(ctx, system, coi); err != nil {
+			return nil, r, err
+		}
+	}
+
 	return system, r, nil
 }
 
