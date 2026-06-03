@@ -23,3 +23,5 @@ runtime_logging := {"allowed": true}
 load_fragment := {"allowed": true}
 scratch_mount := {"allowed": true}
 scratch_unmount := {"allowed": true}
+mapped_directory_mount := {"allowed": true}
+mapped_directory_unmount := {"allowed": true}
