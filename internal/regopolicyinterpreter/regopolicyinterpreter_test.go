@@ -89,9 +89,11 @@ func Test_copyRegoMetadata(t *testing.T) {
 			if copyObject, ok := copy[name]; ok {
 				if !assertObjectsEqual(origObject, copyObject) {
 					t.Errorf("original and copy differ on key %s", name)
+					return false
 				}
 			} else {
 				t.Errorf("copy missing object %s", name)
+				return false
 			}
 		}
 

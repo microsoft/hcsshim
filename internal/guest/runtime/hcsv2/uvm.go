@@ -403,7 +403,7 @@ func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHost
 func (h *Host) checkMountsNotBroken() error {
 	if h.HasSecurityPolicy() && h.mountsBroken.Load() {
 		return errors.Errorf(
-			"Mount, unmount, container creation and deletion has been disabled in this UVM due to a previous error (%q)",
+			"Mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error (%q)",
 			h.mountsBrokenCausedBy,
 		)
 	}

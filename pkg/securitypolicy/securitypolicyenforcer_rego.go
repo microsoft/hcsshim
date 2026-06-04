@@ -1227,7 +1227,7 @@ func (policy *regoEnforcer) StartRevertableSection() (RevertableSectionHandle, e
 	if err != nil {
 		err = errors.Wrapf(err, "unable to save metadata for revertable section")
 		policy.revertableSectionLock.Unlock()
-		return &revertableSectionHandle{}, err
+		return nil, err
 	}
 	// Keep policy.revertableSectionLock locked until the end of the section.
 	sh := &revertableSectionHandle{

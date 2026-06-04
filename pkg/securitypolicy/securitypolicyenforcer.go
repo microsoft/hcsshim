@@ -59,7 +59,7 @@ func init() {
 
 // Represents an in-progress revertable section.  To ensure state is consistent,
 // Commit() and Rollback() must not fail, so they do not return anything, and if
-// an error does occur they should panic.
+// an error does occur they should panic or trigger an unrecoverable error.
 type RevertableSectionHandle interface {
 	Commit()
 	Rollback()
