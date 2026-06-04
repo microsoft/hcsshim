@@ -2151,7 +2151,7 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Drop_NoMatches(t *testing.T) 
 	}
 }
 
-func Test_Regi_EnforceCreateContainer_RequireNoDevices(t *testing.T) {
+func Test_Rego_EnforceCreateContainer_RequireNoDevices(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupSimpleRegoCreateContainerTest(p)
 		if err != nil {
@@ -2180,7 +2180,7 @@ func Test_Regi_EnforceCreateContainer_RequireNoDevices(t *testing.T) {
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
-		t.Errorf("Test_Regi_EnforceCreateContainer_RequireNoDevices: %v", err)
+		t.Errorf("Test_Rego_EnforceCreateContainer_RequireNoDevices: %v", err)
 	}
 }
 
