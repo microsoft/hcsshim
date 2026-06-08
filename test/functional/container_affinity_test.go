@@ -109,6 +109,17 @@ func runArgonAffinityTest(ctx context.Context, t *testing.T, want []jobobject.Gr
 	// Layer 3 (kernel assertion): the init process inherited the pin. Skipped if the
 	// affinity cannot be read; a real mismatch fails the test.
 	assertProcessGroupAffinity(t, uint32(init.Process.Pid()), want)
+
+	// Layer 3, stronger process-level proof for the single-group-0 case: the
+	// per-CPU process affinity mask must equal the bits we requested.
+	// GetProcessAffinityMask only returns a meaningful mask when the process lives
+	// in a single processor group — it reports 0 once the affinity spans groups —
+	// so this is expressible only here. MultiGroup deliberately stays at
+	// membership-only (above); its exact masks remain covered by the job-object
+	// read at Layers 1 & 2.
+	if len(want) == 1 && want[0].Group == 0 {
+		assertProcessAffinityMask(t, uint32(init.Process.Pid()), want[0].Mask)
+	}
 }
 
 // withCPUAffinity returns a SpecOpt that sets spec.Windows.Resources.CPU.Affinity.
@@ -193,6 +204,40 @@ func assertProcessGroupAffinity(t *testing.T, pid uint32, want []jobobject.Group
 	}
 }
 
+// assertProcessAffinityMask reads the init process's per-CPU affinity mask via
+// GetProcessAffinityMask and asserts it equals wantMask. This is a stronger,
+// bit-level process check than assertProcessGroupAffinity, but it is only valid
+// for a single-group pin: GetProcessAffinityMask returns 0 once the process spans
+// more than one processor group, since a single mask can no longer describe the
+// pin. The read is skip-on-failure (logged, not failed); a zero mask is treated as
+// "unexpected multi-group state" and skipped; a non-zero mismatch is a hard failure.
+func assertProcessAffinityMask(t *testing.T, pid uint32, wantMask uint64) {
+	t.Helper()
+
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		t.Logf("Layer 3 (process mask) skipped: OpenProcess(%d): %v", pid, err)
+		return
+	}
+	defer windows.CloseHandle(h) //nolint:errcheck
+
+	got, err := getProcessAffinityMask(h)
+	if err != nil {
+		t.Logf("Layer 3 (process mask) skipped: GetProcessAffinityMask(%d): %v", pid, err)
+		return
+	}
+	if got == 0 {
+		// A zero process mask means the process spans multiple processor groups,
+		// where GetProcessAffinityMask is not meaningful. The per-group bits are
+		// already verified by the job-object read at Layers 1 & 2, so skip here.
+		t.Logf("Layer 3 (process mask) skipped: process affinity mask is 0 (unexpected multi-group state)")
+		return
+	}
+	if got != wantMask {
+		t.Errorf("Layer 3 (process mask): process affinity mask = %#x, want %#x", got, wantMask)
+	}
+}
+
 func assertAffinitiesEqual(t *testing.T, what string, got, want []jobobject.GroupAffinity) {
 	t.Helper()
 
@@ -219,6 +264,7 @@ func assertAffinitiesEqual(t *testing.T, what string, got, want []jobobject.Grou
 var (
 	kernel32                       = windows.NewLazySystemDLL("kernel32.dll")
 	procGetProcessGroupAffinity    = kernel32.NewProc("GetProcessGroupAffinity")
+	procGetProcessAffinityMask     = kernel32.NewProc("GetProcessAffinityMask")
 	procGetActiveProcessorGroupCnt = kernel32.NewProc("GetActiveProcessorGroupCount")
 )
 
@@ -244,6 +290,23 @@ func getProcessGroupAffinity(h windows.Handle) ([]uint16, error) {
 		}
 		return nil, e
 	}
+}
+
+// getProcessAffinityMask wraps kernel32!GetProcessAffinityMask, which is not bound
+// in golang.org/x/sys/windows. It returns the per-CPU affinity bitmask the process
+// is restricted to. The kernel reports 0 when the process spans more than one
+// processor group, since a single mask cannot describe a multi-group pin.
+func getProcessAffinityMask(h windows.Handle) (uint64, error) {
+	var processMask, systemMask uintptr
+	r1, _, e := procGetProcessAffinityMask.Call(
+		uintptr(h),
+		uintptr(unsafe.Pointer(&processMask)),
+		uintptr(unsafe.Pointer(&systemMask)),
+	)
+	if r1 == 0 {
+		return 0, e
+	}
+	return uint64(processMask), nil
 }
 
 // activeProcessorGroupCount returns the number of active processor groups on the host,
