@@ -4172,7 +4172,7 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4236,7 +4236,7 @@ func Test_Rego_LoadFragment_Container_Compat_0_10_0(t *testing.T) {
 		}
 		tc.policy = policy
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4300,7 +4300,7 @@ func Test_Rego_LoadFragment_Container_Compat_0_10_0_allow_all(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4357,13 +4357,13 @@ func Test_Rego_LoadFragment_Fragment(t *testing.T) {
 		fragment := tc.fragments[0]
 		subFragment := tc.subFragments[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: subFragment.info.issuer, Feed: subFragment.info.feed, Rego: subFragment.code})
 		if err != nil {
 			t.Error("unable to load sub-fragment from fragment: %w", err)
 			return false
@@ -4400,7 +4400,7 @@ func Test_Rego_LoadFragment_ExternalProcess(t *testing.T) {
 		fragment := tc.fragments[0]
 		process := tc.externalProcesses[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4436,7 +4436,7 @@ func Test_Rego_LoadFragment_BadIssuer(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		issuer := testDataGenerator.uniqueFragmentIssuer()
-		err = tc.policy.LoadFragment(p.ctx, issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad issuer")
 			return false
@@ -4470,7 +4470,7 @@ func Test_Rego_LoadFragment_BadFeed(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		feed := testDataGenerator.uniqueFragmentFeed()
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad feed")
 			return false
@@ -4595,7 +4595,7 @@ enforcement_point_info := {
 }
 `, fragment.info.minimumSVN, frameworkVersion)
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
 
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad namespace")
@@ -4637,7 +4637,7 @@ framework_version := "%s"
 load_fragment := {"allowed": true, "add_module": true}
 `, fragment.info.minimumSVN, frameworkVersion)
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
 
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid namespace")
@@ -4670,7 +4670,7 @@ func Test_Rego_LoadFragment_InvalidSVN(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid svn")
 			return false
@@ -4703,14 +4703,14 @@ func Test_Rego_LoadFragment_Fragment_InvalidSVN(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
 		subFragment := tc.subFragments[0]
-		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: subFragment.info.issuer, Feed: subFragment.info.feed, Rego: subFragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load subfragment due to invalid svn")
 			return false
@@ -4755,7 +4755,7 @@ func Test_Rego_LoadFragment_SemverVersion(t *testing.T) {
 		fragmentConstraints.svn = mustIncrementSVN(p.fragments[0].minimumSVN)
 		code := fragmentConstraints.toFragment().marshalRego()
 
-		err = policy.LoadFragment(p.ctx, issuer, feed, code)
+		err = policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, Rego: code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4783,7 +4783,7 @@ func Test_Rego_LoadFragment_SVNMismatch(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid version")
 			return false
@@ -4816,7 +4816,7 @@ func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 		}
 
 		for _, fragment := range tc.fragments {
-			err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+			err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 			if err != nil {
 				t.Error("unable to load fragment: %w", err)
 				return false
@@ -4869,7 +4869,7 @@ func Test_Rego_LoadFragment_TwoFeeds(t *testing.T) {
 		}
 
 		for _, fragment := range tc.fragments {
-			err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+			err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 			if err != nil {
 				t.Error("unable to load fragment: %w", err)
 				return false
@@ -4921,13 +4921,13 @@ func Test_Rego_LoadFragment_SameFeedTwice(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, tc.fragments[0].info.issuer, tc.fragments[0].info.feed, tc.fragments[0].code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: tc.fragments[0].info.issuer, Feed: tc.fragments[0].info.feed, Rego: tc.fragments[0].code})
 		if err != nil {
 			t.Error("unable to load fragment the first time: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, tc.fragments[1].info.issuer, tc.fragments[1].info.feed, tc.fragments[1].code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: tc.fragments[1].info.issuer, Feed: tc.fragments[1].info.feed, Rego: tc.fragments[1].code})
 		if err != nil {
 			t.Error("expected to be able to load the same issuer/feed twice: %w", err)
 			return false
@@ -4981,7 +4981,7 @@ func Test_Rego_LoadFragment_ExcludedContainer(t *testing.T) {
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -5012,13 +5012,13 @@ func Test_Rego_LoadFragment_ExcludedFragment(t *testing.T) {
 		fragment := tc.fragments[0]
 		subFragment := tc.subFragments[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: subFragment.info.issuer, Feed: subFragment.info.feed, Rego: subFragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load a sub-fragment from a fragment")
 			return false
@@ -5043,7 +5043,7 @@ func Test_Rego_LoadFragment_ExcludedExternalProcess(t *testing.T) {
 		fragment := tc.fragments[0]
 		process := tc.externalProcesses[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -5117,7 +5117,7 @@ mount_device := data.fragment.mount_device
 		t.Fatalf("unable to create Rego policy: %v", err)
 	}
 
-	err = policy.LoadFragment(ctx, issuer, feed, fragmentCode)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, Rego: fragmentCode})
 	if err != nil {
 		t.Fatalf("unable to load fragment: %v", err)
 	}
@@ -5158,7 +5158,7 @@ input.issuer := "%s"
 data.framework.input.issuer := "%s"
 `, fragment.info.minimumSVN, frameworkVersion, expectedIssuer, expectedIssuer)
 
-		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: actualIssuer, Feed: fragment.info.feed, Rego: code})
 
 		if !assertDecisionJSONContains(t, err, "invalid fragment issuer") {
 			return false
@@ -5208,7 +5208,7 @@ enforcement_point_info := {
 data.framework.load_fragment := load_fragment
 `, fragment.constraints.svn, frameworkVersion)
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
 
 		if !assertDecisionJSONContains(t, err, "fragment svn is below the specified minimum") {
 			return false
@@ -5238,7 +5238,7 @@ func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego(t *testing.T) {
 		actualIssuer := testDataGenerator.uniqueFragmentIssuer()
 		code := "package fragment\n!invalid!rego"
 
-		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: actualIssuer, Feed: fragment.info.feed, Rego: code})
 
 		if strings.Contains(err.Error(), "error when compiling module") ||
 			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
@@ -5274,7 +5274,7 @@ func Test_Rego_LoadFragment_BadFeed_MustNotTryToLoadRego(t *testing.T) {
 		actualFeed := testDataGenerator.uniqueFragmentFeed()
 		code := "package fragment\n!invalid!rego"
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, actualFeed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: actualFeed, Rego: code})
 
 		if strings.Contains(err.Error(), "error when compiling module") ||
 			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
@@ -5316,7 +5316,7 @@ func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0(t *test
 		actualIssuer := testDataGenerator.uniqueFragmentIssuer()
 		code := "package fragment\n!invalid!rego"
 
-		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: actualIssuer, Feed: fragment.info.feed, Rego: code})
 
 		if strings.Contains(err.Error(), "error when compiling module") ||
 			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
@@ -5982,7 +5982,7 @@ func Test_Fragment_FrameworkVersion_Missing(t *testing.T) {
 	}
 
 	fragment := tc.fragments[0]
-	err = tc.policy.LoadFragment(gc.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+	err = tc.policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 	if err == nil {
 		t.Error("unexpected success. Missing framework_version should trigger an error.")
 	}
@@ -6019,7 +6019,7 @@ func Test_Fragment_FrameworkVersion_In_Future(t *testing.T) {
 	}
 
 	fragment := tc.fragments[0]
-	err = tc.policy.LoadFragment(gc.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+	err = tc.policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 	if err == nil {
 		t.Error("unexpected success. Future framework_version should trigger an error.")
 	}

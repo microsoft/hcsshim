@@ -34,6 +34,7 @@ type CreateContainerOptions struct {
 	IsSandboxContainer bool
 	LinuxDevices       []oci.LinuxDevice
 }
+
 type SignalContainerOptions struct {
 	IsInitProcess bool
 	// One of these will be set depending on platform
@@ -42,6 +43,16 @@ type SignalContainerOptions struct {
 
 	LinuxStartupArgs []string
 	WindowsCommand   []string
+}
+
+type LoadFragmentOptions struct {
+	Issuer string
+	Feed   string
+	// If the fragment's COSE envelope contains a CWT Claims with a SVN, pass it
+	// in HeaderSVN.
+	HeaderSVN *int64
+	// Rego is the fragment's Rego payload.
+	Rego string
 }
 
 const (
@@ -128,7 +139,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceGetPropertiesPolicy(ctx context.Context) error
 	EnforceDumpStacksPolicy(ctx context.Context) error
 	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
-	LoadFragment(ctx context.Context, issuer string, feed string, rego string) error
+	LoadFragment(ctx context.Context, opts LoadFragmentOptions) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
@@ -303,7 +314,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context) e
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) LoadFragment(context.Context, string, string, string) error {
+func (OpenDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragmentOptions) error {
 	return nil
 }
 
@@ -444,7 +455,7 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context)
 	return errors.New("getting stack dumps is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(context.Context, string, string, string) error {
+func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragmentOptions) error {
 	return errors.New("loading fragments is denied by policy")
 }
 

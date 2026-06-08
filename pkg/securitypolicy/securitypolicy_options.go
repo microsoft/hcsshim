@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -102,6 +103,30 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	return nil
 }
 
+// asInt64 coerces a CBOR-decoded integer value (which may be returned as
+// int64, uint64 or int by different decoders) to an int64.
+func asInt64(v interface{}) (int64, error) {
+	switch n := v.(type) {
+	case int64:
+		return n, nil
+	case int:
+		return int64(n), nil
+	case uint64:
+		if n > math.MaxInt64 {
+			return 0, errors.New("unable to convert uint64 to int64 due to overflow")
+		}
+		return int64(n), nil
+	case uint:
+		// uint is 64bit on 64bit platforms, so can overflow int64
+		if n > math.MaxInt64 {
+			return 0, errors.New("unable to convert uint to int64 due to overflow")
+		}
+		return int64(n), nil
+	default:
+		return 0, errors.Errorf("expected integer type, got %T", v)
+	}
+}
+
 // Fragment extends current security policy with additional constraints
 // from the incoming fragment. Note that it is base64 encoded over the bridge/
 //
@@ -134,16 +159,27 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		return fmt.Errorf("InjectFragment failed COSE validation: %w", err)
 	}
 
+	cwtClaimsRaw, hasCwtClaims := unpacked.Protected[cosesign1.COSE_Header_CWTClaims]
+	var cwtClaims map[any]any
+	if hasCwtClaims {
+		var ok bool
+		cwtClaims, ok = cwtClaimsRaw.(map[any]any)
+		if !ok {
+			return fmt.Errorf("CWT claims header present, expected it to be a map[any]any, but got %T", cwtClaimsRaw)
+		}
+	}
+
 	payloadString := string(unpacked.Payload[:])
 	issuer := unpacked.Issuer
 	feed := unpacked.Feed
 	chainPem := unpacked.ChainPem
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"issuer":   issuer, // eg the DID:x509:blah....
-		"feed":     feed,
-		"cty":      unpacked.ContentType,
-		"chainPem": chainPem,
+		"issuer":    issuer, // eg the DID:x509:blah....
+		"feed":      feed,
+		"cty":       unpacked.ContentType,
+		"chainPem":  chainPem,
+		"cwtClaims": cwtClaims,
 	}).Debugf("unpacked COSE1 cert chain")
 
 	log.G(ctx).WithFields(logrus.Fields{
@@ -162,10 +198,27 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		return fmt.Errorf("failed to resolve DID: %w", err)
 	}
 
+	var svnFromCwt *int64 = nil
+	if hasCwtClaims {
+		svnFromCwtRaw, hasSvn := cwtClaims["svn"]
+		if hasSvn {
+			svn, err := asInt64(svnFromCwtRaw)
+			if err != nil {
+				return errors.Wrap(err, "SVN present in CWT claims, but failed to convert it to int64")
+			}
+			svnFromCwt = &svn
+		}
+	}
+
 	// now offer the payload fragment to the policy
-	err = s.PolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
+	err = s.PolicyEnforcer.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    issuer,
+		Feed:      feed,
+		HeaderSVN: svnFromCwt,
+		Rego:      payloadString,
+	})
 	if err != nil {
-		return fmt.Errorf("error loading security policy fragment: %w", err)
+		return errors.Wrap(err, "error loading security policy fragment")
 	}
 	return nil
 }

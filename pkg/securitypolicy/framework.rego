@@ -1278,6 +1278,36 @@ fragment_issuer_feed_ok(fragment) {
     input.feed == fragment.feed
 }
 
+header_svn_ok(fragment) {
+    not input.has_header_svn
+}
+
+header_svn_ok(fragment) {
+    input.has_header_svn
+    svn_ok(input.header_svn, fragment.minimum_svn)
+}
+
+svn_ok_if_defined(minimum_svn) {
+    data[input.namespace].svn # This also works if the svn is 0
+    not input.has_header_svn
+    svn_ok(data[input.namespace].svn, minimum_svn)
+}
+
+svn_ok_if_defined(minimum_svn) {
+    data[input.namespace].svn
+    input.has_header_svn
+    # Use to_number as fragment may define svn as a string
+    to_number(input.header_svn) == to_number(data[input.namespace].svn)
+    svn_ok(data[input.namespace].svn, minimum_svn)
+}
+
+# If not defined in fragment, require SVN to present in the header
+svn_ok_if_defined(minimum_svn) {
+    not data[input.namespace].svn
+    input.has_header_svn
+    svn_ok(input.header_svn, minimum_svn)
+}
+
 default load_fragment := {"allowed": false}
 
 # load_fragment gets called twice - first before loading the fragment as a Rego
@@ -1285,20 +1315,25 @@ default load_fragment := {"allowed": false}
 # have access to anything under data[fragment.namespace] yet, and so we only
 # check that the fragment issuer and feed is valid, but does not actually load
 # the fragment into metadata.  It will then be called a second time, at which
-# point we can check the SVN defined in the fragment is valid, and if
-# successful, add the fragment to the metadata.
+# point we can check the SVN defined in the fragment is valid (if the SVN is not
+# in the header, and thus we could not have checked earlier), and if successful,
+# add the fragment to the metadata.
 
 load_fragment := {"allowed": true} {
     not input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
+    # If SVN provided in header, validate it now.
+    header_svn_ok(fragment)
 }
 
 load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed": true} {
     input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
-    svn_ok(data[input.namespace].svn, fragment.minimum_svn)
+    # If SVN is defined in the fragment's Rego module, also validate it.
+    # If header SVN was present, it must match that.
+    svn_ok_if_defined(fragment.minimum_svn)
 
     issuer := update_issuer(fragment.includes)
     updateIssuer := {
@@ -1832,6 +1867,14 @@ fragment_version_is_valid {
     svn_ok(data[input.namespace].svn, fragment.minimum_svn)
 }
 
+fragment_version_is_valid {
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.has_header_svn
+    svn_ok(input.header_svn, fragment.minimum_svn)
+}
+
 default svn_mismatch := false
 
 svn_mismatch {
@@ -1852,6 +1895,39 @@ svn_mismatch {
     to_number(fragment.minimum_svn)
 }
 
+# Header SVN is always a number, not semver
+svn_mismatch {
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.fragment_loaded
+    semver.is_valid(fragment.minimum_svn)
+    input.has_header_svn
+}
+
+default header_svn_not_match_fragment := false
+
+header_svn_not_match_fragment {
+    input.has_header_svn
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.fragment_loaded
+    data[input.namespace].svn
+    to_number(data[input.namespace].svn) != to_number(input.header_svn)
+}
+
+default missing_svn := false
+
+missing_svn {
+    not input.has_header_svn
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.fragment_loaded
+    not data[input.namespace].svn
+}
+
 errors["fragment svn is below the specified minimum"] {
     input.rule == "load_fragment"
     fragment_feed_matches
@@ -1865,6 +1941,22 @@ errors["fragment svn and the specified minimum are different types"] {
     fragment_feed_matches
     input.fragment_loaded
     svn_mismatch
+}
+
+errors[svnMismatchError] {
+    input.rule == "load_fragment"
+    fragment_feed_matches
+    input.fragment_loaded
+    header_svn_not_match_fragment
+
+    svnMismatchError := sprintf("svn in header %v does not match svn in fragment rego %v", [input.header_svn, data[input.namespace].svn])
+}
+
+errors["missing fragment svn in either header or rego payload"] {
+    input.rule == "load_fragment"
+    fragment_feed_matches
+    input.fragment_loaded
+    missing_svn
 }
 
 errors["scratch already mounted at path"] {

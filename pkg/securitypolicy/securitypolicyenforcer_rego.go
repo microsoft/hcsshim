@@ -1131,7 +1131,18 @@ func parseNamespace(rego string) (string, error) {
 	return namespace, nil
 }
 
-func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, feed string, rego string) error {
+// Evaluates a fragment, and if the policy allows, load it into the policy.
+// opts.HeaderSvn can be nil, in which case the SVN is read from the fragment's
+// Rego module after loading it (and unloaded if the fragment's SVN is too low),
+// or a SVN read from the COSE envelope, for a "SCITT-style" fragment.  This
+// allows determining if the SVN should be allowed without loading any Rego from
+// the fragment.
+func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentOptions) error {
+	issuer := opts.Issuer
+	feed := opts.Feed
+	headerSvn := opts.HeaderSVN
+	rego := opts.Rego
+
 	namespace, err := parseNamespace(rego)
 	if err != nil {
 		return fmt.Errorf("unable to load fragment: %w", err)
@@ -1149,6 +1160,8 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, fee
 		"feed":            feed,
 		"namespace":       namespace,
 		"fragment_loaded": false,
+		"has_header_svn":  headerSvn != nil,
+		"header_svn":      headerSvn,
 	}
 
 	// Check that the fragment is signed by the expected issuer before loading
@@ -1159,7 +1172,8 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, issuer string, fee
 	}
 
 	// At this point we need to add the fragment code as a new Rego module in
-	// order for the framework (or any user defined policies) to check the SVN,
+	// order for the framework (or any user defined policies) to check the SVN
+	// (if it's not already available in the CWT, passed in here as headerSvn),
 	// and potentially other information defined by its Rego code. We've already
 	// checked that the fragment is signed correctly, and the namespace is safe
 	// to load (won't override framework or other built-in modules). Once we
