@@ -994,11 +994,9 @@ func (ht *hcsTask) updateWCOWContainerCPUAffinity(ctx context.Context, affinity 
 		return fmt.Errorf("cpu affinity update for hypervisor-isolated containers is not supported: %w", errdefs.ErrNotImplemented)
 	}
 
-	system, ok := ht.c.(*hcs.System)
-	if !ok {
-		return fmt.Errorf("cpu affinity update requires an HCS-backed container, got %T", ht.c)
-	}
-	return system.SetSiloCPUGroupAffinities(ctx, hcsoci.ToJobObjectAffinities(validated))
+	// ht.c speaks the cow.Container interface; the underlying implementation
+	// (an Argon silo) honors affinity, while others return ErrNotImplemented.
+	return ht.c.SetCPUGroupAffinities(ctx, hcsoci.ToJobObjectAffinities(validated))
 }
 
 func isValidWindowsCPUResources(c *specs.WindowsCPUResources) bool {

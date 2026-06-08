@@ -4,20 +4,24 @@
 package hcsoci
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
-// Shared, container-kind-agnostic CPU affinity helpers. These are used by every
-// Windows container shape that honors spec.Windows.Resources.CPU.Affinity:
-// HostProcess (internal/jobcontainers) and Argon (this package). Keeping them
-// here, rather than in a kind-specific file, avoids duplicating the validation
-// and conversion logic across packages.
+// This file holds the package's CPU affinity code for
+// spec.Windows.Resources.CPU.Affinity. Most of it is container-kind-agnostic
+// validation and conversion (ValidateCPUAffinity / ValidateCPUAffinityEntries /
+// ToJobObjectAffinities), shared with the HostProcess path in
+// internal/jobcontainers so the logic is not duplicated across packages. The
+// Argon-specific create-time glue (applyArgonCPUAffinity) lives here too.
 
 // Sentinel errors returned by ValidateCPUAffinity / ValidateCPUAffinityEntries.
 var (
@@ -96,4 +100,31 @@ func ToJobObjectAffinities(affinities []specs.WindowsCPUGroupAffinity) []jobobje
 		}
 	}
 	return out
+}
+
+// applyArgonCPUAffinity honors spec.Windows.Resources.CPU.Affinity for a
+// process-isolated (Argon) container by pinning the container's server silo.
+//
+// HCS ignores CPU affinity on the container Processor schema (Count/Maximum/Weight),
+// so instead we set the affinity on the silo's job object directly. This must run
+// after the compute system is created but before it is started, so the affinity is
+// already recorded on the job when HCS assigns the init process to the silo. See
+// (*hcs.System).SetCPUGroupAffinities for the race-free timeline.
+//
+// If the spec requests no affinity this is a no-op.
+func applyArgonCPUAffinity(ctx context.Context, system *hcs.System, coi *createOptionsInternal) error {
+	affinities, err := ValidateCPUAffinity(coi.Spec)
+	if err != nil {
+		return err
+	}
+	if len(affinities) == 0 {
+		return nil
+	}
+
+	if err := system.SetCPUGroupAffinities(ctx, ToJobObjectAffinities(affinities)); err != nil {
+		return fmt.Errorf("apply CPU affinity to container silo: %w", err)
+	}
+
+	log.G(ctx).WithField("affinities", affinities).Debug("applied CPU affinity to Argon container silo")
+	return nil
 }

@@ -542,7 +542,7 @@ func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcssch
 	}, nil
 }
 
-// SetSiloCPUGroupAffinities pins the container's server silo to the given processor
+// SetCPUGroupAffinities pins the container's server silo to the given processor
 // group affinities. HCS does not expose a CPU-affinity field on the container Processor
 // schema, so for process-isolated (Argon) containers we set the affinity directly on the
 // silo's job object via SetInformationJobObject(JobObjectGroupInformationEx).
@@ -556,17 +556,30 @@ func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcssch
 // affinity is already recorded on the job when HCS assigns the init process. Applying it to
 // an already-running silo is also safe: the kernel re-applies the mask to current members and
 // migrates threads at the next scheduling dispatch.
-func (computeSystem *System) SetSiloCPUGroupAffinities(ctx context.Context, affinities []jobobject.GroupAffinity) (err error) {
-	operation := "hcs::System::SetSiloCPUGroupAffinities"
+//
+// It implements the cow.Container interface.
+func (computeSystem *System) SetCPUGroupAffinities(ctx context.Context, affinities []jobobject.GroupAffinity) error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
+
+	// Guard the compute system's lifecycle while we touch its silo: the RLock blocks
+	// a concurrent Close(), and handle == 0 means it is already torn down.
+	if computeSystem.handle == 0 {
+		return fmt.Errorf("set cpu group affinities on %s silo: %w", computeSystem.ID(), ErrAlreadyClosed)
+	}
+	// The silo job object only exists for containers, not VM-based compute systems.
+	if computeSystem.typ != "container" {
+		return fmt.Errorf("cpu group affinities are only supported on container compute systems, got %q", computeSystem.typ)
+	}
 
 	job, err := computeSystem.openSilo(ctx)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return fmt.Errorf("open %s silo: %w", computeSystem.ID(), err)
 	}
 	defer job.Close()
 
 	if err := job.SetCPUGroupAffinities(affinities); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+		return fmt.Errorf("set cpu group affinities on %s silo: %w", computeSystem.ID(), err)
 	}
 	return nil
 }

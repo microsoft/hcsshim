@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"unsafe"
 
 	"github.com/containerd/containerd/v2/core/containers"
 	ctrdoci "github.com/containerd/containerd/v2/pkg/oci"
@@ -15,6 +14,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/jobobject"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	testcontainer "github.com/Microsoft/hcsshim/test/internal/container"
@@ -34,7 +34,7 @@ import (
 //
 //	Layer 1 — the PR wrote the affinity to the silo's job object in the
 //	          create→start window. This is the real regression gate: it fails if
-//	          applyArgonCPUAffinity / SetSiloCPUGroupAffinities regresses.
+//	          applyArgonCPUAffinity / SetCPUGroupAffinities regresses.
 //	Layer 2 — the host's view matches. The NT-variant silo job IS the host object,
 //	          so the same GetCPUGroupAffinities read-back doubles as the host view;
 //	          no second tool is needed.
@@ -261,50 +261,34 @@ func assertAffinitiesEqual(t *testing.T, what string, got, want []jobobject.Grou
 	}
 }
 
-var (
-	kernel32                       = windows.NewLazySystemDLL("kernel32.dll")
-	procGetProcessGroupAffinity    = kernel32.NewProc("GetProcessGroupAffinity")
-	procGetProcessAffinityMask     = kernel32.NewProc("GetProcessAffinityMask")
-	procGetActiveProcessorGroupCnt = kernel32.NewProc("GetActiveProcessorGroupCount")
-)
-
-// getProcessGroupAffinity wraps kernel32!GetProcessGroupAffinity, which is not bound
-// in golang.org/x/sys/windows. It returns the processor groups the process may run on.
+// getProcessGroupAffinity returns the processor groups the process may run on via
+// winapi.GetProcessGroupAffinity (kernel32!GetProcessGroupAffinity).
 func getProcessGroupAffinity(h windows.Handle) ([]uint16, error) {
 	// Probe with a small buffer; the call sets count to the required size and fails
 	// with ERROR_INSUFFICIENT_BUFFER if it is too small.
 	groups := make([]uint16, 4)
 	count := uint16(len(groups))
 	for {
-		r1, _, e := procGetProcessGroupAffinity.Call(
-			uintptr(h),
-			uintptr(unsafe.Pointer(&count)),
-			uintptr(unsafe.Pointer(&groups[0])),
-		)
-		if r1 != 0 {
+		err := winapi.GetProcessGroupAffinity(h, &count, &groups[0])
+		if err == nil {
 			return groups[:count], nil
 		}
-		if errors.Is(e, windows.ERROR_INSUFFICIENT_BUFFER) && int(count) > len(groups) {
+		if errors.Is(err, windows.ERROR_INSUFFICIENT_BUFFER) && int(count) > len(groups) {
 			groups = make([]uint16, count)
 			continue
 		}
-		return nil, e
+		return nil, err
 	}
 }
 
-// getProcessAffinityMask wraps kernel32!GetProcessAffinityMask, which is not bound
-// in golang.org/x/sys/windows. It returns the per-CPU affinity bitmask the process
-// is restricted to. The kernel reports 0 when the process spans more than one
-// processor group, since a single mask cannot describe a multi-group pin.
+// getProcessAffinityMask returns the per-CPU affinity bitmask the process is
+// restricted to via winapi.GetProcessAffinityMask (kernel32!GetProcessAffinityMask).
+// The kernel reports 0 when the process spans more than one processor group, since a
+// single mask cannot describe a multi-group pin.
 func getProcessAffinityMask(h windows.Handle) (uint64, error) {
 	var processMask, systemMask uintptr
-	r1, _, e := procGetProcessAffinityMask.Call(
-		uintptr(h),
-		uintptr(unsafe.Pointer(&processMask)),
-		uintptr(unsafe.Pointer(&systemMask)),
-	)
-	if r1 == 0 {
-		return 0, e
+	if err := winapi.GetProcessAffinityMask(h, &processMask, &systemMask); err != nil {
+		return 0, err
 	}
 	return uint64(processMask), nil
 }
@@ -313,6 +297,5 @@ func getProcessAffinityMask(h windows.Handle) (uint64, error) {
 // used to decide whether a multi-group affinity test can run.
 func activeProcessorGroupCount(t *testing.T) int {
 	t.Helper()
-	r1, _, _ := procGetActiveProcessorGroupCnt.Call()
-	return int(uint16(r1))
+	return int(winapi.GetActiveProcessorGroupCount())
 }

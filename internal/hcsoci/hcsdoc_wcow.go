@@ -32,9 +32,6 @@ import (
 
 const createContainerSubdirectoryForProcessDumpSuffix = "{container_id}"
 
-// CPU affinity validation (ValidateCPUAffinity / ValidateCPUAffinityEntries) and its
-// sentinel errors live in cpuaffinity.go, shared with the HostProcess container path.
-
 // A simple wrapper struct around the container mount configs that should be added to the
 // container.
 type mountsConfig struct {
