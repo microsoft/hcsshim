@@ -57,10 +57,9 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		return errors.Wrap(err, "failed to unmarshal createContainer")
 	}
 
-	// containerConfig can be of type uvnConfig or hcsschema.HostedSystem or guestresource.CWCOWHostedSystem
+	// containerConfig can be of type uvmConfig or guestresource.CWCOWHostedSystem
 	var (
 		uvmConfig               prot.UvmConfig
-		hostedSystemConfig      hcsschema.HostedSystem
 		cwcowHostedSystemConfig guestresource.CWCOWHostedSystem
 	)
 	if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &uvmConfig); err == nil &&
@@ -68,11 +67,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		systemType := uvmConfig.SystemType
 		timeZoneInformation := uvmConfig.TimeZoneInformation
 		log.G(ctx).Tracef("createContainer: uvmConfig: {systemType: %v, timeZoneInformation: %v}}", systemType, timeZoneInformation)
-	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &hostedSystemConfig); err == nil &&
-		hostedSystemConfig.SchemaVersion != nil && hostedSystemConfig.Container != nil {
-		schemaVersion := hostedSystemConfig.SchemaVersion
-		container := hostedSystemConfig.Container
-		log.G(ctx).Tracef("rpcCreate: HostedSystemConfig: {schemaVersion: %v, container: %v}}", schemaVersion, container)
 	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &cwcowHostedSystemConfig); err == nil &&
 		cwcowHostedSystemConfig.Spec.Version != "" && cwcowHostedSystemConfig.CWCOWHostedSystem.Container != nil {
 		cwcowHostedSystem := cwcowHostedSystemConfig.CWCOWHostedSystem
@@ -551,21 +545,98 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 			switch settings.RPCType {
 			case guestrequest.RPCModifyServiceSettings, guestrequest.RPCStartLogForwarding, guestrequest.RPCStopLogForwarding:
 				log.G(req.ctx).Tracef("%v request received for LogForwardService, proceeding with policy enforcement for log sources", settings.RPCType)
-				// Enforce the policy for log sources in the request and update the settings with allowed log sources.
-				// For cwcow, the sidecar-GCS will verify the allowed log sources against policy and append the necessary GUIDs to the ones allowed. Rest are dropped.
-				// The Enforcer will have to unmarshal the log sources, enforce the policy and then marshal it back to a Base64 encoded JSON string which is what inbox GCS expects.
-				// It can query etw.GetDefaultLogSources to get the default log sources if the policy allows, and allow providers matching the default list during policy enforcement.
-				// This is because the log sources can be a combination of default and user specified log sources for which GUIDs need to be appended based on the policy enforcement.
 				if settings.Settings != "" {
-					// <EXAMPLE CALL>
-					// allowedLogSources, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogForwardServiceSettingsPolicy(req.ctx, settings.LogSources)
+					// Decode the base64-encoded log sources config so we can
+					// enforce policy on the requested provider list.
+					logSources, err := etw.DecodeAndUnmarshalLogSources(settings.Settings)
+					if err != nil {
+						return fmt.Errorf("failed to decode log sources: %w", err)
+					}
 
-					// For now, we are skipping the policy enforcement and allowing all log sources as the policy enforcer implementation is in progress. We will add the enforcement back once it's implemented.
-					allowedLogSources := settings.Settings // This is Base64 encoded JSON string of log sources
-					log.G(req.ctx).Tracef("Allowed log sources after policy enforcement: %v", allowedLogSources)
+					// Collect every requested provider name and ask the
+					// enforcer to validate them as a batch. The enforcer's
+					// behaviour depends on allow_log_provider_dropping in the
+					// active policy:
+					//   - false (default, fail-close): any disallowed provider
+					//     causes the call to be denied.
+					//   - true: disallowed providers are silently dropped and
+					//     the kept subset is returned for forwarding.
+					var requestedNames []string
+					for _, source := range logSources.LogConfig.Sources {
+						for _, provider := range source.Providers {
+							requestedNames = append(requestedNames, provider.ProviderName)
+						}
+					}
 
-					// Update the allowed log sources in the settings. This will be forwarded to inbox GCS which expects the log sources in a JSON string format with GUIDs for providers included.
-					allowedLogSources, err := etw.UpdateLogSources(allowedLogSources, false, true)
+					keptNames, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogProviderPolicy(
+						req.ctx, requestedNames)
+					if err != nil {
+						b.hostState.securityOptions.LockDown(req.ctx)
+						return fmt.Errorf("log providers denied by policy: %w", err)
+					}
+
+					// Build a quick lookup for the kept set so we can trim the
+					// LogSourcesInfo to only those providers the policy allowed.
+					keepSet := make(map[string]struct{}, len(keptNames))
+					for _, name := range keptNames {
+						keepSet[name] = struct{}{}
+					}
+
+					// Detect trimming by scanning requested names against
+					// keepSet. We cannot use len(kept) != len(requested):
+					// the rego enforcer returns providers_to_keep via a set
+					// (see getProvidersToKeep → keepSet.toArray()), so a
+					// duplicate-name request like [A, A, B] returns [A, B]
+					// even when nothing was dropped, which would otherwise
+					// trip a false-positive warning and a needless re-marshal.
+					dropped := make([]string, 0)
+					seenDropped := make(map[string]struct{})
+					for _, name := range requestedNames {
+						if _, ok := keepSet[name]; ok {
+							continue
+						}
+						if _, dup := seenDropped[name]; dup {
+							continue
+						}
+						seenDropped[name] = struct{}{}
+						dropped = append(dropped, name)
+					}
+
+					// Trim happens in-place on the parsed structure so we can
+					// hand it to UpdateLogSourcesFromInfo without a redundant
+					// base64-decode + JSON-unmarshal round-trip (we already
+					// decoded above for enforcement).
+					trimmed := logSources
+					if len(dropped) > 0 {
+						// Surface the drop so operators have a breadcrumb —
+						// under allow_log_provider_dropping the pod boots
+						// silently, and forwardlogs may itself be off, so
+						// without this warning the trim is invisible.
+						log.G(req.ctx).WithFields(map[string]interface{}{
+							"requested": requestedNames,
+							"kept":      keptNames,
+							"dropped":   dropped,
+						}).Warn("log providers trimmed by policy (allow_log_provider_dropping)")
+
+						// Trim each source's provider list to only the
+						// allowed names. Empty sources are preserved to keep
+						// the shape stable; inbox GCS handles them as no-ops.
+						for i := range trimmed.LogConfig.Sources {
+							src := &trimmed.LogConfig.Sources[i]
+							filtered := make([]etw.EtwProvider, 0, len(src.Providers))
+							for _, p := range src.Providers {
+								if _, ok := keepSet[p.ProviderName]; ok {
+									filtered = append(filtered, p)
+								}
+							}
+							src.Providers = filtered
+						}
+					}
+
+					// Apply GUID resolution (and any other inbox-GCS prep)
+					// against the policy-trimmed payload and hand off to
+					// inbox GCS.
+					allowedLogSources, err := etw.UpdateLogSourcesFromInfo(trimmed, false, true)
 					if err != nil {
 						return fmt.Errorf("failed to update log sources: %w", err)
 					}
