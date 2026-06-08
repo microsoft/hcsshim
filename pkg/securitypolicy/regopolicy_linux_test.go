@@ -4807,6 +4807,322 @@ func Test_Rego_LoadFragment_SVNMismatch(t *testing.T) {
 	}
 }
 
+// removeRegoSVN returns the fragment Rego code with its `svn := "<svn>"`
+// declaration removed, simulating a "SCITT-style" fragment whose SVN is carried
+// in the COSE header instead of the Rego payload.
+func removeRegoSVN(code string, svn string) string {
+	return strings.Replace(code, fmt.Sprintf("svn := %q", svn), "", 1)
+}
+
+// A fragment whose SVN is provided in the COSE header (and not in its Rego
+// payload) loads successfully when the header SVN meets the minimum.
+func Test_Rego_LoadFragment_HeaderSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		container := tc.containers[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		// SCITT-style fragment: the SVN comes from the COSE header and the
+		// fragment's Rego module does not declare one.
+		code := removeRegoSVN(fragment.code, fragment.info.minimumSVN)
+		headerSVN := int64(minSVN)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err != nil {
+			t.Errorf("unable to load fragment with header SVN: %v", err)
+			return false
+		}
+
+		containerID, err := mountImageForContainer(tc.policy, container.container)
+		if err != nil {
+			t.Errorf("unable to mount image for fragment container: %v", err)
+			return false
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
+			container.sandboxID,
+			containerID,
+			copyStrings(container.container.Command),
+			copyStrings(container.envList),
+			container.container.WorkingDir,
+			copyMounts(container.mounts),
+			false,
+			container.container.NoNewPrivileges,
+			container.user,
+			container.groups,
+			container.container.User.Umask,
+			container.capabilities,
+			container.seccomp,
+		)
+		if err != nil {
+			t.Errorf("unable to create container from fragment loaded via header SVN: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN: %v", err)
+	}
+}
+
+// A SCITT-style fragment is rejected (before its module is loaded) when the
+// header SVN is below the policy's minimum.
+func Test_Rego_LoadFragment_HeaderSVN_BelowMinimum(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		code := removeRegoSVN(fragment.code, fragment.info.minimumSVN)
+		headerSVN := int64(minSVN - 1)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to header SVN below minimum")
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN_BelowMinimum: %v", err)
+	}
+}
+
+// When both a header SVN and the SVN in the fragment's Rego module are present
+// and they agree (and meet the minimum), the fragment loads. The Rego SVN is a
+// string (as the tooling generates it) while the header SVN is a number, so the
+// framework must compare them numerically.
+func Test_Rego_LoadFragment_HeaderSVN_MatchesRegoSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		code := fragment.code
+		// it just happens now that the minSVN is always used as the fragment
+		// SVN. To fix.
+		headerSVN := int64(minSVN)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err != nil {
+			t.Errorf("unable to load fragment when header SVN matches Rego SVN: %v", err)
+			return false
+		}
+
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN_MatchesRegoSVN: %v", err)
+	}
+}
+
+// When both a header SVN and a numeric SVN in the fragment's Rego module are
+// present but disagree, the fragment is rejected even though both values meet
+// the minimum.
+func Test_Rego_LoadFragment_HeaderSVN_MismatchRegoSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		// The Rego SVN equals the minimum, but the header SVN is higher, so
+		// although both are at/above the minimum they do not match.
+		code := fragment.code
+		// It just happens now that the minSVN is always used as the fragment
+		// SVN. To fix.
+		headerSVN := int64(minSVN + 1)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to header/Rego SVN mismatch")
+			return false
+		}
+
+		expectedString := fmt.Sprintf("svn in header %v does not match svn in fragment rego %v", headerSVN, minSVN)
+		if !assertDecisionJSONContains(t, err, expectedString) {
+			t.Errorf("expected error string to contain '%s'", expectedString)
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN_MismatchRegoSVN: %v", err)
+	}
+}
+
+// A fragment with no SVN in either the header or its Rego payload is rejected.
+func Test_Rego_LoadFragment_MissingSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		// It just happens now that the minSVN is always used as the fragment
+		// SVN. To fix.
+		code := removeRegoSVN(fragment.code, fragment.info.minimumSVN)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
+		if err == nil {
+			t.Error("expected to be unable to load fragment with no SVN in header or Rego")
+			return false
+		}
+
+		if !assertDecisionJSONContains(t, err, "missing fragment svn in either header or rego payload") {
+			t.Error("expected error string to contain 'missing fragment svn in either header or rego payload'")
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_MissingSVN: %v", err)
+	}
+}
+
+// A fragment with an SVN of 0 (the lowest valid value) loads successfully
+// whether the SVN is carried in the COSE header or declared in the fragment's
+// Rego body. This guards against a regression where a 0 SVN could be mistaken
+// for "no SVN defined" due to Rego truthiness semantics.
+func Test_Rego_LoadFragment_ZeroSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		p.fragments = generateFragments(testRand, 1)
+		p.fragments[0].minimumSVN = "0"
+		securityPolicy := p.toPolicy()
+
+		defaultMounts := toOCIMounts(generateMounts(testRand))
+		privilegedMounts := toOCIMounts(generateMounts(testRand))
+
+		issuer := p.fragments[0].issuer
+		feed := p.fragments[0].feed
+
+		// Scenario 1: SVN 0 carried in the COSE header, no SVN in the Rego body.
+		{
+			policy, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts, testOSType)
+			if err != nil {
+				t.Fatalf("error compiling policy: %v", err)
+			}
+
+			fragmentConstraints := generateConstraints(testRand, 1)
+			fragmentConstraints.svn = "0"
+			code := removeRegoSVN(fragmentConstraints.toFragment().marshalRego(), "0")
+			headerSVN := int64(0)
+
+			err = policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, HeaderSVN: &headerSVN, Rego: code})
+			if err != nil {
+				t.Errorf("unable to load fragment with SVN 0 in header: %v", err)
+				return false
+			}
+
+			if policy.rego.IsModuleActive(rpi.ModuleID(issuer, feed)) {
+				t.Error("module not removed after load (header SVN 0)")
+				return false
+			}
+		}
+
+		// Scenario 2: SVN 0 declared in the Rego body, no header SVN.
+		{
+			policy, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts, testOSType)
+			if err != nil {
+				t.Fatalf("error compiling policy: %v", err)
+			}
+
+			fragmentConstraints := generateConstraints(testRand, 1)
+			fragmentConstraints.svn = "0"
+			code := fragmentConstraints.toFragment().marshalRego()
+
+			err = policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, Rego: code})
+			if err != nil {
+				t.Errorf("unable to load fragment with SVN 0 in Rego body: %v", err)
+				return false
+			}
+
+			if policy.rego.IsModuleActive(rpi.ModuleID(issuer, feed)) {
+				t.Error("module not removed after load (Rego body SVN 0)")
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_ZeroSVN: %v", err)
+	}
+}
+
 func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupRegoFragmentTwoFeedTestConfig(p, true, false)
