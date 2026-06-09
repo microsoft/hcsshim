@@ -17,7 +17,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -117,16 +116,44 @@ type Host struct {
 	// hostMounts keeps the state of currently mounted devices and file systems,
 	// which is used for GCS hardening.
 	hostMounts *hostMounts
-	// mountsBroken is a permanent flag to indicate that further mounts,
-	// unmounts and container creation should not be allowed.  This is set when,
-	// because of a failure during an unmount operation, we end up in a state
-	// where the policy enforcer's state is out of sync with what we have
-	// actually done, but we cannot safely revert its state.
+	// uvmError contains a permanent flag to indicate that further mounts,
+	// unmounts and container creation / deletion should not be allowed.  This
+	// is set when, because of a failure during an unmount operation, we end up
+	// in a state where the policy enforcer's state is out of sync with what we
+	// have actually done, but we cannot safely revert its state.
 	//
-	// Not used in non-confidential mode.
-	mountsBroken atomic.Bool
-	// A user-friendly error message for why mountsBroken was set.
-	mountsBrokenCausedBy string
+	// Only consulted in confidential mode (see Host.checkState).
+	uvmError uvmConsistencyError
+}
+
+type uvmConsistencyError struct {
+	mu sync.Mutex
+	// A user-friendly error message for why the UVM has entered an inconsistent
+	// state.  If this is empty, there is no error and Check() returns nil.
+	cause string
+}
+
+// Mark that the UVM has entered an inconsistent state, and store the cause if
+// it is not already set.
+func (u *uvmConsistencyError) Set(cause string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.cause == "" {
+		u.cause = cause
+	}
+}
+
+// Check returns a non-nil error if the UVM has been marked inconsistent.
+func (u *uvmConsistencyError) Check() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.cause != "" {
+		return errors.Errorf(
+			"Mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error (%q)",
+			u.cause,
+		)
+	}
+	return nil
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
@@ -146,7 +173,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		devNullTransport:  &transport.DevNullTransport{},
 		hostMounts:        newHostMounts(),
 		securityOptions:   securityPolicyOptions,
-		mountsBroken:      atomic.Bool{},
+		uvmError:          uvmConsistencyError{},
 	}
 }
 
@@ -398,28 +425,26 @@ func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHost
 	return nil
 }
 
-// Returns an error if h.mountsBroken is set (and we're in a confidential
-// container host)
-func (h *Host) checkMountsNotBroken() error {
-	if h.HasSecurityPolicy() && h.mountsBroken.Load() {
-		return errors.Errorf(
-			"Mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error (%q)",
-			h.mountsBrokenCausedBy,
-		)
+// checkState returns an error if the UVM has entered an inconsistent state from
+// which it cannot safely recover.  Only enforced for confidential containers.
+func (h *Host) checkState() error {
+	if h.HasSecurityPolicy() {
+		return h.uvmError.Check()
 	}
 	return nil
 }
 
-func (h *Host) setMountsBrokenIfConfidential(cause string) {
+// setUVMInconsistent records that the UVM has entered an inconsistent state and
+// logs the cause.  The flag is only consulted in confidential mode (see
+// checkState), so this is a no-op for non-confidential hosts.
+func (h *Host) setUVMInconsistent(cause string) {
 	if !h.HasSecurityPolicy() {
 		return
 	}
-	// write cause before atomic store of the bool below so that cause is never nil when the flag is set.
-	h.mountsBrokenCausedBy = cause
-	h.mountsBroken.Store(true)
+	h.uvmError.Set(cause)
 	log.G(context.Background()).WithFields(logrus.Fields{
 		"cause": cause,
-	}).Error("Host::mountsBroken set to true. All further mounts/unmounts, container creation and deletion will fail.")
+	}).Error("Host marked inconsistent. All further mounts/unmounts, container creation and deletion will fail.")
 }
 
 func checkExists(path string) (bool, error) {
@@ -433,7 +458,7 @@ func checkExists(path string) (bool, error) {
 }
 
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
-	if err = h.checkMountsNotBroken(); err != nil {
+	if err = h.checkState(); err != nil {
 		return nil, err
 	}
 
@@ -788,7 +813,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeSCSIDevice:
 		return modifySCSIDevice(ctx, req.RequestType, req.Settings.(*guestresource.SCSIDevice))
 	case guestresource.ResourceTypeMappedVirtualDisk:
-		if err := h.checkMountsNotBroken(); err != nil {
+		if err := h.checkState(); err != nil {
 			return err
 		}
 
@@ -831,19 +856,19 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return h.modifyMappedVirtualDisk(ctx, req.RequestType, mvd)
 	case guestresource.ResourceTypeMappedDirectory:
-		if err := h.checkMountsNotBroken(); err != nil {
+		if err := h.checkState(); err != nil {
 			return err
 		}
 
 		return h.modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory))
 	case guestresource.ResourceTypeVPMemDevice:
-		if err := h.checkMountsNotBroken(); err != nil {
+		if err := h.checkState(); err != nil {
 			return err
 		}
 
 		return h.modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice))
 	case guestresource.ResourceTypeCombinedLayers:
-		if err := h.checkMountsNotBroken(); err != nil {
+		if err := h.checkState(); err != nil {
 			return err
 		}
 
@@ -1327,7 +1352,7 @@ func (h *Host) modifyMappedVirtualDisk(
 			}
 			// Check that the directory actually exists first, and if it does
 			// not then we just refuse to do anything, without closing the dm
-			// device or setting the mountsBroken flag.  Policy metadata is
+			// device or marking the UVM inconsistent.  Policy metadata is
 			// still reverted to reflect the fact that we have not done
 			// anything.
 			//
@@ -1353,7 +1378,7 @@ func (h *Host) modifyMappedVirtualDisk(
 			}
 			err = scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath, config)
 			if err != nil {
-				h.setMountsBrokenIfConfidential(
+				h.setUVMInconsistent(
 					fmt.Sprintf("unmounting scsi device at %s failed: %v", mvd.MountPath, err),
 				)
 				return err
@@ -1402,7 +1427,7 @@ func (h *Host) modifyMappedDirectory(
 		// Note: storage.UnmountPath is nop if path does not exist.
 		err = storage.UnmountPath(ctx, md.MountPath, true)
 		if err != nil {
-			h.setMountsBrokenIfConfidential(
+			h.setUVMInconsistent(
 				fmt.Sprintf("unmounting plan9 device at %s failed: %v", md.MountPath, err),
 			)
 			return err
@@ -1459,7 +1484,7 @@ func (h *Host) modifyMappedVPMemDevice(ctx context.Context,
 
 		// Check that the directory actually exists first, and if it does not
 		// then we just refuse to do anything, without closing the dm-linear or
-		// dm-verity device or setting the mountsBroken flag.
+		// dm-verity device or marking the UVM inconsistent.
 		//
 		// Similar to the reasoning in modifyMappedVirtualDisk, we should not do
 		// this check before calling the policy enforcer.
@@ -1475,7 +1500,7 @@ func (h *Host) modifyMappedVPMemDevice(ctx context.Context,
 
 		err = pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
 		if err != nil {
-			h.setMountsBrokenIfConfidential(
+			h.setUVMInconsistent(
 				fmt.Sprintf("unmounting pmem device at %s failed: %v", vpd.MountPath, err),
 			)
 			return err
@@ -1586,7 +1611,7 @@ func (h *Host) modifyCombinedLayers(
 		// Note: storage.UnmountPath is a no-op if the path does not exist.
 		err = storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 		if err != nil {
-			h.setMountsBrokenIfConfidential(
+			h.setUVMInconsistent(
 				fmt.Sprintf("unmounting overlay at %s failed: %v", cl.ContainerRootPath, err),
 			)
 			return err
