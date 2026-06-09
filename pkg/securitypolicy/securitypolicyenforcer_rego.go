@@ -1204,19 +1204,6 @@ type revertableSectionHandle struct {
 	policy *regoEnforcer
 }
 
-func (policy *regoEnforcer) inRevertableSection() bool {
-	succ := policy.revertableSectionLock.TryLock()
-	if succ {
-		// since nobody else has the lock, we're not in fact in a revertable
-		// section.
-		policy.revertableSectionLock.Unlock()
-		return false
-	}
-	// somebody else (i.e. the caller) has the lock, so we're in a revertable
-	// section.  Don't unlock it here!
-	return true
-}
-
 // Starts a revertable section by saving the current policy state.  If another
 // revertable section is already active, this will wait until that one is
 // finished.
