@@ -6,6 +6,7 @@ package securitypolicy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -975,41 +976,56 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 		tid := testDataGenerator.uniqueContainerID()
 		scratchTarget := getScratchDiskMountTarget(tid)
 
-		rev := startRevertableSection(t, policy)
-		err = policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchTarget, true, true, "xfs")
+		errSimulatedFailure := errors.New("simulated failure")
+
+		err = policy.WithTransaction(func() error {
+			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchTarget, true, true, "xfs")
+		})
 		if err != nil {
 			t.Errorf("failed to EnforceRWDeviceMountPolicy: %v", err)
 			return false
 		}
-		rev.Commit()
 
 		layerToErr := testRand.Intn(len(tc.Layers))
 		errLayerPathIndex := len(tc.Layers) - layerToErr - 1
 		layerPaths := make([]string, len(tc.Layers))
 		for i, layerHash := range tc.Layers {
-			rev := startRevertableSection(t, policy)
 			target := testDataGenerator.uniqueLayerMountTarget()
 			layerPaths[len(tc.Layers)-i-1] = target
-			err = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
-			if err != nil {
-				t.Errorf("failed to EnforceDeviceMountPolicy: %v", err)
+			var policyErr error
+			err = policy.WithTransaction(func() error {
+				policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
+				if policyErr != nil {
+					return policyErr
+				}
+				if i == layerToErr {
+					// Simulate a mount failure at this point, which will cause us to rollback.
+					return errSimulatedFailure
+				}
+				return nil
+			})
+			if policyErr != nil {
+				t.Errorf("failed to EnforceDeviceMountPolicy: %v", policyErr)
 				return false
-			}
-			if i == layerToErr {
-				// Simulate a mount failure at this point, which will cause us to rollback
-				rev.Rollback()
-			} else {
-				rev.Commit()
 			}
 		}
 
-		rev = startRevertableSection(t, policy)
 		overlayTarget := getOverlayMountTarget(tid)
-		err = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
-		if !assertDecisionJSONContains(t, err, append(slices.Clone(layerPaths), "no matching containers for overlay")...) {
+		var policyErr error
+		err = policy.WithTransaction(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithTransaction to not return an error, but got: %v", err)
 			return false
 		}
-		commitOrRollback(rev, commitOnEnforcementFailure)
+		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPaths), "no matching containers for overlay")...) {
+			return false
+		}
 
 		layerPathsWithoutErr := make([]string, 0)
 		for i, layerPath := range layerPaths {
@@ -1018,21 +1034,29 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 			}
 		}
 
-		rev = startRevertableSection(t, policy)
-		err = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPathsWithoutErr, overlayTarget)
-		if !assertDecisionJSONContains(t, err, append(slices.Clone(layerPathsWithoutErr), "no matching containers for overlay")...) {
+		err = policy.WithTransaction(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPathsWithoutErr, overlayTarget)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithTransaction to not return an error, but got: %v", err)
 			return false
 		}
-		commitOrRollback(rev, commitOnEnforcementFailure)
+		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPathsWithoutErr), "no matching containers for overlay")...) {
+			return false
+		}
 
 		retryTarget := layerPaths[errLayerPathIndex]
-		rev = startRevertableSection(t, policy)
-		err = policy.EnforceDeviceMountPolicy(gc.ctx, retryTarget, tc.Layers[layerToErr])
+		err = policy.WithTransaction(func() error {
+			return policy.EnforceDeviceMountPolicy(gc.ctx, retryTarget, tc.Layers[layerToErr])
+		})
 		if err != nil {
 			t.Errorf("failed to EnforceDeviceMountPolicy again after one previous reverted failure: %v", err)
 			return false
 		}
-		rev.Commit()
 		err = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
 		if err != nil {
 			t.Errorf("failed to EnforceOverlayMountPolicy after one previous reverted failure: %v", err)
@@ -6214,49 +6238,65 @@ func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
 			return false
 		}
 
+		errSimulatedFailure := errors.New("simulated failure")
+
 		scratchMountTarget := getScratchDiskMountTarget(containerID)
-		rev := startRevertableSection(t, policy)
-		err = policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
+		err = policy.WithTransaction(func() error {
+			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
+		})
 		if err != nil {
 			t.Errorf("Failed to EnforceRWDeviceMountPolicy: %v", err)
 			return false
 		}
-		rev.Commit()
 
-		rev = startRevertableSection(t, policy)
 		overlayTarget := getOverlayMountTarget(containerID)
-		err = policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layers, overlayTarget)
-		if err != nil {
-			t.Errorf("Failed to EnforceOverlayMountPolicy: %v", err)
+		var policyErr error
+		err = policy.WithTransaction(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layers, overlayTarget)
+			if policyErr != nil {
+				return policyErr
+			}
+			// Simulate a failure by rolling back the overlay mount.
+			return errSimulatedFailure
+		})
+		if policyErr != nil {
+			t.Errorf("Failed to EnforceOverlayMountPolicy: %v", policyErr)
 			return false
 		}
-		// Simulate a failure by rolling back the overlay mount
-		rev.Rollback()
 
-		rev = startRevertableSection(t, policy)
-		_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
-		if err == nil {
+		err = policy.WithTransaction(func() error {
+			_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if policyErr == nil {
 			t.Errorf("EnforceCreateContainerPolicy should have failed due to missing (reverted) overlay mount")
 			return false
 		}
-		commitOrRollback(rev, commitOnEnforcementFailure)
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithTransaction to not return an error, but got: %v", err)
+			return false
+		}
 
 		// "Retry" overlay mount
-		rev = startRevertableSection(t, policy)
-		err = policy.EnforceOverlayMountPolicy(gc.ctx, tc.containerID, layers, overlayTarget)
+		err = policy.WithTransaction(func() error {
+			return policy.EnforceOverlayMountPolicy(gc.ctx, tc.containerID, layers, overlayTarget)
+		})
 		if err != nil {
 			t.Errorf("Failed to EnforceOverlayMountPolicy: %v", err)
 			return false
 		}
-		rev.Commit()
 
-		rev = startRevertableSection(t, policy)
-		_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		err = policy.WithTransaction(func() error {
+			_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+			return err
+		})
 		if err != nil {
 			t.Errorf("Failed to EnforceCreateContainerPolicy after retrying overlay mount: %v", err)
 			return false
 		}
-		rev.Commit()
 
 		return true
 	}
@@ -6289,68 +6329,84 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		errSimulatedFailure := errors.New("simulated failure")
+
 		scratchMountTarget := getScratchDiskMountTarget(containerID)
-		rev := startRevertableSection(t, policy)
-		err = policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
-		if err != nil {
-			t.Errorf("Failed to EnforceRWDeviceMountPolicy: %v", err)
+		var policyErr error
+		err = policy.WithTransaction(func() error {
+			policyErr = policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
+			if policyErr != nil {
+				return policyErr
+			}
+			if failScratchMount {
+				return errSimulatedFailure
+			}
+			return nil
+		})
+		if policyErr != nil {
+			t.Errorf("Failed to EnforceRWDeviceMountPolicy: %v", policyErr)
 			return false
 		}
 
 		succeedLayerPaths := make([]string, 0)
 
-		if failScratchMount {
-			rev.Rollback()
-		} else {
-			rev.Commit()
-
+		if !failScratchMount {
 			// Simulate one of the layers failing to mount, after which the outside
 			// gives up on this container and starts over.
 			layerToErr := testRand.Intn(len(container.Layers))
 			for i, layerHash := range container.Layers {
-				rev := startRevertableSection(t, policy)
 				target := testDataGenerator.uniqueLayerMountTarget()
-				err = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
-				if err != nil {
-					t.Errorf("failed to EnforceDeviceMountPolicy: %v", err)
+				err = policy.WithTransaction(func() error {
+					policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
+					if policyErr != nil {
+						return policyErr
+					}
+					if i == layerToErr {
+						// Simulate a mount failure at this point, which will cause us to rollback.
+						return errSimulatedFailure
+					}
+					return nil
+				})
+				if policyErr != nil {
+					t.Errorf("failed to EnforceDeviceMountPolicy: %v", policyErr)
 					return false
 				}
 				if i == layerToErr {
-					// Simulate a mount failure at this point, which will cause us to rollback
-					rev.Rollback()
+					// The simulated mount failure was rolled back, so the outside
+					// gives up on this container and starts over.
 					break
-				} else {
-					rev.Commit()
-					succeedLayerPaths = append(succeedLayerPaths, target)
 				}
+				succeedLayerPaths = append(succeedLayerPaths, target)
 			}
 
 			for _, layerPath := range succeedLayerPaths {
-				rev := startRevertableSection(t, policy)
-				err = policy.EnforceDeviceUnmountPolicy(gc.ctx, layerPath)
+				err = policy.WithTransaction(func() error {
+					return policy.EnforceDeviceUnmountPolicy(gc.ctx, layerPath)
+				})
 				if err != nil {
 					t.Errorf("Failed to EnforceDeviceUnmountPolicy: %v", err)
 					return false
 				}
-				rev.Commit()
 			}
 
-			rev = startRevertableSection(t, policy)
-			err = policy.EnforceRWDeviceUnmountPolicy(gc.ctx, scratchMountTarget)
+			err = policy.WithTransaction(func() error {
+				return policy.EnforceRWDeviceUnmountPolicy(gc.ctx, scratchMountTarget)
+			})
 			if err != nil {
 				t.Errorf("Failed to EnforceRWDeviceUnmountPolicy: %v", err)
 				return false
 			}
-			rev.Commit()
 		}
 
 		if testDenyInvalidContainerCreation {
-			rev = startRevertableSection(t, policy)
-			_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
-			if err == nil {
+			err = policy.WithTransaction(func() error {
+				_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+				return policyErr
+			})
+			if policyErr == nil {
 				t.Errorf("EnforceCreateContainerPolicy should have failed due to missing (reverted) overlay mount")
+				return false
 			}
-			rev.Rollback()
 		}
 
 		if newContainerID {

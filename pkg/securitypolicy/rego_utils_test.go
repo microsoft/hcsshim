@@ -380,7 +380,6 @@ func mountImageForContainerWithID(policy *regoEnforcer, container *securityPolic
 	return nil
 }
 
-
 func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
 	mountSpec := new(oci.Spec)
 
@@ -3010,20 +3009,4 @@ type containerInitProcess struct {
 	EnvRules         []EnvRuleConfig
 	WorkingDir       string
 	AllowStdioAccess bool
-}
-
-func startRevertableSection(t *testing.T, policy *regoEnforcer) RevertableSectionHandle {
-	rev, err := policy.StartRevertableSection()
-	if err != nil {
-		t.Fatalf("Failed to start revertable section: %v", err)
-	}
-	return rev
-}
-
-func commitOrRollback(rev RevertableSectionHandle, shouldCommit bool) {
-	if shouldCommit {
-		rev.Commit()
-	} else {
-		rev.Rollback()
-	}
 }

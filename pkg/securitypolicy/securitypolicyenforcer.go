@@ -57,14 +57,6 @@ func init() {
 	registeredEnforcers[openDoorEnforcerName] = createOpenDoorEnforcer
 }
 
-// Represents an in-progress revertable section.  To ensure state is consistent,
-// Commit() and Rollback() must not fail, so they do not return anything, and if
-// an error does occur they should panic or trigger an unrecoverable error.
-type RevertableSectionHandle interface {
-	Commit()
-	Rollback()
-}
-
 type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(ctx context.Context, target string, deviceHash string) (err error)
 	EnforceRWDeviceMountPolicy(ctx context.Context, target string, encrypted, ensureFilesystem bool, filesystem string) (err error)
@@ -136,7 +128,7 @@ type SecurityPolicyEnforcer interface {
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) (err error)
 	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error
-	StartRevertableSection() (RevertableSectionHandle, error)
+	WithTransaction(fn func() error) error
 }
 
 //nolint:unused
@@ -190,11 +182,6 @@ func CreateSecurityPolicyEnforcer(
 		return createEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts, maxErrorMessageLength)
 	}
 }
-
-type nopRevertableSectionHandle struct{}
-
-func (nopRevertableSectionHandle) Commit()   {}
-func (nopRevertableSectionHandle) Rollback() {}
 
 type OpenDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string
@@ -338,8 +325,8 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.C
 	return nil
 }
 
-func (*OpenDoorSecurityPolicyEnforcer) StartRevertableSection() (RevertableSectionHandle, error) {
-	return nopRevertableSectionHandle{}, nil
+func (OpenDoorSecurityPolicyEnforcer) WithTransaction(fn func() error) error {
+	return fn()
 }
 
 type ClosedDoorSecurityPolicyEnforcer struct{}
@@ -471,6 +458,6 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context
 	return errors.New("registry changes are denied by policy")
 }
 
-func (*ClosedDoorSecurityPolicyEnforcer) StartRevertableSection() (RevertableSectionHandle, error) {
-	return nopRevertableSectionHandle{}, nil
+func (ClosedDoorSecurityPolicyEnforcer) WithTransaction(fn func() error) error {
+	return fn()
 }
