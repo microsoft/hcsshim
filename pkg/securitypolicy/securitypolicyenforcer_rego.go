@@ -15,6 +15,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -1195,10 +1196,10 @@ func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (
 	return GetAllUserInfo(process, rootPath)
 }
 
-// WithMetadataRollback snapshots metadata, runs fn and rolls metadata back if fn
-// returns an error. Nested or concurrent calls are rejected. Returns
+// WithTransaction snapshots metadata, runs fn and rolls metadata back if fn
+// returns an error. Nested or concurrent transactions are rejected.  Returns
 // the error from fn if it fails.
-func (policy *regoEnforcer) WithMetadataRollback(fn func() error) error {
+func (policy *regoEnforcer) WithTransaction(fn func() error) error {
 	if !policy.transactionLock.TryLock() {
 		return errors.New("nested or concurrent policy transactions are not supported")
 	}
@@ -1212,7 +1213,8 @@ func (policy *regoEnforcer) WithMetadataRollback(fn func() error) error {
 	err = fn()
 	if err != nil {
 		if restoreErr := policy.rego.RestoreMetadata(saved); restoreErr != nil {
-			return fmt.Errorf("%w: restore failed (%v) after: %v", ErrFatalPolicyDesync, restoreErr, err)
+			gcs.UnrecoverableError(errors.Wrapf(restoreErr,
+				"failed to rollback policy metadata after error: %v", err))
 		}
 		log.G(context.Background()).WithError(err).Warn("rolled back policy metadata due to error")
 		return err
