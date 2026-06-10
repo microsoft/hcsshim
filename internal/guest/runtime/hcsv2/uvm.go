@@ -128,17 +128,17 @@ type Host struct {
 
 type uvmConsistencyError struct {
 	mu sync.Mutex
-	// A user-friendly error message for why the UVM has entered an inconsistent
-	// state.  If this is empty, there is no error and Check() returns nil.
-	cause string
+	// The error describing why the UVM has entered an inconsistent state.  If
+	// this is nil, there is no error and Check() returns nil.
+	cause error
 }
 
 // Mark that the UVM has entered an inconsistent state, and store the cause if
 // it is not already set.
-func (u *uvmConsistencyError) Set(cause string) {
+func (u *uvmConsistencyError) Set(cause error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.cause == "" {
+	if u.cause == nil {
 		u.cause = cause
 	}
 }
@@ -147,13 +147,13 @@ func (u *uvmConsistencyError) Set(cause string) {
 func (u *uvmConsistencyError) Check() error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.cause != "" {
-		return errors.Errorf(
-			"Mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error (%q)",
-			u.cause,
-		)
+	if u.cause == nil {
+		return nil
 	}
-	return nil
+	return fmt.Errorf(
+		"Mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error: %w",
+		u.cause,
+	)
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
@@ -437,7 +437,7 @@ func (h *Host) checkState() error {
 // setUVMInconsistent records that the UVM has entered an inconsistent state and
 // logs the cause.  The flag is only consulted in confidential mode (see
 // checkState), so this is a no-op for non-confidential hosts.
-func (h *Host) setUVMInconsistent(cause string) {
+func (h *Host) setUVMInconsistent(cause error) {
 	if !h.HasSecurityPolicy() {
 		return
 	}
@@ -1375,7 +1375,7 @@ func (h *Host) modifyMappedVirtualDisk(
 				err = scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath, config)
 				if err != nil {
 					h.setUVMInconsistent(
-						fmt.Sprintf("unmounting scsi device at %s failed: %v", mvd.MountPath, err),
+						fmt.Errorf("unmounting scsi device at %s failed: %w", mvd.MountPath, err),
 					)
 					return err
 				}
@@ -1420,7 +1420,7 @@ func (h *Host) modifyMappedDirectory(
 			err = storage.UnmountPath(ctx, md.MountPath, true)
 			if err != nil {
 				h.setUVMInconsistent(
-					fmt.Sprintf("unmounting plan9 device at %s failed: %v", md.MountPath, err),
+					fmt.Errorf("unmounting plan9 device at %s failed: %w", md.MountPath, err),
 				)
 				return err
 			}
@@ -1489,7 +1489,7 @@ func (h *Host) modifyMappedVPMemDevice(ctx context.Context,
 			err = pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
 			if err != nil {
 				h.setUVMInconsistent(
-					fmt.Sprintf("unmounting pmem device at %s failed: %v", vpd.MountPath, err),
+					fmt.Errorf("unmounting pmem device at %s failed: %w", vpd.MountPath, err),
 				)
 				return err
 			}
@@ -1596,7 +1596,7 @@ func (h *Host) modifyCombinedLayers(
 			err = storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 			if err != nil {
 				h.setUVMInconsistent(
-					fmt.Sprintf("unmounting overlay at %s failed: %v", cl.ContainerRootPath, err),
+					fmt.Errorf("unmounting overlay at %s failed: %w", cl.ContainerRootPath, err),
 				)
 				return err
 			}
