@@ -116,44 +116,83 @@ type Host struct {
 	// hostMounts keeps the state of currently mounted devices and file systems,
 	// which is used for GCS hardening.
 	hostMounts *hostMounts
-	// uvmError contains a permanent flag to indicate that further mounts,
-	// unmounts and container creation / deletion should not be allowed.  This
-	// is set when, because of a failure during an unmount operation, we end up
-	// in a state where the policy enforcer's state is out of sync with what we
-	// have actually done, but we cannot safely revert its state.
+	// uvmError tracks two levels of error severity for confidential containers:
 	//
-	// Only consulted in confidential mode (see Host.checkState).
-	uvmError uvmConsistencyError
+	// Inconsistent: set when an unmount operation fails and we cannot safely
+	// revert the policy enforcer's metadata state. Blocks mount, unmount,
+	// container creation and deletion, but allows shutdown, signal, exec and
+	// diagnostics so the host can clean up and operators can troubleshoot.
+	//
+	// Unrecoverable: set when the policy metadata rollback itself fails
+	// (ErrFatalPolicyDesync). The policy state is corrupted beyond repair.
+	// Blocks all operations except exec and diagnostics. The GCS process
+	// will self-terminate after a grace period.
+	//
+	// Only consulted in confidential mode (see Host.checkInconsistent,
+	// Host.checkUnrecoverable).
+	uvmError uvmErrorState
 }
 
-type uvmConsistencyError struct {
-	mu sync.Mutex
-	// The error describing why the UVM has entered an inconsistent state.  If
-	// this is nil, there is no error and Check() returns nil.
-	cause error
+// uvmErrorState tracks two severity levels for UVM errors in confidential mode.
+type uvmErrorState struct {
+	mu            sync.Mutex
+	inconsistent  error // unmount failure: policy metadata out of sync
+	unrecoverable error // policy rollback failure: metadata corrupted
 }
 
-// Mark that the UVM has entered an inconsistent state, and store the cause if
-// it is not already set.
-func (u *uvmConsistencyError) Set(cause error) {
+// SetInconsistent marks the UVM as having inconsistent policy metadata.
+// Stores the cause only if not already set.
+func (u *uvmErrorState) SetInconsistent(cause error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.cause == nil {
-		u.cause = cause
+	if u.inconsistent == nil {
+		u.inconsistent = cause
 	}
 }
 
-// Check returns a non-nil error if the UVM has been marked inconsistent.
-func (u *uvmConsistencyError) Check() error {
+// SetUnrecoverable marks the UVM as having corrupted policy metadata.
+// Stores the cause only if not already set.
+func (u *uvmErrorState) SetUnrecoverable(cause error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.cause == nil {
-		return nil
+	if u.unrecoverable == nil {
+		u.unrecoverable = cause
 	}
-	return fmt.Errorf(
-		"Mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error: %w",
-		u.cause,
-	)
+}
+
+// CheckInconsistent returns a non-nil error if the UVM is inconsistent OR
+// unrecoverable. Used to gate mount/unmount/container create/delete.
+func (u *uvmErrorState) CheckInconsistent() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.unrecoverable != nil {
+		return fmt.Errorf(
+			"all operations have been disabled in this UVM due to an unrecoverable error: %w",
+			u.unrecoverable,
+		)
+	}
+	if u.inconsistent != nil {
+		return fmt.Errorf(
+			"mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error: %w",
+			u.inconsistent,
+		)
+	}
+	return nil
+}
+
+// CheckUnrecoverable returns a non-nil error only if the UVM is in the
+// unrecoverable state. Used to gate operations like shutdown and signal
+// that should still work when merely inconsistent.
+func (u *uvmErrorState) CheckUnrecoverable() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.unrecoverable != nil {
+		return fmt.Errorf(
+			"all operations have been disabled in this UVM due to an unrecoverable error: %w",
+			u.unrecoverable,
+		)
+	}
+	return nil
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
@@ -173,7 +212,6 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		devNullTransport:  &transport.DevNullTransport{},
 		hostMounts:        newHostMounts(),
 		securityOptions:   securityPolicyOptions,
-		uvmError:          uvmConsistencyError{},
 	}
 }
 
@@ -425,26 +463,71 @@ func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHost
 	return nil
 }
 
-// checkState returns an error if the UVM has entered an inconsistent state from
-// which it cannot safely recover.  Only enforced for confidential containers.
-func (h *Host) checkState() error {
+// checkInconsistent returns an error if the UVM is inconsistent or
+// unrecoverable. Used to gate mount/unmount/container create/delete.
+// Only enforced for confidential containers.
+func (h *Host) checkInconsistent() error {
 	if h.HasSecurityPolicy() {
-		return h.uvmError.Check()
+		return h.uvmError.CheckInconsistent()
 	}
 	return nil
 }
 
-// setUVMInconsistent records that the UVM has entered an inconsistent state and
-// logs the cause.  The flag is only consulted in confidential mode (see
-// checkState), so this is a no-op for non-confidential hosts.
+// checkUnrecoverable returns an error only if the UVM is in the unrecoverable
+// state. Used to gate shutdown/signal - operations that should still work
+// when the UVM is merely inconsistent. Only enforced for confidential containers.
+func (h *Host) checkUnrecoverable() error {
+	if h.HasSecurityPolicy() {
+		return h.uvmError.CheckUnrecoverable()
+	}
+	return nil
+}
+
+// setUVMInconsistent records that the UVM has inconsistent policy metadata due
+// to an unmount failure. Blocks mount/unmount/container operations.
+// No-op for non-confidential hosts.
 func (h *Host) setUVMInconsistent(cause error) {
 	if !h.HasSecurityPolicy() {
 		return
 	}
-	h.uvmError.Set(cause)
+	h.uvmError.SetInconsistent(cause)
 	log.G(context.Background()).WithFields(logrus.Fields{
 		"cause": cause,
-	}).Error("Host marked inconsistent. All further mounts/unmounts, container creation and deletion will fail.")
+	}).Error("Host marked inconsistent. Mount/unmount and container create/delete will fail.")
+}
+
+// gracePeriodBeforeExit is how long the GCS stays alive after an unrecoverable
+// error to allow diagnostics before self-terminating.
+const gracePeriodBeforeExit = 1 * time.Hour
+
+// setUVMUnrecoverable records that the UVM has corrupted policy metadata.
+// Blocks all operations. Spawns a goroutine to self-terminate the GCS after
+// a grace period. No-op for non-confidential hosts.
+func (h *Host) setUVMUnrecoverable(cause error) {
+	if !h.HasSecurityPolicy() {
+		return
+	}
+	h.uvmError.SetUnrecoverable(cause)
+	log.G(context.Background()).WithFields(logrus.Fields{
+		"cause":       cause,
+		"gracePeriod": gracePeriodBeforeExit,
+	}).Error("Host marked unrecoverable. All operations will fail. GCS will self-terminate after grace period.")
+
+	go func() {
+		time.Sleep(gracePeriodBeforeExit)
+		panic(fmt.Sprintf("GCS terminating after grace period due to unrecoverable error: %v", cause))
+	}()
+}
+
+// withPolicyRollback runs fn inside WithMetadataRollback on the policy enforcer.
+// If it returns ErrFatalPolicyDesync the UVM is marked unrecoverable; all
+// operations will be blocked and the GCS will self-terminate after a grace period.
+func (h *Host) withPolicyRollback(fn func() error) error {
+	err := h.securityOptions.PolicyEnforcer.WithMetadataRollback(fn)
+	if errors.Is(err, securitypolicy.ErrFatalPolicyDesync) {
+		h.setUVMUnrecoverable(err)
+	}
+	return err
 }
 
 func checkExists(path string) (bool, error) {
@@ -458,7 +541,7 @@ func checkExists(path string) (bool, error) {
 }
 
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
-	if err = h.checkState(); err != nil {
+	if err = h.checkInconsistent(); err != nil {
 		return nil, err
 	}
 
@@ -813,10 +896,9 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeSCSIDevice:
 		return modifySCSIDevice(ctx, req.RequestType, req.Settings.(*guestresource.SCSIDevice))
 	case guestresource.ResourceTypeMappedVirtualDisk:
-		if err := h.checkState(); err != nil {
+		if err := h.checkInconsistent(); err != nil {
 			return err
 		}
-
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
 		// find the actual controller number on the bus and update the incoming request.
 		var cNum uint8
@@ -856,22 +938,19 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return h.modifyMappedVirtualDisk(ctx, req.RequestType, mvd)
 	case guestresource.ResourceTypeMappedDirectory:
-		if err := h.checkState(); err != nil {
+		if err := h.checkInconsistent(); err != nil {
 			return err
 		}
-
 		return h.modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory))
 	case guestresource.ResourceTypeVPMemDevice:
-		if err := h.checkState(); err != nil {
+		if err := h.checkInconsistent(); err != nil {
 			return err
 		}
-
 		return h.modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice))
 	case guestresource.ResourceTypeCombinedLayers:
-		if err := h.checkState(); err != nil {
+		if err := h.checkInconsistent(); err != nil {
 			return err
 		}
-
 		cl := req.Settings.(*guestresource.LCOWCombinedLayers)
 		// when cl.ScratchPath == "", we mount overlay as read-only, in which case
 		// we don't really care about scratch encryption, since the host already
@@ -889,6 +968,9 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	case guestresource.ResourceTypeSecurityPolicy:
+		if err := h.checkInconsistent(); err != nil {
+			return err
+		}
 		r, ok := req.Settings.(*guestresource.ConfidentialOptions)
 		if !ok {
 			return errors.New("the request's settings are not of type ConfidentialOptions")
@@ -898,6 +980,9 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 			r.EncodedSecurityPolicy,
 			r.EncodedUVMReference)
 	case guestresource.ResourceTypePolicyFragment:
+		if err := h.checkInconsistent(); err != nil {
+			return err
+		}
 		r, ok := req.Settings.(*guestresource.SecurityPolicyFragment)
 		if !ok {
 			return errors.New("the request settings are not of type SecurityPolicyFragment")
@@ -943,6 +1028,9 @@ func (*Host) Shutdown() {
 
 // Called to shutdown a container
 func (h *Host) ShutdownContainer(ctx context.Context, containerID string, graceful bool) error {
+	if err := h.checkUnrecoverable(); err != nil {
+		return err
+	}
 	c, err := h.GetCreatedContainer(containerID)
 	if err != nil {
 		return err
@@ -962,6 +1050,9 @@ func (h *Host) ShutdownContainer(ctx context.Context, containerID string, gracef
 }
 
 func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, processID uint32, signal syscall.Signal) error {
+	if err := h.checkUnrecoverable(); err != nil {
+		return err
+	}
 	c, err := h.GetCreatedContainer(containerID)
 	if err != nil {
 		return err
@@ -1296,7 +1387,7 @@ func (h *Host) modifyMappedVirtualDisk(
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations by marking the UVM state as inconsistent.
-	return securityPolicy.WithTransaction(func() error {
+	return h.withPolicyRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
@@ -1398,7 +1489,7 @@ func (h *Host) modifyMappedDirectory(
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations.
-	return securityPolicy.WithTransaction(func() error {
+	return h.withPolicyRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
@@ -1453,7 +1544,7 @@ func (h *Host) modifyMappedVPMemDevice(ctx context.Context,
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations.
-	return securityPolicy.WithTransaction(func() error {
+	return h.withPolicyRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			err = securityPolicy.EnforceDeviceMountPolicy(ctx, vpd.MountPath, deviceHash)
@@ -1522,7 +1613,7 @@ func (h *Host) modifyCombinedLayers(
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations.
-	return securityPolicy.WithTransaction(func() error {
+	return h.withPolicyRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			if h.HasSecurityPolicy() {

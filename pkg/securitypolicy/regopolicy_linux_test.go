@@ -978,7 +978,7 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 
 		errSimulatedFailure := errors.New("simulated failure")
 
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchTarget, true, true, "xfs")
 		})
 		if err != nil {
@@ -993,7 +993,7 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 			target := testDataGenerator.uniqueLayerMountTarget()
 			layerPaths[len(tc.Layers)-i-1] = target
 			var policyErr error
-			err = policy.WithTransaction(func() error {
+			err = policy.WithMetadataRollback(func() error {
 				policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
 				if policyErr != nil {
 					return policyErr
@@ -1012,7 +1012,7 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 
 		overlayTarget := getOverlayMountTarget(tid)
 		var policyErr error
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
 			if commitOnEnforcementFailure {
 				return nil
@@ -1020,7 +1020,7 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 			return policyErr
 		})
 		if err != nil && commitOnEnforcementFailure {
-			t.Errorf("Expected WithTransaction to not return an error, but got: %v", err)
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
 			return false
 		}
 		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPaths), "no matching containers for overlay")...) {
@@ -1034,7 +1034,7 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 			}
 		}
 
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPathsWithoutErr, overlayTarget)
 			if commitOnEnforcementFailure {
 				return nil
@@ -1042,7 +1042,7 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 			return policyErr
 		})
 		if err != nil && commitOnEnforcementFailure {
-			t.Errorf("Expected WithTransaction to not return an error, but got: %v", err)
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
 			return false
 		}
 		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPathsWithoutErr), "no matching containers for overlay")...) {
@@ -1050,7 +1050,7 @@ func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
 		}
 
 		retryTarget := layerPaths[errLayerPathIndex]
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			return policy.EnforceDeviceMountPolicy(gc.ctx, retryTarget, tc.Layers[layerToErr])
 		})
 		if err != nil {
@@ -6241,7 +6241,7 @@ func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
 		errSimulatedFailure := errors.New("simulated failure")
 
 		scratchMountTarget := getScratchDiskMountTarget(containerID)
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
 		})
 		if err != nil {
@@ -6251,7 +6251,7 @@ func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
 
 		overlayTarget := getOverlayMountTarget(containerID)
 		var policyErr error
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layers, overlayTarget)
 			if policyErr != nil {
 				return policyErr
@@ -6264,7 +6264,7 @@ func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
 			return false
 		}
 
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 			if commitOnEnforcementFailure {
 				return nil
@@ -6276,12 +6276,12 @@ func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
 			return false
 		}
 		if err != nil && commitOnEnforcementFailure {
-			t.Errorf("Expected WithTransaction to not return an error, but got: %v", err)
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
 			return false
 		}
 
 		// "Retry" overlay mount
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			return policy.EnforceOverlayMountPolicy(gc.ctx, tc.containerID, layers, overlayTarget)
 		})
 		if err != nil {
@@ -6289,7 +6289,7 @@ func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
 			return false
 		}
 
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 			return err
 		})
@@ -6333,7 +6333,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 
 		scratchMountTarget := getScratchDiskMountTarget(containerID)
 		var policyErr error
-		err = policy.WithTransaction(func() error {
+		err = policy.WithMetadataRollback(func() error {
 			policyErr = policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
 			if policyErr != nil {
 				return policyErr
@@ -6356,7 +6356,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 			layerToErr := testRand.Intn(len(container.Layers))
 			for i, layerHash := range container.Layers {
 				target := testDataGenerator.uniqueLayerMountTarget()
-				err = policy.WithTransaction(func() error {
+				err = policy.WithMetadataRollback(func() error {
 					policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
 					if policyErr != nil {
 						return policyErr
@@ -6380,7 +6380,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 			}
 
 			for _, layerPath := range succeedLayerPaths {
-				err = policy.WithTransaction(func() error {
+				err = policy.WithMetadataRollback(func() error {
 					return policy.EnforceDeviceUnmountPolicy(gc.ctx, layerPath)
 				})
 				if err != nil {
@@ -6389,7 +6389,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 				}
 			}
 
-			err = policy.WithTransaction(func() error {
+			err = policy.WithMetadataRollback(func() error {
 				return policy.EnforceRWDeviceUnmountPolicy(gc.ctx, scratchMountTarget)
 			})
 			if err != nil {
@@ -6399,7 +6399,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 		}
 
 		if testDenyInvalidContainerCreation {
-			err = policy.WithTransaction(func() error {
+			err = policy.WithMetadataRollback(func() error {
 				_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 				return policyErr
 			})
