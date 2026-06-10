@@ -151,7 +151,7 @@ func (u *uvmConsistencyError) Check() error {
 		return nil
 	}
 	return fmt.Errorf(
-		"Mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error: %w",
+		"mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error: %w",
 		u.cause,
 	)
 }
