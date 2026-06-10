@@ -128,7 +128,7 @@ type SecurityPolicyEnforcer interface {
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) (err error)
 	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error
-	WithTransaction(fn func() error) error
+	WithMetadataRollback(fn func() error) error
 }
 
 //nolint:unused
@@ -325,7 +325,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.C
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) WithTransaction(fn func() error) error {
+func (OpenDoorSecurityPolicyEnforcer) WithMetadataRollback(fn func() error) error {
 	return fn()
 }
 
@@ -458,6 +458,6 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context
 	return errors.New("registry changes are denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) WithTransaction(fn func() error) error {
+func (ClosedDoorSecurityPolicyEnforcer) WithMetadataRollback(fn func() error) error {
 	return fn()
 }

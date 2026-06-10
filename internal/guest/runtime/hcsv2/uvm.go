@@ -1296,7 +1296,7 @@ func (h *Host) modifyMappedVirtualDisk(
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations by marking the UVM state as inconsistent.
-	return securityPolicy.WithTransaction(func() error {
+	return securityPolicy.WithMetadataRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
@@ -1398,7 +1398,7 @@ func (h *Host) modifyMappedDirectory(
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations.
-	return securityPolicy.WithTransaction(func() error {
+	return securityPolicy.WithMetadataRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
@@ -1453,7 +1453,7 @@ func (h *Host) modifyMappedVPMemDevice(ctx context.Context,
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations.
-	return securityPolicy.WithTransaction(func() error {
+	return securityPolicy.WithMetadataRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			err = securityPolicy.EnforceDeviceMountPolicy(ctx, vpd.MountPath, deviceHash)
@@ -1522,7 +1522,7 @@ func (h *Host) modifyCombinedLayers(
 	// transaction rollback mechanism on both mount and unmount errors, but if
 	// we've actually called Unmount and it fails we permanently block further
 	// device operations.
-	return securityPolicy.WithTransaction(func() error {
+	return securityPolicy.WithMetadataRollback(func() error {
 		switch rt {
 		case guestrequest.RequestTypeAdd:
 			if h.HasSecurityPolicy() {

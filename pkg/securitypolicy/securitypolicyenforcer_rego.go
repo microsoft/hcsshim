@@ -1196,10 +1196,10 @@ func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (
 	return GetAllUserInfo(process, rootPath)
 }
 
-// WithTransaction snapshots metadata, runs fn and rolls metadata back if fn
+// WithMetadataRollback snapshots metadata, runs fn and rolls metadata back if fn
 // returns an error. Nested or concurrent transactions are rejected.  Returns
 // the error from fn if it fails.
-func (policy *regoEnforcer) WithTransaction(fn func() error) error {
+func (policy *regoEnforcer) WithMetadataRollback(fn func() error) error {
 	if !policy.transactionLock.TryLock() {
 		return errors.New("nested or concurrent policy transactions are not supported")
 	}
