@@ -5,13 +5,11 @@ package hcsv2
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/sirupsen/logrus"
 )
@@ -76,7 +74,7 @@ func newHostMounts() *hostMounts {
 
 func (hm *hostMounts) expectLocked() {
 	if !hm.stateMutexLocked {
-		gcs.UnrecoverableError(errors.New("hostMounts: expected stateMutex to be locked, but it was not"))
+		panic("hostMounts: expected stateMutex to be locked, but it was not")
 	}
 }
 
@@ -88,7 +86,7 @@ func (hm *hostMounts) Lock() {
 	// somebody just unlocked it. Either case, hm.stateMutexLocked should be
 	// false.
 	if hm.stateMutexLocked {
-		gcs.UnrecoverableError(errors.New("hostMounts: stateMutexLocked already true when locking stateMutex"))
+		panic("hostMounts: stateMutexLocked already true when locking stateMutex")
 	}
 	hm.stateMutexLocked = true
 }
