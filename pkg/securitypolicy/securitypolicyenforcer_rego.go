@@ -15,7 +15,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -1213,8 +1212,7 @@ func (policy *regoEnforcer) WithMetadataRollback(fn func() error) error {
 	err = fn()
 	if err != nil {
 		if restoreErr := policy.rego.RestoreMetadata(saved); restoreErr != nil {
-			gcs.UnrecoverableError(errors.Wrapf(restoreErr,
-				"failed to rollback policy metadata after error: %v", err))
+			panic(fmt.Sprintf("failed to rollback policy metadata: %v (caused by error: %v)", restoreErr, err))
 		}
 		log.G(context.Background()).WithError(err).Warn("rolled back policy metadata due to error")
 		return err
