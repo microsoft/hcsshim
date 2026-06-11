@@ -10,11 +10,15 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 )
 
-// Capabilities returns the capabilities of the guest connection.
+// Capabilities returns the capabilities of the guest connection, or nil
+// if no GCS connection is active.
 func (gm *Guest) Capabilities() gcs.GuestDefinedCapabilities {
 	gm.mu.RLock()
 	defer gm.mu.RUnlock()
 
+	if gm.gc == nil {
+		return nil
+	}
 	return gm.gc.Capabilities()
 }
 

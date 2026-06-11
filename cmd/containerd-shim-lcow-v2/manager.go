@@ -183,8 +183,8 @@ func (m *shimManager) Start(ctx context.Context, id string, opts shim.StartOpts)
 // It reads and logs any panic messages written to panic.log, then tries to
 // terminate the associated HCS compute system and waits up to 30 seconds for
 // it to exit.
-func (m *shimManager) Stop(_ context.Context, id string) (resp shim.StopStatus, err error) {
-	ctx, span := oc.StartSpan(context.Background(), "delete")
+func (m *shimManager) Stop(ctx context.Context, id string) (resp shim.StopStatus, err error) {
+	ctx, span := oc.StartSpan(ctx, "delete")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
