@@ -446,6 +446,12 @@ func main() {
 			break
 		}
 
+		// Drop every container stdio ConnSlot. Relay goroutines park inside
+		// ConnSlot.Write until the host re-attaches stdio with a fresh
+		// connection; producing processes pause naturally when their kernel
+		// pipe buffers fill, preserving in-flight bytes.
+		h.DisconnectAllStdio()
+
 		logrus.WithError(serveErr).Warn("bridge connection lost, will reconnect")
 		time.Sleep(reconnectInterval)
 	}
