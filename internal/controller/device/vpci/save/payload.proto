@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package hcsshim.controller.vpci.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/device/vpci/save;save";
+
+// =============================================================================
+// Lifecycle stage enum
+//
+// DeviceStage mirrors the Go State type used by the VPCI sub-controller. The
+// zero value matches the Go iota-zero value (Reserved).
+// =============================================================================
+
+enum DeviceStage {
+  DEVICE_STAGE_RESERVED         = 0;
+  DEVICE_STAGE_ASSIGNED         = 1;
+  DEVICE_STAGE_READY            = 2;
+  DEVICE_STAGE_ASSIGNED_INVALID = 3;
+  DEVICE_STAGE_REMOVED          = 4;
+}
+
+// Payload is the migration payload owned by the VPCI sub-controller. It is the
+// top-level message wrapped in an [anypb.Any] when handed off between source
+// and destination shims.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // devices is keyed by VMBus channel GUID and contains every VPCI device
+  // currently tracked by the controller. The string keys here are the
+  // values referenced by container controllers' vpci_vmbus_guids.
+  map<string, DeviceState> devices = 2;
+}
+
+// DeviceState is a single VPCI device tracked by the controller, keyed by
+// VMBus channel GUID in [Payload.devices].
+message DeviceState {
+  // device_instance_id is the host PnP device instance ID.
+  string device_instance_id = 1;
+
+  // virtual_function_index is the SR-IOV virtual-function index.
+  uint32 virtual_function_index = 2;
+
+  // state is the device lifecycle stage.
+  DeviceStage state = 3;
+
+  // ref_count is the number of containers currently sharing this device.
+  uint32 ref_count = 4;
+}

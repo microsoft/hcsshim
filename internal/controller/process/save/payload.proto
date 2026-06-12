@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package hcsshim.controller.process.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/process/save;save";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// =============================================================================
+// Lifecycle stage enum
+//
+// Stage mirrors the Go State type used by the process controller. The zero
+// value matches the Go iota-zero value (NotCreated).
+// =============================================================================
+
+enum Stage {
+  STAGE_NOT_CREATED = 0;
+  STAGE_CREATED     = 1;
+  STAGE_RUNNING     = 2;
+  STAGE_TERMINATED  = 3;
+}
+
+// Payload is the migration payload owned by a single process controller. It is
+// the top-level message wrapped in an [anypb.Any] when handed off between
+// source and destination shims.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // exec_id is the process's exec identifier; empty for the container's
+  // init process.
+  string exec_id = 2;
+
+  // state is the process lifecycle stage.
+  Stage state = 3;
+
+  // pid is the process ID inside the guest.
+  int32 pid = 4;
+
+  // bundle is the OCI bundle path on the host.
+  string bundle = 5;
+
+  // oci_process_spec_json is the JSON-encoded OCI process specification.
+  bytes oci_process_spec_json = 6;
+
+  // exited_at is the time the process exited; zero while still running.
+  google.protobuf.Timestamp exited_at = 7;
+
+  // exit_code is the process exit code; only meaningful once the process
+  // has terminated.
+  uint32 exit_code = 8;
+
+  // io_retry_timeout is how long IO relay reconnects are retried for this
+  // process.
+  google.protobuf.Duration io_retry_timeout = 9;
+
+  // stdin_port, stdout_port and stderr_port are the vsock ports used by
+  // the GCS<->shim IO relay for this process. The destination reattaches
+  // IO on the same ports so streams do not need to be renegotiated.
+  uint32 stdin_port  = 10;
+  uint32 stdout_port = 11;
+  uint32 stderr_port = 12;
+}

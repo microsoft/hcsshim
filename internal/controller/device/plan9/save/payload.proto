@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package hcsshim.controller.plan9.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/device/plan9/save;save";
+
+// =============================================================================
+// Lifecycle stage enums
+//
+// Each enum mirrors a Go State type used by the Plan9 sub-controller. The
+// zero value matches the Go iota-zero value (Reserved).
+// =============================================================================
+
+enum ShareStage {
+  SHARE_STAGE_RESERVED = 0;
+  SHARE_STAGE_ADDED    = 1;
+  SHARE_STAGE_INVALID  = 2;
+  SHARE_STAGE_REMOVED  = 3;
+}
+
+enum MountStage {
+  MOUNT_STAGE_RESERVED  = 0;
+  MOUNT_STAGE_MOUNTED   = 1;
+  MOUNT_STAGE_INVALID   = 2;
+  MOUNT_STAGE_UNMOUNTED = 3;
+}
+
+// Payload is the migration payload owned by the Plan9 sub-controller. It is
+// the top-level message wrapped in an [anypb.Any] when handed off between
+// source and destination shims.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // no_writable_file_shares mirrors the controller's policy flag.
+  bool no_writable_file_shares = 2;
+
+  // name_counter is the monotonic counter used to allocate unique share
+  // names. It is preserved verbatim so post-restore allocations do not
+  // collide with already-restored shares.
+  uint64 name_counter = 3;
+
+  // shares is keyed by host path.
+  map<string, ShareState> shares = 4;
+
+  // reservations is keyed by reservation GUID and maps to the host path of
+  // the reserved share. The string keys here are the values referenced by
+  // container controllers' plan9_reservation_ids.
+  map<string, string> reservations = 5;
+}
+
+// ShareState is a single 9P share tracked by the controller, keyed by host
+// path in [Payload.shares].
+message ShareState {
+  // name is the generated 9P share name.
+  string name = 1;
+
+  // config is the share configuration.
+  ShareConfig config = 2;
+
+  // state is the share lifecycle stage.
+  ShareStage state = 3;
+
+  // mount carries the in-guest mount metadata for this share, when present.
+  MountState mount = 4;
+}
+
+// ShareConfig is the host-side configuration of a 9P share.
+message ShareConfig {
+  // read_only exposes the share read-only.
+  bool read_only = 1;
+
+  // restrict enables single-file mapping mode in which only files listed in
+  // allowed_names are visible through the share.
+  bool restrict = 2;
+
+  // allowed_names is the whitelist of file names used when restrict is true.
+  repeated string allowed_names = 3;
+}
+
+// MountState is the in-guest mount metadata for a 9P share.
+message MountState {
+  // read_only mounts the share read-only inside the guest.
+  bool read_only = 1;
+
+  // state is the mount lifecycle stage.
+  MountStage state = 2;
+
+  // ref_count is the number of live holders of this mount.
+  uint32 ref_count = 3;
+
+  // guest_path is the mount point inside the guest.
+  string guest_path = 4;
+}

@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package hcsshim.controller.vm.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/vm/save;save";
+
+import "google/protobuf/any.proto";
+
+// =============================================================================
+// Lifecycle stage enum
+//
+// Stage mirrors the Go State type used by the VM controller. The zero value
+// matches the Go iota-zero value (NotCreated).
+// =============================================================================
+
+enum Stage {
+  STAGE_NOT_CREATED = 0;
+  STAGE_CREATED     = 1;
+  STAGE_RUNNING     = 2;
+  STAGE_TERMINATED  = 3;
+  STAGE_INVALID     = 4;
+  STAGE_MIGRATING   = 5;
+}
+
+// Payload is the migration payload owned by the VM controller. It is the
+// top-level message wrapped in an [anypb.Any] when handed off between source
+// and destination shims. Sub-device controllers (SCSI, VPCI, Plan9) are
+// carried as opaque [anypb.Any] payloads so each sub-controller fully owns
+// its own schema and versioning.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // vm_id is the HCS identifier of the running VM.
+  string vm_id = 2;
+
+  // state is the VM lifecycle stage.
+  Stage state = 3;
+
+  // sandbox_options is the original set of options the VM was built from,
+  // so the destination can recreate an equivalent VM.
+  SandboxOptions sandbox_options = 4;
+
+  // scsi is the SCSI sub-controller's [anypb.Any] envelope (attached
+  // disks, mounts and outstanding reservations).
+  google.protobuf.Any scsi = 5;
+
+  // vpci is the VPCI sub-controller's [anypb.Any] envelope (assigned
+  // devices).
+  google.protobuf.Any vpci = 6;
+
+  // plan9 is the Plan9 sub-controller's [anypb.Any] envelope (LCOW file
+  // shares).
+  google.protobuf.Any plan9 = 7;
+
+  // gcs_next_port is the next free vsock port in the GCS port allocator.
+  // The destination seeds its allocator with this value so newly opened
+  // IO channels do not collide with per-process ports restored elsewhere.
+  uint32 gcs_next_port = 8;
+
+  // compat_info is the opaque, host-emitted compatibility blob describing
+  // the source VM's compatibility surface. The destination passes it back
+  // to HCS when starting the target VM so the platform can verify that the
+  // two VMs can interchange live-migration state.
+  bytes compat_info = 9;
+}
+
+// SandboxOptions is the set of VM-creation options preserved verbatim so the
+// destination can build an equivalent VM.
+message SandboxOptions {
+  // no_writable_file_shares disallows read/write file shares into the guest.
+  bool no_writable_file_shares = 1;
+
+  // enable_scratch_encryption enables dm-crypt on the scratch disk.
+  bool enable_scratch_encryption = 2;
+
+  // policy_based_routing enables policy-based routing in the guest network
+  // stack.
+  bool policy_based_routing = 3;
+
+  // architecture is the guest CPU architecture (e.g. "amd64", "arm64").
+  string architecture = 4;
+
+  // fully_physically_backed forces all guest memory to be backed by physical
+  // memory (disables hot-add) and, as a side effect, disables VPMEM.
+  bool fully_physically_backed = 5;
+
+  // confidential carries confidential-compute parameters.
+  ConfidentialConfig confidential = 6;
+}
+
+// ConfidentialConfig carries confidential-compute parameters for the VM.
+message ConfidentialConfig {
+  // security_policy is the base64-encoded security-policy document.
+  string security_policy = 1;
+
+  // security_policy_enforcer selects the enforcer implementation
+  // (e.g. "rego", "standard").
+  string security_policy_enforcer = 2;
+
+  // uvm_reference_info_file is the path to the UVM reference-info file used
+  // to validate measurements.
+  string uvm_reference_info_file = 3;
+}

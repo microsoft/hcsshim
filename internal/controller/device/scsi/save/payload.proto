@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package hcsshim.controller.scsi.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/device/scsi/save;save";
+
+// =============================================================================
+// Lifecycle stage enums
+//
+// Each enum mirrors a Go State type used by the SCSI sub-controller. The zero
+// value matches the Go iota-zero value (Reserved).
+// =============================================================================
+
+enum DiskStage {
+  DISK_STAGE_RESERVED = 0;
+  DISK_STAGE_ATTACHED = 1;
+  DISK_STAGE_EJECTED  = 2;
+  DISK_STAGE_DETACHED = 3;
+}
+
+enum MountStage {
+  MOUNT_STAGE_RESERVED  = 0;
+  MOUNT_STAGE_MOUNTED   = 1;
+  MOUNT_STAGE_UNMOUNTED = 2;
+}
+
+// Payload is the migration payload owned by the SCSI sub-controller. It is the
+// top-level message wrapped in an [anypb.Any] when handed off between source
+// and destination shims.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // num_controllers is the number of SCSI controllers attached to the VM.
+  // The destination uses it to size its slot table on restore.
+  uint32 num_controllers = 2;
+
+  // disks is keyed by controller slot index (controller*64 + lun).
+  map<uint32, DiskState> disks = 3;
+
+  // reservations is keyed by reservation GUID and tracks outstanding handles
+  // that containers hold against SCSI mounts. The string keys here are the
+  // values referenced by container controllers' scsi_reservation_ids.
+  map<string, Reservation> reservations = 4;
+}
+
+// DiskState is a single SCSI-attached disk, keyed by controller slot index
+// in [Payload.disks].
+message DiskState {
+  // config is the disk attachment configuration.
+  DiskConfig config = 1;
+
+  // state is the disk lifecycle stage.
+  DiskStage state = 2;
+
+  // mounts is keyed by partition number on the disk.
+  map<uint64, MountState> mounts = 3;
+}
+
+// DiskConfig is the host-side configuration of a SCSI-attached disk.
+message DiskConfig {
+  // host_path is the path to the disk on the host.
+  string host_path = 1;
+
+  // read_only attaches the disk read-only.
+  bool read_only = 2;
+
+  // type is the disk kind: "VirtualDisk", "PassThru" or
+  // "ExtensibleVirtualDisk".
+  string type = 3;
+
+  // evd_type is the extensible-virtual-disk provider name. Only meaningful
+  // when type == "ExtensibleVirtualDisk".
+  string evd_type = 4;
+}
+
+// MountState is the in-guest mount metadata for a single partition of a
+// SCSI-attached disk.
+message MountState {
+  // config is the mount configuration.
+  MountConfig config = 1;
+
+  // state is the mount lifecycle stage.
+  MountStage state = 2;
+
+  // ref_count is the number of live holders of this mount.
+  uint32 ref_count = 3;
+
+  // guest_path is where the partition is mounted inside the guest.
+  string guest_path = 4;
+}
+
+// MountConfig is the guest-side configuration of a SCSI partition mount.
+message MountConfig {
+  // read_only mounts the partition read-only inside the guest.
+  bool read_only = 1;
+
+  // encrypted wraps the partition with dm-crypt before mounting.
+  bool encrypted = 2;
+
+  // options are extra mount options passed to the guest (e.g. "noatime").
+  repeated string options = 3;
+
+  // ensure_filesystem formats the partition if it has no filesystem.
+  bool ensure_filesystem = 4;
+
+  // filesystem is the filesystem type to use when formatting or mounting
+  // (e.g. "ext4").
+  string filesystem = 5;
+
+  // block_dev exposes the partition as a raw block device instead of
+  // mounting it.
+  bool block_dev = 6;
+}
+
+// Reservation is an outstanding handle a container holds against a SCSI
+// partition mount.
+message Reservation {
+  // slot is the controllerSlot index (controller*64 + lun).
+  uint32 slot = 1;
+
+  // partition is the partition number on the disk that this reservation
+  // refers to.
+  uint64 partition = 2;
+}

@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package hcsshim.controller.linuxcontainer.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/linuxcontainer/save;save";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+
+// =============================================================================
+// Lifecycle stage enum
+//
+// Stage mirrors the Go State type used by the linuxcontainer controller. The
+// zero value matches the Go iota-zero value (NotCreated).
+// =============================================================================
+
+enum Stage {
+  STAGE_NOT_CREATED = 0;
+  STAGE_CREATED     = 1;
+  STAGE_RUNNING     = 2;
+  STAGE_STOPPED     = 3;
+  STAGE_INVALID     = 4;
+  STAGE_MIGRATING   = 5;
+}
+
+// Payload is the migration payload owned by a single linuxcontainer
+// controller. It is the top-level message wrapped in an [anypb.Any] when
+// handed off between source and destination shims. Embedded process states
+// are carried as opaque [anypb.Any] payloads so the process controller fully
+// owns its own schema and versioning.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // container_id is the host/shim container identifier.
+  string container_id = 2;
+
+  // gcs_container_id is the container identifier as known by the GCS inside
+  // the guest, which may differ from container_id.
+  string gcs_container_id = 3;
+
+  // state is the container lifecycle stage.
+  Stage state = 4;
+
+  // io_retry_timeout is how long IO relay reconnects are retried for this
+  // container.
+  google.protobuf.Duration io_retry_timeout = 5;
+
+  // layers is the container's rootfs composition.
+  Layers layers = 6;
+
+  // scsi_reservation_ids are the SCSI reservation GUIDs the container owns.
+  // Each value is a key into the SCSI sub-controller's reservations map.
+  repeated string scsi_reservation_ids = 7;
+
+  // plan9_reservation_ids are the Plan9 reservation GUIDs the container
+  // owns. Each value is a key into the Plan9 sub-controller's reservations
+  // map.
+  repeated string plan9_reservation_ids = 8;
+
+  // vpci_vmbus_guids are the VMBus GUIDs of VPCI devices the container
+  // uses. Each value is a key into the VPCI sub-controller's devices map.
+  repeated string vpci_vmbus_guids = 9;
+
+  // processes is keyed by exec ID and contains the init process (with an
+  // empty exec ID) plus any additional exec'd processes. Each value is an
+  // opaque process-controller [Payload] envelope.
+  map<string, google.protobuf.Any> processes = 10;
+}
+
+// Layers describes the container's rootfs composition.
+message Layers {
+  // ro_layers are the read-only layer reservations in stack order.
+  repeated LayerReservation ro_layers = 1;
+
+  // scratch is the writable scratch layer reservation.
+  LayerReservation scratch = 2;
+
+  // layers_combined is true when the layers were merged into a single
+  // rootfs (e.g. overlay) rather than mounted individually.
+  bool layers_combined = 3;
+
+  // rootfs_path is the final guest path of the container rootfs: the
+  // merged mount when layers_combined is true, otherwise the topmost
+  // layer mount.
+  string rootfs_path = 4;
+}
+
+// LayerReservation references a single SCSI-backed layer mounted into the
+// guest.
+message LayerReservation {
+  // reservation_id is a SCSI reservation GUID; layers are SCSI-backed VHDs
+  // and this is a key into the SCSI sub-controller's reservations map.
+  string reservation_id = 1;
+
+  // guest_path is the path inside the guest where this layer is mounted.
+  string guest_path = 2;
+}
