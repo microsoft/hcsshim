@@ -46,16 +46,7 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 	if err != nil {
 		return nil, err
 	}
-	var groupAffinities []jobobject.GroupAffinity
-	if len(affinities) > 0 {
-		groupAffinities = make([]jobobject.GroupAffinity, len(affinities))
-		for i, a := range affinities {
-			groupAffinities[i] = jobobject.GroupAffinity{
-				Mask:  a.Mask,
-				Group: uint16(a.Group),
-			}
-		}
-	}
+	groupAffinities := hcsoci.ToJobObjectAffinities(affinities)
 
 	realCPULimit, realCPUWeight := uint32(cpuLimit), uint32(cpuWeight)
 	if cpuCount != 0 {

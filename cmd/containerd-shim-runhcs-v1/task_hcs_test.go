@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -504,5 +506,47 @@ func Test_handleProcessArgsForIsolatedJobContainer(t *testing.T) {
 				t.Errorf("Username mismatch:  got:  %q  want: %q", tt.specs.User.Username, tt.expectedUsername)
 			}
 		})
+	}
+}
+
+func u64(v uint64) *uint64 { return &v }
+func u16(v uint16) *uint16 { return &v }
+
+func Test_isValidWindowsCPUResources(t *testing.T) {
+	affinity := []specs.WindowsCPUGroupAffinity{{Group: 0, Mask: 0x3}}
+	for _, tt := range []struct {
+		name string
+		c    *specs.WindowsCPUResources
+		want bool
+	}{
+		{"count only", &specs.WindowsCPUResources{Count: u64(2)}, true},
+		{"shares only", &specs.WindowsCPUResources{Shares: u16(100)}, true},
+		{"maximum only", &specs.WindowsCPUResources{Maximum: u16(5000)}, true},
+		{"count and shares", &specs.WindowsCPUResources{Count: u64(2), Shares: u16(100)}, false},
+		{"affinity only", &specs.WindowsCPUResources{Affinity: affinity}, true},
+		{"affinity with count", &specs.WindowsCPUResources{Count: u64(2), Affinity: affinity}, true},
+		{"empty", &specs.WindowsCPUResources{}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isValidWindowsCPUResources(tt.c); got != tt.want {
+				t.Fatalf("isValidWindowsCPUResources(%+v) = %v, want %v", tt.c, got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_hcsTask_updateWCOWContainerCPUAffinity_NoAffinity(t *testing.T) {
+	ht := &hcsTask{id: t.Name()}
+	// An empty affinity slice is a no-op and must not require an HCS-backed container.
+	if err := ht.updateWCOWContainerCPUAffinity(context.Background(), nil); err != nil {
+		t.Fatalf("expected nil error for empty affinity, got %v", err)
+	}
+}
+
+func Test_hcsTask_updateWCOWContainerCPUAffinity_XenonNotImplemented(t *testing.T) {
+	ht := &hcsTask{id: t.Name(), host: &uvm.UtilityVM{}}
+	err := ht.updateWCOWContainerCPUAffinity(context.Background(), []specs.WindowsCPUGroupAffinity{{Group: 0, Mask: 0x1}})
+	if !errors.Is(err, errdefs.ErrNotImplemented) {
+		t.Fatalf("expected ErrNotImplemented for hypervisor-isolated container, got %v", err)
 	}
 }
