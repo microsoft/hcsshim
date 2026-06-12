@@ -46,6 +46,9 @@ func setupStandaloneContainerSpec(ctx context.Context, id, rootDir string, spec 
 	}()
 
 	hostname := spec.Hostname
+	if err = network.ValidateHostname(hostname); err != nil {
+		return err
+	}
 	if hostname == "" {
 		var err error
 		hostname, err = os.Hostname()
