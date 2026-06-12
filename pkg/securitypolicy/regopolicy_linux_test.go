@@ -7696,3 +7696,34 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 	}
 	return m
 }
+
+func Test_Rego_EnforceMountBlockDevicePolicy_DefaultDenied(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	securityPolicy := p.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("cannot make rego policy from constraints: %v", err)
+	}
+
+	target := testDataGenerator.uniqueLayerMountTarget()
+	err = policy.EnforceMountBlockDevicePolicy(p.ctx, target)
+	assertDecisionJSONContains(t, err, "blockdev mounts are not supported")
+
+	err = policy.EnforceUnmountBlockDevicePolicy(p.ctx, target)
+	assertDecisionJSONContains(t, err, "blockdev mounts are not supported")
+}
+
+func Test_Rego_EnforceMountBlockDevicePolicy_OpenDoor(t *testing.T) {
+	policy, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("cannot compile open door rego policy: %v", err)
+	}
+
+	target := testDataGenerator.uniqueLayerMountTarget()
+	if err = policy.EnforceMountBlockDevicePolicy(context.Background(), target); err != nil {
+		t.Errorf("open door should allow mount_blockdev, got: %v", err)
+	}
+	if err = policy.EnforceUnmountBlockDevicePolicy(context.Background(), target); err != nil {
+		t.Errorf("open door should allow unmount_blockdev, got: %v", err)
+	}
+}
