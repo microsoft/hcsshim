@@ -58,19 +58,31 @@ func (c *Controller) buildConfidentialOptions(ctx context.Context) (*guestresour
 		return nil, nil
 	}
 
+	bootFilesPath := vmutils.DefaultLCOWOSBootFilesPath()
+
 	uvmReferenceInfoEncoded, err := vmutils.ParseUVMReferenceInfo(
 		ctx,
-		vmutils.DefaultLCOWOSBootFilesPath(),
+		bootFilesPath,
 		c.sandboxOptions.ConfidentialConfig.UvmReferenceInfoFile,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse UVM reference info: %w", err)
 	}
 
+	uvmHashEnvelopeReferenceInfoEncoded, err := vmutils.ParseUVMReferenceInfo(
+		ctx,
+		bootFilesPath,
+		c.sandboxOptions.ConfidentialConfig.UvmHashEnvelopeReferenceInfoFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse UVM hash envelope reference info: %w", err)
+	}
+
 	return &guestresource.ConfidentialOptions{
-		EnforcerType:          c.sandboxOptions.ConfidentialConfig.SecurityPolicyEnforcer,
-		EncodedSecurityPolicy: c.sandboxOptions.ConfidentialConfig.SecurityPolicy,
-		EncodedUVMReference:   uvmReferenceInfoEncoded,
+		EnforcerType:                    c.sandboxOptions.ConfidentialConfig.SecurityPolicyEnforcer,
+		EncodedSecurityPolicy:           c.sandboxOptions.ConfidentialConfig.SecurityPolicy,
+		EncodedUVMReference:             uvmReferenceInfoEncoded,
+		EncodedUVMHashEnvelopeReference: uvmHashEnvelopeReferenceInfoEncoded,
 	}, nil
 }
 

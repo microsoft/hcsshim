@@ -38,4 +38,7 @@ type ConfidentialConfig struct {
 
 	// UvmReferenceInfoFile is the path to the signed UVM reference info file for attestation.
 	UvmReferenceInfoFile string
+
+	// UvmHashEnvelopeReferenceInfoFile is the path to the hash envelope signed UVM reference info file for attestation.
+	UvmHashEnvelopeReferenceInfoFile string
 }
