@@ -126,10 +126,6 @@ linters:
         text: "ST1003:"
       - linters:
           - staticcheck
-        path: internal/vmcompute/
-        text: "ST1003:"
-      - linters:
-          - staticcheck
         path: internal/regstate/
         text: "ST1003:"
       - linters:
