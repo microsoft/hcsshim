@@ -89,7 +89,14 @@ out/delta-snp.tar.gz: out/delta.tar.gz bin/internal/tools/snp-report boot/startu
 out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths Makefile
 	@mkdir -p out
 	rm -rf rootfs
-	mkdir -p rootfs/bin/
+	rm -rf /tmp/base-rootfs && mkdir -p /tmp/base-rootfs
+	tar -xf $(BASE) -C /tmp/base-rootfs
+	if [ "$$(readlink -f /tmp/base-rootfs/bin)" = "/tmp/base-rootfs/usr/bin" ]; then \
+		mkdir -p rootfs/usr/bin; \
+		ln -s usr/bin rootfs/bin; \
+	else \
+		mkdir -p rootfs/bin; \
+	fi
 	mkdir -p rootfs/info/
 	cp bin/init rootfs/
 	cp bin/vsockexec rootfs/bin/
