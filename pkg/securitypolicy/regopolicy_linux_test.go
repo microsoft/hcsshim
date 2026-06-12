@@ -6,6 +6,7 @@ package securitypolicy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -960,6 +961,113 @@ func Test_Rego_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *te
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}
 		}
+	}
+}
+
+func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
+	f := func(gc *generatedConstraints, commitOnEnforcementFailure bool) bool {
+		securityPolicy := gc.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+		tc := selectContainerFromContainerList(gc.containers, testRand)
+		tid := testDataGenerator.uniqueContainerID()
+		scratchTarget := getScratchDiskMountTarget(tid)
+
+		errSimulatedFailure := errors.New("simulated failure")
+
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchTarget, true, true, "xfs")
+		})
+		if err != nil {
+			t.Errorf("failed to EnforceRWDeviceMountPolicy: %v", err)
+			return false
+		}
+
+		layerToErr := testRand.Intn(len(tc.Layers))
+		errLayerPathIndex := len(tc.Layers) - layerToErr - 1
+		layerPaths := make([]string, len(tc.Layers))
+		for i, layerHash := range tc.Layers {
+			target := testDataGenerator.uniqueLayerMountTarget()
+			layerPaths[len(tc.Layers)-i-1] = target
+			var policyErr error
+			err = policy.WithMetadataRollback(func() error {
+				policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
+				if policyErr != nil {
+					return policyErr
+				}
+				if i == layerToErr {
+					// Simulate a mount failure at this point, which will cause us to rollback.
+					return errSimulatedFailure
+				}
+				return nil
+			})
+			if policyErr != nil {
+				t.Errorf("failed to EnforceDeviceMountPolicy: %v", policyErr)
+				return false
+			}
+		}
+
+		overlayTarget := getOverlayMountTarget(tid)
+		var policyErr error
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
+			return false
+		}
+		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPaths), "no matching containers for overlay")...) {
+			return false
+		}
+
+		layerPathsWithoutErr := make([]string, 0)
+		for i, layerPath := range layerPaths {
+			if i != errLayerPathIndex {
+				layerPathsWithoutErr = append(layerPathsWithoutErr, layerPath)
+			}
+		}
+
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPathsWithoutErr, overlayTarget)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
+			return false
+		}
+		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPathsWithoutErr), "no matching containers for overlay")...) {
+			return false
+		}
+
+		retryTarget := layerPaths[errLayerPathIndex]
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceDeviceMountPolicy(gc.ctx, retryTarget, tc.Layers[layerToErr])
+		})
+		if err != nil {
+			t.Errorf("failed to EnforceDeviceMountPolicy again after one previous reverted failure: %v", err)
+			return false
+		}
+		err = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
+		if err != nil {
+			t.Errorf("failed to EnforceOverlayMountPolicy after one previous reverted failure: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceOverlayMountPolicy_MountFail: %v", err)
 	}
 }
 
@@ -6100,6 +6208,227 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 
 	if !assertDecisionJSONContains(t, err, "missing required environment variable") {
 		t.Fatal("No error message given for missing required environment variable")
+	}
+}
+
+func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
+	f := func(gc *generatedConstraints, commitOnEnforcementFailure bool) bool {
+		container := selectContainerFromContainerList(gc.containers, testRand)
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		containerID := testDataGenerator.uniqueContainerID()
+		tc, err := createTestContainerSpec(gc, containerID, container, false, policy, defaultMounts, privilegedMounts)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		layers, err := testDataGenerator.createValidOverlayForContainer(policy, container)
+		if err != nil {
+			t.Errorf("Failed to createValidOverlayForContainer: %v", err)
+			return false
+		}
+
+		errSimulatedFailure := errors.New("simulated failure")
+
+		scratchMountTarget := getScratchDiskMountTarget(containerID)
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
+		})
+		if err != nil {
+			t.Errorf("Failed to EnforceRWDeviceMountPolicy: %v", err)
+			return false
+		}
+
+		overlayTarget := getOverlayMountTarget(containerID)
+		var policyErr error
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layers, overlayTarget)
+			if policyErr != nil {
+				return policyErr
+			}
+			// Simulate a failure by rolling back the overlay mount.
+			return errSimulatedFailure
+		})
+		if policyErr != nil {
+			t.Errorf("Failed to EnforceOverlayMountPolicy: %v", policyErr)
+			return false
+		}
+
+		err = policy.WithMetadataRollback(func() error {
+			_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if policyErr == nil {
+			t.Errorf("EnforceCreateContainerPolicy should have failed due to missing (reverted) overlay mount")
+			return false
+		}
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
+			return false
+		}
+
+		// "Retry" overlay mount
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceOverlayMountPolicy(gc.ctx, tc.containerID, layers, overlayTarget)
+		})
+		if err != nil {
+			t.Errorf("Failed to EnforceOverlayMountPolicy: %v", err)
+			return false
+		}
+
+		err = policy.WithMetadataRollback(func() error {
+			_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+			return err
+		})
+		if err != nil {
+			t.Errorf("Failed to EnforceCreateContainerPolicy after retrying overlay mount: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCreateContainerPolicy_RejectRevertedOverlayMount: %v", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
+	f := func(gc *generatedConstraints,
+		newContainerID, failScratchMount, testDenyInvalidContainerCreation bool,
+	) bool {
+		container := selectContainerFromContainerList(gc.containers, testRand)
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		containerID := testDataGenerator.uniqueContainerID()
+		tc, err := createTestContainerSpec(gc, containerID, container, false, policy, defaultMounts, privilegedMounts)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		errSimulatedFailure := errors.New("simulated failure")
+
+		scratchMountTarget := getScratchDiskMountTarget(containerID)
+		var policyErr error
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
+			if policyErr != nil {
+				return policyErr
+			}
+			if failScratchMount {
+				return errSimulatedFailure
+			}
+			return nil
+		})
+		if policyErr != nil {
+			t.Errorf("Failed to EnforceRWDeviceMountPolicy: %v", policyErr)
+			return false
+		}
+
+		succeedLayerPaths := make([]string, 0)
+
+		if !failScratchMount {
+			// Simulate one of the layers failing to mount, after which the outside
+			// gives up on this container and starts over.
+			layerToErr := testRand.Intn(len(container.Layers))
+			for i, layerHash := range container.Layers {
+				target := testDataGenerator.uniqueLayerMountTarget()
+				err = policy.WithMetadataRollback(func() error {
+					policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
+					if policyErr != nil {
+						return policyErr
+					}
+					if i == layerToErr {
+						// Simulate a mount failure at this point, which will cause us to rollback.
+						return errSimulatedFailure
+					}
+					return nil
+				})
+				if policyErr != nil {
+					t.Errorf("failed to EnforceDeviceMountPolicy: %v", policyErr)
+					return false
+				}
+				if i == layerToErr {
+					// The simulated mount failure was rolled back, so the outside
+					// gives up on this container and starts over.
+					break
+				}
+				succeedLayerPaths = append(succeedLayerPaths, target)
+			}
+
+			for _, layerPath := range succeedLayerPaths {
+				err = policy.WithMetadataRollback(func() error {
+					return policy.EnforceDeviceUnmountPolicy(gc.ctx, layerPath)
+				})
+				if err != nil {
+					t.Errorf("Failed to EnforceDeviceUnmountPolicy: %v", err)
+					return false
+				}
+			}
+
+			err = policy.WithMetadataRollback(func() error {
+				return policy.EnforceRWDeviceUnmountPolicy(gc.ctx, scratchMountTarget)
+			})
+			if err != nil {
+				t.Errorf("Failed to EnforceRWDeviceUnmountPolicy: %v", err)
+				return false
+			}
+		}
+
+		if testDenyInvalidContainerCreation {
+			err = policy.WithMetadataRollback(func() error {
+				_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+				return policyErr
+			})
+			if policyErr == nil {
+				t.Errorf("EnforceCreateContainerPolicy should have failed due to missing (reverted) overlay mount")
+				return false
+			}
+		}
+
+		if newContainerID {
+			tc.containerID = testDataGenerator.uniqueContainerID()
+		}
+
+		err = mountImageForContainerWithID(policy, container, tc.containerID)
+		if err != nil {
+			t.Errorf("Failed to mount image for container after reverting and retrying: %v", err)
+			return false
+		}
+		_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		if err != nil {
+			t.Errorf("Failed to EnforceCreateContainerPolicy after retrying: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCreateContainerPolicy_RejectRevertedOverlayMount: %v", err)
 	}
 }
 
