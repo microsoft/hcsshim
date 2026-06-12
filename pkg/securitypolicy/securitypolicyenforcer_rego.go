@@ -713,6 +713,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		Umask:                umask,
 		Capabilities:         capabilities,
 		SeccompProfileSHA256: seccompProfileSHA256,
+		IsSandboxContainer:   false,
 	}
 	return policy.EnforceCreateContainerPolicyV2(ctx, containerID, argList, envList, workingDir, mounts, user, opts)
 }
@@ -757,6 +758,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 			"umask":                opts.Umask,
 			"capabilities":         mapifyCapabilities(opts.Capabilities),
 			"seccompProfileSHA256": opts.SeccompProfileSHA256,
+			"isSandboxContainer":   opts.IsSandboxContainer,
 		}
 	case "windows":
 		// Dump full interpreter metadata for debugging diagnostics.
