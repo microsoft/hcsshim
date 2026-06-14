@@ -4,12 +4,13 @@ package aws
 import (
 	"bytes"
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"hash"
 	"io"
 	"math/big"
@@ -107,7 +108,7 @@ func deriveKeyFromAccessKeyPair(accessKey, secretKey string) (*ecdsa.PrivateKey,
 
 		counter++
 		if counter > 0xFF {
-			return nil, fmt.Errorf("exhausted single byte external counter")
+			return nil, errors.New("exhausted single byte external counter")
 		}
 	}
 	d = d.Add(d, one)
@@ -115,7 +116,18 @@ func deriveKeyFromAccessKeyPair(accessKey, secretKey string) (*ecdsa.PrivateKey,
 	priv := new(ecdsa.PrivateKey)
 	priv.PublicKey.Curve = p256
 	priv.D = d
-	priv.PublicKey.X, priv.PublicKey.Y = p256.ScalarBaseMult(d.Bytes())
+
+	dBytes := make([]byte, 32)
+	d.FillBytes(dBytes)
+
+	ecdhPriv, err := ecdh.P256().NewPrivateKey(dBytes)
+	if err != nil {
+		return nil, err
+	}
+	pubBytes := ecdhPriv.PublicKey().Bytes()
+
+	priv.PublicKey.X = new(big.Int).SetBytes(pubBytes[1:33])
+	priv.PublicKey.Y = new(big.Int).SetBytes(pubBytes[33:])
 
 	return priv, nil
 }
@@ -146,7 +158,7 @@ func retrievePrivateKey(symmetric Credentials) (v4aCredentials, error) {
 
 	privateKey, err := deriveKeyFromAccessKeyPair(symmetric.AccessKey, symmetric.SecretKey)
 	if err != nil {
-		return v4aCredentials{}, fmt.Errorf("failed to derive asymmetric key from credentials")
+		return v4aCredentials{}, errors.New("failed to derive asymmetric key from credentials")
 	}
 
 	creds := v4aCredentials{
@@ -216,7 +228,7 @@ func (s *httpSigner) Build() (signedRequest, error) {
 
 	signedHeaders, signedHeadersStr, canonicalHeaderStr := s.buildCanonicalHeaders(host, v4Internal.IgnoredHeaders, unsignedHeaders, s.Request.ContentLength)
 
-	rawQuery := strings.Replace(query.Encode(), "+", "%20", -1)
+	rawQuery := strings.ReplaceAll(query.Encode(), "+", "%20")
 
 	canonicalURI := v4Internal.GetURIPath(req.URL)
 
@@ -280,7 +292,7 @@ func buildAuthorizationHeader(credentialStr, signedHeadersStr, signingSignature 
 	return parts.String()
 }
 
-func (s *httpSigner) buildCanonicalHeaders(host string, rule v4Internal.Rule, header http.Header, length int64) (signed http.Header, signedHeaders, canonicalHeadersStr string) {
+func (*httpSigner) buildCanonicalHeaders(host string, rule v4Internal.Rule, header http.Header, length int64) (signed http.Header, signedHeaders, canonicalHeadersStr string) {
 	signed = make(http.Header)
 
 	const hostHeader = "host"
@@ -314,7 +326,7 @@ func (s *httpSigner) buildCanonicalHeaders(host string, rule v4Internal.Rule, he
 	var canonicalHeaders strings.Builder
 	n := len(headers)
 	const colon = ':'
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if headers[i] == hostHeader {
 			canonicalHeaders.WriteString(hostHeader)
 			canonicalHeaders.WriteRune(colon)
