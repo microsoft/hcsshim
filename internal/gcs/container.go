@@ -5,6 +5,7 @@ package gcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,8 +13,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/containerd/errdefs"
 	"go.opencensus.io/trace"
 )
 
@@ -136,6 +139,13 @@ func (c *Container) Modify(ctx context.Context, config interface{}) (err error) 
 	}
 	var resp prot.ResponseBase
 	return c.gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
+}
+
+// SetCPUGroupAffinities implements the cow.Container interface. CPU affinity is
+// applied on the host's silo job object, which a guest-side container does not
+// own, so this returns ErrNotImplemented.
+func (c *Container) SetCPUGroupAffinities(_ context.Context, _ []jobobject.GroupAffinity) error {
+	return fmt.Errorf("cpu affinity is not supported for guest containers: %w", errdefs.ErrNotImplemented)
 }
 
 // Properties returns the requested container properties targeting a V1 schema prot.Container.
