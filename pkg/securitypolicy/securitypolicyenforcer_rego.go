@@ -5,6 +5,7 @@ package securitypolicy
 
 import (
 	"context"
+	"crypto"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
@@ -61,6 +62,11 @@ type regoEnforcer struct {
 	osType string
 	// Mutex to ensure only one transaction is active
 	transactionLock sync.Mutex
+	// ttlKeysLock guards access to ttlKeys.
+	ttlKeysLock sync.Mutex
+	// ttlKeys holds the receipt-signing keys learned from loaded Transparency
+	// Trust Lists, keyed by ledger name (receipt issuer) and then by key id.
+	ttlKeys map[string]map[string]crypto.PublicKey
 }
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
@@ -159,6 +165,7 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 		return nil, err
 	}
 	policy.stdio = map[string]bool{}
+	policy.ttlKeys = map[string]map[string]crypto.PublicKey{}
 
 	policy.base64policy = ""
 	policy.rego.AddModule("framework.rego", &rpi.RegoModule{Namespace: "framework", Code: FrameworkCode})
@@ -1196,6 +1203,76 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 	return nil
 }
 
+// LoadTransparencyTrustList enforces and ingests a signed Transparency Trust
+// List (TTL). parsedTTL maps each ledger name (receipt issuer) to that ledger's
+// kid -> public key map. The Rego enforcement point only receives the list of
+// ledger names; it decides which of them this TTL is authorized to contribute
+// keys for, based on the policy's transparency_trust_lists. The keys for the
+// allowed ledgers are then merged into the enforcer's TTL key store for use
+// when validating fragment receipts.
+func (policy *regoEnforcer) LoadTransparencyTrustList(ctx context.Context, issuer string, subject string, svn int64, parsedTTL map[string]map[string]crypto.PublicKey) error {
+	ledgers := make([]string, 0, len(parsedTTL))
+	for ledger := range parsedTTL {
+		ledgers = append(ledgers, ledger)
+	}
+
+	input := inputData{
+		"issuer":  issuer,
+		"subject": subject,
+		"svn":     svn,
+		"ledgers": ledgers,
+	}
+
+	results, err := policy.enforce(ctx, "load_transparency_trust_list", input)
+	if err != nil {
+		return err
+	}
+
+	allowedLedgersRaw, err := results.Array("allowed_ledgers")
+	if err != nil {
+		return errors.Wrap(err, "unable to get allowed_ledgers from load_transparency_trust_list result")
+	}
+
+	if len(allowedLedgersRaw) == 0 {
+		return errors.New("transparency trust list carries no ledgers authorized by the policy")
+	}
+
+	allowedLedgers := make([]string, 0, len(allowedLedgersRaw))
+	for _, l := range allowedLedgersRaw {
+		ledger, ok := l.(string)
+		if !ok {
+			return fmt.Errorf("Elements of result.allowed_ledgers must be strings, got %T", l)
+		}
+		allowedLedgers = append(allowedLedgers, ledger)
+	}
+
+	policy.ttlKeysLock.Lock()
+	defer policy.ttlKeysLock.Unlock()
+	for _, ledger := range allowedLedgers {
+		newKeys := parsedTTL[ledger]
+		existingKeys, ok := policy.ttlKeys[ledger]
+		if !ok {
+			existingKeys = make(map[string]crypto.PublicKey, len(newKeys))
+			policy.ttlKeys[ledger] = existingKeys
+		}
+		for kid, pk := range newKeys {
+			if existingKey, exists := existingKeys[kid]; exists {
+				// Equal is implemented for all crypto.PublicKey types in std.
+				eq, ok := existingKey.(interface{ Equal(crypto.PublicKey) bool })
+				if !ok || !eq.Equal(pk) {
+					log.G(ctx).Warnf("TTL for ledger %s overrides existing key with id %s with a different key", ledger, kid)
+					existingKeys[kid] = pk
+				}
+			} else {
+				existingKeys[kid] = pk
+			}
+		}
+	}
+
+	log.G(ctx).Infof("Loaded TTL with subject %s signed by %s with keys for ledgers: %v", subject, issuer, allowedLedgers)
+	return nil
+}
+
 func (policy *regoEnforcer) EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) error {
 	input := map[string]interface{}{
 		"target":    scratchPath,
@@ -1268,14 +1345,39 @@ func (policy *regoEnforcer) WithMetadataRollback(fn func() error) error {
 		return errors.Wrap(err, "failed to snapshot policy metadata")
 	}
 
+	// The TTL key store is Go-side enforcer state, not Rego metadata, so it is
+	// not covered by SaveMetadata/RestoreMetadata. Snapshot it here so it is
+	// rolled back alongside the metadata if fn fails. We only copy the per-ledger
+	// map references, not deep-copy the crypto.PublicKey values.
+	savedTTLKeys := policy.snapshotTTLKeys()
+
 	err = fn()
 	if err != nil {
 		if restoreErr := policy.rego.RestoreMetadata(saved); restoreErr != nil {
 			panic(fmt.Sprintf("failed to rollback policy metadata: %v (caused by error: %v)", restoreErr, err))
 		}
+		policy.ttlKeysLock.Lock()
+		policy.ttlKeys = savedTTLKeys
+		policy.ttlKeysLock.Unlock()
 		log.G(context.Background()).WithError(err).Warn("rolled back policy metadata due to error")
 		return err
 	}
 
 	return nil
+}
+
+// snapshotTTLKeys returns a shallow copy of the TTL key store: the outer and
+// inner maps are copied, but the crypto.PublicKey values are shared.
+func (policy *regoEnforcer) snapshotTTLKeys() map[string]map[string]crypto.PublicKey {
+	policy.ttlKeysLock.Lock()
+	defer policy.ttlKeysLock.Unlock()
+	snapshot := make(map[string]map[string]crypto.PublicKey, len(policy.ttlKeys))
+	for ledger, keys := range policy.ttlKeys {
+		keysCopy := make(map[string]crypto.PublicKey, len(keys))
+		for kid, pk := range keys {
+			keysCopy[kid] = pk
+		}
+		snapshot[ledger] = keysCopy
+	}
+	return snapshot
 }

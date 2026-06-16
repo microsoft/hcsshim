@@ -2,6 +2,7 @@ package securitypolicy
 
 import (
 	"context"
+	"crypto"
 	"fmt"
 	"syscall"
 
@@ -140,6 +141,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceDumpStacksPolicy(ctx context.Context) error
 	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
 	LoadFragment(ctx context.Context, opts LoadFragmentOptions) error
+	LoadTransparencyTrustList(ctx context.Context, issuer string, subject string, svn int64, parsedTTL map[string]map[string]crypto.PublicKey) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
@@ -318,6 +320,10 @@ func (OpenDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragment
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, string, string, int64, map[string]map[string]crypto.PublicKey) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts([]oci.Mount) error {
 	return nil
 }
@@ -457,6 +463,10 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context)
 
 func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragmentOptions) error {
 	return errors.New("loading fragments is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, string, string, int64, map[string]map[string]crypto.PublicKey) error {
+	return errors.New("loading transparency trust lists is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {

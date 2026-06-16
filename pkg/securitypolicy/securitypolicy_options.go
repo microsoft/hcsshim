@@ -103,6 +103,17 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	return nil
 }
 
+// Media types carried by the fragment-injection delivery mechanism. The host
+// may deliver blobs of different types through the same path; the guest decides
+// how to treat each one based on its media type.
+const (
+	// mediaTypeFragment is a Rego security policy fragment. This is the default
+	// when the host does not specify a media type (older hosts).
+	mediaTypeFragment = "application/cose-x509+rego"
+	// mediaTypeTransparencyTrustList is a signed Transparency Trust List (TTL).
+	mediaTypeTransparencyTrustList = "application/vnd.transparency-trust-list.v1+cose"
+)
+
 // asInt64 coerces a CBOR-decoded integer value (which may be returned as
 // int64, uint64 or int by different decoders) to an int64.
 func asInt64(v interface{}) (int64, error) {
@@ -139,6 +150,22 @@ func asInt64(v interface{}) (int64, error) {
 // security policy (done in the regoby LoadFragment)
 func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestresource.SecurityPolicyFragment) (err error) {
 	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("VerifyAndExtractFragment")
+
+	// An empty media type defaults to a Rego policy fragment, for backward
+	// compatibility with older hosts that do not set the field.
+	mediaType := fragment.MediaType
+	if mediaType == "" {
+		mediaType = mediaTypeFragment
+	}
+	switch mediaType {
+	case mediaTypeFragment, mediaTypeTransparencyTrustList:
+	default:
+		// The host (azcri) only ever injects blobs whose media type it knows
+		// we handle, so receiving an unrecognized one means either a host bug
+		// or a newer host paired with an older guest. Fail loudly rather than
+		// silently ignoring it; a failed injection is non-fatal to the host.
+		return fmt.Errorf("cannot inject fragment blob with unsupported media type %q", mediaType)
+	}
 
 	raw, err := base64.StdEncoding.DecodeString(fragment.Fragment)
 	if err != nil {
@@ -208,6 +235,25 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 			}
 			svnFromCwt = &svn
 		}
+	}
+
+	if mediaType == mediaTypeTransparencyTrustList {
+		// A TTL must carry its SVN in the COSE header; there is nowhere else for
+		// it to go.
+		if svnFromCwt == nil {
+			return fmt.Errorf("transparency trust list is missing an SVN in its CWT claims")
+		}
+
+		parsedTTL, err := cosesign1.ParseTTLPayload(unpacked.Payload)
+		if err != nil {
+			return errors.Wrap(err, "failed to parse transparency trust list payload")
+		}
+
+		// feed is the "subject" in the new-style envelope terminology.
+		if err := s.PolicyEnforcer.LoadTransparencyTrustList(ctx, issuer, feed, *svnFromCwt, parsedTTL); err != nil {
+			return errors.Wrap(err, "error loading transparency trust list")
+		}
+		return nil
 	}
 
 	// now offer the payload fragment to the policy

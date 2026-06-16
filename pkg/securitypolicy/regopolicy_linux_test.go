@@ -5,6 +5,10 @@ package securitypolicy
 
 import (
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -5449,6 +5453,176 @@ mount_device := data.fragment.mount_device
 		}
 	} else {
 		t.Errorf("unable to located metadata key stored by fragment: %v", err)
+	}
+}
+
+func generateTestECDSAKey(t *testing.T) crypto.PublicKey {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("unable to generate test key: %v", err)
+	}
+	return priv.Public()
+}
+
+func ttlPolicyCode(issuer, subject string, minimumSVN int, allowedLedgers []string) string {
+	quoted := make([]string, len(allowedLedgers))
+	for i, l := range allowedLedgers {
+		quoted[i] = fmt.Sprintf("%q", l)
+	}
+	return fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+transparency_trust_lists := [
+	{
+		"issuer": "%s",
+		"subject": "%s",
+		"minimum_svn": %d,
+		"allowed_ledgers": [%s],
+	},
+]
+
+load_transparency_trust_list := data.framework.load_transparency_trust_list
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, issuer, subject, minimumSVN, strings.Join(quoted, ", "))
+}
+
+func Test_Rego_LoadTransparencyTrustList(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+	ledger := "esrp-cts-dev.confidential-ledger.azure.com"
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{ledger}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		ledger:                        {"kid1": key},
+		"unauthorized.ledger.example": {"kid2": key},
+	}
+
+	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 2, parsedTTL); err != nil {
+		t.Fatalf("expected TTL to load: %v", err)
+	}
+
+	if _, ok := policy.ttlKeys[ledger]["kid1"]; !ok {
+		t.Errorf("expected key for authorized ledger to be stored")
+	}
+	if _, ok := policy.ttlKeys["unauthorized.ledger.example"]; ok {
+		t.Errorf("keys for an unauthorized ledger must not be stored")
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_Wildcard(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{"*"}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		"ledger.one.example": {"kid1": key},
+		"ledger.two.example": {"kid2": key},
+	}
+
+	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, parsedTTL); err != nil {
+		t.Fatalf("expected TTL to load: %v", err)
+	}
+
+	for _, ledger := range []string{"ledger.one.example", "ledger.two.example"} {
+		if _, ok := policy.ttlKeys[ledger]; !ok {
+			t.Errorf("expected wildcard root to authorize ledger %s", ledger)
+		}
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_NoAuthorizedLedgers(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{"only.this.ledger.example"}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		"some.other.ledger.example": {"kid1": key},
+	}
+
+	err = policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, parsedTTL)
+	if err == nil {
+		t.Fatalf("expected TTL load to be denied when no ledgers are authorized")
+	}
+	if len(policy.ttlKeys) != 0 {
+		t.Errorf("no keys should be stored when the TTL is denied")
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_SVNBelowMinimum(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 5, []string{ledger}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		ledger: {"kid1": key},
+	}
+
+	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 4, parsedTTL); err == nil {
+		t.Fatalf("expected TTL load to be denied when svn is below the minimum")
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_MergeOverride(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{ledger}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	firstKey := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, map[string]map[string]crypto.PublicKey{
+		ledger: {"kid1": firstKey},
+	}); err != nil {
+		t.Fatalf("expected first TTL to load: %v", err)
+	}
+
+	// A second TTL for the same ledger that adds a new kid and overrides the
+	// existing one with a different key.
+	secondKey := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, map[string]map[string]crypto.PublicKey{
+		ledger: {"kid1": secondKey, "kid2": firstKey},
+	}); err != nil {
+		t.Fatalf("expected second TTL to load: %v", err)
+	}
+
+	eq := policy.ttlKeys[ledger]["kid1"].(interface{ Equal(crypto.PublicKey) bool })
+	if !eq.Equal(secondKey) {
+		t.Errorf("expected kid1 to be overridden with the newer key")
+	}
+	if _, ok := policy.ttlKeys[ledger]["kid2"]; !ok {
+		t.Errorf("expected kid2 to be merged in")
 	}
 }
 
