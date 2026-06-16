@@ -262,6 +262,7 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		Feed:      feed,
 		HeaderSVN: svnFromCwt,
 		Rego:      payloadString,
+		Receipts:  unpacked.Receipts,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error loading security policy fragment")

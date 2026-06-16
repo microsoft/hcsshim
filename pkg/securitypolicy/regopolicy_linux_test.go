@@ -27,6 +27,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+
+	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 )
 
 const testOSType = "linux"
@@ -5623,6 +5625,279 @@ func Test_Rego_LoadTransparencyTrustList_MergeOverride(t *testing.T) {
 	}
 	if _, ok := policy.ttlKeys[ledger]["kid2"]; !ok {
 		t.Errorf("expected kid2 to be merged in")
+	}
+}
+
+func Test_Rego_LoadFragment_MissingRequiredReceipt(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	feed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "esrp-cts-dev.confidential-ledger.azure.com"
+
+	fragmentCode := fmt.Sprintf(`package fragment
+
+svn := 1
+framework_version := "%s"
+`, frameworkVersion)
+
+	policyCode := fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+		"receipt_issuers": ["%s"],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, issuer, feed, ledger)
+
+	policy, err := newRegoPolicy(policyCode, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	// No TTL has been loaded, so the enforcer has no keys to validate any
+	// receipt, and the fragment requires one. The load must be denied.
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, HeaderSVN: &svn, Rego: fragmentCode})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied for missing required receipt")
+	}
+	if !assertDecisionJSONContains(t, err, fmt.Sprintf("missing receipt from %s", ledger)) {
+		t.Fatalf("expected denial reason to mention the missing receipt, got: %v", err)
+	}
+
+	if !expectFragmentNotLoaded(t, policy, issuer, feed) {
+		return
+	}
+}
+
+func Test_Rego_LoadFragment_NoReceiptRequired(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	feed := testDataGenerator.uniqueFragmentFeed()
+
+	fragmentCode := fmt.Sprintf(`package fragment
+
+svn := 1
+framework_version := "%s"
+`, frameworkVersion)
+
+	// A fragment object with no receipt_issuers must load without any receipts,
+	// exactly as before this feature existed.
+	policyCode := fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, issuer, feed)
+
+	policy, err := newRegoPolicy(policyCode, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	svn := int64(1)
+	if err := policy.LoadFragment(ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, HeaderSVN: &svn, Rego: fragmentCode}); err != nil {
+		t.Fatalf("expected fragment with no required receipts to load: %v", err)
+	}
+}
+
+// receiptFragmentPolicy builds a policy that both trusts a TTL signed by
+// ttlIssuer/ttlSubject (authorizing the given ledger) and allows a fragment
+// from fragIssuer/fragFeed that requires a receipt from requiredLedger.
+func receiptFragmentPolicy(ttlIssuer, ttlSubject, allowedLedger, fragIssuer, fragFeed, requiredLedger string) string {
+	return fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+transparency_trust_lists := [
+	{
+		"issuer": "%s",
+		"subject": "%s",
+		"minimum_svn": 1,
+		"allowed_ledgers": ["%s"],
+	},
+]
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+		"receipt_issuers": ["%s"],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+load_transparency_trust_list := data.framework.load_transparency_trust_list
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, ttlIssuer, ttlSubject, allowedLedger, fragIssuer, fragFeed, requiredLedger)
+}
+
+func Test_Rego_LoadFragment_ValidReceipt(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "esrp-cts-dev.confidential-ledger.azure.com"
+
+	policy, err := newRegoPolicy(
+		receiptFragmentPolicy(ttlIssuer, ttlSubject, ledger, fragIssuer, fragFeed, ledger),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, ttlIssuer, ttlSubject, 1, map[string]map[string]crypto.PublicKey{
+		ledger: {"kid1": key},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	// Mock receipt validation: assert the enforcer only ever offers us the keys
+	// belonging to the receipt's own claimed issuer, then accept.
+	validateCalled := false
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		validateCalled = true
+		if receipt.Issuer != ledger {
+			t.Errorf("validate called with unexpected issuer %q", receipt.Issuer)
+		}
+		if _, ok := keys["kid1"]; !ok || len(keys) != 1 {
+			t.Errorf("validate offered the wrong key set: %v", keys)
+		}
+		return nil
+	})
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	})
+	if err != nil {
+		t.Fatalf("expected fragment with a valid receipt to load: %v", err)
+	}
+	if !validateCalled {
+		t.Errorf("expected receipt validation to be invoked")
+	}
+}
+
+func Test_Rego_LoadFragment_ReceiptWrongIssuer(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	requiredLedger := "required.ledger.example"
+	otherLedger := "other.ledger.example"
+
+	// The TTL only authorizes otherLedger, and the fragment requires a receipt
+	// from requiredLedger. The attached receipt claims to be from otherLedger.
+	policy, err := newRegoPolicy(
+		receiptFragmentPolicy(ttlIssuer, ttlSubject, otherLedger, fragIssuer, fragFeed, requiredLedger),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, ttlIssuer, ttlSubject, 1, map[string]map[string]crypto.PublicKey{
+		otherLedger: {"kid1": key},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	// Even though the mock would accept the receipt, its issuer is otherLedger,
+	// not the requiredLedger, so the requirement is not satisfied.
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return nil
+	})
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: otherLedger, Kid: "kid1"}},
+	})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied: receipt issuer does not match the requirement")
+	}
+	if !assertDecisionJSONContains(t, err, fmt.Sprintf("missing receipt from %s", requiredLedger)) {
+		t.Fatalf("expected denial reason to mention the missing receipt, got: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_ReceiptValidationFails(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		receiptFragmentPolicy(ttlIssuer, ttlSubject, ledger, fragIssuer, fragFeed, ledger),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, ttlIssuer, ttlSubject, 1, map[string]map[string]crypto.PublicKey{
+		ledger: {"kid1": key},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	// A receipt whose cryptographic validation fails must not count.
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return errors.New("bad signature")
+	})
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied: receipt failed validation")
+	}
+	if !assertDecisionJSONContains(t, err, fmt.Sprintf("missing receipt from %s", ledger)) {
+		t.Fatalf("expected denial reason to mention the missing receipt, got: %v", err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"syscall"
 
+	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -54,6 +55,10 @@ type LoadFragmentOptions struct {
 	HeaderSVN *int64
 	// Rego is the fragment's Rego payload.
 	Rego string
+	// Receipts are the COSE transparency receipts attached to the fragment's
+	// COSE envelope, if any.  Validation is handled by the enforcer, caller
+	// does not have to validate them.
+	Receipts []cosesign1.ParsedCOSEReceipt
 }
 
 const (

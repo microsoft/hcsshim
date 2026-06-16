@@ -16,6 +16,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -67,6 +68,10 @@ type regoEnforcer struct {
 	// ttlKeys holds the receipt-signing keys learned from loaded Transparency
 	// Trust Lists, keyed by ledger name (receipt issuer) and then by key id.
 	ttlKeys map[string]map[string]crypto.PublicKey
+	// validateReceipt validates a single transparency receipt against the given
+	// keys. It defaults to (cosesign1.ParsedCOSEReceipt).Validate and exists as
+	// a field so tests can substitute a mock.
+	validateReceipt func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error
 }
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
@@ -166,6 +171,9 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	}
 	policy.stdio = map[string]bool{}
 	policy.ttlKeys = map[string]map[string]crypto.PublicKey{}
+	policy.validateReceipt = func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return receipt.Validate(keys)
+	}
 
 	policy.base64policy = ""
 	policy.rego.AddModule("framework.rego", &rpi.RegoModule{Namespace: "framework", Code: FrameworkCode})
@@ -1155,6 +1163,34 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 		return fmt.Errorf("unable to load fragment: %w", err)
 	}
 
+	// Validate each attached transparency receipt against the keys we have for
+	// its claimed issuer (ledger), learned from previously loaded TTLs. We only
+	// ever offer Validate the keys belonging to the receipt's own claimed
+	// issuer, so a ledger cannot sign a receipt while pretending to be a
+	// different ledger. The set of issuers for which we successfully validated a
+	// receipt is then passed to the policy as input.receipt_issuers.
+	receiptIssuersSet := make(map[string]struct{})
+	policy.ttlKeysLock.Lock()
+	for _, receipt := range opts.Receipts {
+		keys, ok := policy.ttlKeys[receipt.Issuer]
+		if !ok {
+			// We have no TTL keys for this issuer, so we cannot validate the
+			// receipt. Ignore it.
+			log.G(ctx).WithField("issuer", receipt.Issuer).Debug("skipping fragment receipt: no TTL keys for claimed issuer")
+			continue
+		}
+		if err := policy.validateReceipt(receipt, keys); err != nil {
+			log.G(ctx).WithError(err).WithField("issuer", receipt.Issuer).Error("fragment receipt failed validation")
+			continue
+		}
+		receiptIssuersSet[receipt.Issuer] = struct{}{}
+	}
+	policy.ttlKeysLock.Unlock()
+	receiptIssuers := make([]string, 0, len(receiptIssuersSet))
+	for issuer := range receiptIssuersSet {
+		receiptIssuers = append(receiptIssuers, issuer)
+	}
+
 	fragment := &rpi.RegoModule{
 		Issuer:    issuer,
 		Feed:      feed,
@@ -1169,6 +1205,7 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 		"fragment_loaded": false,
 		"has_header_svn":  headerSvn != nil,
 		"header_svn":      headerSvn,
+		"receipt_issuers": receiptIssuers,
 	}
 
 	// Check that the fragment is signed by the expected issuer before loading
@@ -1201,6 +1238,13 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 	}
 
 	return nil
+}
+
+// SetReceiptValidationFunction overrides how transparency receipts are
+// validated.  It exists only for tests, since a real CCF receipt cannot be
+// constructed in a unit test.
+func (policy *regoEnforcer) SetReceiptValidationFunction(fn func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error) {
+	policy.validateReceipt = fn
 }
 
 // LoadTransparencyTrustList enforces and ingests a signed Transparency Trust

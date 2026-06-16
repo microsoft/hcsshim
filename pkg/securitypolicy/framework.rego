@@ -1327,6 +1327,17 @@ svn_ok_if_defined(minimum_svn) {
     svn_ok(input.header_svn, minimum_svn)
 }
 
+# A fragment rule may require transparency receipts from one or more ledgers
+# (the receipt issuers). input.receipt_issuers is the set of ledgers for which
+# the enforcer successfully validated a receipt attached to this fragment.  If
+# not set, no receipts are required.
+fragment_receipts_ok(fragment) {
+    required := object.get(fragment, "receipt_issuers", [])
+    every required_issuer in required {
+        required_issuer in input.receipt_issuers
+    }
+}
+
 default load_fragment := {"allowed": false}
 
 # load_fragment gets called twice - first before loading the fragment as a Rego
@@ -1344,6 +1355,7 @@ load_fragment := {"allowed": true} {
     fragment_issuer_feed_ok(fragment)
     # If SVN provided in header, validate it now.
     header_svn_ok(fragment)
+    fragment_receipts_ok(fragment)
 }
 
 load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed": true} {
@@ -2026,6 +2038,17 @@ errors["missing fragment svn in either header or rego payload"] {
     missing_svn
 }
 
+errors[receipt_error] {
+    input.rule == "load_fragment"
+    not input.fragment_loaded
+    some fragment in candidate_fragments
+    fragment_issuer_feed_ok(fragment)
+    required := object.get(fragment, "receipt_issuers", [])
+    some required_issuer in required
+    not required_issuer in input.receipt_issuers
+    receipt_error := sprintf("missing receipt from %s", [required_issuer])
+}
+
 default transparency_root_matches := false
 
 transparency_root_matches {
@@ -2537,6 +2560,13 @@ check_fragment(raw_fragment, framework_version) := fragment {
         "feed": raw_fragment.feed,
         "minimum_svn": raw_fragment.minimum_svn,
         "includes": raw_fragment.includes,
+
+        # receipt_issuers was added in 0.5.0. Older policies default to
+        # [], i.e. no transparency receipts are required, but if any is
+        # specified, even when the policy has an older framework_version, we
+        # respect it since it is restrictive.
+        "receipt_issuers": object.get(raw_fragment, "receipt_issuers", []),
+
         # Additional fields need to have default logic applied
     }
 }
