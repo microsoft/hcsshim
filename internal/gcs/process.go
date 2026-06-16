@@ -187,7 +187,10 @@ func (p *Process) ExitCode() (_ int, err error) {
 		return -1, errors.New("process not exited")
 	}
 	if err := p.waitCall.Err(); err != nil {
-		return -1, err
+		var rerr *rpcError
+		if !errors.As(err, &rerr) || uint32(rerr.result) != hrNotFound {
+			return -1, err
+		}
 	}
 	return int(p.waitResp.ExitCode), nil
 }
@@ -274,7 +277,8 @@ func (p *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 // Wait waits for the process (or guest connection) to terminate.
 func (p *Process) Wait() error {
 	p.waitCall.Wait()
-	return p.waitCall.Err()
+	_, err := p.ExitCode()
+	return err
 }
 
 func (p *Process) waitBackground() {
