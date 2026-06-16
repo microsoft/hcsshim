@@ -1,6 +1,6 @@
 //go:build windows
 
-package hcs
+package hcsv2
 
 import (
 	"encoding/json"
@@ -17,19 +17,28 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 // Test helpers
 //
-// The handler under test reads its arguments as raw uintptrs that originate
-// outside the Go heap (HCS hands them to us via a syscall callback). To
-// faithfully exercise that contract — and the cgo pointer-passing rules it
-// implies — the helpers below allocate the HcsEvent, the UTF-16 EventData
-// buffer, and the channel context out of process heap memory via LocalAlloc.
-// All allocations are bound to the test's lifetime through t.Cleanup, so the
-// individual tests stay free of teardown bookkeeping.
+// notificationHandler has the signature (event, ctx uintptr), matching the
+// raw HCS syscall callback. The two arguments are built very differently in
+// tests:
+//
+//  1. event — a pointer to an HcsEvent struct that, in production, lives in
+//     memory HCS allocated outside the Go heap. To honor the cgo rule that
+//     such pointers must not refer to Go-managed memory, allocCEvent
+//     allocates the HcsEvent (and any UTF-16 EventData buffer) with
+//     LocalAlloc rather than using a Go &HcsEvent{}.
+//
+//  2. ctx — not a pointer at all, but an opaque integer key into the
+//     package-level notificationContexts map. Real Go pointers can't be
+//     handed to HCS across the callback boundary, so each registration
+//     stores its state (channel, etc.) in that map and gives HCS only the
+//     ID. Tests use registerSystemCtx to insert an entry pointing at their
+//     channel and pass the returned ID straight into notificationHandler.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// allocCEvent returns a uintptr to a LocalAlloc'd HcsEvent. If payload is
-// non-empty it is encoded as UTF-16 into a second LocalAlloc'd buffer and
-// wired up as EventData; otherwise EventData is left nil.
-func allocCEvent(t *testing.T, payload string) uintptr {
+// allocCEvent returns a uintptr to a LocalAlloc'd HcsEvent of the given type.
+// If payload is non-empty it is encoded as UTF-16 into a second LocalAlloc'd
+// buffer and wired up as EventData; otherwise EventData is left nil.
+func allocCEvent(t *testing.T, eventType computecore.HcsEventType, payload string) uintptr {
 	t.Helper()
 
 	evtAddr, err := windows.LocalAlloc(windows.LPTR, uint32(unsafe.Sizeof(computecore.HcsEvent{})))
@@ -39,7 +48,7 @@ func allocCEvent(t *testing.T, payload string) uintptr {
 	t.Cleanup(func() { _, _ = windows.LocalFree(windows.Handle(evtAddr)) })
 
 	e := (*computecore.HcsEvent)(unsafe.Pointer(evtAddr))
-	e.Type = computecore.HcsEventTypeGroupLiveMigration
+	e.Type = eventType
 
 	if payload == "" {
 		return evtAddr
@@ -63,19 +72,14 @@ func allocCEvent(t *testing.T, payload string) uintptr {
 	return evtAddr
 }
 
-// allocCChanCtx stores ch in a LocalAlloc'd buffer and returns its address,
-// so the handler reads the chan header out of C memory rather than the Go heap
-// (matching how HCS delivers the registered callback context).
-func allocCChanCtx(t *testing.T, ch chan hcsschema.OperationSystemMigrationNotificationInfo) uintptr {
+// registerSystemCtx registers a fresh system-style notificationContext that
+// forwards GroupLiveMigration events to ch and returns its lookup ID as a
+// uintptr ready to pass to notificationHandler. Cleanup is registered on t.
+func registerSystemCtx(t *testing.T, ch chan hcsschema.OperationSystemMigrationNotificationInfo) uintptr {
 	t.Helper()
-	addr, err := windows.LocalAlloc(windows.LPTR, uint32(unsafe.Sizeof(ch)))
-	if err != nil {
-		t.Fatalf("LocalAlloc(ctx): %v", err)
-	}
-	t.Cleanup(func() { _, _ = windows.LocalFree(windows.Handle(addr)) })
-
-	*(*chan hcsschema.OperationSystemMigrationNotificationInfo)(unsafe.Pointer(addr)) = ch
-	return addr
+	id := registerNotificationContext("test-system", 0, nil, ch)
+	t.Cleanup(func() { unregisterNotificationContext(id) })
+	return uintptr(id)
 }
 
 // expectNotification fails the test unless want is the next queued value on ch.
@@ -104,26 +108,30 @@ func expectNoNotification(t *testing.T, ch <-chan hcsschema.OperationSystemMigra
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nil-argument guards
+// Nil / unknown context guards
 // ─────────────────────────────────────────────────────────────────────────────
 
-// TestMigrationCallbackHandler_NilArgs verifies that the handler is a no-op
-// (returns 0, sends nothing on the channel) when either argument is zero.
-func TestMigrationCallbackHandler_NilArgs(t *testing.T) {
+// TestNotificationHandler_LM_NilOrUnknownArgs verifies that the handler is a
+// no-op (returns 0, sends nothing on the channel) when the event pointer is
+// zero or the context ID does not resolve to a registered entry.
+func TestNotificationHandler_LM_NilOrUnknownArgs(t *testing.T) {
 	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
+	ctx := registerSystemCtx(t, ch)
 
 	cases := []struct {
 		name       string
 		event, ctx uintptr
 	}{
 		{"BothZero", 0, 0},
-		{"EventZero", 0, allocCChanCtx(t, ch)},
-		{"CtxZero", allocCEvent(t, ""), 0},
+		{"EventZero", 0, ctx},
+		// A non-zero but never-registered ID must miss the lookup
+		// silently rather than dispatch or panic.
+		{"UnknownCtx", allocCEvent(t, computecore.HcsEventTypeGroupLiveMigration, `{"Event":"SetupDone"}`), ^uintptr(0)},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if ret := migrationCallbackHandler(tc.event, tc.ctx); ret != 0 {
+			if ret := notificationHandler(tc.event, tc.ctx); ret != 0 {
 				t.Fatalf("expected 0, got %d", ret)
 			}
 		})
@@ -135,10 +143,10 @@ func TestMigrationCallbackHandler_NilArgs(t *testing.T) {
 // Payload decoding
 // ─────────────────────────────────────────────────────────────────────────────
 
-// TestMigrationCallbackHandler_Payloads verifies that real-world HCS
+// TestNotificationHandler_LM_Payloads verifies that real-world HCS
 // GroupLiveMigration JSON payloads — including a nil EventData pointer — are
 // decoded and forwarded on the notification channel.
-func TestMigrationCallbackHandler_Payloads(t *testing.T) {
+func TestNotificationHandler_LM_Payloads(t *testing.T) {
 	cases := []struct {
 		name    string
 		payload string
@@ -201,10 +209,10 @@ func TestMigrationCallbackHandler_Payloads(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
-			evt := allocCEvent(t, tc.payload)
-			ctx := allocCChanCtx(t, ch)
+			ctx := registerSystemCtx(t, ch)
+			evt := allocCEvent(t, computecore.HcsEventTypeGroupLiveMigration, tc.payload)
 
-			if ret := migrationCallbackHandler(evt, ctx); ret != 0 {
+			if ret := notificationHandler(evt, ctx); ret != 0 {
 				t.Fatalf("expected 0, got %d", ret)
 			}
 			expectNotification(t, ch, tc.want)
@@ -212,30 +220,31 @@ func TestMigrationCallbackHandler_Payloads(t *testing.T) {
 	}
 }
 
-// TestMigrationCallbackHandler_InvalidJSONDropped verifies that an
-// unparseable EventData payload is logged and dropped without sending.
-func TestMigrationCallbackHandler_InvalidJSONDropped(t *testing.T) {
+// TestNotificationHandler_LM_InvalidJSONDropped verifies that an unparseable
+// EventData payload is logged and dropped without sending.
+func TestNotificationHandler_LM_InvalidJSONDropped(t *testing.T) {
 	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
-	evt := allocCEvent(t, "not-json")
-	ctx := allocCChanCtx(t, ch)
+	ctx := registerSystemCtx(t, ch)
+	evt := allocCEvent(t, computecore.HcsEventTypeGroupLiveMigration, "not-json")
 
-	if ret := migrationCallbackHandler(evt, ctx); ret != 0 {
+	if ret := notificationHandler(evt, ctx); ret != 0 {
 		t.Fatalf("expected 0, got %d", ret)
 	}
 	expectNoNotification(t, ch)
 }
 
-// TestMigrationCallbackHandler_AdditionalDetailsDecodes verifies that the
-// raw JSON captured in AdditionalDetails for a BlackoutExited event can be
-// decoded by the consumer into the concrete BlackoutExitedEventDetails struct.
-// This is the contract that motivates modeling AdditionalDetails as
+// TestNotificationHandler_LM_AdditionalDetailsDecodes verifies that the raw
+// JSON captured in AdditionalDetails for a BlackoutExited event can be
+// decoded by the consumer into the concrete BlackoutExitedEventDetails
+// struct. This is the contract that motivates modeling AdditionalDetails as
 // json.RawMessage rather than a typed *interface{}.
-func TestMigrationCallbackHandler_AdditionalDetailsDecodes(t *testing.T) {
+func TestNotificationHandler_LM_AdditionalDetailsDecodes(t *testing.T) {
 	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
-	evt := allocCEvent(t, `{"Event":"BlackoutExited","Result":"Success","AdditionalDetails":{"BlackoutDurationMilliseconds":1234,"BlackoutStopTimestamp":"2026-04-23T12:34:56Z"}}`)
-	ctx := allocCChanCtx(t, ch)
+	ctx := registerSystemCtx(t, ch)
+	evt := allocCEvent(t, computecore.HcsEventTypeGroupLiveMigration,
+		`{"Event":"BlackoutExited","Result":"Success","AdditionalDetails":{"BlackoutDurationMilliseconds":1234,"BlackoutStopTimestamp":"2026-04-23T12:34:56Z"}}`)
 
-	if ret := migrationCallbackHandler(evt, ctx); ret != 0 {
+	if ret := notificationHandler(evt, ctx); ret != 0 {
 		t.Fatalf("expected 0, got %d", ret)
 	}
 
@@ -272,15 +281,15 @@ func TestMigrationCallbackHandler_AdditionalDetailsDecodes(t *testing.T) {
 	}
 }
 
-// TestMigrationCallbackHandler_AdditionalDetailsAbsent verifies that a
+// TestNotificationHandler_LM_AdditionalDetailsAbsent verifies that a
 // payload without an AdditionalDetails field results in a nil
 // json.RawMessage on the forwarded notification.
-func TestMigrationCallbackHandler_AdditionalDetailsAbsent(t *testing.T) {
+func TestNotificationHandler_LM_AdditionalDetailsAbsent(t *testing.T) {
 	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
-	evt := allocCEvent(t, `{"Event":"SetupDone"}`)
-	ctx := allocCChanCtx(t, ch)
+	ctx := registerSystemCtx(t, ch)
+	evt := allocCEvent(t, computecore.HcsEventTypeGroupLiveMigration, `{"Event":"SetupDone"}`)
 
-	if ret := migrationCallbackHandler(evt, ctx); ret != 0 {
+	if ret := notificationHandler(evt, ctx); ret != 0 {
 		t.Fatalf("expected 0, got %d", ret)
 	}
 
@@ -294,26 +303,49 @@ func TestMigrationCallbackHandler_AdditionalDetailsAbsent(t *testing.T) {
 // Backpressure
 // ─────────────────────────────────────────────────────────────────────────────
 
-// TestMigrationCallbackHandler_FullChannelDropsEvent verifies that when the
+// TestNotificationHandler_LM_FullChannelDropsEvent verifies that when the
 // notification channel is full the handler drops the new event rather than
 // blocking the HCS callback thread.
-func TestMigrationCallbackHandler_FullChannelDropsEvent(t *testing.T) {
+func TestNotificationHandler_LM_FullChannelDropsEvent(t *testing.T) {
 	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
+	ctx := registerSystemCtx(t, ch)
 
 	// Pre-fill the channel so the next send would block.
 	prefill := hcsschema.OperationSystemMigrationNotificationInfo{Event: hcsschema.MigrationEventSetupDone}
 	ch <- prefill
 
-	evt := allocCEvent(t, `{"Event":"MigrationDone"}`)
-	ctx := allocCChanCtx(t, ch)
+	evt := allocCEvent(t, computecore.HcsEventTypeGroupLiveMigration, `{"Event":"MigrationDone"}`)
 
-	if ret := migrationCallbackHandler(evt, ctx); ret != 0 {
+	if ret := notificationHandler(evt, ctx); ret != 0 {
 		t.Fatalf("expected 0, got %d", ret)
 	}
 
 	// The original prefill must still be the only entry (new event dropped).
 	if got := <-ch; !reflect.DeepEqual(got, prefill) {
 		t.Fatalf("expected prefill to remain, got %+v", got)
+	}
+	expectNoNotification(t, ch)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Event-type routing
+// ─────────────────────────────────────────────────────────────────────────────
+
+// TestNotificationHandler_NonLMEvent_NotDispatched verifies that a
+// non-GroupLiveMigration event does not land on the migration channel even
+// when a channel is registered. This guards the dispatch switch in
+// notificationHandler.
+func TestNotificationHandler_NonLMEvent_NotDispatched(t *testing.T) {
+	ch := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
+	ctx := registerSystemCtx(t, ch)
+
+	// SystemExited is a terminal exit event; without a notificationState
+	// registered (nil above) it must not panic and must not send anything
+	// onto the migration channel.
+	evt := allocCEvent(t, computecore.HcsEventTypeSystemExited, `{"Status":0}`)
+
+	if ret := notificationHandler(evt, ctx); ret != 0 {
+		t.Fatalf("expected 0, got %d", ret)
 	}
 	expectNoNotification(t, ch)
 }
