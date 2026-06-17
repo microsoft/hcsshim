@@ -796,8 +796,11 @@ mount_ok(mounts, allow_elevated, mount) {
 # the sandbox.  Since we have no other way to determine if the sandbox should be
 # allowed to be privileged or not (input.privileged is set to false for the
 # pause container even if the pod is privileged), we just special case the sysfs
-# mount.  Furthermore, we only allow this special case if this policy allows any
-# privileged containers at all.
+# mount.
+#
+# We have to allow this special case whether or not this policy currently allows
+# any privileged containers at all, since a fragment that is loaded in the
+# future may allow privileged containers.
 mount_ok(mounts, allow_elevated, mount) {
     input.isSandboxContainer
 
@@ -813,9 +816,6 @@ mount_ok(mounts, allow_elevated, mount) {
     "noexec" in mount.options
     "nodev" in mount.options
     "rw" in mount.options
-
-    some c in candidate_containers
-    c.allow_elevated
 }
 
 mountList_ok(mounts, allow_elevated) {
