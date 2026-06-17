@@ -7705,7 +7705,7 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 //
 // DefaultCRIMounts() is used as the policy's default mount set so the /sys
 // "ro" mount is in data.defaultMounts.
-func setupSandboxSysfsTest(t *testing.T) (
+func setupSandboxSysfsTest(t *testing.T, workloadIsPrivileged bool) (
 	policy *regoEnforcer,
 	sandboxContainer *securityPolicyContainer,
 	containerID string,
@@ -7730,9 +7730,7 @@ func setupSandboxSysfsTest(t *testing.T) (
 	sandboxContainer.AllowElevated = false
 	sandboxContainer.Mounts = nil
 
-	// At least one other container in the policy must be elevated to enable
-	// the sandbox sysfs carve-out.
-	gc.containers[1].AllowElevated = true
+	gc.containers[1].AllowElevated = workloadIsPrivileged
 
 	defaultMounts := DefaultCRIMounts()
 	privilegedMounts := DefaultCRIPrivilegedMounts()
@@ -7769,15 +7767,20 @@ func sysfsMount(mode string) oci.Mount {
 
 func Test_Rego_SandboxSysfsCarveOut(t *testing.T) {
 	cases := []struct {
-		name               string
-		isSandboxContainer bool
-		mode               string
-		expectAllowed      bool
+		name                 string
+		isSandboxContainer   bool
+		mode                 string
+		expectAllowed        bool
+		workloadIsPrivileged bool
 	}{
-		{"sandbox_ro", true, "ro", true},
-		{"sandbox_rw", true, "rw", true},
-		{"non_sandbox_ro", false, "ro", true},
-		{"non_sandbox_rw", false, "rw", false},
+		{"sandbox_ro", true, "ro", true, true},
+		{"sandbox_rw", true, "rw", true, true},
+		// sysfs rw is allowed for sandbox containers even if no container in
+		// the policy is elevated (a future fragment might allow elevation).
+		{"sandbox_rw_no_elevated_workload", true, "rw", true, false},
+		{"non_sandbox_ro", false, "ro", true, false},
+		{"non_sandbox_rw", false, "rw", false, false},
+		{"non_sandbox_rw_elevated_workload", false, "rw", false, true},
 	}
 
 	for _, tc := range cases {
@@ -7786,7 +7789,7 @@ func Test_Rego_SandboxSysfsCarveOut(t *testing.T) {
 			// create_container records the container as "started" and a
 			// second call for the same containerID would be denied.
 			policy, sandboxContainer, containerID, envList, user, groups, capabilities :=
-				setupSandboxSysfsTest(t)
+				setupSandboxSysfsTest(t, tc.workloadIsPrivileged)
 			noNewPriv := sandboxContainer.NoNewPrivileges
 			privileged := false
 			mounts := []oci.Mount{sysfsMount(tc.mode)}
@@ -7831,7 +7834,7 @@ func Test_Rego_SandboxSysfsCarveOut(t *testing.T) {
 // does not allow elevation, create_container must still be denied.
 func Test_Rego_SandboxSysfsCarveOut_PrivilegedRequestDenied(t *testing.T) {
 	policy, sandboxContainer, containerID, envList, user, groups, capabilities :=
-		setupSandboxSysfsTest(t)
+		setupSandboxSysfsTest(t, false)
 
 	noNewPriv := sandboxContainer.NoNewPrivileges
 	privileged := true
