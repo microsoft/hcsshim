@@ -3,33 +3,41 @@
 package migration
 
 import (
+	"fmt"
+
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
 // InitializeOptionsFromProto converts a protobuf [InitializeOptions] to the
 // HCS schema [hcsschema.MigrationInitializeOptions].
-func InitializeOptionsFromProto(p *InitializeOptions) *hcsschema.MigrationInitializeOptions {
+func InitializeOptionsFromProto(p *InitializeOptions) (*hcsschema.MigrationInitializeOptions, error) {
 	if p == nil {
-		return nil
+		return nil, nil
+	}
+
+	memoryTransport, err := memoryTransportFromProto(p.MemoryTransport)
+	if err != nil {
+		return nil, fmt.Errorf("convert memory transport: %w", err)
 	}
 	return &hcsschema.MigrationInitializeOptions{
-		MemoryTransport:                  memoryTransportFromProto(p.MemoryTransport),
+		MemoryTransport:                  memoryTransport,
 		MemoryTransferThrottleParams:     throttleParamsFromProto(p.MemoryTransferThrottleParams),
 		CompressionSettings:              compressionSettingsFromProto(p.CompressionSettings),
 		ChecksumVerification:             p.ChecksumVerification,
 		PerfTracingEnabled:               p.PerfTracingEnabled,
 		CancelIfBlackoutThresholdExceeds: p.CancelIfBlackoutThresholdExceeds,
 		PrepareMemoryTransferMode:        p.PrepareMemoryTransferMode,
-	}
+	}, nil
 }
 
 // memoryTransportFromProto converts a protobuf [MemoryTransport] enum value to its HCS [hcsschema.MigrationMemoryTransport] equivalent.
-func memoryTransportFromProto(t MemoryTransport) hcsschema.MigrationMemoryTransport {
+// It returns an error for any value other than TCP, since HCS requires a valid memory transport to start migration.
+func memoryTransportFromProto(t MemoryTransport) (hcsschema.MigrationMemoryTransport, error) {
 	switch t {
 	case MemoryTransport_MEMORY_TRANSPORT_TCP:
-		return hcsschema.MigrationMemoryTransportTCP
+		return hcsschema.MigrationMemoryTransportTCP, nil
 	default:
-		return ""
+		return "", fmt.Errorf("unsupported memory transport %q", t)
 	}
 }
 
