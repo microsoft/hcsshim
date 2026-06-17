@@ -513,6 +513,19 @@ func (r RegoQueryResult) Object(key string) (map[string]interface{}, error) {
 	}
 }
 
+// Array attempts to interpret the result value as an array.
+func (r RegoQueryResult) Array(key string) ([]interface{}, error) {
+	if value, ok := r[key]; ok {
+		if arr, ok := value.([]interface{}); ok {
+			return arr, nil
+		} else {
+			return nil, fmt.Errorf("value for '%s' is not an array", key)
+		}
+	} else {
+		return nil, fmt.Errorf("unable to find value for key '%s'", key)
+	}
+}
+
 // Bool attempts to interpret a result value as a boolean.
 func (r RegoQueryResult) Bool(key string) (bool, error) {
 	if value, ok := r[key]; ok {
