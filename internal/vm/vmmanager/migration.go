@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 )
 
 // StartWithMigrationOptions starts the utility VM as a live migration destination
@@ -47,8 +47,8 @@ func (uvm *UtilityVM) StartLiveMigrationTransfer(ctx context.Context, options *h
 
 // FinalizeLiveMigration completes the live migration workflow. If resume is true
 // the utility VM is resumed; otherwise it is stopped.
-func (uvm *UtilityVM) FinalizeLiveMigration(ctx context.Context, resume bool) error {
-	if err := uvm.cs.FinalizeLiveMigration(ctx, resume); err != nil {
+func (uvm *UtilityVM) FinalizeLiveMigration(ctx context.Context, options *hcsschema.MigrationFinalizedOptions) error {
+	if err := uvm.cs.FinalizeLiveMigration(ctx, options); err != nil {
 		return fmt.Errorf("failed to finalize live migration: %w", err)
 	}
 	return nil
@@ -56,10 +56,6 @@ func (uvm *UtilityVM) FinalizeLiveMigration(ctx context.Context, resume bool) er
 
 // MigrationNotifications returns a read-only channel that receives live migration
 // event payloads for the utility VM.
-func (uvm *UtilityVM) MigrationNotifications() (<-chan hcsschema.OperationSystemMigrationNotificationInfo, error) {
-	ch, err := uvm.cs.MigrationNotifications()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get migration notifications channel: %w", err)
-	}
-	return ch, nil
+func (uvm *UtilityVM) MigrationNotifications() <-chan hcsschema.OperationSystemMigrationNotificationInfo {
+	return uvm.cs.MigrationNotifications()
 }
