@@ -340,9 +340,10 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 	securityPolicy := oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicy, "")
 	if len(securityPolicy) > 0 {
 		sandboxOptions.ConfidentialConfig = &ConfidentialConfig{
-			SecurityPolicy:         securityPolicy,
-			SecurityPolicyEnforcer: oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicyEnforcer, "rego"),
-			UvmReferenceInfoFile:   oci.ParseAnnotationsString(annotations, shimannotations.LCOWReferenceInfoFile, vmutils.DefaultUVMReferenceInfoFile),
+			SecurityPolicy:                   securityPolicy,
+			SecurityPolicyEnforcer:           oci.ParseAnnotationsString(annotations, shimannotations.LCOWSecurityPolicyEnforcer, "rego"),
+			UvmReferenceInfoFile:             oci.ParseAnnotationsString(annotations, shimannotations.LCOWReferenceInfoFile, vmutils.DefaultUVMReferenceInfoFile),
+			UvmHashEnvelopeReferenceInfoFile: oci.ParseAnnotationsString(annotations, shimannotations.UVMHashEnvelopeReferenceInfoFile, vmutils.DefaultUVMHashEnvelopeReferenceInfoFile),
 		}
 
 		log.G(ctx).Debug("found security policy")
