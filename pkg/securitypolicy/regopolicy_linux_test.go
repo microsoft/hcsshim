@@ -7696,3 +7696,170 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 	}
 	return m
 }
+
+// setupSandboxSysfsTest builds a policy with exactly two containers: a
+// non-elevated container that the test request will match (acting as the
+// sandbox/pause container in the policy) and a separate elevated container so
+// that candidate_containers has at least one container with allow_elevated set
+// - this gates the sandbox sysfs carve-out in framework.rego.
+//
+// DefaultCRIMounts() is used as the policy's default mount set so the /sys
+// "ro" mount is in data.defaultMounts.
+func setupSandboxSysfsTest(t *testing.T, workloadIsPrivileged bool) (
+	policy *regoEnforcer,
+	sandboxContainer *securityPolicyContainer,
+	containerID string,
+	envList []string,
+	user IDName,
+	groups []IDName,
+	capabilities *oci.LinuxCapabilities,
+) {
+	t.Helper()
+
+	gc := generateConstraints(testRand, 2)
+	for len(gc.containers) < 2 {
+		// Force exactly two containers if generator under-generated.
+		gc.containers = append(gc.containers, generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer))
+	}
+
+	// containers[0] is the one the test will exercise: act as the pause
+	// container, never elevated. Strip its own mount constraints so the
+	// input mount list is matched purely against defaultMounts and the
+	// sandbox carve-out.
+	sandboxContainer = gc.containers[0]
+	sandboxContainer.AllowElevated = false
+	sandboxContainer.Mounts = nil
+
+	gc.containers[1].AllowElevated = workloadIsPrivileged
+
+	defaultMounts := DefaultCRIMounts()
+	privilegedMounts := DefaultCRIPrivilegedMounts()
+
+	var err error
+	policy, err = newRegoPolicy(gc.toPolicy().marshalRego(), defaultMounts, privilegedMounts, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	containerID, err = mountImageForContainer(policy, sandboxContainer)
+	if err != nil {
+		t.Fatalf("failed to mount image for sandbox container: %v", err)
+	}
+
+	envList = buildEnvironmentVariablesFromEnvRules(sandboxContainer.EnvRules, testRand)
+	user = buildIDNameFromConfig(sandboxContainer.User.UserIDName, testRand)
+	groups = buildGroupIDNamesFromUser(sandboxContainer.User, testRand)
+	capsExternal := copyLinuxCapabilities(sandboxContainer.Capabilities.toExternal())
+	capabilities = &capsExternal
+	return policy, sandboxContainer, containerID, envList, user, groups, capabilities
+}
+
+// sysfsMount returns a /sys sysfs mount with the given mode ("ro" or "rw"),
+// matching the option set produced by containerd's CRI sandbox spec.
+func sysfsMount(mode string) oci.Mount {
+	return oci.Mount{
+		Source:      "sysfs",
+		Destination: "/sys",
+		Type:        "sysfs",
+		Options:     []string{"nosuid", "noexec", "nodev", mode},
+	}
+}
+
+func Test_Rego_SandboxSysfsCarveOut(t *testing.T) {
+	cases := []struct {
+		name                 string
+		isSandboxContainer   bool
+		mode                 string
+		expectAllowed        bool
+		workloadIsPrivileged bool
+	}{
+		{"sandbox_ro", true, "ro", true, true},
+		{"sandbox_rw", true, "rw", true, true},
+		// sysfs rw is allowed for sandbox containers even if no container in
+		// the policy is elevated (a future fragment might allow elevation).
+		{"sandbox_rw_no_elevated_workload", true, "rw", true, false},
+		{"non_sandbox_ro", false, "ro", true, false},
+		{"non_sandbox_rw", false, "rw", false, false},
+		{"non_sandbox_rw_elevated_workload", false, "rw", false, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Each subtest gets its own policy because a successful
+			// create_container records the container as "started" and a
+			// second call for the same containerID would be denied.
+			policy, sandboxContainer, containerID, envList, user, groups, capabilities :=
+				setupSandboxSysfsTest(t, tc.workloadIsPrivileged)
+			noNewPriv := sandboxContainer.NoNewPrivileges
+			privileged := false
+			mounts := []oci.Mount{sysfsMount(tc.mode)}
+			_, _, _, err := policy.EnforceCreateContainerPolicyV2(
+				context.Background(),
+				containerID,
+				sandboxContainer.Command,
+				envList,
+				sandboxContainer.WorkingDir,
+				mounts,
+				user,
+				&CreateContainerOptions{
+					SandboxID:            testDataGenerator.uniqueSandboxID(),
+					Privileged:           &privileged,
+					NoNewPrivileges:      &noNewPriv,
+					Groups:               groups,
+					Umask:                sandboxContainer.User.Umask,
+					Capabilities:         capabilities,
+					SeccompProfileSHA256: sandboxContainer.SeccompProfileSHA256,
+					IsSandboxContainer:   tc.isSandboxContainer,
+				},
+			)
+			if tc.expectAllowed {
+				if err != nil {
+					t.Errorf("expected allowed, got error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected denied, got allowed")
+				} else {
+					assertDecisionJSONContains(t, err, "invalid mount list", "/sys")
+				}
+			}
+		})
+	}
+}
+
+// Test_Rego_SandboxSysfsCarveOut_PrivilegedRequestDenied verifies that the
+// sysfs carve-out for the sandbox container does NOT also grant privilege:
+// even with IsSandboxContainer=true and the /sys rw mount accepted, if the
+// host requests Privileged=true for a sandbox container whose policy entry
+// does not allow elevation, create_container must still be denied.
+func Test_Rego_SandboxSysfsCarveOut_PrivilegedRequestDenied(t *testing.T) {
+	policy, sandboxContainer, containerID, envList, user, groups, capabilities :=
+		setupSandboxSysfsTest(t, false)
+
+	noNewPriv := sandboxContainer.NoNewPrivileges
+	privileged := true
+	mounts := []oci.Mount{sysfsMount("rw")}
+	_, _, _, err := policy.EnforceCreateContainerPolicyV2(
+		context.Background(),
+		containerID,
+		sandboxContainer.Command,
+		envList,
+		sandboxContainer.WorkingDir,
+		mounts,
+		user,
+		&CreateContainerOptions{
+			SandboxID:            testDataGenerator.uniqueSandboxID(),
+			Privileged:           &privileged,
+			NoNewPrivileges:      &noNewPriv,
+			Groups:               groups,
+			Umask:                sandboxContainer.User.Umask,
+			Capabilities:         capabilities,
+			SeccompProfileSHA256: sandboxContainer.SeccompProfileSHA256,
+			IsSandboxContainer:   true,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected create_container to be denied when Privileged=true for a non-elevated sandbox container, but it was allowed")
+	}
+	assertDecisionJSONContains(t, err, "privileged escalation not allowed")
+}

@@ -656,21 +656,27 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, err
 	}
 
-	envToKeep, capsToKeep, allowStdio, err := h.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicy(
+	privileged := isPrivilegedContainerCreationRequest(ctx, settings.OCISpecification)
+	noNewPrivileges := settings.OCISpecification.Process.NoNewPrivileges
+	opts := &securitypolicy.CreateContainerOptions{
+		SandboxID:            sandboxID,
+		Privileged:           &privileged,
+		NoNewPrivileges:      &noNewPrivileges,
+		Groups:               groups,
+		Umask:                umask,
+		Capabilities:         settings.OCISpecification.Process.Capabilities,
+		SeccompProfileSHA256: seccomp,
+		IsSandboxContainer:   c.isSandbox,
+	}
+	envToKeep, capsToKeep, allowStdio, err := h.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(
 		ctx,
-		sandboxID,
 		id,
 		settings.OCISpecification.Process.Args,
 		settings.OCISpecification.Process.Env,
 		settings.OCISpecification.Process.Cwd,
 		settings.OCISpecification.Mounts,
-		isPrivilegedContainerCreationRequest(ctx, settings.OCISpecification),
-		settings.OCISpecification.Process.NoNewPrivileges,
 		user,
-		groups,
-		umask,
-		settings.OCISpecification.Process.Capabilities,
-		seccomp,
+		opts,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
