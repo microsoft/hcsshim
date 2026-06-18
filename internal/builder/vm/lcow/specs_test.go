@@ -2129,7 +2129,7 @@ func TestBuildSandboxConfig_CPUClamping(t *testing.T) {
 }
 
 // TestBuildSandboxConfig_LiveMigration validates the wiring for the
-// io.microsoft.migration.support.enabled sandbox annotation. The annotation is parsed
+// io.microsoft.migration.support-enabled sandbox annotation. The annotation is parsed
 // into SandboxOptions.LiveMigrationSupportEnabled and threaded down into the kernel
 // command line: live-migratable sandboxes must skip the /bin/vsockexec wrapper
 // (which would otherwise stall init waiting for a host log listener that the
