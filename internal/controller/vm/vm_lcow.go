@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
 	"github.com/Microsoft/hcsshim/internal/controller/network"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
@@ -165,6 +166,31 @@ func (c *Controller) setupEntropyListener(ctx context.Context, group *errgroup.G
 // running inside the Linux VM. The logs are parsed and
 // forwarded to the host's logging system for monitoring and debugging.
 func (c *Controller) setupLoggingListener(ctx context.Context, group *errgroup.Group) error {
+	// Live-migratable sandboxes intentionally run without a host-side GCS log
+	// listener.
+	//
+	// The log listener is host-local state: GCS inside the guest connects out to
+	// a host-side hvsocket on LinuxLogVsockPort and streams its stderr to it. That
+	// connection, and the goroutine reading from it, are bound to the *source*
+	// host and are not part of the guest state that live migration transfers.
+	// After the VM is migrated to a destination host there is no equivalent
+	// listener to reconnect to, so a guest that depended on the log socket would
+	// block on its outbound connect and stall the boot path. To keep the guest
+	// migratable we skip the listener here and drop the matching /bin/vsockexec
+	// wrapper from the kernel command line, so GCS never attempts the connection.
+	//
+	// Re-enabling host-side log collection for live-migratable pods requires a
+	// migration-aware log transport: GCS must tolerate the listener going away
+	// and reconnect to a freshly established listener on the destination host once
+	// migration completes, and the host must (re)create the listener and re-attach
+	// the log-parsing goroutine on the destination. Until that work lands we forgo
+	// host-side GCS logs for these pods.
+	if c.sandboxOptions != nil && c.sandboxOptions.LiveMigrationSupportEnabled {
+		log.G(ctx).Info("skipping GCS log listener: pod is live-migratable")
+		close(c.logOutputDone)
+		return nil
+	}
+
 	// The GCS will connect to this port to stream log output.
 	logConn, err := winio.ListenHvsock(&winio.HvsockAddr{
 		VMID:      c.uvm.RuntimeID(),
