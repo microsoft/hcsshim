@@ -5508,7 +5508,12 @@ func Test_Rego_LoadTransparencyTrustList(t *testing.T) {
 		"unauthorized.ledger.example": {"kid2": key},
 	}
 
-	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 2, parsedTTL); err != nil {
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       2,
+		ParsedTTL: parsedTTL,
+	}); err != nil {
 		t.Fatalf("expected TTL to load: %v", err)
 	}
 
@@ -5536,7 +5541,12 @@ func Test_Rego_LoadTransparencyTrustList_Wildcard(t *testing.T) {
 		"ledger.two.example": {"kid2": key},
 	}
 
-	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, parsedTTL); err != nil {
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       1,
+		ParsedTTL: parsedTTL,
+	}); err != nil {
 		t.Fatalf("expected TTL to load: %v", err)
 	}
 
@@ -5562,7 +5572,12 @@ func Test_Rego_LoadTransparencyTrustList_NoAuthorizedLedgers(t *testing.T) {
 		"some.other.ledger.example": {"kid1": key},
 	}
 
-	err = policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, parsedTTL)
+	err = policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       1,
+		ParsedTTL: parsedTTL,
+	})
 	if err == nil {
 		t.Fatalf("expected TTL load to be denied when no ledgers are authorized")
 	}
@@ -5587,7 +5602,12 @@ func Test_Rego_LoadTransparencyTrustList_SVNBelowMinimum(t *testing.T) {
 		ledger: {"kid1": key},
 	}
 
-	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 4, parsedTTL); err == nil {
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       4,
+		ParsedTTL: parsedTTL,
+	}); err == nil {
 		t.Fatalf("expected TTL load to be denied when svn is below the minimum")
 	}
 }
@@ -5604,8 +5624,13 @@ func Test_Rego_LoadTransparencyTrustList_MergeOverride(t *testing.T) {
 	}
 
 	firstKey := generateTestECDSAKey(t)
-	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, map[string]map[string]crypto.PublicKey{
-		ledger: {"kid1": firstKey},
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  issuer,
+		Subject: subject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": firstKey},
+		},
 	}); err != nil {
 		t.Fatalf("expected first TTL to load: %v", err)
 	}
@@ -5613,8 +5638,13 @@ func Test_Rego_LoadTransparencyTrustList_MergeOverride(t *testing.T) {
 	// A second TTL for the same ledger that adds a new kid and overrides the
 	// existing one with a different key.
 	secondKey := generateTestECDSAKey(t)
-	if err := policy.LoadTransparencyTrustList(ctx, issuer, subject, 1, map[string]map[string]crypto.PublicKey{
-		ledger: {"kid1": secondKey, "kid2": firstKey},
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  issuer,
+		Subject: subject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": secondKey, "kid2": firstKey},
+		},
 	}); err != nil {
 		t.Fatalf("expected second TTL to load: %v", err)
 	}
@@ -5772,8 +5802,13 @@ func Test_Rego_LoadFragment_ValidReceipt(t *testing.T) {
 	}
 
 	key := generateTestECDSAKey(t)
-	if err := policy.LoadTransparencyTrustList(ctx, ttlIssuer, ttlSubject, 1, map[string]map[string]crypto.PublicKey{
-		ledger: {"kid1": key},
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": key},
+		},
 	}); err != nil {
 		t.Fatalf("unable to load TTL: %v", err)
 	}
@@ -5828,8 +5863,13 @@ func Test_Rego_LoadFragment_ReceiptWrongIssuer(t *testing.T) {
 	}
 
 	key := generateTestECDSAKey(t)
-	if err := policy.LoadTransparencyTrustList(ctx, ttlIssuer, ttlSubject, 1, map[string]map[string]crypto.PublicKey{
-		otherLedger: {"kid1": key},
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			otherLedger: {"kid1": key},
+		},
 	}); err != nil {
 		t.Fatalf("unable to load TTL: %v", err)
 	}
@@ -5873,8 +5913,13 @@ func Test_Rego_LoadFragment_ReceiptValidationFails(t *testing.T) {
 	}
 
 	key := generateTestECDSAKey(t)
-	if err := policy.LoadTransparencyTrustList(ctx, ttlIssuer, ttlSubject, 1, map[string]map[string]crypto.PublicKey{
-		ledger: {"kid1": key},
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": key},
+		},
 	}); err != nil {
 		t.Fatalf("unable to load TTL: %v", err)
 	}

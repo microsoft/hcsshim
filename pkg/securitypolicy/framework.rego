@@ -1297,6 +1297,13 @@ fragment_issuer_feed_ok(fragment) {
     input.feed == fragment.feed
 }
 
+# header_svn_ok checks that the fragment's CWT-declared SVN is at least the
+# minimum, if it is present.  If it's not present, then we don't check it here,
+# but later in svn_ok_if_defined we will ensure that the fragment itself
+# declares an SVN and that it meets the minimum requirement.  A case where
+# neither the header nor the fragment Rego declares an SVN is tested in
+# Test_Rego_LoadFragment_MissingSVN.
+
 header_svn_ok(fragment) {
     not input.has_header_svn
 }
@@ -1385,18 +1392,18 @@ load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed
 default policy_transparency_trust_lists := []
 policy_transparency_trust_lists := data.policy.transparency_trust_lists
 
-candidate_transparency_trust_lists := roots {
-    fragment_roots := [r |
+candidate_transparency_trust_lists := ttls {
+    fragment_ttls := [r |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
         r := fragment.transparency_trust_lists[_]
     ]
 
-    roots := array.concat(policy_transparency_trust_lists, fragment_roots)
+    ttls := array.concat(policy_transparency_trust_lists, fragment_ttls)
 }
 
-# The set of ledger names a matching transparency root authorizes for the given
-# (issuer, subject, svn).  "*" is a wildcard meaning "any ledger".
+# The set of ledger names a matching TTL authorizes for the given (issuer,
+# subject, svn).  "*" is a wildcard meaning "any ledger".
 ttl_allowed_ledgers_for_issuer_subject_svn(issuer, subject, svn) := allowed_ledgers {
     allowed_ledgers := {l |
         ttl := candidate_transparency_trust_lists[_]
@@ -1420,8 +1427,8 @@ intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
 default load_transparency_trust_list := {"allowed": false}
 
 load_transparency_trust_list := {"allowed": true, "allowed_ledgers": allowed_ledgers} {
-    root_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
-    allowed_ledgers := intersect_or_allow_all_if_wildcard(root_ledgers, input.ledgers)
+    ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
+    allowed_ledgers := intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
     count(allowed_ledgers) > 0
 }
 
@@ -2049,23 +2056,26 @@ errors[receipt_error] {
     receipt_error := sprintf("missing receipt from %s", [required_issuer])
 }
 
-default transparency_root_matches := false
+default ttl_matches := false
 
-transparency_root_matches {
+ttl_matches {
     some ttl in candidate_transparency_trust_lists
     ttl.issuer == input.issuer
     ttl.subject == input.subject
     svn_ok(input.svn, ttl.minimum_svn)
 }
 
-errors["no transparency root matches the trust list issuer, subject and svn"] {
+errors["no TTL candidate matches the provided TTL's issuer, subject and svn"] {
     input.rule == "load_transparency_trust_list"
-    not transparency_root_matches
+    not ttl_matches
 }
 
-errors["transparency trust list carries no ledgers authorized by any transparency root"] {
+errors["The provided TTL does not contain any ledgers it is allowed to load"] {
     input.rule == "load_transparency_trust_list"
-    transparency_root_matches
+    ttl_matches
+    ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
+    allowed_ledgers := intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
+    count(allowed_ledgers) == 0
 }
 
 errors["scratch already mounted at path"] {

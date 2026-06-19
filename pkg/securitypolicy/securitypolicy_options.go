@@ -242,7 +242,8 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		}
 	}
 
-	if mediaType == mediaTypeTransparencyTrustList {
+	switch mediaType {
+	case mediaTypeTransparencyTrustList:
 		// A TTL must carry its SVN in the COSE header; there is nowhere else for
 		// it to go.
 		if svnFromCwt == nil {
@@ -255,23 +256,58 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		}
 
 		// feed is the "subject" in the new-style envelope terminology.
-		if err := s.PolicyEnforcer.LoadTransparencyTrustList(ctx, issuer, feed, *svnFromCwt, parsedTTL); err != nil {
+		log.G(ctx).WithFields(logrus.Fields{
+			"issuer":     issuer,
+			"subject":    feed,
+			"svn":        svnFromCwt,
+			"numLedgers": len(parsedTTL),
+		}).Debugf("Offering transparency trust list containing %d ledgers with issuer %s subject %s to policy enforcer", len(parsedTTL), issuer, feed)
+		if log.G(ctx).Logger.IsLevelEnabled(logrus.TraceLevel) {
+			for ledgerName, ledger := range parsedTTL {
+				for keyID, entry := range ledger {
+					log.G(ctx).WithFields(logrus.Fields{
+						"issuer":  issuer,
+						"subject": feed,
+						"svn":     svnFromCwt,
+						"ledger":  ledgerName,
+						"keyID":   keyID,
+					}).Tracef("Transparency trust list contains entry for ledger %s kid %s entry %T", ledgerName, keyID, entry)
+				}
+			}
+		}
+		if err := s.PolicyEnforcer.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+			Issuer:    issuer,
+			Subject:   feed,
+			SVN:       *svnFromCwt,
+			ParsedTTL: parsedTTL,
+		}); err != nil {
 			return errors.Wrap(err, "error loading transparency trust list")
 		}
-		return nil
+
+	case mediaTypeFragment:
+		// now offer the payload fragment to the policy
+		fragmentOptions := LoadFragmentOptions{
+			Issuer:    issuer,
+			Feed:      feed,
+			HeaderSVN: svnFromCwt,
+			Rego:      payloadString,
+			Receipts:  unpacked.Receipts,
+		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"issuer":      issuer,
+			"feed":        feed,
+			"headerSvn":   svnFromCwt,
+			"numReceipts": len(unpacked.Receipts),
+		}).Debugf("Offering fragment with issuer %s feed %s to policy enforcer with %d receipts", issuer, feed, len(unpacked.Receipts))
+		log.G(ctx).WithFields(logrus.Fields{
+			"feed": feed,
+			"rego": payloadString,
+		}).Tracef("Fragment Rego content")
+		if err = s.PolicyEnforcer.LoadFragment(ctx, fragmentOptions); err != nil {
+			return errors.Wrap(err, "error loading security policy fragment")
+		}
 	}
 
-	// now offer the payload fragment to the policy
-	err = s.PolicyEnforcer.LoadFragment(ctx, LoadFragmentOptions{
-		Issuer:    issuer,
-		Feed:      feed,
-		HeaderSVN: svnFromCwt,
-		Rego:      payloadString,
-		Receipts:  unpacked.Receipts,
-	})
-	if err != nil {
-		return errors.Wrap(err, "error loading security policy fragment")
-	}
 	return nil
 }
 

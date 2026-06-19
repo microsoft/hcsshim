@@ -1171,6 +1171,8 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 	// receipt is then passed to the policy as input.receipt_issuers.
 	receiptIssuersSet := make(map[string]struct{})
 	policy.ttlKeysLock.Lock()
+	defer policy.ttlKeysLock.Unlock()
+
 	for _, receipt := range opts.Receipts {
 		keys, ok := policy.ttlKeys[receipt.Issuer]
 		if !ok {
@@ -1185,7 +1187,6 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 		}
 		receiptIssuersSet[receipt.Issuer] = struct{}{}
 	}
-	policy.ttlKeysLock.Unlock()
 	receiptIssuers := make([]string, 0, len(receiptIssuersSet))
 	for issuer := range receiptIssuersSet {
 		receiptIssuers = append(receiptIssuers, issuer)
@@ -1254,16 +1255,17 @@ func (policy *regoEnforcer) SetReceiptValidationFunction(fn func(receipt cosesig
 // keys for, based on the policy's transparency_trust_lists. The keys for the
 // allowed ledgers are then merged into the enforcer's TTL key store for use
 // when validating fragment receipts.
-func (policy *regoEnforcer) LoadTransparencyTrustList(ctx context.Context, issuer string, subject string, svn int64, parsedTTL map[string]map[string]crypto.PublicKey) error {
+func (policy *regoEnforcer) LoadTransparencyTrustList(ctx context.Context, opts LoadTransparencyTrustListOptions) error {
+	parsedTTL := opts.ParsedTTL
 	ledgers := make([]string, 0, len(parsedTTL))
 	for ledger := range parsedTTL {
 		ledgers = append(ledgers, ledger)
 	}
 
 	input := inputData{
-		"issuer":  issuer,
-		"subject": subject,
-		"svn":     svn,
+		"issuer":  opts.Issuer,
+		"subject": opts.Subject,
+		"svn":     opts.SVN,
 		"ledgers": ledgers,
 	}
 
@@ -1313,7 +1315,7 @@ func (policy *regoEnforcer) LoadTransparencyTrustList(ctx context.Context, issue
 		}
 	}
 
-	log.G(ctx).Infof("Loaded TTL with subject %s signed by %s with keys for ledgers: %v", subject, issuer, allowedLedgers)
+	log.G(ctx).Infof("Loaded TTL with subject %s signed by %s with keys for ledgers: %v", opts.Subject, opts.Issuer, allowedLedgers)
 	return nil
 }
 

@@ -61,6 +61,18 @@ type LoadFragmentOptions struct {
 	Receipts []cosesign1.ParsedCOSEReceipt
 }
 
+type LoadTransparencyTrustListOptions struct {
+	// Issuer of the signed Transparency Trust List (TTL).
+	Issuer string
+	// Subject of the TTL.
+	Subject string
+	// SVN carried in the TTL's COSE header.
+	SVN int64
+	// ParsedTTL maps each ledger name (receipt issuer) to that ledger's kid ->
+	// public key map.  This is the return value of cosesign1.ParseTTLPayload.
+	ParsedTTL map[string]map[string]crypto.PublicKey
+}
+
 const (
 	openDoorEnforcerName = "open_door"
 )
@@ -146,7 +158,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceDumpStacksPolicy(ctx context.Context) error
 	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
 	LoadFragment(ctx context.Context, opts LoadFragmentOptions) error
-	LoadTransparencyTrustList(ctx context.Context, issuer string, subject string, svn int64, parsedTTL map[string]map[string]crypto.PublicKey) error
+	LoadTransparencyTrustList(ctx context.Context, opts LoadTransparencyTrustListOptions) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
@@ -325,7 +337,7 @@ func (OpenDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragment
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, string, string, int64, map[string]map[string]crypto.PublicKey) error {
+func (OpenDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, LoadTransparencyTrustListOptions) error {
 	return nil
 }
 
@@ -470,7 +482,7 @@ func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragme
 	return errors.New("loading fragments is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, string, string, int64, map[string]map[string]crypto.PublicKey) error {
+func (ClosedDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, LoadTransparencyTrustListOptions) error {
 	return errors.New("loading transparency trust lists is denied by policy")
 }
 
