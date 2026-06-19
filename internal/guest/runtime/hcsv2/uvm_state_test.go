@@ -323,3 +323,57 @@ func Test_HostMounts_Cannot_RemoveInUseDeviceByOverlay_MultipleUsers(t *testing.
 		t.Fatalf("unexpected error removing RW device %s: %s", sharedScratchMount, err)
 	}
 }
+
+func Test_HostMounts_RemoveOverlay_PathNormalization_AddUncleanRemoveClean(t *testing.T) {
+	hm := newHostMounts()
+	hm.Lock()
+	defer hm.Unlock()
+
+	layer := "/run/mounts/scsi/m1"
+	if err := hm.AddRODevice(layer, layer); err != nil {
+		t.Fatalf("unexpected error adding RO device: %s", err)
+	}
+
+	scratch := "/run/gcs/c/aaaa/scratch"
+	if err := hm.AddRWDevice(scratch, scratch, false); err != nil {
+		t.Fatalf("unexpected error adding RW device: %s", err)
+	}
+
+	uncleanOverlay := "/run/gcs/c/aaaa/./rootfs"
+	cleanOverlay := "/run/gcs/c/aaaa/rootfs"
+
+	if err := hm.AddOverlay(uncleanOverlay, []string{layer}, scratch); err != nil {
+		t.Fatalf("unexpected error adding overlay with unclean path: %s", err)
+	}
+
+	if _, err := hm.RemoveOverlay(cleanOverlay); err != nil {
+		t.Fatalf("expected removing overlay with clean path to succeed after add with unclean path, got error: %s", err)
+	}
+}
+
+func Test_HostMounts_RemoveOverlay_PathNormalization_AddCleanRemoveUnclean(t *testing.T) {
+	hm := newHostMounts()
+	hm.Lock()
+	defer hm.Unlock()
+
+	layer := "/run/mounts/scsi/m1"
+	if err := hm.AddRODevice(layer, layer); err != nil {
+		t.Fatalf("unexpected error adding RO device: %s", err)
+	}
+
+	scratch := "/run/gcs/c/aaaa/scratch"
+	if err := hm.AddRWDevice(scratch, scratch, false); err != nil {
+		t.Fatalf("unexpected error adding RW device: %s", err)
+	}
+
+	cleanOverlay := "/run/gcs/c/aaaa/rootfs"
+	uncleanOverlay := "/run/gcs/c/aaaa/./rootfs"
+
+	if err := hm.AddOverlay(cleanOverlay, []string{layer}, scratch); err != nil {
+		t.Fatalf("unexpected error adding overlay with clean path: %s", err)
+	}
+
+	if _, err := hm.RemoveOverlay(uncleanOverlay); err != nil {
+		t.Fatalf("expected removing overlay with unclean path to succeed after add with clean path, got error: %s", err)
+	}
+}

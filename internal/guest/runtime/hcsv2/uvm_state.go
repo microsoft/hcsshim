@@ -248,7 +248,9 @@ func (hm *hostMounts) AddRWDevice(mountPath string, sourcePath string, encrypted
 func (hm *hostMounts) AddOverlay(mountPath string, layers []string, scratchDir string) (err error) {
 	hm.expectLocked()
 
-	dev, err := hm.doAddDevice(mountPath, DeviceTypeOverlay, mountPath)
+	cleanMountPath := filepath.Clean(mountPath)
+
+	dev, err := hm.doAddDevice(cleanMountPath, DeviceTypeOverlay, cleanMountPath)
 	if err != nil {
 		return err
 	}
@@ -260,7 +262,7 @@ func (hm *hostMounts) AddOverlay(mountPath string, layers []string, scratchDir s
 			for _, d := range dev.referencedDevices {
 				hm.releaseDeviceUsage(d)
 			}
-			delete(hm.devices, mountPath)
+			delete(hm.devices, dev.mountPath)
 		}
 	}()
 
@@ -306,8 +308,10 @@ func (hm *hostMounts) RemoveRWDevice(mountPath string, sourcePath string, encryp
 func (hm *hostMounts) RemoveOverlay(mountPath string) (undo func(), err error) {
 	hm.expectLocked()
 
+	cleanMountPath := filepath.Clean(mountPath)
+
 	var dev *device
-	err = hm.doRemoveDevice(mountPath, DeviceTypeOverlay, mountPath, func(_dev *device) error {
+	err = hm.doRemoveDevice(cleanMountPath, DeviceTypeOverlay, cleanMountPath, func(_dev *device) error {
 		dev = _dev
 		for _, refDev := range dev.referencedDevices {
 			hm.releaseDeviceUsage(refDev)
@@ -326,14 +330,14 @@ func (hm *hostMounts) RemoveOverlay(mountPath string) (undo func(), err error) {
 			refDev.usage++
 		}
 
-		if _, ok := hm.devices[mountPath]; ok {
-			log.G(context.Background()).WithField("mountPath", mountPath).Error(
+		if _, ok := hm.devices[cleanMountPath]; ok {
+			log.G(context.Background()).WithField("mountPath", cleanMountPath).Error(
 				"hostMounts::RemoveOverlay: failed to undo remove: device that was removed exists in map",
 			)
 			return
 		}
 
-		hm.devices[mountPath] = dev
+		hm.devices[cleanMountPath] = dev
 	}
 	return undo, nil
 }

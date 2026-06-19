@@ -100,7 +100,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 		}
 		p.exitCode = exitCode
 		if p.init {
-			c.terminated.Store(true)
+			c.setStatus(containerTerminated)
 		}
 		log.G(ctx).WithField("exitCode", p.exitCode).Debug("process exited")
 

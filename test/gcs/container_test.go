@@ -77,9 +77,9 @@ func TestContainerDelete(t *testing.T) {
 
 	cleanupContainer(ctx, t, host, c)
 
-	_, err := host.GetCreatedContainer(id)
+	_, err := host.GetInitializedContainer(id)
 	if hr, herr := gcserr.GetHresult(err); herr != nil || hr != gcserr.HrVmcomputeSystemNotFound {
-		t.Fatalf("GetCreatedContainer returned %v, wanted %v", err, gcserr.HrVmcomputeSystemNotFound)
+		t.Fatalf("GetInitializedContainer returned %v, wanted %v", err, gcserr.HrVmcomputeSystemNotFound)
 	}
 	assertNumberContainers(ctx, t, rtime, 0)
 }
