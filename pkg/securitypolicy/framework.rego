@@ -1335,14 +1335,49 @@ svn_ok_if_defined(minimum_svn) {
 }
 
 # A fragment rule may require transparency receipts from one or more ledgers
-# (the receipt issuers). input.receipt_issuers is the set of ledgers for which
-# the enforcer successfully validated a receipt attached to this fragment.  If
-# not set, no receipts are required.
+# (identified by the issuer of the receipt, and checked by the key used to sign
+# the receipt).  input.receipts is the set of receipts that the enforcer
+# successfully validated against keys learned from accepted TTLs. Each receipt
+# is {"issuer": <ledger>, "ttl_subjects": [<ttl subject>, ...]} where
+# ttl_subjects lists the subjects of the TTLs that contributed the key that
+# validated the receipt.
+#
+# fragment.required_receipts contains the list of required receipt issuers or
+# feeds of the TTLs containing the key for the receipt.  If not set, no receipts
+# are required.  The list is an AND: every required entry must be satisfied.
+# One receipt can satisfy multiple such requirement entries.
 fragment_receipts_ok(fragment) {
-    required := object.get(fragment, "receipt_issuers", [])
+    required := object.get(fragment, "required_receipts", [])
     every required_issuer in required {
-        required_issuer in input.receipt_issuers
+        receipt_requirement_satisfied(required_issuer)
     }
+}
+
+# receipt_requirement_satisfied checks a single receipt requirement against the
+# validated receipts in input.receipts. A requirement may be:
+# - "*": satisfied by any validated receipt. This still implies the receipt was
+#   signed by a key from a TTL we have accepted, it just doesn't constrain which
+#   one.
+# - "TTL:<subject>": satisfied by a validated receipt that was signed by a key
+#   contributed by a TTL with the given subject.
+# - a literal ledger name: satisfied by a validated receipt with that issuer.
+receipt_requirement_satisfied(required_issuer) {
+    required_issuer == "*"
+    count(input.receipts) > 0
+}
+
+receipt_requirement_satisfied(required_issuer) {
+    startswith(required_issuer, "TTL:")
+    subject := substring(required_issuer, count("TTL:"), -1)
+    some receipt in input.receipts
+    subject in receipt.ttl_subjects
+}
+
+receipt_requirement_satisfied(required_issuer) {
+    required_issuer != "*"
+    not startswith(required_issuer, "TTL:")
+    some receipt in input.receipts
+    receipt.issuer == required_issuer
 }
 
 default load_fragment := {"allowed": false}
@@ -2045,14 +2080,15 @@ errors["missing fragment svn in either header or rego payload"] {
     missing_svn
 }
 
+# This will result in one error per missing receipt requirement
 errors[receipt_error] {
     input.rule == "load_fragment"
     not input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
-    required := object.get(fragment, "receipt_issuers", [])
+    required := object.get(fragment, "required_receipts", [])
     some required_issuer in required
-    not required_issuer in input.receipt_issuers
+    not receipt_requirement_satisfied(required_issuer)
     receipt_error := sprintf("missing receipt from %s", [required_issuer])
 }
 
@@ -2571,11 +2607,11 @@ check_fragment(raw_fragment, framework_version) := fragment {
         "minimum_svn": raw_fragment.minimum_svn,
         "includes": raw_fragment.includes,
 
-        # receipt_issuers was added in 0.5.0. Older policies default to
+        # required_receipts was added in 0.5.0. Older policies default to
         # [], i.e. no transparency receipts are required, but if any is
         # specified, even when the policy has an older framework_version, we
         # respect it since it is restrictive.
-        "receipt_issuers": object.get(raw_fragment, "receipt_issuers", []),
+        "required_receipts": object.get(raw_fragment, "required_receipts", []),
 
         # Additional fields need to have default logic applied
     }

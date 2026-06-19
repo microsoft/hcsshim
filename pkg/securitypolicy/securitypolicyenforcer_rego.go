@@ -67,11 +67,23 @@ type regoEnforcer struct {
 	ttlKeysLock sync.Mutex
 	// ttlKeys holds the receipt-signing keys learned from loaded Transparency
 	// Trust Lists, keyed by ledger name (receipt issuer) and then by key id.
-	ttlKeys map[string]map[string]crypto.PublicKey
+	ttlKeys map[string]map[string]TTLKeyEntry
 	// validateReceipt validates a single transparency receipt against the given
 	// keys. It defaults to (cosesign1.ParsedCOSEReceipt).Validate and exists as
 	// a field so tests can substitute a mock.
 	validateReceipt func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error
+}
+
+// TTLKeyEntry is a single receipt-signing key learned from one or more loaded
+// Transparency Trust Lists (TTLs), along with the subjects of the TTLs that
+// contributed this exact key under its key id.
+type TTLKeyEntry struct {
+	// key is the parsed public key.
+	key crypto.PublicKey
+	// offeredBy holds the subjects of all loaded TTLs that contributed this
+	// exact key under this kid. It is used to satisfy fragment receipt
+	// requirements of the form "TTL:<subject>".
+	offeredBy []string
 }
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
@@ -170,7 +182,7 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 		return nil, err
 	}
 	policy.stdio = map[string]bool{}
-	policy.ttlKeys = map[string]map[string]crypto.PublicKey{}
+	policy.ttlKeys = map[string]map[string]TTLKeyEntry{}
 	policy.validateReceipt = func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
 		return receipt.Validate(keys)
 	}
@@ -1167,29 +1179,39 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 	// its claimed issuer (ledger), learned from previously loaded TTLs. We only
 	// ever offer Validate the keys belonging to the receipt's own claimed
 	// issuer, so a ledger cannot sign a receipt while pretending to be a
-	// different ledger. The set of issuers for which we successfully validated a
-	// receipt is then passed to the policy as input.receipt_issuers.
-	receiptIssuersSet := make(map[string]struct{})
+	// different ledger. Each receipt we successfully validate is passed to the
+	// policy as an entry of input.receipts, of the form
+	// {"issuer": <ledger>, "ttl_subjects": [<ttl subject>, ...]}, where
+	// ttl_subjects lists the subjects of the TTLs that contributed the exact
+	// key that validated the receipt.
+	receipts := []interface{}{}
 	policy.ttlKeysLock.Lock()
 	defer policy.ttlKeysLock.Unlock()
 
 	for _, receipt := range opts.Receipts {
-		keys, ok := policy.ttlKeys[receipt.Issuer]
+		entries, ok := policy.ttlKeys[receipt.Issuer]
 		if !ok {
 			// We have no TTL keys for this issuer, so we cannot validate the
 			// receipt. Ignore it.
 			log.G(ctx).WithField("issuer", receipt.Issuer).Debug("skipping fragment receipt: no TTL keys for claimed issuer")
 			continue
 		}
+		keys := make(map[string]crypto.PublicKey, len(entries))
+		for kid, entry := range entries {
+			keys[kid] = entry.key
+		}
 		if err := policy.validateReceipt(receipt, keys); err != nil {
 			log.G(ctx).WithError(err).WithField("issuer", receipt.Issuer).Error("fragment receipt failed validation")
 			continue
 		}
-		receiptIssuersSet[receipt.Issuer] = struct{}{}
-	}
-	receiptIssuers := make([]string, 0, len(receiptIssuersSet))
-	for issuer := range receiptIssuersSet {
-		receiptIssuers = append(receiptIssuers, issuer)
+		// Validation succeeded against keys[receipt.Kid], so the validating key
+		// is entries[receipt.Kid]. Report which TTL subjects offered that key so
+		// the policy can satisfy "TTL:<subject>" requirements.
+		ttlSubjects := append([]string(nil), entries[receipt.Kid].offeredBy...)
+		receipts = append(receipts, inputData{
+			"issuer":       receipt.Issuer,
+			"ttl_subjects": ttlSubjects,
+		})
 	}
 
 	fragment := &rpi.RegoModule{
@@ -1206,7 +1228,7 @@ func (policy *regoEnforcer) LoadFragment(ctx context.Context, opts LoadFragmentO
 		"fragment_loaded": false,
 		"has_header_svn":  headerSvn != nil,
 		"header_svn":      headerSvn,
-		"receipt_issuers": receiptIssuers,
+		"receipts":        receipts,
 	}
 
 	// Check that the fragment is signed by the expected issuer before loading
@@ -1298,19 +1320,30 @@ func (policy *regoEnforcer) LoadTransparencyTrustList(ctx context.Context, opts 
 		newKeys := parsedTTL[ledger]
 		existingKeys, ok := policy.ttlKeys[ledger]
 		if !ok {
-			existingKeys = make(map[string]crypto.PublicKey, len(newKeys))
+			existingKeys = make(map[string]TTLKeyEntry, len(newKeys))
 			policy.ttlKeys[ledger] = existingKeys
 		}
 		for kid, pk := range newKeys {
-			if existingKey, exists := existingKeys[kid]; exists {
+			if existingEntry, exists := existingKeys[kid]; exists {
 				// Equal is implemented for all crypto.PublicKey types in std.
-				eq, ok := existingKey.(interface{ Equal(crypto.PublicKey) bool })
-				if !ok || !eq.Equal(pk) {
+				eq, ok := existingEntry.key.(interface{ Equal(crypto.PublicKey) bool })
+				if ok && eq.Equal(pk) {
+					// The same key is offered again, possibly by a TTL with a
+					// different subject. Record this TTL's subject as also
+					// offering it (deduplicated).
+					if !slices.Contains(existingEntry.offeredBy, opts.Subject) {
+						existingEntry.offeredBy = append(existingEntry.offeredBy, opts.Subject)
+						existingKeys[kid] = existingEntry
+					}
+				} else {
+					// A different key is offered under the same kid. Replace it
+					// and reset offeredBy to only this TTL's subject, since the
+					// previously recorded subjects offered a now-superseded key.
 					log.G(ctx).Warnf("TTL for ledger %s overrides existing key with id %s with a different key", ledger, kid)
-					existingKeys[kid] = pk
+					existingKeys[kid] = TTLKeyEntry{key: pk, offeredBy: []string{opts.Subject}}
 				}
 			} else {
-				existingKeys[kid] = pk
+				existingKeys[kid] = TTLKeyEntry{key: pk, offeredBy: []string{opts.Subject}}
 			}
 		}
 	}
@@ -1413,15 +1446,19 @@ func (policy *regoEnforcer) WithMetadataRollback(fn func() error) error {
 }
 
 // snapshotTTLKeys returns a shallow copy of the TTL key store: the outer and
-// inner maps are copied, but the crypto.PublicKey values are shared.
-func (policy *regoEnforcer) snapshotTTLKeys() map[string]map[string]crypto.PublicKey {
+// inner maps are copied, as are the offeredBy slices, but the crypto.PublicKey
+// values are shared.
+func (policy *regoEnforcer) snapshotTTLKeys() map[string]map[string]TTLKeyEntry {
 	policy.ttlKeysLock.Lock()
 	defer policy.ttlKeysLock.Unlock()
-	snapshot := make(map[string]map[string]crypto.PublicKey, len(policy.ttlKeys))
+	snapshot := make(map[string]map[string]TTLKeyEntry, len(policy.ttlKeys))
 	for ledger, keys := range policy.ttlKeys {
-		keysCopy := make(map[string]crypto.PublicKey, len(keys))
-		for kid, pk := range keys {
-			keysCopy[kid] = pk
+		keysCopy := make(map[string]TTLKeyEntry, len(keys))
+		for kid, entry := range keys {
+			keysCopy[kid] = TTLKeyEntry{
+				key:       entry.key,
+				offeredBy: append([]string(nil), entry.offeredBy...),
+			}
 		}
 		snapshot[ledger] = keysCopy
 	}

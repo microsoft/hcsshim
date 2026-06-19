@@ -5649,7 +5649,7 @@ func Test_Rego_LoadTransparencyTrustList_MergeOverride(t *testing.T) {
 		t.Fatalf("expected second TTL to load: %v", err)
 	}
 
-	eq := policy.ttlKeys[ledger]["kid1"].(interface{ Equal(crypto.PublicKey) bool })
+	eq := policy.ttlKeys[ledger]["kid1"].key.(interface{ Equal(crypto.PublicKey) bool })
 	if !eq.Equal(secondKey) {
 		t.Errorf("expected kid1 to be overridden with the newer key")
 	}
@@ -5681,7 +5681,7 @@ fragments := [
 		"feed": "%s",
 		"minimum_svn": 1,
 		"includes": [],
-		"receipt_issuers": ["%s"],
+		"required_receipts": ["%s"],
 	},
 ]
 
@@ -5721,7 +5721,7 @@ svn := 1
 framework_version := "%s"
 `, frameworkVersion)
 
-	// A fragment object with no receipt_issuers must load without any receipts,
+	// A fragment object with no required_receipts must load without any receipts,
 	// exactly as before this feature existed.
 	policyCode := fmt.Sprintf(`package policy
 
@@ -5776,7 +5776,7 @@ fragments := [
 		"feed": "%s",
 		"minimum_svn": 1,
 		"includes": [],
-		"receipt_issuers": ["%s"],
+		"required_receipts": ["%s"],
 	},
 ]
 
@@ -5943,6 +5943,400 @@ func Test_Rego_LoadFragment_ReceiptValidationFails(t *testing.T) {
 	}
 	if !assertDecisionJSONContains(t, err, fmt.Sprintf("missing receipt from %s", ledger)) {
 		t.Fatalf("expected denial reason to mention the missing receipt, got: %v", err)
+	}
+}
+
+// ttlEntryRego renders a single transparency_trust_lists entry as Rego.
+func ttlEntryRego(issuer, subject string, minimumSVN int, allowedLedgers []string) string {
+	quoted := make([]string, len(allowedLedgers))
+	for i, l := range allowedLedgers {
+		quoted[i] = fmt.Sprintf("%q", l)
+	}
+	return fmt.Sprintf(`{"issuer": %q, "subject": %q, "minimum_svn": %d, "allowed_ledgers": [%s]}`,
+		issuer, subject, minimumSVN, strings.Join(quoted, ", "))
+}
+
+// ttlReceiptFragmentPolicy builds a policy that trusts the given TTL entries and
+// allows a fragment from fragIssuer/fragFeed that requires the given list of
+// receipt issuers (which may include literal ledger names, "*", or
+// "TTL:<subject>").
+func ttlReceiptFragmentPolicy(ttlEntries []string, fragIssuer, fragFeed string, requiredIssuers []string) string {
+	quotedReq := make([]string, len(requiredIssuers))
+	for i, r := range requiredIssuers {
+		quotedReq[i] = fmt.Sprintf("%q", r)
+	}
+	return fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+transparency_trust_lists := [%s]
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+		"required_receipts": [%s],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+load_transparency_trust_list := data.framework.load_transparency_trust_list
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, strings.Join(ttlEntries, ", "), fragIssuer, fragFeed, strings.Join(quotedReq, ", "))
+}
+
+func Test_Rego_LoadFragment_WildcardReceipt(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{ttlEntryRego(ttlIssuer, ttlSubject, 1, []string{ledger})},
+			fragIssuer, fragFeed, []string{"*"}),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": key},
+		},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return nil
+	})
+
+	// A "*" requirement is satisfied by any validated receipt, regardless of
+	// which trusted ledger it came from.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	if err := policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	}); err != nil {
+		t.Fatalf("expected fragment requiring \"*\" to load with a valid receipt: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_WildcardReceipt_NoReceipt(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{ttlEntryRego(ttlIssuer, ttlSubject, 1, []string{ledger})},
+			fragIssuer, fragFeed, []string{"*"}),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	// A fragment requiring "*" still needs at least one validated receipt. With
+	// no receipts attached, the load must be denied.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+	})
+	if err == nil {
+		t.Fatalf("expected fragment requiring \"*\" to be denied when no receipt is attached")
+	}
+	if !assertDecisionJSONContains(t, err, "missing receipt from *") {
+		t.Fatalf("expected denial reason to mention the missing wildcard receipt, got: %v", err)
+	}
+	if !expectFragmentNotLoaded(t, policy, fragIssuer, fragFeed) {
+		return
+	}
+}
+
+// setupTTLSubjectReceiptPolicy builds a policy where the same ledger is
+// authorized by two different TTL subjects (A and B), each contributing a
+// distinct key id, and a fragment that requires a receipt signed by a key from
+// TTL subject A ("TTL:<subjectA>"). It loads both TTLs (subject A offering kid1,
+// subject B offering kid2) and installs an accepting receipt validation mock.
+func setupTTLSubjectReceiptPolicy(t *testing.T, ctx context.Context) (policy *regoEnforcer, fragIssuer, fragFeed, ledger string) {
+	t.Helper()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubjectA := testDataGenerator.uniqueFragmentFeed()
+	ttlSubjectB := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer = testDataGenerator.uniqueFragmentIssuer()
+	fragFeed = testDataGenerator.uniqueFragmentFeed()
+	ledger = "ledger.example"
+
+	var err error
+	policy, err = newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{
+				ttlEntryRego(ttlIssuer, ttlSubjectA, 1, []string{ledger}),
+				ttlEntryRego(ttlIssuer, ttlSubjectB, 1, []string{ledger}),
+			},
+			fragIssuer, fragFeed, []string{"TTL:" + ttlSubjectA}),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	keyA := generateTestECDSAKey(t)
+	keyB := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    ttlIssuer,
+		Subject:   ttlSubjectA,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": keyA}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL A: %v", err)
+	}
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    ttlIssuer,
+		Subject:   ttlSubjectB,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid2": keyB}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL B: %v", err)
+	}
+
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return nil
+	})
+	return policy, fragIssuer, fragFeed, ledger
+}
+
+func Test_Rego_LoadFragment_TTLSubjectReceipt(t *testing.T) {
+	ctx := context.Background()
+	policy, fragIssuer, fragFeed, ledger := setupTTLSubjectReceiptPolicy(t, ctx)
+
+	// kid1 was contributed by TTL subject A, so a receipt signed with it
+	// satisfies the fragment's "TTL:<subjectA>" requirement.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	if err := policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	}); err != nil {
+		t.Fatalf("expected fragment requiring a receipt from TTL subject A to load: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_TTLSubjectReceipt_WrongSubject(t *testing.T) {
+	ctx := context.Background()
+	policy, fragIssuer, fragFeed, ledger := setupTTLSubjectReceiptPolicy(t, ctx)
+
+	// kid2 was contributed by TTL subject B, not A. Even though the receipt
+	// validates against a trusted key for the same ledger, it does not satisfy a
+	// requirement for TTL:<subjectA>.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err := policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid2"}},
+	})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied: receipt signed by key from the wrong TTL subject")
+	}
+	if !assertDecisionJSONContains(t, err, "missing receipt from TTL:") {
+		t.Fatalf("expected denial reason to mention the missing ttl-subject receipt, got: %v", err)
+	}
+	if !expectFragmentNotLoaded(t, policy, fragIssuer, fragFeed) {
+		return
+	}
+}
+
+// Test_Rego_LoadFragment_MultipleTTLSubjectRequirements covers a fragment that
+// requires receipts from two different TTL subjects ("TTL:A" and "TTL:B"),
+// where both TTLs contribute the exact same key (same kid) for the same ledger.
+// A single receipt signed by that key only satisfies both requirements when we
+// have both TTLs.
+func Test_Rego_LoadFragment_MultipleTTLSubjectRequirements(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	subjectA := testDataGenerator.uniqueFragmentFeed()
+	subjectB := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	// A single key shared by both TTLs under the same kid.
+	key := generateTestECDSAKey(t)
+
+	// buildPolicy returns a fresh enforcer that trusts both TTL subjects for the
+	// ledger and whose fragment requires receipts from BOTH TTL:subjectA and
+	// TTL:subjectB.
+	buildPolicy := func() *regoEnforcer {
+		policy, err := newRegoPolicy(
+			ttlReceiptFragmentPolicy(
+				[]string{
+					ttlEntryRego(ttlIssuer, subjectA, 1, []string{ledger}),
+					ttlEntryRego(ttlIssuer, subjectB, 1, []string{ledger}),
+				},
+				fragIssuer, fragFeed, []string{"TTL:" + subjectA, "TTL:" + subjectB}),
+			[]oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("unable to create Rego policy: %v", err)
+		}
+		policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+			return nil
+		})
+		return policy
+	}
+
+	loadTTL := func(policy *regoEnforcer, subject string) {
+		if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+			Issuer:    ttlIssuer,
+			Subject:   subject,
+			SVN:       1,
+			ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": key}},
+		}); err != nil {
+			t.Fatalf("unable to load TTL %s: %v", subject, err)
+		}
+	}
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	loadFragment := func(policy *regoEnforcer) error {
+		return policy.LoadFragment(ctx, LoadFragmentOptions{
+			Issuer:    fragIssuer,
+			Feed:      fragFeed,
+			HeaderSVN: &svn,
+			Rego:      fragmentCode,
+			Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+		})
+	}
+
+	// Only TTL subject A loaded: the receipt's key is only offered by subject A,
+	// so the TTL:subjectB requirement is unmet.
+	policyA := buildPolicy()
+	loadTTL(policyA, subjectA)
+	if err := loadFragment(policyA); err == nil {
+		t.Fatalf("expected fragment to be denied with only TTL subject A loaded")
+	} else if !assertDecisionJSONContains(t, err, "missing receipt from TTL:"+subjectB) {
+		t.Fatalf("expected denial to mention the missing TTL:%s receipt, got: %v", subjectB, err)
+	}
+
+	// Only TTL subject B loaded: now the TTL:subjectA requirement is unmet.
+	policyB := buildPolicy()
+	loadTTL(policyB, subjectB)
+	if err := loadFragment(policyB); err == nil {
+		t.Fatalf("expected fragment to be denied with only TTL subject B loaded")
+	} else if !assertDecisionJSONContains(t, err, "missing receipt from TTL:"+subjectA) {
+		t.Fatalf("expected denial to mention the missing TTL:%s receipt, got: %v", subjectA, err)
+	}
+
+	// No TTL loaded at all: the receipt cannot be validated, so neither
+	// requirement is met and the denial must report both missing requirements.
+	policyNone := buildPolicy()
+	err := loadFragment(policyNone)
+	if err == nil {
+		t.Fatalf("expected fragment to be denied with no TTL loaded")
+	}
+	if !assertDecisionJSONContains(t, err, "missing receipt from TTL:", subjectA, subjectB) {
+		t.Fatalf("expected denial to mention the missing TTL:%s receipt, got: %v", subjectA, err)
+	}
+
+	// Both TTLs loaded: the single key is offered by both subjects, so the same
+	// receipt satisfies both TTL:subjectA and TTL:subjectB.
+	policyBoth := buildPolicy()
+	loadTTL(policyBoth, subjectA)
+	loadTTL(policyBoth, subjectB)
+	if err := loadFragment(policyBoth); err != nil {
+		t.Fatalf("expected fragment to load when both TTLs are injected: %v", err)
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_OfferedBy(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subjectA := testDataGenerator.uniqueFragmentFeed()
+	subjectB := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{
+				ttlEntryRego(issuer, subjectA, 1, []string{ledger}),
+				ttlEntryRego(issuer, subjectB, 1, []string{ledger}),
+			},
+			testDataGenerator.uniqueFragmentIssuer(), testDataGenerator.uniqueFragmentFeed(), nil),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	sharedKey := generateTestECDSAKey(t)
+	// Subject A offers sharedKey under kid1.
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subjectA,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": sharedKey}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL A: %v", err)
+	}
+	// Subject B offers the same key under the same kid, so offeredBy accumulates
+	// both subjects.
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subjectB,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": sharedKey}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL B: %v", err)
+	}
+
+	entry := policy.ttlKeys[ledger]["kid1"]
+	if len(entry.offeredBy) != 2 || !slices.Contains(entry.offeredBy, subjectA) || !slices.Contains(entry.offeredBy, subjectB) {
+		t.Fatalf("expected kid1 to be offered by both subjects, got %v", entry.offeredBy)
+	}
+
+	// Subject A now offers a different key under the same kid. The override must
+	// reset offeredBy to only the contributing subject (A).
+	newKey := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subjectA,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": newKey}},
+	}); err != nil {
+		t.Fatalf("unable to load overriding TTL: %v", err)
+	}
+
+	entry = policy.ttlKeys[ledger]["kid1"]
+	if len(entry.offeredBy) != 1 || entry.offeredBy[0] != subjectA {
+		t.Fatalf("expected offeredBy to be reset to [subjectA] after key override, got %v", entry.offeredBy)
+	}
+	eq := entry.key.(interface{ Equal(crypto.PublicKey) bool })
+	if !eq.Equal(newKey) {
+		t.Errorf("expected the key to be replaced with the new key")
 	}
 }
 
