@@ -49,10 +49,12 @@ type bridge struct {
 	// Timeout is the time a synchronous RPC must respond within.
 	Timeout time.Duration
 
-	mu        sync.Mutex
-	nextID    int64
-	rpcs      map[int64]*rpc
-	conn      io.ReadWriteCloser
+	mu     sync.Mutex
+	nextID int64
+	rpcs   map[int64]*rpc
+	// conn is the transport carrying messages to and from the guest.
+	// Held atomically because the send path reads it while a migration swaps it.
+	conn      atomic.Value
 	rpcCh     chan *rpc
 	notify    notifyFunc
 	closed    bool
@@ -76,8 +78,7 @@ type notifyFunc func(*prot.ContainerNotification) error
 // notification message arrives from the guest. It logs transport errors and
 // traces using `log`.
 func newBridge(conn io.ReadWriteCloser, notify notifyFunc, log *logrus.Entry) *bridge {
-	return &bridge{
-		conn:     conn,
+	brdg := &bridge{
 		rpcs:     make(map[int64]*rpc),
 		rpcCh:    make(chan *rpc),
 		waitCh:   make(chan struct{}),
@@ -86,6 +87,8 @@ func newBridge(conn io.ReadWriteCloser, notify notifyFunc, log *logrus.Entry) *b
 		log:      log,
 		Timeout:  bridgeFailureTimeout,
 	}
+	brdg.conn.Store(conn)
+	return brdg
 }
 
 // Start begins the bridge send and receive goroutines.
@@ -115,7 +118,9 @@ func (brdg *bridge) kill(err error) {
 	} else {
 		brdg.log.Debug("bridge terminating")
 	}
-	brdg.conn.Close()
+	if c, ok := brdg.conn.Load().(io.ReadWriteCloser); ok {
+		_ = c.Close()
+	}
 	close(brdg.waitCh)
 }
 
@@ -142,20 +147,39 @@ func (brdg *bridge) SetMigrating(migrating bool) {
 
 // ResumeOnConn swaps the bridge transport onto conn and wakes the recv
 // loop without dropping outstanding RPCs.
-func (brdg *bridge) ResumeOnConn(newConn io.ReadWriteCloser) error {
+//
+// Resume is only legal inside a migration window, so it is gated on the
+// migrating flag. The flag is set before the blackout begins; during the
+// blackout the old transport is gone, so a send may still be dequeued and
+// attempts to write that simply fails and is tolerated. The transport is held
+// atomically, so that send's read of the conn and this swap never race. The migration
+// flag stays set across this swap and is cleared only after the new transport
+// is in place, so RPCs resume only once a healthy conn is installed.
+func (brdg *bridge) ResumeOnConn(newConn io.ReadWriteCloser) (err error) {
 	brdg.mu.Lock()
 	defer brdg.mu.Unlock()
+
+	defer func() {
+		if err != nil {
+			// Not adopting newConn; close it so the accepted socket does not leak.
+			_ = newConn.Close()
+		}
+	}()
 
 	if brdg.closed {
 		return ErrBridgeClosed
 	}
 
-	if brdg.conn != nil {
-		// Force any in-progress recvLoop off the stale conn so it can restart on the new one.
-		_ = brdg.conn.Close()
+	if !brdg.migrating.Load() {
+		return fmt.Errorf("bridge resume requires an active migration")
 	}
 
-	brdg.conn = newConn
+	if c, ok := brdg.conn.Load().(io.ReadWriteCloser); ok {
+		// Force any in-progress recvLoop off the stale conn so it can restart on the new one.
+		_ = c.Close()
+	}
+
+	brdg.conn.Store(newConn)
 
 	select {
 	case brdg.resumeCh <- struct{}{}:
@@ -337,7 +361,7 @@ func isLocalDisconnectError(err error) bool {
 }
 
 func (brdg *bridge) recvLoop() error {
-	br := bufio.NewReader(brdg.conn)
+	br := bufio.NewReader(brdg.conn.Load().(io.ReadWriteCloser))
 	for {
 		id, typ, b, err := readMessage(br)
 		if err != nil {
@@ -468,7 +492,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ prot.
 	}
 
 	// Write the message.
-	_, err = buf.WriteTo(brdg.conn)
+	_, err = buf.WriteTo(brdg.conn.Load().(io.ReadWriteCloser))
 	if err != nil {
 		return fmt.Errorf("bridge write: %w", err)
 	}

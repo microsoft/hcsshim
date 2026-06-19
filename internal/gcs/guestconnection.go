@@ -246,6 +246,8 @@ func (gc *GuestConnection) SetMigrating(migrating bool) {
 // transport without dropping outstanding RPCs.
 func (gc *GuestConnection) ResumeOnConn(conn io.ReadWriteCloser) error {
 	if gc.brdg == nil {
+		// Not adopting conn; close it so the accepted socket does not leak.
+		_ = conn.Close()
 		return ErrBridgeClosed
 	}
 	return gc.brdg.ResumeOnConn(conn)
