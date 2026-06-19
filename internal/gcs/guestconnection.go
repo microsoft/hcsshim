@@ -233,6 +233,26 @@ func (gc *GuestConnection) Close() error {
 	return gc.brdg.Close()
 }
 
+// SetMigrating forwards to [bridge.SetMigrating]. No-op if uninitialized.
+func (gc *GuestConnection) SetMigrating(migrating bool) {
+	if gc.brdg == nil {
+		return
+	}
+
+	gc.brdg.SetMigrating(migrating)
+}
+
+// ResumeOnConn resumes the bridge after swaping the bridge
+// transport without dropping outstanding RPCs.
+func (gc *GuestConnection) ResumeOnConn(conn io.ReadWriteCloser) error {
+	if gc.brdg == nil {
+		// Not adopting conn; close it so the accepted socket does not leak.
+		_ = conn.Close()
+		return ErrBridgeClosed
+	}
+	return gc.brdg.ResumeOnConn(conn)
+}
+
 // CreateProcess creates a process in the container host.
 func (gc *GuestConnection) CreateProcess(ctx context.Context, settings interface{}) (_ cow.Process, err error) {
 	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::CreateProcess", oc.WithClientSpanKind)

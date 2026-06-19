@@ -105,6 +105,11 @@ const (
 
 	VMShimOperation = "vmshim-op"
 
+	// migration
+
+	SessionID = "session-id"
+	Action    = "action"
+
 	// logging and tracing
 
 	TraceID      = "traceID"

@@ -230,7 +230,7 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 
 	// VM is started, entropy is seeded and log channel is up. Accept the
 	// GCS dial on the prepared listener and run the GCS protocol handshake.
-	err = c.guest.CreateConnection(ctx, opts.ConfigOptions...)
+	err = c.guest.CreateConnection(ctx, true, opts.ConfigOptions...)
 	if err != nil {
 		return fmt.Errorf("failed to create guest connection: %w", err)
 	}
