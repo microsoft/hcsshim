@@ -17,7 +17,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -298,7 +297,7 @@ func (h *Host) RemoveContainer(id string) {
 	}
 }
 
-func (h *Host) GetCreatedContainer(id string) (*Container, error) {
+func (h *Host) GetInitializedContainer(id string) (*Container, error) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
@@ -306,8 +305,8 @@ func (h *Host) GetCreatedContainer(id string) (*Container, error) {
 	if !ok {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
-	if c.getStatus() != containerCreated {
-		return nil, fmt.Errorf("container is not in state \"created\": %w",
+	if c.getStatus() == containerCreating {
+		return nil, fmt.Errorf("container is still being created: %w",
 			gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState))
 	}
 	return c, nil
@@ -506,7 +505,6 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		isSandbox:      criType == "sandbox",
 		exitType:       prot.NtUnexpectedExit,
 		processes:      make(map[uint32]*containerProcess),
-		terminated:     atomic.Bool{},
 		scratchDirPath: settings.ScratchDirPath,
 	}
 	c.setStatus(containerCreating)
@@ -822,7 +820,7 @@ func (h *Host) IsOverlayInUse(overlayPath string) bool {
 	defer h.containersMutex.Unlock()
 
 	for _, c := range h.containers {
-		if c.terminated.Load() {
+		if c.getStatus() != containerRunning {
 			continue
 		}
 
@@ -881,7 +879,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeVPCIDevice:
 		return modifyMappedVPCIDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPCIDevice))
 	case guestresource.ResourceTypeContainerConstraints:
-		c, err := h.GetCreatedContainer(containerID)
+		c, err := h.GetInitializedContainer(containerID)
 		if err != nil {
 			return err
 		}
@@ -926,7 +924,7 @@ func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, 
 		}
 	}
 
-	c, err := h.GetCreatedContainer(containerID)
+	c, err := h.GetInitializedContainer(containerID)
 	if err != nil {
 		return err
 	}
@@ -954,7 +952,7 @@ func (*Host) Shutdown() {
 
 // Called to shutdown a container
 func (h *Host) ShutdownContainer(ctx context.Context, containerID string, graceful bool) error {
-	c, err := h.GetCreatedContainer(containerID)
+	c, err := h.GetInitializedContainer(containerID)
 	if err != nil {
 		return err
 	}
@@ -973,7 +971,7 @@ func (h *Host) ShutdownContainer(ctx context.Context, containerID string, gracef
 }
 
 func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, processID uint32, signal syscall.Signal) error {
-	c, err := h.GetCreatedContainer(containerID)
+	c, err := h.GetInitializedContainer(containerID)
 	if err != nil {
 		return err
 	}
@@ -1026,7 +1024,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			tport = h.devNullTransport
 		}
 		pid, err = h.runExternalProcess(ctx, params, conSettings, tport)
-	} else if c, err = h.GetCreatedContainer(containerID); err == nil {
+	} else if c, err = h.GetInitializedContainer(containerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
 		if params.OCIProcess == nil {
 			// We've already done policy enforcement for creating a container so
@@ -1102,7 +1100,7 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 		return nil, errors.Wrapf(err, "get properties denied due to policy")
 	}
 
-	c, err := h.GetCreatedContainer(containerID)
+	c, err := h.GetInitializedContainer(containerID)
 	if err != nil {
 		return nil, err
 	}
@@ -1870,12 +1868,12 @@ func (h *Host) DeleteContainerState(ctx context.Context, containerID string) err
 		return err
 	}
 
-	c, err := h.GetCreatedContainer(containerID)
+	c, err := h.GetInitializedContainer(containerID)
 	if err != nil {
 		return err
 	}
 	if h.HasSecurityPolicy() {
-		if !c.terminated.Load() {
+		if c.getStatus() == containerRunning {
 			return errors.Errorf("Denied deleting state of a running container %q", containerID)
 		}
 		overlay := c.spec.Root.Path

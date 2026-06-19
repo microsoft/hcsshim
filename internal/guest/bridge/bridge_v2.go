@@ -358,7 +358,7 @@ func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
 		}
 		exitCodeChan, doneChan = p.Wait()
 	} else {
-		c, err := b.hostState.GetCreatedContainer(request.ContainerID)
+		c, err := b.hostState.GetInitializedContainer(request.ContainerID)
 		if err != nil {
 			return nil, err
 		}
@@ -404,7 +404,7 @@ func (b *Bridge) resizeConsoleV2(r *Request) (_ RequestResponse, err error) {
 		trace.Int64Attribute("height", int64(request.Height)),
 		trace.Int64Attribute("width", int64(request.Width)))
 
-	c, err := b.hostState.GetCreatedContainer(request.ContainerID)
+	c, err := b.hostState.GetInitializedContainer(request.ContainerID)
 	if err != nil {
 		return nil, err
 	}

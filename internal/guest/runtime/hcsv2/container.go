@@ -44,6 +44,11 @@ const (
 	// containerCreated is the status when a runtime container and init process
 	// have been assigned, but runtime start command has not been issued yet
 	containerCreated
+	// containerRunning is the status when the init process has started and has
+	// not yet exited.
+	containerRunning
+	// containerTerminated is the status when the init process has exited.
+	containerTerminated
 )
 
 type Container struct {
@@ -76,9 +81,6 @@ type Container struct {
 	// then use [atomic.Value] and deal with unsafe conversions to/from [any], or use [atomic.Pointer]
 	// and deal with the extra pointer dereferencing overhead.
 	status atomic.Uint32
-
-	// Set to true when the init process for the container has exited
-	terminated atomic.Bool
 
 	// scratchDirPath represents the path inside the UVM where the scratch directory
 	// of this container is located. Usually, this is either `/run/gcs/c/<containerID>` or
@@ -139,6 +141,8 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 	err = c.container.Start()
 	if err != nil {
 		stdioSet.Close()
+	} else {
+		c.setStatus(containerRunning)
 	}
 	return int(c.initProcess.pid), err
 }
