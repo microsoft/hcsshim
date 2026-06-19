@@ -31,7 +31,7 @@ require (
 
 require (
 	cyphar.com/go-pathrs v0.2.4 // indirect
-	github.com/Microsoft/cosesign1go v1.5.0 // indirect
+	github.com/Microsoft/cosesign1go v1.6.0 // indirect
 	github.com/Microsoft/didx509go v0.0.3 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.2.0 // indirect
