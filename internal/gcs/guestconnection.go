@@ -285,6 +285,45 @@ func (gc *GuestConnection) newIoChannel() (*ioChannel, uint32, error) {
 	return newIoChannel(l), port, nil
 }
 
+// SetNextPort raises the new-process IO port allocator floor. Called
+// by the live-migration restore path after [Connect] to skip past
+// vsock ports already in use by restored processes. Never goes
+// backwards.
+func (gc *GuestConnection) SetNextPort(p uint32) {
+	gc.mu.Lock()
+	defer gc.mu.Unlock()
+	if p > gc.nextPort {
+		gc.nextPort = p
+	}
+}
+
+// NextPort returns the current allocator floor. Used by the
+// live-migration save path to record what [SetNextPort] should be
+// seeded with on the destination.
+func (gc *GuestConnection) NextPort() uint32 {
+	gc.mu.Lock()
+	defer gc.mu.Unlock()
+	return gc.nextPort
+}
+
+// BridgeNextID returns the bridge's next request id allocator value.
+func (gc *GuestConnection) BridgeNextID() int64 {
+	return gc.brdg.NextID()
+}
+
+// SeedBridgeNextID raises the bridge's request id allocator floor.
+func (gc *GuestConnection) SeedBridgeNextID(next int64) {
+	gc.brdg.SeedNextID(next)
+}
+
+// PreregisterWaitForProcess registers a stub WaitForProcess rpc against the
+// source-issued id so a later [Container.OpenProcessWithIO] (or the bridge
+// itself) routes the guest's response without issuing a duplicate wait.
+func (gc *GuestConnection) PreregisterWaitForProcess(id int64, resp *prot.ContainerWaitForProcessResponse) error {
+	_, err := gc.brdg.PreregisterRPC(id, prot.RPCWaitForProcess, resp)
+	return err
+}
+
 func (gc *GuestConnection) requestNotify(cid string, ch chan struct{}) error {
 	gc.mu.Lock()
 	defer gc.mu.Unlock()

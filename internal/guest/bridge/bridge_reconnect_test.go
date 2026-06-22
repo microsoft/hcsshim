@@ -3,11 +3,14 @@
 package bridge
 
 import (
+	"encoding/json"
 	"io"
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
+	"github.com/sirupsen/logrus"
 )
 
 func TestBridge_NotificationQueuedWhenDisconnected(t *testing.T) {
@@ -161,5 +164,80 @@ func TestBridge_FullReconnectCycle(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for drained notification")
+	}
+}
+
+// TestBridge_ListenAndServeResetsProtocolVersion verifies that ListenAndServe
+// resets protVer to PvInvalid on entry, so a fresh NegotiateProtocol after a
+// reconnect dispatches to the PvInvalid-registered handler instead of falling
+// through to UnknownMessageHandler.
+func TestBridge_ListenAndServeResetsProtocolVersion(t *testing.T) {
+	logrus.SetOutput(io.Discard)
+
+	lc := newLoopbackConnection()
+	defer lc.close()
+
+	// Mirror AssignHandlers: negotiate handler is registered only at PvInvalid.
+	mux := NewBridgeMux()
+	var dispatchedVer prot.ProtocolVersion
+	mux.HandleFunc(prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid,
+		func(r *Request) (RequestResponse, error) {
+			dispatchedVer = r.Version
+			return &prot.NegotiateProtocolResponse{
+				MessageResponseBase: prot.MessageResponseBase{ActivityID: r.ActivityID},
+				Version:             uint32(prot.PvV4),
+			}, nil
+		})
+
+	// Simulate a Bridge whose protVer survived the previous connection.
+	b := &Bridge{
+		Handler: mux,
+		protVer: prot.PvV4,
+	}
+
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- b.ListenAndServe(lc.SRead(), lc.SWrite())
+	}()
+	defer func() {
+		// Fire-and-forget quit; ListenAndServe's teardown handles the reader.
+		b.quitChan <- true
+		select {
+		case err := <-serveErr:
+			if err != nil {
+				t.Errorf("ListenAndServe returned: %v", err)
+			}
+		default:
+		}
+	}()
+
+	req := &prot.NegotiateProtocol{
+		MessageBase:    prot.MessageBase{ActivityID: "00000000-0000-0000-0000-000000000002"},
+		MinimumVersion: uint32(prot.PvV4),
+		MaximumVersion: uint32(prot.PvV4),
+	}
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemNegotiateProtocolV1, prot.SequenceID(1), req); err != nil {
+		t.Fatalf("send NegotiateProtocol: %v", err)
+	}
+
+	header, body, err := serverRead(lc.CRead())
+	if err != nil {
+		t.Fatalf("read NegotiateProtocol response: %v", err)
+	}
+	if header.Type != prot.ComputeSystemResponseNegotiateProtocolV1 {
+		t.Fatalf("unexpected response header type: %v", header.Type)
+	}
+	// Receiving the response guarantees the handler ran.
+	if dispatchedVer != prot.PvInvalid {
+		t.Fatalf("expected dispatch at PvInvalid, got %v", dispatchedVer)
+	}
+
+	// Must not be UnknownMessageHandler's HrNotImpl.
+	resp := &prot.MessageResponseBase{}
+	if err := json.Unmarshal(body, resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.Result == int32(gcserr.HrNotImpl) {
+		t.Fatalf("unexpected HrNotImpl response; body=%s", string(body))
 	}
 }

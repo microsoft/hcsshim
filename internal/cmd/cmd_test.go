@@ -137,6 +137,12 @@ func (p *localProcess) Pid() int {
 	return p.p.Pid
 }
 
+// MigrationState returns the zero value: the test fake doesn't use vsock
+// or a GCS bridge.
+func (p *localProcess) MigrationState() cow.MigrationState {
+	return cow.MigrationState{}
+}
+
 func (p *localProcess) ResizeConsole(ctx context.Context, x, y uint16) error {
 	return errors.New("not supported")
 }
@@ -278,5 +284,55 @@ func TestCmdStuckIo(t *testing.T) {
 	_, err := cmd.Output()
 	if !errors.Is(err, errIOTimeOut) {
 		t.Fatalf("expected: %v; got: %v", errIOTimeOut, err)
+	}
+}
+
+// TestCmdAttach verifies that Attach binds a Cmd to a caller-supplied
+// process and the resulting Cmd can be Wait'd to completion. Mirrors
+// the migration restore path: caller obtains the process via the
+// host's restore API (e.g. gcs.OpenProcessWithIO) and Attach wires IO.
+func TestCmdAttach(t *testing.T) {
+	host := &localProcessHost{}
+	p, err := host.CreateProcess(context.Background(), &hcsschema.ProcessParameters{
+		CommandLine: "cmd /c exit /b 0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd, err := Attach(context.Background(), p, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	if cmd.Process != p {
+		t.Fatal("Cmd.Process does not match the supplied process")
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+}
+
+// TestCmdAttachIO verifies that Attach's IO relays flow process output
+// to caller-supplied destination streams.
+func TestCmdAttachIO(t *testing.T) {
+	host := &localProcessHost{}
+	p, err := host.CreateProcess(context.Background(), &hcsschema.ProcessParameters{
+		CommandLine:      "cmd /c echo hello",
+		CreateStdOutPipe: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	cmd, err := Attach(context.Background(), p, nil, &stdout, nil)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if got := stdout.String(); got != "hello\r\n" {
+		t.Fatalf("stdout=%q, want %q", got, "hello\r\n")
 	}
 }
