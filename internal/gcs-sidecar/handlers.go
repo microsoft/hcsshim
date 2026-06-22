@@ -552,6 +552,12 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 						return fmt.Errorf("failed to decode log sources: %w", err)
 					}
 
+					// Validate host-supplied (Name, GUID) pairs before
+					// name-based policy enforcement.
+					if err := validateLogProviders(logSources.LogConfig.Sources); err != nil {
+						return fmt.Errorf("log providers rejected: %w", err)
+					}
+
 					// Collect every requested provider name and ask the
 					// enforcer to validate them as a batch. The enforcer's
 					// behaviour depends on allow_log_provider_dropping in the
@@ -661,6 +667,53 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 		return fmt.Errorf("modifyServiceSettings: unsupported PropertyType %q", modifyRequest.PropertyType)
 	}
 	b.forwardRequestToGcs(req)
+	return nil
+}
+
+// validateLogProviders validates host-supplied log providers before they
+// reach the name-based policy enforcer.
+//
+// CWCOW policy approves provider names, but inbox GCS subscribes by GUID. If
+// the host could send {Name: "allowed", GUID: "<disallowed>"} the name-based
+// enforcer would approve and the disallowed GUID would still be forwarded
+// (resolveGUIDsWithLookup keeps any GUID the host set). To close that bypass
+// the sidecar rejects, before enforcement, any entry whose (Name, GUID) pair
+// is not verifiable against the well-known ETW map:
+//
+//   - Name == "": rejected. Policy is name-based; a GUID-only entry has
+//     nothing for the enforcer to evaluate.
+//   - Name + GUID where Name is not in the well-known map: rejected. We have
+//     no ground truth to compare the GUID against, so we cannot verify the
+//     host's claim. Name-only is still accepted for downstream resolution to
+//     stay best-effort.
+//   - Name + GUID where the GUID disagrees with the well-known lookup for
+//     Name: rejected.
+//
+// Name-only entries are passed through unchanged; the sidecar fills in the
+// canonical GUID after enforcement via etw.UpdateLogSourcesFromInfo.
+func validateLogProviders(sources []etw.Source) error {
+	for _, src := range sources {
+		for _, p := range src.Providers {
+			if p.ProviderName == "" {
+				return fmt.Errorf("provider with no name is not allowed (GUID %q)", p.ProviderGUID)
+			}
+			if p.ProviderGUID == "" {
+				continue
+			}
+			well := etw.GetProviderGUIDFromName(p.ProviderName)
+			if well == "" {
+				return fmt.Errorf("provider %q: name not in well-known ETW map; cannot verify supplied GUID %q", p.ProviderName, p.ProviderGUID)
+			}
+			suppliedTrimmed := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(p.ProviderGUID), "{"), "}")
+			supplied, err := guid.FromString(suppliedTrimmed)
+			if err != nil {
+				return fmt.Errorf("provider %q: invalid GUID %q: %w", p.ProviderName, p.ProviderGUID, err)
+			}
+			if !strings.EqualFold(supplied.String(), well) {
+				return fmt.Errorf("provider %q: supplied GUID %q does not match well-known GUID %q", p.ProviderName, p.ProviderGUID, well)
+			}
+		}
+	}
 	return nil
 }
 

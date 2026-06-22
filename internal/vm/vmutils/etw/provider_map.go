@@ -36,7 +36,7 @@ func GetDefaultLogSources() LogSourcesInfo {
 }
 
 // GetProviderGUIDFromName returns the provider GUID for a given provider name. If the provider name is not found in the map, it returns an empty string.
-func getProviderGUIDFromName(providerName string) string {
+func GetProviderGUIDFromName(providerName string) string {
 	if guid, ok := etwNameToGUIDMap[strings.ToLower(providerName)]; ok {
 		return guid
 	}
@@ -127,7 +127,7 @@ func resolveGUIDsWithLookup(sources []Source) ([]Source, error) {
 				sources[i].Providers[j].ProviderGUID = strings.ToLower(guid.String())
 			}
 			if provider.ProviderName != "" && provider.ProviderGUID == "" {
-				sources[i].Providers[j].ProviderGUID = getProviderGUIDFromName(provider.ProviderName)
+				sources[i].Providers[j].ProviderGUID = GetProviderGUIDFromName(provider.ProviderName)
 			}
 		}
 	}
@@ -147,7 +147,7 @@ func stripRedundantGUIDs(sources []Source) ([]Source, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid GUID %q for provider %q: %w", provider.ProviderGUID, provider.ProviderName, err)
 			}
-			if strings.EqualFold(guid.String(), getProviderGUIDFromName(provider.ProviderName)) {
+			if strings.EqualFold(guid.String(), GetProviderGUIDFromName(provider.ProviderName)) {
 				sources[i].Providers[j].ProviderGUID = ""
 			} else {
 				// If the GUID doesn't match the well-known GUID for the provider name,

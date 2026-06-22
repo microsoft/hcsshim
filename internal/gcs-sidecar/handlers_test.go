@@ -649,3 +649,179 @@ func TestModifyServiceSettings_LogForward_UnsupportedRPCType_Denied(t *testing.T
 		// Good.
 	}
 }
+
+// buildLogForwardServiceRequestWithProviders is the variant of
+// buildLogForwardServiceRequest that lets each test set ProviderName and
+// ProviderGUID independently, so the validateLogProviders tests can
+// exercise mismatched and GUID-only payloads.
+func buildLogForwardServiceRequestWithProviders(t *testing.T, providers []etw.EtwProvider) []byte {
+	t.Helper()
+
+	info := etw.LogSourcesInfo{
+		LogConfig: etw.LogConfig{
+			Sources: []etw.Source{{
+				Type:      "etw",
+				Providers: providers,
+			}},
+		},
+	}
+	infoBytes, err := json.Marshal(info)
+	if err != nil {
+		t.Fatalf("failed to marshal log sources: %v", err)
+	}
+	encoded := base64.StdEncoding.EncodeToString(infoBytes)
+
+	inner := &guestrequest.LogForwardServiceRPCRequest{
+		RPCType:  guestrequest.RPCModifyServiceSettings,
+		Settings: encoded,
+	}
+	req := prot.ServiceModificationRequest{
+		RequestBase: prot.RequestBase{
+			ContainerID: UVMContainerID,
+			ActivityID:  guid.GUID{},
+		},
+		PropertyType: string(prot.LogForwardService),
+		Settings:     inner,
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+	return b
+}
+
+// TestModifyServiceSettings_LogForward_GUIDOnly_Denied verifies that a
+// provider entry with ProviderName=="" (GUID-only) is rejected before
+// reaching policy enforcement. CWCOW policy is name-based, so a GUID-only
+// entry has nothing for the enforcer to evaluate; accepting it would let the
+// host smuggle a disallowed GUID past name-based policy.
+func TestModifyServiceSettings_LogForward_GUIDOnly_Denied(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
+		{ProviderName: "", ProviderGUID: "80ce50de-d264-4581-950d-abadeee0d340"},
+	})
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err == nil {
+		t.Fatal("expected modifyServiceSettings to reject GUID-only provider entry")
+	}
+
+	select {
+	case fwd := <-b.sendToGCSCh:
+		t.Fatalf("rejected request must not be forwarded to GCS: %+v", fwd)
+	default:
+		// Good.
+	}
+}
+
+// TestModifyServiceSettings_LogForward_NameGUIDMismatch_Denied verifies that
+// a provider entry whose ProviderGUID disagrees with the well-known map
+// lookup for ProviderName is rejected. Without this check a hostile host
+// could pair an allowed Name with a disallowed GUID and bypass name-based
+// policy because inbox GCS subscribes by GUID.
+func TestModifyServiceSettings_LogForward_NameGUIDMismatch_Denied(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	// Name resolves to 80ce50de-d264-4581-950d-abadeee0d340 in the
+	// well-known map; deliberately supply an unrelated valid GUID.
+	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
+		{
+			ProviderName: "microsoft.windows.hyperv.compute",
+			ProviderGUID: "11111111-2222-3333-4444-555555555555",
+		},
+	})
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err == nil {
+		t.Fatal("expected modifyServiceSettings to reject Name/GUID mismatch")
+	}
+
+	select {
+	case fwd := <-b.sendToGCSCh:
+		t.Fatalf("rejected request must not be forwarded to GCS: %+v", fwd)
+	default:
+		// Good.
+	}
+}
+
+// TestModifyServiceSettings_LogForward_UnknownNameWithGUID_Denied verifies
+// that a provider entry whose ProviderName is not in the well-known ETW map
+// is rejected when paired with a ProviderGUID: the sidecar has no ground
+// truth to verify the host's claim against.
+func TestModifyServiceSettings_LogForward_UnknownNameWithGUID_Denied(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
+		{
+			ProviderName: "unknown-provider",
+			ProviderGUID: "11111111-2222-3333-4444-555555555555",
+		},
+	})
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err == nil {
+		t.Fatal("expected modifyServiceSettings to reject unknown Name + GUID")
+	}
+
+	select {
+	case fwd := <-b.sendToGCSCh:
+		t.Fatalf("rejected request must not be forwarded to GCS: %+v", fwd)
+	default:
+		// Good.
+	}
+}
+
+// TestModifyServiceSettings_LogForward_NameMatchingGUID_Allowed verifies the
+// positive path of validateLogProviders: a provider entry where
+// ProviderGUID matches the well-known lookup for ProviderName passes
+// validation and is forwarded to inbox GCS.
+func TestModifyServiceSettings_LogForward_NameMatchingGUID_Allowed(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
+		{
+			ProviderName: "microsoft.windows.hyperv.compute",
+			ProviderGUID: "80ce50de-d264-4581-950d-abadeee0d340",
+		},
+	})
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err != nil {
+		t.Fatalf("modifyServiceSettings with matching Name/GUID returned error: %v", err)
+	}
+
+	select {
+	case <-b.sendToGCSCh:
+		// Forwarded to GCS as expected.
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for request to be forwarded to GCS")
+	}
+}
+
+// TestModifyServiceSettings_LogForward_BracedGUID_Allowed verifies that the
+// validator accepts GUID strings wrapped in `{...}` braces (the common
+// canonical form on Windows). The well-known map stores the un-braced form,
+// so the comparison must be brace-insensitive.
+func TestModifyServiceSettings_LogForward_BracedGUID_Allowed(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
+		{
+			ProviderName: "microsoft.windows.hyperv.compute",
+			ProviderGUID: "{80ce50de-d264-4581-950d-abadeee0d340}",
+		},
+	})
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err != nil {
+		t.Fatalf("modifyServiceSettings with braced matching GUID returned error: %v", err)
+	}
+
+	select {
+	case <-b.sendToGCSCh:
+		// Forwarded to GCS as expected.
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for request to be forwarded to GCS")
+	}
+}
