@@ -453,6 +453,7 @@ func (w *legacyLayerWriter) reset() (err error) {
 			w.currentFile = nil
 			w.currentFileName = ""
 			w.currentFileRoot = nil
+			w.currentIsDir = false
 		}
 	}()
 

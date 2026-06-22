@@ -60,7 +60,60 @@ func Test_legacyLayerWriter_reset_ClosesFileOnFlushError(t *testing.T) {
 	}
 }
 
-// Test_legacyLayerWriter_reset_ClosesFileOnSuccess verifies the normal path also
+// Test_legacyLayerWriter_reset_ClearsCurrentIsDirOnError verifies that
+// currentIsDir is cleared by the deferred cleanup when an error occurs inside
+// the currentIsDir handling block. Before the fix, currentIsDir remained true
+// after the defer closed currentFile, so the next call to reset would enter the
+// currentIsDir block and panic with a nil pointer dereference on r.Seek.
+func Test_legacyLayerWriter_reset_ClearsCurrentIsDirOnError(t *testing.T) {
+	dir := t.TempDir()
+	fpath := filepath.Join(dir, "current")
+	f, err := os.Create(fpath)
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	// Write non-zero content so Flush succeeds but the backup stream Seek
+	// returns a file-level error (empty file means Seek succeeds but the
+	// backup-stream reader immediately sees EOF before returning an error from
+	// the reparse-data path; writing garbage bytes causes winio to return an
+	// error from Next()).
+	if _, err := f.WriteString("not-a-valid-backup-stream"); err != nil {
+		f.Close()
+		t.Fatalf("failed to write to temp file: %v", err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		f.Close()
+		t.Fatalf("failed to seek temp file: %v", err)
+	}
+
+	w := &legacyLayerWriter{
+		currentFile:  f,
+		currentIsDir: true,
+		bufWriter:    bufio.NewWriter(io.Discard),
+	}
+
+	// reset should return an error from inside the currentIsDir block.
+	if err := w.reset(); err == nil {
+		t.Fatal("expected reset to return an error from the currentIsDir block, got nil")
+	}
+
+	// The critical invariant: currentIsDir must be cleared by the deferred
+	// cleanup so that a subsequent call to reset does not panic.
+	if w.currentIsDir {
+		t.Error("expected currentIsDir to be false after reset error, got true")
+	}
+	if w.currentFile != nil {
+		t.Error("expected currentFile to be nil after reset error")
+	}
+
+	// A second call to reset must not panic (nil-deref on r.Seek was the bug).
+	w.bufWriter = bufio.NewWriter(io.Discard)
+	if err := w.reset(); err != nil {
+		t.Errorf("second reset call returned unexpected error: %v", err)
+	}
+}
+
 // closes and clears the current file handle.
 func Test_legacyLayerWriter_reset_ClosesFileOnSuccess(t *testing.T) {
 	dir := t.TempDir()
