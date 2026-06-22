@@ -412,11 +412,10 @@ func TestModifyServiceSettings_LogForward_PolicyAllow_ForwardsToGCS(t *testing.T
 	}
 }
 
-// TestModifyServiceSettings_LogForward_PolicyDeny_ReturnsErrorAndLocksDown
+// TestModifyServiceSettings_LogForward_PolicyDeny_ReturnsErrorAndDoesNotForward
 // verifies that when any requested provider is denied by policy, the call
-// fails (no forward to GCS) and the sidecar enforcer is locked down to
-// closed-door so subsequent requests also deny.
-func TestModifyServiceSettings_LogForward_PolicyDeny_ReturnsErrorAndLocksDown(t *testing.T) {
+// fails and the request is not forwarded to inbox GCS.
+func TestModifyServiceSettings_LogForward_PolicyDeny_ReturnsErrorAndDoesNotForward(t *testing.T) {
 	b := newTestBridge(&securitypolicy.ClosedDoorSecurityPolicyEnforcer{})
 
 	payload := buildLogForwardServiceRequest(t, "microsoft.windows.hyperv.compute")
@@ -433,13 +432,6 @@ func TestModifyServiceSettings_LogForward_PolicyDeny_ReturnsErrorAndLocksDown(t 
 		t.Fatalf("denied request must not be forwarded to GCS: %+v", fwd)
 	default:
 		// Good.
-	}
-
-	// Enforcer should now be locked down. (ClosedDoor was already installed;
-	// LockDown's idempotency check keeps the same instance, so we verify the
-	// type rather than identity.)
-	if _, ok := b.hostState.securityOptions.PolicyEnforcer.(*securitypolicy.ClosedDoorSecurityPolicyEnforcer); !ok {
-		t.Errorf("after deny: expected ClosedDoor enforcer, got %T", b.hostState.securityOptions.PolicyEnforcer)
 	}
 }
 

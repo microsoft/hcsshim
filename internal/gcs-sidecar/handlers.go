@@ -571,7 +571,6 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 					keptNames, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogProviderPolicy(
 						req.ctx, requestedNames)
 					if err != nil {
-						b.hostState.securityOptions.LockDown(req.ctx)
 						return fmt.Errorf("log providers denied by policy: %w", err)
 					}
 

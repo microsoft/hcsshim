@@ -40,36 +40,6 @@ func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmRe
 	}
 }
 
-// LockDown irreversibly replaces the active policy enforcer with a closed-door
-// (deny-everything) enforcer in response to a policy violation. All subsequent
-// Enforce* calls will deny.
-//
-// LockDown is idempotent with respect to the enforcer swap: if the enforcer is
-// already a ClosedDoorSecurityPolicyEnforcer the swap and the error log are
-// skipped.
-//
-// LockDown also sets PolicyEnforcerSet unconditionally so that a subsequent
-// SetConfidentialOptions call (which checks PolicyEnforcerSet and refuses to
-// install a policy if it is already set) cannot replace the closed-door
-// enforcer with a permissive one. This makes lockdown sticky regardless of
-// whether LockDown was called before or after the initial policy load, and in
-// particular covers the boot-time case where the sidecar starts with a
-// ClosedDoorSecurityPolicyEnforcer but PolicyEnforcerSet is still false.
-func (s *SecurityOptions) LockDown(ctx context.Context) {
-	s.policyMutex.Lock()
-	defer s.policyMutex.Unlock()
-	// Mark the policy as set first, unconditionally. This is the property that
-	// makes lockdown sticky against a follow-up SetConfidentialOptions, and it
-	// must hold even when the enforcer is already a ClosedDoor instance
-	// (e.g. the sidecar's boot-time default before any user policy arrives).
-	s.PolicyEnforcerSet = true
-	if _, alreadyLocked := s.PolicyEnforcer.(*ClosedDoorSecurityPolicyEnforcer); alreadyLocked {
-		return
-	}
-	log.G(ctx).Error("policy violation: locking down sidecar enforcer to closed-door; all subsequent policy decisions will deny")
-	s.PolicyEnforcer = &ClosedDoorSecurityPolicyEnforcer{}
-}
-
 // SetConfidentialOptions takes guestresource.ConfidentialOptions
 // to set up our internal data structures we use to store and enforce
 // security policy. The options can contain security policy enforcer type,
