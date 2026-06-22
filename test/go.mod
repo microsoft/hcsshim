@@ -7,7 +7,7 @@ require (
 	github.com/Microsoft/hcsshim v0.14.1
 	github.com/containerd/cgroups/v3 v3.1.3
 	github.com/containerd/containerd/api v1.10.0
-	github.com/containerd/containerd/v2 v2.2.4
+	github.com/containerd/containerd/v2 v2.2.5
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/platforms v1.0.0-rc.4
