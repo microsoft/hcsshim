@@ -567,7 +567,8 @@ func (s *Service) updateVMResources(ctx context.Context, resources interface{}, 
 	switch res := resources.(type) {
 	case *ctrdtaskapi.PolicyFragment:
 		return s.vmController.UpdatePolicyFragment(ctx, guestresource.SecurityPolicyFragment{
-			Fragment: res.Fragment,
+			Fragment:  res.Fragment,
+			MediaType: res.MediaType,
 		})
 	case *specs.LinuxResources:
 		// Update memory if specified.
