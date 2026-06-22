@@ -530,7 +530,6 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	// Todo: Add policy enforcement for modifying service settings
 	modifyRequest, err := unmarshalModifyServiceSettings(req)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal modifyServiceSettings request: %w", err)
@@ -642,7 +641,7 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 					settings.Settings = allowedLogSources
 				}
 			default:
-				log.G(req.ctx).Warningf("modifyServiceSettings for LogForwardService with RPCType: %v, skipping policy enforcement", settings.RPCType)
+				return fmt.Errorf("modifyServiceSettings for LogForwardService: unsupported RPCType %q", settings.RPCType)
 			}
 			modifyRequest.Settings = settings
 			buf, err := json.Marshal(modifyRequest)
@@ -659,7 +658,7 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 			log.G(req.ctx).Warningf("modifyServiceSettings for LogForwardService with empty settings, skipping policy enforcement")
 		}
 	default:
-		log.G(req.ctx).Warningf("modifyServiceSettings with PropertyType: %v, skipping policy enforcement", modifyRequest.PropertyType)
+		return fmt.Errorf("modifyServiceSettings: unsupported PropertyType %q", modifyRequest.PropertyType)
 	}
 	b.forwardRequestToGcs(req)
 	return nil

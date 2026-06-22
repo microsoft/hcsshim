@@ -577,3 +577,75 @@ func TestModifyServiceSettings_LogForward_PolicyDropping_NoFalsePositive(t *test
 		}
 	}
 }
+
+// TestModifyServiceSettings_UnsupportedPropertyType_Denied verifies that a
+// ModifyServiceSettings request whose PropertyType is not one the sidecar
+// structurally understands is rejected and not forwarded to inbox GCS.
+//
+// An empty PropertyType is used because unmarshalModifyServiceSettings only
+// validates non-empty PropertyType values, so this is the path that actually
+// reaches the handler's outer switch default.
+func TestModifyServiceSettings_UnsupportedPropertyType_Denied(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	r := prot.ServiceModificationRequest{
+		RequestBase: prot.RequestBase{
+			ContainerID: UVMContainerID,
+			ActivityID:  guid.GUID{},
+		},
+		// PropertyType deliberately empty to exercise the handler's
+		// outer-switch default branch.
+		PropertyType: "",
+	}
+	payload, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err == nil {
+		t.Fatal("expected modifyServiceSettings to fail for unsupported PropertyType")
+	}
+
+	select {
+	case fwd := <-b.sendToGCSCh:
+		t.Fatalf("request with unsupported PropertyType must not be forwarded to GCS: %+v", fwd)
+	default:
+		// Good.
+	}
+}
+
+// TestModifyServiceSettings_LogForward_UnsupportedRPCType_Denied verifies
+// that a LogForwardService request carrying an RPCType the sidecar does not
+// recognise is rejected and not forwarded to inbox GCS.
+func TestModifyServiceSettings_LogForward_UnsupportedRPCType_Denied(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	inner := &guestrequest.LogForwardServiceRPCRequest{
+		RPCType: guestrequest.RPCType("UnsupportedRPCType"),
+	}
+	r := prot.ServiceModificationRequest{
+		RequestBase: prot.RequestBase{
+			ContainerID: UVMContainerID,
+			ActivityID:  guid.GUID{},
+		},
+		PropertyType: string(prot.LogForwardService),
+		Settings:     inner,
+	}
+	payload, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+	req := newModifyServiceSettingsRequest(payload)
+
+	if err := b.modifyServiceSettings(req); err == nil {
+		t.Fatal("expected modifyServiceSettings to fail for unsupported RPCType")
+	}
+
+	select {
+	case fwd := <-b.sendToGCSCh:
+		t.Fatalf("request with unsupported RPCType must not be forwarded to GCS: %+v", fwd)
+	default:
+		// Good.
+	}
+}
