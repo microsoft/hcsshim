@@ -29,6 +29,9 @@ type CreateContainerOptions struct {
 	Umask                string
 	Capabilities         *oci.LinuxCapabilities
 	SeccompProfileSHA256 string
+	// IsSandboxContainer is true when the container being created is the cri
+	// pod sandbox container (usually it is the "pause" image).
+	IsSandboxContainer bool
 }
 type SignalContainerOptions struct {
 	IsInitProcess bool
@@ -136,6 +139,7 @@ type SecurityPolicyEnforcer interface {
 	// silently dropped from the returned slice; otherwise the whole call is
 	// denied (returning a non-nil error) if any provider is not allowed.
 	EnforceLogProviderPolicy(ctx context.Context, providerNames []string) ([]string, error)
+	WithMetadataRollback(fn func() error) error
 }
 
 //nolint:unused
@@ -336,6 +340,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceLogProviderPolicy(_ context.Context
 	return providerNames, nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) WithMetadataRollback(fn func() error) error {
+	return fn()
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
@@ -467,4 +475,8 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceLogProviderPolicy(context.Context, []string) ([]string, error) {
 	return nil, errors.New("log provider is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) WithMetadataRollback(fn func() error) error {
+	return fn()
 }

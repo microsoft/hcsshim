@@ -203,14 +203,17 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 	// this might change if the building of the vmgs file were to be done on demand but that is likely
 	// much slower and noy very useful. We do respect the filename of the vmgs file so if it is necessary to
 	// have different options then multiple files could be used.
-	if len(lopts.SecurityPolicy) > 0 && !noSecurityHardware {
+	if len(lopts.SecurityPolicy) > 0 {
+		lopts.SecurityPolicyEnabled = true
+	}
+
+	if lopts.SecurityPolicyEnabled && !noSecurityHardware {
 		// VPMem not supported by the enlightened kernel for SNP so set count to zero.
 		lopts.VPMemDeviceCount = 0
 		// set the default GuestState filename.
 		lopts.GuestStateFilePath = vmutils.DefaultGuestStateFile
 		lopts.KernelBootOptions = ""
 		lopts.AllowOvercommit = false
-		lopts.SecurityPolicyEnabled = true
 
 		// There are two possible ways to boot SNP mode. Either kernelinitrd.vmgs which consists of kernel plus initrd.cpio.gz
 		// Or a kernel.vmgs file (without an initrd) plus a separate vhd file which is dmverity protected via a hash tree
@@ -224,7 +227,7 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 		lopts.DmVerityMode = true
 	}
 
-	if len(lopts.SecurityPolicy) > 0 {
+	if lopts.SecurityPolicyEnabled {
 		// will only be false if explicitly set false by the annotation. We will otherwise default to true when there is a security policy
 		lopts.EnableScratchEncryption = ParseAnnotationsBool(ctx, a, annotations.LCOWEncryptedScratchDisk, true)
 	}
@@ -250,6 +253,7 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
 	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
 	wopts.UVMReferenceInfoFile = ParseAnnotationsString(a, annotations.WCOWReferenceInfoFile, uvm.GetDefaultReferenceInfoFilePath())
+	wopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(a, annotations.UVMHashEnvelopeReferenceInfoFile, uvm.GetDefaultHashEnvelopeReferenceInfoFilePath())
 	wopts.IsolationType = "SecureNestedPaging"
 	if noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false); noSecurityHardware {
 		wopts.IsolationType = "GuestStateOnly"
@@ -377,6 +381,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.SecurityPolicy = ParseAnnotationsString(s.Annotations, annotations.LCOWSecurityPolicy, lopts.SecurityPolicy)
 		lopts.SecurityPolicyEnforcer = ParseAnnotationsString(s.Annotations, annotations.LCOWSecurityPolicyEnforcer, lopts.SecurityPolicyEnforcer)
 		lopts.UVMReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.LCOWReferenceInfoFile, lopts.UVMReferenceInfoFile)
+		lopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.UVMHashEnvelopeReferenceInfoFile, lopts.UVMHashEnvelopeReferenceInfoFile)
 		lopts.KernelBootOptions = ParseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 		lopts.WritableOverlayDirs = ParseAnnotationsBool(ctx, s.Annotations, iannotations.WritableOverlayDirs, lopts.WritableOverlayDirs)

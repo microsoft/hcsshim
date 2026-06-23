@@ -25,6 +25,10 @@ type SandboxOptions struct {
 	// ConfidentialConfig carries confidential computing fields that are not
 	// part of the HCS document but are needed for confidential VM setup.
 	ConfidentialConfig *ConfidentialConfig
+
+	// LiveMigrationSupportEnabled indicates that the live migration feature set is
+	// enabled for the sandbox, constraining it to migration-compatible features.
+	LiveMigrationSupportEnabled bool
 }
 
 // ConfidentialConfig carries confidential computing configuration that is not
@@ -38,4 +42,7 @@ type ConfidentialConfig struct {
 
 	// UvmReferenceInfoFile is the path to the signed UVM reference info file for attestation.
 	UvmReferenceInfoFile string
+
+	// UvmHashEnvelopeReferenceInfoFile is the path to the hash envelope signed UVM reference info file for attestation.
+	UvmHashEnvelopeReferenceInfoFile string
 }

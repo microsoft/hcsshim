@@ -29,10 +29,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
 	"github.com/Microsoft/hcsshim/internal/layers"
@@ -149,7 +149,9 @@ func createContainer(
 		return nil, nil, err
 	}
 
-	if oci.IsJobContainer(s) {
+	// For Job Container which runs on host, we create the same using shim logic.
+	// If the request was for job container within UVM, then the request is passed along to GCS.
+	if oci.IsJobContainer(s) && !oci.IsIsolated(s) {
 		opts := jobcontainers.CreateOptions{WCOWLayers: wcowLayers}
 		container, resources, err = jobcontainers.Create(ctx, id, s, opts)
 		if err != nil {
@@ -210,6 +212,12 @@ func newHcsTask(
 			return nil, err
 		}
 		shimOpts = v.(*runhcsopts.Options)
+	}
+
+	// For Isolated Job containers, we need special handling wherein if the command line
+	// is not specified, then we add 'cmd /C' by default.
+	if oci.IsJobContainer(s) && oci.IsIsolated(s) {
+		handleProcessArgsForIsolatedJobContainer(s, s.Process)
 	}
 
 	// Default to an infinite timeout (zero value)
@@ -362,6 +370,10 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 
 	if ht.init.State() != shimExecStateRunning {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
+	}
+
+	if oci.IsJobContainer(ht.taskSpec) && oci.IsIsolated(ht.taskSpec) {
+		handleProcessArgsForIsolatedJobContainer(ht.taskSpec, spec)
 	}
 
 	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal, ht.ioRetryTimeout)
@@ -919,7 +931,11 @@ func (ht *hcsTask) updateTaskContainerResources(ctx context.Context, data interf
 func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.WindowsCPUResources) error {
 	// if host is 20h2+ then we can make a request directly to hcs
 	if osversion.Get().Build >= osversion.V20H2 {
+		// Count/Maximum/Shares live on the HCS Processor schema. Only send a modify
+		// request when at least one of them is set, so an affinity-only update does
+		// not push an empty (no-op) request to HCS.
 		req := &hcsschema.Processor{}
+		hasRateControl := false
 		if cpu.Count != nil {
 			procCount := int32(*cpu.Count)
 			hostProcs := processorinfo.ProcessorCount()
@@ -927,23 +943,71 @@ func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.Window
 				hostProcs = ht.host.ProcessorCount()
 			}
 			req.Count = hcsoci.NormalizeProcessorCount(ctx, ht.id, procCount, hostProcs)
+			hasRateControl = true
 		}
 		if cpu.Maximum != nil {
 			req.Maximum = int32(*cpu.Maximum)
+			hasRateControl = true
 		}
 		if cpu.Shares != nil {
 			req.Weight = int32(*cpu.Shares)
+			hasRateControl = true
 		}
-		return ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req)
+		if hasRateControl {
+			if err := ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req); err != nil {
+				return err
+			}
+		}
+
+		// CPU affinity is not part of the HCS Processor schema, so it has to be
+		// applied out of band (the silo's job object for Argon). A no-op when unset.
+		if len(cpu.Affinity) > 0 {
+			return ht.updateWCOWContainerCPUAffinity(ctx, cpu.Affinity)
+		}
+		return nil
 	}
 
 	return errdefs.ErrNotImplemented
 }
 
+// updateWCOWContainerCPUAffinity honors a post-start change to
+// spec.Windows.Resources.CPU.Affinity for an HCS-backed WCOW container.
+//
+// For process-isolated (Argon) containers this re-pins the silo's job object, using
+// the same race-free mechanism as create-time: the Windows kernel re-applies the new
+// mask to every process already in the silo and to every future joiner.
+//
+// Hypervisor-isolated (Xenon) containers require swapping the UVM's CPU group instead;
+// that is not yet implemented, so this returns ErrNotImplemented rather than silently
+// dropping the request.
+func (ht *hcsTask) updateWCOWContainerCPUAffinity(ctx context.Context, affinity []specs.WindowsCPUGroupAffinity) error {
+	validated, err := hcsoci.ValidateCPUAffinityEntries(affinity)
+	if err != nil {
+		return err
+	}
+	if len(validated) == 0 {
+		return nil
+	}
+
+	if ht.host != nil {
+		// Xenon: UVM-level CPU-group swap is out of scope here (Track A).
+		return fmt.Errorf("cpu affinity update for hypervisor-isolated containers is not supported: %w", errdefs.ErrNotImplemented)
+	}
+
+	// ht.c speaks the cow.Container interface; the underlying implementation
+	// (an Argon silo) honors affinity, while others return ErrNotImplemented.
+	return ht.c.SetCPUGroupAffinities(ctx, hcsoci.ToJobObjectAffinities(validated))
+}
+
 func isValidWindowsCPUResources(c *specs.WindowsCPUResources) bool {
-	return (c.Count != nil && (c.Shares == nil && c.Maximum == nil)) ||
+	// Exactly one of the mutually-exclusive rate controls (Count/Shares/Maximum).
+	exactlyOneRateControl := (c.Count != nil && (c.Shares == nil && c.Maximum == nil)) ||
 		(c.Shares != nil && (c.Count == nil && c.Maximum == nil)) ||
 		(c.Maximum != nil && (c.Count == nil && c.Shares == nil))
+	// An affinity-only update carries no rate control; accept it on its own so that
+	// CPU affinity can be changed after the container has started.
+	affinityOnly := len(c.Affinity) > 0 && c.Count == nil && c.Shares == nil && c.Maximum == nil
+	return exactlyOneRateControl || affinityOnly
 }
 
 func (ht *hcsTask) updateWCOWResources(ctx context.Context, resources *specs.WindowsResources, annotations map[string]string) error {
@@ -1013,6 +1077,56 @@ func (ht *hcsTask) requestAddContainerMount(ctx context.Context, resourcePath st
 		Settings:     settings,
 	}
 	return ht.c.Modify(ctx, modification)
+}
+
+// handleProcessArgsForIsolatedJobContainer adjusts the process spec for a
+// HostProcess container running inside a hypervisor-isolated UVM.
+//
+// Why the "cmd /c" wrap:
+//   - For a regular WCOW container, the guest creates the workload process
+//     from within the container silo, so the silo's filesystem view (including
+//     the bind-mounted container rootfs) is in scope for path resolution.
+//   - For a HostProcess container the guest creates the process from outside
+//     the silo and only attaches it to the silo's job object after creation.
+//     Executable-name resolution therefore uses the launcher's view (System32,
+//     Windows, PATH) and cannot see binaries that live only inside the
+//     container rootfs, nor resolve shell builtins like `echo`, `dir`, `set`,
+//     redirection, etc. Anything not present as a real .exe on the standard
+//     search path would fail with ERROR_FILE_NOT_FOUND.
+//   - cmd.exe always exists under System32 (so the launcher can find it) and,
+//     once joined to the silo's job, runs inside the container's filesystem
+//     view where it can resolve builtins and any rootfs-relative binary.
+func handleProcessArgsForIsolatedJobContainer(taskSpec *specs.Spec, p *specs.Process) {
+	if p == nil {
+		return
+	}
+
+	// Wrap the process invocation with "cmd /c" so it runs via cmd.exe. Only mutate
+	// whichever of CommandLine/Args will actually be used (CommandLine wins if set),
+	// and skip if it already invokes cmd.
+	switch {
+	case p.CommandLine != "":
+		fields := strings.Fields(p.CommandLine)
+		base := ""
+		if len(fields) > 0 {
+			base = strings.ToLower(filepath.Base(fields[0]))
+		}
+		if base != "cmd" && base != "cmd.exe" {
+			p.CommandLine = fmt.Sprintf("cmd /c %s", p.CommandLine)
+		}
+	case len(p.Args) > 0:
+		base := strings.ToLower(filepath.Base(strings.TrimSpace(p.Args[0])))
+		if base != "cmd" && base != "cmd.exe" {
+			p.Args = append([]string{"cmd", "/c"}, p.Args...)
+		}
+	}
+
+	// HostProcessInheritUser is set to explicit true or false during container create.
+	if taskSpec != nil && taskSpec.Annotations[annotations.HostProcessInheritUser] == "true" {
+		// For privileged containers within the sandbox, if the annotation to inherit user is set
+		// we will set the user to NT AUTHORITY\SYSTEM.
+		p.User.Username = `NT AUTHORITY\SYSTEM`
+	}
 }
 
 func isMountTypeSupported(hostPath, mountType string) bool {

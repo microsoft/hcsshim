@@ -202,7 +202,6 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			parent.Close()
 			return nil, err
 		}
-
 	} else if oci.IsJobContainer(s) {
 		// If we're making a job container fake a task (i.e reuse the wcowPodSandbox logic)
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent, "")
@@ -224,7 +223,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			}); err != nil {
 			return nil, err
 		}
-		p.jobContainer = true
+
 		return &p, nil
 	} else if !isWCOW {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
@@ -339,11 +338,6 @@ type pod struct {
 	// It MUST be treated as read only in the lifetime of the pod.
 	host *uvm.UtilityVM
 
-	// jobContainer specifies whether this pod is for WCOW job containers only.
-	//
-	// It MUST be treated as read only in the lifetime of the pod.
-	jobContainer bool
-
 	// spec is the OCI runtime specification for the pod sandbox container.
 	spec *specs.Spec
 
@@ -368,24 +362,9 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists id pod: '%s'", req.ID, p.id)
 	}
 
-	if p.jobContainer {
-		// This is a short circuit to make sure that all containers in a pod will have
-		// the same IP address/be added to the same compartment.
-		//
-		// There will need to be OS work needed to support this scenario, so for now we need to block on
-		// this.
-		if !oci.IsJobContainer(s) {
-			return nil, errors.New("cannot create a normal process isolated container if the pod sandbox is a job container")
-		}
-		// Pass through some annotations from the pod spec that if specified will need to be made available
-		// to every container as well. Kubernetes only passes annotations to RunPodSandbox so there needs to be
-		// a way for individual containers to get access to these.
-		oci.SandboxAnnotationsPassThrough(
-			p.spec.Annotations,
-			s.Annotations,
-			annotations.HostProcessInheritUser,
-			annotations.HostProcessRootfsLocation,
-		)
+	err = p.updateConfigForHostProcessContainer(s)
+	if err != nil {
+		return nil, err
 	}
 
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
@@ -498,6 +477,61 @@ func (p *pod) DeleteTask(ctx context.Context, tid string) error {
 
 	if p.id != tid {
 		p.workloadTasks.Delete(tid)
+	}
+
+	return nil
+}
+
+// updateConfigForHostProcessContainer validates and adjusts a container spec
+// against the pod sandbox spec for HostProcess (HPC) scenarios:
+//   - Rejects a hypervisor-isolated HPC when the parent UVM does not
+//     advertise HostProcess container support.
+//   - Rejects a non-HPC container inside a process-isolated HPC sandbox
+//     (all containers in such a pod must share the host job/network).
+//   - Propagates HPC pod-level annotations (e.g. inherit-user, rootfs
+//     location) onto each container, since CRI only delivers them at pod
+//     create time.
+//   - Clears HostProcessInheritUser on any non-HPC container so a stray or
+//     propagated annotation can't grant it SYSTEM.
+func (p *pod) updateConfigForHostProcessContainer(s *specs.Spec) error {
+	isProcessIsolatedPrivilegedSandbox := oci.IsJobContainer(p.spec) && !oci.IsIsolated(p.spec)
+	isProcessIsolatedPrivilegedContainer := oci.IsJobContainer(s) && !oci.IsIsolated(s)
+	isHypervisorIsolatedPrivilegedContainer := oci.IsJobContainer(s) && oci.IsIsolated(s)
+
+	// Reject hypervisor-isolated HPCs when the UVM doesn't support them.
+	if isHypervisorIsolatedPrivilegedContainer &&
+		p.host != nil && !p.host.HostProcessContainerSupported() {
+		return fmt.Errorf("UVM does not support HostProcess containers")
+	}
+
+	if isProcessIsolatedPrivilegedSandbox || isHypervisorIsolatedPrivilegedContainer {
+		if isProcessIsolatedPrivilegedSandbox && !isProcessIsolatedPrivilegedContainer {
+			// This is a short circuit to make sure that all containers in a pod will have
+			// the same IP address/be added to the same compartment.
+			//
+			// There will need to be OS work needed to support this scenario, so for now we need to block on
+			// this.
+			//
+			// If the pod sandbox is a process-isolated HPC then the container must also be a
+			// process-isolated HPC.
+			return errors.New("cannot create a normal process isolated container if the pod sandbox is a job container running on host")
+		}
+
+		// Pass through some annotations from the pod spec that if specified will need to be made available
+		// to every container as well. Kubernetes only passes annotations to RunPodSandbox so there needs to be
+		// a way for individual containers to get access to these.
+		oci.SandboxAnnotationsPassThrough(
+			p.spec.Annotations,
+			s.Annotations,
+			annotations.HostProcessInheritUser,
+			annotations.HostProcessRootfsLocation,
+		)
+	}
+
+	// Non-HPC containers must never carry HostProcessInheritUser - it would
+	// otherwise grant SYSTEM to a non-privileged exec.
+	if !oci.IsJobContainer(s) && s.Annotations[annotations.HostProcessInheritUser] != "" {
+		s.Annotations[annotations.HostProcessInheritUser] = "false"
 	}
 
 	return nil

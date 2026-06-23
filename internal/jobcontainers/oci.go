@@ -4,7 +4,6 @@ package jobcontainers
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
@@ -41,20 +40,13 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 		return nil, err
 	}
 
-	var cpuAffinity uint64
-	if s.Windows != nil && s.Windows.Resources != nil && s.Windows.Resources.CPU != nil && len(s.Windows.Resources.CPU.Affinity) > 0 {
-		affinity := s.Windows.Resources.CPU.Affinity
-		if len(affinity) != 1 {
-			return nil, fmt.Errorf("cpu affinity with multiple processor groups is not supported")
-		}
-		if affinity[0].Group != 0 {
-			return nil, fmt.Errorf("cpu affinity processor group %d is not supported", affinity[0].Group)
-		}
-		if affinity[0].Mask == 0 {
-			return nil, fmt.Errorf("cpu affinity mask must be non-zero")
-		}
-		cpuAffinity = affinity[0].Mask
+	// Validate and retrieve CPU affinity using the shared helper, which enforces the
+	// OS version gate for multi-group support (WS2022+).
+	affinities, err := hcsoci.ValidateCPUAffinity(s)
+	if err != nil {
+		return nil, err
 	}
+	groupAffinities := hcsoci.ToJobObjectAffinities(affinities)
 
 	realCPULimit, realCPUWeight := uint32(cpuLimit), uint32(cpuWeight)
 	if cpuCount != 0 {
@@ -77,7 +69,7 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 	return &jobobject.JobLimits{
 		CPULimit:           realCPULimit,
 		CPUWeight:          realCPUWeight,
-		CPUAffinity:        cpuAffinity,
+		GroupAffinities:    groupAffinities,
 		MaxIOPS:            maxIops,
 		MaxBandwidth:       maxBandwidth,
 		MemoryLimitInBytes: memLimitMB * memory.MiB,

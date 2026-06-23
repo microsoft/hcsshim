@@ -230,7 +230,7 @@ func (c *Controller) StartVM(ctx context.Context, opts *StartOptions) (err error
 
 	// VM is started, entropy is seeded and log channel is up. Accept the
 	// GCS dial on the prepared listener and run the GCS protocol handshake.
-	err = c.guest.CreateConnection(ctx, opts.ConfigOptions...)
+	err = c.guest.CreateConnection(ctx, true, opts.ConfigOptions...)
 	if err != nil {
 		return fmt.Errorf("failed to create guest connection: %w", err)
 	}
@@ -342,6 +342,7 @@ func (c *Controller) waitForVMExit(ctx context.Context) {
 	// copy the original to prevent it affecting the background wait go routine
 	ctx = context.WithoutCancel(ctx)
 	_ = c.uvm.Wait(ctx)
+
 	// Once the VM has exited, attempt to transition to Terminated.
 	// This may be a no-op if TerminateVM already ran concurrently and
 	// transitioned the state first — log the discarded error so that
@@ -350,6 +351,15 @@ func (c *Controller) waitForVMExit(ctx context.Context) {
 	if c.vmState != StateTerminated {
 		c.vmState = StateTerminated
 	}
+
+	// Force the bridge to collapse so in-flight container/process waits are
+	// released. CloseConnection is idempotent.
+	if c.guest != nil {
+		if err := c.guest.CloseConnection(); err != nil {
+			log.G(ctx).WithError(err).Warn("close guest connection after vm exit failed")
+		}
+	}
+
 	c.mu.Unlock()
 }
 

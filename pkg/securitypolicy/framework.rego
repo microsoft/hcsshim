@@ -784,6 +784,40 @@ mount_ok(mounts, allow_elevated, mount) {
     mountConstraint_ok(constraint, mount)
 }
 
+# Special case for the pod sandbox (pause) container: starting with v2,
+# containerd mounts /sys as rw on the sandbox container when the pod is
+# privileged (1fc497218 "Fix privileged container sysfs can't be rw because pod
+# is ro by default") instead of ro.  This means that the mount list for a
+# privileged pause container no longer matches with just data.defaultMounts and
+# will either need a special case for sysfs (which is the only mount being
+# treated differently), or use data.privilegedMounts.  However, if we blindly
+# use data.privilegedMounts, this could result in the host being able to mount
+# "privileged" mounts on even a non-privileged container, as long as it runs as
+# the sandbox.  Since we have no other way to determine if the sandbox should be
+# allowed to be privileged or not (input.privileged is set to false for the
+# pause container even if the pod is privileged), we just special case the sysfs
+# mount.
+#
+# We have to allow this special case whether or not this policy currently allows
+# any privileged containers at all, since a fragment that is loaded in the
+# future may allow privileged containers.
+mount_ok(mounts, allow_elevated, mount) {
+    input.isSandboxContainer
+
+    # we allow allow_elevated to be false since this is what existing policies
+    # already does, even when some workload containers can be privileged, the
+    # sandbox container itself is not.
+
+    mount.type == "sysfs"
+    mount.source == "sysfs"
+    mount.destination == "/sys"
+    count(mount.options) == 4
+    "nosuid" in mount.options
+    "noexec" in mount.options
+    "nodev" in mount.options
+    "rw" in mount.options
+}
+
 mountList_ok(mounts, allow_elevated) {
     is_linux
     every mount in input.mounts {
@@ -1436,14 +1470,14 @@ filtered_registry_values(input_values, policy_values) := [input_val |
 registry_changes := {"allowed": true} {
     containers := data.metadata.matches[input.containerID]
     container := containers[_]
-    
+
     # Check if container has registry_changes defined in policy
     container.registry_changes
-    
+
     # If input has registry changes, filter to only matching ones
     input.registryChanges.AddValues
     matched_values := filtered_registry_values(input.registryChanges.AddValues, container.registry_changes.add_values)
-    
+
     # Build result with filtered AddValues
     result := {
         "AddValues": matched_values

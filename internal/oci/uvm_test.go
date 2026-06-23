@@ -9,6 +9,7 @@ import (
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/google/go-cmp/cmp"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -325,5 +326,99 @@ func Test_SpecToUVMCreateOptions_Common(t *testing.T) {
 				t.Fatal("should have disabled writable in shares creation when annotation is provided")
 			}
 		})
+	}
+}
+
+func Test_SpecToUVMCreateOptions_LCOW_SecurityPolicy_SNP(t *testing.T) {
+	s := &specs.Spec{
+		Linux: &specs.Linux{},
+		Annotations: map[string]string{
+			annotations.LCOWSecurityPolicy: "test-policy",
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	lopts := (opts).(*uvm.OptionsLCOW)
+	if !lopts.SecurityPolicyEnabled {
+		t.Fatal("SecurityPolicyEnabled should be true when SecurityPolicy is set")
+	}
+	if lopts.SecurityPolicy != "test-policy" {
+		t.Fatalf("expected SecurityPolicy=%q, got %q", "test-policy", lopts.SecurityPolicy)
+	}
+	if lopts.VPMemDeviceCount != 0 {
+		t.Fatalf("expected VPMemDeviceCount=0 for SNP, got %d", lopts.VPMemDeviceCount)
+	}
+	if lopts.GuestStateFilePath != vmutils.DefaultGuestStateFile {
+		t.Fatalf("expected GuestStateFilePath=%q, got %q", vmutils.DefaultGuestStateFile, lopts.GuestStateFilePath)
+	}
+	if !lopts.DmVerityMode {
+		t.Fatal("DmVerityMode should be true for SNP")
+	}
+	if lopts.AllowOvercommit {
+		t.Fatal("AllowOvercommit should be false for SNP")
+	}
+	if !lopts.EnableScratchEncryption {
+		t.Fatal("EnableScratchEncryption should be true when SecurityPolicy is set")
+	}
+}
+
+func Test_SpecToUVMCreateOptions_LCOW_SecurityPolicy_NoSecurityHardware(t *testing.T) {
+	s := &specs.Spec{
+		Linux: &specs.Linux{},
+		Annotations: map[string]string{
+			annotations.LCOWSecurityPolicy: "test-policy",
+			annotations.NoSecurityHardware: "true",
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	lopts := (opts).(*uvm.OptionsLCOW)
+	if !lopts.SecurityPolicyEnabled {
+		t.Fatal("SecurityPolicyEnabled should be true even with no-security-hardware")
+	}
+	if lopts.SecurityPolicy != "test-policy" {
+		t.Fatalf("expected SecurityPolicy=%q, got %q", "test-policy", lopts.SecurityPolicy)
+	}
+	// SNP-specific settings should NOT be applied
+	if lopts.VPMemDeviceCount == 0 {
+		t.Fatal("VPMemDeviceCount should not be zeroed in no-security-hardware mode")
+	}
+	if lopts.GuestStateFilePath != "" {
+		t.Fatalf("GuestStateFilePath should be empty in no-security-hardware mode, got %q", lopts.GuestStateFilePath)
+	}
+	if lopts.DmVerityMode {
+		t.Fatal("DmVerityMode should be false in no-security-hardware mode")
+	}
+	// Policy-dependent settings should still be applied
+	if !lopts.EnableScratchEncryption {
+		t.Fatal("EnableScratchEncryption should be true when SecurityPolicy is set, even with no-security-hardware")
+	}
+}
+
+func Test_SpecToUVMCreateOptions_LCOW_NoSecurityPolicy(t *testing.T) {
+	s := &specs.Spec{
+		Linux:       &specs.Linux{},
+		Annotations: make(map[string]string),
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	lopts := (opts).(*uvm.OptionsLCOW)
+	if lopts.SecurityPolicyEnabled {
+		t.Fatal("SecurityPolicyEnabled should be false when no SecurityPolicy is set")
+	}
+	if lopts.SecurityPolicy != "" {
+		t.Fatalf("expected empty SecurityPolicy, got %q", lopts.SecurityPolicy)
 	}
 }

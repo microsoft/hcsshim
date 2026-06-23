@@ -233,6 +233,26 @@ func (gc *GuestConnection) Close() error {
 	return gc.brdg.Close()
 }
 
+// SetMigrating forwards to [bridge.SetMigrating]. No-op if uninitialized.
+func (gc *GuestConnection) SetMigrating(migrating bool) {
+	if gc.brdg == nil {
+		return
+	}
+
+	gc.brdg.SetMigrating(migrating)
+}
+
+// ResumeOnConn resumes the bridge after swaping the bridge
+// transport without dropping outstanding RPCs.
+func (gc *GuestConnection) ResumeOnConn(conn io.ReadWriteCloser) error {
+	if gc.brdg == nil {
+		// Not adopting conn; close it so the accepted socket does not leak.
+		_ = conn.Close()
+		return ErrBridgeClosed
+	}
+	return gc.brdg.ResumeOnConn(conn)
+}
+
 // CreateProcess creates a process in the container host.
 func (gc *GuestConnection) CreateProcess(ctx context.Context, settings interface{}) (_ cow.Process, err error) {
 	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::CreateProcess", oc.WithClientSpanKind)
@@ -263,6 +283,45 @@ func (gc *GuestConnection) newIoChannel() (*ioChannel, uint32, error) {
 		return nil, 0, err
 	}
 	return newIoChannel(l), port, nil
+}
+
+// SetNextPort raises the new-process IO port allocator floor. Called
+// by the live-migration restore path after [Connect] to skip past
+// vsock ports already in use by restored processes. Never goes
+// backwards.
+func (gc *GuestConnection) SetNextPort(p uint32) {
+	gc.mu.Lock()
+	defer gc.mu.Unlock()
+	if p > gc.nextPort {
+		gc.nextPort = p
+	}
+}
+
+// NextPort returns the current allocator floor. Used by the
+// live-migration save path to record what [SetNextPort] should be
+// seeded with on the destination.
+func (gc *GuestConnection) NextPort() uint32 {
+	gc.mu.Lock()
+	defer gc.mu.Unlock()
+	return gc.nextPort
+}
+
+// BridgeNextID returns the bridge's next request id allocator value.
+func (gc *GuestConnection) BridgeNextID() int64 {
+	return gc.brdg.NextID()
+}
+
+// SeedBridgeNextID raises the bridge's request id allocator floor.
+func (gc *GuestConnection) SeedBridgeNextID(next int64) {
+	gc.brdg.SeedNextID(next)
+}
+
+// PreregisterWaitForProcess registers a stub WaitForProcess rpc against the
+// source-issued id so a later [Container.OpenProcessWithIO] (or the bridge
+// itself) routes the guest's response without issuing a duplicate wait.
+func (gc *GuestConnection) PreregisterWaitForProcess(id int64, resp *prot.ContainerWaitForProcessResponse) error {
+	_, err := gc.brdg.PreregisterRPC(id, prot.RPCWaitForProcess, resp)
+	return err
 }
 
 func (gc *GuestConnection) requestNotify(cid string, ch chan struct{}) error {

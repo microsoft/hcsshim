@@ -20,6 +20,7 @@ import (
 	vm "github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"google.golang.org/protobuf/proto"
 )
 
 type specTestCase struct {
@@ -728,7 +729,12 @@ func TestBuildSandboxConfig(t *testing.T) {
 					shimannotations.ResourcePartitionID: "87654321-4321-8765-4321-876543218765",
 				},
 			},
-			// A valid GUID should be accepted without error.
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if doc.VirtualMachine.ResourcePartitionId != "87654321-4321-8765-4321-876543218765" {
+					t.Errorf("expected ResourcePartitionId %q, got %q", "87654321-4321-8765-4321-876543218765", doc.VirtualMachine.ResourcePartitionId)
+				}
+			},
 		},
 		{
 			name: "CPU group and resource partition conflict",
@@ -1105,7 +1111,7 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 			errContains: "v2 shims do not support vPMem devices",
 		},
 		{
-			name: "scratch encryption defaults to false when security hardware is bypassed",
+			name: "scratch encryption defaults to true when security hardware is bypassed",
 			spec: &vm.Spec{
 				Annotations: map[string]string{
 					shimannotations.LCOWSecurityPolicy: "eyJ0ZXN0IjoidGVzdCJ9",
@@ -1114,10 +1120,10 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				// When NoSecurityHardware is true, isConfidential is false,
-				// so EnableScratchEncryption defaults to false
-				if sandboxOpts.EnableScratchEncryption != false {
-					t.Error("expected scratch encryption disabled by default when security hardware is bypassed")
+				// When NoSecurityHardware is true but a security policy is present,
+				// ConfidentialConfig is still set, so EnableScratchEncryption defaults to true
+				if sandboxOpts.EnableScratchEncryption != true {
+					t.Error("expected scratch encryption enabled by default when security policy is present")
 				}
 			},
 		},
@@ -1143,6 +1149,42 @@ func TestBuildSandboxConfig_SecurityPolicyInteractions(t *testing.T) {
 				t.Helper()
 				if sandboxOpts.EnableScratchEncryption != false {
 					t.Error("expected scratch encryption disabled without security policy")
+				}
+			},
+		},
+		{
+			name: "no-security-hardware sets ConfidentialConfig but uses standard HCS doc",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LCOWSecurityPolicy:         "eyJ0ZXN0IjoidGVzdCJ9",
+					shimannotations.LCOWSecurityPolicyEnforcer: "rego",
+					shimannotations.NoSecurityHardware:         "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				// ConfidentialConfig should be set for policy plumbing
+				if sandboxOpts.ConfidentialConfig == nil {
+					t.Fatal("expected ConfidentialConfig to be set even with no-security-hardware")
+				}
+				if sandboxOpts.ConfidentialConfig.SecurityPolicy != "eyJ0ZXN0IjoidGVzdCJ9" {
+					t.Errorf("expected security policy to be set, got %q", sandboxOpts.ConfidentialConfig.SecurityPolicy)
+				}
+				if sandboxOpts.ConfidentialConfig.SecurityPolicyEnforcer != "rego" {
+					t.Errorf("expected security policy enforcer 'rego', got %q", sandboxOpts.ConfidentialConfig.SecurityPolicyEnforcer)
+				}
+				// HCS doc should use standard schema (V21), not SNP schema (V25)
+				if doc.SchemaVersion.Major != 2 || doc.SchemaVersion.Minor != 1 {
+					t.Errorf("expected schema V2.1 for no-security-hardware, got V%d.%d", doc.SchemaVersion.Major, doc.SchemaVersion.Minor)
+				}
+				// GuestState should NOT be set (no SNP boot)
+				if doc.VirtualMachine.GuestState != nil {
+					t.Error("expected no GuestState in no-security-hardware mode")
+				}
+				// Standard boot options should be used (kernel direct or UEFI)
+				chipset := doc.VirtualMachine.Chipset
+				if chipset.LinuxKernelDirect == nil && chipset.Uefi == nil {
+					t.Error("expected standard boot options in no-security-hardware mode")
 				}
 			},
 		},
@@ -1657,16 +1699,44 @@ func TestBuildSandboxConfig_BootOptions(t *testing.T) {
 			},
 		},
 		{
-			name: "scrub logs option",
+			name: "scrub logs option enabled",
 			opts: &runhcsoptions.Options{
 				SandboxPlatform:   "linux/amd64",
 				BootFilesRootPath: vhdOnlyPath,
-				ScrubLogs:         true,
+				ScrubLogs:         proto.Bool(true),
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
 				if !strings.Contains(getKernelArgs(doc), "-scrub-logs") {
 					t.Error("expected -scrub-logs in kernel args")
+				}
+			},
+		},
+		{
+			name: "scrub logs option disabled",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: vhdOnlyPath,
+				ScrubLogs:         proto.Bool(false),
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !strings.Contains(getKernelArgs(doc), "-scrub-logs=false") {
+					t.Error("expected -scrub-logs=false in kernel args")
+				}
+			},
+		},
+		{
+			name: "scrub logs option unset",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: vhdOnlyPath,
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				args := getKernelArgs(doc)
+				if strings.Contains(args, "-scrub-logs") {
+					t.Error("did not expect -scrub-logs in kernel args when unset")
 				}
 			},
 		},
@@ -2056,4 +2126,159 @@ func TestBuildSandboxConfig_CPUClamping(t *testing.T) {
 	if actualCount != uint32(hostCount) {
 		t.Errorf("expected processor count to be clamped to host count %d, got %d", hostCount, actualCount)
 	}
+}
+
+// TestBuildSandboxConfig_LiveMigration validates the wiring for the
+// io.microsoft.migration.support-enabled sandbox annotation. The annotation is parsed
+// into SandboxOptions.LiveMigrationSupportEnabled and threaded down into the kernel
+// command line: live-migratable sandboxes must skip the /bin/vsockexec wrapper
+// (which would otherwise stall init waiting for a host log listener that the
+// LM-enabled host does not run), while non-LM sandboxes must continue to use
+// vsockexec so that GCS stderr is forwarded over LinuxLogVsockPort.
+func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
+	ctx := context.Background()
+
+	validBootFilesPath := newBootFilesPath(t)
+	defaultOpts := defaultSandboxOpts(validBootFilesPath)
+
+	// Pre-format the vsockexec prefix once so the assertions are obviously
+	// driven by the same constant the production code uses.
+	vsockexecPrefix := fmt.Sprintf("/bin/vsockexec -e %d", vmutils.LinuxLogVsockPort)
+
+	tests := []specTestCase{
+		{
+			name: "live migration disabled by default",
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=false by default, got true")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, vsockexecPrefix) {
+					t.Errorf("expected vsockexec wrapper %q in kernel args (LM disabled), got %q", vsockexecPrefix, kernelArgs)
+				}
+				if !strings.Contains(kernelArgs, "/bin/gcs") {
+					t.Errorf("expected /bin/gcs in kernel args, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration explicitly disabled",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "false",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=false when annotation=\"false\", got true")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, vsockexecPrefix) {
+					t.Errorf("expected vsockexec wrapper %q in kernel args, got %q", vsockexecPrefix, kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration enabled drops vsockexec wrapper",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=true when annotation=\"true\", got false")
+				}
+				kernelArgs := getKernelArgs(doc)
+				// The vsockexec wrapper must not appear at all when LM is on:
+				// neither the prefix nor the binary path on its own.
+				if strings.Contains(kernelArgs, "vsockexec") {
+					t.Errorf("expected no vsockexec in kernel args when LM enabled, got %q", kernelArgs)
+				}
+				if strings.Contains(kernelArgs, fmt.Sprintf("-e %d", vmutils.LinuxLogVsockPort)) {
+					t.Errorf("expected no log vsock port (%d) wiring when LM enabled, got %q", vmutils.LinuxLogVsockPort, kernelArgs)
+				}
+				// /bin/gcs must still be invoked - just without the wrapper.
+				if !strings.Contains(kernelArgs, "/bin/gcs") {
+					t.Errorf("expected /bin/gcs in kernel args even when LM enabled, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration combined with debug log level",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: validBootFilesPath,
+				LogLevel:          "debug",
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=true, got false")
+				}
+				kernelArgs := getKernelArgs(doc)
+				// Other GCS flags must still be threaded through the command
+				// even when the vsockexec wrapper is removed.
+				if !strings.Contains(kernelArgs, "-loglevel debug") {
+					t.Errorf("expected -loglevel debug in kernel args when LM enabled, got %q", kernelArgs)
+				}
+				if strings.Contains(kernelArgs, "vsockexec") {
+					t.Errorf("expected no vsockexec when LM enabled, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration with disable time sync still drops vsockexec",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.LiveMigrationSupportEnabled: "true",
+					shimannotations.DisableLCOWTimeSyncService:  "true",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if !sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=true, got false")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, "-disable-time-sync") {
+					t.Errorf("expected -disable-time-sync flag in kernel args, got %q", kernelArgs)
+				}
+				if strings.Contains(kernelArgs, "vsockexec") {
+					t.Errorf("expected no vsockexec when LM enabled, got %q", kernelArgs)
+				}
+			},
+		},
+		{
+			name: "live migration invalid annotation value falls back to default (false)",
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					// ParseAnnotationsBool returns the default value (false) on
+					// unparseable input, so the sandbox should behave like the
+					// default-disabled case rather than failing the build.
+					shimannotations.LiveMigrationSupportEnabled: "not-a-bool",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if sandboxOpts.LiveMigrationSupportEnabled {
+					t.Errorf("expected LiveMigrationSupportEnabled=false on invalid annotation value, got true")
+				}
+				kernelArgs := getKernelArgs(doc)
+				if !strings.Contains(kernelArgs, vsockexecPrefix) {
+					t.Errorf("expected vsockexec wrapper %q in kernel args, got %q", vsockexecPrefix, kernelArgs)
+				}
+			},
+		},
+	}
+
+	runTestCases(t, ctx, defaultOpts, tests)
 }

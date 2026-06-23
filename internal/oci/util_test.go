@@ -3,6 +3,7 @@ package oci
 import (
 	"testing"
 
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -150,5 +151,101 @@ func Test_IsIsolated_Neither(t *testing.T) {
 
 	if IsIsolated(s) {
 		t.Fatal("should have not have returned isolated for neither config")
+	}
+}
+
+// -----------------------------------------------------------------------------
+// IsJobContainer tests
+// -----------------------------------------------------------------------------
+
+func Test_IsJobContainer(t *testing.T) {
+	tests := []struct {
+		name     string
+		spec     *specs.Spec
+		expected bool
+	}{
+		{
+			name: "WCOW process-isolated with HostProcess=true",
+			spec: &specs.Spec{
+				Windows:     &specs.Windows{},
+				Annotations: map[string]string{annotations.HostProcessContainer: "true"},
+			},
+			expected: true,
+		},
+		{
+			name: "WCOW process-isolated with HostProcess=false",
+			spec: &specs.Spec{
+				Windows:     &specs.Windows{},
+				Annotations: map[string]string{annotations.HostProcessContainer: "false"},
+			},
+			expected: false,
+		},
+		{
+			name: "WCOW process-isolated with HostProcess missing",
+			spec: &specs.Spec{
+				Windows: &specs.Windows{},
+			},
+			expected: false,
+		},
+		{
+			name: "WCOW Hyper-V isolated with HostProcess=true",
+			spec: &specs.Spec{
+				Windows: &specs.Windows{
+					HyperV: &specs.WindowsHyperV{},
+				},
+				Annotations: map[string]string{annotations.HostProcessContainer: "true"},
+			},
+			expected: true,
+		},
+		{
+			name: "LCOW without Windows (not a JobContainer)",
+			spec: &specs.Spec{
+				Linux: &specs.Linux{},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			actual := IsJobContainer(tt.spec)
+			if actual != tt.expected {
+				t.Fatalf("IsJobContainer() = %v, expected %v", actual, tt.expected)
+			}
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Cross-property tests: IsJobContainer combined with IsIsolated to differentiate
+// process-isolated HPC from hypervisor-isolated HPC.
+// -----------------------------------------------------------------------------
+
+func Test_JobContainer_IsolationDifferentiation(t *testing.T) {
+	// Process-isolated WCOW HostProcess=true
+	processJob := &specs.Spec{
+		Windows:     &specs.Windows{},
+		Annotations: map[string]string{annotations.HostProcessContainer: "true"},
+	}
+	if !IsJobContainer(processJob) {
+		t.Fatal("expected IsJobContainer to be true for process-isolated HostProcess=true")
+	}
+	if IsIsolated(processJob) {
+		t.Fatal("expected IsIsolated to be false for process-isolated HostProcess=true")
+	}
+
+	// Hyper-V isolated WCOW HostProcess=true
+	hyperVJob := &specs.Spec{
+		Windows: &specs.Windows{
+			HyperV: &specs.WindowsHyperV{},
+		},
+		Annotations: map[string]string{annotations.HostProcessContainer: "true"},
+	}
+	if !IsJobContainer(hyperVJob) {
+		t.Fatal("expected IsJobContainer to be true for Hyper-V isolated HostProcess=true")
+	}
+	if !IsIsolated(hyperVJob) {
+		t.Fatal("expected IsIsolated to be true for Hyper-V isolated HostProcess=true")
 	}
 }

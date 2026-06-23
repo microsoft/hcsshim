@@ -10,11 +10,15 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 )
 
-// Capabilities returns the capabilities of the guest connection.
+// Capabilities returns the capabilities of the guest connection, or nil
+// if no GCS connection is active.
 func (gm *Guest) Capabilities() gcs.GuestDefinedCapabilities {
 	gm.mu.RLock()
 	defer gm.mu.RUnlock()
 
+	if gm.gc == nil {
+		return nil
+	}
 	return gm.gc.Capabilities()
 }
 
@@ -26,6 +30,21 @@ func (gm *Guest) CreateContainer(ctx context.Context, cid string, config interfa
 	c, err := gm.gc.CreateContainer(ctx, cid, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container %s: %w", cid, err)
+	}
+
+	return c, nil
+}
+
+// OpenContainer attaches a host-side wrapper to a container already
+// running inside the UVM. Counterpart of [CreateContainer] for the
+// live-migration restore path.
+func (gm *Guest) OpenContainer(ctx context.Context, cid string) (*gcs.Container, error) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	c, err := gm.gc.OpenContainer(ctx, cid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open container %s: %w", cid, err)
 	}
 
 	return c, nil

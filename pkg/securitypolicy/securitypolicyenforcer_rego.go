@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
@@ -58,6 +59,8 @@ type regoEnforcer struct {
 	maxErrorMessageLength int
 	// OS type
 	osType string
+	// Mutex to ensure only one transaction is active
+	transactionLock sync.Mutex
 }
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
@@ -742,6 +745,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		Umask:                umask,
 		Capabilities:         capabilities,
 		SeccompProfileSHA256: seccompProfileSHA256,
+		IsSandboxContainer:   false,
 	}
 	return policy.EnforceCreateContainerPolicyV2(ctx, containerID, argList, envList, workingDir, mounts, user, opts)
 }
@@ -786,6 +790,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 			"umask":                opts.Umask,
 			"capabilities":         mapifyCapabilities(opts.Capabilities),
 			"seccompProfileSHA256": opts.SeccompProfileSHA256,
+			"isSandboxContainer":   opts.IsSandboxContainer,
 		}
 	case "windows":
 		// Dump full interpreter metadata for debugging diagnostics.
@@ -1233,4 +1238,30 @@ func (policy *regoEnforcer) EnforceLogProviderPolicy(ctx context.Context, provid
 
 func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return GetAllUserInfo(process, rootPath)
+}
+
+// WithMetadataRollback snapshots metadata, runs fn and rolls metadata back if fn
+// returns an error. Nested or concurrent transactions are rejected.  Returns
+// the error from fn if it fails.
+func (policy *regoEnforcer) WithMetadataRollback(fn func() error) error {
+	if !policy.transactionLock.TryLock() {
+		return errors.New("nested or concurrent policy transactions are not supported")
+	}
+	defer policy.transactionLock.Unlock()
+
+	saved, err := policy.rego.SaveMetadata()
+	if err != nil {
+		return errors.Wrap(err, "failed to snapshot policy metadata")
+	}
+
+	err = fn()
+	if err != nil {
+		if restoreErr := policy.rego.RestoreMetadata(saved); restoreErr != nil {
+			panic(fmt.Sprintf("failed to rollback policy metadata: %v (caused by error: %v)", restoreErr, err))
+		}
+		log.G(context.Background()).WithError(err).Warn("rolled back policy metadata due to error")
+		return err
+	}
+
+	return nil
 }

@@ -73,31 +73,31 @@ func checkValidContainerID(id string, idType string) error {
 	return errors.Errorf("invalid %s id: %s (must match %s)", idType, id, validContainerIDRegex.String())
 }
 
-// VirtualPod represents a virtual pod that shares a UVM/Sandbox with other pods
-type VirtualPod struct {
-	VirtualSandboxID string
-	MasterSandboxID  string
-	NetworkNamespace string
-	CgroupPath       string
-	CgroupControl    cgroup.Manager  // Unified cgroup manager (v1 or v2)
-	Containers       map[string]bool // containerID -> exists
-	CreatedAt        time.Time
+// Cgroup path formats for pod and container cgroups within the UVM.
+const (
+	// podCgroupPathFmt is the cgroup path for a pod (sandbox or standalone): /pods/{sandboxID}.
+	podCgroupPathFmt = "/pods/%s"
+	// containerCgroupPathFmt is the cgroup path for a workload container nested under its pod: /pods/{sandboxID}/{containerID}.
+	containerCgroupPathFmt = "/pods/%s/%s"
+)
+
+// pod tracks pod-level state within the UVM.
+type pod struct {
+	sandboxID     string
+	cgroupControl cgroup.Manager
+	containers    map[string]bool
 }
 
 // Host is the structure tracking all UVM host state including all containers
 // and processes.
 type Host struct {
+	// containersMutex guards both containers and pods maps.
 	containersMutex sync.Mutex
 	containers      map[string]*Container
+	pods            map[string]*pod
 
 	externalProcessesMutex sync.Mutex
 	externalProcesses      map[int]*externalProcess
-
-	// Virtual pod support for multi-pod scenarios
-	virtualPodsMutex         sync.Mutex
-	virtualPods              map[string]*VirtualPod // virtualSandboxID -> VirtualPod
-	containerToVirtualPod    map[string]string      // containerID -> virtualSandboxID
-	virtualPodsCgroupManager cgroup.Manager         // Parent cgroup for all virtual pods
 
 	// sandboxRoots maps sandboxID to the resolved sandbox root directory.
 	// Populated via registerSandboxRoot during sandbox creation using
@@ -116,6 +116,44 @@ type Host struct {
 	// hostMounts keeps the state of currently mounted devices and file systems,
 	// which is used for GCS hardening.
 	hostMounts *hostMounts
+	// uvmError contains a permanent flag to indicate that further mounts,
+	// unmounts and container creation / deletion should not be allowed.  This
+	// is set when, because of a failure during an unmount operation, we end up
+	// in a state where the policy enforcer's state is out of sync with what we
+	// have actually done, but we cannot safely revert its state.
+	//
+	// Only consulted in confidential mode (see Host.checkState).
+	uvmError uvmConsistencyError
+}
+
+type uvmConsistencyError struct {
+	mu sync.Mutex
+	// The error describing why the UVM has entered an inconsistent state.  If
+	// this is nil, there is no error and Check() returns nil.
+	cause error
+}
+
+// Mark that the UVM has entered an inconsistent state, and store the cause if
+// it is not already set.
+func (u *uvmConsistencyError) Set(cause error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.cause == nil {
+		u.cause = cause
+	}
+}
+
+// Check returns a non-nil error if the UVM has been marked inconsistent.
+func (u *uvmConsistencyError) Check() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.cause == nil {
+		return nil
+	}
+	return fmt.Errorf(
+		"mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error: %w",
+		u.cause,
+	)
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
@@ -123,19 +161,20 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		initialEnforcer,
 		false,
 		"",
+		"",
 		logWriter,
 	)
 	return &Host{
-		containers:            make(map[string]*Container),
-		externalProcesses:     make(map[int]*externalProcess),
-		virtualPods:           make(map[string]*VirtualPod),
-		containerToVirtualPod: make(map[string]string),
-		sandboxRoots:          make(map[string]string),
-		rtime:                 rtime,
-		vsock:                 vsock,
-		devNullTransport:      &transport.DevNullTransport{},
-		hostMounts:            newHostMounts(),
-		securityOptions:       securityPolicyOptions,
+		containers:        make(map[string]*Container),
+		externalProcesses: make(map[int]*externalProcess),
+		pods:              make(map[string]*pod),
+		sandboxRoots:      make(map[string]string),
+		rtime:             rtime,
+		vsock:             vsock,
+		devNullTransport:  &transport.DevNullTransport{},
+		hostMounts:        newHostMounts(),
+		securityOptions:   securityPolicyOptions,
+		uvmError:          uvmConsistencyError{},
 	}
 }
 
@@ -214,25 +253,39 @@ func (h *Host) RemoveContainer(id string) {
 		return
 	}
 
-	// Check if this container is part of a virtual pod
-	virtualPodID, isVirtualPod := c.spec.Annotations[annotations.VirtualPodID]
-	if isVirtualPod {
-		// Remove from virtual pod tracking
-		h.RemoveContainerFromVirtualPod(id)
-		// Network namespace cleanup is handled in virtual pod cleanup when last container is removed.
-		logrus.WithFields(logrus.Fields{
-			logfields.ContainerID:      id,
-			logfields.VirtualSandboxID: virtualPodID,
-		}).Info("Container removed from virtual pod")
-	} else {
-		// delete the network namespace for standalone and sandbox containers
-		criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
-		if !isCRI || criType == "sandbox" {
-			_ = RemoveNetworkNamespace(context.Background(), id)
+	criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
+
+	// Do NOT call RemoveNetworkNamespace for virtual pod sandbox containers.
+	// The host-driven teardown path (TearDownNetworking → RemoveNetNS → removeNIC)
+	// removes adapters first and then the namespace. Calling it here would fail
+	// with "contains adapters" because the host hasn't removed them yet.
+	virtualPodID := c.spec.Annotations[annotations.VirtualPodID]
+	isVirtualPodSandbox := virtualPodID != "" && id == virtualPodID
+	if !isVirtualPodSandbox && (!isCRI || criType == "sandbox") {
+		if err := RemoveNetworkNamespace(context.Background(), id); err != nil {
+			logrus.WithError(err).WithField(logfields.ContainerID, id).Warn("failed to remove network namespace")
 		}
 	}
 
 	delete(h.containers, id)
+
+	// Clean up pod tracking. For standalone containers, sandboxID == id but
+	// no pod entry exists (createPodInUVM is only called for CRI sandboxes),
+	// so the lookup returns false and the block is skipped.
+	if pod, exists := h.pods[c.sandboxID]; exists {
+		delete(pod.containers, id)
+		// When the sandbox container itself is removed, tear down the pod.
+		if id == c.sandboxID {
+			if pod.cgroupControl != nil {
+				if err := pod.cgroupControl.Delete(); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"sandboxID": c.sandboxID,
+					}).WithError(err).Warn("failed to delete pod cgroup")
+				}
+			}
+			delete(h.pods, c.sandboxID)
+		}
+	}
 
 	// Clean up the sandbox root mapping for sandbox containers.
 	if c.isSandbox {
@@ -373,11 +426,48 @@ func checkContainerSettings(sandboxID, containerID string, settings *prot.VMHost
 	return nil
 }
 
+// checkState returns an error if the UVM has entered an inconsistent state from
+// which it cannot safely recover.  Only enforced for confidential containers.
+func (h *Host) checkState() error {
+	if h.HasSecurityPolicy() {
+		return h.uvmError.Check()
+	}
+	return nil
+}
+
+// setUVMInconsistent records that the UVM has entered an inconsistent state and
+// logs the cause.  The flag is only consulted in confidential mode (see
+// checkState), so this is a no-op for non-confidential hosts.
+func (h *Host) setUVMInconsistent(cause error) {
+	if !h.HasSecurityPolicy() {
+		return
+	}
+	h.uvmError.Set(cause)
+	log.G(context.Background()).WithFields(logrus.Fields{
+		"cause": cause,
+	}).Error("Host marked inconsistent. All further mounts/unmounts, container creation and deletion will fail.")
+}
+
+func checkExists(path string) (bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "failed to determine if path '%s' exists", path)
+	}
+	return true, nil
+}
+
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
+	if err = h.checkState(); err != nil {
+		return nil, err
+	}
+
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 
 	// Check for virtual pod annotation
-	virtualPodID, isVirtualPod := settings.OCISpecification.Annotations[annotations.VirtualPodID]
+	virtualPodID := settings.OCISpecification.Annotations[annotations.VirtualPodID]
+	isVirtualPod := virtualPodID != ""
 
 	if h.HasSecurityPolicy() {
 		if err = checkValidContainerID(id, "container"); err != nil {
@@ -415,6 +505,18 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	}
 	c.setStatus(containerCreating)
 
+	// Resolve sandboxID early so all downstream code uses the correct value.
+	// For sandbox containers, sandboxID == id (or virtualPodID for virtual pods).
+	// For workload containers, sandboxID comes from the KubernetesSandboxID annotation.
+	// For standalone containers, sandboxID == id.
+	sandboxID := id
+	if isVirtualPod {
+		sandboxID = virtualPodID
+	} else if criType == "container" {
+		sandboxID = settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
+	}
+	c.sandboxID = sandboxID
+
 	if err := h.AddContainer(id, c); err != nil {
 		return nil, err
 	}
@@ -424,50 +526,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}()
 
-	// Handle virtual pod logic
-	if isVirtualPod && isCRI {
-		logrus.WithFields(logrus.Fields{
-			logfields.ContainerID:      id,
-			logfields.VirtualSandboxID: virtualPodID,
-			"criType":                  criType,
-		}).Info("Processing container for virtual pod")
-
-		if criType == "sandbox" {
-			// This is a virtual pod sandbox - create the virtual pod if it doesn't exist
-			if _, exists := h.GetVirtualPod(virtualPodID); !exists {
-				// Use the network namespace ID from the current container spec
-				// Virtual pods share the same network namespace
-				networkNamespace := specGuest.GetNetworkNamespaceID(settings.OCISpecification)
-				if networkNamespace == "" {
-					networkNamespace = fmt.Sprintf("virtual-pod-%s", virtualPodID)
-				}
-
-				if err := h.CreateVirtualPod(ctx, virtualPodID, virtualPodID, networkNamespace, settings.OCISpecification); err != nil {
-					return nil, errors.Wrapf(err, "failed to create virtual pod %s", virtualPodID)
-				}
-			}
-		}
-
-		// Add this container to the virtual pod
-		if err := h.AddContainerToVirtualPod(id, virtualPodID); err != nil {
-			return nil, errors.Wrapf(err, "failed to add container %s to virtual pod %s", id, virtualPodID)
-		}
-	}
-
-	// Normally we would be doing policy checking here at the start of our
-	// "policy gated function". However, we can't for create container as we
-	// need a properly correct sandboxID which might be changed by the code
-	// below that determines the sandboxID. This is a bit of future proofing
-	// as currently for our single use case, the sandboxID is the same as the
-	// container id
-
 	var namespaceID string
-	// for sandbox container sandboxID is same as container id
-	sandboxID := id
 	if isCRI {
 		switch criType {
 		case "sandbox":
-			// Capture namespaceID if any because setupSandboxContainerSpec clears the Windows section.
 			namespaceID = specGuest.GetNetworkNamespaceID(settings.OCISpecification)
 
 			// Resolve the sandbox root from OCIBundlePath.
@@ -500,23 +562,31 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 
-			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxRoot, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+				return nil, err
+			}
+
+			if err := h.createPodInUVM(sandboxID, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 		case "container":
-			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
-			sandboxID = sid
 			if h.HasSecurityPolicy() {
-				if err = checkValidContainerID(sid, "sandbox"); err != nil {
+				if err = checkValidContainerID(sandboxID, "sandbox"); err != nil {
 					return nil, err
 				}
 			}
-			if !ok || sid == "" {
-				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
+
+			if sandboxID == "" {
+				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sandboxID)
 			}
-			sandboxRoot := h.resolveSandboxRoot(sid)
+
+			if err = h.createContainerInPod(sandboxID, id); err != nil {
+				return nil, err
+			}
+
+			sandboxRoot := h.resolveSandboxRoot(sandboxID)
 			c.sandboxRoot = sandboxRoot
-			if err = setupWorkloadContainerSpec(ctx, sid, id, sandboxRoot, settings.OCISpecification, settings.OCIBundlePath); err != nil {
+			if err = setupWorkloadContainerSpec(ctx, sandboxID, id, sandboxRoot, settings.OCISpecification, settings.OCIBundlePath); err != nil {
 				return nil, err
 			}
 
@@ -534,14 +604,14 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					_ = os.RemoveAll(settings.OCIBundlePath)
 				}
 			}()
-			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
+			if err := securitypolicy.ExtendPolicyWithNetworkingMounts(sandboxRoot, h.securityOptions.PolicyEnforcer, settings.OCISpecification); err != nil {
 				return nil, err
 			}
 		default:
 			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
 		}
 	} else {
-		// Capture namespaceID if any because setupStandaloneContainerSpec clears the Windows section.
+		// Standalone container: no pod entry is created.
 		namespaceID = specGuest.GetNetworkNamespaceID(settings.OCISpecification)
 		// Standalone uses OCIBundlePath directly as its root.
 		c.sandboxRoot = settings.OCIBundlePath
@@ -553,7 +623,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				_ = os.RemoveAll(settings.OCIBundlePath)
 			}
 		}()
-		if err := securitypolicy.ExtendPolicyWithNetworkingMounts(id, h.securityOptions.PolicyEnforcer,
+		if err := securitypolicy.ExtendPolicyWithNetworkingMounts(c.sandboxRoot, h.securityOptions.PolicyEnforcer,
 			settings.OCISpecification); err != nil {
 			return nil, err
 		}
@@ -586,21 +656,27 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, err
 	}
 
-	envToKeep, capsToKeep, allowStdio, err := h.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicy(
+	privileged := isPrivilegedContainerCreationRequest(ctx, settings.OCISpecification)
+	noNewPrivileges := settings.OCISpecification.Process.NoNewPrivileges
+	opts := &securitypolicy.CreateContainerOptions{
+		SandboxID:            sandboxID,
+		Privileged:           &privileged,
+		NoNewPrivileges:      &noNewPrivileges,
+		Groups:               groups,
+		Umask:                umask,
+		Capabilities:         settings.OCISpecification.Process.Capabilities,
+		SeccompProfileSHA256: seccomp,
+		IsSandboxContainer:   c.isSandbox,
+	}
+	envToKeep, capsToKeep, allowStdio, err := h.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(
 		ctx,
-		sandboxID,
 		id,
 		settings.OCISpecification.Process.Args,
 		settings.OCISpecification.Process.Env,
 		settings.OCISpecification.Process.Cwd,
 		settings.OCISpecification.Mounts,
-		isPrivilegedContainerCreationRequest(ctx, settings.OCISpecification),
-		settings.OCISpecification.Process.NoNewPrivileges,
 		user,
-		groups,
-		umask,
-		settings.OCISpecification.Process.Capabilities,
-		seccomp,
+		opts,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
@@ -744,6 +820,10 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeSCSIDevice:
 		return modifySCSIDevice(ctx, req.RequestType, req.Settings.(*guestresource.SCSIDevice))
 	case guestresource.ResourceTypeMappedVirtualDisk:
+		if err := h.checkState(); err != nil {
+			return err
+		}
+
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
 		// find the actual controller number on the bus and update the incoming request.
 		var cNum uint8
@@ -781,18 +861,30 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 				}()
 			}
 		}
-		return modifyMappedVirtualDisk(ctx, req.RequestType, mvd, h.securityOptions.PolicyEnforcer)
+		return h.modifyMappedVirtualDisk(ctx, req.RequestType, mvd)
 	case guestresource.ResourceTypeMappedDirectory:
-		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory), h.securityOptions.PolicyEnforcer)
+		if err := h.checkState(); err != nil {
+			return err
+		}
+
+		return h.modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory))
 	case guestresource.ResourceTypeVPMemDevice:
-		return modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice), h.securityOptions.PolicyEnforcer)
+		if err := h.checkState(); err != nil {
+			return err
+		}
+
+		return h.modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice))
 	case guestresource.ResourceTypeCombinedLayers:
+		if err := h.checkState(); err != nil {
+			return err
+		}
+
 		cl := req.Settings.(*guestresource.LCOWCombinedLayers)
 		// when cl.ScratchPath == "", we mount overlay as read-only, in which case
 		// we don't really care about scratch encryption, since the host already
 		// knows about the layers and the overlayfs.
 		encryptedScratch := cl.ScratchPath != "" && h.hostMounts.IsEncrypted(cl.ScratchPath)
-		return modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), encryptedScratch, h.securityOptions.PolicyEnforcer)
+		return h.modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), encryptedScratch)
 	case guestresource.ResourceTypeNetwork:
 		return modifyNetwork(ctx, req.RequestType, req.Settings.(*guestresource.LCOWNetworkAdapter))
 	case guestresource.ResourceTypeVPCIDevice:
@@ -811,7 +903,8 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		return h.securityOptions.SetConfidentialOptions(ctx,
 			r.EnforcerType,
 			r.EncodedSecurityPolicy,
-			r.EncodedUVMReference)
+			r.EncodedUVMReference,
+			r.EncodedUVMHashEnvelopeReference)
 	case guestresource.ResourceTypePolicyFragment:
 		r, ok := req.Settings.(*guestresource.SecurityPolicyFragment)
 		if !ok {
@@ -1180,19 +1273,19 @@ func modifySCSIDevice(
 	}
 }
 
-func modifyMappedVirtualDisk(
+func (h *Host) modifyMappedVirtualDisk(
 	ctx context.Context,
 	rt guestrequest.RequestType,
 	mvd *guestresource.LCOWMappedVirtualDisk,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	var verityInfo *guestresource.DeviceVerityInfo
+	securityPolicy := h.securityOptions.PolicyEnforcer
 	if mvd.ReadOnly {
 		// The only time the policy is empty, and we want it to be empty
 		// is when no policy is provided, and we default to open door
 		// policy. In any other case, e.g. explicit open door or any
 		// other rego policy we would like to mount layers with verity.
-		if len(securityPolicy.EncodedSecurityPolicy()) > 0 {
+		if h.HasSecurityPolicy() {
 			devPath, err := scsi.GetDevicePath(ctx, mvd.Controller, mvd.Lun, mvd.Partition)
 			if err != nil {
 				return err
@@ -1206,101 +1299,154 @@ func modifyMappedVirtualDisk(
 			}
 		}
 	}
-	switch rt {
-	case guestrequest.RequestTypeAdd:
-		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-		defer cancel()
-		if mvd.MountPath != "" {
-			if mvd.ReadOnly {
-				var deviceHash string
-				if verityInfo != nil {
-					deviceHash = verityInfo.RootDigest
+
+	// For confidential containers, we revert the policy metadata via the
+	// transaction rollback mechanism on both mount and unmount errors, but if
+	// we've actually called Unmount and it fails we permanently block further
+	// device operations by marking the UVM state as inconsistent.
+	return securityPolicy.WithMetadataRollback(func() error {
+		switch rt {
+		case guestrequest.RequestTypeAdd:
+			mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			if mvd.MountPath != "" {
+				if mvd.ReadOnly {
+					var deviceHash string
+					if verityInfo != nil {
+						deviceHash = verityInfo.RootDigest
+					}
+					err = securityPolicy.EnforceDeviceMountPolicy(ctx, mvd.MountPath, deviceHash)
+					if err != nil {
+						return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
+					}
+				} else {
+					err = securityPolicy.EnforceRWDeviceMountPolicy(ctx, mvd.MountPath, mvd.Encrypted, mvd.EnsureFilesystem, mvd.Filesystem)
+					if err != nil {
+						return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
+					}
 				}
-				err = securityPolicy.EnforceDeviceMountPolicy(ctx, mvd.MountPath, deviceHash)
+				config := &scsi.Config{
+					Encrypted:        mvd.Encrypted,
+					VerityInfo:       verityInfo,
+					EnsureFilesystem: mvd.EnsureFilesystem,
+					Filesystem:       mvd.Filesystem,
+					BlockDev:         mvd.BlockDev,
+				}
+				// Since we're rolling back the policy metadata on failure, we
+				// need to ensure that we have reverted all the side effects
+				// from this failed mount attempt, otherwise the Rego metadata
+				// is technically still inconsistent with reality.  Mount cleans
+				// up the created directory and dm devices on failure, so we're
+				// good.
+				return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
+					mvd.ReadOnly, mvd.Options, config)
+			}
+			return nil
+		case guestrequest.RequestTypeRemove:
+			if mvd.MountPath != "" {
+				if mvd.ReadOnly {
+					if err = securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
+						return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
+					}
+				} else {
+					if err = securityPolicy.EnforceRWDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
+						return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
+					}
+				}
+				// Check that the directory actually exists first, and if it
+				// does not then we just refuse to do anything, without closing
+				// the dm device or marking the UVM inconsistent.  Policy
+				// metadata is still reverted to reflect the fact that we have
+				// not done anything.
+				//
+				// Note: we should not do this check before calling the policy
+				// enforcer (which we have done above), otherwise we will
+				// inadvertently allow the host to find out whether an arbitrary
+				// path (which may point to sensitive data within a container
+				// rootfs) exists or not
+				if h.HasSecurityPolicy() {
+					exists, err := checkExists(mvd.MountPath)
+					if err != nil {
+						return err
+					}
+					if !exists {
+						return errors.Errorf("unmounting scsi device at %s failed: directory does not exist", mvd.MountPath)
+					}
+				}
+				config := &scsi.Config{
+					Encrypted:        mvd.Encrypted,
+					VerityInfo:       verityInfo,
+					EnsureFilesystem: mvd.EnsureFilesystem,
+					Filesystem:       mvd.Filesystem,
+					BlockDev:         mvd.BlockDev,
+				}
+				err = scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath, config)
 				if err != nil {
-					return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
-				}
-			} else {
-				err = securityPolicy.EnforceRWDeviceMountPolicy(ctx, mvd.MountPath, mvd.Encrypted, mvd.EnsureFilesystem, mvd.Filesystem)
-				if err != nil {
-					return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
+					h.setUVMInconsistent(
+						fmt.Errorf("unmounting scsi device at %s failed: %w", mvd.MountPath, err),
+					)
+					return err
 				}
 			}
-			config := &scsi.Config{
-				Encrypted:        mvd.Encrypted,
-				VerityInfo:       verityInfo,
-				EnsureFilesystem: mvd.EnsureFilesystem,
-				Filesystem:       mvd.Filesystem,
-				BlockDev:         mvd.BlockDev,
-			}
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.Partition, mvd.MountPath,
-				mvd.ReadOnly, mvd.Options, config)
+			return nil
+		default:
+			return newInvalidRequestTypeError(rt)
 		}
-		return nil
-	case guestrequest.RequestTypeRemove:
-		if mvd.MountPath != "" {
-			if mvd.ReadOnly {
-				if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
-					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
-				}
-			} else {
-				if err := securityPolicy.EnforceRWDeviceUnmountPolicy(ctx, mvd.MountPath); err != nil {
-					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
-				}
-			}
-			config := &scsi.Config{
-				Encrypted:        mvd.Encrypted,
-				VerityInfo:       verityInfo,
-				EnsureFilesystem: mvd.EnsureFilesystem,
-				Filesystem:       mvd.Filesystem,
-				BlockDev:         mvd.BlockDev,
-			}
-			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.Partition,
-				mvd.MountPath, config); err != nil {
-				return err
-			}
-		}
-		return nil
-	default:
-		return newInvalidRequestTypeError(rt)
-	}
+	})
 }
 
-func modifyMappedDirectory(
+func (h *Host) modifyMappedDirectory(
 	ctx context.Context,
 	vsock transport.Transport,
 	rt guestrequest.RequestType,
 	md *guestresource.LCOWMappedDirectory,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	switch rt {
-	case guestrequest.RequestTypeAdd:
-		err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
-		if err != nil {
-			return errors.Wrapf(err, "mounting plan9 device at %s denied by policy", md.MountPath)
-		}
+	securityPolicy := h.securityOptions.PolicyEnforcer
+	// For confidential containers, we revert the policy metadata via the
+	// transaction rollback mechanism on both mount and unmount errors, but if
+	// we've actually called Unmount and it fails we permanently block further
+	// device operations.
+	return securityPolicy.WithMetadataRollback(func() error {
+		switch rt {
+		case guestrequest.RequestTypeAdd:
+			err = securityPolicy.EnforcePlan9MountPolicy(ctx, md.MountPath)
+			if err != nil {
+				return errors.Wrapf(err, "mounting plan9 device at %s denied by policy", md.MountPath)
+			}
 
-		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
-	case guestrequest.RequestTypeRemove:
-		err = securityPolicy.EnforcePlan9UnmountPolicy(ctx, md.MountPath)
-		if err != nil {
-			return errors.Wrapf(err, "unmounting plan9 device at %s denied by policy", md.MountPath)
-		}
+			// Similar to the reasoning in modifyMappedVirtualDisk, since we're
+			// rolling back the policy metadata, plan9.Mount here must clean up
+			// everything if it fails, which it does do.
+			return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
+		case guestrequest.RequestTypeRemove:
+			err = securityPolicy.EnforcePlan9UnmountPolicy(ctx, md.MountPath)
+			if err != nil {
+				return errors.Wrapf(err, "unmounting plan9 device at %s denied by policy", md.MountPath)
+			}
 
-		return storage.UnmountPath(ctx, md.MountPath, true)
-	default:
-		return newInvalidRequestTypeError(rt)
-	}
+			// Note: storage.UnmountPath is nop if path does not exist.
+			err = storage.UnmountPath(ctx, md.MountPath, true)
+			if err != nil {
+				h.setUVMInconsistent(
+					fmt.Errorf("unmounting plan9 device at %s failed: %w", md.MountPath, err),
+				)
+				return err
+			}
+			return nil
+		default:
+			return newInvalidRequestTypeError(rt)
+		}
+	})
 }
 
-func modifyMappedVPMemDevice(ctx context.Context,
+func (h *Host) modifyMappedVPMemDevice(ctx context.Context,
 	rt guestrequest.RequestType,
 	vpd *guestresource.LCOWMappedVPMemDevice,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	var verityInfo *guestresource.DeviceVerityInfo
+	securityPolicy := h.securityOptions.PolicyEnforcer
 	var deviceHash string
-	if len(securityPolicy.EncodedSecurityPolicy()) > 0 {
+	if h.HasSecurityPolicy() {
 		if vpd.MappingInfo != nil {
 			return fmt.Errorf("multi mapping is not supported with verity")
 		}
@@ -1310,23 +1456,56 @@ func modifyMappedVPMemDevice(ctx context.Context,
 		}
 		deviceHash = verityInfo.RootDigest
 	}
-	switch rt {
-	case guestrequest.RequestTypeAdd:
-		err = securityPolicy.EnforceDeviceMountPolicy(ctx, vpd.MountPath, deviceHash)
-		if err != nil {
-			return errors.Wrapf(err, "mounting pmem device %d onto %s denied by policy", vpd.DeviceNumber, vpd.MountPath)
-		}
 
-		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
-	case guestrequest.RequestTypeRemove:
-		if err := securityPolicy.EnforceDeviceUnmountPolicy(ctx, vpd.MountPath); err != nil {
-			return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", vpd.MountPath)
-		}
+	// For confidential containers, we revert the policy metadata via the
+	// transaction rollback mechanism on both mount and unmount errors, but if
+	// we've actually called Unmount and it fails we permanently block further
+	// device operations.
+	return securityPolicy.WithMetadataRollback(func() error {
+		switch rt {
+		case guestrequest.RequestTypeAdd:
+			err = securityPolicy.EnforceDeviceMountPolicy(ctx, vpd.MountPath, deviceHash)
+			if err != nil {
+				return errors.Wrapf(err, "mounting pmem device %d onto %s denied by policy", vpd.DeviceNumber, vpd.MountPath)
+			}
 
-		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
-	default:
-		return newInvalidRequestTypeError(rt)
-	}
+			// Similar to the reasoning in modifyMappedVirtualDisk, since we're
+			// rolling back the policy metadata, pmem.Mount here must clean up
+			// everything if it fails, which it does do.
+			return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
+		case guestrequest.RequestTypeRemove:
+			if err = securityPolicy.EnforceDeviceUnmountPolicy(ctx, vpd.MountPath); err != nil {
+				return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", vpd.MountPath)
+			}
+
+			// Check that the directory actually exists first, and if it does not
+			// then we just refuse to do anything, without closing the dm-linear or
+			// dm-verity device or marking the UVM inconsistent.
+			//
+			// Similar to the reasoning in modifyMappedVirtualDisk, we should not do
+			// this check before calling the policy enforcer.
+			if h.HasSecurityPolicy() {
+				exists, err := checkExists(vpd.MountPath)
+				if err != nil {
+					return err
+				}
+				if !exists {
+					return errors.Errorf("unmounting pmem device at %s failed: directory does not exist", vpd.MountPath)
+				}
+			}
+
+			err = pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, verityInfo)
+			if err != nil {
+				h.setUVMInconsistent(
+					fmt.Errorf("unmounting pmem device at %s failed: %w", vpd.MountPath, err),
+				)
+				return err
+			}
+			return nil
+		default:
+			return newInvalidRequestTypeError(rt)
+		}
+	})
 }
 
 func modifyMappedVPCIDevice(ctx context.Context, rt guestrequest.RequestType, vpciDev *guestresource.LCOWMappedVPCIDevice) error {
@@ -1338,85 +1517,102 @@ func modifyMappedVPCIDevice(ctx context.Context, rt guestrequest.RequestType, vp
 	}
 }
 
-func modifyCombinedLayers(
+func (h *Host) modifyCombinedLayers(
 	ctx context.Context,
 	rt guestrequest.RequestType,
 	cl *guestresource.LCOWCombinedLayers,
 	scratchEncrypted bool,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	isConfidential := len(securityPolicy.EncodedSecurityPolicy()) > 0
+	securityPolicy := h.securityOptions.PolicyEnforcer
 	containerID := cl.ContainerID
 
-	switch rt {
-	case guestrequest.RequestTypeAdd:
-		if isConfidential {
-			if err := checkValidContainerID(containerID, "container"); err != nil {
-				return err
-			}
+	// For confidential containers, we revert the policy metadata via the
+	// transaction rollback mechanism on both mount and unmount errors, but if
+	// we've actually called Unmount and it fails we permanently block further
+	// device operations.
+	return securityPolicy.WithMetadataRollback(func() error {
+		switch rt {
+		case guestrequest.RequestTypeAdd:
+			if h.HasSecurityPolicy() {
+				if err := checkValidContainerID(containerID, "container"); err != nil {
+					return err
+				}
 
-			// We check this regardless of what the policy says, as long as we're in
-			// confidential mode.  This matches with checkContainerSettings called for
-			// container creation request.
-			expectedContainerRootfs := path.Join(guestpath.LCOWRootPrefixInUVM, containerID, guestpath.RootfsPath)
-			if cl.ContainerRootPath != expectedContainerRootfs {
-				return fmt.Errorf("combined layers target %q does not match expected path %q",
-					cl.ContainerRootPath, expectedContainerRootfs)
-			}
+				// We check this regardless of what the policy says, as long as we're in
+				// confidential mode.  This matches with checkContainerSettings called for
+				// container creation request.
+				expectedContainerRootfs := path.Join(guestpath.LCOWRootPrefixInUVM, containerID, guestpath.RootfsPath)
+				if cl.ContainerRootPath != expectedContainerRootfs {
+					return fmt.Errorf("combined layers target %q does not match expected path %q",
+						cl.ContainerRootPath, expectedContainerRootfs)
+				}
 
-			if cl.ScratchPath != "" {
-				// At this point, we do not know what the sandbox ID would be yet, so we
-				// have to allow anything reasonable.
-				scratchDirRegexStr := fmt.Sprintf(
-					"^%s/%s/%s/%s$",
-					guestpath.LCOWRootPrefixInUVM,
-					validContainerIDRegexRaw,
-					guestpath.ScratchDir,
-					containerID,
-				)
-				scratchDirRegex := regexp.MustCompile(scratchDirRegexStr)
-				if !scratchDirRegex.MatchString(cl.ScratchPath) {
-					return fmt.Errorf("scratch path %q must match regex %q",
-						cl.ScratchPath, scratchDirRegexStr)
+				if cl.ScratchPath != "" {
+					// At this point, we do not know what the sandbox ID would be yet, so we
+					// have to allow anything reasonable.
+					scratchDirRegexStr := fmt.Sprintf(
+						"^%s/%s/%s/%s$",
+						guestpath.LCOWRootPrefixInUVM,
+						validContainerIDRegexRaw,
+						guestpath.ScratchDir,
+						containerID,
+					)
+					scratchDirRegex := regexp.MustCompile(scratchDirRegexStr)
+					if !scratchDirRegex.MatchString(cl.ScratchPath) {
+						return fmt.Errorf("scratch path %q must match regex %q",
+							cl.ScratchPath, scratchDirRegexStr)
+					}
 				}
 			}
-		}
-		layerPaths := make([]string, len(cl.Layers))
-		for i, layer := range cl.Layers {
-			layerPaths[i] = layer.Path
-		}
-
-		var upperdirPath string
-		var workdirPath string
-		readonly := false
-		if cl.ScratchPath == "" {
-			// The user did not pass a scratch path. Mount overlay as readonly.
-			readonly = true
-		} else {
-			upperdirPath = filepath.Join(cl.ScratchPath, "upper")
-			workdirPath = filepath.Join(cl.ScratchPath, "work")
-
-			if err := securityPolicy.EnforceScratchMountPolicy(ctx, cl.ScratchPath, scratchEncrypted); err != nil {
-				return fmt.Errorf("scratch mounting denied by policy: %w", err)
+			layerPaths := make([]string, len(cl.Layers))
+			for i, layer := range cl.Layers {
+				layerPaths[i] = layer.Path
 			}
-		}
 
-		if err := securityPolicy.EnforceOverlayMountPolicy(ctx, containerID, layerPaths, cl.ContainerRootPath); err != nil {
-			return fmt.Errorf("overlay creation denied by policy: %w", err)
-		}
+			var upperdirPath string
+			var workdirPath string
+			readonly := false
+			if cl.ScratchPath == "" {
+				// The user did not pass a scratch path. Mount overlay as readonly.
+				readonly = true
+			} else {
+				upperdirPath = filepath.Join(cl.ScratchPath, "upper")
+				workdirPath = filepath.Join(cl.ScratchPath, "work")
 
-		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
-	case guestrequest.RequestTypeRemove:
-		// cl.ContainerID is not set on remove requests, but rego checks that we can
-		// only umount previously mounted targets anyway
-		if err := securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath); err != nil {
-			return errors.Wrap(err, "overlay removal denied by policy")
-		}
+				if err := securityPolicy.EnforceScratchMountPolicy(ctx, cl.ScratchPath, scratchEncrypted); err != nil {
+					return fmt.Errorf("scratch mounting denied by policy: %w", err)
+				}
+			}
 
-		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
-	default:
-		return newInvalidRequestTypeError(rt)
-	}
+			if err := securityPolicy.EnforceOverlayMountPolicy(ctx, containerID, layerPaths, cl.ContainerRootPath); err != nil {
+				return fmt.Errorf("overlay creation denied by policy: %w", err)
+			}
+
+			// Correctness for policy transaction rollback:
+			// MountLayer does two things - mkdir, then mount. On mount failure, the
+			// target directory is cleaned up.  Therefore we're clean in terms of
+			// side effects.
+			return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
+		case guestrequest.RequestTypeRemove:
+			// cl.ContainerID is not set on remove requests, but rego checks that we can
+			// only umount previously mounted targets anyway
+			if err = securityPolicy.EnforceOverlayUnmountPolicy(ctx, cl.ContainerRootPath); err != nil {
+				return errors.Wrap(err, "overlay removal denied by policy")
+			}
+
+			// Note: storage.UnmountPath is a no-op if the path does not exist.
+			err = storage.UnmountPath(ctx, cl.ContainerRootPath, true)
+			if err != nil {
+				h.setUVMInconsistent(
+					fmt.Errorf("unmounting overlay at %s failed: %w", cl.ContainerRootPath, err),
+				)
+				return err
+			}
+			return nil
+		default:
+			return newInvalidRequestTypeError(rt)
+		}
+	})
 }
 
 func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestresource.LCOWNetworkAdapter) (err error) {
@@ -1489,194 +1685,55 @@ func isPrivilegedContainerCreationRequest(ctx context.Context, spec *specs.Spec)
 	return oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.LCOWPrivileged, false)
 }
 
-// Virtual Pod Management Methods
-
-// InitializeVirtualPodSupport sets up the parent cgroup for virtual pods
-func (h *Host) InitializeVirtualPodSupport(mgr cgroup.Manager) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	if mgr == nil {
-		return errors.New("no valid cgroup manager provided for virtual pod support")
-	}
-
-	h.virtualPodsCgroupManager = mgr
-	logrus.Info("Virtual pod support initialized")
-	return nil
-}
-
-// CreateVirtualPod creates a new virtual pod with its own cgroup and network namespace
-func (h *Host) CreateVirtualPod(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string, pSpec *specs.Spec) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	// Check if virtual pod already exists
-	if _, exists := h.virtualPods[virtualSandboxID]; exists {
-		return fmt.Errorf("virtual pod %s already exists", virtualSandboxID)
-	}
-
-	// Extract resource limits if provided
+// createPodInUVM allocates a cgroup for a pod and registers it in the host.
+func (h *Host) createPodInUVM(sid string, pSpec *specs.Spec) error {
+	cgroupPath := fmt.Sprintf(podCgroupPathFmt, sid)
 	resources := &specs.LinuxResources{}
 	if pSpec != nil && pSpec.Linux != nil && pSpec.Linux.Resources != nil {
 		resources = pSpec.Linux.Resources
-		logrus.WithFields(logrus.Fields{
-			logfields.VirtualSandboxID: virtualSandboxID,
-		}).Info("Creating virtual pod with specified resources")
-	} else {
-		logrus.WithField(logfields.VirtualSandboxID, virtualSandboxID).Info("Creating pod cgroup with default resources as none were specified")
 	}
 
-	if h.virtualPodsCgroupManager == nil {
-		return fmt.Errorf("no virtual pod cgroup manager available")
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	if _, exists := h.pods[sid]; exists {
+		return fmt.Errorf("pod %s already exists", sid)
 	}
 
-	cgroupPath := path.Join("/containers/virtual-pods", virtualSandboxID)
 	cgroupControl, err := cgroup.NewManager(cgroupPath, resources)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create cgroup for virtual pod %s", virtualSandboxID)
+		return fmt.Errorf("failed to create cgroup for pod %s: %w", sid, err)
 	}
-	logrus.WithField("cgroupPath", cgroupPath).Info("Created virtual pod cgroup")
-
-	// Create virtual pod structure
-	virtualPod := &VirtualPod{
-		VirtualSandboxID: virtualSandboxID,
-		MasterSandboxID:  masterSandboxID,
-		NetworkNamespace: networkNamespace,
-		CgroupPath:       cgroupPath,
-		CgroupControl:    cgroupControl,
-		Containers:       make(map[string]bool),
-		CreatedAt:        time.Now(),
+	h.pods[sid] = &pod{
+		sandboxID:     sid,
+		cgroupControl: cgroupControl,
+		// Register the sandbox container with its pod.
+		containers: map[string]bool{sid: true},
 	}
-
-	h.virtualPods[virtualSandboxID] = virtualPod
-
 	logrus.WithFields(logrus.Fields{
-		logfields.VirtualSandboxID: virtualSandboxID,
-		"masterSandboxID":          masterSandboxID,
-		"cgroupPath":               cgroupPath,
-		"networkNamespace":         networkNamespace,
-	}).Info("Virtual pod created successfully")
-
+		"sandboxID":  sid,
+		"cgroupPath": cgroupPath,
+	}).Info("pod created in UVM")
 	return nil
 }
 
-// CreateVirtualPodWithoutMemoryLimit creates a virtual pod without memory limits (backward compatibility)
-func (h *Host) CreateVirtualPodWithoutMemoryLimit(ctx context.Context, virtualSandboxID, masterSandboxID, networkNamespace string) error {
-	return h.CreateVirtualPod(ctx, virtualSandboxID, masterSandboxID, networkNamespace, nil)
-}
+func (h *Host) createContainerInPod(sandboxID string, containerID string) error {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
 
-// GetVirtualPod retrieves a virtual pod by its virtualSandboxID
-func (h *Host) GetVirtualPod(virtualSandboxID string) (*VirtualPod, bool) {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	vp, exists := h.virtualPods[virtualSandboxID]
-	return vp, exists
-}
-
-// AddContainerToVirtualPod associates a container with a virtual pod
-func (h *Host) AddContainerToVirtualPod(containerID, virtualSandboxID string) error {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	// Check if virtual pod exists
-	vp, exists := h.virtualPods[virtualSandboxID]
-	if !exists {
-		return fmt.Errorf("virtual pod %s does not exist", virtualSandboxID)
+	// Find the pod corresponding to the sandboxID.
+	pod, podExists := h.pods[sandboxID]
+	if !podExists {
+		return fmt.Errorf("pod %s does not exist for workload container %s", sandboxID, containerID)
 	}
 
-	// Add container to virtual pod
-	vp.Containers[containerID] = true
-	h.containerToVirtualPod[containerID] = virtualSandboxID
+	// Validate that the container was not already registered.
+	if _, exists := pod.containers[containerID]; exists {
+		return fmt.Errorf("container %s already registered with pod %s", containerID, sandboxID)
+	}
 
-	logrus.WithFields(logrus.Fields{
-		logfields.ContainerID:      containerID,
-		logfields.VirtualSandboxID: virtualSandboxID,
-	}).Info("Container added to virtual pod")
+	// Register container with the pod.
+	pod.containers[containerID] = true
 
 	return nil
-}
-
-// RemoveContainerFromVirtualPod removes a container from a virtual pod
-func (h *Host) RemoveContainerFromVirtualPod(containerID string) {
-	h.virtualPodsMutex.Lock()
-	defer h.virtualPodsMutex.Unlock()
-
-	virtualSandboxID, exists := h.containerToVirtualPod[containerID]
-	if !exists {
-		return // Container not in any virtual pod
-	}
-
-	ctx, entry := log.SetEntry(context.Background(), logrus.Fields{
-		logfields.VirtualSandboxID: virtualSandboxID,
-		logfields.ContainerID:      containerID,
-	})
-
-	// Remove from virtual pod
-	if vp, vpExists := h.virtualPods[virtualSandboxID]; vpExists {
-		delete(vp.Containers, containerID)
-
-		// If this is the sandbox container, clean up the network namespace adapters first,
-		// then remove the namespace.
-
-		// Do NOT call [RemoveNetworkNamespace] here.
-		// When cleaning up the virtual pod's sandbox container on the host,
-		// [UtilityVM.TearDownNetworking] calls [UtilityVM.RemoveNetNS],
-		// which, via [UtilityVM.removeNIC], removes the NICs from the uVM and
-		// sends [guestresource.ResourceTypeNetwork] RPCs that ultimately cal [modifyNetwork]
-		// to remove adapters from guest tracking.
-		// However, that happens AFTER this function runs.
-		// Calling [RemoveNetworkNamespace] here would
-		// fail with "contains adapters" since the host hasn't removed them yet.
-		//
-		// The host-driven path handles cleanup in the correct order.
-		if containerID == virtualSandboxID && vp.NetworkNamespace != "" {
-			entry.WithField(logfields.NamespaceID, vp.NetworkNamespace).Debug("skipping virtual pod network namespace removal")
-		}
-
-		// If this was the last container, cleanup the virtual pod
-		if len(vp.Containers) == 0 {
-			h.cleanupVirtualPod(ctx, virtualSandboxID)
-		}
-	}
-
-	delete(h.containerToVirtualPod, containerID)
-
-	entry.Info("Container removed from virtual pod")
-}
-
-func (h *Host) cleanupVirtualPod(ctx context.Context, virtualSandboxID string) {
-	// logfields set on [Host.RemoveContainerFromVirtualPod]
-	entry := log.G(ctx)
-
-	vp, exists := h.virtualPods[virtualSandboxID]
-	if !exists {
-		entry.Warn("attempted to cleanup non-existent virtual sandbox pod")
-		return // virtual pod does not exist
-	}
-
-	// Delete the cgroup
-	if vp.CgroupControl != nil {
-		if err := vp.CgroupControl.Delete(); err != nil {
-			entry.WithError(err).Warn("failed to delete virtual pod cgroup")
-		}
-	}
-
-	// NOTE: Do NOT call [RemoveNetworkNamespace] here.
-	// See comment in [Host.RemoveContainerFromVirtualPod] for more info.
-
-	// Clean up the virtual pod root directory which contains hostname, hosts,
-	// resolv.conf, and logs/. These are NOT cleaned by Container.Delete() because
-	// they live under /run/gcs/c/virtual-pods/<id>/ which is separate from the
-	// container's ociBundlePath (/run/gcs/c/<id>/).
-	if vpRootDir := specGuest.VirtualPodRootDir(virtualSandboxID); vpRootDir != "" {
-		if err := os.RemoveAll(vpRootDir); err != nil {
-			entry.WithField("path", vpRootDir).WithError(err).Warn("Failed to remove virtual pod root directory")
-		} else {
-			entry.WithField("path", vpRootDir).Debug("Removed virtual pod root directory")
-		}
-	}
-
-	delete(h.virtualPods, virtualSandboxID)
-	entry.Info("Virtual pod cleaned up")
 }

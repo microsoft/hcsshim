@@ -6,6 +6,7 @@ package securitypolicy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -961,6 +962,113 @@ func Test_Rego_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *te
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}
 		}
+	}
+}
+
+func Test_Rego_EnforceOverlayMountPolicy_MountFail(t *testing.T) {
+	f := func(gc *generatedConstraints, commitOnEnforcementFailure bool) bool {
+		securityPolicy := gc.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+		tc := selectContainerFromContainerList(gc.containers, testRand)
+		tid := testDataGenerator.uniqueContainerID()
+		scratchTarget := getScratchDiskMountTarget(tid)
+
+		errSimulatedFailure := errors.New("simulated failure")
+
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchTarget, true, true, "xfs")
+		})
+		if err != nil {
+			t.Errorf("failed to EnforceRWDeviceMountPolicy: %v", err)
+			return false
+		}
+
+		layerToErr := testRand.Intn(len(tc.Layers))
+		errLayerPathIndex := len(tc.Layers) - layerToErr - 1
+		layerPaths := make([]string, len(tc.Layers))
+		for i, layerHash := range tc.Layers {
+			target := testDataGenerator.uniqueLayerMountTarget()
+			layerPaths[len(tc.Layers)-i-1] = target
+			var policyErr error
+			err = policy.WithMetadataRollback(func() error {
+				policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
+				if policyErr != nil {
+					return policyErr
+				}
+				if i == layerToErr {
+					// Simulate a mount failure at this point, which will cause us to rollback.
+					return errSimulatedFailure
+				}
+				return nil
+			})
+			if policyErr != nil {
+				t.Errorf("failed to EnforceDeviceMountPolicy: %v", policyErr)
+				return false
+			}
+		}
+
+		overlayTarget := getOverlayMountTarget(tid)
+		var policyErr error
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
+			return false
+		}
+		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPaths), "no matching containers for overlay")...) {
+			return false
+		}
+
+		layerPathsWithoutErr := make([]string, 0)
+		for i, layerPath := range layerPaths {
+			if i != errLayerPathIndex {
+				layerPathsWithoutErr = append(layerPathsWithoutErr, layerPath)
+			}
+		}
+
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPathsWithoutErr, overlayTarget)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
+			return false
+		}
+		if !assertDecisionJSONContains(t, policyErr, append(slices.Clone(layerPathsWithoutErr), "no matching containers for overlay")...) {
+			return false
+		}
+
+		retryTarget := layerPaths[errLayerPathIndex]
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceDeviceMountPolicy(gc.ctx, retryTarget, tc.Layers[layerToErr])
+		})
+		if err != nil {
+			t.Errorf("failed to EnforceDeviceMountPolicy again after one previous reverted failure: %v", err)
+			return false
+		}
+		err = policy.EnforceOverlayMountPolicy(gc.ctx, tid, layerPaths, overlayTarget)
+		if err != nil {
+			t.Errorf("failed to EnforceOverlayMountPolicy after one previous reverted failure: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceOverlayMountPolicy_MountFail: %v", err)
 	}
 }
 
@@ -6104,6 +6212,227 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 	}
 }
 
+func Test_Rego_EnforceCreateContainer_RejectRevertedOverlayMount(t *testing.T) {
+	f := func(gc *generatedConstraints, commitOnEnforcementFailure bool) bool {
+		container := selectContainerFromContainerList(gc.containers, testRand)
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		containerID := testDataGenerator.uniqueContainerID()
+		tc, err := createTestContainerSpec(gc, containerID, container, false, policy, defaultMounts, privilegedMounts)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		layers, err := testDataGenerator.createValidOverlayForContainer(policy, container)
+		if err != nil {
+			t.Errorf("Failed to createValidOverlayForContainer: %v", err)
+			return false
+		}
+
+		errSimulatedFailure := errors.New("simulated failure")
+
+		scratchMountTarget := getScratchDiskMountTarget(containerID)
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
+		})
+		if err != nil {
+			t.Errorf("Failed to EnforceRWDeviceMountPolicy: %v", err)
+			return false
+		}
+
+		overlayTarget := getOverlayMountTarget(containerID)
+		var policyErr error
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceOverlayMountPolicy(gc.ctx, containerID, layers, overlayTarget)
+			if policyErr != nil {
+				return policyErr
+			}
+			// Simulate a failure by rolling back the overlay mount.
+			return errSimulatedFailure
+		})
+		if policyErr != nil {
+			t.Errorf("Failed to EnforceOverlayMountPolicy: %v", policyErr)
+			return false
+		}
+
+		err = policy.WithMetadataRollback(func() error {
+			_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+			if commitOnEnforcementFailure {
+				return nil
+			}
+			return policyErr
+		})
+		if policyErr == nil {
+			t.Errorf("EnforceCreateContainerPolicy should have failed due to missing (reverted) overlay mount")
+			return false
+		}
+		if err != nil && commitOnEnforcementFailure {
+			t.Errorf("Expected WithMetadataRollback to not return an error, but got: %v", err)
+			return false
+		}
+
+		// "Retry" overlay mount
+		err = policy.WithMetadataRollback(func() error {
+			return policy.EnforceOverlayMountPolicy(gc.ctx, tc.containerID, layers, overlayTarget)
+		})
+		if err != nil {
+			t.Errorf("Failed to EnforceOverlayMountPolicy: %v", err)
+			return false
+		}
+
+		err = policy.WithMetadataRollback(func() error {
+			_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+			return err
+		})
+		if err != nil {
+			t.Errorf("Failed to EnforceCreateContainerPolicy after retrying overlay mount: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCreateContainerPolicy_RejectRevertedOverlayMount: %v", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
+	f := func(gc *generatedConstraints,
+		newContainerID, failScratchMount, testDenyInvalidContainerCreation bool,
+	) bool {
+		container := selectContainerFromContainerList(gc.containers, testRand)
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Errorf("cannot make rego policy from constraints: %v", err)
+			return false
+		}
+
+		containerID := testDataGenerator.uniqueContainerID()
+		tc, err := createTestContainerSpec(gc, containerID, container, false, policy, defaultMounts, privilegedMounts)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		errSimulatedFailure := errors.New("simulated failure")
+
+		scratchMountTarget := getScratchDiskMountTarget(containerID)
+		var policyErr error
+		err = policy.WithMetadataRollback(func() error {
+			policyErr = policy.EnforceRWDeviceMountPolicy(gc.ctx, scratchMountTarget, true, true, "xfs")
+			if policyErr != nil {
+				return policyErr
+			}
+			if failScratchMount {
+				return errSimulatedFailure
+			}
+			return nil
+		})
+		if policyErr != nil {
+			t.Errorf("Failed to EnforceRWDeviceMountPolicy: %v", policyErr)
+			return false
+		}
+
+		succeedLayerPaths := make([]string, 0)
+
+		if !failScratchMount {
+			// Simulate one of the layers failing to mount, after which the outside
+			// gives up on this container and starts over.
+			layerToErr := testRand.Intn(len(container.Layers))
+			for i, layerHash := range container.Layers {
+				target := testDataGenerator.uniqueLayerMountTarget()
+				err = policy.WithMetadataRollback(func() error {
+					policyErr = policy.EnforceDeviceMountPolicy(gc.ctx, target, layerHash)
+					if policyErr != nil {
+						return policyErr
+					}
+					if i == layerToErr {
+						// Simulate a mount failure at this point, which will cause us to rollback.
+						return errSimulatedFailure
+					}
+					return nil
+				})
+				if policyErr != nil {
+					t.Errorf("failed to EnforceDeviceMountPolicy: %v", policyErr)
+					return false
+				}
+				if i == layerToErr {
+					// The simulated mount failure was rolled back, so the outside
+					// gives up on this container and starts over.
+					break
+				}
+				succeedLayerPaths = append(succeedLayerPaths, target)
+			}
+
+			for _, layerPath := range succeedLayerPaths {
+				err = policy.WithMetadataRollback(func() error {
+					return policy.EnforceDeviceUnmountPolicy(gc.ctx, layerPath)
+				})
+				if err != nil {
+					t.Errorf("Failed to EnforceDeviceUnmountPolicy: %v", err)
+					return false
+				}
+			}
+
+			err = policy.WithMetadataRollback(func() error {
+				return policy.EnforceRWDeviceUnmountPolicy(gc.ctx, scratchMountTarget)
+			})
+			if err != nil {
+				t.Errorf("Failed to EnforceRWDeviceUnmountPolicy: %v", err)
+				return false
+			}
+		}
+
+		if testDenyInvalidContainerCreation {
+			err = policy.WithMetadataRollback(func() error {
+				_, _, _, policyErr = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+				return policyErr
+			})
+			if policyErr == nil {
+				t.Errorf("EnforceCreateContainerPolicy should have failed due to missing (reverted) overlay mount")
+				return false
+			}
+		}
+
+		if newContainerID {
+			tc.containerID = testDataGenerator.uniqueContainerID()
+		}
+
+		err = mountImageForContainerWithID(policy, container, tc.containerID)
+		if err != nil {
+			t.Errorf("Failed to mount image for container after reverting and retrying: %v", err)
+			return false
+		}
+		_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+		if err != nil {
+			t.Errorf("Failed to EnforceCreateContainerPolicy after retrying: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCreateContainerPolicy_RejectRevertedOverlayMount: %v", err)
+	}
+}
+
 func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	container := selectContainerFromContainerList(constraints.containers, testRand)
@@ -7367,4 +7696,171 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 		m.Source = specInternal.HugePagesMountSource(sandboxID, m.Source)
 	}
 	return m
+}
+
+// setupSandboxSysfsTest builds a policy with exactly two containers: a
+// non-elevated container that the test request will match (acting as the
+// sandbox/pause container in the policy) and a separate elevated container so
+// that candidate_containers has at least one container with allow_elevated set
+// - this gates the sandbox sysfs carve-out in framework.rego.
+//
+// DefaultCRIMounts() is used as the policy's default mount set so the /sys
+// "ro" mount is in data.defaultMounts.
+func setupSandboxSysfsTest(t *testing.T, workloadIsPrivileged bool) (
+	policy *regoEnforcer,
+	sandboxContainer *securityPolicyContainer,
+	containerID string,
+	envList []string,
+	user IDName,
+	groups []IDName,
+	capabilities *oci.LinuxCapabilities,
+) {
+	t.Helper()
+
+	gc := generateConstraints(testRand, 2)
+	for len(gc.containers) < 2 {
+		// Force exactly two containers if generator under-generated.
+		gc.containers = append(gc.containers, generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer))
+	}
+
+	// containers[0] is the one the test will exercise: act as the pause
+	// container, never elevated. Strip its own mount constraints so the
+	// input mount list is matched purely against defaultMounts and the
+	// sandbox carve-out.
+	sandboxContainer = gc.containers[0]
+	sandboxContainer.AllowElevated = false
+	sandboxContainer.Mounts = nil
+
+	gc.containers[1].AllowElevated = workloadIsPrivileged
+
+	defaultMounts := DefaultCRIMounts()
+	privilegedMounts := DefaultCRIPrivilegedMounts()
+
+	var err error
+	policy, err = newRegoPolicy(gc.toPolicy().marshalRego(), defaultMounts, privilegedMounts, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	containerID, err = mountImageForContainer(policy, sandboxContainer)
+	if err != nil {
+		t.Fatalf("failed to mount image for sandbox container: %v", err)
+	}
+
+	envList = buildEnvironmentVariablesFromEnvRules(sandboxContainer.EnvRules, testRand)
+	user = buildIDNameFromConfig(sandboxContainer.User.UserIDName, testRand)
+	groups = buildGroupIDNamesFromUser(sandboxContainer.User, testRand)
+	capsExternal := copyLinuxCapabilities(sandboxContainer.Capabilities.toExternal())
+	capabilities = &capsExternal
+	return policy, sandboxContainer, containerID, envList, user, groups, capabilities
+}
+
+// sysfsMount returns a /sys sysfs mount with the given mode ("ro" or "rw"),
+// matching the option set produced by containerd's CRI sandbox spec.
+func sysfsMount(mode string) oci.Mount {
+	return oci.Mount{
+		Source:      "sysfs",
+		Destination: "/sys",
+		Type:        "sysfs",
+		Options:     []string{"nosuid", "noexec", "nodev", mode},
+	}
+}
+
+func Test_Rego_SandboxSysfsCarveOut(t *testing.T) {
+	cases := []struct {
+		name                 string
+		isSandboxContainer   bool
+		mode                 string
+		expectAllowed        bool
+		workloadIsPrivileged bool
+	}{
+		{"sandbox_ro", true, "ro", true, true},
+		{"sandbox_rw", true, "rw", true, true},
+		// sysfs rw is allowed for sandbox containers even if no container in
+		// the policy is elevated (a future fragment might allow elevation).
+		{"sandbox_rw_no_elevated_workload", true, "rw", true, false},
+		{"non_sandbox_ro", false, "ro", true, false},
+		{"non_sandbox_rw", false, "rw", false, false},
+		{"non_sandbox_rw_elevated_workload", false, "rw", false, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Each subtest gets its own policy because a successful
+			// create_container records the container as "started" and a
+			// second call for the same containerID would be denied.
+			policy, sandboxContainer, containerID, envList, user, groups, capabilities :=
+				setupSandboxSysfsTest(t, tc.workloadIsPrivileged)
+			noNewPriv := sandboxContainer.NoNewPrivileges
+			privileged := false
+			mounts := []oci.Mount{sysfsMount(tc.mode)}
+			_, _, _, err := policy.EnforceCreateContainerPolicyV2(
+				context.Background(),
+				containerID,
+				sandboxContainer.Command,
+				envList,
+				sandboxContainer.WorkingDir,
+				mounts,
+				user,
+				&CreateContainerOptions{
+					SandboxID:            testDataGenerator.uniqueSandboxID(),
+					Privileged:           &privileged,
+					NoNewPrivileges:      &noNewPriv,
+					Groups:               groups,
+					Umask:                sandboxContainer.User.Umask,
+					Capabilities:         capabilities,
+					SeccompProfileSHA256: sandboxContainer.SeccompProfileSHA256,
+					IsSandboxContainer:   tc.isSandboxContainer,
+				},
+			)
+			if tc.expectAllowed {
+				if err != nil {
+					t.Errorf("expected allowed, got error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected denied, got allowed")
+				} else {
+					assertDecisionJSONContains(t, err, "invalid mount list", "/sys")
+				}
+			}
+		})
+	}
+}
+
+// Test_Rego_SandboxSysfsCarveOut_PrivilegedRequestDenied verifies that the
+// sysfs carve-out for the sandbox container does NOT also grant privilege:
+// even with IsSandboxContainer=true and the /sys rw mount accepted, if the
+// host requests Privileged=true for a sandbox container whose policy entry
+// does not allow elevation, create_container must still be denied.
+func Test_Rego_SandboxSysfsCarveOut_PrivilegedRequestDenied(t *testing.T) {
+	policy, sandboxContainer, containerID, envList, user, groups, capabilities :=
+		setupSandboxSysfsTest(t, false)
+
+	noNewPriv := sandboxContainer.NoNewPrivileges
+	privileged := true
+	mounts := []oci.Mount{sysfsMount("rw")}
+	_, _, _, err := policy.EnforceCreateContainerPolicyV2(
+		context.Background(),
+		containerID,
+		sandboxContainer.Command,
+		envList,
+		sandboxContainer.WorkingDir,
+		mounts,
+		user,
+		&CreateContainerOptions{
+			SandboxID:            testDataGenerator.uniqueSandboxID(),
+			Privileged:           &privileged,
+			NoNewPrivileges:      &noNewPriv,
+			Groups:               groups,
+			Umask:                sandboxContainer.User.Umask,
+			Capabilities:         capabilities,
+			SeccompProfileSHA256: sandboxContainer.SeccompProfileSHA256,
+			IsSandboxContainer:   true,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected create_container to be denied when Privileged=true for a non-elevated sandbox container, but it was allowed")
+	}
+	assertDecisionJSONContains(t, err, "privileged escalation not allowed")
 }

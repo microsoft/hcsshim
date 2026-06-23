@@ -100,8 +100,9 @@ func (gm *Guest) PrepareConnection(GCSServiceID guid.GUID) error {
 
 // CreateConnection accepts the GCS dial on the prepared listener and runs
 // the GCS protocol handshake. Must be called after VM start. Idempotent if
-// a connection already exists.
-func (gm *Guest) CreateConnection(ctx context.Context, opts ...ConfigOption) error {
+// a connection already exists. Pass coldStart=true for a fresh boot and
+// coldStart=false for a live-migration destination (guest already running).
+func (gm *Guest) CreateConnection(ctx context.Context, coldStart bool, opts ...ConfigOption) error {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
@@ -136,7 +137,7 @@ func (gm *Guest) CreateConnection(ctx context.Context, opts ...ConfigOption) err
 	}
 
 	// Start the GCS protocol
-	gm.gc, err = gcc.Connect(ctx, true)
+	gm.gc, err = gcc.Connect(ctx, coldStart)
 	if err != nil {
 		return fmt.Errorf("failed to connect to GCS: %w", err)
 	}
@@ -160,4 +161,89 @@ func (gm *Guest) CloseConnection() error {
 		gm.gcListener = nil
 	}
 	return err
+}
+
+// NextPort returns the active GCS connection's IO port allocator
+// floor, or 0 if no connection is active. Used by the live-migration
+// save path.
+func (gm *Guest) NextPort() uint32 {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	if gm.gc == nil {
+		return 0
+	}
+	return gm.gc.NextPort()
+}
+
+// SetNextPort raises the active GCS connection's IO port allocator
+// floor. No-op if no connection is active. Used by the live-migration
+// restore path to skip past vsock ports already in use by restored
+// processes.
+func (gm *Guest) SetNextPort(p uint32) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	if gm.gc == nil {
+		return
+	}
+	gm.gc.SetNextPort(p)
+}
+
+// BridgeNextID returns the bridge's next request id, or 0 if no
+// connection is active.
+func (gm *Guest) BridgeNextID() int64 {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	if gm.gc == nil {
+		return 0
+	}
+	return gm.gc.BridgeNextID()
+}
+
+// SeedBridgeNextID raises the bridge's request id allocator floor. No-op
+// if no connection is active.
+func (gm *Guest) SeedBridgeNextID(next int64) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	if gm.gc == nil {
+		return
+	}
+	gm.gc.SeedBridgeNextID(next)
+}
+
+// SetMigrating marks the guest as migrating so transient connection errors are
+// tolerated during the migration window. Callers must clear the flag on finalize.
+func (gm *Guest) SetMigrating(migrating bool) {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	if gm.gc == nil {
+		return
+	}
+
+	gm.gc.SetMigrating(migrating)
+}
+
+// ResumeConnection accepts a fresh hvsock on the prepared listener and
+// swaps it into the existing GCS bridge, preserving in-flight RPCs.
+func (gm *Guest) ResumeConnection(ctx context.Context) error {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	if gm.gc == nil {
+		return fmt.Errorf("ResumeConnection called without active connection")
+	}
+	if gm.gcListener == nil {
+		return fmt.Errorf("ResumeConnection called before PrepareConnection")
+	}
+
+	l := gm.gcListener
+	gm.gcListener = nil
+
+	conn, err := vmmanager.AcceptConnection(ctx, gm.uvm, l, true)
+	if err != nil {
+		return fmt.Errorf("failed to accept resumed guest connection: %w", err)
+	}
+	return gm.gc.ResumeOnConn(conn)
 }

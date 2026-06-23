@@ -16,8 +16,8 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -133,12 +133,13 @@ type Options struct {
 }
 
 type ConfidentialCommonOptions struct {
-	GuestStateFilePath     string // The vmgs file path to load
-	SecurityPolicy         string // Optional security policy
-	SecurityPolicyEnabled  bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	SecurityPolicyEnforcer string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
-	UVMReferenceInfoFile   string // Path to the file that contains the signed UVM measurements
-	BundleDirectory        string // This allows paths to be constructed relative to a per-VM bundle directory.
+	GuestStateFilePath               string // The vmgs file path to load
+	SecurityPolicy                   string // Optional security policy
+	SecurityPolicyEnabled            bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicyEnforcer           string // Set which security policy enforcer to use (open door or rego). This allows for better fallback mechanic.
+	UVMReferenceInfoFile             string // Path to the file that contains the signed UVM measurements
+	UVMHashEnvelopeReferenceInfoFile string // Path to the file that contains the hash envelope signed UVM measurements
+	BundleDirectory                  string // This allows paths to be constructed relative to a per-VM bundle directory.
 }
 
 func verifyWCOWBootFiles(bootFiles *WCOWBootFiles) error {

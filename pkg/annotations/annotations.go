@@ -312,6 +312,12 @@ const (
 	VirtualMachineKernelDrivers = "io.microsoft.virtualmachine.kerneldrivers"
 )
 
+// Confidential UVM annotations.
+const (
+	// UVMHashEnvelopeReferenceInfoFile specifies the filename of a hash envelope signed UVM reference file to be passed to UVM.
+	UVMHashEnvelopeReferenceInfoFile = "io.microsoft.virtualmachine.uvm-hash-envelope-reference-info-file"
+)
+
 // uVM CPU annotations.
 const (
 	// CPUGroupID specifies the cpugroup ID that a UVM should be assigned to, if any.
@@ -533,14 +539,13 @@ const (
 
 // Live Migration annotations.
 const (
-	// LiveMigrationAllowed is a gatekeeping annotation scoped to a pod/sandbox that indicates
-	// the pod is intended to be live-migratable. When set on a pod, any container within that
-	// pod which requests a feature incompatible with live migration will fail to be created.
+	// LiveMigrationSupportEnabled is a sandbox-scoped annotation that enables the live
+	// migration feature set for a pod. When enabled, the pod is constrained to the subset
+	// of features that are compatible with live migration.
 	//
-	// For example, if a pod is started with this annotation and a container within it
-	// subsequently requests a plan9 share (which is not compatible with live migration),
-	// the container creation will be failed.
-	LiveMigrationAllowed = "io.microsoft.migration.allowed"
+	// For example, the sandbox runs without the host-side GCS log listener,
+	// since that listener is host-local and cannot survive migration.
+	LiveMigrationSupportEnabled = "io.microsoft.migration.support-enabled"
 
 	// LiveMigrationSourceContainerID is used only on the destination node during a live
 	// migration. It is set on the NewTask request to identify the corresponding container

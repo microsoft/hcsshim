@@ -347,18 +347,25 @@ type regoPlan9MountTestConfig struct {
 }
 
 func mountImageForContainer(policy *regoEnforcer, container *securityPolicyContainer) (string, error) {
-	ctx := context.Background()
 	containerID := testDataGenerator.uniqueContainerID()
+	if err := mountImageForContainerWithID(policy, container, containerID); err != nil {
+		return "", err
+	}
+	return containerID, nil
+}
+
+func mountImageForContainerWithID(policy *regoEnforcer, container *securityPolicyContainer, containerID string) error {
+	ctx := context.Background()
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(policy, container)
 	if err != nil {
-		return "", fmt.Errorf("error creating valid overlay: %w", err)
+		return fmt.Errorf("error creating valid overlay: %w", err)
 	}
 
 	scratchDisk := getScratchDiskMountTarget(containerID)
 	err = policy.EnforceRWDeviceMountPolicy(ctx, scratchDisk, true, true, "xfs")
 	if err != nil {
-		return "", fmt.Errorf("error mounting scratch disk: %w", err)
+		return fmt.Errorf("error mounting scratch disk: %w", err)
 	}
 
 	overlayTarget := getOverlayMountTarget(containerID)
@@ -367,10 +374,10 @@ func mountImageForContainer(policy *regoEnforcer, container *securityPolicyConta
 	err = policy.EnforceOverlayMountPolicy(
 		ctx, containerID, copyStrings(layerPaths), overlayTarget)
 	if err != nil {
-		return "", fmt.Errorf("error mounting filesystem: %w", err)
+		return fmt.Errorf("error mounting filesystem: %w", err)
 	}
 
-	return containerID, nil
+	return nil
 }
 
 func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
@@ -1404,6 +1411,10 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 		return nil, err
 	}
 
+	return createTestContainerSpec(gc, containerID, testContainer, privilegedError, policy, defaultMounts, privilegedMounts)
+}
+
+func createTestContainerSpec(gc *generatedConstraints, containerID string, testContainer *securityPolicyContainer, privilegedError bool, policy *regoEnforcer, defaultMounts, privilegedMounts []mountInternal) (*regoContainerTestConfig, error) {
 	envList := buildEnvironmentVariablesFromEnvRules(testContainer.EnvRules, testRand)
 	sandboxID := testDataGenerator.uniqueSandboxID()
 

@@ -17,8 +17,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/hvsocket"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -128,10 +128,17 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
 	}
 
-	log.G(ctx).WithFields(logrus.Fields{
-		"options": log.Format(ctx, createOptions),
-		"schema":  log.Format(ctx, coi.actualSchemaVersion),
-	}).Debug("hcsshim::initializeCreateOptions")
+	// Log create options if debug logging is enabled
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		if b, err := log.ScrubCreateOptions([]byte(log.Format(ctx, createOptions))); err != nil {
+			log.G(ctx).WithError(err).Warning("could not scrub CreateOptions")
+		} else {
+			log.G(ctx).WithFields(logrus.Fields{
+				"options": string(b),
+				"schema":  log.Format(ctx, coi.actualSchemaVersion),
+			}).Debug("hcsshim::initializeCreateOptions")
+		}
+	}
 
 	return coi, nil
 }
@@ -350,6 +357,18 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	if err != nil {
 		return nil, r, err
 	}
+
+	// Process-isolated (Argon) containers run in a server silo on the host. HCS does not
+	// have CPU affinity on the container Processor schema, so pin the silo's job object
+	// directly, after create but before the caller starts the container. Only the modern
+	// V2 schema is handled; legacy V1 Argon and Xenon (UVM-backed) containers are out of
+	// scope here (Xenon is handled at the UVM layer).
+	if coi.isV2Argon() {
+		if err := applyArgonCPUAffinity(ctx, system, coi); err != nil {
+			return nil, r, err
+		}
+	}
+
 	return system, r, nil
 }
 
