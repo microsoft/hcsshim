@@ -453,15 +453,15 @@ func (w *legacyLayerWriter) reset() (err error) {
 			w.currentFile = nil
 			w.currentFileName = ""
 			w.currentFileRoot = nil
-			w.currentIsDir = false
 		}
+		w.currentIsDir = false
 	}()
 
 	if err = w.bufWriter.Flush(); err != nil {
 		return err
 	}
 	w.bufWriter.Reset(io.Discard)
-	if w.currentIsDir {
+	if w.currentIsDir && w.currentFile != nil {
 		r := w.currentFile
 		br := winio.NewBackupStreamReader(r)
 		// Seek to the beginning of the backup stream, skipping the fileattrs
