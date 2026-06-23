@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
@@ -405,5 +407,98 @@ func TestProcessParamEnvToOCIEnv_Roundtrip(t *testing.T) {
 		if roundtripped[k] != v {
 			t.Errorf("roundtrip[%q] = %q, want %q", k, roundtripped[k], v)
 		}
+	}
+}
+
+// envFilterEnforcer wraps OpenDoorSecurityPolicyEnforcer and overrides the
+// external-exec env-filtering hook to return a caller-specified subset.
+// Embedding OpenDoor satisfies the rest of the SecurityPolicyEnforcer
+// interface (all return-allow / no-op behaviour), so a single overridden
+// method is enough to drive the env-filter code path in executeProcess.
+type envFilterEnforcer struct {
+	securitypolicy.OpenDoorSecurityPolicyEnforcer
+	keep []string
+}
+
+func (e *envFilterEnforcer) EnforceExecExternalProcessPolicy(
+	_ context.Context, _ []string, _ []string, _ string,
+) (securitypolicy.EnvList, bool, error) {
+	return securitypolicy.EnvList(e.keep), true, nil
+}
+
+// TestExecuteProcess_External_AppliesFilteredEnv exercises the env-filter
+// rewrite path of the external-exec (UVMContainerID) branch of
+// executeProcess. The fake enforcer returns a strict subset of the input
+// env; the test asserts the request forwarded to GCS carries exactly that
+// subset in ProcessParameters.Environment.
+func TestExecuteProcess_External_AppliesFilteredEnv(t *testing.T) {
+	enf := &envFilterEnforcer{
+		keep: []string{`PATH=C:\Windows\System32`, "KEEP=1"},
+	}
+	b := newTestBridge(enf)
+
+	params := hcsschema.ProcessParameters{
+		CommandLine: "cmd.exe /c exit",
+		Environment: map[string]string{
+			"PATH": `C:\Windows\System32`,
+			"KEEP": "1",
+			"DROP": "secret",
+		},
+	}
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{
+			ContainerID: UVMContainerID,
+			ActivityID:  guid.GUID{},
+		},
+		Settings: prot.ExecuteProcessSettings{
+			ProcessParameters: prot.AnyInString{Value: &params},
+		},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   1,
+		},
+		message: msg,
+	}
+
+	if err := b.executeProcess(req); err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	// Unwrap the re-marshalled request and pull the inner ProcessParameters
+	// JSON back out via the same *json.RawMessage trick that the handler
+	// uses, then decode it as hcsschema.ProcessParameters.
+	var outer prot.ContainerExecuteProcess
+	var paramsRaw json.RawMessage
+	outer.Settings.ProcessParameters.Value = &paramsRaw
+	if err := json.Unmarshal(got.message, &outer); err != nil {
+		t.Fatalf("unmarshal forwarded outer: %v", err)
+	}
+	var gotParams hcsschema.ProcessParameters
+	if err := json.Unmarshal(paramsRaw, &gotParams); err != nil {
+		t.Fatalf("unmarshal forwarded ProcessParameters: %v", err)
+	}
+
+	want := map[string]string{
+		"PATH": `C:\Windows\System32`,
+		"KEEP": "1",
+	}
+	if !reflect.DeepEqual(gotParams.Environment, want) {
+		t.Errorf("forwarded Environment = %v, want %v", gotParams.Environment, want)
 	}
 }
