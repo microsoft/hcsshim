@@ -4,7 +4,6 @@
 package bridge
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -315,14 +314,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 	}
 	containerID := r.ContainerID
 	var processParams hcsschema.ProcessParameters
-	// Strict-decode ProcessParameters so any field the sidecar's hcsschema
-	// struct doesn't model is rejected up-front. No field unknown to the
-	// sidecar should be forwarded to inbox GCS silently. When a new field
-	// is added, the sidecar must be made aware of it and enforce policy
-	// on it if needed.
-	dec := json.NewDecoder(bytes.NewReader(processParamSettings))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&processParams); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(processParamSettings, &processParams); err != nil {
 		return fmt.Errorf("executeProcess: invalid params type for request: %w", err)
 	}
 
