@@ -20,7 +20,9 @@ import (
 	vpci "github.com/Microsoft/hcsshim/internal/controller/device/vpci"
 	network "github.com/Microsoft/hcsshim/internal/controller/network"
 	guestmanager "github.com/Microsoft/hcsshim/internal/vm/guestmanager"
+	vmmanager "github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	gomock "go.uber.org/mock/gomock"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 )
 
 // MockvmController is a mock of vmController interface.
@@ -104,17 +106,32 @@ func (mr *MockvmControllerMockRecorder) RuntimeID() *gomock.Call {
 }
 
 // SCSIController mocks base method.
-func (m *MockvmController) SCSIController() *scsi.Controller {
+func (m *MockvmController) SCSIController(ctx context.Context) (*scsi.Controller, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SCSIController")
+	ret := m.ctrl.Call(m, "SCSIController", ctx)
 	ret0, _ := ret[0].(*scsi.Controller)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SCSIController indicates an expected call of SCSIController.
-func (mr *MockvmControllerMockRecorder) SCSIController() *gomock.Call {
+func (mr *MockvmControllerMockRecorder) SCSIController(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController), ctx)
+}
+
+// VM mocks base method.
+func (m *MockvmController) VM() *vmmanager.UtilityVM {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VM")
+	ret0, _ := ret[0].(*vmmanager.UtilityVM)
+	return ret0
+}
+
+// VM indicates an expected call of VM.
+func (mr *MockvmControllerMockRecorder) VM() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VM", reflect.TypeOf((*MockvmController)(nil).VM))
 }
 
 // VPCIController mocks base method.
@@ -153,6 +170,59 @@ func NewMocknetworkController(ctrl *gomock.Controller) *MocknetworkController {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocknetworkController) EXPECT() *MocknetworkControllerMockRecorder {
 	return m.recorder
+}
+
+// Patch mocks base method.
+func (m *MocknetworkController) Patch(ctx context.Context, networkNamespaceID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Patch", ctx, networkNamespaceID)
+}
+
+// Patch indicates an expected call of Patch.
+func (mr *MocknetworkControllerMockRecorder) Patch(ctx, networkNamespaceID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Patch", reflect.TypeOf((*MocknetworkController)(nil).Patch), ctx, networkNamespaceID)
+}
+
+// ResetAfterMigration mocks base method.
+func (m *MocknetworkController) ResetAfterMigration(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetAfterMigration", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ResetAfterMigration indicates an expected call of ResetAfterMigration.
+func (mr *MocknetworkControllerMockRecorder) ResetAfterMigration(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetAfterMigration", reflect.TypeOf((*MocknetworkController)(nil).ResetAfterMigration), ctx)
+}
+
+// Resume mocks base method.
+func (m *MocknetworkController) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest *guestmanager.Guest) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Resume", ctx, vm, guest)
+}
+
+// Resume indicates an expected call of Resume.
+func (mr *MocknetworkControllerMockRecorder) Resume(ctx, vm, guest any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resume", reflect.TypeOf((*MocknetworkController)(nil).Resume), ctx, vm, guest)
+}
+
+// Save mocks base method.
+func (m *MocknetworkController) Save(ctx context.Context) (*anypb.Any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Save", ctx)
+	ret0, _ := ret[0].(*anypb.Any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Save indicates an expected call of Save.
+func (mr *MocknetworkControllerMockRecorder) Save(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MocknetworkController)(nil).Save), ctx)
 }
 
 // Setup mocks base method.

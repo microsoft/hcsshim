@@ -12,6 +12,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
@@ -39,7 +40,7 @@ func (c *Controller) removeNetNSInsideGuest(_ context.Context, _ string) error {
 
 // addEndpointToGuestNamespace hot-adds an HCN endpoint to the UVM and,
 // configures it inside the LCOW guest.
-func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint, isPolicyBasedRoutingSupported bool) error {
+func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, netnsID string, nicID string, endpoint *hcn.HostComputeEndpoint, isPolicyBasedRoutingSupported bool) error {
 	log.G(ctx).Info("adding endpoint to guest namespace")
 
 	// 1. Host-side hot-add.
@@ -57,7 +58,7 @@ func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, nicID stri
 
 	// 2. Guest-side add.
 	if c.isNamespaceSupportedByGuest {
-		lcowAdapter, err := guestresource.BuildLCOWNetworkAdapter(nicID, endpoint, isPolicyBasedRoutingSupported)
+		lcowAdapter, err := guestresource.BuildLCOWNetworkAdapter(netnsID, nicID, endpoint, isPolicyBasedRoutingSupported)
 		if err != nil {
 			return fmt.Errorf("build LCOW network adapter for endpoint %s: %w", endpoint.Id, err)
 		}
@@ -84,7 +85,7 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 		if err := c.guestNetwork.RemoveNetworkInterface(ctx, &guestresource.LCOWNetworkAdapter{
 			NamespaceID: c.namespaceID,
 			ID:          nicID,
-		}); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) {
+		}); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) && !errors.Is(err, guestmanager.ErrGuestConnectionUnavailable) {
 			return fmt.Errorf("remove NIC %s from guest: %w", nicID, err)
 		}
 
@@ -92,11 +93,13 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 	}
 
 	// 2. Host-side removal.
-	if err := c.vmNetwork.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
-		EndpointId: endpoint.Id,
-		MacAddress: endpoint.MacAddress,
-	}); err != nil && !vmutils.IsVMNotAvailableError(err) {
-		return fmt.Errorf("remove NIC %s from host (endpoint %s): %w", nicID, endpoint.Id, err)
+	if endpoint != nil {
+		if err := c.vmNetwork.RemoveNIC(ctx, nicID, &hcsschema.NetworkAdapter{
+			EndpointId: endpoint.Id,
+			MacAddress: endpoint.MacAddress,
+		}); err != nil && !vmutils.IsVMNotAvailableError(err) {
+			return fmt.Errorf("remove NIC %s from host (endpoint %s): %w", nicID, endpoint.Id, err)
+		}
 	}
 
 	log.G(ctx).Debug("removed NIC from host")

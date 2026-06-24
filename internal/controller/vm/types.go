@@ -6,6 +6,7 @@ import (
 	"time"
 
 	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	vmsandbox "github.com/Microsoft/hcsshim/sandbox-spec/vm/v2"
 
@@ -28,6 +29,12 @@ type CreateOptions struct {
 
 	// SandboxSpec specifies the sandbox specification from CRI.
 	SandboxSpec *vmsandbox.Spec
+
+	// MigrationOptions, when non-nil, marks this CreateVM as the
+	// destination side of a live migration: the imported HCS document is
+	// reused and these options are stamped into VirtualMachine.MigrationOptions.
+	// Requires the controller to be in [StateMigratingImported].
+	MigrationOptions *hcsschema.MigrationInitializeOptions
 }
 
 // StartOptions contains the configuration needed to start a VM and establish

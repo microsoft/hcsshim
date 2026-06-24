@@ -29,6 +29,7 @@ import (
 	guestresource "github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	shimdiag "github.com/Microsoft/hcsshim/internal/shimdiag"
 	guestmanager "github.com/Microsoft/hcsshim/internal/vm/guestmanager"
+	vmmanager "github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	v3 "github.com/containerd/containerd/api/runtime/task/v3"
 	task "github.com/containerd/containerd/api/types/task"
 	specs_go "github.com/opencontainers/runtime-spec/specs-go"
@@ -175,17 +176,18 @@ func (mr *MockvmControllerMockRecorder) RuntimeID() *gomock.Call {
 }
 
 // SCSIController mocks base method.
-func (m *MockvmController) SCSIController() *scsi.Controller {
+func (m *MockvmController) SCSIController(ctx context.Context) (*scsi.Controller, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SCSIController")
+	ret := m.ctrl.Call(m, "SCSIController", ctx)
 	ret0, _ := ret[0].(*scsi.Controller)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SCSIController indicates an expected call of SCSIController.
-func (mr *MockvmControllerMockRecorder) SCSIController() *gomock.Call {
+func (mr *MockvmControllerMockRecorder) SCSIController(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController), ctx)
 }
 
 // SandboxOptions mocks base method.
@@ -327,6 +329,20 @@ func (m *MockvmController) UpdatePolicyFragment(ctx context.Context, fragment gu
 func (mr *MockvmControllerMockRecorder) UpdatePolicyFragment(ctx, fragment any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePolicyFragment", reflect.TypeOf((*MockvmController)(nil).UpdatePolicyFragment), ctx, fragment)
+}
+
+// VM mocks base method.
+func (m *MockvmController) VM() *vmmanager.UtilityVM {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VM")
+	ret0, _ := ret[0].(*vmmanager.UtilityVM)
+	return ret0
+}
+
+// VM indicates an expected call of VM.
+func (mr *MockvmControllerMockRecorder) VM() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VM", reflect.TypeOf((*MockvmController)(nil).VM))
 }
 
 // VPCIController mocks base method.

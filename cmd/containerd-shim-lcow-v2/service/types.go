@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
+	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	"github.com/containerd/containerd/api/runtime/task/v3"
 	containerdtypes "github.com/containerd/containerd/api/types/task"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -83,8 +84,11 @@ type vmController interface {
 	// Guest returns the guest manager used for guest-side operations.
 	Guest() *guestmanager.Guest
 
+	// VM returns the vm manager used for UVM host side operations.
+	VM() *vmmanager.UtilityVM
+
 	// SCSIController returns the SCSI device controller for the VM.
-	SCSIController() *scsi.Controller
+	SCSIController(ctx context.Context) (*scsi.Controller, error)
 
 	// VPCIController returns the vPCI device controller for the VM.
 	VPCIController() *vpci.Controller

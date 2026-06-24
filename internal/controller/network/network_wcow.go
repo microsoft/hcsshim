@@ -13,6 +13,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
 	"github.com/sirupsen/logrus"
@@ -61,7 +62,7 @@ func (c *Controller) removeNetNSInsideGuest(ctx context.Context, namespaceID str
 		// If the GCS bridge is already closed (e.g. the guest agent crashed), the
 		// namespace will be torn down with the VM, so treat that as success and let
 		// teardown continue.
-		if err = c.guestNetwork.RemoveNetworkNamespace(ctx, hcnNamespace); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) {
+		if err = c.guestNetwork.RemoveNetworkNamespace(ctx, hcnNamespace); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) && !errors.Is(err, guestmanager.ErrGuestConnectionUnavailable) {
 			return fmt.Errorf("remove network namespace %s from guest: %w", namespaceID, err)
 		}
 	}
@@ -71,7 +72,7 @@ func (c *Controller) removeNetNSInsideGuest(ctx context.Context, namespaceID str
 
 // addEndpointToGuestNamespace wires an HCN endpoint into the WCOW guest in three steps:
 // pre-add (guest notification), host-side hot-add, and guest-side finalisation.
-func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, nicID string, endpoint *hcn.HostComputeEndpoint, _ bool) error {
+func (c *Controller) addEndpointToGuestNamespace(ctx context.Context, _ string, nicID string, endpoint *hcn.HostComputeEndpoint, _ bool) error {
 	log.G(ctx).Info("adding network endpoint to guest namespace")
 
 	// 1. Guest pre-add: informs WCOW guest that a NIC is about to arrive.
@@ -125,7 +126,7 @@ func (c *Controller) removeEndpointFromGuestNamespace(ctx context.Context, nicID
 		nicID,
 		guestrequest.RequestTypeRemove,
 		nil,
-	); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) {
+	); err != nil && !errors.Is(err, gcs.ErrBridgeClosed) && !errors.Is(err, guestmanager.ErrGuestConnectionUnavailable) {
 		return fmt.Errorf("remove NIC %s from guest (endpoint %s): %w", nicID, endpoint.Id, err)
 	}
 

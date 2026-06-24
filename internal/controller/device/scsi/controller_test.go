@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/disk"
@@ -68,6 +69,17 @@ func mappedController(t *testing.T) (*Controller, guid.GUID) {
 		t.Fatalf("setup MapToGuest: %v", err)
 	}
 	return c, id
+}
+
+func attachmentsContainPath(att map[string]hcsschema.Scsi, path string) bool {
+	for _, s := range att {
+		for _, a := range s.Attachments {
+			if a.Path == path {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // --- Tests: New ---
@@ -395,5 +407,113 @@ func TestUnmapFromGuest_RetryAfterDetachFailure(t *testing.T) {
 	_, err = c.Reserve(context.Background(), dc, mc)
 	if err != nil {
 		t.Fatalf("re-reserve after retry: %v", err)
+	}
+}
+
+// --- Tests: ReserveForRootfs ---
+
+func TestReserveForRootfs_Success(t *testing.T) {
+	c := newController(&mockVMOps{}, newMockGuestOps())
+	cfg := defaultDiskConfig()
+	if err := c.ReserveForRootfs(context.Background(), 0, 0, cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The reserved rootfs disk surfaces in the VM topology with its config.
+	if !attachmentsContainPath(c.HCSAttachments(), cfg.HostPath) {
+		t.Errorf("expected rootfs path %q in HCS attachments", cfg.HostPath)
+	}
+}
+
+func TestReserveForRootfs_InvalidLocation(t *testing.T) {
+	c := newController(&mockVMOps{}, newMockGuestOps())
+	// Controller index beyond the single configured controller.
+	if err := c.ReserveForRootfs(context.Background(), 1, 0, defaultDiskConfig()); err == nil {
+		t.Fatal("expected error for out-of-range location")
+	}
+}
+
+func TestReserveForRootfs_AlreadyReserved(t *testing.T) {
+	c := newController(&mockVMOps{}, newMockGuestOps())
+	if err := c.ReserveForRootfs(context.Background(), 0, 0, defaultDiskConfig()); err != nil {
+		t.Fatalf("first reserve: %v", err)
+	}
+	if err := c.ReserveForRootfs(context.Background(), 0, 0, defaultDiskConfig()); err == nil {
+		t.Fatal("expected error reserving an occupied location")
+	}
+}
+
+// --- Tests: migration guard ---
+
+func TestPublicOps_RejectedWhileMigrating(t *testing.T) {
+	ctx := t.Context()
+	ops := []struct {
+		name string
+		call func(*Controller) error
+	}{
+		{"ReserveForRootfs", func(c *Controller) error {
+			return c.ReserveForRootfs(ctx, 0, 0, defaultDiskConfig())
+		}},
+		{"Reserve", func(c *Controller) error {
+			_, err := c.Reserve(ctx, defaultDiskConfig(), defaultMountConfig())
+			return err
+		}},
+		{"MapToGuest", func(c *Controller) error {
+			_, err := c.MapToGuest(ctx, guid.GUID{})
+			return err
+		}},
+		{"UnmapFromGuest", func(c *Controller) error {
+			return c.UnmapFromGuest(ctx, guid.GUID{})
+		}},
+	}
+	for _, op := range ops {
+		t.Run(op.name, func(t *testing.T) {
+			// Saving the source blocks further operations until migration resumes.
+			src := New(1, &mockVMOps{}, newMockGuestOps())
+			env, err := src.Save(ctx)
+			if err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			if err := op.call(src); err == nil || !strings.Contains(err.Error(), "migrating") {
+				t.Fatalf("source: expected migrating error, got %v", err)
+			}
+
+			// A freshly imported controller is also mid-migration until resumed.
+			c, err := Import(ctx, env)
+			if err != nil {
+				t.Fatalf("Import: %v", err)
+			}
+			if err := op.call(c); err == nil || !strings.Contains(err.Error(), "migrating") {
+				t.Fatalf("imported: expected migrating error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestResume_LiftsMigrationGuard(t *testing.T) {
+	ctx := t.Context()
+	// Snapshot a controller holding a reservation, then import it.
+	src := newController(&mockVMOps{}, newMockGuestOps())
+	if _, err := src.Reserve(ctx, defaultDiskConfig(), defaultMountConfig()); err != nil {
+		t.Fatalf("setup Reserve: %v", err)
+	}
+	env, err := src.Save(ctx)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	c, err := Import(ctx, env)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+
+	// Rejected while migrating.
+	if _, err := c.Reserve(ctx, defaultDiskConfig(), defaultMountConfig()); err == nil {
+		t.Fatal("expected migrating error before Resume")
+	}
+
+	// Resuming binds live interfaces and lifts the guard.
+	c.Resume(ctx, &mockVMOps{}, newMockGuestOps())
+	dc := disk.Config{HostPath: `C:\other.vhdx`, Type: disk.TypeVirtualDisk}
+	if _, err := c.Reserve(ctx, dc, defaultMountConfig()); err != nil {
+		t.Fatalf("Reserve after Resume: %v", err)
 	}
 }

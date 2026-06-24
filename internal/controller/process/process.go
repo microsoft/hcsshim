@@ -69,6 +69,14 @@ type Controller struct {
 
 	// exitedCh is closed when the process has exited and all cleanup is done.
 	exitedCh chan struct{}
+
+	// vsock ports restored from a migrated process, used to reattach the
+	// stdio relay on resume.
+	stdinPort, stdoutPort, stderrPort uint32
+
+	// Wait request id carried over from a migrated process, reused on resume
+	// so no duplicate wait is issued. Zero if absent.
+	waitCallID int64
 }
 
 // New creates a [Controller] for a process in the given container.
@@ -225,12 +233,15 @@ func (c *Controller) Status(isDetailed bool) *task.StateResponse {
 
 	if isDetailed && c.state != StateNotCreated {
 		resp.Bundle = c.bundle
-		resp.Stdin = c.upstreamIO.StdinPath()
-		resp.Stdout = c.upstreamIO.StdoutPath()
-		resp.Stderr = c.upstreamIO.StderrPath()
-		resp.Terminal = c.upstreamIO.Terminal()
 		resp.ExitStatus = c.exitCode
 		resp.ExitedAt = timestamppb.New(c.exitedAt)
+		// upstreamIO is nil for an imported process not yet patched.
+		if c.upstreamIO != nil {
+			resp.Stdin = c.upstreamIO.StdinPath()
+			resp.Stdout = c.upstreamIO.StdoutPath()
+			resp.Stderr = c.upstreamIO.StderrPath()
+			resp.Terminal = c.upstreamIO.Terminal()
+		}
 	}
 
 	return resp
@@ -267,7 +278,8 @@ func (c *Controller) CloseIO(ctx context.Context) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.state == StateNotCreated {
+	// upstreamIO is nil before create or for an unpatched imported process.
+	if c.state == StateNotCreated || c.upstreamIO == nil {
 		return
 	}
 

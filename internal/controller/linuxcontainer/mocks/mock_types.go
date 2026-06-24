@@ -107,6 +107,21 @@ func (mr *MockguestMockRecorder) DeleteContainerState(ctx, cid any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteContainerState", reflect.TypeOf((*Mockguest)(nil).DeleteContainerState), ctx, cid)
 }
 
+// OpenContainer mocks base method.
+func (m *Mockguest) OpenContainer(ctx context.Context, cid string) (*gcs.Container, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OpenContainer", ctx, cid)
+	ret0, _ := ret[0].(*gcs.Container)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenContainer indicates an expected call of OpenContainer.
+func (mr *MockguestMockRecorder) OpenContainer(ctx, cid any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenContainer", reflect.TypeOf((*Mockguest)(nil).OpenContainer), ctx, cid)
+}
+
 // RemoveCombinedLayers mocks base method.
 func (m *Mockguest) RemoveCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error {
 	m.ctrl.T.Helper()
@@ -187,6 +202,20 @@ func (m *MockscsiController) UnmapFromGuest(ctx context.Context, reservation gui
 func (mr *MockscsiControllerMockRecorder) UnmapFromGuest(ctx, reservation any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnmapFromGuest", reflect.TypeOf((*MockscsiController)(nil).UnmapFromGuest), ctx, reservation)
+}
+
+// UpdateDiskHostPath mocks base method.
+func (m *MockscsiController) UpdateDiskHostPath(ctx context.Context, reservationID guid.GUID, newPath string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDiskHostPath", ctx, reservationID, newPath)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateDiskHostPath indicates an expected call of UpdateDiskHostPath.
+func (mr *MockscsiControllerMockRecorder) UpdateDiskHostPath(ctx, reservationID, newPath any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDiskHostPath", reflect.TypeOf((*MockscsiController)(nil).UpdateDiskHostPath), ctx, reservationID, newPath)
 }
 
 // Mockplan9Controller is a mock of plan9Controller interface.

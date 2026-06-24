@@ -7,6 +7,12 @@
 // creation, startup, stats collection, and termination — with the [Controller]
 // as the primary implementation.
 //
+// Live-migration entry points are provided on both sides: the source captures a
+// running VM via [Controller.Save] (state snapshot), while the destination
+// rehydrates it via [Controller.Import] (state-only rehydration), recreates the
+// VM, and rebinds its disks via [Controller.Patch] before resuming.
+// [Controller.Resume] returns either side to [StateRunning].
+//
 // # Lifecycle
 //
 // A VM follows the state machine below.
@@ -31,6 +37,33 @@
 //		            └─►│                 StateTerminated                 │
 //		               └─────────────────────────────────────────────────┘
 //
+// Live migration adds side-specific paths. The source toggles a running VM into
+// [StateSourceMigrating]; the destination walks a dedicated path —
+// [Controller.Import] → [Controller.CreateVM] → [Controller.StartWithMigrationOptions].
+// From either migrating state the resumed side returns to [StateRunning] via
+// [Controller.Resume], while the stopped side reaches [StateTerminated] via a
+// finalize Stop or a teardown ([Controller.TerminateVM]). The forward flow stops
+// the source and resumes the destination; the reverse flow resumes the source and
+// stops the destination.
+//
+//	      source                                  destination
+//	┌──────────────────────┐         ┌───────────────────────────┐
+//	│ StateSourceMigrating │         │  StateMigratingImported   │
+//	└───┬──────────────┬───┘         └─────────────┬─────────────┘
+//	    │ Resume       │ Finalize(Stop)/Terminate  │ CreateVM
+//	    ▼              ▼                           ▼
+//	StateRunning  StateTerminated     ┌───────────────────────────┐
+//	                                  │   StateMigratingCreated   │
+//	                                  └─────────────┬─────────────┘
+//	                                                │ StartWithMigrationOptions
+//	                                                ▼
+//	                                  ┌───────────────────────────┐
+//	                                  │ StateDestinationMigrating │
+//	                                  └──────┬─────────────┬──────┘
+//	                                  Resume │             │ Finalize(Stop)/Terminate
+//	                                         ▼             ▼
+//	                                   StateRunning   StateTerminated
+//
 // State descriptions:
 //
 //   - [StateNotCreated]: initial state after [New] is called.
@@ -41,8 +74,21 @@
 //     [Controller.TerminateVM] completes successfully.
 //   - [StateInvalid]: error state entered when [Controller.StartVM] fails after the underlying
 //     HCS VM has already started, or when [Controller.TerminateVM] fails during uvm.Close
-//     (from either [StateCreated] or [StateRunning]).
+//     (from [StateCreated], [StateRunning], or [StateMigratingCreated]).
 //     A VM in this state can only be cleaned up by calling [Controller.TerminateVM].
+//   - [StateSourceMigrating]: the running source VM has begun an outgoing migration;
+//     only live-migration calls and [Controller.Save] are permitted. [Controller.Resume]
+//     rolls it back to [StateRunning]; a finalize Stop (forward flow) or
+//     [Controller.TerminateVM] terminates it to [StateTerminated].
+//   - [StateMigratingImported]: the destination has been rehydrated from a snapshot via
+//     [Controller.Import] but the VM does not exist yet; [Controller.CreateVM] is the next step.
+//   - [StateMigratingCreated]: the destination VM has been created from the snapshot but not
+//     started; disks are rebound via [Controller.Patch] and
+//     [Controller.StartWithMigrationOptions] advances it to [StateDestinationMigrating].
+//   - [StateDestinationMigrating]: the destination VM is running against the migration
+//     transport awaiting the source's state; [Controller.Resume] reaches [StateRunning],
+//     while a finalize Stop (reverse flow) or [Controller.TerminateVM] terminates it to
+//     [StateTerminated].
 //
 // # Platform Variants
 //
