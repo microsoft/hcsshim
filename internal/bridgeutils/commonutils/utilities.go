@@ -1,6 +1,7 @@
 package commonutils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,17 @@ type ErrorRecord struct {
 // wraps any error returned in an HRESULT error.
 func UnmarshalJSONWithHresult(data []byte, v interface{}) error {
 	if err := json.Unmarshal(data, v); err != nil {
+		return gcserr.WrapHresult(err, gcserr.HrVmcomputeInvalidJSON)
+	}
+	return nil
+}
+
+// UnmarshalJSONWithHresultStrict behaves like [UnmarshalJSONWithHresult] but
+// rejects any JSON object key the Go type v does not declare.
+func UnmarshalJSONWithHresultStrict(data []byte, v interface{}) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
 		return gcserr.WrapHresult(err, gcserr.HrVmcomputeInvalidJSON)
 	}
 	return nil
