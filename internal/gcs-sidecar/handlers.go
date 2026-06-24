@@ -4,6 +4,7 @@
 package bridge
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -319,7 +320,9 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 	// sidecar should be forwarded to inbox GCS silently. When a new field
 	// is added, the sidecar must be made aware of it and enforce policy
 	// on it if needed.
-	if err := commonutils.UnmarshalJSONWithHresultStrict(processParamSettings, &processParams); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(processParamSettings))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&processParams); err != nil {
 		return fmt.Errorf("executeProcess: invalid params type for request: %w", err)
 	}
 
