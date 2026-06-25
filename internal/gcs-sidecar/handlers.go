@@ -21,12 +21,10 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	oci "github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/internal/windevice"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
@@ -122,6 +120,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 				len(container.RegistryChanges.AddValues), len(defaultValues), len(nonDefaultValues))
 		}
 
+		// We enforce `spec`, which is not passed to inbox gcs within this function TODO....
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}
@@ -147,7 +146,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 
 		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
 		if err := b.hostState.AddContainer(req.ctx, containerID, c); err != nil {
-			log.G(ctx).Tracef("Container exists in the map.")
+			log.G(ctx).Tracef("Container exists in the map. containerID: %v", containerID)
 			return err
 		}
 		defer func() {
@@ -158,9 +157,34 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			}
 		}()
 
-			if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
-				return fmt.Errorf("failed to write security context dir: %w", err)
+		if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
+			return fmt.Errorf("failed to write security context dir: %w", err)
+		}
+
+		// TODO!! enforce over various fields in HostedSystem.
+		/*
+			type Container struct {
+				GuestOs *GuestOs `json:"GuestOs,omitempty"`
+			->?	Storage *Storage `json:"Storage,omitempty"`
+			->	MappedDirectories []MappedDirectory `json:"MappedDirectories,omitempty"`
+			->?	MappedPipes []MappedPipe `json:"MappedPipes,omitempty"`
+				Memory *Memory `json:"Memory,omitempty"` # We can't do anything about this. Host can do denial of service attack anyway.
+			?	Processor *Processor `json:"Processor,omitempty"`
+				Networking *Networking `json:"Networking,omitempty"`
+				HvSocket *HvSocket `json:"HvSocket,omitempty"`
+				ContainerCredentialGuard *ContainerCredentialGuardState `json:"ContainerCredentialGuard,omitempty"`
+			->	RegistryChanges *RegistryChanges `json:"RegistryChanges,omitempty"`
+			->?	AssignedDevices []Device `json:"AssignedDevices,omitempty"`
+			->?	AdditionalDeviceNamespace *ContainerDefinitionDevice `json:"AdditionalDeviceNamespace,omitempty"`
 			}
+		*/
+
+		// TODO: Delete? It's not used anymore?
+		// cwcowHostedSystemConfig.Spec = spec
+
+		// Marshal the original cwcowHostedSystem from the request.
+		// That's safe because we've done enforcement on `spec` and
+		// later we will
 
 		hostedSystemBytes, err := json.Marshal(cwcowHostedSystem)
 
@@ -255,6 +279,8 @@ func (b *Bridge) startContainer(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
+	// TODO: do we need enforcement?
+
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal startContainer: %w", err)
@@ -343,11 +369,11 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			return fmt.Errorf("failed to get created container: %w", err)
 		}
 
-		c.processesMutex.Lock()
+		c.processesMutex.Lock() // TODO: maybe move to the top of the block?
 		isCreateExec := c.commandLine && !c.commandLineExec
 		if isCreateExec {
 			// if this is an exec of Container command line, then it's already enforced
-			// during container creation, hence skip it here
+			// during container creation, hence skip it here -> TODO!!
 			c.commandLineExec = true
 
 		}
@@ -681,21 +707,37 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		return fmt.Errorf("invald guestRequestType %v", guestRequestType)
 	}
 
+	// Question: should we enforce policy for each type? Maybe just reject if we don't implement policy?
 	if guestResourceType != "" {
 		switch guestResourceType {
 		case guestresource.ResourceTypeCombinedLayers:
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWCombinedLayers)
 			log.G(ctx).Tracef("WCOWCombinedLayers: {%v}", settings)
+			// TODO: Reject this type of request or enforce policy for it.
+			// guestresource.ResourceTypeCWCOWCombinedLayers (ResourceTypeCombinedLayers' content + ContainerID) is used for CWCOW.
+			// Without special reason gcs-sidecar should be able to handle
+			// normal WCOW. So ideally enforce policy rather than reject everything.
 
-		case guestresource.ResourceTypeNetworkNamespace:
+			// TODO: Consider removing this. Or support normal WCOW. TBD.
+
+		case guestresource.ResourceTypeNetworkNamespace: // logged.
 			settings := modifyGuestSettingsRequest.Settings.(*hcn.HostComputeNamespace)
 			log.G(ctx).Tracef("HostComputeNamespaces { %v}", settings)
+			// We don't enforce policy for network namespace.
+			// TODO: Maybe we could enforce NamespaceType and SchemaVersion?
+			// What's the justification not to enforce them?
+			// TODO: see what lcow does
 
-		case guestresource.ResourceTypeNetwork:
+		case guestresource.ResourceTypeNetwork: // logged
 			settings := modifyGuestSettingsRequest.Settings.(*guestrequest.NetworkModifyRequest)
 			log.G(ctx).Tracef("NetworkModifyRequest { %v}", settings)
+			// We don't enforce policy for network setttings.
+			// There is no field that policy authors can expect a value to be set.
+			// TODO: see what lcow does
 
 		case guestresource.ResourceTypeMappedVirtualDisk:
+			// We don't know if it's used for CWCOW.
+			// The change is added in case it's used for CWCOW. TODO: to see if it's used or not, maybe try attaching a test VHD through pod.json
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("wcowMappedVirtualDisk { %v}", wcowMappedVirtualDisk)
 			if wcowMappedVirtualDisk.ContainerPath != "" {
@@ -709,8 +751,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeHvSocket:
 			hvSocketAddress := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
 			log.G(ctx).Tracef("hvSocketAddress { %v }", hvSocketAddress)
+			// If host doesn't use it maybe remove it TODO
 
 		case guestresource.ResourceTypeMappedDirectory:
+			// WE don't have hostpath enforcement because anyway contents of the dir can be changed by the host.
 			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.MappedDirectory)
 			log.G(ctx).Tracef("hcsschema.MappedDirectory { %v }", settings)
 			switch modifyGuestSettingsRequest.RequestType {
@@ -760,7 +804,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			}
 			return b.sendResponseToShim(req.ctx, prot.RPCModifySettings, req.header.ID, resp)
 
-		case guestresource.ResourceTypeWCOWBlockCims:
+		case guestresource.ResourceTypeWCOWBlockCims: // logged
 			// This is request to mount the merged cim at given volumeGUID
 			switch modifyGuestSettingsRequest.RequestType {
 			case guestrequest.RequestTypeAdd:
@@ -879,7 +923,9 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			}
 			return nil
 
-		case guestresource.ResourceTypeMappedVirtualDiskForContainerScratch:
+		case guestresource.ResourceTypeMappedVirtualDiskForContainerScratch: // logged
+			// It doesn't have an enforcement point within this case block, but it has EnforceScratchMountPolicy
+			// in ResourceTypeCWCOWCombinedLayers.
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("ResourceTypeMappedVirtualDiskForContainerScratch: { %v }", wcowMappedVirtualDisk)
 
@@ -940,7 +986,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			newRequest.header.Size = uint32(len(buf)) + prot.HdrSize
 			newRequest.message = buf
 			req = &newRequest
-		case guestresource.ResourceTypeCWCOWCombinedLayers:
+		case guestresource.ResourceTypeCWCOWCombinedLayers: // logged
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWCombinedLayers)
 			switch modifyGuestSettingsRequest.RequestType {
 			case guestrequest.RequestTypeAdd:
@@ -981,7 +1027,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					}
 				}
 
-				//Since unencrypted scratch is not an option, always pass true
+				//Since unencrypted scratch is not an option, always pass true TODO: fix.
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
 					return fmt.Errorf("scratch mounting denied by policy: %w", err)
 				}
