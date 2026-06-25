@@ -1421,6 +1421,8 @@ filtered_registry_values(input_values, policy_values) := [input_val |
     registry_value_matches(policy_val, input_val)
 ]
 
+# TODO: have allow_registry_changes_dropping switch like environment variable's allow_environment_variable_dropping.
+
 registry_changes := {"allowed": true} {
     containers := data.metadata.matches[input.containerID]
     container := containers[_]
