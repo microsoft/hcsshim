@@ -645,10 +645,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Process.Capabilities = capsToKeep
 	}
 
-	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.LCOWSecurityPolicyEnv, true) {
-		if err := h.securityOptions.WriteSecurityContextDir(settings.OCISpecification); err != nil {
-			return nil, fmt.Errorf("failed to write security context dir: %w", err)
-		}
+	// It should not be controlled by host using the annotation
+	if err := h.securityOptions.WriteSecurityContextDir(settings.OCISpecification); err != nil {
+		return nil, fmt.Errorf("failed to write security context dir: %w", err)
 	}
 
 	// Create the BundlePath

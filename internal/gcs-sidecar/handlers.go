@@ -158,14 +158,10 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			}
 		}()
 
-		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
 			if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
 				return fmt.Errorf("failed to write security context dir: %w", err)
 			}
-			cwcowHostedSystemConfig.Spec = spec
-		}
 
-		// Strip the spec field
 		hostedSystemBytes, err := json.Marshal(cwcowHostedSystem)
 
 		if err != nil {
