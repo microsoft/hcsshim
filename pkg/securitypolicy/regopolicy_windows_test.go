@@ -1517,7 +1517,7 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 
 // Tests for MappedDirectory enforcement
 
-func Test_Rego_EnforceMappedDirectoryMountPolicy_ReadOnly_Allowed_Windows(t *testing.T) {
+func Test_Rego_EnforceMappedDirectoryMountPolicy_OpenDoor_AllowsAll_Windows(t *testing.T) {
 	policy, err := newRegoPolicy(
 		openDoorRego,
 		[]oci.Mount{},
@@ -1529,9 +1529,16 @@ func Test_Rego_EnforceMappedDirectoryMountPolicy_ReadOnly_Allowed_Windows(t *tes
 	}
 
 	ctx := context.Background()
-	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\data`, true)
+
+	// Open door should allow both readonly and writable
+	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\readonly`, true)
 	if err != nil {
-		t.Errorf("expected readonly mapped directory to be allowed: %v", err)
+		t.Errorf("open door should allow readonly mount: %v", err)
+	}
+
+	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\writable`, false)
+	if err != nil {
+		t.Errorf("open door should allow writable mount: %v", err)
 	}
 }
 
@@ -1667,30 +1674,5 @@ func Test_Rego_EnforceMappedDirectoryUnmountPolicy_NotMounted_Denied_Windows(t *
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceMappedDirectoryUnmountPolicy_NotMounted_Denied_Windows: %v", err)
-	}
-}
-
-func Test_Rego_EnforceMappedDirectoryMountPolicy_OpenDoor_AllowsAll_Windows(t *testing.T) {
-	policy, err := newRegoPolicy(
-		openDoorRego,
-		[]oci.Mount{},
-		[]oci.Mount{},
-		testOSType,
-	)
-	if err != nil {
-		t.Fatalf("failed to create policy: %v", err)
-	}
-
-	ctx := context.Background()
-
-	// Open door should allow both readonly and writable
-	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\readonly`, true)
-	if err != nil {
-		t.Errorf("open door should allow readonly mount: %v", err)
-	}
-
-	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\writable`, false)
-	if err != nil {
-		t.Errorf("open door should allow writable mount: %v", err)
 	}
 }
