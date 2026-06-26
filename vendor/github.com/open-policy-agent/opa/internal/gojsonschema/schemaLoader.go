@@ -23,10 +23,11 @@ import (
 
 // SchemaLoader is used to load schemas
 type SchemaLoader struct {
-	pool       *schemaPool
-	AutoDetect bool
-	Validate   bool
-	Draft      Draft
+	pool             *schemaPool
+	AutoDetect       bool
+	Validate         bool
+	Draft            Draft
+	ValidatePatterns bool
 }
 
 // NewSchemaLoader creates a new NewSchemaLoader
@@ -45,7 +46,7 @@ func NewSchemaLoader() *SchemaLoader {
 	return ps
 }
 
-func (sl *SchemaLoader) validateMetaschema(documentNode interface{}) error {
+func (sl *SchemaLoader) validateMetaschema(documentNode any) error {
 
 	var (
 		schema string
@@ -157,8 +158,9 @@ func (sl *SchemaLoader) Compile(rootSchema JSONLoader) (*Schema, error) {
 	d.Pool.jsonLoaderFactory = rootSchema.LoaderFactory()
 	d.DocumentReference = ref
 	d.ReferencePool = newSchemaReferencePool()
+	d.validatePatterns = sl.ValidatePatterns
 
-	var doc interface{}
+	var doc any
 	if ref.String() != "" {
 		// Get document from schema pool
 		spd, err := d.Pool.GetDocument(d.DocumentReference)
