@@ -63,6 +63,8 @@ const (
 	maxGeneratedMountOptionLength             = 32
 	maxGeneratedExecProcesses                 = 4
 	maxGeneratedWorkingDirLength              = 128
+	maxGeneratedMappedDirectories             = 8
+	maxGeneratedMappedDirectoryPathLength     = 64
 	maxSignalNumber                           = 64
 	maxGeneratedNameLength                    = 8
 	maxGeneratedGroupNames                    = 4
@@ -709,6 +711,27 @@ func setupWindowsExternalProcessTest(gc *generatedWindowsConstraints) (tc *regoE
 }
 
 type regoExternalPolicyTestConfig struct {
+	policy *regoEnforcer
+}
+
+func setupWindowsMappedDirectoriesTest(gc *generatedWindowsConstraints) (tc *regoMappedDirectoriesTestConfig, err error) {
+	gc.mappedDirectories = generateMappedDirectories(testRand)
+	securityPolicy := gc.toPolicy()
+
+	policy, err := newRegoPolicy(securityPolicy.marshalWindowsRego(),
+		[]oci.Mount{},
+		[]oci.Mount{},
+		testOSType)
+	if err != nil {
+		return nil, err
+	}
+
+	return &regoMappedDirectoriesTestConfig{
+		policy: policy,
+	}, nil
+}
+
+type regoMappedDirectoriesTestConfig struct {
 	policy *regoEnforcer
 }
 
@@ -1998,6 +2021,10 @@ func selectWindowsExternalProcessFromConstraints(constraints *generatedWindowsCo
 	return constraints.externalProcesses[r.Intn(numberOfProcessesInConstraints)]
 }
 
+func selectMappedDirectoryFromConstraints(constraints *generatedWindowsConstraints, r *rand.Rand) WindowsMappedDirectoryRule {
+	return constraints.mappedDirectories[r.Intn(len(constraints.mappedDirectories))]
+}
+
 func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 	return &securityPolicyInternal{
 		Containers:                       constraints.containers,
@@ -2382,6 +2409,28 @@ func generateRootHash(r *rand.Rand) string {
 
 func generateWorkingDir(r *rand.Rand) string {
 	return randVariableString(r, maxGeneratedWorkingDirLength)
+}
+
+func generateMappedDirectory(r *rand.Rand) WindowsMappedDirectoryRule {
+	return WindowsMappedDirectoryRule{
+		ContainerPath: `C:\` + randVariableString(r, maxGeneratedMappedDirectoryPathLength),
+		ReadOnly:      randBool(r),
+	}
+}
+
+func generateMappedDirectories(r *rand.Rand) []WindowsMappedDirectoryRule {
+	numRules := atLeastOneAtMost(r, maxGeneratedMappedDirectories)
+	rules := make([]WindowsMappedDirectoryRule, 0, numRules)
+	seen := make(map[string]struct{}, numRules)
+	for int32(len(rules)) < numRules {
+		rule := generateMappedDirectory(r)
+		if _, dup := seen[rule.ContainerPath]; dup {
+			continue
+		}
+		seen[rule.ContainerPath] = struct{}{}
+		rules = append(rules, rule)
+	}
+	return rules
 }
 
 func generateWindowsUser(r *rand.Rand) string {
