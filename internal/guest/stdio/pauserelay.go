@@ -70,6 +70,9 @@ func writeAll(w io.Writer, p []byte) (int, error) {
 	written := 0
 	for written < len(p) {
 		n, err := w.Write(p[written:])
+		// Count n before the error check: per the io.Writer contract these n
+		// bytes were written even on a partial-write error, so the caller
+		// replays only p[written:] and never re-sends them.
 		written += n
 		if err != nil {
 			return written, err
