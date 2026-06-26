@@ -1306,9 +1306,27 @@ mapped_directory_mounted(target) {
     data.metadata.mapped_directories[target]
 }
 
+default mapped_directory_ok := false
+
+# allowed by an entry in the base policy
+mapped_directory_ok {
+    mapped_directory := data.policy.mapped_directories[_]
+    input.containerPath == mapped_directory.container_path
+    input.readOnly == mapped_directory.read_only
+}
+
+# allowed by an entry loaded from a fragment
+mapped_directory_ok {
+    feed := data.metadata.issuers[_].feeds[_]
+    some fragment in feed
+    mapped_directory := fragment.mapped_directories[_]
+    input.containerPath == mapped_directory.container_path
+    input.readOnly == mapped_directory.read_only
+}
+
 mapped_directory_mount := {"metadata": [add_mapped_dir], "allowed": true} {
     not mapped_directory_mounted(input.containerPath)
-    input.readOnly
+    mapped_directory_ok
     add_mapped_dir := {
         "name": "mapped_directories",
         "action": "add",
@@ -1863,9 +1881,9 @@ errors["mapped directory already mounted at path"] {
     mapped_directory_mounted(input.containerPath)
 }
 
-errors["writable mapped directory not allowed"] {
+errors["no matching mapped directory in policy"] {
     input.rule == "mapped_directory_mount"
-    not input.readOnly
+    not mapped_directory_ok
 }
 
 errors["no mapped directory at path to unmount"] {

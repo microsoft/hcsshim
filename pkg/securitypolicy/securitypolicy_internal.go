@@ -26,6 +26,7 @@ type securityPolicyWindowsInternal struct {
 	Containers                       []*securityPolicyWindowsContainer
 	ExternalProcesses                []*externalProcess
 	Fragments                        []*fragment
+	MappedDirectories                []WindowsMappedDirectoryRule
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool

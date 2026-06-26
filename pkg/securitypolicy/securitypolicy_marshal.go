@@ -585,6 +585,20 @@ func addFragments(builder *strings.Builder, fragments []*fragment) {
 	writeLine(builder, "]")
 }
 
+func addWindowsMappedDirectories(builder *strings.Builder, rules []WindowsMappedDirectoryRule) {
+	if len(rules) == 0 {
+		return
+	}
+
+	writeLine(builder, "mapped_directories := [")
+
+	for _, rule := range rules {
+		writeLine(builder, `%s{"container_path": %q, "read_only": %t},`, indentUsing, rule.ContainerPath, rule.ReadOnly)
+	}
+
+	writeLine(builder, "]")
+}
+
 func (p securityPolicyInternal) marshalRego() string {
 	builder := new(strings.Builder)
 	addFragments(builder, p.Fragments)
@@ -615,6 +629,7 @@ func (p securityPolicyWindowsInternal) marshalWindowsRego() string {
 	addFragments(builder, p.Fragments)
 	addWindowsContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
+	addWindowsMappedDirectories(builder, p.MappedDirectories)
 	writeLine(builder, `allow_properties_access := %t`, p.AllowPropertiesAccess)
 	writeLine(builder, `allow_dump_stacks := %t`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %t`, p.AllowRuntimeLogging)

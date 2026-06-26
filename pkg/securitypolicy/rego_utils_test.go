@@ -2916,6 +2916,7 @@ type generatedWindowsConstraints struct {
 	containers                       []*securityPolicyWindowsContainer
 	externalProcesses                []*externalProcess
 	fragments                        []*fragment
+	mappedDirectories                []WindowsMappedDirectoryRule
 	allowGetProperties               bool
 	allowDumpStacks                  bool
 	allowRuntimeLogging              bool
@@ -2932,6 +2933,7 @@ func (constraints *generatedWindowsConstraints) toPolicy() *securityPolicyWindow
 		Containers:                       constraints.containers,
 		ExternalProcesses:                constraints.externalProcesses,
 		Fragments:                        constraints.fragments,
+		MappedDirectories:                constraints.mappedDirectories,
 		AllowPropertiesAccess:            constraints.allowGetProperties,
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,

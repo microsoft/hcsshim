@@ -94,6 +94,15 @@ type FragmentConfig struct {
 	Includes   []string `json:"includes" toml:"include"`
 }
 
+// WindowsMappedDirectoryRule describes a single whitelisted VSMB mapped
+// directory share for a Windows UVM. Mapped directories are mounted at the
+// UVM level (before any container is started), so the rule is keyed only on
+// the container-visible path and the read-only flag.
+type WindowsMappedDirectoryRule struct {
+	ContainerPath string `json:"container_path" toml:"container_path"`
+	ReadOnly      bool   `json:"read_only" toml:"read_only"`
+}
+
 // AuthConfig contains toml or JSON config for registry authentication.
 type AuthConfig struct {
 	Username string `json:"username" toml:"username"`
