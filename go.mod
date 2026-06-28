@@ -55,7 +55,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
-	go.etcd.io/bbolt v1.4.3
+	go.etcd.io/bbolt v1.5.0
 	go.opencensus.io v0.24.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/net v0.56.0
