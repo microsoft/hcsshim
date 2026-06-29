@@ -381,7 +381,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			return fmt.Errorf("failed to get created container: %w", err)
 		}
 
-		c.processesMutex.Lock() // TODO: maybe move to the top of the block?
+		c.processesMutex.Lock()
 		isCreateExec := c.commandLine && !c.commandLineExec
 		if isCreateExec {
 			// if this is an exec of Container command line, then it's already enforced
