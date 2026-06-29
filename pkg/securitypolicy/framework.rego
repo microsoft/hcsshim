@@ -791,7 +791,7 @@ mountList_ok(mounts, allow_elevated) {
     }
 }
 mountList_ok(mounts, allow_elevated) {
-    # no-op for windows
+    # no-op for windows. TODO: Check if it's true. `mounts` made a dir inside a conainer.
     is_windows
 }
 
