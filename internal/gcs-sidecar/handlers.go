@@ -74,7 +74,8 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		container := cwcowHostedSystem.Container
 		spec := cwcowHostedSystemConfig.Spec
 		containerID := createContainerRequest.ContainerID
-		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %v}}", string(req.message), schemaVersion, container)
+		containerJSON, _ := json.Marshal(container)
+		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %s}}", string(req.message), schemaVersion, containerJSON)
 
 		// Enforce registry changes policy
 		if container != nil && container.RegistryChanges != nil {
