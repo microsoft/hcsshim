@@ -60,7 +60,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	// containerConfig can be of type uvnConfig or hcsschema.HostedSystem or guestresource.CWCOWHostedSystem
 	var (
 		uvmConfig               prot.UvmConfig
-		hostedSystemConfig      hcsschema.HostedSystem
 		cwcowHostedSystemConfig guestresource.CWCOWHostedSystem
 	)
 	if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &uvmConfig); err == nil &&
@@ -68,11 +67,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		systemType := uvmConfig.SystemType
 		timeZoneInformation := uvmConfig.TimeZoneInformation
 		log.G(ctx).Tracef("createContainer: uvmConfig: {systemType: %v, timeZoneInformation: %v}}", systemType, timeZoneInformation)
-	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &hostedSystemConfig); err == nil &&
-		hostedSystemConfig.SchemaVersion != nil && hostedSystemConfig.Container != nil {
-		schemaVersion := hostedSystemConfig.SchemaVersion
-		container := hostedSystemConfig.Container
-		log.G(ctx).Tracef("rpcCreate: HostedSystemConfig: {schemaVersion: %v, container: %v}}", schemaVersion, container)
 	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &cwcowHostedSystemConfig); err == nil &&
 		cwcowHostedSystemConfig.Spec.Version != "" && cwcowHostedSystemConfig.CWCOWHostedSystem.Container != nil {
 		cwcowHostedSystem := cwcowHostedSystemConfig.CWCOWHostedSystem
