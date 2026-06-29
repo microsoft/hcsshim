@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // buildModifySettingsRequest creates a serialized ModifySettings request message
@@ -498,6 +500,203 @@ func TestExecuteProcess_External_AppliesFilteredEnv(t *testing.T) {
 		"PATH": `C:\Windows\System32`,
 		"KEEP": "1",
 	}
+	if !reflect.DeepEqual(gotParams.Environment, want) {
+		t.Errorf("forwarded Environment = %v, want %v", gotParams.Environment, want)
+	}
+}
+
+// addInitContainer registers a container in the "init process not yet exec'd"
+// state (commandLine=true, commandLineExec=false) with the given enforced
+// process spec, so executeProcess takes the create-exec cross-check branch.
+func addInitContainer(t *testing.T, b *Bridge, id string, proc *oci.Process) {
+	t.Helper()
+	c := &Container{
+		id:              id,
+		spec:            oci.Spec{Process: proc},
+		processes:       make(map[uint32]*containerProcess),
+		commandLine:     true,
+		commandLineExec: false,
+	}
+	if err := b.hostState.AddContainer(context.Background(), id, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+}
+
+// buildExecRequest serializes an executeProcess request for the given container
+// and process parameters.
+func buildExecRequest(t *testing.T, containerID string, params hcsschema.ProcessParameters) *request {
+	t.Helper()
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{
+			ContainerID: containerID,
+			ActivityID:  guid.GUID{},
+		},
+		Settings: prot.ExecuteProcessSettings{
+			ProcessParameters: prot.AnyInString{Value: &params},
+		},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	return &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   7,
+		},
+		message: msg,
+	}
+}
+
+// unwrapExecParams pulls the inner ProcessParameters back out of a forwarded
+// executeProcess request message.
+func unwrapExecParams(t *testing.T, message []byte) hcsschema.ProcessParameters {
+	t.Helper()
+	var outer prot.ContainerExecuteProcess
+	var paramsRaw json.RawMessage
+	outer.Settings.ProcessParameters.Value = &paramsRaw
+	if err := json.Unmarshal(message, &outer); err != nil {
+		t.Fatalf("unmarshal forwarded outer: %v", err)
+	}
+	var params hcsschema.ProcessParameters
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		t.Fatalf("unmarshal forwarded ProcessParameters: %v", err)
+	}
+	return params
+}
+
+func assertNothingForwarded(t *testing.T, b *Bridge) {
+	t.Helper()
+	select {
+	case got := <-b.sendToGCSCh:
+		t.Fatalf("unexpected request forwarded to GCS: %+v", got)
+	default:
+	}
+}
+
+// enforcedInitProcess is the process spec used by the create-exec tests: the
+// command line, working directory, user and environment that createContainer
+// enforcement would have produced.
+func enforcedInitProcess() *oci.Process {
+	return &oci.Process{
+		Args: []string{"python", "hello.py"},
+		Cwd:  `C:\app`,
+		User: oci.User{Username: "ContainerUser"},
+		Env:  []string{"APP_FOO=BAR"},
+	}
+}
+
+// TestExecuteProcess_InitExec_DeniesCommandLineMismatch verifies that an init
+// exec whose command line does not match the enforced spec (the
+// "cmd.exe /c <evil>" tamper) is denied before anything is forwarded to GCS.
+func TestExecuteProcess_InitExec_DeniesCommandLineMismatch(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "cmd.exe /c whoami",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+	})
+
+	err := b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "command line") {
+		t.Fatalf("expected command-line denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_DeniesWorkingDirMismatch verifies a tampered
+// working directory is denied.
+func TestExecuteProcess_InitExec_DeniesWorkingDirMismatch(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\Windows`,
+		User:             "ContainerUser",
+	})
+
+	err := b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "working directory") {
+		t.Fatalf("expected working-directory denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_DeniesUserMismatch verifies a tampered user is
+// denied.
+func TestExecuteProcess_InitExec_DeniesUserMismatch(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerAdministrator",
+	})
+
+	err := b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "user") {
+		t.Fatalf("expected user denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_AllowsAndAppliesEnv verifies that an init exec
+// matching the enforced command line/cwd/user is allowed, and that the
+// environment forwarded to GCS is reduced to exactly the enforced set (extra
+// host-supplied variables are dropped).
+func TestExecuteProcess_InitExec_AllowsAndAppliesEnv(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+		Environment: map[string]string{
+			"APP_FOO": "BAR",
+			"DROP":    "secret",
+		},
+	})
+
+	// The container path forwards to GCS and then blocks waiting for the exec
+	// response keyed by header ID, so run the handler in a goroutine and feed
+	// it a response once we've captured the forwarded request.
+	done := make(chan error, 1)
+	go func() { done <- b.executeProcess(req) }()
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	// Stand in for GCS: deliver an exec response on the channel the handler
+	// registered under this request's header ID, which unblocks its select.
+	b.pendingMu.Lock()
+	ch := b.pending[got.header.ID]
+	b.pendingMu.Unlock()
+	if ch == nil {
+		t.Fatal("no pending response channel registered for forwarded request")
+	}
+	ch <- &prot.ContainerExecuteProcessResponse{ProcessID: 42}
+
+	if err := <-done; err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	want := map[string]string{"APP_FOO": "BAR"}
 	if !reflect.DeepEqual(gotParams.Environment, want) {
 		t.Errorf("forwarded Environment = %v, want %v", gotParams.Environment, want)
 	}

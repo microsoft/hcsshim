@@ -28,6 +28,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -122,8 +123,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 
 		// We enforce `spec`, which is not passed to inbox gcs within this createContainer.
 		// The result of enforcement is stored in memory and used for executeProcess.
-		//
-		// TODO: Implement the above logic in executeProcess.
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}
@@ -255,6 +254,19 @@ func ociEnvToProcessParamEnv(envs []string) map[string]string {
 	return paramEnv
 }
 
+// escapeArgs builds a Windows-style escaped command line from a set of OCI
+// process args. This mirrors how the host shim constructs the init process'
+// ProcessParameters.CommandLine (internal/cmd.escapeArgs), so the sidecar can
+// reconstruct the expected command line from the enforced spec and compare it
+// against what the host actually sends in executeProcess.
+func escapeArgs(args []string) string {
+	escaped := make([]string, len(args))
+	for i, a := range args {
+		escaped[i] = windows.EscapeArg(a)
+	}
+	return strings.Join(escaped, " ")
+}
+
 // rewriteExecRequest re-marshals an execute process request with updated
 // ProcessParameters (e.g., after env filtering by policy).
 func rewriteExecRequest(req *request, r prot.ContainerExecuteProcess, params hcsschema.ProcessParameters) (*request, error) {
@@ -374,7 +386,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		if isCreateExec {
 			// if this is an exec of Container command line, then it's already enforced
 			// during container creation.
-			// TODO: Use the result of enforcement from container creation to
+			// We use the result of enforcement from container creation to
 			// validate the exec command line and drop environment variable if necessary.
 
 			c.commandLineExec = true
@@ -405,6 +417,43 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				if err != nil {
 					return fmt.Errorf("failed to rewrite exec request with filtered env: %w", err)
 				}
+			}
+		} else {
+			// This is the container's init process. Its command line, working
+			// directory, user and environment were already validated against
+			// policy in createContainer, and the result is stored in c.spec.
+			// The host fully controls this executeProcess request though, so we
+			// cross-check it against the enforced spec instead of trusting it:
+			// otherwise a host could pass policy with a benign spec at create
+			// time and then launch a different init command (e.g.
+			// "cmd.exe /c <evil>") or smuggle back environment variables that
+			// create-time enforcement dropped.
+			if c.spec.Process == nil {
+				return errors.New("exec in container denied due to policy: enforced spec has no process")
+			}
+			enforced := c.spec.Process
+
+			expectedCmdLine := enforced.CommandLine
+			if expectedCmdLine == "" {
+				expectedCmdLine = escapeArgs(enforced.Args)
+			}
+			if processParams.CommandLine != expectedCmdLine {
+				return fmt.Errorf("exec in container denied due to policy: init command line %q does not match enforced %q", processParams.CommandLine, expectedCmdLine)
+			}
+			if enforced.Cwd != "" && processParams.WorkingDirectory != enforced.Cwd {
+				return fmt.Errorf("exec in container denied due to policy: init working directory %q does not match enforced %q", processParams.WorkingDirectory, enforced.Cwd)
+			}
+			if enforced.User.Username != "" && processParams.User != enforced.User.Username {
+				return fmt.Errorf("exec in container denied due to policy: init user %q does not match enforced %q", processParams.User, enforced.User.Username)
+			}
+
+			// Re-apply the environment that createContainer enforcement
+			// produced (dropped variables removed, nothing injected) so the
+			// init process runs with exactly the enforced environment.
+			processParams.Environment = ociEnvToProcessParamEnv(enforced.Env)
+			req, err = rewriteExecRequest(req, r, processParams)
+			if err != nil {
+				return fmt.Errorf("failed to rewrite init exec request with enforced env: %w", err)
 			}
 		}
 		headerID := req.header.ID
