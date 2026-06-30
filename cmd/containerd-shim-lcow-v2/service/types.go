@@ -11,12 +11,17 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9"
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi"
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
+	container "github.com/Microsoft/hcsshim/internal/controller/linuxcontainer"
 	"github.com/Microsoft/hcsshim/internal/controller/network"
+	"github.com/Microsoft/hcsshim/internal/controller/process"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
+	"github.com/containerd/containerd/api/runtime/task/v3"
+	containerdtypes "github.com/containerd/containerd/api/types/task"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // vmController is the subset of the VM controller that [Service] depends on.
@@ -89,4 +94,44 @@ type vmController interface {
 
 	// NetworkController returns the network controller for the VM.
 	NetworkController(networkNamespaceID string) *network.Controller
+}
+
+// containerController is the subset of the container controller that [Service]
+// depends on. Implemented by [*container.Controller] (linuxcontainer).
+//
+// The child-returning methods (GetProcess, NewProcess) intentionally return the
+// concrete [*process.Controller], exactly matching the production controller's
+// signatures. This lets [*container.Controller] satisfy the interface directly
+// — with no adapter or wrapper — while still allowing tests to substitute a
+// mock container controller via [getContainerController].
+type containerController interface {
+	// Create builds and creates the container in the guest from the OCI spec.
+	Create(ctx context.Context, spec *specs.Spec, opts *task.CreateTaskRequest, copts *container.CreateOpts) error
+
+	// Start starts the container's init process and returns its pid.
+	Start(ctx context.Context, events chan interface{}) (uint32, error)
+
+	// Wait blocks until the container has terminated and finished teardown.
+	Wait(ctx context.Context)
+
+	// Update applies a resource update to the running container.
+	Update(ctx context.Context, resources interface{}) error
+
+	// NewProcess creates a new exec process in the container.
+	NewProcess(execID string) (*process.Controller, error)
+
+	// GetProcess returns the process controller for the given exec ID.
+	GetProcess(execID string) (*process.Controller, error)
+
+	// Pids returns the processes currently running in the container.
+	Pids(ctx context.Context) ([]*containerdtypes.ProcessInfo, error)
+
+	// Stats returns resource-usage statistics for the container.
+	Stats(ctx context.Context) (*stats.Statistics, error)
+
+	// KillProcess signals a process (or all processes when all is set).
+	KillProcess(ctx context.Context, execID string, signal uint32, all bool) error
+
+	// DeleteProcess deletes a process and returns its final state.
+	DeleteProcess(ctx context.Context, execID string) (*task.StateResponse, error)
 }

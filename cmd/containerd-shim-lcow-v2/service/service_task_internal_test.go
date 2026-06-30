@@ -11,6 +11,8 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"go.uber.org/mock/gomock"
 
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v2/service/mocks"
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -18,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 
 	task "github.com/containerd/containerd/api/runtime/task/v3"
+	containerdtypes "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 )
@@ -558,5 +561,176 @@ func TestEnrichNotFoundError_WrapsErrdefsNotFound(t *testing.T) {
 	out := enrichNotFoundError(in)
 	if !errors.Is(out, errdefs.ErrNotFound) {
 		t.Errorf("expected output to wrap ErrNotFound, got %v", out)
+	}
+}
+
+// ─── Container delegation success paths ───────────────────────────────────
+
+// swapGetContainerController replaces the package-level getContainerController
+// seam with one that always yields mc, restoring the original when the test
+// ends.
+//
+// Tests that use this helper MUST NOT call t.Parallel(): getContainerController
+// is a package-level variable, so overriding it concurrently would race the
+// real lookups exercised by the parallel guard tests in this file. Go's testing
+// package never runs serial tests alongside the bodies of parallel ones, so a
+// serial test is safe to swap the global and restore it via t.Cleanup before
+// the parallel phase resumes.
+func swapGetContainerController(t *testing.T, mc containerController) {
+	t.Helper()
+	orig := getContainerController
+	t.Cleanup(func() { getContainerController = orig })
+	getContainerController = func(*Service, string) (containerController, error) {
+		return mc, nil
+	}
+}
+
+// TestPids_Success verifies that pidsInternal forwards to the container
+// controller and returns the processes it reports verbatim.
+func TestPids_Success(t *testing.T) {
+	svc, mockVM := newTestService(t)
+	mockVM.EXPECT().State().Return(vm.StateRunning)
+
+	mockCtr := mocks.NewMockcontainerController(gomock.NewController(t))
+	swapGetContainerController(t, mockCtr)
+
+	want := []*containerdtypes.ProcessInfo{{Pid: 42}, {Pid: 99}}
+	mockCtr.EXPECT().Pids(gomock.Any()).Return(want, nil)
+
+	resp, err := svc.pidsInternal(context.Background(), &task.PidsRequest{ID: "ctr-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Processes) != len(want) {
+		t.Fatalf("Processes len = %d, want %d", len(resp.Processes), len(want))
+	}
+	if resp.Processes[0].Pid != 42 || resp.Processes[1].Pid != 99 {
+		t.Errorf("Processes pids = [%d %d], want [42 99]", resp.Processes[0].Pid, resp.Processes[1].Pid)
+	}
+}
+
+// TestStats_Success verifies the container-level stats path: statsInternal
+// fetches the container's stats and marshals them into the response. The
+// container is not registered as a pod, so no VM stats are attached.
+func TestStats_Success(t *testing.T) {
+	svc, mockVM := newTestService(t)
+	mockVM.EXPECT().State().Return(vm.StateRunning)
+
+	mockCtr := mocks.NewMockcontainerController(gomock.NewController(t))
+	swapGetContainerController(t, mockCtr)
+
+	mockCtr.EXPECT().Stats(gomock.Any()).Return(&stats.Statistics{}, nil)
+
+	resp, err := svc.statsInternal(context.Background(), &task.StatsRequest{ID: "ctr-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil || resp.Stats == nil {
+		t.Fatal("expected non-nil stats in response")
+	}
+}
+
+// TestDeleteProcess_Success verifies the exec-deletion path: deleteInternal
+// forwards the exec ID to the container controller and maps the returned
+// process status onto the delete response. The forwarded ExecID is asserted so
+// a regression that drops or swaps it is caught.
+func TestDeleteProcess_Success(t *testing.T) {
+	svc, _ := newTestService(t)
+
+	mockCtr := mocks.NewMockcontainerController(gomock.NewController(t))
+	swapGetContainerController(t, mockCtr)
+
+	status := &task.StateResponse{Pid: 7, ExitStatus: 137}
+	mockCtr.EXPECT().DeleteProcess(gomock.Any(), "exec-1").Return(status, nil)
+
+	resp, err := svc.deleteInternal(context.Background(), &task.DeleteRequest{ID: "ctr-1", ExecID: "exec-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Pid != 7 || resp.ExitStatus != 137 {
+		t.Errorf("resp = {Pid:%d ExitStatus:%d}, want {Pid:7 ExitStatus:137}", resp.Pid, resp.ExitStatus)
+	}
+}
+
+// TestKill_Success verifies the single-container kill path: killInternal
+// forwards the exec ID, signal, and all=false to the container controller.
+func TestKill_Success(t *testing.T) {
+	svc, mockVM := newTestService(t)
+	mockVM.EXPECT().State().Return(vm.StateRunning)
+
+	mockCtr := mocks.NewMockcontainerController(gomock.NewController(t))
+	swapGetContainerController(t, mockCtr)
+
+	mockCtr.EXPECT().KillProcess(gomock.Any(), "exec-1", uint32(9), false).Return(nil)
+
+	if _, err := svc.killInternal(context.Background(), &task.KillRequest{
+		ID:     "ctr-1",
+		ExecID: "exec-1",
+		Signal: 9,
+		All:    false,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestUpdateContainer_Success verifies the container-level update path:
+// updateInternal unmarshals the resources and forwards them to the container
+// controller's Update. The container is not a pod, so the VM-update branch is
+// not taken. The forwarded resources are asserted to catch a regression that
+// passes the wrong payload.
+func TestUpdateContainer_Success(t *testing.T) {
+	svc, mockVM := newTestService(t)
+	mockVM.EXPECT().State().Return(vm.StateRunning)
+
+	mockCtr := mocks.NewMockcontainerController(gomock.NewController(t))
+	swapGetContainerController(t, mockCtr)
+
+	shares := uint64(512)
+	any, err := typeurl.MarshalAnyToProto(&specs.LinuxResources{
+		CPU: &specs.LinuxCPU{Shares: &shares},
+	})
+	if err != nil {
+		t.Fatalf("marshal resources: %v", err)
+	}
+
+	mockCtr.EXPECT().
+		Update(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, resources interface{}) error {
+			lr, ok := resources.(*specs.LinuxResources)
+			if !ok {
+				t.Fatalf("Update resources type = %T, want *specs.LinuxResources", resources)
+			}
+			if lr.CPU == nil || lr.CPU.Shares == nil || *lr.CPU.Shares != 512 {
+				t.Errorf("Update resources CPU.Shares = %v, want 512", lr.CPU)
+			}
+			return nil
+		})
+
+	if _, err := svc.updateInternal(context.Background(), &task.UpdateTaskRequest{
+		ID:        "ctr-1",
+		Resources: any,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestStartContainer_Success verifies the init-process start path:
+// startInternal starts the container (ExecID empty) and returns the pid the
+// container controller reports.
+func TestStartContainer_Success(t *testing.T) {
+	svc, mockVM := newTestService(t)
+	mockVM.EXPECT().State().Return(vm.StateRunning)
+
+	mockCtr := mocks.NewMockcontainerController(gomock.NewController(t))
+	swapGetContainerController(t, mockCtr)
+
+	mockCtr.EXPECT().Start(gomock.Any(), gomock.Any()).Return(uint32(1234), nil)
+
+	resp, err := svc.startInternal(context.Background(), &task.StartRequest{ID: "ctr-1", ExecID: ""})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Pid != 1234 {
+		t.Errorf("resp.Pid = %d, want 1234", resp.Pid)
 	}
 }
