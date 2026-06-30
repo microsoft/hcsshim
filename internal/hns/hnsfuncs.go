@@ -28,13 +28,27 @@ func hnsCallRawResponse(method, path, request string) (*hnsResponse, error) {
 	return hnsresponse, nil
 }
 
+type HNSError struct {
+	ErrorString string
+	ErrorCode   uint32
+}
+
+func (e *HNSError) Error() string {
+	return fmt.Sprintf("hns failed with error : %s", e.ErrorString)
+}
+
+var hnsCallRawResponseMock = hnsCallRawResponse
+
 func hnsCall(method, path, request string, returnResponse interface{}) error {
-	hnsresponse, err := hnsCallRawResponse(method, path, request)
+	hnsresponse, err := hnsCallRawResponseMock(method, path, request)
 	if err != nil {
 		return fmt.Errorf("failed during hnsCallRawResponse: %w", err)
 	}
 	if !hnsresponse.Success {
-		return fmt.Errorf("hns failed with error : %s", hnsresponse.Error)
+		return &HNSError{
+			ErrorString: hnsresponse.Error,
+			ErrorCode:   hnsresponse.ErrorCode,
+		}
 	}
 
 	if len(hnsresponse.Output) == 0 {
