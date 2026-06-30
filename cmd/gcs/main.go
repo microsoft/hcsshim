@@ -27,6 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
+	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -449,6 +450,10 @@ func main() {
 			bridgeOut = bridgeCon
 		}
 
+		// The bridge is up again; let the stdio relays resume any copiers that
+		// paused when the previous bridge dropped during a live migration.
+		stdio.SetBridgeDown(false)
+
 		logrus.Info("bridge connected, serving")
 
 		serveErr := b.ListenAndServe(bridgeIn, bridgeOut)
@@ -457,6 +462,12 @@ func main() {
 			logrus.Info("bridge shutdown requested, exiting reconnect loop")
 			break
 		}
+
+		// The bridge dropped (for example during a live migration). Tell the
+		// stdio relays to pause rather than tear down so each process's stdio
+		// survives the reconnect; the relays re-dial and resume once the bridge
+		// is back and SetBridgeDown(false) is set above.
+		stdio.SetBridgeDown(true)
 
 		logrus.WithError(serveErr).Warn("bridge connection lost, will reconnect")
 		time.Sleep(reconnectInterval)
