@@ -362,8 +362,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapp
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.50.0/go.mod h1:otE2jQekW/PqXk1Awf5lmfokJx4uwuqcj1ab5SpGeW0=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.51.0/go.mod h1:otE2jQekW/PqXk1Awf5lmfokJx4uwuqcj1ab5SpGeW0=
 github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c/go.mod h1:X0CRv0ky0k6m906ixxpzmDRLvX58TFUKS2eePweuyxk=
-github.com/Microsoft/cosesign1go v1.5.0 h1:YmQCF8z7dGp50Rp/+rLTLFOFgIfZ1GSUHXPgLLlOlNk=
-github.com/Microsoft/cosesign1go v1.5.0/go.mod h1:s7E3nBWxb//ZLhuLAU5u9EZ1qMGBdgZzrKIUW1H/OIY=
+github.com/Microsoft/cosesign1go v1.6.0 h1:/dGDBxrrbqdkUDOgUDvFAKBou85XmSrB58G3sfYaAMk=
+github.com/Microsoft/cosesign1go v1.6.0/go.mod h1:7x+fdYtZ4ureEgfVtl2K+nY4MMfujMsCIb5kRuncpmg=
 github.com/Microsoft/didx509go v0.0.3 h1:n/owuFOXVzCEzSyzivMEolKEouBm9G0NrEDgoTekM8A=
 github.com/Microsoft/didx509go v0.0.3/go.mod h1:wWt+iQsLzn3011+VfESzznLIp/Owhuj7rLF7yLglYbk=
 github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 h1:0kQAzHq8vLs7Pptv+7TxjdETLf/nIqJpIB4oC6Ba4vY=
