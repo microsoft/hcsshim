@@ -75,6 +75,27 @@ func MaximumDiskSize(size int64) Option {
 	}
 }
 
+// ReadWrite instructs the writer to not mark the file system as write-protected.
+func ReadWrite() Option {
+	return func(p *params) {
+		p.ext4opts = append(p.ext4opts, compactext4.ReadWrite)
+	}
+}
+
+// UUID instructs the writer to set the UUID.
+func UUID(uuid [16]byte) Option {
+	return func(p *params) {
+		p.ext4opts = append(p.ext4opts, compactext4.UUID(uuid))
+	}
+}
+
+// VolumeName instructs the writer to set the volume name.
+func VolumeName(volumeName [16]byte) Option {
+	return func(p *params) {
+		p.ext4opts = append(p.ext4opts, compactext4.VolumeName(volumeName))
+	}
+}
+
 const (
 	whiteoutPrefix = ".wh."
 	opaqueWhiteout = ".wh..wh..opq"
