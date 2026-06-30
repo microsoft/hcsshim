@@ -42,8 +42,9 @@ type Service struct {
 	// For LCOW shim, sandboxID corresponds 1-1 with the UtilityVM managed by the shim.
 	sandboxID string
 
-	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
-	vmController *vm.Controller
+	// vmController is responsible for managing the lifecycle of the underlying
+	// utility VM.
+	vmController vmController
 
 	// podControllers maps podID -> PodController for each active pod.
 	podControllers map[string]*pod.Controller

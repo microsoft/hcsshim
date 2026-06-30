@@ -34,7 +34,12 @@ import (
 )
 
 // getContainerController looks up the container controller for the given container ID.
-func (s *Service) getContainerController(containerID string) (*container.Controller, error) {
+//
+// It is a package-level function variable rather than a plain method so that
+// unit tests can substitute a mock [containerController] for a given Service
+// without having to construct a real pod/container chain. Production code never
+// reassigns it.
+var getContainerController = func(s *Service, containerID string) (containerController, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -71,7 +76,7 @@ func (s *Service) getPodController(podID string) (*pod.Controller, bool) {
 // stateInternal returns the current status of a process within a container.
 func (s *Service) stateInternal(_ context.Context, request *task.StateRequest) (*task.StateResponse, error) {
 	// Look up the container controller for the requested container.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for state request: %w", err)
 	}
@@ -224,7 +229,7 @@ func (s *Service) startInternal(ctx context.Context, request *task.StartRequest)
 	}
 
 	// Get the container controller for the requested task.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for start request: %w", err)
 	}
@@ -275,7 +280,7 @@ func (s *Service) startInternal(ctx context.Context, request *task.StartRequest)
 // deleteInternal deletes a process, container, or pod sandbox depending on the request.
 func (s *Service) deleteInternal(ctx context.Context, request *task.DeleteRequest) (*task.DeleteResponse, error) {
 	// Look up the container controller for the target ID.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for delete request: %w", err)
 	}
@@ -363,7 +368,7 @@ func (s *Service) pidsInternal(ctx context.Context, request *task.PidsRequest) (
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for pids request: %w", err)
 	}
@@ -400,7 +405,7 @@ func (s *Service) killInternal(ctx context.Context, request *task.KillRequest) (
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for kill request: %w", err)
 	}
@@ -447,7 +452,7 @@ func (s *Service) execInternal(ctx context.Context, request *task.ExecProcessReq
 		return nil, fmt.Errorf("unmarshal process spec: %w", err)
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for exec request: %w", err)
 	}
@@ -482,7 +487,7 @@ func (s *Service) resizePtyInternal(ctx context.Context, request *task.ResizePty
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for resize pty request: %w", err)
 	}
@@ -505,7 +510,7 @@ func (s *Service) closeIOInternal(ctx context.Context, request *task.CloseIORequ
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for close IO request: %w", err)
 	}
@@ -545,7 +550,7 @@ func (s *Service) updateInternal(ctx context.Context, request *task.UpdateTaskRe
 	}
 
 	// Otherwise, find the container controller and call Update on it.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update resources for container %s: %w", request.ID, err)
 	}
@@ -606,7 +611,7 @@ func (s *Service) waitInternal(ctx context.Context, request *task.WaitRequest) (
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for wait request: %w", err)
 	}
@@ -643,7 +648,7 @@ func (s *Service) statsInternal(ctx context.Context, request *task.StatsRequest)
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for stats request: %w", err)
 	}
