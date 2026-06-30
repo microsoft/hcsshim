@@ -15,6 +15,8 @@ type MigrationService interface {
 	FinalizeSandbox(context.Context, *FinalizeSandboxRequest) (*FinalizeSandboxResponse, error)
 	Notifications(context.Context, *NotificationsRequest, Migration_NotificationsServer) error
 	CreateDuplicateSocket(context.Context, *CreateDuplicateSocketRequest) (*CreateDuplicateSocketResponse, error)
+	Cancel(context.Context, *CancelRequest) (*CancelResponse, error)
+	Cleanup(context.Context, *CleanupRequest) (*CleanupResponse, error)
 }
 
 type Migration_NotificationsServer interface {
@@ -75,6 +77,20 @@ func RegisterMigrationService(srv *ttrpc.Server, svc MigrationService) {
 				}
 				return svc.CreateDuplicateSocket(ctx, &req)
 			},
+			"Cancel": func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
+				var req CancelRequest
+				if err := unmarshal(&req); err != nil {
+					return nil, err
+				}
+				return svc.Cancel(ctx, &req)
+			},
+			"Cleanup": func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
+				var req CleanupRequest
+				if err := unmarshal(&req); err != nil {
+					return nil, err
+				}
+				return svc.Cleanup(ctx, &req)
+			},
 		},
 		Streams: map[string]ttrpc.Stream{
 			"Notifications": {
@@ -100,6 +116,8 @@ type MigrationClient interface {
 	FinalizeSandbox(context.Context, *FinalizeSandboxRequest) (*FinalizeSandboxResponse, error)
 	Notifications(context.Context, *NotificationsRequest) (Migration_NotificationsClient, error)
 	CreateDuplicateSocket(context.Context, *CreateDuplicateSocketRequest) (*CreateDuplicateSocketResponse, error)
+	Cancel(context.Context, *CancelRequest) (*CancelResponse, error)
+	Cleanup(context.Context, *CleanupRequest) (*CleanupResponse, error)
 }
 
 type migrationClient struct {
@@ -184,6 +202,22 @@ func (x *migrationNotificationsClient) Recv() (*NotificationsResponse, error) {
 func (c *migrationClient) CreateDuplicateSocket(ctx context.Context, req *CreateDuplicateSocketRequest) (*CreateDuplicateSocketResponse, error) {
 	var resp CreateDuplicateSocketResponse
 	if err := c.client.Call(ctx, "Migration", "CreateDuplicateSocket", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *migrationClient) Cancel(ctx context.Context, req *CancelRequest) (*CancelResponse, error) {
+	var resp CancelResponse
+	if err := c.client.Call(ctx, "Migration", "Cancel", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *migrationClient) Cleanup(ctx context.Context, req *CleanupRequest) (*CleanupResponse, error) {
+	var resp CleanupResponse
+	if err := c.client.Call(ctx, "Migration", "Cleanup", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
