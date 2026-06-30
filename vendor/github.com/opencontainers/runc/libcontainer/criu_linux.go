@@ -15,15 +15,16 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode"
 
-	"github.com/checkpoint-restore/go-criu/v7"
-	criurpc "github.com/checkpoint-restore/go-criu/v7/rpc"
+	"github.com/checkpoint-restore/go-criu/v8"
+	criurpc "github.com/checkpoint-restore/go-criu/v8/rpc"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/opencontainers/cgroups"
+	"github.com/opencontainers/runc/internal/cmsg"
 	"github.com/opencontainers/runc/internal/pathrs"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/utils"
@@ -108,14 +109,17 @@ func (c *Container) checkCriuVersion(minVersion int) error {
 
 const descriptorsFilename = "descriptors.json"
 
+// TODO: replace with new(v) once Go < 1.26 is not supported.
+func mkPtr[T any](v T) *T { return &v }
+
 func (c *Container) addCriuDumpMount(req *criurpc.CriuReq, m *configs.Mount) {
 	mountDest := strings.TrimPrefix(m.Destination, c.config.Rootfs)
 	if dest, err := securejoin.SecureJoin(c.config.Rootfs, mountDest); err == nil {
 		mountDest = dest[len(c.config.Rootfs):]
 	}
 	extMnt := &criurpc.ExtMountMap{
-		Key: proto.String(mountDest),
-		Val: proto.String(mountDest),
+		Key: mkPtr(mountDest),
+		Val: mkPtr(mountDest),
 	}
 	req.Opts.ExtMnt = append(req.Opts.ExtMnt, extMnt)
 }
@@ -134,8 +138,8 @@ func (c *Container) addMaskPaths(req *criurpc.CriuReq) error {
 		}
 
 		extMnt := &criurpc.ExtMountMap{
-			Key: proto.String(path),
-			Val: proto.String("/dev/null"),
+			Key: mkPtr(path),
+			Val: mkPtr("/dev/null"),
 		}
 		req.Opts.ExtMnt = append(req.Opts.ExtMnt, extMnt)
 	}
@@ -155,7 +159,7 @@ func (c *Container) handleCriuConfigurationFile(rpcOpts *criurpc.CriuOpts) {
 		// configuration file. If the file does not exist, CRIU
 		// will just ignore it.
 		if configFile != "" {
-			rpcOpts.ConfigFile = proto.String(configFile)
+			rpcOpts.ConfigFile = mkPtr(configFile)
 		}
 		// If 'org.criu.config' exists and is set to an empty
 		// string, a runc specific CRIU configuration file will
@@ -163,7 +167,7 @@ func (c *Container) handleCriuConfigurationFile(rpcOpts *criurpc.CriuOpts) {
 	} else {
 		// If the mentioned annotation has not been found, specify
 		// a default CRIU configuration file.
-		rpcOpts.ConfigFile = proto.String("/etc/criu/runc.conf")
+		rpcOpts.ConfigFile = mkPtr("/etc/criu/runc.conf")
 	}
 }
 
@@ -184,7 +188,19 @@ func (c *Container) criuSupportsExtNS(t configs.NamespaceType) bool {
 }
 
 func criuNsToKey(t configs.NamespaceType) string {
-	return "extRoot" + strings.Title(configs.NsName(t)) + "NS" //nolint:staticcheck // SA1019: strings.Title is deprecated
+	// Construct "extRoot" + capitalize(nsName) + "NS" without allocations.
+	// Result format: "extRootNetNS", "extRootPidNS", etc.
+	nsName := configs.NsName(t)
+	out := make([]byte, 0, 32)
+	out = append(out, "extRoot"...)
+	// Capitalize the first character (this assumes it's in the a-z range).
+	if len(nsName) > 0 {
+		out = append(out, byte(unicode.ToUpper(rune(nsName[0]))))
+		out = append(out, nsName[1:]...)
+	}
+	out = append(out, "NS"...)
+
+	return string(out)
 }
 
 func (c *Container) handleCheckpointingExternalNamespaces(rpcOpts *criurpc.CriuOpts, t configs.NamespaceType) error {
@@ -238,8 +254,8 @@ func (c *Container) handleRestoringNamespaces(rpcOpts *criurpc.CriuOpts, extraFi
 			// CRIU will issue a warning for NEWUSER:
 			// criu/namespaces.c: 'join-ns with user-namespace is not fully tested and dangerous'
 			rpcOpts.JoinNs = append(rpcOpts.JoinNs, &criurpc.JoinNamespace{
-				Ns:     proto.String(configs.NsName(ns.Type)),
-				NsFile: proto.String(nsPath),
+				Ns:     mkPtr(configs.NsName(ns.Type)),
+				NsFile: mkPtr(nsPath),
 			})
 		}
 	}
@@ -266,10 +282,10 @@ func (c *Container) handleRestoringExternalNamespaces(rpcOpts *criurpc.CriuOpts,
 		return fmt.Errorf("Requested network namespace %v does not exist", nsPath)
 	}
 	inheritFd := &criurpc.InheritFd{
-		Key: proto.String(criuNsToKey(t)),
+		Key: mkPtr(criuNsToKey(t)),
 		// The offset of four is necessary because 0, 1, 2 and 3 are
 		// already used by stdin, stdout, stderr, 'criu swrk' socket.
-		Fd: proto.Int32(int32(4 + len(*extraFiles))),
+		Fd: mkPtr(int32(4 + len(*extraFiles))),
 	}
 	rpcOpts.InheritFd = append(rpcOpts.InheritFd, inheritFd)
 	// All open FDs need to be transferred to CRIU via extraFiles
@@ -317,25 +333,25 @@ func (c *Container) Checkpoint(criuOpts *CriuOpts) error {
 	defer imageDir.Close()
 
 	rpcOpts := criurpc.CriuOpts{
-		ImagesDirFd:       proto.Int32(int32(imageDir.Fd())),
-		LogLevel:          proto.Int32(4),
-		LogFile:           proto.String(logFile),
-		Root:              proto.String(c.config.Rootfs),
-		ManageCgroups:     proto.Bool(true), // Obsoleted by ManageCgroupsMode.
+		ImagesDirFd:       mkPtr(int32(imageDir.Fd())),
+		LogLevel:          mkPtr(int32(4)),
+		LogFile:           mkPtr(logFile),
+		Root:              mkPtr(c.config.Rootfs),
+		ManageCgroups:     mkPtr(true), // Obsoleted by ManageCgroupsMode.
 		ManageCgroupsMode: &cgMode,
-		NotifyScripts:     proto.Bool(true),
-		Pid:               proto.Int32(int32(c.initProcess.pid())),
-		ShellJob:          proto.Bool(criuOpts.ShellJob),
-		LeaveRunning:      proto.Bool(criuOpts.LeaveRunning),
-		TcpEstablished:    proto.Bool(criuOpts.TcpEstablished),
-		TcpSkipInFlight:   proto.Bool(criuOpts.TcpSkipInFlight),
-		LinkRemap:         proto.Bool(criuOpts.LinkRemap),
-		ExtUnixSk:         proto.Bool(criuOpts.ExternalUnixConnections),
-		FileLocks:         proto.Bool(criuOpts.FileLocks),
-		EmptyNs:           proto.Uint32(criuOpts.EmptyNs),
-		OrphanPtsMaster:   proto.Bool(true),
-		AutoDedup:         proto.Bool(criuOpts.AutoDedup),
-		LazyPages:         proto.Bool(criuOpts.LazyPages),
+		NotifyScripts:     mkPtr(true),
+		Pid:               mkPtr(int32(c.initProcess.pid())),
+		ShellJob:          mkPtr(criuOpts.ShellJob),
+		LeaveRunning:      mkPtr(criuOpts.LeaveRunning),
+		TcpEstablished:    mkPtr(criuOpts.TcpEstablished),
+		TcpSkipInFlight:   mkPtr(criuOpts.TcpSkipInFlight),
+		LinkRemap:         mkPtr(criuOpts.LinkRemap),
+		ExtUnixSk:         mkPtr(criuOpts.ExternalUnixConnections),
+		FileLocks:         mkPtr(criuOpts.FileLocks),
+		EmptyNs:           mkPtr(criuOpts.EmptyNs),
+		OrphanPtsMaster:   mkPtr(true),
+		AutoDedup:         mkPtr(criuOpts.AutoDedup),
+		LazyPages:         mkPtr(criuOpts.LazyPages),
 	}
 
 	// if criuOpts.WorkDirectory is not set, criu default is used.
@@ -348,7 +364,7 @@ func (c *Container) Checkpoint(criuOpts *CriuOpts) error {
 			return err
 		}
 		defer workDir.Close()
-		rpcOpts.WorkDirFd = proto.Int32(int32(workDir.Fd()))
+		rpcOpts.WorkDirFd = mkPtr(int32(workDir.Fd()))
 		logDir = criuOpts.WorkDirectory
 	}
 
@@ -374,28 +390,28 @@ func (c *Container) Checkpoint(criuOpts *CriuOpts) error {
 	// Note cgroup v2 freezer is only supported since CRIU release 3.14.
 	if !cgroups.IsCgroup2UnifiedMode() || c.checkCriuVersion(31400) == nil {
 		if fcg := c.cgroupManager.Path("freezer"); fcg != "" {
-			rpcOpts.FreezeCgroup = proto.String(fcg)
+			rpcOpts.FreezeCgroup = mkPtr(fcg)
 		}
 	}
 
 	// append optional criu opts, e.g., page-server and port
 	if criuOpts.PageServer.Address != "" && criuOpts.PageServer.Port != 0 {
 		rpcOpts.Ps = &criurpc.CriuPageServerInfo{
-			Address: proto.String(criuOpts.PageServer.Address),
-			Port:    proto.Int32(criuOpts.PageServer.Port),
+			Address: mkPtr(criuOpts.PageServer.Address),
+			Port:    mkPtr(criuOpts.PageServer.Port),
 		}
 	}
 
 	// pre-dump may need parentImage param to complete iterative migration
 	if criuOpts.ParentImage != "" {
-		rpcOpts.ParentImg = proto.String(criuOpts.ParentImage)
-		rpcOpts.TrackMem = proto.Bool(true)
+		rpcOpts.ParentImg = mkPtr(criuOpts.ParentImage)
+		rpcOpts.TrackMem = mkPtr(true)
 	}
 
 	var t criurpc.CriuReqType
 	if criuOpts.PreDump {
 		feat := criurpc.CriuFeatures{
-			MemTrack: proto.Bool(true),
+			MemTrack: mkPtr(true),
 		}
 
 		if err := c.checkCriuFeatures(criuOpts, &feat); err != nil {
@@ -410,7 +426,7 @@ func (c *Container) Checkpoint(criuOpts *CriuOpts) error {
 	if criuOpts.LazyPages {
 		// lazy migration requested; check if criu supports it
 		feat := criurpc.CriuFeatures{
-			LazyPages: proto.Bool(true),
+			LazyPages: mkPtr(true),
 		}
 		if err := c.checkCriuFeatures(criuOpts, &feat); err != nil {
 			return err
@@ -430,7 +446,7 @@ func (c *Container) Checkpoint(criuOpts *CriuOpts) error {
 			if c.checkCriuVersion(31500) != nil {
 				// For criu 3.15+, use notifications (see case "status-ready"
 				// in criuNotifications). Otherwise, rely on criu status fd.
-				rpcOpts.StatusFd = proto.Int32(int32(fd))
+				rpcOpts.StatusFd = mkPtr(int32(fd))
 			}
 		}
 	}
@@ -498,8 +514,8 @@ func (c *Container) addCriuRestoreMount(req *criurpc.CriuReq, m *configs.Mount) 
 		mountDest = dest[len(c.config.Rootfs):]
 	}
 	extMnt := &criurpc.ExtMountMap{
-		Key: proto.String(mountDest),
-		Val: proto.String(m.Source),
+		Key: mkPtr(mountDest),
+		Val: mkPtr(m.Source),
 	}
 	req.Opts.ExtMnt = append(req.Opts.ExtMnt, extMnt)
 }
@@ -509,8 +525,8 @@ func (c *Container) restoreNetwork(req *criurpc.CriuReq, criuOpts *CriuOpts) {
 		switch iface.Type {
 		case "veth":
 			veth := new(criurpc.CriuVethPair)
-			veth.IfOut = proto.String(iface.HostInterfaceName)
-			veth.IfIn = proto.String(iface.Name)
+			veth.IfOut = mkPtr(iface.HostInterfaceName)
+			veth.IfIn = mkPtr(iface.Name)
 			req.Opts.Veths = append(req.Opts.Veths, veth)
 		case "loopback":
 			// Do nothing
@@ -518,8 +534,8 @@ func (c *Container) restoreNetwork(req *criurpc.CriuReq, criuOpts *CriuOpts) {
 	}
 	for _, i := range criuOpts.VethPairs {
 		veth := new(criurpc.CriuVethPair)
-		veth.IfOut = proto.String(i.HostInterfaceName)
-		veth.IfIn = proto.String(i.ContainerInterfaceName)
+		veth.IfOut = mkPtr(i.HostInterfaceName)
+		veth.IfIn = mkPtr(i.ContainerInterfaceName)
 		req.Opts.Veths = append(req.Opts.Veths, veth)
 	}
 }
@@ -540,10 +556,16 @@ func isOnTmpfs(path string, mounts []*configs.Mount) bool {
 // This function also creates missing mountpoints as long as they
 // are not on top of a tmpfs, as CRIU will restore tmpfs content anyway.
 func (c *Container) prepareCriuRestoreMounts(mounts []*configs.Mount) error {
+	rootFd, err := os.OpenFile(c.config.Rootfs, unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_PATH, 0)
+	if err != nil {
+		return fmt.Errorf("open rootfs handle: %w", err)
+	}
+	defer rootFd.Close()
+
 	umounts := []string{}
 	defer func() {
 		for _, u := range umounts {
-			mntFile, err := pathrs.OpenInRoot(c.config.Rootfs, u, unix.O_PATH)
+			mntFile, err := pathrs.OpenInRoot(rootFd, u, unix.O_PATH)
 			if err != nil {
 				logrus.Warnf("Error during cleanup unmounting %s: open handle: %v", u, err)
 				continue
@@ -577,7 +599,7 @@ func (c *Container) prepareCriuRestoreMounts(mounts []*configs.Mount) error {
 			continue
 		}
 		me := mountEntry{Mount: m}
-		if err := me.createOpenMountpoint(c.config.Rootfs); err != nil {
+		if err := me.createOpenMountpoint(rootFd); err != nil {
 			return fmt.Errorf("create criu restore mountpoint for %s mount: %w", me.Destination, err)
 		}
 		if me.dstFile != nil {
@@ -667,23 +689,23 @@ func (c *Container) Restore(process *Process, criuOpts *CriuOpts) error {
 	req := &criurpc.CriuReq{
 		Type: &t,
 		Opts: &criurpc.CriuOpts{
-			ImagesDirFd:       proto.Int32(int32(imageDir.Fd())),
-			EvasiveDevices:    proto.Bool(true),
-			LogLevel:          proto.Int32(4),
-			LogFile:           proto.String(logFile),
-			RstSibling:        proto.Bool(true),
-			Root:              proto.String(root),
-			ManageCgroups:     proto.Bool(true), // Obsoleted by ManageCgroupsMode.
+			ImagesDirFd:       mkPtr(int32(imageDir.Fd())),
+			EvasiveDevices:    mkPtr(true),
+			LogLevel:          mkPtr(int32(4)),
+			LogFile:           mkPtr(logFile),
+			RstSibling:        mkPtr(true),
+			Root:              mkPtr(root),
+			ManageCgroups:     mkPtr(true), // Obsoleted by ManageCgroupsMode.
 			ManageCgroupsMode: &cgMode,
-			NotifyScripts:     proto.Bool(true),
-			ShellJob:          proto.Bool(criuOpts.ShellJob),
-			ExtUnixSk:         proto.Bool(criuOpts.ExternalUnixConnections),
-			TcpEstablished:    proto.Bool(criuOpts.TcpEstablished),
-			FileLocks:         proto.Bool(criuOpts.FileLocks),
-			EmptyNs:           proto.Uint32(criuOpts.EmptyNs),
-			OrphanPtsMaster:   proto.Bool(true),
-			AutoDedup:         proto.Bool(criuOpts.AutoDedup),
-			LazyPages:         proto.Bool(criuOpts.LazyPages),
+			NotifyScripts:     mkPtr(true),
+			ShellJob:          mkPtr(criuOpts.ShellJob),
+			ExtUnixSk:         mkPtr(criuOpts.ExternalUnixConnections),
+			TcpEstablished:    mkPtr(criuOpts.TcpEstablished),
+			FileLocks:         mkPtr(criuOpts.FileLocks),
+			EmptyNs:           mkPtr(criuOpts.EmptyNs),
+			OrphanPtsMaster:   mkPtr(true),
+			AutoDedup:         mkPtr(criuOpts.AutoDedup),
+			LazyPages:         mkPtr(criuOpts.LazyPages),
 		},
 	}
 
@@ -693,13 +715,13 @@ func (c *Container) Restore(process *Process, criuOpts *CriuOpts) error {
 		if err := c.checkCriuVersion(31600); err != nil {
 			return errors.New("--lsm-profile requires at least CRIU 3.16")
 		}
-		req.Opts.LsmProfile = proto.String(criuOpts.LsmProfile)
+		req.Opts.LsmProfile = mkPtr(criuOpts.LsmProfile)
 	}
 	if criuOpts.LsmMountContext != "" {
 		if err := c.checkCriuVersion(31600); err != nil {
 			return errors.New("--lsm-mount-context requires at least CRIU 3.16")
 		}
-		req.Opts.LsmMountContext = proto.String(criuOpts.LsmMountContext)
+		req.Opts.LsmMountContext = mkPtr(criuOpts.LsmMountContext)
 	}
 
 	if criuOpts.WorkDirectory != "" {
@@ -713,7 +735,7 @@ func (c *Container) Restore(process *Process, criuOpts *CriuOpts) error {
 			return err
 		}
 		defer workDir.Close()
-		req.Opts.WorkDirFd = proto.Int32(int32(workDir.Fd()))
+		req.Opts.WorkDirFd = mkPtr(int32(workDir.Fd()))
 		logDir = criuOpts.WorkDirectory
 	}
 	c.handleCriuConfigurationFile(req.Opts)
@@ -776,8 +798,8 @@ func (c *Container) Restore(process *Process, criuOpts *CriuOpts) error {
 	for i := range fds {
 		if s := fds[i]; strings.Contains(s, "pipe:") {
 			inheritFd := new(criurpc.InheritFd)
-			inheritFd.Key = proto.String(s)
-			inheritFd.Fd = proto.Int32(int32(i))
+			inheritFd.Key = mkPtr(s)
+			inheritFd.Fd = mkPtr(int32(i))
 			req.Opts.InheritFd = append(req.Opts.InheritFd, inheritFd)
 		}
 	}
@@ -869,8 +891,8 @@ func (c *Container) criuApplyCgroups(pid int, req *criurpc.CriuReq) error {
 
 	for c, p := range cgroupsPaths {
 		cgroupRoot := &criurpc.CgroupRoot{
-			Ctrl: proto.String(c),
-			Path: proto.String(p),
+			Ctrl: mkPtr(c),
+			Path: mkPtr(p),
 		}
 		req.Opts.CgRoot = append(req.Opts.CgRoot, cgroupRoot)
 	}
@@ -964,7 +986,7 @@ func (c *Container) criuSwrk(process *Process, req *criurpc.CriuReq, opts *CriuO
 			}
 		}
 	}
-	data, err := proto.Marshal(req)
+	data, err := req.MarshalVT()
 	if err != nil {
 		return err
 	}
@@ -997,7 +1019,7 @@ func (c *Container) criuSwrk(process *Process, req *criurpc.CriuReq, opts *CriuO
 		}
 
 		resp := new(criurpc.CriuResp)
-		err = proto.Unmarshal(buf[:n], resp)
+		err = resp.UnmarshalVT(buf[:n])
 		if err != nil {
 			return err
 		}
@@ -1016,9 +1038,9 @@ func (c *Container) criuSwrk(process *Process, req *criurpc.CriuReq, opts *CriuO
 			}
 			req = &criurpc.CriuReq{
 				Type:          &t,
-				NotifySuccess: proto.Bool(true),
+				NotifySuccess: mkPtr(true),
 			}
-			data, err = proto.Marshal(req)
+			data, err = req.MarshalVT()
 			if err != nil {
 				return err
 			}
@@ -1174,7 +1196,7 @@ func (c *Container) criuNotifications(resp *criurpc.CriuResp, process *Process, 
 		defer master.Close()
 
 		// While we can access console.master, using the API is a good idea.
-		if err := utils.SendFile(process.ConsoleSocket, master); err != nil {
+		if err := cmsg.SendFile(process.ConsoleSocket, master); err != nil {
 			return err
 		}
 	case "status-ready":
