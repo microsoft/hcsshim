@@ -353,7 +353,7 @@ func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
 	// If debug mode is enabled, save the per-UVM boot/EFI VHD and scratch VHD to the debug data
 	// directory before they are cleaned up so they can be inspected (e.g. for boot failures).
 	if wopts, ok := uvm.createOpts.(*OptionsWCOW); ok &&
-		wopts.ConfidentialWCOWOptions != nil &&
+		uvm.HasConfidentialPolicy() &&
 		wopts.DebugMode &&
 		wopts.DebugDataPath != "" &&
 		wopts.BootFiles != nil &&

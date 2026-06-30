@@ -310,8 +310,8 @@ const (
 // uVM annotations.
 const (
 	// BootFilesRootPath indicates the path to find the boot files to use when creating the UVM. It applies
-	// to both LCOW and WCOW (including confidential WCOW, where it locates boot.vhd, rootfs.vhd, VMGS, and
-	// reference info). If unset, a platform-specific default location is used.
+	// to LCOW and confidential WCOW (where it locates boot.vhd, rootfs.vhd, VMGS, and reference info). If
+	// unset, a platform-specific default location is used.
 	BootFilesRootPath = "io.microsoft.virtualmachine.bootfilesrootpath"
 
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in

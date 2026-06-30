@@ -90,7 +90,7 @@ type OptionsWCOW struct {
 
 // confidentialWCOWOSBootFilesPath returns the directory that holds the confidential WCOW boot
 // files. If root is non-empty it is used as-is (allowing the location to be overridden via the
-// WCOWBootFilesRootPath annotation), otherwise the default location next to the shim executable is used.
+// BootFilesRootPath annotation), otherwise the default location next to the shim executable is used.
 func confidentialWCOWOSBootFilesPath(root string) string {
 	if root != "" {
 		return root
