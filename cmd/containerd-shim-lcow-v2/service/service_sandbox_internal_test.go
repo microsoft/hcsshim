@@ -131,6 +131,52 @@ func TestCreateSandbox_VMCreateFailure(t *testing.T) {
 	}
 }
 
+// TestCreateSandbox_Success verifies the happy path: createSandboxInternal
+// parses the bundle's config.json and forwards a CreateOptions to
+// vmController.CreateVM whose fields are derived from the request. It asserts
+// on the forwarded options (rather than gomock.Any()) so a regression in how
+// the request is translated is caught, and confirms the sandboxID is recorded
+// only after CreateVM succeeds.
+func TestCreateSandbox_Success(t *testing.T) {
+	t.Parallel()
+	svc, mockCtrl := newTestService(t)
+
+	bundleDir := t.TempDir()
+	writeMiniConfigJSON(t, bundleDir)
+
+	mockCtrl.EXPECT().
+		CreateVM(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, opts *vm.CreateOptions) error {
+			if got, want := opts.ID, "test-sandbox@vm"; got != want {
+				t.Errorf("CreateOptions.ID = %q, want %q", got, want)
+			}
+			if got, want := opts.Owner, ShimName; got != want {
+				t.Errorf("CreateOptions.Owner = %q, want %q", got, want)
+			}
+			if got, want := opts.BundlePath, bundleDir; got != want {
+				t.Errorf("CreateOptions.BundlePath = %q, want %q", got, want)
+			}
+			if opts.SandboxSpec == nil {
+				t.Error("CreateOptions.SandboxSpec = nil, want non-nil parsed spec")
+			}
+			return nil
+		})
+
+	resp, err := svc.createSandboxInternal(context.Background(), &sandboxsvc.CreateSandboxRequest{
+		SandboxID:  "test-sandbox",
+		BundlePath: bundleDir,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if got, want := svc.sandboxID, "test-sandbox"; got != want {
+		t.Errorf("sandboxID = %q, want %q recorded after CreateVM succeeds", got, want)
+	}
+}
+
 // ─── Sandbox-ID-mismatch guards ───────────────────────────────────────────
 
 // TestSandboxIDMismatch verifies that every per-sandbox internal method
