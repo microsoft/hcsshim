@@ -286,7 +286,8 @@ func (b *Bridge) startContainer(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	// TODO: do we need enforcement?
+	// We don't need any enforcement here because the container has already been created and
+	// this request is just to start the container.
 
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
