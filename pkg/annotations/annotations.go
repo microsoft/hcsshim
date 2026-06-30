@@ -280,6 +280,18 @@ const (
 	// Attaches the EFI/boot VHD in the writable mode (instead of the default read-only mode). This is usually required
 	// when debugging boot to capture bootstat traces.
 	WCOWWritableEFI = "io.microsoft.virtualmachine.wcow.writable_efi"
+
+	// WCOWDebugMode enables debug mode for confidential WCOW. When enabled, the per-UVM boot/EFI VHD and
+	// scratch VHD are saved to WCOWDebugDataPath when the UVM is torn down, so they can be inspected for
+	// troubleshooting (e.g. boot failures). To also capture the bootstat trace in the saved boot/EFI VHD,
+	// enable WCOWWritableEFI alongside this option. This option is only valid for confidential WCOW and
+	// requires WCOWDebugDataPath to be set to a non-empty path.
+	WCOWDebugMode = "io.microsoft.wcow.debug"
+
+	// WCOWDebugDataPath specifies the directory to which the boot/EFI VHD and scratch VHD are saved when
+	// WCOWDebugMode is enabled. The directory is created if it does not exist and the saved files are
+	// prefixed with the UVM id to avoid collisions when multiple UVMs share the directory.
+	WCOWDebugDataPath = "io.microsoft.wcow.debug_data_path"
 )
 
 // WCOW host process container annotations.
@@ -297,6 +309,11 @@ const (
 
 // uVM annotations.
 const (
+	// BootFilesRootPath indicates the path to find the boot files to use when creating the UVM. It applies
+	// to both LCOW and WCOW (including confidential WCOW, where it locates boot.vhd, rootfs.vhd, VMGS, and
+	// reference info). If unset, a platform-specific default location is used.
+	BootFilesRootPath = "io.microsoft.virtualmachine.bootfilesrootpath"
+
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
 	// case the UVM crashes.
 	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
@@ -485,9 +502,6 @@ const (
 
 // LCOW uVM annotations.
 const (
-	// BootFilesRootPath indicates the path to find the LCOW boot files to use when creating the UVM.
-	BootFilesRootPath = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
-
 	// DisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.
 	DisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"

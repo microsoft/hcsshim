@@ -263,6 +263,109 @@ func Test_SpecToUVMCreateOptions_WCOW_Confidential_Overrides(t *testing.T) {
 	}
 }
 
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_BootFilesRootPath(t *testing.T) {
+	root := "C:\\custom\\bootfiles"
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+			annotations.BootFilesRootPath:  root,
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	wopts := (opts).(*uvm.OptionsWCOW)
+	if wopts.BootFilesRootPath != root {
+		t.Fatalf("expected BootFilesRootPath=%q, got %q", root, wopts.BootFilesRootPath)
+	}
+	// Defaults derived from the boot files root (SNP isolation by default).
+	if want := uvm.ConfidentialVMGSPath(root, "SecureNestedPaging"); wopts.GuestStateFilePath != want {
+		t.Fatalf("expected GuestStateFilePath=%q, got %q", want, wopts.GuestStateFilePath)
+	}
+	if want := uvm.ConfidentialReferenceInfoFilePath(root); wopts.UVMReferenceInfoFile != want {
+		t.Fatalf("expected UVMReferenceInfoFile=%q, got %q", want, wopts.UVMReferenceInfoFile)
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_VMGSDefaultByIsolation(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+			annotations.WCOWIsolationType:  "VirtualizationBasedSecurity",
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	wopts := (opts).(*uvm.OptionsWCOW)
+	// With no explicit VMGS override, the default VMGS must follow the isolation type.
+	if want := uvm.ConfidentialVMGSPath("", "VirtualizationBasedSecurity"); wopts.GuestStateFilePath != want {
+		t.Fatalf("expected GuestStateFilePath=%q for VBS isolation, got %q", want, wopts.GuestStateFilePath)
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_DebugMode_Enabled(t *testing.T) {
+	dataPath := "C:\\debug\\data"
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+			annotations.WCOWDebugMode:      "true",
+			annotations.WCOWDebugDataPath:  dataPath,
+		},
+	}
+
+	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
+	if err != nil {
+		t.Fatalf("unexpected error generating UVM opts: %v", err)
+	}
+
+	wopts := (opts).(*uvm.OptionsWCOW)
+	if !wopts.DebugMode {
+		t.Fatal("DebugMode should be true when WCOWDebugMode is set")
+	}
+	if wopts.DebugDataPath != dataPath {
+		t.Fatalf("expected DebugDataPath=%q, got %q", dataPath, wopts.DebugDataPath)
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_Confidential_DebugMode_ErrorOnMissingDataPath(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			annotations.WCOWSecurityPolicy: "test-policy",
+			annotations.WCOWDebugMode:      "true",
+		},
+	}
+
+	if _, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), ""); err == nil {
+		t.Fatal("expected error when debug mode is enabled without a data path, got nil")
+	}
+}
+
+func Test_SpecToUVMCreateOptions_WCOW_NonConfidential_DebugMode_Error(t *testing.T) {
+	s := &specs.Spec{
+		Windows: &specs.Windows{HyperV: &specs.WindowsHyperV{}},
+		Annotations: map[string]string{
+			// No WCOWSecurityPolicy means non-confidential path.
+			annotations.WCOWDebugMode:     "true",
+			annotations.WCOWDebugDataPath: "C:\\debug\\data",
+		},
+	}
+
+	if _, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), ""); err == nil {
+		t.Fatal("expected error when debug mode is enabled for non-confidential WCOW, got nil")
+	}
+}
+
 func Test_SpecToUVMCreateOptions_Common(t *testing.T) {
 	cpugroupid := "1"
 	lowmmiogap := 1024

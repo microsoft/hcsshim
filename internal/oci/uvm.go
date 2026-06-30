@@ -251,9 +251,8 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 
 	wopts.SecurityPolicyEnforcer = ParseAnnotationsString(a, annotations.WCOWSecurityPolicyEnforcer, wopts.SecurityPolicyEnforcer)
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
-	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
-	wopts.UVMReferenceInfoFile = ParseAnnotationsString(a, annotations.WCOWReferenceInfoFile, uvm.GetDefaultReferenceInfoFilePath())
-	wopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(a, annotations.UVMHashEnvelopeReferenceInfoFile, uvm.GetDefaultHashEnvelopeReferenceInfoFilePath())
+
+	// Resolve the isolation type first so the default VMGS file can be selected accordingly.
 	wopts.IsolationType = "SecureNestedPaging"
 	if noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false); noSecurityHardware {
 		wopts.IsolationType = "GuestStateOnly"
@@ -261,6 +260,10 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	if err := handleWCOWIsolationType(ctx, a, wopts); err != nil {
 		return err
 	}
+
+	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.ConfidentialVMGSPath(wopts.BootFilesRootPath, wopts.IsolationType))
+	wopts.UVMReferenceInfoFile = ParseAnnotationsString(a, annotations.WCOWReferenceInfoFile, uvm.ConfidentialReferenceInfoFilePath(wopts.BootFilesRootPath))
+	wopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(a, annotations.UVMHashEnvelopeReferenceInfoFile, uvm.ConfidentialHashEnvelopeReferenceInfoFilePath(wopts.BootFilesRootPath))
 
 	return nil
 }
@@ -420,9 +423,26 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		// Writable EFI is valid for both confidential and regular Hyper-V isolated WCOW.
 		wopts.WritableEFI = ParseAnnotationsBool(ctx, s.Annotations, annotations.WCOWWritableEFI, wopts.WritableEFI)
 
+		// Debug mode (confidential WCOW only) saves the boot/EFI and scratch VHDs on teardown.
+		wopts.DebugMode = ParseAnnotationsBool(ctx, s.Annotations, annotations.WCOWDebugMode, wopts.DebugMode)
+		wopts.DebugDataPath = ParseAnnotationsString(s.Annotations, annotations.WCOWDebugDataPath, wopts.DebugDataPath)
+
+		// Optional override for the directory containing the confidential WCOW boot files.
+		wopts.BootFilesRootPath = ParseAnnotationsString(s.Annotations, annotations.BootFilesRootPath, wopts.BootFilesRootPath)
+
 		// Handle WCOW security policy settings
 		if err := handleWCOWSecurityPolicy(ctx, s.Annotations, wopts); err != nil {
 			return nil, err
+		}
+
+		// Debug mode is only supported for confidential WCOW and requires a non-empty data path.
+		if wopts.DebugMode {
+			if !wopts.SecurityPolicyEnabled {
+				return nil, fmt.Errorf("%q is only supported for confidential WCOW", annotations.WCOWDebugMode)
+			}
+			if wopts.DebugDataPath == "" {
+				return nil, fmt.Errorf("%q must be set to a non-empty path when %q is enabled", annotations.WCOWDebugDataPath, annotations.WCOWDebugMode)
+			}
 		}
 		// If security policy is enable, wopts.LogForwardingEnabled default value should be false (CWCOW should not allow log forwarding by default)
 		if wopts.SecurityPolicyEnabled {
