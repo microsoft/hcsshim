@@ -129,6 +129,8 @@ type SecurityPolicyEnforcer interface {
 	LoadFragment(ctx context.Context, issuer string, feed string, rego string) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
+	EnforceMappedDirectoryMountPolicy(ctx context.Context, containerPath string, readOnly bool) (err error)
+	EnforceMappedDirectoryUnmountPolicy(ctx context.Context, containerPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) (err error)
 	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error
@@ -317,6 +319,14 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Contex
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceMappedDirectoryMountPolicy(context.Context, string, bool) error {
+	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceMappedDirectoryUnmountPolicy(context.Context, string) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
@@ -448,6 +458,14 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(context.Contex
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Context, string) error {
 	return errors.New("unmounting scratch is denied by the policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceMappedDirectoryMountPolicy(context.Context, string, bool) error {
+	return errors.New("mounting mapped directory is denied by the policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceMappedDirectoryUnmountPolicy(context.Context, string) error {
+	return errors.New("unmounting mapped directory is denied by the policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error) {

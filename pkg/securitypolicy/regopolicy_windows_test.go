@@ -1514,3 +1514,183 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 	_ = sandboxID
 	return m
 }
+
+// Tests for MappedDirectory enforcement
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_ReadOnly_Allowed_Windows(t *testing.T) {
+	policy, err := newRegoPolicy(
+		openDoorRego,
+		[]oci.Mount{},
+		[]oci.Mount{},
+		testOSType,
+	)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\data`, true)
+	if err != nil {
+		t.Errorf("expected readonly mapped directory to be allowed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_Writable_Denied_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(
+			securityPolicy.marshalWindowsRego(),
+			[]oci.Mount{},
+			[]oci.Mount{},
+			testOSType,
+		)
+		if err != nil {
+			t.Errorf("failed to create policy: %v", err)
+			return false
+		}
+
+		ctx := context.Background()
+		err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\data`, false)
+		if err == nil {
+			t.Errorf("expected writable mapped directory to be denied")
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryMountPolicy_Writable_Denied_Windows: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_Duplicate_Denied_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(
+			securityPolicy.marshalWindowsRego(),
+			[]oci.Mount{},
+			[]oci.Mount{},
+			testOSType,
+		)
+		if err != nil {
+			t.Errorf("failed to create policy: %v", err)
+			return false
+		}
+
+		ctx := context.Background()
+		containerPath := `C:\testmount`
+
+		// First mount should succeed
+		err = policy.EnforceMappedDirectoryMountPolicy(ctx, containerPath, true)
+		if err != nil {
+			t.Errorf("first mount should succeed: %v", err)
+			return false
+		}
+
+		// Second mount at same path should fail
+		err = policy.EnforceMappedDirectoryMountPolicy(ctx, containerPath, true)
+		if err == nil {
+			t.Errorf("duplicate mount at same path should be denied")
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryMountPolicy_Duplicate_Denied_Windows: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryUnmountPolicy_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(
+			securityPolicy.marshalWindowsRego(),
+			[]oci.Mount{},
+			[]oci.Mount{},
+			testOSType,
+		)
+		if err != nil {
+			t.Errorf("failed to create policy: %v", err)
+			return false
+		}
+
+		ctx := context.Background()
+		containerPath := `C:\unmounttest`
+
+		// Mount first
+		err = policy.EnforceMappedDirectoryMountPolicy(ctx, containerPath, true)
+		if err != nil {
+			t.Errorf("mount should succeed: %v", err)
+			return false
+		}
+
+		// Unmount should succeed
+		err = policy.EnforceMappedDirectoryUnmountPolicy(ctx, containerPath)
+		if err != nil {
+			t.Errorf("unmount should succeed: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryUnmountPolicy_Windows: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryUnmountPolicy_NotMounted_Denied_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(
+			securityPolicy.marshalWindowsRego(),
+			[]oci.Mount{},
+			[]oci.Mount{},
+			testOSType,
+		)
+		if err != nil {
+			t.Errorf("failed to create policy: %v", err)
+			return false
+		}
+
+		ctx := context.Background()
+		// Unmount without mounting should fail
+		err = policy.EnforceMappedDirectoryUnmountPolicy(ctx, `C:\notmounted`)
+		if err == nil {
+			t.Errorf("unmount of non-mounted path should be denied")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryUnmountPolicy_NotMounted_Denied_Windows: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_OpenDoor_AllowsAll_Windows(t *testing.T) {
+	policy, err := newRegoPolicy(
+		openDoorRego,
+		[]oci.Mount{},
+		[]oci.Mount{},
+		testOSType,
+	)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Open door should allow both readonly and writable
+	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\readonly`, true)
+	if err != nil {
+		t.Errorf("open door should allow readonly mount: %v", err)
+	}
+
+	err = policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\writable`, false)
+	if err != nil {
+		t.Errorf("open door should allow writable mount: %v", err)
+	}
+}
