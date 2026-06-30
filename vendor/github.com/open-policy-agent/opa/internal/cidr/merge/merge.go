@@ -114,7 +114,7 @@ func GetAddressRange(ipNet net.IPNet) (net.IP, net.IP) {
 	copy(lastIPMask, ipNet.Mask)
 	for i := range lastIPMask {
 		lastIPMask[len(lastIPMask)-i-1] = ^lastIPMask[len(lastIPMask)-i-1]
-		lastIP[net.IPv6len-i-1] = lastIP[net.IPv6len-i-1] | lastIPMask[len(lastIPMask)-i-1]
+		lastIP[net.IPv6len-i-1] |= lastIPMask[len(lastIPMask)-i-1]
 	}
 
 	return firstIP, lastIP
@@ -293,7 +293,7 @@ func partitionCIDR(targetCIDR net.IPNet, excludeCIDR net.IPNet) ([]*net.IPNet, [
 			// package expects, as big package doesn't append leading zeroes.
 			if iUpperBytesLen != net.IPv6len {
 				numZeroesToAppend := net.IPv6len - iUpperBytesLen
-				zeroBytes := make([]byte, numZeroesToAppend)
+				zeroBytes := make([]byte, numZeroesToAppend, numZeroesToAppend+len(iUpper.Bytes()))
 				iUpperBytes = append(zeroBytes, iUpper.Bytes()...)
 			} else {
 				iUpperBytes = iUpper.Bytes()
@@ -303,7 +303,7 @@ func partitionCIDR(targetCIDR net.IPNet, excludeCIDR net.IPNet) ([]*net.IPNet, [
 			iLowerBytesLen := len(iLower.Bytes())
 			if iLowerBytesLen != net.IPv6len {
 				numZeroesToAppend := net.IPv6len - iLowerBytesLen
-				zeroBytes := make([]byte, numZeroesToAppend)
+				zeroBytes := make([]byte, numZeroesToAppend, numZeroesToAppend+len(iLower.Bytes()))
 				iLowerBytes = append(zeroBytes, iLower.Bytes()...)
 			} else {
 				iLowerBytes = iLower.Bytes()
