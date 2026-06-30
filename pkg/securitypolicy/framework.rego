@@ -1337,10 +1337,10 @@ svn_ok_if_defined(minimum_svn) {
 # A fragment rule may require transparency receipts from one or more ledgers
 # (identified by the issuer of the receipt, and checked by the key used to sign
 # the receipt).  input.receipts is the set of receipts that the enforcer
-# successfully validated against keys learned from accepted TTLs. Each receipt
-# is {"issuer": <ledger>, "ttl_subjects": [<ttl subject>, ...]} where
-# ttl_subjects lists the subjects of the TTLs that contributed the key that
-# validated the receipt.
+# successfully validated against keys learned from accepted TTLs (Transparency
+# Trust Lists). Each receipt is {"issuer": <ledger>, "ttl_subjects": [<ttl
+# subject>, ...]} where ttl_subjects lists the subjects of the TTLs that
+# contributed the key that validated the receipt.
 #
 # fragment.required_receipts contains the list of required receipt issuers or
 # feeds of the TTLs containing the key for the receipt.  If not set, no receipts
@@ -1449,12 +1449,12 @@ ttl_allowed_ledgers_for_issuer_subject_svn(issuer, subject, svn) := allowed_ledg
     }
 }
 
-intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
+ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
     not "*" in allowed_ledgers
     result := {l | l := input_ledgers[_]; l in allowed_ledgers}
 }
 
-intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
+ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
     "*" in allowed_ledgers
     result := {l | l := input_ledgers[_]}
 }
@@ -1463,7 +1463,7 @@ default load_transparency_trust_list := {"allowed": false}
 
 load_transparency_trust_list := {"allowed": true, "allowed_ledgers": allowed_ledgers} {
     ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
-    allowed_ledgers := intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
+    allowed_ledgers := ttl_intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
     count(allowed_ledgers) > 0
 }
 
@@ -2110,7 +2110,7 @@ errors["The provided TTL does not contain any ledgers it is allowed to load"] {
     input.rule == "load_transparency_trust_list"
     ttl_matches
     ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
-    allowed_ledgers := intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
+    allowed_ledgers := ttl_intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
     count(allowed_ledgers) == 0
 }
 
