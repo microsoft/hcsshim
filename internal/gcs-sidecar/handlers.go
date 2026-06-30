@@ -160,19 +160,127 @@ func (b *Bridge) createContainer(req *request) (err error) {
 
 		// TODO!! enforce over various fields in HostedSystem.
 		/*
-			type Container struct {
-				GuestOs *GuestOs `json:"GuestOs,omitempty"`
-			->?	Storage *Storage `json:"Storage,omitempty"`
-			->	MappedDirectories []MappedDirectory `json:"MappedDirectories,omitempty"`
-			->?	MappedPipes []MappedPipe `json:"MappedPipes,omitempty"`
-				Memory *Memory `json:"Memory,omitempty"` # We can't do anything about this. Host can do denial of service attack anyway.
-			?	Processor *Processor `json:"Processor,omitempty"`
-				Networking *Networking `json:"Networking,omitempty"`
-				HvSocket *HvSocket `json:"HvSocket,omitempty"`
-				ContainerCredentialGuard *ContainerCredentialGuardState `json:"ContainerCredentialGuard,omitempty"`
-			->	RegistryChanges *RegistryChanges `json:"RegistryChanges,omitempty"`
-			->?	AssignedDevices []Device `json:"AssignedDevices,omitempty"`
-			->?	AdditionalDeviceNamespace *ContainerDefinitionDevice `json:"AdditionalDeviceNamespace,omitempty"`
+				type Container struct {
+					GuestOs *GuestOs `json:"GuestOs,omitempty"`
+				->?	Storage *Storage `json:"Storage,omitempty"` # Looks like it's scratch.
+				->	MappedDirectories []MappedDirectory `json:"MappedDirectories,omitempty"` # Used with `mounts`
+				->?	MappedPipes []MappedPipe `json:"MappedPipes,omitempty"`
+					Memory *Memory `json:"Memory,omitempty"` # We can't do anything about this. Host can do denial of service attack anyway.
+				?	Processor *Processor `json:"Processor,omitempty"`
+					Networking *Networking `json:"Networking,omitempty"`
+					HvSocket *HvSocket `json:"HvSocket,omitempty"` # At the moment host doesn't pass it (createWindowsContainerDocument internal\hcsoci\hcsdoc_wcow.go). We just should reject any value here?
+					ContainerCredentialGuard *ContainerCredentialGuardState `json:"ContainerCredentialGuard,omitempty"` # TODO: what's credential guard and can we block it for now?
+				->	RegistryChanges *RegistryChanges `json:"RegistryChanges,omitempty"` -> It's already enforced by EnforceRegistryChangesPolicy() above.
+				->?	AssignedDevices []Device `json:"AssignedDevices,omitempty"` # Block these for now. See below for the details.
+				->?	AdditionalDeviceNamespace *ContainerDefinitionDevice `json:"AdditionalDeviceNamespace,omitempty"` # Block these for now. See below for the details.
+				}
+
+			For hvsocket, UVMHyperVSocketConfigPrefix annotation seem to be available somehow. TODO: check
+
+			AssignedDevices: Looks like it's exposing VPCI device on L1 to uvm.
+			host-populated from Spec.Windows.Devices
+			(parseAssignedDevices, internal/hcsoci/hcsdoc_wcow.go:513,529), only for v2
+			argon/xenon (hcsdoc_wcow.go:508). Each device is first VPCI-assigned into the
+			UVM via handleAssignedDevicesWindows -> devices.AddDevice -> uvm.AssignDevice
+			(internal/hcsoci/resources_wcow.go:94, internal/hcsoci/devices.go:134,
+			internal/devices/assigned_devices.go:45). It seems to require VPCI device instance
+			on L1. TODO: Try it and see if we need an enforcement point here now.
+
+			AdditionalDeviceNamespace: host-populated from getDeviceExtensions(coi.Spec.Annotations)
+			(internal/hcsoci/hcsdoc_wcow.go:391,395). It's driven purely by the annotation
+			"io.microsoft.container.wcow.deviceextensions" (pkg/annotations/annotations.go:223).
+			TODO: What's device extension? Do we need to support it for the first release or
+			can we just reject for now?
+		*/
+
+		/*
+			Test container.json:
+
+			{
+				"metadata": {
+					"name": "wcow-test"
+				},
+				"image": {
+					"image": "takurosatodevacr.azurecr.io/payload-demo:250929"
+				},
+				"command": [
+					"python",
+					"hello.py"
+				],
+				"envs": [
+					{
+					"key": "APP_FOO",
+					"value": "BAR"
+					}
+				],
+				"mounts": [
+					{
+					"host_path": "C:\\share-ro",
+					"container_path": "C:\\mnt\\ro",
+					"readonly": true
+					},
+					{
+					"host_path": "\\\\.\\pipe\\hostedsystem-demo",
+					"container_path": "\\\\.\\pipe\\hostedsystem-demo"
+					}
+				],
+				"windows": {
+					"security_context": {
+						"credential_spec": "{\"CmsPlugins\":[\"ActiveDirectory\"],\"DomainJoinConfig\":{\"Sid\":\"S-1-5-21-1111111111-2222222222-3333333333\",\"MachineAccountName\":\"WebApp01\",\"Guid\":\"244818ae-87ac-4fcd-92ec-e79e5252348a\",\"DnsTreeName\":\"contoso.com\",\"DnsName\":\"contoso.com\",\"NetBiosName\":\"CONTOSO\"},\"ActiveDirectoryConfig\":{\"GroupManagedServiceAccounts\":[{\"Name\":\"WebApp01\",\"Scope\":\"contoso.com\"},{\"Name\":\"WebApp01\",\"Scope\":\"CONTOSO\"}]}}"
+					},
+					"resources": {
+						"rootfs_size_in_bytes": 42949672960
+					}
+				}
+			}
+
+			HostedSystem.Container:
+			{
+				"Storage": {
+				"Layers": [
+					{
+					"Id": "6e2349b7-8215-4325-a88a-38a8e1f67e18",
+					"Path": "\\\\?\\Volume{6e2349b7-8215-4325-a88a-38a8e1f67e18}\\"
+					}
+				],
+				"Path": "c:\\mounts\\scsi\\m0"
+				},
+				"MappedDirectories": [
+				{
+					"HostPath": "\\\\?\\VMSMB\\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\\s1",
+					"ContainerPath": "C:\\mnt\\ro",
+					"ReadOnly": true
+				}
+				],
+				"MappedPipes": [
+				{
+					"ContainerPipeName": "hostedsystem-demo",
+					"HostPath": "\\\\?\\VMSMB\\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\\IPC$\\hostedsystem-demo"
+				}
+				],
+				"Processor": {},
+				"Networking": {
+				"Namespace": "644da769-7f9a-41c7-820b-8ef9e66d747b"
+				},
+				"ContainerCredentialGuard": {
+				"Cookie": "01000000740069000CEBF50D32C0CF80BE559BE206B4EAF9",
+				"RpcEndpoint": "91571621-3782-9EC0-3C5C-C0EC10E6E763",
+				"Transport": "HvSocket",
+				"CredentialSpec": "{\"CmsPlugins\":[\"ActiveDirectory\"],\"DomainJoinConfig\":{\"Sid\":\"S-1-5-21-1111111111-2222222222-3333333333\",\"MachineAccountName\":\"WebApp01\",\"Guid\":\"244818ae-87ac-4fcd-92ec-e79e5252348a\",\"DnsTreeName\":\"contoso.com\",\"DnsName\":\"contoso.com\",\"NetBiosName\":\"CONTOSO\"},\"ActiveDirectoryConfig\":{\"GroupManagedServiceAccounts\":[{\"Name\":\"WebApp01\",\"Scope\":\"contoso.com\"},{\"Name\":\"WebApp01\",\"Scope\":\"CONTOSO\"}]}}"
+				},
+				"RegistryChanges": {
+				"AddValues": [
+					{
+					"Key": {
+						"Hive": "System",
+						"Name": "ControlSet001\\Control"
+					},
+					"Name": "WaitToKillServiceTimeout",
+					"Type": "String",
+					"StringValue": "2147483647"
+					}
+				]
+				}
 			}
 		*/
 
