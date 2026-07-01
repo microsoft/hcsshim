@@ -23,7 +23,7 @@ type vmController interface {
 	Guest() *guestmanager.Guest
 
 	// SCSIController returns the SCSI device controller for the VM.
-	SCSIController() *scsi.Controller
+	SCSIController(ctx context.Context) (*scsi.Controller, error)
 
 	// VPCIController returns the vPCI device controller for the VM.
 	VPCIController() *vpci.Controller
