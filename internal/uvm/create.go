@@ -15,6 +15,7 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
@@ -349,11 +350,51 @@ func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
 		}
 	}
 
+	// If debug mode is enabled, save the per-UVM boot/EFI VHD and scratch VHD to the debug data
+	// directory before they are cleaned up so they can be inspected (e.g. for boot failures).
+	if wopts, ok := uvm.createOpts.(*OptionsWCOW); ok &&
+		uvm.HasConfidentialPolicy() &&
+		wopts.DebugMode &&
+		wopts.DebugDataPath != "" &&
+		wopts.BootFiles != nil &&
+		wopts.BootFiles.BlockCIMFiles != nil {
+		uvm.preserveWCOWScratch(ctx, wopts.DebugDataPath, wopts.BootFiles.BlockCIMFiles)
+	}
+
 	if uvm.hcsSystem != nil {
 		return uvm.hcsSystem.CloseCtx(ctx)
 	}
 
 	return nil
+}
+
+// preserveWCOWScratch copies the per-UVM scratch VHD and boot/EFI VHD to destDir so they can be
+// inspected for troubleshooting after the UVM is torn down. The boot/EFI VHD contains the bootstat
+// trace when the writable EFI option is enabled. It is best-effort: any error is logged but does not
+// fail UVM close. Copied files are prefixed with the UVM id to avoid collisions when multiple UVMs
+// share the same directory.
+func (uvm *UtilityVM) preserveWCOWScratch(ctx context.Context, destDir string, blockFiles *BlockCIMBootFiles) {
+	e := log.G(ctx).WithFields(logrus.Fields{
+		logfields.UVMID: uvm.id,
+		"destination":   destDir,
+	})
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		e.WithError(err).Error("failed to create boot files preserve directory")
+		return
+	}
+
+	for _, src := range []string{blockFiles.ScratchVHDPath, blockFiles.EFIVHDPath} {
+		if src == "" {
+			continue
+		}
+		dst := filepath.Join(destDir, uvm.id+"_"+filepath.Base(src))
+		if err := copyfile.CopyFile(ctx, src, dst, true); err != nil {
+			e.WithField("source", src).WithError(err).Error("failed to preserve boot file")
+			continue
+		}
+		e.WithFields(logrus.Fields{"source": src, "copy": dst}).Debug("preserved boot file for troubleshooting")
+	}
 }
 
 // CreateContainer creates a container in the utility VM.

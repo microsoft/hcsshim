@@ -52,6 +52,13 @@ type ConfidentialWCOWOptions struct {
 	DisableSecureBoot  bool
 	FirmwareParameters string
 	WritableEFI        bool
+	// DebugMode, when enabled, saves the per-UVM boot/EFI VHD and scratch VHD to DebugDataPath when the
+	// UVM is torn down, so they can be inspected for troubleshooting (e.g. boot failures). The boot/EFI VHD
+	// contains the bootstat trace when WritableEFI is also enabled. Only valid for confidential WCOW.
+	DebugMode bool
+	// DebugDataPath is the directory to which the boot/EFI VHD and scratch VHD are saved when DebugMode is
+	// enabled. It must be non-empty when DebugMode is set.
+	DebugDataPath string
 }
 
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
@@ -60,6 +67,11 @@ type OptionsWCOW struct {
 	*ConfidentialWCOWOptions
 
 	BootFiles *WCOWBootFiles
+
+	// BootFilesRootPath optionally overrides the directory used to locate the confidential WCOW boot
+	// files (boot.vhd, rootfs.vhd, VMGS, reference info). If empty, the default location next to the
+	// shim executable is used.
+	BootFilesRootPath string
 
 	// NoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM
 	NoDirectMap bool
@@ -76,28 +88,77 @@ type OptionsWCOW struct {
 	DefaultLogSourcesEnabled bool                         // Whether to enable using default log sources
 }
 
-func defaultConfidentialWCOWOSBootFilesPath() string {
+// confidentialWCOWOSBootFilesPath returns the directory that holds the confidential WCOW boot
+// files. If root is non-empty it is used as-is (allowing the location to be overridden via the
+// BootFilesRootPath annotation), otherwise the default location next to the shim executable is used.
+func confidentialWCOWOSBootFilesPath(root string) string {
+	if root != "" {
+		return root
+	}
 	return filepath.Join(filepath.Dir(os.Args[0]), "WindowsBootFiles", "confidential")
 }
 
+// ConfidentialVMGSFileName returns the VMGS file name for the given UVM isolation type.
+func ConfidentialVMGSFileName(isolationType string) string {
+	switch isolationType {
+	case "VirtualizationBasedSecurity":
+		return "cwcow.vbs.vmgs"
+	case "GuestStateOnly":
+		return "cwcow.gso.vmgs"
+	default: // SecureNestedPaging (and any unknown value) defaults to SNP.
+		return "cwcow.snp.vmgs"
+	}
+}
+
+// ConfidentialVMGSPath returns the VMGS file path under the given boot files root for the given
+// isolation type. An empty root resolves to the default confidential boot files location.
+func ConfidentialVMGSPath(root, isolationType string) string {
+	return filepath.Join(confidentialWCOWOSBootFilesPath(root), ConfidentialVMGSFileName(isolationType))
+}
+
+// ConfidentialBootCIMPath returns the BootCIM (rootfs.vhd) path under the given boot files root.
+// An empty root resolves to the default confidential boot files location.
+func ConfidentialBootCIMPath(root string) string {
+	return filepath.Join(confidentialWCOWOSBootFilesPath(root), "rootfs.vhd")
+}
+
+// ConfidentialEFIPath returns the EFI/boot (boot.vhd) path under the given boot files root.
+// An empty root resolves to the default confidential boot files location.
+func ConfidentialEFIPath(root string) string {
+	return filepath.Join(confidentialWCOWOSBootFilesPath(root), "boot.vhd")
+}
+
+// ConfidentialReferenceInfoFilePath returns the UVM reference info file path under the given boot
+// files root. An empty root resolves to the default confidential boot files location.
+func ConfidentialReferenceInfoFilePath(root string) string {
+	return filepath.Join(confidentialWCOWOSBootFilesPath(root), vmutils.DefaultUVMReferenceInfoFile)
+}
+
+// ConfidentialHashEnvelopeReferenceInfoFilePath returns the hash envelope UVM reference info file
+// path under the given boot files root. An empty root resolves to the default confidential boot
+// files location.
+func ConfidentialHashEnvelopeReferenceInfoFilePath(root string) string {
+	return filepath.Join(confidentialWCOWOSBootFilesPath(root), vmutils.DefaultUVMHashEnvelopeReferenceInfoFile)
+}
+
 func GetDefaultConfidentialVMGSPath() string {
-	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "cwcow.snp.vmgs")
+	return ConfidentialVMGSPath("", "SecureNestedPaging")
 }
 
 func GetDefaultConfidentialBootCIMPath() string {
-	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "rootfs.vhd")
+	return ConfidentialBootCIMPath("")
 }
 
 func GetDefaultConfidentialEFIPath() string {
-	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), "boot.vhd")
+	return ConfidentialEFIPath("")
 }
 
 func GetDefaultReferenceInfoFilePath() string {
-	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), vmutils.DefaultUVMReferenceInfoFile)
+	return ConfidentialReferenceInfoFilePath("")
 }
 
 func GetDefaultHashEnvelopeReferenceInfoFilePath() string {
-	return filepath.Join(defaultConfidentialWCOWOSBootFilesPath(), vmutils.DefaultUVMHashEnvelopeReferenceInfoFile)
+	return ConfidentialHashEnvelopeReferenceInfoFilePath("")
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of

@@ -49,8 +49,8 @@ func initializeWCOWBootFiles(ctx context.Context, wopts *uvm.OptionsWCOW, rootfs
 			return fmt.Errorf("security policy (confidential mode) only works with block CIM based layers")
 		}
 		// we use measured EFI & rootfs for confidential UVMs, use those instead of the ones passed in layers/rootfs
-		wopts.BootFiles.BlockCIMFiles.EFIVHDPath = uvm.GetDefaultConfidentialEFIPath()
-		wopts.BootFiles.BlockCIMFiles.BootCIMVHDPath = uvm.GetDefaultConfidentialBootCIMPath()
+		wopts.BootFiles.BlockCIMFiles.EFIVHDPath = uvm.ConfidentialEFIPath(wopts.BootFilesRootPath)
+		wopts.BootFiles.BlockCIMFiles.BootCIMVHDPath = uvm.ConfidentialBootCIMPath(wopts.BootFilesRootPath)
 
 		// make a copy of the vmgs file as the same vmgs can not be used by multiple pods in parallel
 		// TODO(ambarve): for C-LCOW we make a copy in the bundle directory, is it better
