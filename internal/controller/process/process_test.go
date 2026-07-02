@@ -211,13 +211,15 @@ func TestStart_Succeeds(t *testing.T) {
 		t.Errorf("state after exit = %s; want StateTerminated", controller.State())
 	}
 
-	// Verify that a TaskExit event was published.
+	// Verify that a TaskExit event was published. Block (with a timeout) so the
+	// handleProcessExit goroutine finishes publishing — which happens after its
+	// final Status mock calls — before the gomock controller runs Finish.
 	select {
 	case event := <-events:
 		if event == nil {
 			t.Error("received nil event; want TaskExit")
 		}
-	default:
+	case <-time.After(time.Second):
 		t.Error("expected a TaskExit event in events channel; got none")
 	}
 }
@@ -537,6 +539,8 @@ func TestCloseIO(t *testing.T) {
 		{"Created", StateCreated, true},
 		{"Running", StateRunning, true},
 		{"Terminated", StateTerminated, true},
+		// Imported but not yet patched: upstreamIO is nil and CloseIO must not panic.
+		{"MigratingUnpatched", StateDestinationMigrating, false},
 	}
 
 	for _, testCase := range tests {
@@ -712,6 +716,26 @@ func TestStatus_Created_Detailed(t *testing.T) {
 	}
 	if status.Terminal {
 		t.Error("Terminal = true; want false")
+	}
+}
+
+// TestStatus_MigratingUnpatched_Detailed verifies that detailed Status on an
+// imported-but-not-yet-patched process (nil upstreamIO) does not panic and
+// returns bundle/exit fields while leaving IO paths empty.
+func TestStatus_MigratingUnpatched_Detailed(t *testing.T) {
+	t.Parallel()
+	_, _, _, controller := newSetup(t)
+	controller.state = StateDestinationMigrating
+	controller.bundle = "/test/bundle"
+	// upstreamIO intentionally nil.
+
+	status := controller.Status(true)
+
+	if status.Bundle != "/test/bundle" {
+		t.Errorf("Bundle = %q; want /test/bundle", status.Bundle)
+	}
+	if status.Stdin != "" || status.Stdout != "" || status.Stderr != "" || status.Terminal {
+		t.Errorf("IO fields should be empty for unpatched process, got (%q,%q,%q,%v)", status.Stdin, status.Stdout, status.Stderr, status.Terminal)
 	}
 }
 

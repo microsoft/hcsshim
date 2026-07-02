@@ -18,6 +18,7 @@ import (
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/containerd/errdefs"
@@ -356,17 +357,30 @@ func TestKillProcess_InvalidSignal(t *testing.T) {
 // when the container has not been created yet.
 func TestKillProcess_NotCreatedState(t *testing.T) {
 	t.Parallel()
-	c, _, _, _, guestCtrl := newContainerTestController(t)
+	c, _, _, _, _ := newContainerTestController(t)
 	c.state = StateNotCreated
-
-	// SIGTERM (15) with no signal support returns nil signal options.
-	guestCtrl.EXPECT().
-		Capabilities().
-		Return(&gcs.LCOWGuestDefinedCapabilities{})
 
 	err := c.KillProcess(t.Context(), "", 15, false)
 	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
 		t.Errorf("KillProcess() error = %v, want ErrFailedPrecondition", err)
+	}
+}
+
+// TestKillProcess_FrozenWhileMigrating verifies that a container frozen mid
+// migration (source or destination) rejects kills.
+func TestKillProcess_FrozenWhileMigrating(t *testing.T) {
+	t.Parallel()
+	for _, state := range []State{StateSourceMigrating, StateDestinationMigrating} {
+		t.Run(state.String(), func(t *testing.T) {
+			t.Parallel()
+			c, _, _, _, _ := newContainerTestController(t)
+			c.state = state
+
+			err := c.KillProcess(t.Context(), "", 15, false)
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("KillProcess() error = %v, want ErrFailedPrecondition", err)
+			}
+		})
 	}
 }
 
@@ -399,6 +413,24 @@ func TestDeleteProcess_NotCreatedState(t *testing.T) {
 	_, err := c.DeleteProcess(t.Context(), "exec-1")
 	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
 		t.Errorf("DeleteProcess() error = %v, want ErrFailedPrecondition", err)
+	}
+}
+
+// TestDeleteProcess_FrozenWhileMigrating verifies that a container frozen mid
+// migration (source or destination) rejects process deletion.
+func TestDeleteProcess_FrozenWhileMigrating(t *testing.T) {
+	t.Parallel()
+	for _, state := range []State{StateSourceMigrating, StateDestinationMigrating} {
+		t.Run(state.String(), func(t *testing.T) {
+			t.Parallel()
+			c, _, _, _, _ := newContainerTestController(t)
+			c.state = state
+
+			_, err := c.DeleteProcess(t.Context(), "exec-1")
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("DeleteProcess() error = %v, want ErrFailedPrecondition", err)
+			}
+		})
 	}
 }
 
@@ -621,6 +653,7 @@ func TestReleaseResources_StopsOnFirstError(t *testing.T) {
 	}{
 		{name: "RealError_StopsChain", scsiErr: errUnmapSCSI, wantStops: true},
 		{name: "BridgeClosed_Continues", scsiErr: fmt.Errorf("transport gone: %w", gcs.ErrBridgeClosed)},
+		{name: "GuestConnectionUnavailable_Continues", scsiErr: fmt.Errorf("guest RPC: %w", guestmanager.ErrGuestConnectionUnavailable)},
 		{name: "ComputeSystemDoesNotExist_Continues", scsiErr: fmt.Errorf("hcs::System::Modify: %w", hcs.ErrComputeSystemDoesNotExist)},
 		{name: "VmcomputeAlreadyStopped_Continues", scsiErr: fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeAlreadyStopped)},
 		{name: "VmcomputeOperationInvalidState_Continues", scsiErr: fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeOperationInvalidState)},
@@ -908,6 +941,7 @@ func TestReleaseResources_DeleteContainerState_ToleratesAlreadyGone(t *testing.T
 		err  error
 	}{
 		{name: "BridgeClosed", err: fmt.Errorf("transport gone: %w", gcs.ErrBridgeClosed)},
+		{name: "GuestConnectionUnavailable", err: fmt.Errorf("guest RPC failure: %w", guestmanager.ErrGuestConnectionUnavailable)},
 		{name: "ComputeSystemDoesNotExist", err: fmt.Errorf("guest RPC failure: %w", hcs.ErrComputeSystemDoesNotExist)},
 		{name: "VmcomputeAlreadyStopped", err: fmt.Errorf("guest RPC failure: %w", hcs.ErrVmcomputeAlreadyStopped)},
 		{name: "VmcomputeOperationInvalidState", err: fmt.Errorf("guest RPC failure: %w", hcs.ErrVmcomputeOperationInvalidState)},
@@ -1024,35 +1058,56 @@ func TestStats_WrongState(t *testing.T) {
 // --- KillProcess (additional state and flow tests) ---
 
 // TestKillProcess_AllowedInPostCreatedStates verifies that KillProcess does
-// not reject containers in StateCreated or StateStopped on container-level
-// state grounds. Errors that surface from the underlying process controller
-// (which here is in StateNotCreated) are tolerated; the test only asserts
-// that the container's own "cannot kill" precondition does not fire.
+// not reject containers in StateCreated on container-level state grounds.
+// Errors that surface from the underlying process controller (which here is
+// in StateNotCreated) are tolerated; the test only asserts that the
+// container's own "cannot kill" precondition does not fire.
 func TestKillProcess_AllowedInPostCreatedStates(t *testing.T) {
+	t.Parallel()
+	c, _, _, _, guestCtrl := newContainerTestController(t)
+	c.state = StateCreated
+	c.processes[""] = process.New(testContainerID, "", nil, 0)
+
+	guestCtrl.EXPECT().
+		Capabilities().
+		Return(&gcs.LCOWGuestDefinedCapabilities{})
+
+	// SIGTERM (15) with no signal support returns nil options.
+	err := c.KillProcess(t.Context(), "", 15, false)
+	if err != nil && strings.Contains(err.Error(), "cannot kill") {
+		t.Errorf("KillProcess should not reject %s containers, got: %v", c.state, err)
+	}
+}
+
+// TestKillProcess_TerminalStatesAreNoOp verifies that KillProcess short-circuits
+// when the container has already reached a terminal state (StateStopped or
+// StateInvalid). In these states, the underlying processes are gone and
+// c.guest may be nil (e.g. for a container imported during live migration
+// and aborted on the destination-stop path without ever calling Resume).
+// Kill must be a no-op so CRI's stop flow does not fail on an already-dead
+// workload — and must not dereference c.guest.
+func TestKillProcess_TerminalStatesAreNoOp(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name  string
 		state State
 	}{
-		{name: "created", state: StateCreated},
 		{name: "stopped", state: StateStopped},
+		{name: "invalid", state: StateInvalid},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			c, _, _, _, guestCtrl := newContainerTestController(t)
+			c, _, _, _, _ := newContainerTestController(t)
 			c.state = tc.state
 			c.processes[""] = process.New(testContainerID, "", nil, 0)
+			// Simulate the post-AbortMigrated / aborted-import condition
+			// where c.guest is nil. KillProcess must NOT dereference it.
+			c.guest = nil
 
-			guestCtrl.EXPECT().
-				Capabilities().
-				Return(&gcs.LCOWGuestDefinedCapabilities{})
-
-			// SIGTERM (15) with no signal support returns nil options.
-			err := c.KillProcess(t.Context(), "", 15, false)
-			if err != nil && strings.Contains(err.Error(), "cannot kill") {
-				t.Errorf("KillProcess should not reject %s containers, got: %v", tc.state, err)
+			if err := c.KillProcess(t.Context(), "", 15, false); err != nil {
+				t.Errorf("KillProcess(%s) should be a no-op, got: %v", tc.state, err)
 			}
 		})
 	}

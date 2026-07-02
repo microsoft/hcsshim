@@ -18,10 +18,14 @@ import (
 )
 
 type Controller struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// namespaceID is the HCN namespace ID in use after a successful Setup.
 	namespaceID string
+
+	// migratedNamespaceID is the HCN namespace ID on the LM destination
+	// which is used for rehydrating the guest namespace.
+	migratedNamespaceID string
 
 	// vmEndpoints maps nicID (ID within UVM) -> HCN endpoint.
 	vmEndpoints map[string]*hcn.HostComputeEndpoint
@@ -128,7 +132,7 @@ func (c *Controller) Setup(ctx context.Context) (err error) {
 		// add the nicID and endpointID to the context for trace.
 		nicCtx, _ := log.WithContext(ctx, logrus.WithFields(logrus.Fields{"vm_nic_id": nicGUID.String(), "hns_endpoint_id": endpoint.Id}))
 
-		if err = c.addEndpointToGuestNamespace(nicCtx, nicGUID.String(), endpoint, c.policyBasedRouting); err != nil {
+		if err = c.addEndpointToGuestNamespace(nicCtx, endpoint.HostComputeNamespace, nicGUID.String(), endpoint, c.policyBasedRouting); err != nil {
 			return fmt.Errorf("add endpoint %s to guest: %w", endpoint.Name, err)
 		}
 	}
@@ -161,6 +165,15 @@ func (c *Controller) Teardown(ctx context.Context) error {
 	if c.netState == StateNotConfigured {
 		// Nothing was configured; nothing to clean up.
 		log.G(ctx).Info("network not configured, skipping")
+		return nil
+	}
+
+	if c.netState == StateDestinationMigrating || c.netState == StateSourceMigrating {
+		// Migration finalized: the guest-side NICs are not ours to remove —
+		// never wired on the destination, or gone with the torn-down source VM.
+		// Drop the bindings and mark torn down.
+		c.vmEndpoints = make(map[string]*hcn.HostComputeEndpoint)
+		c.netState = StateTornDown
 		return nil
 	}
 

@@ -522,7 +522,7 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 	if s == nil {
 		return nil, nil
 	}
-	ctx, span := oc.StartSpan(ctx, "DiagPid") //nolint:ineffassign,staticcheck
+	_, span := oc.StartSpan(ctx, "DiagPid")
 	defer span.End()
 
 	span.AddAttributes(trace.StringAttribute("tid", s.tid))

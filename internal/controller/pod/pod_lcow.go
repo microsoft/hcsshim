@@ -30,6 +30,10 @@ type Controller struct {
 	// containers maps containerID → [linuxcontainer.Controller] for every
 	// live container in this pod. Access must be guarded by mu.
 	containers map[string]*linuxcontainer.Controller
+
+	// isMigrating rejects operations while set: true once a snapshot has been
+	// taken or imported, until migration is resumed. Guarded by mu.
+	isMigrating bool
 }
 
 // New creates a ready-to-use [Controller] for the given pod.
@@ -47,6 +51,14 @@ func New(
 		network:    vm.NetworkController(networkNamespaceID),
 		containers: make(map[string]*linuxcontainer.Controller),
 	}
+}
+
+// PodID returns the pod's containerd-facing identifier.
+func (c *Controller) PodID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.podID
 }
 
 // SetupNetwork performs network setup for the pod.
@@ -84,9 +96,19 @@ func (c *Controller) NewContainer(ctx context.Context, containerID string) (*lin
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// The VM is not bound until Resume, so reject new containers while inert.
+	if c.isMigrating {
+		return nil, fmt.Errorf("pod %q is migrating; call Resume first", c.podID)
+	}
+
 	// Ensure we don't create a duplicate container controller.
 	if _, ok := c.containers[containerID]; ok {
 		return nil, fmt.Errorf("container %q already exists in pod %q", containerID, c.podID)
+	}
+
+	scsiCtrl, err := c.vm.SCSIController(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get SCSI controller: %w", err)
 	}
 
 	containerCtrl := linuxcontainer.New(
@@ -94,7 +116,7 @@ func (c *Controller) NewContainer(ctx context.Context, containerID string) (*lin
 		c.gcsPodID,
 		containerID,
 		c.vm.Guest(),
-		c.vm.SCSIController(),
+		scsiCtrl,
 		c.vm.Plan9Controller(),
 		c.vm.VPCIController(),
 	)

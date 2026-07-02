@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"syscall"
 	"testing"
 )
 
@@ -146,6 +147,58 @@ func TestHcsErrorUnwrapNet(t *testing.T) {
 			//nolint:staticcheck // Temporary() is deprecated
 			if !nerr.Temporary() {
 				t.Errorf("expected .Temporary() on '%v' to be true", nerr)
+			}
+		})
+	}
+}
+
+func TestIsAlreadyStopped(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "vmcompute already stopped (0xc0370110)",
+			err:  ErrVmcomputeAlreadyStopped,
+			want: true,
+		},
+		{
+			// Compute system reported as no longer running (e.g. UVM stopped during migration teardown).
+			name: "system already stopped (0x80370110)",
+			err:  ErrVmcomputeSystemAlreadyStopped,
+			want: true,
+		},
+		{
+			name: "process already stopped",
+			err:  ErrProcessAlreadyStopped,
+			want: true,
+		},
+		{
+			name: "element not found",
+			err:  ErrElementNotFound,
+			want: true,
+		},
+		{
+			name: "system not running wrapped in SystemError",
+			err: &SystemError{
+				ID: "uvm-test",
+				HcsError: HcsError{
+					Op:  "hcs::System::Modify",
+					Err: ErrVmcomputeSystemAlreadyStopped,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "unrelated error",
+			err:  syscall.Errno(0x5),
+			want: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsAlreadyStopped(tc.err); got != tc.want {
+				t.Errorf("IsAlreadyStopped(%v) = %t, want %t", tc.err, got, tc.want)
 			}
 		})
 	}

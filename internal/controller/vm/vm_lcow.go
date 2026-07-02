@@ -29,6 +29,14 @@ type platformControllers struct {
 
 	// sandboxOptions contains parsed, shim-level configuration for the sandbox.
 	sandboxOptions *lcow.SandboxOptions
+
+	// nextGuestPort is the GCS IO port-allocator floor restored from a
+	// migration snapshot; consumed by [Controller.Resume].
+	nextGuestPort uint32
+
+	// nextBridgeID is the GCS bridge request-id floor restored from a
+	// migration snapshot; consumed by [Controller.Resume].
+	nextBridgeID int64
 }
 
 // SandboxOptions returns the sandbox options stored during CreateVM.

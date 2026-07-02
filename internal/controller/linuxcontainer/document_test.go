@@ -301,3 +301,76 @@ func TestGenerateContainerDocument_NilLinux(t *testing.T) {
 		t.Fatal("expected error for nil Linux section")
 	}
 }
+
+// TestRewriteSandboxIDAnnotation verifies the post-migration sandbox-id
+// translation: rewrite when present, no-op otherwise.
+func TestRewriteSandboxIDAnnotation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourcePodID      = "source-pod"
+		destinationPodID = "destination-pod"
+	)
+
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		wantPresent bool
+		wantValue   string
+	}{
+		{
+			name: "workload-container-sandbox-id-rewritten-to-gcs-pod-id",
+			annotations: map[string]string{
+				annotations.KubernetesContainerType: "container",
+				annotations.KubernetesSandboxID:     destinationPodID,
+			},
+			wantPresent: true,
+			wantValue:   sourcePodID,
+		},
+		{
+			name: "no-sandbox-id-annotation-leaves-map-unchanged",
+			annotations: map[string]string{
+				annotations.KubernetesContainerType: "sandbox",
+			},
+			wantPresent: false,
+		},
+		{
+			name:        "nil-annotations-is-a-noop",
+			annotations: nil,
+			wantPresent: false,
+		},
+		{
+			name: "non-migrated-pod-rewrite-is-idempotent",
+			annotations: map[string]string{
+				annotations.KubernetesSandboxID: sourcePodID,
+			},
+			wantPresent: true,
+			wantValue:   sourcePodID,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := &specs.Spec{Annotations: tt.annotations}
+
+			rewriteSandboxIDAnnotation(spec, sourcePodID)
+
+			got, present := spec.Annotations[annotations.KubernetesSandboxID]
+			if present != tt.wantPresent {
+				t.Fatalf("KubernetesSandboxID present = %v, want %v (annotations=%v)",
+					present, tt.wantPresent, spec.Annotations)
+			}
+			if present && got != tt.wantValue {
+				t.Errorf("KubernetesSandboxID = %q, want %q", got, tt.wantValue)
+			}
+		})
+	}
+}
+
+// TestRewriteSandboxIDAnnotation_NilSpec ensures the helper does not panic
+// on a nil spec.
+func TestRewriteSandboxIDAnnotation_NilSpec(t *testing.T) {
+	t.Parallel()
+	rewriteSandboxIDAnnotation(nil, "pod")
+}

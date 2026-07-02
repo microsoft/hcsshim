@@ -34,7 +34,7 @@ import (
 // it succeeds to release the reservation and all resources.
 type Controller struct {
 	// mu serializes all public operations on the Controller.
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// vm is the host-side interface for adding and removing SCSI disks.
 	// Immutable after construction.
@@ -58,6 +58,10 @@ type Controller struct {
 	//   ControllerID = index / numLUNsPerController
 	//   LUN          = index % numLUNsPerController
 	controllerSlots []*disk.Disk
+
+	// isMigrating rejects all public ops while set: true once a snapshot has
+	// been taken or imported, until migration is resumed. Guarded by mu.
+	isMigrating bool
 }
 
 // New creates a new [Controller] for the given number of SCSI controllers and
@@ -78,9 +82,13 @@ func New(numControllers int, vm VMSCSIOps, guest GuestSCSIOps) *Controller {
 // once per controller and lun location, and must be called before any calls to
 // Reserve() to ensure the rootfs reservation is not evicted by a dynamic
 // reservation.
-func (c *Controller) ReserveForRootfs(ctx context.Context, controller, lun uint) error {
+func (c *Controller) ReserveForRootfs(ctx context.Context, controller, lun uint, cfg disk.Config) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.isMigrating {
+		return fmt.Errorf("SCSI controller is migrating; call Resume first")
+	}
 
 	slot := int(controller*numLUNsPerController + lun)
 	if slot >= len(c.controllerSlots) {
@@ -89,7 +97,7 @@ func (c *Controller) ReserveForRootfs(ctx context.Context, controller, lun uint)
 	if c.controllerSlots[slot] != nil {
 		return fmt.Errorf("slot for controller %d and lun %d is already reserved", controller, lun)
 	}
-	c.controllerSlots[slot] = disk.NewReserved(controller, lun, disk.Config{})
+	c.controllerSlots[slot] = disk.NewReserved(controller, lun, cfg)
 	return nil
 }
 
@@ -102,6 +110,10 @@ func (c *Controller) ReserveForRootfs(ctx context.Context, controller, lun uint)
 func (c *Controller) Reserve(ctx context.Context, diskConfig disk.Config, mountConfig mount.Config) (guid.GUID, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.isMigrating {
+		return guid.GUID{}, fmt.Errorf("SCSI controller is migrating; call Resume first")
+	}
 
 	ctx, _ = log.WithContext(ctx, logrus.WithFields(logrus.Fields{
 		logfields.HostPath:  diskConfig.HostPath,
@@ -178,6 +190,10 @@ func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, erro
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.isMigrating {
+		return "", fmt.Errorf("SCSI controller is migrating; call Resume first")
+	}
+
 	r, ok := c.reservations[id]
 	if !ok {
 		return "", fmt.Errorf("reservation %s not found", id)
@@ -211,6 +227,10 @@ func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, erro
 func (c *Controller) UnmapFromGuest(ctx context.Context, id guid.GUID) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.isMigrating {
+		return fmt.Errorf("SCSI controller is migrating; call Resume first")
+	}
 
 	ctx, _ = log.WithContext(ctx, logrus.WithField("reservation", id.String()))
 

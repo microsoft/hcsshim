@@ -683,7 +683,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hcn.HostC
 				nil),
 		}
 	} else {
-		s, err := guestresource.BuildLCOWNetworkAdapter(id, endpoint, uvm.policyBasedRouting)
+		s, err := guestresource.BuildLCOWNetworkAdapter(endpoint.HostComputeNamespace, id, endpoint, uvm.policyBasedRouting)
 		if err != nil {
 			return err
 		}

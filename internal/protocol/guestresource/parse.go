@@ -14,9 +14,9 @@ import (
 
 // BuildLCOWNetworkAdapter converts an HCN endpoint into the [LCOWNetworkAdapter]
 // payload that the GCS expects.
-func BuildLCOWNetworkAdapter(nicID string, endpoint *hcn.HostComputeEndpoint, policyBasedRouting bool) (*LCOWNetworkAdapter, error) {
+func BuildLCOWNetworkAdapter(netnsID string, nicID string, endpoint *hcn.HostComputeEndpoint, policyBasedRouting bool) (*LCOWNetworkAdapter, error) {
 	req := &LCOWNetworkAdapter{
-		NamespaceID: endpoint.HostComputeNamespace,
+		NamespaceID: netnsID,
 		ID:          nicID,
 		MacAddress:  endpoint.MacAddress,
 		IPConfigs:   make([]LCOWIPConfig, 0, len(endpoint.IpConfigurations)),

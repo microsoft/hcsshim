@@ -25,6 +25,7 @@ type CreateOpts struct {
 type guest interface {
 	Capabilities() gcs.GuestDefinedCapabilities
 	CreateContainer(ctx context.Context, cid string, config interface{}) (*gcs.Container, error)
+	OpenContainer(ctx context.Context, cid string) (*gcs.Container, error)
 	DeleteContainerState(ctx context.Context, cid string) error
 
 	AddCombinedLayers(ctx context.Context, settings guestresource.LCOWCombinedLayers) error
@@ -36,6 +37,7 @@ type scsiController interface {
 	Reserve(ctx context.Context, diskConfig disk.Config, mountConfig scsiMount.Config) (guid.GUID, error)
 	UnmapFromGuest(ctx context.Context, reservation guid.GUID) error
 	MapToGuest(ctx context.Context, id guid.GUID) (string, error)
+	UpdateDiskHostPath(ctx context.Context, reservationID guid.GUID, newPath string) error
 }
 
 // plan9Controller abstracts host-side Plan9 share reservation and guest mapping.
