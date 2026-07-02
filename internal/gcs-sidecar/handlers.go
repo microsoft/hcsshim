@@ -4,6 +4,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -579,68 +580,12 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 						return fmt.Errorf("log providers denied by policy: %w", err)
 					}
 
-					// Build a quick lookup for the kept set so we can trim the
-					// LogSourcesInfo to only those providers the policy allowed.
-					keepSet := make(map[string]struct{}, len(keptNames))
-					for _, name := range keptNames {
-						keepSet[name] = struct{}{}
-					}
-
-					// Detect trimming by scanning requested names against
-					// keepSet. We cannot use len(kept) != len(requested):
-					// the rego enforcer returns providers_to_keep via a set
-					// (see getProvidersToKeep → keepSet.toArray()), so a
-					// duplicate-name request like [A, A, B] returns [A, B]
-					// even when nothing was dropped, which would otherwise
-					// trip a false-positive warning and a needless re-marshal.
-					dropped := make([]string, 0)
-					seenDropped := make(map[string]struct{})
-					for _, name := range requestedNames {
-						if _, ok := keepSet[name]; ok {
-							continue
-						}
-						if _, dup := seenDropped[name]; dup {
-							continue
-						}
-						seenDropped[name] = struct{}{}
-						dropped = append(dropped, name)
-					}
-
-					// Trim happens in-place on the parsed structure so we can
-					// hand it to UpdateLogSourcesFromInfo without a redundant
-					// base64-decode + JSON-unmarshal round-trip (we already
-					// decoded above for enforcement).
-					trimmed := logSources
-					if len(dropped) > 0 {
-						// Surface the drop so operators have a breadcrumb —
-						// under allow_log_provider_dropping the pod boots
-						// silently, and forwardlogs may itself be off, so
-						// without this warning the trim is invisible.
-						log.G(req.ctx).WithFields(map[string]interface{}{
-							"requested": requestedNames,
-							"kept":      keptNames,
-							"dropped":   dropped,
-						}).Warn("log providers trimmed by policy (allow_log_provider_dropping)")
-
-						// Trim each source's provider list to only the
-						// allowed names. Empty sources are preserved to keep
-						// the shape stable; inbox GCS handles them as no-ops.
-						for i := range trimmed.LogConfig.Sources {
-							src := &trimmed.LogConfig.Sources[i]
-							filtered := make([]etw.EtwProvider, 0, len(src.Providers))
-							for _, p := range src.Providers {
-								if _, ok := keepSet[p.ProviderName]; ok {
-									filtered = append(filtered, p)
-								}
-							}
-							src.Providers = filtered
-						}
-					}
+					filtered := filterLogSourcesToAllowed(req.ctx, logSources, keptNames)
 
 					// Apply GUID resolution (and any other inbox-GCS prep)
 					// against the policy-trimmed payload and hand off to
 					// inbox GCS.
-					allowedLogSources, err := etw.UpdateLogSourcesFromInfo(trimmed, false, true)
+					allowedLogSources, err := etw.UpdateLogSourcesFromInfo(filtered, false, true)
 					if err != nil {
 						return fmt.Errorf("failed to update log sources: %w", err)
 					}
@@ -715,6 +660,43 @@ func validateLogProviders(sources []etw.Source) error {
 		}
 	}
 	return nil
+}
+
+func filterLogSourcesToAllowed(ctx context.Context, sources etw.LogSourcesInfo, keptNames []string) etw.LogSourcesInfo {
+	keepSet := make(map[string]struct{}, len(keptNames))
+	for _, name := range keptNames {
+		keepSet[name] = struct{}{}
+	}
+
+	var requestedNames []string
+	dropped := make([]string, 0)
+	seenDropped := make(map[string]struct{})
+	for i := range sources.LogConfig.Sources {
+		src := &sources.LogConfig.Sources[i]
+		filtered := make([]etw.EtwProvider, 0, len(src.Providers))
+		for _, p := range src.Providers {
+			requestedNames = append(requestedNames, p.ProviderName)
+			if _, ok := keepSet[p.ProviderName]; ok {
+				filtered = append(filtered, p)
+				continue
+			}
+			if _, dup := seenDropped[p.ProviderName]; !dup {
+				seenDropped[p.ProviderName] = struct{}{}
+				dropped = append(dropped, p.ProviderName)
+			}
+		}
+		src.Providers = filtered
+	}
+
+	if len(dropped) > 0 {
+		log.G(ctx).WithFields(map[string]interface{}{
+			"requested": requestedNames,
+			"kept":      keptNames,
+			"dropped":   dropped,
+		}).Warn("log providers trimmed by policy (allow_log_provider_dropping)")
+	}
+
+	return sources
 }
 
 func volumeGUIDFromLayerPath(path string) (string, bool) {
