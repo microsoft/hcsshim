@@ -144,6 +144,15 @@ type UtilityVM struct {
 	blockCIMMounts    map[string]*UVMMountedBlockCIMs
 	blockCIMMountLock sync.Mutex
 
+	// containerCreateLock serializes the per-container bring-up (block-CIM
+	// mount + scratch SCSI attach + CombineLayers/hive-merge + guest container
+	// create) into a single UVM. It is only taken for confidential containers
+	// (see createContainer): concurrent container starts in a confidential WCOW
+	// UVM otherwise issue overlapping guest mount/create operations that the
+	// guest cannot handle, causing a guest reset that drops the GCS bridge
+	// ("bridge closed: use of closed network connection").
+	containerCreateLock sync.Mutex
+
 	logForwardingEnabled     bool   // Indicates whether to forward logs from the UVM to the host
 	defaultLogSourcesEnabled bool   // Specifies whether addition of default list of ETW providers should be disabled
 	logSources               string // ETW providers to enable for log forwarding

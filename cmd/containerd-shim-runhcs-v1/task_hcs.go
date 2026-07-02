@@ -171,6 +171,18 @@ func createContainer(
 		if shimOpts != nil {
 			opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
 		}
+		// Serialize the per-container bring-up (layer mount + hive-merge + guest
+		// container create) into a single confidential WCOW UVM. Concurrent
+		// container starts in a multi-container CG otherwise issue overlapping
+		// guest mount/create operations that the confidential guest cannot
+		// handle, triggering a guest reset that drops the GCS bridge
+		// ("bridge closed: use of closed network connection"). Serializing makes
+		// the starts effectively one-at-a-time, which is reliable. Only taken for
+		// confidential containers; createContainer is shared with LCOW.
+		if parent != nil && parent.HasConfidentialPolicy() {
+			parent.LockContainerCreate()
+			defer parent.UnlockContainerCreate()
+		}
 		container, resources, err = hcsoci.CreateContainer(ctx, opts)
 		if err != nil {
 			return nil, nil, err
