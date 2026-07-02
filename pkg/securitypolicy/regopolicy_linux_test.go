@@ -75,6 +75,7 @@ func Test_MarshalRego_Policy(t *testing.T) {
 			p.allowEnvironmentVariableDropping,
 			p.allowUnencryptedScratch,
 			p.allowCapabilityDropping,
+			p.allowLogProviderDropping,
 		)
 		if err != nil {
 			t.Error(err)

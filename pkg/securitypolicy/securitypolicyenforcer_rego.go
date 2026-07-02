@@ -583,6 +583,38 @@ func getEnvsToKeep(envList []string, results rpi.RegoQueryResult) ([]string, err
 	return keepSet.toArray(), nil
 }
 
+// getProvidersToKeep extracts the "providers_to_keep" field from the rego
+// query results for log_provider enforcement and intersects it (defensively)
+// with the originally requested providerNames. Mirrors getEnvsToKeep.
+//
+// When the policy is older / does not return providers_to_keep, the entire
+// requested list is kept (analogous to env_list).
+func getProvidersToKeep(providerNames []string, results rpi.RegoQueryResult) ([]string, error) {
+	value, err := results.Value("providers_to_keep")
+	if err != nil || value == nil {
+		// policy did not return 'providers_to_keep'. Interpret as
+		// "proceed with provided providers".
+		return providerNames, nil
+	}
+
+	providersAsInterfaces, ok := value.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("policy returned incorrect type for 'providers_to_keep', expected []interface{}, received %T", value)
+	}
+
+	keepSet := make(stringSet)
+	for _, providerAsInterface := range providersAsInterfaces {
+		if provider, ok := providerAsInterface.(string); ok {
+			keepSet.add(provider)
+		} else {
+			return nil, fmt.Errorf("members of providers_to_keep from policy must be strings, received %T", providerAsInterface)
+		}
+	}
+
+	keepSet = keepSet.intersect(toStringSet(providerNames))
+	return keepSet.toArray(), nil
+}
+
 func getCapsToKeep(capsList *oci.LinuxCapabilities, results rpi.RegoQueryResult) (*oci.LinuxCapabilities, error) {
 	value, err := results.Value("caps_list")
 	if err != nil || value == nil {
@@ -1216,6 +1248,17 @@ func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, co
 
 	_, err := policy.enforce(ctx, "registry_changes", input)
 	return err
+}
+
+func (policy *regoEnforcer) EnforceLogProviderPolicy(ctx context.Context, providerNames []string) ([]string, error) {
+	input := inputData{
+		"providers": providerNames,
+	}
+	results, err := policy.enforce(ctx, "log_provider", input)
+	if err != nil {
+		return nil, err
+	}
+	return getProvidersToKeep(providerNames, results)
 }
 
 func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (IDName, []IDName, string, error) {

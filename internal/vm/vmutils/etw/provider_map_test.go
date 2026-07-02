@@ -23,9 +23,9 @@ func TestGetProviderGUIDFromName(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := getProviderGUIDFromName(tt.name)
+		got := GetProviderGUIDFromName(tt.name)
 		if got != tt.expected {
-			t.Errorf("getProviderGUIDFromName(%q) = %q, want %q", tt.name, got, tt.expected)
+			t.Errorf("GetProviderGUIDFromName(%q) = %q, want %q", tt.name, got, tt.expected)
 		}
 	}
 }
@@ -126,11 +126,11 @@ func buildTestUserLogSources(t *testing.T) LogSourcesInfo {
 	nameOnlyProvider := "Microsoft.Windows.HyperV.Compute"
 	nameAndGUIDProvider := "Microsoft.Windows.Containers.Setup"
 
-	guid := getProviderGUIDFromName(nameAndGUIDProvider)
+	guid := GetProviderGUIDFromName(nameAndGUIDProvider)
 	if guid == "" {
 		t.Fatalf("missing GUID mapping for provider %q", nameAndGUIDProvider)
 	}
-	if getProviderGUIDFromName(nameOnlyProvider) == "" {
+	if GetProviderGUIDFromName(nameOnlyProvider) == "" {
 		t.Fatalf("missing GUID mapping for provider %q", nameOnlyProvider)
 	}
 
@@ -185,7 +185,7 @@ func applyExpectedGUIDBehavior(cfg *LogSourcesInfo, includeGUIDs bool) {
 					}
 				}
 				if provider.ProviderName != "" && provider.ProviderGUID == "" {
-					cfg.LogConfig.Sources[i].Providers[j].ProviderGUID = getProviderGUIDFromName(provider.ProviderName)
+					cfg.LogConfig.Sources[i].Providers[j].ProviderGUID = GetProviderGUIDFromName(provider.ProviderName)
 				}
 				continue
 			}
@@ -195,7 +195,7 @@ func applyExpectedGUIDBehavior(cfg *LogSourcesInfo, includeGUIDs bool) {
 				if err != nil {
 					continue
 				}
-				if strings.EqualFold(guid.String(), getProviderGUIDFromName(provider.ProviderName)) {
+				if strings.EqualFold(guid.String(), GetProviderGUIDFromName(provider.ProviderName)) {
 					cfg.LogConfig.Sources[i].Providers[j].ProviderGUID = ""
 				} else {
 					cfg.LogConfig.Sources[i].Providers[j].ProviderGUID = strings.ToLower(guid.String())

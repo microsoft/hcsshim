@@ -4,6 +4,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -57,10 +58,9 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		return errors.Wrap(err, "failed to unmarshal createContainer")
 	}
 
-	// containerConfig can be of type uvnConfig or hcsschema.HostedSystem or guestresource.CWCOWHostedSystem
+	// containerConfig can be of type uvmConfig or guestresource.CWCOWHostedSystem
 	var (
 		uvmConfig               prot.UvmConfig
-		hostedSystemConfig      hcsschema.HostedSystem
 		cwcowHostedSystemConfig guestresource.CWCOWHostedSystem
 	)
 	if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &uvmConfig); err == nil &&
@@ -68,11 +68,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		systemType := uvmConfig.SystemType
 		timeZoneInformation := uvmConfig.TimeZoneInformation
 		log.G(ctx).Tracef("createContainer: uvmConfig: {systemType: %v, timeZoneInformation: %v}}", systemType, timeZoneInformation)
-	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &hostedSystemConfig); err == nil &&
-		hostedSystemConfig.SchemaVersion != nil && hostedSystemConfig.Container != nil {
-		schemaVersion := hostedSystemConfig.SchemaVersion
-		container := hostedSystemConfig.Container
-		log.G(ctx).Tracef("rpcCreate: HostedSystemConfig: {schemaVersion: %v, container: %v}}", schemaVersion, container)
 	} else if err = commonutils.UnmarshalJSONWithHresult(containerConfig, &cwcowHostedSystemConfig); err == nil &&
 		cwcowHostedSystemConfig.Spec.Version != "" && cwcowHostedSystemConfig.CWCOWHostedSystem.Container != nil {
 		cwcowHostedSystem := cwcowHostedSystemConfig.CWCOWHostedSystem
@@ -536,7 +531,6 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	// Todo: Add policy enforcement for modifying service settings
 	modifyRequest, err := unmarshalModifyServiceSettings(req)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal modifyServiceSettings request: %w", err)
@@ -551,28 +545,54 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 			switch settings.RPCType {
 			case guestrequest.RPCModifyServiceSettings, guestrequest.RPCStartLogForwarding, guestrequest.RPCStopLogForwarding:
 				log.G(req.ctx).Tracef("%v request received for LogForwardService, proceeding with policy enforcement for log sources", settings.RPCType)
-				// Enforce the policy for log sources in the request and update the settings with allowed log sources.
-				// For cwcow, the sidecar-GCS will verify the allowed log sources against policy and append the necessary GUIDs to the ones allowed. Rest are dropped.
-				// The Enforcer will have to unmarshal the log sources, enforce the policy and then marshal it back to a Base64 encoded JSON string which is what inbox GCS expects.
-				// It can query etw.GetDefaultLogSources to get the default log sources if the policy allows, and allow providers matching the default list during policy enforcement.
-				// This is because the log sources can be a combination of default and user specified log sources for which GUIDs need to be appended based on the policy enforcement.
 				if settings.Settings != "" {
-					// <EXAMPLE CALL>
-					// allowedLogSources, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogForwardServiceSettingsPolicy(req.ctx, settings.LogSources)
+					// Decode the base64-encoded log sources config so we can
+					// enforce policy on the requested provider list.
+					logSources, err := etw.DecodeAndUnmarshalLogSources(settings.Settings)
+					if err != nil {
+						return fmt.Errorf("failed to decode log sources: %w", err)
+					}
 
-					// For now, we are skipping the policy enforcement and allowing all log sources as the policy enforcer implementation is in progress. We will add the enforcement back once it's implemented.
-					allowedLogSources := settings.Settings // This is Base64 encoded JSON string of log sources
-					log.G(req.ctx).Tracef("Allowed log sources after policy enforcement: %v", allowedLogSources)
+					// Validate host-supplied (Name, GUID) pairs before
+					// name-based policy enforcement.
+					if err := validateLogProviders(logSources.LogConfig.Sources); err != nil {
+						return fmt.Errorf("log providers rejected: %w", err)
+					}
 
-					// Update the allowed log sources in the settings. This will be forwarded to inbox GCS which expects the log sources in a JSON string format with GUIDs for providers included.
-					allowedLogSources, err := etw.UpdateLogSources(allowedLogSources, false, true)
+					// Collect every requested provider name and ask the
+					// enforcer to validate them as a batch. The enforcer's
+					// behaviour depends on allow_log_provider_dropping in the
+					// active policy:
+					//   - false (default, fail-close): any disallowed provider
+					//     causes the call to be denied.
+					//   - true: disallowed providers are silently dropped and
+					//     the kept subset is returned for forwarding.
+					var requestedNames []string
+					for _, source := range logSources.LogConfig.Sources {
+						for _, provider := range source.Providers {
+							requestedNames = append(requestedNames, provider.ProviderName)
+						}
+					}
+
+					keptNames, err := b.hostState.securityOptions.PolicyEnforcer.EnforceLogProviderPolicy(
+						req.ctx, requestedNames)
+					if err != nil {
+						return fmt.Errorf("log providers denied by policy: %w", err)
+					}
+
+					filtered := filterLogSourcesToAllowed(req.ctx, logSources, keptNames)
+
+					// Apply GUID resolution (and any other inbox-GCS prep)
+					// against the policy-trimmed payload and hand off to
+					// inbox GCS.
+					allowedLogSources, err := etw.UpdateLogSourcesFromInfo(filtered, false, true)
 					if err != nil {
 						return fmt.Errorf("failed to update log sources: %w", err)
 					}
 					settings.Settings = allowedLogSources
 				}
 			default:
-				log.G(req.ctx).Warningf("modifyServiceSettings for LogForwardService with RPCType: %v, skipping policy enforcement", settings.RPCType)
+				return fmt.Errorf("modifyServiceSettings for LogForwardService: unsupported RPCType %q", settings.RPCType)
 			}
 			modifyRequest.Settings = settings
 			buf, err := json.Marshal(modifyRequest)
@@ -589,10 +609,94 @@ func (b *Bridge) modifyServiceSettings(req *request) (err error) {
 			log.G(req.ctx).Warningf("modifyServiceSettings for LogForwardService with empty settings, skipping policy enforcement")
 		}
 	default:
-		log.G(req.ctx).Warningf("modifyServiceSettings with PropertyType: %v, skipping policy enforcement", modifyRequest.PropertyType)
+		return fmt.Errorf("modifyServiceSettings: unsupported PropertyType %q", modifyRequest.PropertyType)
 	}
 	b.forwardRequestToGcs(req)
 	return nil
+}
+
+// validateLogProviders validates host-supplied log providers before they
+// reach the name-based policy enforcer.
+//
+// CWCOW policy approves provider names, but inbox GCS subscribes by GUID. If
+// the host could send {Name: "allowed", GUID: "<disallowed>"} the name-based
+// enforcer would approve and the disallowed GUID would still be forwarded
+// (resolveGUIDsWithLookup keeps any GUID the host set). To close that bypass
+// the sidecar rejects, before enforcement, any entry whose (Name, GUID) pair
+// is not verifiable against the well-known ETW map:
+//
+//   - Name == "": rejected. Policy is name-based; a GUID-only entry has
+//     nothing for the enforcer to evaluate.
+//   - Name + GUID where Name is not in the well-known map: rejected. We have
+//     no ground truth to compare the GUID against, so we cannot verify the
+//     host's claim. Name-only is still accepted for downstream resolution to
+//     stay best-effort.
+//   - Name + GUID where the GUID disagrees with the well-known lookup for
+//     Name: rejected.
+//
+// Name-only entries are passed through unchanged; the sidecar fills in the
+// canonical GUID after enforcement via etw.UpdateLogSourcesFromInfo.
+func validateLogProviders(sources []etw.Source) error {
+	for _, src := range sources {
+		for _, p := range src.Providers {
+			if p.ProviderName == "" {
+				return fmt.Errorf("provider with no name is not allowed (GUID %q)", p.ProviderGUID)
+			}
+			if p.ProviderGUID == "" {
+				continue
+			}
+			well := etw.GetProviderGUIDFromName(p.ProviderName)
+			if well == "" {
+				return fmt.Errorf("provider %q: name not in well-known ETW map; cannot verify supplied GUID %q", p.ProviderName, p.ProviderGUID)
+			}
+			suppliedTrimmed := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(p.ProviderGUID), "{"), "}")
+			supplied, err := guid.FromString(suppliedTrimmed)
+			if err != nil {
+				return fmt.Errorf("provider %q: invalid GUID %q: %w", p.ProviderName, p.ProviderGUID, err)
+			}
+			if !strings.EqualFold(supplied.String(), well) {
+				return fmt.Errorf("provider %q: supplied GUID %q does not match well-known GUID %q", p.ProviderName, p.ProviderGUID, well)
+			}
+		}
+	}
+	return nil
+}
+
+func filterLogSourcesToAllowed(ctx context.Context, sources etw.LogSourcesInfo, keptNames []string) etw.LogSourcesInfo {
+	keepSet := make(map[string]struct{}, len(keptNames))
+	for _, name := range keptNames {
+		keepSet[name] = struct{}{}
+	}
+
+	var requestedNames []string
+	dropped := make([]string, 0)
+	seenDropped := make(map[string]struct{})
+	for i := range sources.LogConfig.Sources {
+		src := &sources.LogConfig.Sources[i]
+		filtered := make([]etw.EtwProvider, 0, len(src.Providers))
+		for _, p := range src.Providers {
+			requestedNames = append(requestedNames, p.ProviderName)
+			if _, ok := keepSet[p.ProviderName]; ok {
+				filtered = append(filtered, p)
+				continue
+			}
+			if _, dup := seenDropped[p.ProviderName]; !dup {
+				seenDropped[p.ProviderName] = struct{}{}
+				dropped = append(dropped, p.ProviderName)
+			}
+		}
+		src.Providers = filtered
+	}
+
+	if len(dropped) > 0 {
+		log.G(ctx).WithFields(map[string]interface{}{
+			"requested": requestedNames,
+			"kept":      keptNames,
+			"dropped":   dropped,
+		}).Warn("log providers trimmed by policy (allow_log_provider_dropping)")
+	}
+
+	return sources
 }
 
 func volumeGUIDFromLayerPath(path string) (string, bool) {

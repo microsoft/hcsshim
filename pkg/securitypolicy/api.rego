@@ -24,4 +24,5 @@ enforcement_points := {
     "load_fragment": {"introducedVersion": "0.9.0", "default_results": {"allowed": false, "add_module": false}, "use_framework": false},
     "scratch_mount": {"introducedVersion": "0.10.0", "default_results": {"allowed": true}, "use_framework": false},
     "scratch_unmount": {"introducedVersion": "0.10.0", "default_results": {"allowed": true}, "use_framework": false},
+    "log_provider": {"introducedVersion": "0.11.0", "default_results": {"allowed": true, "providers_to_keep": null}, "use_framework": false},
 }

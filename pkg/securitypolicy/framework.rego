@@ -1343,6 +1343,47 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
     }
 }
 
+# Log provider validation for Windows containers.
+#
+# Two modes (mirrors allow_environment_variable_dropping):
+#   - allow_log_provider_dropping := false (default, fail-close): every
+#     requested provider name must appear in allowed_log_providers, otherwise
+#     the rule denies the entire request.
+#   - allow_log_provider_dropping := true: providers not in the allow-list are
+#     silently dropped from providers_to_keep; the call still allows and the
+#     caller is expected to only forward the remaining providers.
+#
+# Input:  {"providers": [name, ...]}
+# Output: {"allowed": bool, "providers_to_keep": [name, ...]}
+default log_provider := {"allowed": false, "providers_to_keep": []}
+
+valid_log_providers := providers {
+    allow_log_provider_dropping
+
+    providers := [name |
+        name := input.providers[_]
+        some allowed_provider in data.policy.allowed_log_providers
+        lower(name) == lower(allowed_provider)
+    ]
+}
+
+valid_log_providers := providers {
+    not allow_log_provider_dropping
+    providers := input.providers
+}
+
+log_providers_ok(providers) {
+    every name in providers {
+        some allowed_provider in data.policy.allowed_log_providers
+        lower(name) == lower(allowed_provider)
+    }
+}
+
+log_provider := {"allowed": true, "providers_to_keep": providers} {
+    providers := valid_log_providers
+    log_providers_ok(providers)
+}
+
 # Registry changes validation
 default registry_changes := {"allowed": false}
 
@@ -1871,6 +1912,11 @@ errors["no scratch at path to unmount"] {
     not scratch_mounted(input.unmountTarget)
 }
 
+errors["log provider not allowed by policy"] {
+    input.rule == "log_provider"
+    not log_provider.allowed
+}
+
 errors[framework_version_error] {
     policy_framework_version == null
     framework_version_error := concat(" ", ["framework_version is missing. Current version:", version])
@@ -2357,6 +2403,7 @@ allow_dump_stacks := data.policy.allow_dump_stacks
 allow_runtime_logging := data.policy.allow_runtime_logging
 allow_environment_variable_dropping := data.policy.allow_environment_variable_dropping
 allow_unencrypted_scratch := data.policy.allow_unencrypted_scratch
+allow_log_provider_dropping := data.policy.allow_log_provider_dropping
 
 # all flags not in the base set need to have default logic applied
 
