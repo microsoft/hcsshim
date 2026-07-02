@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v2/service/mocks"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
+	"github.com/Microsoft/hcsshim/internal/controller/migration"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 )
@@ -48,6 +49,7 @@ func newTestService(t *testing.T) (*Service, *mocks.MockvmController) {
 		events:              make(chan interface{}, 128),
 		podControllers:      make(map[string]*pod.Controller),
 		containerPodMapping: make(map[string]string),
+		migrationController: migration.New(),
 		shutdown:            sd,
 	}, mockCtrl
 }

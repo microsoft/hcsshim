@@ -16,12 +16,14 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/process"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/containerd/containerd/api/runtime/task/v3"
 	containerdtypes "github.com/containerd/containerd/api/types/task"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // vmController is the subset of the VM controller that [Service] depends on.
@@ -94,6 +96,40 @@ type vmController interface {
 
 	// NetworkController returns the network controller for the VM.
 	NetworkController(networkNamespaceID string) *network.Controller
+
+	// The methods below are required by the migration controller, which the
+	// Service hands this vmController to. Declaring them here lets the same
+	// field satisfy the migration controller's vmController interface.
+
+	// InitializeLiveMigrationOnSource arms the running source VM for migration.
+	InitializeLiveMigrationOnSource(ctx context.Context, options *hcsschema.MigrationInitializeOptions) error
+
+	// Save captures the migrating VM's state into a portable snapshot.
+	Save(ctx context.Context) (*anypb.Any, error)
+
+	// Import rehydrates a destination VM controller from a saved snapshot.
+	Import(ctx context.Context, env *anypb.Any) error
+
+	// Patch re-ACLs the destination VM's disks after creation.
+	Patch(ctx context.Context) error
+
+	// StartLiveMigrationOnSource starts the outgoing migration on the source VM.
+	StartLiveMigrationOnSource(ctx context.Context, config *hcs.MigrationConfig) error
+
+	// StartWithMigrationOptions starts the destination VM against the transport.
+	StartWithMigrationOptions(ctx context.Context, config *hcs.MigrationConfig) error
+
+	// StartLiveMigrationTransfer begins the memory transfer.
+	StartLiveMigrationTransfer(ctx context.Context, options *hcsschema.MigrationTransferOptions) error
+
+	// FinalizeLiveMigration applies the migration's final operation to the VM.
+	FinalizeLiveMigration(ctx context.Context, options *hcsschema.MigrationFinalizedOptions) error
+
+	// Resume returns a migrating VM to the running state.
+	Resume(ctx context.Context, rebuildBridge bool) error
+
+	// MigrationNotifications returns the VM's migration event stream.
+	MigrationNotifications() (<-chan hcsschema.OperationSystemMigrationNotificationInfo, error)
 }
 
 // containerController is the subset of the container controller that [Service]
