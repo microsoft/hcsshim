@@ -13,6 +13,7 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
@@ -550,12 +551,13 @@ func TestModifyServiceSettings_LogForward_PolicyDropping_NoFalsePositive(t *test
 	payload := buildLogForwardServiceRequest(t, name, name)
 	req := newModifyServiceSettingsRequest(payload)
 
+	// Scope the capture hook to a request-local logger (rather than mutating
+	// the global logrus) by injecting it into the request context.
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
 	hook := &captureHook{}
-	logrus.AddHook(hook)
-	defer func() {
-		// logrus has no public RemoveHook; reset all hooks to clear ours.
-		logrus.StandardLogger().ReplaceHooks(logrus.LevelHooks{})
-	}()
+	logger.AddHook(hook)
+	req.ctx, _ = log.WithContext(req.ctx, logrus.NewEntry(logger))
 
 	if err := b.modifyServiceSettings(req); err != nil {
 		t.Fatalf("modifyServiceSettings under dropping enforcer (dedup) returned error: %v", err)
