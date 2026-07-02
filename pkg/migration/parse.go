@@ -3,9 +3,11 @@
 package migration
 
 import (
+	"encoding/json"
 	"fmt"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // InitializeOptionsFromProto converts a protobuf [InitializeOptions] to the
@@ -70,4 +72,104 @@ func compressionSettingsFromProto(p *CompressionSettings) *hcsschema.MigrationCo
 	return &hcsschema.MigrationCompressionSettings{
 		ThrottleWorkerCount: p.ThrottleWorkerCount,
 	}
+}
+
+// ToOrigin maps an HCS migration origin to its wire form, falling back to the
+// controller-known origin when HCS leaves the field empty.
+func ToOrigin(origin, fallback hcsschema.MigrationOrigin) Origin {
+	if origin == "" {
+		origin = fallback
+	}
+
+	switch origin {
+	case hcsschema.MigrationOriginSource:
+		return Origin_ORIGIN_SOURCE
+	case hcsschema.MigrationOriginDestination:
+		return Origin_ORIGIN_DESTINATION
+	}
+
+	return Origin_ORIGIN_UNSPECIFIED
+}
+
+// ToPhase maps an HCS migration event to its wire-form phase, returning
+// PHASE_UNSPECIFIED for an unrecognized event.
+func ToPhase(event hcsschema.MigrationEvent) Phase {
+	switch event {
+	case hcsschema.MigrationEventSetupDone:
+		return Phase_PHASE_SETUP_DONE
+	case hcsschema.MigrationEventTransferInProgress:
+		return Phase_PHASE_TRANSFER_IN_PROGRESS
+	case hcsschema.MigrationEventBlackoutStarted:
+		return Phase_PHASE_BLACKOUT_STARTED
+	case hcsschema.MigrationEventOfflineDone:
+		return Phase_PHASE_OFFLINE_DONE
+	case hcsschema.MigrationEventBlackoutExited:
+		return Phase_PHASE_BLACKOUT_EXITED
+	case hcsschema.MigrationEventMigrationDone:
+		return Phase_PHASE_DONE
+	case hcsschema.MigrationEventMigrationRecoveryDone:
+		return Phase_PHASE_RECOVERY_DONE
+	case hcsschema.MigrationEventMigrationFailed:
+		return Phase_PHASE_FAILED
+	}
+
+	return Phase_PHASE_UNSPECIFIED
+}
+
+// ToPhaseState maps an HCS migration result to its wire-form state.
+func ToPhaseState(result hcsschema.MigrationResult, phase Phase) PhaseState {
+	switch result {
+	case hcsschema.MigrationResultSuccess:
+		return PhaseState_PHASE_STATE_SUCCESS
+	case hcsschema.MigrationResultMigrationCancelled:
+		return PhaseState_PHASE_STATE_CANCELLED
+	case hcsschema.MigrationResultGuestInitiatedCancellation:
+		return PhaseState_PHASE_STATE_GUEST_INITIATED_CANCELLATION
+	case hcsschema.MigrationResultSourceMigrationFailed:
+		return PhaseState_PHASE_STATE_SOURCE_FAILED
+	case hcsschema.MigrationResultDestinationMigrationFailed:
+		return PhaseState_PHASE_STATE_DESTINATION_FAILED
+	case hcsschema.MigrationResultMigrationRecoveryFailed:
+		return PhaseState_PHASE_STATE_RECOVERY_FAILED
+	}
+
+	// No HCS result: progress phases imply forward progress (failures arrive
+	// as PHASE_FAILED), so default to SUCCESS; terminal phases stay UNSPECIFIED
+	// so callers can tell "HCS did not say" from a real outcome.
+	switch phase {
+	case Phase_PHASE_SETUP_DONE,
+		Phase_PHASE_TRANSFER_IN_PROGRESS,
+		Phase_PHASE_BLACKOUT_STARTED,
+		Phase_PHASE_OFFLINE_DONE,
+		Phase_PHASE_BLACKOUT_EXITED:
+		return PhaseState_PHASE_STATE_SUCCESS
+	}
+
+	return PhaseState_PHASE_STATE_UNSPECIFIED
+}
+
+// ToNotification converts an HCS migration event into its wire-form notification.
+func ToNotification(info hcsschema.OperationSystemMigrationNotificationInfo, fallbackOrigin hcsschema.MigrationOrigin) *Notification {
+	phase := ToPhase(info.Event)
+	notification := &Notification{
+		Origin: ToOrigin(info.Origin, fallbackOrigin),
+		Phase:  phase,
+		State:  ToPhaseState(info.Result, phase),
+	}
+
+	if info.Event == hcsschema.MigrationEventBlackoutExited && len(info.AdditionalDetails) > 0 {
+		// On unmarshal failure we drop PhaseDetails rather than the whole
+		// notification; the core phase/state info is still useful.
+		var details hcsschema.BlackoutExitedEventDetails
+		if err := json.Unmarshal(info.AdditionalDetails, &details); err == nil {
+			notification.PhaseDetails = &Notification_BlackoutExited{
+				BlackoutExited: &BlackoutExitedEventDetails{
+					BlackoutDurationMilliseconds: details.BlackoutDurationMilliseconds,
+					BlackoutStopTimestamp:        timestamppb.New(details.BlackoutStopTimestamp),
+				},
+			}
+		}
+	}
+
+	return notification
 }
