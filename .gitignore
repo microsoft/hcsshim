@@ -58,3 +58,11 @@ go.work.sum
 *.cose
 
 rust/target/
+
+# cmake
+CMakeFiles/
+CMakeScripts/
+CMakeCache.txt
+CMakeUserPresets.json
+UserConfig.cmake
+cmake_install.cmake
