@@ -26,13 +26,16 @@ import (
 	process "github.com/Microsoft/hcsshim/internal/controller/process"
 	vm "github.com/Microsoft/hcsshim/internal/controller/vm"
 	schema2 "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	v2 "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	guestresource "github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	shimdiag "github.com/Microsoft/hcsshim/internal/shimdiag"
 	guestmanager "github.com/Microsoft/hcsshim/internal/vm/guestmanager"
+	vmmanager "github.com/Microsoft/hcsshim/internal/vm/vmmanager"
 	v3 "github.com/containerd/containerd/api/runtime/task/v3"
 	task "github.com/containerd/containerd/api/types/task"
 	specs_go "github.com/opencontainers/runtime-spec/specs-go"
 	gomock "go.uber.org/mock/gomock"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 )
 
 // MockvmController is a mock of vmController interface.
@@ -118,6 +121,20 @@ func (mr *MockvmControllerMockRecorder) ExitStatus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitStatus", reflect.TypeOf((*MockvmController)(nil).ExitStatus))
 }
 
+// FinalizeLiveMigration mocks base method.
+func (m *MockvmController) FinalizeLiveMigration(ctx context.Context, options *schema2.MigrationFinalizedOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FinalizeLiveMigration", ctx, options)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FinalizeLiveMigration indicates an expected call of FinalizeLiveMigration.
+func (mr *MockvmControllerMockRecorder) FinalizeLiveMigration(ctx, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinalizeLiveMigration", reflect.TypeOf((*MockvmController)(nil).FinalizeLiveMigration), ctx, options)
+}
+
 // Guest mocks base method.
 func (m *MockvmController) Guest() *guestmanager.Guest {
 	m.ctrl.T.Helper()
@@ -130,6 +147,49 @@ func (m *MockvmController) Guest() *guestmanager.Guest {
 func (mr *MockvmControllerMockRecorder) Guest() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Guest", reflect.TypeOf((*MockvmController)(nil).Guest))
+}
+
+// Import mocks base method.
+func (m *MockvmController) Import(ctx context.Context, env *anypb.Any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Import", ctx, env)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Import indicates an expected call of Import.
+func (mr *MockvmControllerMockRecorder) Import(ctx, env any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Import", reflect.TypeOf((*MockvmController)(nil).Import), ctx, env)
+}
+
+// InitializeLiveMigrationOnSource mocks base method.
+func (m *MockvmController) InitializeLiveMigrationOnSource(ctx context.Context, options *schema2.MigrationInitializeOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InitializeLiveMigrationOnSource", ctx, options)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InitializeLiveMigrationOnSource indicates an expected call of InitializeLiveMigrationOnSource.
+func (mr *MockvmControllerMockRecorder) InitializeLiveMigrationOnSource(ctx, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeLiveMigrationOnSource", reflect.TypeOf((*MockvmController)(nil).InitializeLiveMigrationOnSource), ctx, options)
+}
+
+// MigrationNotifications mocks base method.
+func (m *MockvmController) MigrationNotifications() (<-chan schema2.OperationSystemMigrationNotificationInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MigrationNotifications")
+	ret0, _ := ret[0].(<-chan schema2.OperationSystemMigrationNotificationInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MigrationNotifications indicates an expected call of MigrationNotifications.
+func (mr *MockvmControllerMockRecorder) MigrationNotifications() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrationNotifications", reflect.TypeOf((*MockvmController)(nil).MigrationNotifications))
 }
 
 // NetworkController mocks base method.
@@ -146,6 +206,20 @@ func (mr *MockvmControllerMockRecorder) NetworkController(networkNamespaceID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkController", reflect.TypeOf((*MockvmController)(nil).NetworkController), networkNamespaceID)
 }
 
+// Patch mocks base method.
+func (m *MockvmController) Patch(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Patch", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Patch indicates an expected call of Patch.
+func (mr *MockvmControllerMockRecorder) Patch(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Patch", reflect.TypeOf((*MockvmController)(nil).Patch), ctx)
+}
+
 // Plan9Controller mocks base method.
 func (m *MockvmController) Plan9Controller() *plan9.Controller {
 	m.ctrl.T.Helper()
@@ -158,6 +232,20 @@ func (m *MockvmController) Plan9Controller() *plan9.Controller {
 func (mr *MockvmControllerMockRecorder) Plan9Controller() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Plan9Controller", reflect.TypeOf((*MockvmController)(nil).Plan9Controller))
+}
+
+// Resume mocks base method.
+func (m *MockvmController) Resume(ctx context.Context, rebuildBridge bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Resume", ctx, rebuildBridge)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Resume indicates an expected call of Resume.
+func (mr *MockvmControllerMockRecorder) Resume(ctx, rebuildBridge any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resume", reflect.TypeOf((*MockvmController)(nil).Resume), ctx, rebuildBridge)
 }
 
 // RuntimeID mocks base method.
@@ -175,17 +263,18 @@ func (mr *MockvmControllerMockRecorder) RuntimeID() *gomock.Call {
 }
 
 // SCSIController mocks base method.
-func (m *MockvmController) SCSIController() *scsi.Controller {
+func (m *MockvmController) SCSIController(ctx context.Context) (*scsi.Controller, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SCSIController")
+	ret := m.ctrl.Call(m, "SCSIController", ctx)
 	ret0, _ := ret[0].(*scsi.Controller)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SCSIController indicates an expected call of SCSIController.
-func (mr *MockvmControllerMockRecorder) SCSIController() *gomock.Call {
+func (mr *MockvmControllerMockRecorder) SCSIController(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SCSIController", reflect.TypeOf((*MockvmController)(nil).SCSIController), ctx)
 }
 
 // SandboxOptions mocks base method.
@@ -200,6 +289,49 @@ func (m *MockvmController) SandboxOptions() *lcow.SandboxOptions {
 func (mr *MockvmControllerMockRecorder) SandboxOptions() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SandboxOptions", reflect.TypeOf((*MockvmController)(nil).SandboxOptions))
+}
+
+// Save mocks base method.
+func (m *MockvmController) Save(ctx context.Context) (*anypb.Any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Save", ctx)
+	ret0, _ := ret[0].(*anypb.Any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Save indicates an expected call of Save.
+func (mr *MockvmControllerMockRecorder) Save(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockvmController)(nil).Save), ctx)
+}
+
+// StartLiveMigrationOnSource mocks base method.
+func (m *MockvmController) StartLiveMigrationOnSource(ctx context.Context, config *v2.MigrationConfig) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartLiveMigrationOnSource", ctx, config)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartLiveMigrationOnSource indicates an expected call of StartLiveMigrationOnSource.
+func (mr *MockvmControllerMockRecorder) StartLiveMigrationOnSource(ctx, config any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartLiveMigrationOnSource", reflect.TypeOf((*MockvmController)(nil).StartLiveMigrationOnSource), ctx, config)
+}
+
+// StartLiveMigrationTransfer mocks base method.
+func (m *MockvmController) StartLiveMigrationTransfer(ctx context.Context, options *schema2.MigrationTransferOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartLiveMigrationTransfer", ctx, options)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartLiveMigrationTransfer indicates an expected call of StartLiveMigrationTransfer.
+func (mr *MockvmControllerMockRecorder) StartLiveMigrationTransfer(ctx, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartLiveMigrationTransfer", reflect.TypeOf((*MockvmController)(nil).StartLiveMigrationTransfer), ctx, options)
 }
 
 // StartTime mocks base method.
@@ -228,6 +360,20 @@ func (m *MockvmController) StartVM(ctx context.Context, opts *vm.StartOptions) e
 func (mr *MockvmControllerMockRecorder) StartVM(ctx, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartVM", reflect.TypeOf((*MockvmController)(nil).StartVM), ctx, opts)
+}
+
+// StartWithMigrationOptions mocks base method.
+func (m *MockvmController) StartWithMigrationOptions(ctx context.Context, config *v2.MigrationConfig) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartWithMigrationOptions", ctx, config)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartWithMigrationOptions indicates an expected call of StartWithMigrationOptions.
+func (mr *MockvmControllerMockRecorder) StartWithMigrationOptions(ctx, config any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWithMigrationOptions", reflect.TypeOf((*MockvmController)(nil).StartWithMigrationOptions), ctx, config)
 }
 
 // State mocks base method.
@@ -327,6 +473,20 @@ func (m *MockvmController) UpdatePolicyFragment(ctx context.Context, fragment gu
 func (mr *MockvmControllerMockRecorder) UpdatePolicyFragment(ctx, fragment any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePolicyFragment", reflect.TypeOf((*MockvmController)(nil).UpdatePolicyFragment), ctx, fragment)
+}
+
+// VM mocks base method.
+func (m *MockvmController) VM() *vmmanager.UtilityVM {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VM")
+	ret0, _ := ret[0].(*vmmanager.UtilityVM)
+	return ret0
+}
+
+// VM indicates an expected call of VM.
+func (mr *MockvmControllerMockRecorder) VM() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VM", reflect.TypeOf((*MockvmController)(nil).VM))
 }
 
 // VPCIController mocks base method.

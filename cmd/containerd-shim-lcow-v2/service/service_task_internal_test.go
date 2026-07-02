@@ -41,10 +41,11 @@ var (
 // one representative not-running state (NotCreated); a regression in the guard
 // would let containerd issue task RPCs against a VM that has not booted.
 //
-// state and delete are intentionally excluded: containerd issues them during
-// task teardown, so they operate on container bookkeeping and surface NotFound
-// when the container is absent (see TestTaskMethods_RejectUnknownContainer)
-// rather than a precondition error.
+// state, delete, kill, and wait are intentionally excluded: they omit the
+// VM-running guard so they can run during task teardown / migration aborts, so
+// they operate on container bookkeeping and surface NotFound when the container
+// is absent (see TestTaskMethods_RejectUnknownContainer) rather than a
+// precondition error.
 func TestTaskMethods_RejectVMNotRunning(t *testing.T) {
 	tests := []struct {
 		name string
@@ -68,13 +69,6 @@ func TestTaskMethods_RejectVMNotRunning(t *testing.T) {
 			name: "pidsInternal",
 			call: func(svc *Service) error {
 				_, err := svc.pidsInternal(context.Background(), &task.PidsRequest{ID: "ctr"})
-				return err
-			},
-		},
-		{
-			name: "killInternal",
-			call: func(svc *Service) error {
-				_, err := svc.killInternal(context.Background(), &task.KillRequest{ID: "ctr"})
 				return err
 			},
 		},
@@ -103,13 +97,6 @@ func TestTaskMethods_RejectVMNotRunning(t *testing.T) {
 			name: "updateInternal",
 			call: func(svc *Service) error {
 				_, err := svc.updateInternal(context.Background(), &task.UpdateTaskRequest{ID: "ctr"})
-				return err
-			},
-		},
-		{
-			name: "waitInternal",
-			call: func(svc *Service) error {
-				_, err := svc.waitInternal(context.Background(), &task.WaitRequest{ID: "ctr"})
 				return err
 			},
 		},
@@ -655,8 +642,7 @@ func TestDeleteProcess_Success(t *testing.T) {
 // TestKill_Success verifies the single-container kill path: killInternal
 // forwards the exec ID, signal, and all=false to the container controller.
 func TestKill_Success(t *testing.T) {
-	svc, mockVM := newTestService(t)
-	mockVM.EXPECT().State().Return(vm.StateRunning)
+	svc, _ := newTestService(t)
 
 	mockCtr := mocks.NewMockcontainerController(gomock.NewController(t))
 	swapGetContainerController(t, mockCtr)
