@@ -7,7 +7,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -89,7 +88,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches_Windows(t *testing
 			return false
 		}
 
-		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
+		envList := append(tc.envList, generateRandomEnvironmentVariable(testRand))
 
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, tc.user, nil)
 
@@ -570,13 +569,9 @@ exec_external := {
 	"env_list": ["%s"]
 }`
 
-	generateEnv := func(r *rand.Rand) string {
-		return randVariableString(r, maxGeneratedEnvironmentVariableRuleLength)
-	}
-
 	generateEnvs := func(envSet stringSet) []string {
 		numVars := atLeastOneAtMost(testRand, maxGeneratedEnvironmentVariableRules)
-		return envSet.randUniqueArray(testRand, generateEnv, numVars)
+		return envSet.randUniqueArray(testRand, generateRandomEnvironmentVariable, numVars)
 	}
 
 	testFunc := func(gc *generatedWindowsConstraints) bool {
@@ -729,7 +724,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired_Windows(t *testi
 		// add a rule to re2 match
 		requiredRule := EnvRuleConfig{
 			Strategy: "string",
-			Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+			Rule:     generateRandomEnvironmentVariable(testRand),
 			Required: true,
 		}
 

@@ -370,7 +370,11 @@ func writeCommand(builder *strings.Builder, command []string, indent string) {
 }
 
 func (e EnvRuleConfig) marshalRego() string {
-	return fmt.Sprintf("{\"pattern\": `%s`, \"strategy\": \"%s\", \"required\": %v}", e.Rule, e.Strategy, e.Required)
+	if e.UseNameValue {
+		return fmt.Sprintf("{\"name\": `%s`, \"name_strategy\": \"%s\", \"value\": `%s`, \"value_strategy\": \"%s\", \"required\": %v}", e.Name, e.NameStrategy, e.Value, e.ValueStrategy, e.Required)
+	} else {
+		return fmt.Sprintf("{\"pattern\": `%s`, \"strategy\": \"%s\", \"required\": %v}", e.Rule, e.Strategy, e.Required)
+	}
 }
 
 type envRuleArray []EnvRuleConfig
@@ -567,8 +571,18 @@ func addExternalProcesses(builder *strings.Builder, processes []*externalProcess
 
 func (f fragment) marshalRego() string {
 	includes := stringArray(f.includes).marshalRego()
-	return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s}`,
-		f.issuer, f.feed, f.minimumSVN, includes)
+
+	if len(f.parameters) == 0 {
+		return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s}`,
+			f.issuer, f.feed, f.minimumSVN, includes)
+	}
+
+	paramsJSON, err := json.Marshal(f.parameters)
+	if err != nil {
+		panic(fmt.Errorf("failed to marshal fragment parameters object to JSON: %w", err))
+	}
+	return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s, "parameters": %s}`,
+		f.issuer, f.feed, f.minimumSVN, includes, string(paramsJSON))
 }
 
 func addFragments(builder *strings.Builder, fragments []*fragment) {

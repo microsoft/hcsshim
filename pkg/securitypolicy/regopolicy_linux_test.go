@@ -4,11 +4,12 @@
 package securitypolicy
 
 import (
+	_ "embed"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -1233,7 +1234,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
+		// Generate a new random env var that will not be in the allowed list
+		envList := append(tc.envList, generateRandomEnvironmentVariable(testRand))
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
@@ -1241,7 +1243,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		return assertDecisionJSONContains(t, err, "invalid env list", envList[0])
+		anyKeyInConstraints := strings.Split(envList[0], "=")[0]
+		return assertDecisionJSONContains(t, err, "invalid env list", anyKeyInConstraints)
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1481,7 +1484,11 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
-		return err == nil
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		return true
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -3053,13 +3060,9 @@ exec_external := {
 	"env_list": ["%s"]
 }`
 
-	generateEnv := func(r *rand.Rand) string {
-		return randVariableString(r, maxGeneratedEnvironmentVariableRuleLength)
-	}
-
 	generateEnvs := func(envSet stringSet) []string {
 		numVars := atLeastOneAtMost(testRand, maxGeneratedEnvironmentVariableRules)
-		return envSet.randUniqueArray(testRand, generateEnv, numVars)
+		return envSet.randUniqueArray(testRand, generateRandomEnvironmentVariable, numVars)
 	}
 
 	testFunc := func(gc *generatedConstraints) bool {
@@ -3217,7 +3220,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 		// add a rule to re2 match
 		requiredRule := EnvRuleConfig{
 			Strategy: "string",
-			Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+			Rule:     generateRandomEnvironmentVariable(testRand),
 			Required: true,
 		}
 
@@ -4557,7 +4560,7 @@ func expectFragmentNotLoaded(t *testing.T, policy *regoEnforcer, issuer, feed st
 		t.Errorf("fragment module is present")
 		return false
 	}
-	mtdIssuer, err := policy.rego.GetMetadata("issuers", issuer)
+	mtdIssuer, err := policy.rego.GetMetadataMapValue("issuers", issuer)
 	if err != nil && !strings.Contains(err.Error(), "value not found") &&
 		!strings.Contains(err.Error(), "metadata not found for name issuers") {
 		t.Errorf("unexpected error when checking issuer metadata: %v", err)
@@ -4593,6 +4596,7 @@ enforcement_point_info := {
     "default_results": {"allowed": true},
     "use_framework": true
 }
+default extract_parameter(_, _, _) := ""
 `, fragment.info.minimumSVN, frameworkVersion)
 
 		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
@@ -5127,7 +5131,7 @@ mount_device := data.fragment.mount_device
 		t.Fatalf("unable to mount device: %v", err)
 	}
 
-	if test, err := policy.rego.GetMetadata("custom", key); err == nil {
+	if test, err := policy.rego.GetMetadataMapValue("custom", key); err == nil {
 		if test != value {
 			t.Error("incorrect metadata value stored by fragment")
 		}
@@ -5156,6 +5160,8 @@ load_fragment := {"allowed": true, "add_module": true}
 data.framework.load_fragment := {"allowed": true, "add_module": true}
 input.issuer := "%s"
 data.framework.input.issuer := "%s"
+default extract_parameter(_, _, _) := ""
+data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
 `, fragment.info.minimumSVN, frameworkVersion, expectedIssuer, expectedIssuer)
 
 		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
@@ -5206,6 +5212,8 @@ enforcement_point_info := {
     "use_framework": true
 }
 data.framework.load_fragment := load_fragment
+default extract_parameter(_, _, _) := ""
+data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
 `, fragment.constraints.svn, frameworkVersion)
 
 		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
@@ -5335,6 +5343,488 @@ func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0(t *test
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0: %v", err)
 	}
+}
+
+func Test_Rego_LoadFragment_Container_FragmentParameters_Simple(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "allowed.value",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=allowed.value",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value",
+		"ENV_VAR_PARAMETER=allowed_value",
+		"ENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_MultiplePossibilities(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "allowed.value.1",
+						"value_strategy": "string",
+					},
+				},
+				{
+					"env_param": mapOfAny{
+						"value":          "allowed.value.2",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=allowed.value.1",
+		"ENV_VAR_PARAMETER=allowed.value.2",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value.1",
+		"ENV_VAR_PARAMETER=allowed_value.2",
+		"ENV_VAR_PARAMETER=allowed.value.3",
+		"ENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_Default(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=default_is_allow_all_non_empty",
+	}, []string{
+		"ANOTHER_ENV=should.deny",
+		"ENV_VAR_PARAMETER=",
+	})
+}
+
+// Test passing parameters not defined in the fragment. Current behaviour is
+// ignore but this could be changed in the future to be more strict.
+func Test_Rego_LoadFragment_FragmentParameters_UndefinedParameters(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"bogus_param": "some_value",
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=default_is_allow_all_non_empty",
+	}, []string{
+		"ANOTHER_ENV=should.deny",
+		"ENV_VAR_PARAMETER=",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_SpecialChars(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "!@#$%^&*( )_+-=[]{};'\\:\"|,./<>?\n\r\t\x01",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=!@#$%^&*( )_+-=[]{};'\\:\"|,./<>?\n\r\t\x01",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value",
+		"ENV_VAR_PARAMETER=?></.,|\":\\';}{][=-+_)(*&^%$#@!",
+		"ENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER=!@#$%^&*( )_+-=[]{};'\\:\"|,./<>?\n\r\t\x01\n",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_Empty(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value",
+		"ENV_VAR_PARAMETER==",
+		"ENV_VAR_PARAMETER=\n",
+		"ENV_VAR_PARAMETER=.",
+		"\nENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_MultipleParams(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: envRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param_nodefault": mapOfAny{
+						"value":          "aaa",
+						"value_strategy": "string",
+					},
+					"env_string_param_nodefault": "bbb",
+				},
+			},
+		},
+	}, false)
+	correctArray := []string{
+		"ENV_VAR_FIXED=fixed_value",
+		"ENV_VAR_PARAMETER=default_value",
+		"ENV_VAR_PARAMETER_NODEFAULT=aaa",
+		"ENV_STRING_PARAM=default_string_value",
+		"ENV_STRING_PARAM_NODEFAULT=bbb",
+	}
+	wrongArrays := make([][]string, 0)
+
+	// wrong value
+	for idxToChange := range correctArray {
+		wrongArray := make([]string, 0, len(correctArray))
+		for idx, val := range correctArray {
+			if idx == idxToChange {
+				wrongArray = append(wrongArray, val+"_wrong")
+			} else {
+				wrongArray = append(wrongArray, val)
+			}
+		}
+		wrongArrays = append(wrongArrays, wrongArray)
+	}
+
+	fragmentParameterTestCheckMultipleEnv(t, p, [][]string{correctArray}, wrongArrays)
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_MultipleParams_MultipleChoices(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: envRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param_nodefault": mapOfAny{
+						"value":          "aaa",
+						"value_strategy": "string",
+					},
+					"env_string_param_nodefault": "bbb",
+					"env_param": mapOfAny{
+						"value":          "ccc",
+						"value_strategy": "string",
+					},
+					"env_string_param": "ddd",
+				},
+				{
+					"env_param_nodefault": mapOfAny{
+						"value":          "111",
+						"value_strategy": "string",
+					},
+					"env_string_param_nodefault": "222",
+					"env_param": mapOfAny{
+						"value":          "333",
+						"value_strategy": "string",
+					},
+					"env_string_param": "444",
+				},
+			},
+		},
+	}, false)
+
+	correctArray1 := []string{
+		"ENV_VAR_FIXED=fixed_value",
+		"ENV_VAR_PARAMETER=ccc",
+		"ENV_VAR_PARAMETER_NODEFAULT=aaa",
+		"ENV_STRING_PARAM=ddd",
+		"ENV_STRING_PARAM_NODEFAULT=bbb",
+	}
+	correctArray2 := []string{
+		"ENV_VAR_FIXED=fixed_value",
+		"ENV_VAR_PARAMETER=333",
+		"ENV_VAR_PARAMETER_NODEFAULT=111",
+		"ENV_STRING_PARAM=444",
+		"ENV_STRING_PARAM_NODEFAULT=222",
+	}
+	correctArrays := [][]string{correctArray1, correctArray2}
+	wrongArrays := make([][]string, 0)
+
+	// wrong value
+	for _, correctArray := range correctArrays {
+		for idxToChange := range correctArray {
+			wrongArray := make([]string, 0, len(correctArray))
+			for idx, val := range correctArray {
+				if idx == idxToChange {
+					wrongArray = append(wrongArray, val+"_wrong")
+				} else {
+					wrongArray = append(wrongArray, val)
+				}
+			}
+			wrongArrays = append(wrongArrays, wrongArray)
+		}
+	}
+
+	// wrong combination 1
+	invalidCombination := make([]string, 0, len(correctArray1))
+	for i := range correctArray1 {
+		if i%2 == 0 {
+			invalidCombination = append(invalidCombination, correctArray1[i])
+		} else {
+			invalidCombination = append(invalidCombination, correctArray2[i])
+		}
+	}
+	wrongArrays = append(wrongArrays, invalidCombination)
+
+	// wrong combination 2
+	invalidCombination = make([]string, 0, len(correctArray1))
+	for i := range correctArray1 {
+		if i%2 == 1 {
+			invalidCombination = append(invalidCombination, correctArray1[i])
+		} else {
+			invalidCombination = append(invalidCombination, correctArray2[i])
+		}
+	}
+	wrongArrays = append(wrongArrays, invalidCombination)
+
+	fragmentParameterTestCheckMultipleEnv(t, p, correctArrays, wrongArrays)
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_TwoFragments_CommonParameterName(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "value1",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+		{
+			fragmentCode: envRuleParamAnotherFragmentPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "value2",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnvWithLayer(t, p, []string{paramTestImageBaseLayer}, []string{
+		"ENV_VAR_PARAMETER=value1",
+	}, []string{
+		"ENV_VAR_PARAMETER=value2",
+	})
+
+	fragmentParameterTestCheckOneEnvWithLayer(t, p, []string{paramTestImageLayer1}, []string{
+		"ENV_VAR_PARAMETER=value2",
+	}, []string{
+		"ENV_VAR_PARAMETER=value1",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_Nested(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: nestedImporterPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+		{
+			fragmentCode: nestedImporter2PolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+		{
+			fragmentCode: nestedImporter2PolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"l1_param": "l1_value_3",
+				},
+			},
+		},
+	}, true)
+
+	err := p.LoadFragment(context.Background(), "nested:issuer", "nested_fragment", paramTestTemplateFragmentCode(nestedFragmentPolicyCode))
+	if err != nil {
+		t.Fatalf("unable to load nested fragment: %v", err)
+	}
+
+	fragmentParameterTestCheckMultipleEnvWithLayer(t, p, []string{paramTestImageLayer2}, [][]string{
+		{
+			"L1_PARAM=l1param_default",
+			"L2_PARAM=l2param_from_l1_1",
+		},
+		{
+			"L1_PARAM=l1param_default",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+		{
+			"L1_PARAM=l1param_default_2",
+			"L2_PARAM=l2param_from_l1_1",
+		},
+		{
+			"L1_PARAM=l1param_default_2",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+		{
+			"L1_PARAM=l1_value_3",
+			"L2_PARAM=l2param_from_l1_1",
+		},
+		{
+			"L1_PARAM=l1_value_3",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+	}, [][]string{
+		{
+			"L1_PARAM=l1_invalid",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+		{
+			"L1_PARAM=l1_value_3",
+			"L2_PARAM=l2_invalid",
+		},
+	})
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"L1_PARAM=l1param_default",
+		"L2_PARAM=l2param_from_l1_1",
+	}, []string{"init"}, []string{paramTestImageLayer1}, nil)
+	assertDecisionJSONContains(t, err, "deviceHash not found")
+	assertDecisionJSONDoesNotContain(t, err, "invalid env list")
+
+	p = setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: nestedImporterPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+	}, false)
+
+	err = p.LoadFragment(context.Background(), "nested:issuer", "nested_fragment", paramTestTemplateFragmentCode(nestedFragmentPolicyCode))
+	if err == nil {
+		t.Fatal("expected error when loading nested fragment when parent fragment does not include fragments")
+	}
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_ParamOnCommand(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: paramOnCommandPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"command_param": []string{"custom_command"},
+				},
+			},
+		},
+	}, false)
+
+	err := fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"custom_command"}, []string{paramTestImageBaseLayer}, []string{
+		"MY_ENV=1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating container with custom command: %v", err)
+	}
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"invalid_command"}, []string{paramTestImageBaseLayer}, nil)
+	assertDecisionJSONContains(t, err, "invalid command")
+
+	p = setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: paramOnCommandPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+	}, false)
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"custom_command"}, []string{paramTestImageBaseLayer}, nil)
+	assertDecisionJSONContains(t, err, "invalid command")
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"init"}, []string{paramTestImageBaseLayer}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating container with default command: %v", err)
+	}
+
+	p = setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: paramOnCommandPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"command_param": []string{
+						"sleep",
+						"infinity",
+					},
+				},
+			},
+		},
+	}, false)
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"sleep", "infinity"}, []string{paramTestImageBaseLayer}, []string{
+		"MY_ENV=1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating container with custom command: %v", err)
+	}
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"bash"}, []string{paramTestImageBaseLayer}, nil)
+	assertDecisionJSONContains(t, err, "invalid command")
 }
 
 func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
@@ -6214,7 +6704,7 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 	container := selectContainerFromContainerList(constraints.containers, testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
-		Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+		Rule:     generateRandomEnvironmentVariable(testRand),
 		Required: true,
 	}
 
@@ -6468,7 +6958,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	container := selectContainerFromContainerList(constraints.containers, testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
@@ -6514,7 +7004,7 @@ func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testin
 func Test_Rego_ExecExternalProcessPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	process := generateExternalProcess(testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
@@ -7047,6 +7537,15 @@ func Test_Rego_Fragment_FrameworkSVN(t *testing.T) {
 	fragmentConstraints := generateConstraints(testRand, 1)
 	fragmentConstraints.svn = mustIncrementSVN(gc.fragments[0].minimumSVN)
 	code := fragmentConstraints.toFragment().marshalRego()
+
+	// Simulate what the actual fragment loading code does.  We need to add this
+	// definition even if there are no arguments and the main fragment code does
+	// not use the parameter functions, otherwise it will fail Rego compilation
+	// with unsafe variable error.
+	code, err = getRegoWithParameterDefinitions(code, make(map[string]interface{}))
+	if err != nil {
+		t.Fatalf("Error adding parameter definitions to fragment rego: %v", err)
+	}
 
 	policy.rego.AddModule(fragmentConstraints.namespace, &rpi.RegoModule{
 		Namespace: fragmentConstraints.namespace,
@@ -7925,5 +8424,246 @@ func Test_Rego_EnforceMountBlockDevicePolicy_OpenDoor(t *testing.T) {
 	}
 	if err = policy.EnforceUnmountBlockDevicePolicy(context.Background(), target); err != nil {
 		t.Errorf("open door should allow unmount_blockdev, got: %v", err)
+	}
+}
+
+//go:embed fragment_test_policies/_container_common.rego.inc
+var containerCommonCode string
+
+//go:embed fragment_test_policies/simple_env_rule_param.rego
+var simpleEnvRuleParamPolicyCode string
+
+//go:embed fragment_test_policies/env_rule_param.rego
+var envRuleParamPolicyCode string
+
+//go:embed fragment_test_policies/env_rule_param_another_fragment.rego
+var envRuleParamAnotherFragmentPolicyCode string
+
+//go:embed fragment_test_policies/nested_importer.rego
+var nestedImporterPolicyCode string
+
+//go:embed fragment_test_policies/nested_importer_2.rego
+var nestedImporter2PolicyCode string
+
+//go:embed fragment_test_policies/nested_fragment.rego
+var nestedFragmentPolicyCode string
+
+//go:embed fragment_test_policies/param_on_command.rego
+var paramOnCommandPolicyCode string
+
+const paramTestImageBaseLayer = "0000000000000000000000000000000000000000000000000000000000000000"
+const paramTestImageLayer1 = "1111111111111111111111111111111111111111111111111111111111111111"
+const paramTestImageLayer2 = "2222222222222222222222222222222222222222222222222222222222222222"
+
+func paramTestTemplateFragmentCode(code string) string {
+	return strings.ReplaceAll(code, "@@CONTAINER_COMMON@@", containerCommonCode)
+}
+
+type mapOfAny map[string]interface{}
+
+type fragmentCodeAndParameters struct {
+	fragmentCode   string
+	possibleParams []mapOfAny
+}
+
+func setupRegoFragmentParameterTest(
+	t *testing.T,
+	fragmentsToLoad []fragmentCodeAndParameters,
+	allowSubfragments bool,
+) (p *regoEnforcer) {
+	fragmentImports := make([]*fragment, 0)
+
+	includes := []string{
+		"containers",
+	}
+	if allowSubfragments {
+		includes = append(includes, "fragments")
+	}
+	topFragmentIssuer := testDataGenerator.uniqueFragmentIssuer()
+	topFragmentFeedFmt := "feed_%d"
+
+	for i_fragment, f := range fragmentsToLoad {
+		for _, params := range f.possibleParams {
+			importWithParams := fragment{
+				issuer:     topFragmentIssuer,
+				feed:       fmt.Sprintf(topFragmentFeedFmt, i_fragment),
+				minimumSVN: "1",
+				includes:   includes,
+				parameters: params,
+			}
+			fragmentImports = append(fragmentImports, &importWithParams)
+		}
+	}
+
+	gc := &generatedConstraints{
+		fragments: fragmentImports,
+		ctx:       context.Background(),
+	}
+	securityPolicy := gc.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts), testOSType)
+	if err != nil {
+		t.Fatalf("failed to create rego policy: %v", err)
+	}
+
+	for i_fragment, f := range fragmentsToLoad {
+		err = policy.LoadFragment(gc.ctx, topFragmentIssuer, fmt.Sprintf(topFragmentFeedFmt, i_fragment), paramTestTemplateFragmentCode(f.fragmentCode))
+	}
+	if err != nil {
+		t.Fatalf("failed to load fragment: %v", err)
+	}
+
+	return policy
+}
+
+func fragmentParameterTestCreateContainer(
+	policy *regoEnforcer,
+	envList []string,
+	command []string,
+	layers []string,
+	expectedEnvListAfterEnforcement []string,
+) (err error) {
+	sandboxID := testDataGenerator.uniqueSandboxID()
+	containerID := testDataGenerator.uniqueContainerID()
+	ctx := context.Background()
+	scratchDisk := getScratchDiskMountTarget(sandboxID)
+
+	err = policy.EnforceRWDeviceMountPolicy(ctx, scratchDisk, true, true, "xfs")
+	if err != nil {
+		return fmt.Errorf("error mounting scratch disk: %v", err)
+	}
+
+	layerPaths := make([]string, len(layers))
+	for i, layerHash := range layers {
+		layerPath := testDataGenerator.uniqueLayerMountTarget()
+		err = policy.EnforceDeviceMountPolicy(ctx, layerPath, layerHash)
+		if err != nil {
+			return fmt.Errorf("error mounting layer %s: %v", layerHash, err)
+		}
+		layerPaths[len(layers)-i-1] = layerPath
+	}
+
+	overlayTarget := getOverlayMountTarget(containerID)
+
+	// see NOTE_TESTCOPY
+	err = policy.EnforceOverlayMountPolicy(ctx, containerID, copyStrings(layerPaths), overlayTarget)
+	if err != nil {
+		return fmt.Errorf("error mounting filesystem: %v", err)
+	}
+
+	envToKeep, _, _, err := policy.EnforceCreateContainerPolicy(
+		ctx,
+		sandboxID,
+		containerID,
+		copyStrings(command),
+		copyStrings(envList),
+		"/",
+		[]oci.Mount{},
+		false,
+		false,
+		IDName{
+			ID: "0",
+		},
+		[]IDName{
+			{ID: "0"},
+		},
+		"0022",
+		&oci.LinuxCapabilities{},
+		"",
+	)
+	if err != nil {
+		return err
+	}
+	if expectedEnvListAfterEnforcement != nil {
+		if !areStringArraysEqual(envToKeep, expectedEnvListAfterEnforcement) {
+			return fmt.Errorf("environment variables after enforcement do not match expected values.\nExpected: %v\nActual: %v",
+				expectedEnvListAfterEnforcement,
+				envToKeep)
+		}
+	}
+	return nil
+}
+
+func fragmentParameterTestCheckOneEnv(
+	t *testing.T,
+	p *regoEnforcer,
+	expectAllowEnvs []string,
+	expectDenyEnvs []string,
+) {
+	t.Helper()
+
+	fragmentParameterTestCheckOneEnvWithLayer(t, p, []string{paramTestImageBaseLayer}, expectAllowEnvs, expectDenyEnvs)
+}
+
+func fragmentParameterTestCheckMultipleEnv(
+	t *testing.T,
+	p *regoEnforcer,
+	expectAllowEnvs [][]string,
+	expectDenyEnvs [][]string,
+) {
+	t.Helper()
+
+	fragmentParameterTestCheckMultipleEnvWithLayer(t, p, []string{paramTestImageBaseLayer}, expectAllowEnvs, expectDenyEnvs)
+}
+
+func fragmentParameterTestCheckMultipleEnvWithLayer(
+	t *testing.T,
+	p *regoEnforcer,
+	layerHashs []string,
+	expectAllowEnvs [][]string,
+	expectDenyEnvs [][]string,
+) {
+	t.Helper()
+
+	for _, envs := range expectAllowEnvs {
+		err := fragmentParameterTestCreateContainer(p, envs, []string{"init"}, layerHashs, envs)
+		if err != nil {
+			t.Errorf("expected to allow env list %v, but got error: %v", envs, err)
+		}
+	}
+
+	for _, envs := range expectDenyEnvs {
+		err := fragmentParameterTestCreateContainer(p, envs, []string{"init"}, layerHashs, nil)
+		if err == nil {
+			t.Errorf("expected to deny env list %v, but got no error", envs)
+			continue
+		}
+		assertDecisionJSONContains(t, err, "invalid env list")
+	}
+}
+
+func fragmentParameterTestCheckOneEnvWithLayer(
+	t *testing.T,
+	p *regoEnforcer,
+	layerHashs []string,
+	expectAllowEnvs []string,
+	expectDenyEnvs []string,
+) {
+	t.Helper()
+
+	for _, env := range expectAllowEnvs {
+		err := fragmentParameterTestCreateContainer(p, []string{
+			env,
+		}, []string{"init"}, layerHashs, []string{
+			env,
+		})
+		if err != nil {
+			t.Errorf("expected to allow env %q, but got error: %v", env, err)
+		}
+	}
+
+	for _, env := range expectDenyEnvs {
+		err := fragmentParameterTestCreateContainer(p, []string{
+			env,
+		}, []string{"init"}, layerHashs, nil)
+		if err == nil {
+			t.Errorf("expected to deny env %q, but got no error", env)
+			continue
+		}
+		assertDecisionJSONContains(t, err, "invalid env list")
 	}
 }
