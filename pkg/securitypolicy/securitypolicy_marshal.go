@@ -412,7 +412,17 @@ func writeCapabilities(builder *strings.Builder, capabilities *capabilitiesInter
 
 func (m mountInternal) marshalRego() string {
 	options := stringArray(m.Options).marshalRego()
-	return fmt.Sprintf(`{"destination": "%s", "options": %s, "source": "%s", "type": "%s"}`, m.Destination, options, m.Source, m.Type)
+	return fmt.Sprintf(`{"destination": "%s", "options": %s, "source": "%s", "type": "%s"}`,
+		escapeRegoString(m.Destination), options, escapeRegoString(m.Source), escapeRegoString(m.Type))
+}
+
+// escapeRegoString escapes a Go string so it is a valid double-quoted Rego
+// string literal. This matters for Windows mount paths, which contain
+// backslashes that would otherwise be interpreted as escape sequences.
+func escapeRegoString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
 }
 
 func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string) {
@@ -463,6 +473,7 @@ func writeWindowsContainer(builder *strings.Builder, container *securityPolicyWi
 	writeEnvRules(builder, container.EnvRules, indent+indentUsing)
 	writeLayers(builder, container.Layers, indent+indentUsing)
 	writeMountedCim(builder, container.MountedCim, indent+indentUsing)
+	writeMounts(builder, container.Mounts, indent+indentUsing)
 	writeWindowsExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeWindowsSignals(builder, container.Signals, indent+indentUsing)
 	writeWindowsUser(builder, container.User, indent+indentUsing)

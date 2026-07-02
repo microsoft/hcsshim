@@ -190,6 +190,9 @@ type securityPolicyWindowsContainer struct {
 	// WorkingDir is a path to container's working directory, which all the processes
 	// will default to.
 	WorkingDir string `json:"working_dir"`
+	// The set of mount constraints that the container is allowed to be created
+	// with. Matched against the OCI spec mounts at container creation time.
+	Mounts []mountInternal `json:"mounts"`
 	// A list of lists of commands that can be used to execute additional
 	// processes within the container
 	ExecProcesses []windowsContainerExecProcess `json:"exec_processes"`
@@ -317,11 +320,17 @@ func (c *WindowsContainer) toInternal() (*securityPolicyWindowsContainer, error)
 		execProcesses[i] = windowsContainerExecProcess(ep)
 	}
 
+	mounts, err := c.Mounts.toInternal()
+	if err != nil {
+		return nil, err
+	}
+
 	return &securityPolicyWindowsContainer{
 		Command:          command,
 		EnvRules:         envRules,
 		Layers:           layers,
 		WorkingDir:       c.WorkingDir,
+		Mounts:           mounts,
 		ExecProcesses:    execProcesses,
 		Signals:          c.Signals,
 		AllowStdioAccess: c.AllowStdioAccess,

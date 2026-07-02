@@ -315,6 +315,7 @@ type WindowsContainer struct {
 	Layers           Layers                         `json:"layers"`
 	MountedCim       []string                       `json:"mounted_cim"`
 	WorkingDir       string                         `json:"working_dir"`
+	Mounts           Mounts                         `json:"mounts"`
 	ExecProcesses    []WindowsExecProcessConfig     `json:"-"`
 	Signals          []guestrequest.SignalValueWCOW `json:"-"`
 	AllowStdioAccess bool                           `json:"-"`

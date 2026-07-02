@@ -1882,6 +1882,7 @@ func (c *securityPolicyWindowsContainer) toWindowsContainer() *WindowsContainer 
 		Layers:        Layers(stringArrayToStringMap(c.Layers)),
 		MountedCim:    c.MountedCim,
 		WorkingDir:    c.WorkingDir,
+		Mounts:        mountArrayToMounts(c.Mounts),
 		ExecProcesses: execProcesses,
 		Signals:       c.Signals,
 		User:          c.User,

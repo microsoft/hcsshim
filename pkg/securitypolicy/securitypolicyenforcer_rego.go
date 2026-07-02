@@ -763,9 +763,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 			log.G(ctx).WithError(err).Warn("failed to obtain policy metadata snapshot")
 		}
 
-		// TODO: check if `mounts` is missing.
 		// TODO: we should handle registry here? for narrowing
 		input = inputData{
+			"mounts":      appendMountData([]interface{}{}, mounts),
 			"containerID": containerID,
 			"argList":     argList,
 			"envList":     envList,

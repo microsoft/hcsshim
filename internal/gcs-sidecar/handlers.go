@@ -27,6 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/windevice"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
@@ -284,10 +285,19 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			}
 		*/
 
-		// Marshal the original cwcowHostedSystem from the request.
-		// That's safe because we've done enforcement on `spec` and
-		// later we will
+		// Reconcile the host-provided HostedSystem mounts against the enforced
+		// spec. spec.Mounts has already been validated against policy by
+		// EnforceCreateContainerPolicyV2 above. Here we make sure the host is
+		// not forwarding any MappedDirectories or MappedPipes that don't map to
+		// an enforced spec mount, so the host can't smuggle in a mount the
+		// policy never saw.
+		if err := reconcileHostedSystemMounts(spec.Mounts, container); err != nil {
+			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
 
+		// Marshal the original cwcowHostedSystem from the request. That's safe
+		// because we've enforced `spec` above and reconciled the forwarded
+		// MappedDirectories/MappedPipes against it.
 		hostedSystemBytes, err := json.Marshal(cwcowHostedSystem)
 
 		if err != nil {
@@ -326,6 +336,103 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	}
 
 	b.forwardRequestToGcs(req)
+	return nil
+}
+
+// namedPipePrefix is the prefix used for Windows named pipe paths. A mount
+// whose OCI destination starts with this prefix becomes a MappedPipe in the
+// HostedSystem, with ContainerPipeName set to the destination minus this
+// prefix (see internal/uvm.ParseNamedPipe and internal/hcsoci/hcsdoc_wcow.go).
+const namedPipePrefix = `\\.\pipe\`
+
+// isPipeDestination reports whether an OCI mount destination refers to a named
+// pipe (and would therefore become a MappedPipe rather than a MappedDirectory).
+func isPipeDestination(dest string) bool {
+	return strings.HasPrefix(dest, namedPipePrefix)
+}
+
+// pipeNameFromDestination derives the ContainerPipeName that the host sets for
+// a pipe mount from its OCI destination, mirroring ParseNamedPipe.
+func pipeNameFromDestination(dest string) string {
+	return strings.TrimPrefix(dest, namedPipePrefix)
+}
+
+// mountReadOnly reports whether an OCI mount's options request a read-only
+// mount, mirroring how the host derives MappedDirectory.ReadOnly in
+// internal/hcsoci/hcsdoc_wcow.go (an "ro" option, case-insensitive).
+func mountReadOnly(options []string) bool {
+	for _, o := range options {
+		if strings.EqualFold(o, "ro") {
+			return true
+		}
+	}
+	return false
+}
+
+// reconcileHostedSystemMounts verifies that every MappedDirectory and
+// MappedPipe the host forwards in the HostedSystem corresponds to an enforced
+// spec mount. The spec mounts have already been validated against policy, so
+// this binds the forwarded HostedSystem to that enforced view and rejects any
+// host-added mount the policy never saw. Note that HostPath is intentionally
+// not compared: the spec source is a host-side path while the HostedSystem
+// HostPath is a VSMB path, so they legitimately differ and the host controls
+// both regardless.
+func reconcileHostedSystemMounts(mounts []oci.Mount, container *hcsschema.Container) error {
+	if container == nil {
+		return nil
+	}
+
+	// Every MappedDirectory must correspond to a (non-pipe) spec mount that
+	// targets the same container path with the same read-only flag.
+	for _, md := range container.MappedDirectories {
+		matched := false
+		for _, m := range mounts {
+			// Pipe mounts are reconciled against MappedPipes below, not here.
+			if isPipeDestination(m.Destination) {
+				continue
+			}
+			// Bind on container path (spec destination) + read-only.
+			if m.Destination == md.ContainerPath && mountReadOnly(m.Options) == md.ReadOnly {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("mapped directory %q (readOnly=%v) does not match any enforced spec mount", md.ContainerPath, md.ReadOnly)
+		}
+	}
+
+	// Every MappedPipe must correspond to a pipe spec mount that yields the same
+	// pipe name. We match on the pipe name (derived from the spec destination),
+	// not the source.
+	//
+	// NB: for a pipe, the spec mount and the HostedSystem entry hold *different*
+	// values for the "same" pipe, which is easy to trip over:
+	//   - spec mount source:      "\\.\pipe\<name>"                         (pure name, NO guid)
+	//   - MappedPipe.HostPath:    "\\?\VMSMB\VSMB-{guid}\IPC$\<name>"       (host VSMB transport, has guid)
+	// The spec source stays the clean "\\.\pipe\<name>"; only the host-side
+	// transport path (HostPath) carries the VSMB guid. HostPath is host-controlled
+	// and not comparable to the spec source, so we don't compare it here; instead
+	// we bind on the pipe name. The clean spec source is enforced separately by
+	// policy (windows_mountConstraint_ok in framework.rego).
+	for _, mp := range container.MappedPipes {
+		matched := false
+		for _, m := range mounts {
+			// Non-pipe mounts are reconciled against MappedDirectories above.
+			if !isPipeDestination(m.Destination) {
+				continue
+			}
+			// Bind on the pipe name (destination minus the \\.\pipe\ prefix).
+			if pipeNameFromDestination(m.Destination) == mp.ContainerPipeName {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("mapped pipe %q does not match any enforced spec mount", mp.ContainerPipeName)
+		}
+	}
+
 	return nil
 }
 
@@ -909,7 +1016,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			// If host doesn't use it maybe remove it TODO
 
 		case guestresource.ResourceTypeMappedDirectory:
-			// WE don't have hostpath enforcement because anyway contents of the dir can be changed by the host.
+			// We don't have hostpath enforcement because anyway contents of the dir can be changed by the host.
 			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.MappedDirectory)
 			log.G(ctx).Tracef("hcsschema.MappedDirectory { %v }", settings)
 			switch modifyGuestSettingsRequest.RequestType {

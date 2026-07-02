@@ -669,6 +669,7 @@ create_container := {"metadata": [updateMatches, addStarted],
         user_ok(container.user)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
+        mountList_ok(container.mounts, false)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -747,15 +748,11 @@ mountSource_ok(constraint, source) {
     constraint == source
 }
 
-mountConstraint_ok(constraint, mount) {
-    mount.type == constraint.type
-    mountSource_ok(constraint.source, mount.source)
-    mount.destination != ""
-    mount.destination == constraint.destination
-
-    # the following check is not required (as the following tests will prove this
-    # condition as well), however it will check whether those more expensive
-    # tests need to be performed.
+# mountOptions_ok holds when a mount's options are exactly the constraint's
+# option set: every requested option is allowed and every allowed option is
+# present (no missing, no extras). The count check is a cheap pre-filter for the
+# two set-containment checks that follow.
+mountOptions_ok(constraint, mount) {
     count(mount.options) == count(constraint.options)
     every option in mount.options {
         some constraintOption in constraint.options
@@ -766,6 +763,69 @@ mountConstraint_ok(constraint, mount) {
         some mountOption in mount.options
         option == mountOption
     }
+}
+
+# is_named_pipe reports whether an OCI mount destination refers to a Windows
+# named pipe. This matches how the host decides to turn a mount into a
+# MappedPipe rather than a MappedDirectory (see internal/gcs-sidecar handlers'
+# isPipeDestination and internal/hcsoci/hcsdoc_wcow.go).
+is_named_pipe(path) {
+    startswith(path, `\\.\pipe\`)
+}
+
+# windows_mount_type_ok gates which OCI mount `type` values are acceptable on
+# Windows. We only handle "plain" mounts - mapped directories and named pipes -
+# which carry an empty type or an explicit
+# "bind". Disk/device mount types (virtual-disk / physical-disk /
+# extensible-virtual-disk) are not supported and rejected.
+windows_mount_type_ok(mount) {
+    mount.type == ""
+}
+
+windows_mount_type_ok(mount) {
+    mount.type == "bind"
+}
+
+mountConstraint_ok(constraint, mount) {
+    is_linux
+    mount.type == constraint.type
+    mountSource_ok(constraint.source, mount.source)
+    mount.destination != ""
+    mount.destination == constraint.destination
+    mountOptions_ok(constraint, mount)
+}
+
+# Windows named pipe: the source is a stable "\\.\pipe\<name>" path that the
+# policy author can predict, so we require it to match the constraint exactly.
+# This stops the host from wiring a container's expected pipe destination up to a
+# different host pipe. We don't match mount.type against a policy value (it's
+# empty/"bind" for real mounts), but we do reject non-plain types via
+# windows_mount_type_ok so a disk/device mount can't pass as a pipe.
+mountConstraint_ok(constraint, mount) {
+    is_windows
+    windows_mount_type_ok(mount)
+    is_named_pipe(mount.destination)
+    mount.destination != ""
+    mount.destination == constraint.destination
+    constraint.source == mount.source
+    mountOptions_ok(constraint, mount)
+}
+
+# Windows mapped directory (anything that is not a named pipe): by the time the
+# request reaches the UVM the host has rewritten the user's host_path (e.g.
+# "C:\share-host") into a host-generated volume path such as
+# "\\?\Volume{<random-guid>}\share-host". That GUID is picked by the host and
+# cannot be predicted by the policy author, so we do not enforce the source and
+# rely on the destination + options (mirroring the top-level mapped_directories
+# rule, which matches on container_path + read_only). windows_mount_type_ok
+# rejects disk/device mount types so they can't pass as a directory.
+mountConstraint_ok(constraint, mount) {
+    is_windows
+    windows_mount_type_ok(mount)
+    not is_named_pipe(mount.destination)
+    mount.destination != ""
+    mount.destination == constraint.destination
+    mountOptions_ok(constraint, mount)
 }
 
 mount_ok(mounts, allow_elevated, mount) {
@@ -784,15 +844,12 @@ mount_ok(mounts, allow_elevated, mount) {
     mountConstraint_ok(constraint, mount)
 }
 
+# mountList_ok is OS-agnostic here: the per-mount OS differences are handled by
+# the is_linux/is_windows bodies of mountConstraint_ok.
 mountList_ok(mounts, allow_elevated) {
-    is_linux
     every mount in input.mounts {
         mount_ok(mounts, allow_elevated, mount)
     }
-}
-mountList_ok(mounts, allow_elevated) {
-    # no-op for windows. TODO: Check if it's true. `mounts` made a dir inside a conainer.
-    is_windows
 }
 
 is_linux {
@@ -1308,6 +1365,15 @@ mapped_directory_mounted(target) {
 
 default mapped_directory_ok := false
 
+# A mapped directory is matched on container_path + read_only only; we do not
+# enforce its host-side source. This mirrors the reasoning in
+# windows_mountSource_ok for directory (non-pipe) mounts: by the time the
+# request reaches the UVM the host has already rewritten the user's host_path
+# (e.g. "C:\share-host") into a host-generated volume path such as
+# "\\?\Volume{<random-guid>}\share-host". That GUID is picked by the host and
+# cannot be predicted by the policy author, so matching on it carries no
+# security value.
+
 # allowed by an entry in the base policy
 mapped_directory_ok {
     mapped_directory := data.policy.mapped_directories[_]
@@ -1738,12 +1804,18 @@ errors["invalid working directory"] {
 }
 
 mount_matches(mount) {
+    is_linux
     some container in data.metadata.matches[input.containerID]
     mount_ok(container.mounts, container.allow_elevated, mount)
 }
 
+mount_matches(mount) {
+    is_windows
+    some container in data.metadata.matches[input.containerID]
+    mount_ok(container.mounts, false, mount)
+}
+
 errors[mountError] {
-    is_linux
     input.rule == "create_container"
     bad_mounts := [mount.destination |
         mount := input.mounts[_]
@@ -1982,6 +2054,7 @@ errors["containers only distinguishable by allow_stdio_access"] {
         user_ok(container.user)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
+        mountList_ok(container.mounts, false)
     ]
 
     count(possible_after_initial_containers) > 0

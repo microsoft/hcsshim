@@ -229,6 +229,235 @@ func Test_Rego_EnforceCreateContainer_Windows(t *testing.T) {
 	}
 }
 
+func Test_Rego_MountPolicy_Matches_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		mnt := mountInternal{
+			Source:      "C:\\host\\share",
+			Destination: "C:\\container\\share",
+			Options:     []string{"ro"},
+		}
+		c.Mounts = append(c.Mounts, mnt)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		requestMounts := []oci.Mount{
+			{
+				Source:      mnt.Source,
+				Destination: mnt.Destination,
+				Options:     mnt.Options,
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a mount matching the policy was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_Matches_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_DiskTypeRejected_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		mnt := mountInternal{
+			Source:      "C:\\host\\share",
+			Destination: "C:\\container\\share",
+			Options:     []string{"ro"},
+		}
+		c.Mounts = append(c.Mounts, mnt)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// Same destination + options the policy allows, but tagged as a disk
+		// mount type. A disk/device type must be rejected regardless of the
+		// destination match, so it can't ride in on a directory allowance.
+		requestMounts := []oci.Mount{
+			{
+				Source:      mnt.Source,
+				Destination: mnt.Destination,
+				Options:     mnt.Options,
+				Type:        "virtual-disk",
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err == nil {
+			t.Error("a disk-type mount was allowed by policy")
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "invalid mount list")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_DiskTypeRejected_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_BindTypeAllowed_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		mnt := mountInternal{
+			Source:      "C:\\host\\share",
+			Destination: "C:\\container\\share",
+			Options:     []string{"ro"},
+		}
+		c.Mounts = append(c.Mounts, mnt)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// An explicit "bind" type is a plain mount and must still be allowed.
+		requestMounts := []oci.Mount{
+			{
+				Source:      mnt.Source,
+				Destination: mnt.Destination,
+				Options:     mnt.Options,
+				Type:        "bind",
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a bind-type mount matching the policy was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_BindTypeAllowed_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_NoMatches_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// The container declares no matching mount constraint, so any
+		// requested mount must be rejected.
+		requestMounts := []oci.Mount{
+			{
+				Source:      "C:\\host\\not-in-policy",
+				Destination: "C:\\container\\not-in-policy",
+				Options:     []string{"rw"},
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err == nil {
+			t.Error("a mount not present in the policy did not result in an error")
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "invalid mount list")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_NoMatches_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_Pipe_Matches_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		pipe := mountInternal{
+			Source:      "\\\\.\\pipe\\host-pipe",
+			Destination: "\\\\.\\pipe\\container-pipe",
+			Options:     []string{},
+		}
+		c.Mounts = append(c.Mounts, pipe)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		requestMounts := []oci.Mount{
+			{
+				Source:      pipe.Source,
+				Destination: pipe.Destination,
+				Options:     pipe.Options,
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a pipe mount matching the policy was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_Pipe_Matches_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_Pipe_BadSource_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		pipe := mountInternal{
+			Source:      "\\\\.\\pipe\\host-pipe",
+			Destination: "\\\\.\\pipe\\container-pipe",
+			Options:     []string{},
+		}
+		c.Mounts = append(c.Mounts, pipe)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// Same (policy-matching) pipe destination, but a different host pipe
+		// source. Unlike a mapped directory, a pipe source is enforced, so this
+		// must be rejected.
+		requestMounts := []oci.Mount{
+			{
+				Source:      "\\\\.\\pipe\\attacker-pipe",
+				Destination: pipe.Destination,
+				Options:     pipe.Options,
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err == nil {
+			t.Error("a pipe mount with a non-matching source did not result in an error")
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "invalid mount list")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_Pipe_BadSource_Windows: %v", err)
+	}
+}
+
 func Test_Rego_EnforceCreateContainer_Start_All_Containers(t *testing.T) {
 	f := func(p *generatedWindowsConstraints) bool {
 		securityPolicy := p.toPolicy()
