@@ -1159,6 +1159,9 @@ default fragment_external_processes := []
 
 fragment_external_processes := data[input.namespace].external_processes
 
+default fragment_transparency_trust_lists := []
+fragment_transparency_trust_lists := data[input.namespace].transparency_trust_lists
+
 apply_defaults(name, raw_values, framework_version) := values {
     semver.compare(framework_version, version) == 0
     values := raw_values
@@ -1188,6 +1191,21 @@ apply_defaults("fragment", raw_values, framework_version) := values {
     ]
 }
 
+# transparency_trust_lists is introduced in framework version 0.5.0.  If an old
+# policy has it, silently ignore as it might be using the name for something
+# else.
+
+apply_defaults("transparency_trust_lists", raw_values, framework_version) := values {
+    semver.compare(framework_version, version) < 0
+    semver.compare(framework_version, "0.5.0") >= 0
+    values := raw_values
+}
+
+apply_defaults("transparency_trust_lists", raw_values, framework_version) := values {
+    semver.compare(framework_version, "0.5.0") < 0
+    values := []
+}
+
 default fragment_framework_version := null
 fragment_framework_version := data[input.namespace].framework_version
 
@@ -1196,7 +1214,8 @@ extract_fragment_includes(includes) := fragment {
     objects := {
         "containers": apply_defaults("container", fragment_containers, framework_version),
         "fragments": apply_defaults("fragment", fragment_fragments, framework_version),
-        "external_processes": apply_defaults("external_process", fragment_external_processes, framework_version)
+        "external_processes": apply_defaults("external_process", fragment_external_processes, framework_version),
+        "transparency_trust_lists": apply_defaults("transparency_trust_lists", fragment_transparency_trust_lists, framework_version),
     }
 
     fragment := {
@@ -1278,6 +1297,89 @@ fragment_issuer_feed_ok(fragment) {
     input.feed == fragment.feed
 }
 
+# header_svn_ok checks that the fragment's CWT-declared SVN is at least the
+# minimum, if it is present.  If it's not present, then we don't check it here,
+# but later in svn_ok_if_defined we will ensure that the fragment itself
+# declares an SVN and that it meets the minimum requirement.  A case where
+# neither the header nor the fragment Rego declares an SVN is tested in
+# Test_Rego_LoadFragment_MissingSVN.
+
+header_svn_ok(fragment) {
+    not input.has_header_svn
+}
+
+header_svn_ok(fragment) {
+    input.has_header_svn
+    svn_ok(input.header_svn, fragment.minimum_svn)
+}
+
+svn_ok_if_defined(minimum_svn) {
+    data[input.namespace].svn # This also works if the svn is 0
+    not input.has_header_svn
+    svn_ok(data[input.namespace].svn, minimum_svn)
+}
+
+svn_ok_if_defined(minimum_svn) {
+    data[input.namespace].svn
+    input.has_header_svn
+    # Use to_number as fragment may define svn as a string
+    to_number(input.header_svn) == to_number(data[input.namespace].svn)
+    svn_ok(data[input.namespace].svn, minimum_svn)
+}
+
+# If not defined in fragment, require SVN to present in the header
+svn_ok_if_defined(minimum_svn) {
+    not data[input.namespace].svn
+    input.has_header_svn
+    svn_ok(input.header_svn, minimum_svn)
+}
+
+# A fragment rule may require transparency receipts from one or more ledgers
+# (identified by the issuer of the receipt, and checked by the key used to sign
+# the receipt).  input.receipts is the set of receipts that the enforcer
+# successfully validated against keys learned from accepted TTLs (Transparency
+# Trust Lists). Each receipt is {"issuer": <ledger>, "ttl_subjects": [<ttl
+# subject>, ...]} where ttl_subjects lists the subjects of the TTLs that
+# contributed the key that validated the receipt.
+#
+# fragment.required_receipts contains the list of required receipt issuers or
+# feeds of the TTLs containing the key for the receipt.  If not set, no receipts
+# are required.  The list is an AND: every required entry must be satisfied.
+# One receipt can satisfy multiple such requirement entries.
+fragment_receipts_ok(fragment) {
+    required := object.get(fragment, "required_receipts", [])
+    every required_issuer in required {
+        receipt_requirement_satisfied(required_issuer)
+    }
+}
+
+# receipt_requirement_satisfied checks a single receipt requirement against the
+# validated receipts in input.receipts. A requirement may be:
+# - "*": satisfied by any validated receipt. This still implies the receipt was
+#   signed by a key from a TTL we have accepted, it just doesn't constrain which
+#   one.
+# - "TTL:<subject>": satisfied by a validated receipt that was signed by a key
+#   contributed by a TTL with the given subject.
+# - a literal ledger name: satisfied by a validated receipt with that issuer.
+receipt_requirement_satisfied(required_issuer) {
+    required_issuer == "*"
+    count(input.receipts) > 0
+}
+
+receipt_requirement_satisfied(required_issuer) {
+    startswith(required_issuer, "TTL:")
+    subject := substring(required_issuer, count("TTL:"), -1)
+    some receipt in input.receipts
+    subject in receipt.ttl_subjects
+}
+
+receipt_requirement_satisfied(required_issuer) {
+    required_issuer != "*"
+    not startswith(required_issuer, "TTL:")
+    some receipt in input.receipts
+    receipt.issuer == required_issuer
+}
+
 default load_fragment := {"allowed": false}
 
 # load_fragment gets called twice - first before loading the fragment as a Rego
@@ -1285,20 +1387,26 @@ default load_fragment := {"allowed": false}
 # have access to anything under data[fragment.namespace] yet, and so we only
 # check that the fragment issuer and feed is valid, but does not actually load
 # the fragment into metadata.  It will then be called a second time, at which
-# point we can check the SVN defined in the fragment is valid, and if
-# successful, add the fragment to the metadata.
+# point we can check the SVN defined in the fragment is valid (if the SVN is not
+# in the header, and thus we could not have checked earlier), and if successful,
+# add the fragment to the metadata.
 
 load_fragment := {"allowed": true} {
     not input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
+    # If SVN provided in header, validate it now.
+    header_svn_ok(fragment)
+    fragment_receipts_ok(fragment)
 }
 
 load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed": true} {
     input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
-    svn_ok(data[input.namespace].svn, fragment.minimum_svn)
+    # If SVN is defined in the fragment's Rego module, also validate it.
+    # If header SVN was present, it must match that.
+    svn_ok_if_defined(fragment.minimum_svn)
 
     issuer := update_issuer(fragment.includes)
     updateIssuer := {
@@ -1309,6 +1417,54 @@ load_fragment := {"metadata": [updateIssuer], "add_module": add_module, "allowed
     }
 
     add_module := "namespace" in fragment.includes
+}
+
+# transparency_trust_lists declares which signed Transparency Trust Lists (TTLs)
+# the policy is willing to accept, and which ledgers each such TTL may
+# contribute keys for.  Like candidate_fragments, the candidate set is the union
+# of the top-level policy's transparency_trust_lists and any contributed by
+# already-loaded fragments that included "transparency_trust_lists".
+default policy_transparency_trust_lists := []
+policy_transparency_trust_lists := data.policy.transparency_trust_lists
+
+candidate_transparency_trust_lists := ttls {
+    fragment_ttls := [r |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        r := fragment.transparency_trust_lists[_]
+    ]
+
+    ttls := array.concat(policy_transparency_trust_lists, fragment_ttls)
+}
+
+# The set of ledger names a matching TTL authorizes for the given (issuer,
+# subject, svn).  "*" is a wildcard meaning "any ledger".
+ttl_allowed_ledgers_for_issuer_subject_svn(issuer, subject, svn) := allowed_ledgers {
+    allowed_ledgers := {l |
+        ttl := candidate_transparency_trust_lists[_]
+        ttl.issuer == issuer
+        ttl.subject == subject
+        svn_ok(svn, ttl.minimum_svn)
+        l := ttl.allowed_ledgers[_]
+    }
+}
+
+ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
+    not "*" in allowed_ledgers
+    result := {l | l := input_ledgers[_]; l in allowed_ledgers}
+}
+
+ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
+    "*" in allowed_ledgers
+    result := {l | l := input_ledgers[_]}
+}
+
+default load_transparency_trust_list := {"allowed": false}
+
+load_transparency_trust_list := {"allowed": true, "allowed_ledgers": allowed_ledgers} {
+    ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
+    allowed_ledgers := ttl_intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
+    count(allowed_ledgers) > 0
 }
 
 default scratch_mount := {"allowed": false}
@@ -1832,6 +1988,14 @@ fragment_version_is_valid {
     svn_ok(data[input.namespace].svn, fragment.minimum_svn)
 }
 
+fragment_version_is_valid {
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.has_header_svn
+    svn_ok(input.header_svn, fragment.minimum_svn)
+}
+
 default svn_mismatch := false
 
 svn_mismatch {
@@ -1852,6 +2016,39 @@ svn_mismatch {
     to_number(fragment.minimum_svn)
 }
 
+# Header SVN is always a number, not semver
+svn_mismatch {
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.fragment_loaded
+    semver.is_valid(fragment.minimum_svn)
+    input.has_header_svn
+}
+
+default header_svn_not_match_fragment := false
+
+header_svn_not_match_fragment {
+    input.has_header_svn
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.fragment_loaded
+    data[input.namespace].svn
+    to_number(data[input.namespace].svn) != to_number(input.header_svn)
+}
+
+default missing_svn := false
+
+missing_svn {
+    not input.has_header_svn
+    some fragment in candidate_fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    input.fragment_loaded
+    not data[input.namespace].svn
+}
+
 errors["fragment svn is below the specified minimum"] {
     input.rule == "load_fragment"
     fragment_feed_matches
@@ -1865,6 +2062,56 @@ errors["fragment svn and the specified minimum are different types"] {
     fragment_feed_matches
     input.fragment_loaded
     svn_mismatch
+}
+
+errors[svnMismatchError] {
+    input.rule == "load_fragment"
+    fragment_feed_matches
+    input.fragment_loaded
+    header_svn_not_match_fragment
+
+    svnMismatchError := sprintf("svn in header %v does not match svn in fragment rego %v", [input.header_svn, data[input.namespace].svn])
+}
+
+errors["missing fragment svn in either header or rego payload"] {
+    input.rule == "load_fragment"
+    fragment_feed_matches
+    input.fragment_loaded
+    missing_svn
+}
+
+# This will result in one error per missing receipt requirement
+errors[receipt_error] {
+    input.rule == "load_fragment"
+    not input.fragment_loaded
+    some fragment in candidate_fragments
+    fragment_issuer_feed_ok(fragment)
+    required := object.get(fragment, "required_receipts", [])
+    some required_issuer in required
+    not receipt_requirement_satisfied(required_issuer)
+    receipt_error := sprintf("missing receipt from %s", [required_issuer])
+}
+
+default ttl_matches := false
+
+ttl_matches {
+    some ttl in candidate_transparency_trust_lists
+    ttl.issuer == input.issuer
+    ttl.subject == input.subject
+    svn_ok(input.svn, ttl.minimum_svn)
+}
+
+errors["no TTL candidate matches the provided TTL's issuer, subject and svn"] {
+    input.rule == "load_transparency_trust_list"
+    not ttl_matches
+}
+
+errors["The provided TTL does not contain any ledgers it is allowed to load"] {
+    input.rule == "load_transparency_trust_list"
+    ttl_matches
+    ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
+    allowed_ledgers := ttl_intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
+    count(allowed_ledgers) == 0
 }
 
 errors["scratch already mounted at path"] {
@@ -2359,6 +2606,13 @@ check_fragment(raw_fragment, framework_version) := fragment {
         "feed": raw_fragment.feed,
         "minimum_svn": raw_fragment.minimum_svn,
         "includes": raw_fragment.includes,
+
+        # required_receipts was added in 0.5.0. Older policies default to
+        # [], i.e. no transparency receipts are required, but if any is
+        # specified, even when the policy has an older framework_version, we
+        # respect it since it is restrictive.
+        "required_receipts": object.get(raw_fragment, "required_receipts", []),
+
         # Additional fields need to have default logic applied
     }
 }

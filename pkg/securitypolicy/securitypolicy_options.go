@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,12 +15,14 @@ import (
 	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 type SecurityOptions struct {
@@ -102,6 +105,41 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	return nil
 }
 
+// Media types carried by the fragment-injection delivery mechanism. The host
+// may deliver blobs of different types through the same path; the guest decides
+// how to treat each one based on its media type.
+const (
+	// mediaTypeFragment is a Rego security policy fragment. This is the default
+	// when the host does not specify a media type (older hosts).
+	mediaTypeFragment = "application/cose-x509+rego"
+	// mediaTypeTransparencyTrustList is a signed Transparency Trust List (TTL).
+	mediaTypeTransparencyTrustList = "application/vnd.transparency-trust-list.v1+cose"
+)
+
+// asInt64 coerces a CBOR-decoded integer value (which may be returned as
+// int64, uint64 or int by different decoders) to an int64.
+func asInt64(v interface{}) (int64, error) {
+	switch n := v.(type) {
+	case int64:
+		return n, nil
+	case int:
+		return int64(n), nil
+	case uint64:
+		if n > math.MaxInt64 {
+			return 0, errors.New("unable to convert uint64 to int64 due to overflow")
+		}
+		return int64(n), nil
+	case uint:
+		// uint is 64bit on 64bit platforms, so can overflow int64
+		if n > math.MaxInt64 {
+			return 0, errors.New("unable to convert uint to int64 due to overflow")
+		}
+		return int64(n), nil
+	default:
+		return 0, errors.Errorf("expected integer type, got %T", v)
+	}
+}
+
 // Fragment extends current security policy with additional constraints
 // from the incoming fragment. Note that it is base64 encoded over the bridge/
 //
@@ -113,7 +151,26 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 // 3 - Check that this issuer/feed match the requirement of the user provided
 // security policy (done in the regoby LoadFragment)
 func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestresource.SecurityPolicyFragment) (err error) {
-	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("VerifyAndExtractFragment")
+	ctx, span := oc.StartSpan(ctx, "securitypolicy::InjectFragment")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("fragment", fmt.Sprintf("%+v", fragment)))
+
+	// An empty media type defaults to a Rego policy fragment, for backward
+	// compatibility with older hosts that do not set the field.
+	mediaType := fragment.MediaType
+	if mediaType == "" {
+		mediaType = mediaTypeFragment
+	}
+	switch mediaType {
+	case mediaTypeFragment, mediaTypeTransparencyTrustList:
+	default:
+		// The host (azcri) only ever injects blobs whose media type it knows
+		// we handle, so receiving an unrecognized one means either a host bug
+		// or a newer host paired with an older guest. Fail loudly rather than
+		// silently ignoring it; a failed injection is non-fatal to the host.
+		return fmt.Errorf("cannot inject fragment blob with unsupported media type %q", mediaType)
+	}
 
 	raw, err := base64.StdEncoding.DecodeString(fragment.Fragment)
 	if err != nil {
@@ -134,16 +191,27 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		return fmt.Errorf("InjectFragment failed COSE validation: %w", err)
 	}
 
+	cwtClaimsRaw, hasCwtClaims := unpacked.Protected[cosesign1.COSE_Header_CWTClaims]
+	var cwtClaims map[any]any
+	if hasCwtClaims {
+		var ok bool
+		cwtClaims, ok = cwtClaimsRaw.(map[any]any)
+		if !ok {
+			return fmt.Errorf("CWT claims header present, expected it to be a map[any]any, but got %T", cwtClaimsRaw)
+		}
+	}
+
 	payloadString := string(unpacked.Payload[:])
 	issuer := unpacked.Issuer
 	feed := unpacked.Feed
 	chainPem := unpacked.ChainPem
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"issuer":   issuer, // eg the DID:x509:blah....
-		"feed":     feed,
-		"cty":      unpacked.ContentType,
-		"chainPem": chainPem,
+		"issuer":    issuer, // eg the DID:x509:blah....
+		"feed":      feed,
+		"cty":       unpacked.ContentType,
+		"chainPem":  chainPem,
+		"cwtClaims": cwtClaims,
 	}).Debugf("unpacked COSE1 cert chain")
 
 	log.G(ctx).WithFields(logrus.Fields{
@@ -162,11 +230,84 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		return fmt.Errorf("failed to resolve DID: %w", err)
 	}
 
-	// now offer the payload fragment to the policy
-	err = s.PolicyEnforcer.LoadFragment(ctx, issuer, feed, payloadString)
-	if err != nil {
-		return fmt.Errorf("error loading security policy fragment: %w", err)
+	var svnFromCwt *int64 = nil
+	if hasCwtClaims {
+		svnFromCwtRaw, hasSvn := cwtClaims["svn"]
+		if hasSvn {
+			svn, err := asInt64(svnFromCwtRaw)
+			if err != nil {
+				return errors.Wrap(err, "SVN present in CWT claims, but failed to convert it to int64")
+			}
+			svnFromCwt = &svn
+		}
 	}
+
+	switch mediaType {
+	case mediaTypeTransparencyTrustList:
+		// A TTL must carry its SVN in the COSE header; there is nowhere else for
+		// it to go.
+		if svnFromCwt == nil {
+			return fmt.Errorf("transparency trust list is missing an SVN in its CWT claims")
+		}
+
+		parsedTTL, err := cosesign1.ParseTTLPayload(unpacked.Payload)
+		if err != nil {
+			return errors.Wrap(err, "failed to parse transparency trust list payload")
+		}
+
+		// feed is the "subject" in the new-style envelope terminology.
+		log.G(ctx).WithFields(logrus.Fields{
+			"issuer":     issuer,
+			"subject":    feed,
+			"svn":        svnFromCwt,
+			"numLedgers": len(parsedTTL),
+		}).Debugf("Offering transparency trust list containing %d ledgers with issuer %s subject %s to policy enforcer", len(parsedTTL), issuer, feed)
+		if log.G(ctx).Logger.IsLevelEnabled(logrus.TraceLevel) {
+			for ledgerName, ledger := range parsedTTL {
+				for keyID, entry := range ledger {
+					log.G(ctx).WithFields(logrus.Fields{
+						"issuer":  issuer,
+						"subject": feed,
+						"svn":     svnFromCwt,
+						"ledger":  ledgerName,
+						"keyID":   keyID,
+					}).Tracef("Transparency trust list contains entry for ledger %s kid %s entry %T", ledgerName, keyID, entry)
+				}
+			}
+		}
+		if err := s.PolicyEnforcer.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+			Issuer:    issuer,
+			Subject:   feed,
+			SVN:       *svnFromCwt,
+			ParsedTTL: parsedTTL,
+		}); err != nil {
+			return errors.Wrap(err, "error loading transparency trust list")
+		}
+
+	case mediaTypeFragment:
+		// now offer the payload fragment to the policy
+		fragmentOptions := LoadFragmentOptions{
+			Issuer:    issuer,
+			Feed:      feed,
+			HeaderSVN: svnFromCwt,
+			Rego:      payloadString,
+			Receipts:  unpacked.Receipts,
+		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"issuer":      issuer,
+			"feed":        feed,
+			"headerSvn":   svnFromCwt,
+			"numReceipts": len(unpacked.Receipts),
+		}).Debugf("Offering fragment with issuer %s feed %s to policy enforcer with %d receipts", issuer, feed, len(unpacked.Receipts))
+		log.G(ctx).WithFields(logrus.Fields{
+			"feed": feed,
+			"rego": payloadString,
+		}).Tracef("Fragment Rego content")
+		if err = s.PolicyEnforcer.LoadFragment(ctx, fragmentOptions); err != nil {
+			return errors.Wrap(err, "error loading security policy fragment")
+		}
+	}
+
 	return nil
 }
 

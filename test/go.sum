@@ -4,8 +4,8 @@ cyphar.com/go-pathrs v0.2.4/go.mod h1:y8f1EMG7r+hCuFf/rXsKqMJrJAUoADZGNh5/vZPKcG
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8afgbRMd7mFxO99hRNu+6tazq8nFF9lIwo9JFroBk=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6/go.mod h1:8o94RPi1/7XTJvwPpRSzSUedZrtlirdB3r9Z20bi2f8=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/Microsoft/cosesign1go v1.5.0 h1:YmQCF8z7dGp50Rp/+rLTLFOFgIfZ1GSUHXPgLLlOlNk=
-github.com/Microsoft/cosesign1go v1.5.0/go.mod h1:s7E3nBWxb//ZLhuLAU5u9EZ1qMGBdgZzrKIUW1H/OIY=
+github.com/Microsoft/cosesign1go v1.6.0 h1:/dGDBxrrbqdkUDOgUDvFAKBou85XmSrB58G3sfYaAMk=
+github.com/Microsoft/cosesign1go v1.6.0/go.mod h1:7x+fdYtZ4ureEgfVtl2K+nY4MMfujMsCIb5kRuncpmg=
 github.com/Microsoft/didx509go v0.0.3 h1:n/owuFOXVzCEzSyzivMEolKEouBm9G0NrEDgoTekM8A=
 github.com/Microsoft/didx509go v0.0.3/go.mod h1:wWt+iQsLzn3011+VfESzznLIp/Owhuj7rLF7yLglYbk=
 github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 h1:0kQAzHq8vLs7Pptv+7TxjdETLf/nIqJpIB4oC6Ba4vY=

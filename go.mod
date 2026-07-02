@@ -21,7 +21,7 @@ tool (
 )
 
 require (
-	github.com/Microsoft/cosesign1go v1.5.0
+	github.com/Microsoft/cosesign1go v1.6.0
 	github.com/Microsoft/didx509go v0.0.3
 	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29
 	github.com/blang/semver/v4 v4.0.0

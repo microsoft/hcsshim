@@ -344,6 +344,12 @@ func asInt64(v interface{}) (int64, bool) {
 //     r.Kid.
 //   - The data-hash in the receipt matches the expected hash of the signed
 //     statement it is for.
+//
+// keys is a map of key IDs to public keys for this ledger. The caller must
+// acquire this via some other means, e.g. via a signed trusted key list, or via
+// the JWKS endpoint of the ledger (see example code in
+// cmd/sign1util/ccf_keyfetch.go) with additional attestation verification which
+// is not implemented in this library.
 func (r ParsedCOSEReceipt) Validate(keys map[string]crypto.PublicKey) error {
 	msg := r.Message
 
