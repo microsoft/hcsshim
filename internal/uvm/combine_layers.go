@@ -10,6 +10,22 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
+// LockContainerCreate acquires the per-UVM lock that serializes a container's
+// bring-up (block-CIM mount + scratch SCSI attach + CombineLayers/hive-merge +
+// guest container create). It is intended for confidential containers: concurrent
+// container starts otherwise issue overlapping guest mount/create operations into
+// the single confidential UVM, which the guest cannot handle and responds to with
+// a guest reset that drops the GCS bridge.
+// Callers must pair this with UnlockContainerCreate (typically via defer).
+func (uvm *UtilityVM) LockContainerCreate() {
+	uvm.containerCreateLock.Lock()
+}
+
+// UnlockContainerCreate releases the lock acquired by LockContainerCreate.
+func (uvm *UtilityVM) UnlockContainerCreate() {
+	uvm.containerCreateLock.Unlock()
+}
+
 // CombineLayersWCOW combines `layerPaths` with `containerRootPath` into the
 // container file system.
 //
