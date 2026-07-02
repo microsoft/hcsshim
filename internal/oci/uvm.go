@@ -148,6 +148,14 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 
 // handleAnnotationBootFilesPath handles parsing annotations.BootFilesRootPath and setting
 // implied options from the result.
+func handleLCOWAnnotationExtraExecArgs(_ context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
+	if s := ParseAnnotationsString(a, iannotations.ExtraLCOWExecArgs, ""); s != "" {
+		lopts.ExecCommandLine += " " + s
+	}
+}
+
+// handleAnnotationBootFilesPath handles parsing annotations.BootFilesRootPath and setting
+// implied options from the result.
 func handleAnnotationBootFilesPath(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
 	lopts.UpdateBootFilesPath(ctx, ParseAnnotationsString(a, annotations.BootFilesRootPath, lopts.BootFilesPath))
 }
@@ -388,6 +396,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
+		handleLCOWAnnotationExtraExecArgs(ctx, s.Annotations, lopts)
 
 		// SecurityPolicy is very sensitive to other settings and will silently change those that are incompatible.
 		// Eg VMPem device count, overridden kernel option cannot be respected.
