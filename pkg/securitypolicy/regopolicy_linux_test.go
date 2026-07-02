@@ -4,11 +4,12 @@
 package securitypolicy
 
 import (
+	_ "embed"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -1233,7 +1234,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
+		// Generate a new random env var that will not be in the allowed list
+		envList := append(tc.envList, generateRandomEnvironmentVariable(testRand))
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
@@ -1241,7 +1243,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		return assertDecisionJSONContains(t, err, "invalid env list", envList[0])
+		anyKeyInConstraints := strings.Split(envList[0], "=")[0]
+		return assertDecisionJSONContains(t, err, "invalid env list", anyKeyInConstraints)
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1481,7 +1484,11 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
-		return err == nil
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		return true
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -3053,13 +3060,9 @@ exec_external := {
 	"env_list": ["%s"]
 }`
 
-	generateEnv := func(r *rand.Rand) string {
-		return randVariableString(r, maxGeneratedEnvironmentVariableRuleLength)
-	}
-
 	generateEnvs := func(envSet stringSet) []string {
 		numVars := atLeastOneAtMost(testRand, maxGeneratedEnvironmentVariableRules)
-		return envSet.randUniqueArray(testRand, generateEnv, numVars)
+		return envSet.randUniqueArray(testRand, generateRandomEnvironmentVariable, numVars)
 	}
 
 	testFunc := func(gc *generatedConstraints) bool {
@@ -3217,7 +3220,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 		// add a rule to re2 match
 		requiredRule := EnvRuleConfig{
 			Strategy: "string",
-			Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+			Rule:     generateRandomEnvironmentVariable(testRand),
 			Required: true,
 		}
 
@@ -6214,7 +6217,7 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 	container := selectContainerFromContainerList(constraints.containers, testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
-		Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+		Rule:     generateRandomEnvironmentVariable(testRand),
 		Required: true,
 	}
 
@@ -6468,7 +6471,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	container := selectContainerFromContainerList(constraints.containers, testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
@@ -6514,7 +6517,7 @@ func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testin
 func Test_Rego_ExecExternalProcessPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	process := generateExternalProcess(testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
@@ -7642,6 +7645,374 @@ func Test_Rego_GetUserInfo_EtcPasswdOnly(t *testing.T) {
 	}
 }
 
+// Test platform rules in fragment, container in main policy
+func Test_Rego_PlatformRules_InFragment1(t *testing.T) {
+	f := func(gc *generatedConstraints, skipLoadFragment bool, fragmentDontIncludePlatformRules bool) bool {
+		platformFragment := fragment{
+			issuer:     testDataGenerator.uniqueFragmentIssuer(),
+			feed:       "infra",
+			minimumSVN: "1",
+			includes: []string{
+				"platform_rules",
+			},
+		}
+
+		if fragmentDontIncludePlatformRules {
+			platformFragment.includes = []string{
+				"containers",
+			}
+		}
+
+		gc.fragments = []*fragment{&platformFragment}
+
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Fatalf("failed to create rego policy: %v", err)
+		}
+
+		if !skipLoadFragment {
+			err = policy.LoadFragment(gc.ctx, platformFragment.issuer, platformFragment.feed, platformRulesFragmentPolicyCode)
+			if err != nil {
+				t.Fatalf("failed to load infra fragment: %v", err)
+			}
+		}
+
+		container := selectContainerFromContainerList(gc.containers, testRand)
+		containerID, err := mountImageForContainer(policy, container)
+		if err != nil {
+			t.Errorf("failed to mount image for container: %v", err)
+			return false
+		}
+
+		tc, err := createTestContainerSpec(gc, containerID, container, false, policy, defaultMounts, privilegedMounts)
+		if err != nil {
+			t.Fatalf("failed to create test container spec: %v", err)
+		}
+		tc.envList = append(tc.envList, "Fabric_NodeIPOrFqdn=10.0.0.1")
+		tc.mounts = append(tc.mounts, oci.Mount{
+			Source:      fmt.Sprintf("/run/gcs/c/%s/sandboxMounts/tmp/atlas/emptydir/serviceaccount", tc.sandboxID),
+			Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+			Type:        "bind",
+			Options:     []string{"rbind", "rshared", "ro"},
+		})
+
+		envsToKeep, _, _, err := tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+		if skipLoadFragment || fragmentDontIncludePlatformRules {
+			if err == nil {
+				t.Error("expected error due to missing platform rules, got nil")
+				return false
+			}
+			assertDecisionJSONContains(t, err, "invalid env list: Fabric_NodeIPOrFqdn")
+			assertDecisionJSONContains(t, err, "invalid mount list: /var/run/secrets/kubernetes.io/serviceaccount")
+			return true
+		}
+
+		// getting an error means something is broken
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		slices.Sort(tc.envList)
+		slices.Sort(envsToKeep)
+		if !slices.Equal(tc.envList, envsToKeep) {
+			t.Errorf("expected envs to keep = %v, got %v", tc.envList, envsToKeep)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_PlatformRules_InFragment1 failed: %v", err)
+	}
+}
+
+// Test platform rule and container both in separate fragment
+func Test_Rego_PlatformRules_InFragment2(t *testing.T) {
+	f := func(gc *generatedConstraints, loadPlatformRulesFragmentFirst bool, skipLoadPlatformRulesFragment bool) bool {
+		// Generate some random fragments in the policy
+		gc.fragments = generateFragments(testRand, maxFragmentsInGeneratedConstraints)
+		// Pick one or two to use for container create test
+		containerFragments := selectFragmentsFromConstraints(gc, testRand.Intn(2)+1, []string{"containers"}, []string{}, false, frameworkVersion, false)
+		// Now add platform rules fragment in a random position
+		platformFragment := fragment{
+			issuer:     testDataGenerator.uniqueFragmentIssuer(),
+			feed:       "infra",
+			minimumSVN: "1",
+			includes: []string{
+				"platform_rules",
+			},
+		}
+		gc.fragments = append(gc.fragments, &platformFragment)
+		testRand.Shuffle(len(gc.fragments), func(i, j int) {
+			gc.fragments[i], gc.fragments[j] = gc.fragments[j], gc.fragments[i]
+		})
+
+		containers := make([]*regoFragmentContainer, len(containerFragments))
+
+		// c.f. setupRegoFragmentTestConfig
+		for i, fragment := range containerFragments {
+			containers[i] = makeContainerFromGeneratedFragment(fragment)
+
+			containers[i].envList = append(containers[i].envList, "Fabric_NodeIPOrFqdn=10.0.0.1")
+			containers[i].mounts = append(containers[i].mounts, oci.Mount{
+				Source:      fmt.Sprintf("/run/gcs/c/%s/sandboxMounts/tmp/atlas/emptydir/serviceaccount", containers[i].sandboxID),
+				Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+				Type:        "bind",
+				Options:     []string{"rbind", "rshared", "ro"},
+			})
+
+			code := fragment.constraints.toFragment().marshalRego()
+			fragment.code = setFrameworkVersion(code, frameworkVersion)
+		}
+
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Fatalf("failed to create rego policy: %v", err)
+		}
+
+		if loadPlatformRulesFragmentFirst {
+			if !skipLoadPlatformRulesFragment {
+				err = policy.LoadFragment(gc.ctx, platformFragment.issuer, platformFragment.feed, platformRulesFragmentPolicyCode)
+				if err != nil {
+					t.Fatalf("failed to load platform rules fragment: %v", err)
+				}
+			}
+			for _, containerFragment := range containerFragments {
+				err = policy.LoadFragment(gc.ctx, containerFragment.info.issuer, containerFragment.info.feed, containerFragment.code)
+				if err != nil {
+					t.Fatalf("failed to load container fragment: %v", err)
+				}
+			}
+		} else {
+			for _, containerFragment := range containerFragments {
+				err = policy.LoadFragment(gc.ctx, containerFragment.info.issuer, containerFragment.info.feed, containerFragment.code)
+				if err != nil {
+					t.Fatalf("failed to load container fragment: %v", err)
+				}
+			}
+			if !skipLoadPlatformRulesFragment {
+				err = policy.LoadFragment(gc.ctx, platformFragment.issuer, platformFragment.feed, platformRulesFragmentPolicyCode)
+				if err != nil {
+					t.Fatalf("failed to load platform rules fragment: %v", err)
+				}
+			}
+		}
+
+		for _, container := range containers {
+			containerID, err := mountImageForContainer(policy, container.container)
+			if err != nil {
+				t.Errorf("failed to mount image for container: %v", err)
+				return false
+			}
+
+			_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx,
+				container.sandboxID,
+				containerID,
+				copyStrings(container.container.Command),
+				copyStrings(container.envList),
+				container.container.WorkingDir,
+				copyMounts(container.mounts),
+				false,
+				container.container.NoNewPrivileges,
+				container.user,
+				container.groups,
+				container.container.User.Umask,
+				container.capabilities,
+				container.seccomp,
+			)
+
+			if !skipLoadPlatformRulesFragment {
+				if err != nil {
+					t.Errorf("unable to create container from fragment: %v", err)
+					return false
+				}
+			} else {
+				if err == nil {
+					t.Error("expected error due to missing platform rules, got nil")
+					return false
+				}
+				assertDecisionJSONContains(t, err, "invalid env list: Fabric_NodeIPOrFqdn")
+				assertDecisionJSONContains(t, err, "invalid mount list: /var/run/secrets/kubernetes.io/serviceaccount")
+			}
+		}
+
+		return true
+	}
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_PlatformRules_InFragment2 failed: %v", err)
+	}
+}
+
+// Test platform rules and container both in main policy
+func Test_Rego_PlatformRules_InPolicy1(t *testing.T) {
+	// We don't actually use fragment in this test, but need some value as
+	// placeholder.
+	fragmentFeed := testDataGenerator.uniqueFragmentFeed()
+	fragmentIssuer := testDataGenerator.uniqueFragmentIssuer()
+
+	rego := getPolicyCode_PolicyWithPlatformRules(fragmentFeed, fragmentIssuer)
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	p, err := newRegoPolicy(rego,
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts), testOSType)
+	if err != nil {
+		t.Errorf("unable to create policy with platform rules: %v", err)
+	}
+
+	container := &securityPolicyContainer{
+		Command: []string{"bash"},
+		EnvRules: []EnvRuleConfig{
+			{
+				Required:      true,
+				UseNameValue:  true,
+				Name:          "Fabric_NodeIPOrFqdn",
+				NameStrategy:  EnvVarRuleString,
+				Value:         "10.0.0.1",
+				ValueStrategy: EnvVarRuleString,
+			},
+		},
+		Layers: []string{
+			paramTestImageBaseLayer,
+		},
+		WorkingDir: "/",
+		Mounts: []mountInternal{
+			{
+				Source:      "sandbox:///tmp/atlas/emptydir/.+",
+				Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+				Type:        "bind",
+				Options:     []string{"rbind", "rshared", "ro"},
+			},
+		},
+		User: UserConfig{
+			UserIDName: generateIDNameConfig(testRand),
+			GroupIDNames: []IDNameConfig{
+				generateIDNameConfig(testRand),
+			},
+			Umask: "0022",
+		},
+		Capabilities: &capabilitiesInternal{
+			Ambient:     []string{},
+			Bounding:    []string{},
+			Effective:   []string{},
+			Inheritable: []string{},
+			Permitted:   []string{},
+		},
+	}
+	containerID, err := mountImageForContainer(p, container)
+	if err != nil {
+		t.Fatalf("failed to mount image for container: %v", err)
+	}
+
+	tc, err := createTestContainerSpec(&generatedConstraints{
+		ctx: context.Background(),
+	}, containerID, container, false, p, defaultMounts, privilegedMounts)
+	if err != nil {
+		t.Fatalf("failed to create test container spec: %v", err)
+	}
+
+	envsToKeep, _, _, err := tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+	// getting an error means something is broken
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(tc.envList, envsToKeep) {
+		t.Fatalf("expected envs to keep = %v, got %v", tc.envList, envsToKeep)
+	}
+}
+
+// Test platform rule in main policy, container in fragment
+func Test_Rego_PlatformRules_InPolicy2(t *testing.T) {
+	// Generate a random fragment. We only have one "slot" in
+	// policy_with_platform_rules.rego for an external fragment so we only do
+	// one.  generateFragments' argument is only a minimum, so truncate to one to
+	// keep selectFragmentsFromConstraints' random pick aligned with
+	// fragments[0] below.
+	fragments := generateFragments(testRand, 1)[:1]
+	containerFragments := selectFragmentsFromConstraints(&generatedConstraints{
+		fragments: fragments,
+	}, 1, []string{"containers"}, []string{}, false, frameworkVersion, false)
+	containers := make([]*regoFragmentContainer, len(containerFragments))
+
+	for i, fragment := range containerFragments {
+		containers[i] = makeContainerFromGeneratedFragment(fragment)
+
+		containers[i].envList = append(containers[i].envList, "Fabric_NodeIPOrFqdn=10.0.0.1")
+		containers[i].mounts = append(containers[i].mounts, oci.Mount{
+			Source:      fmt.Sprintf("/run/gcs/c/%s/sandboxMounts/tmp/atlas/emptydir/serviceaccount", containers[i].sandboxID),
+			Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+			Type:        "bind",
+			Options:     []string{"rbind", "rshared", "ro"},
+		})
+
+		code := fragment.constraints.toFragment().marshalRego()
+		fragment.code = setFrameworkVersion(code, frameworkVersion)
+	}
+
+	rego := getPolicyCode_PolicyWithPlatformRules(fragments[0].feed, fragments[0].issuer)
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	p, err := newRegoPolicy(rego,
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts), testOSType)
+	if err != nil {
+		t.Fatalf("unable to create policy with platform rules: %v", err)
+	}
+
+	for _, containerFragment := range containerFragments {
+		err = p.LoadFragment(context.Background(), containerFragment.info.issuer, containerFragment.info.feed, containerFragment.code)
+		if err != nil {
+			t.Fatalf("failed to load container fragment: %v", err)
+		}
+	}
+
+	for _, container := range containers {
+		containerID, err := mountImageForContainer(p, container.container)
+		if err != nil {
+			t.Fatalf("failed to mount image for container: %v", err)
+		}
+
+		_, _, _, err = p.EnforceCreateContainerPolicy(context.Background(),
+			container.sandboxID,
+			containerID,
+			copyStrings(container.container.Command),
+			copyStrings(container.envList),
+			container.container.WorkingDir,
+			copyMounts(container.mounts),
+			false,
+			container.container.NoNewPrivileges,
+			container.user,
+			container.groups,
+			container.container.User.Umask,
+			container.capabilities,
+			container.seccomp,
+		)
+
+		if err != nil {
+			t.Fatalf("unable to create container from fragment: %v", err)
+		}
+	}
+}
+
 type getUserInfoTestCase struct {
 	userStrs           []string
 	additionalGIDs     []uint32
@@ -7927,3 +8298,20 @@ func Test_Rego_EnforceMountBlockDevicePolicy_OpenDoor(t *testing.T) {
 		t.Errorf("open door should allow unmount_blockdev, got: %v", err)
 	}
 }
+
+//go:embed fragment_test_policies/platform_rules.rego
+var platformRulesFragmentPolicyCode string
+
+//go:embed policy_with_platform_rules.rego
+var policyWithPlatformRules string
+
+func getPolicyCode_PolicyWithPlatformRules(fragmentFeed, fragmentIssuer string) string {
+	s := policyWithPlatformRules
+	s = strings.ReplaceAll(s, "@@API_VERSION@@", apiVersion)
+	s = strings.ReplaceAll(s, "@@FRAMEWORK_VERSION@@", frameworkVersion)
+	s = strings.ReplaceAll(s, "@@FRAGMENT_FEED@@", fragmentFeed)
+	s = strings.ReplaceAll(s, "@@FRAGMENT_ISSUER@@", fragmentIssuer)
+	return s
+}
+
+const paramTestImageBaseLayer = "0000000000000000000000000000000000000000000000000000000000000000"

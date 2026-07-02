@@ -374,9 +374,9 @@ func (policy *regoEnforcer) denyWithError(ctx context.Context, policyError error
 }
 
 func (policy *regoEnforcer) denyWithReason(ctx context.Context, enforcementPoint string, input inputData) error {
+	input["rule"] = enforcementPoint
 	cleaned_input := policy.redactSensitiveData(input)
 	cleaned_input = replaceCapabilitiesWithPlaceholders(cleaned_input)
-	input["rule"] = enforcementPoint
 	policyDecision := map[string]interface{}{
 		"input":    cleaned_input,
 		"decision": "deny",

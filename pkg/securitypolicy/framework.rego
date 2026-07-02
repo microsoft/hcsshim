@@ -146,32 +146,40 @@ overlay_mounted(target) {
     data.metadata.overlayTargets[target]
 }
 
-default candidate_containers := []
+# Note that a valid policy might not even define (data.policy.)containers, if
+# all its containers are coming from fragments.  This default rule prevents
+# breaking other rules in this case.
+default policy_containers := []
 
-candidate_containers := containers {
+policy_containers := pc {
     semver.compare(policy_framework_version, version) == 0
+    pc := data.policy.containers
+}
 
-    policy_containers := [c | c := data.policy.containers[_]]
-    fragment_containers := [c |
-        feed := data.metadata.issuers[_].feeds[_]
-        fragment := feed[_]
-        c := fragment.containers[_]
-    ]
-
-    containers := array.concat(policy_containers, fragment_containers)
+policy_containers := pc {
+    semver.compare(policy_framework_version, version) < 0
+    pc := apply_defaults("container", data.policy.containers, policy_framework_version)
 }
 
 candidate_containers := containers {
-    semver.compare(policy_framework_version, version) < 0
-
-    policy_containers := apply_defaults("container", data.policy.containers, policy_framework_version)
     fragment_containers := [c |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
         c := fragment.containers[_]
     ]
 
-    containers := array.concat(policy_containers, fragment_containers)
+    containers_raw := array.concat(policy_containers, fragment_containers)
+
+    # Each container definition applied with platform_rules might turn into
+    # multiple containers if multiple platforms are allowed.  We flatten the
+    # result here.
+    after_platform_rules := [c2 |
+        c1 := containers_raw[_]
+        applied := apply_platform_rules("container", c1)
+        c2 := applied[_]
+    ]
+
+    containers := after_platform_rules
 }
 
 default mount_cims := {"allowed": false}
@@ -242,32 +250,84 @@ command_ok(command) {
     }
 }
 
-env_ok(pattern, "string", value) {
+# An env rule can be of two forms:
+# {
+#   "pattern": "name=value",
+#   "strategy": "string" | "re2"
+# }
+# or
+# {
+#   "name": "name_pattern",
+#   "name_strategy": "string" | "re2",
+#   "value": "value_pattern",
+#   "value_strategy": "string" | "re2"
+# }
+
+# env_pattern_ok(pattern, strategy, value) tests whether the given string
+# pattern matches the input value.
+
+env_pattern_ok(pattern, "string", value) {
     pattern == value
 }
 
-env_ok(pattern, "re2", value) {
+env_pattern_ok(pattern, "re2", value) {
     regex.match(anchor_pattern(pattern), value)
 }
 
-rule_ok(rule, env) {
+# env_rule_ok accepts both forms of env rules described above, and matches it
+# against the given env string (of form name=value).
+
+env_rule_ok(rule, env) {
+    pattern := object.get(rule, "pattern", null)
+    strategy := object.get(rule, "strategy", null)
+    pattern != null
+    strategy != null
+    env_pattern_ok(pattern, strategy, env)
+}
+
+env_rule_ok(rule, env) {
+    rule_name := object.get(rule, "name", null)
+    name_strategy := object.get(rule, "name_strategy", null)
+    rule_value := object.get(rule, "value", null)
+    value_strategy := object.get(rule, "value_strategy", null)
+    rule_name != null
+    name_strategy != null
+    rule_value != null
+    value_strategy != null
+
+    # Split the env into name and value (value can contain '=', name cannot)
+    eq_idx := indexof(env, "=")
+    eq_idx >= 0
+    env_name := substring(env, 0, eq_idx)
+    env_value := substring(env, eq_idx + 1, -1)
+
+    env_pattern_ok(rule_name, name_strategy, env_name)
+    env_pattern_ok(rule_value, value_strategy, env_value)
+}
+
+# For a required env rule, check that envList contains a matching env var for
+# it.
+env_required_rule_ok(rule, envList) {
+    rule.required
+    some env in envList
+    env_rule_ok(rule, env)
+}
+
+# If it's not required, skip the check
+env_required_rule_ok(rule, envList) {
     not rule.required
 }
 
-rule_ok(rule, env) {
-    rule.required
-    env_ok(rule.pattern, rule.strategy, env)
-}
-
 envList_ok(env_rules, envList) {
+    # Check that all required rules are satisfied
     every rule in env_rules {
-        some env in envList
-        rule_ok(rule, env)
+        env_required_rule_ok(rule, envList)
     }
 
+    # Check that any env provided is allowed
     every env in envList {
         some rule in env_rules
-        env_ok(rule.pattern, rule.strategy, env)
+        env_rule_ok(rule, env)
     }
 }
 
@@ -275,7 +335,7 @@ valid_envs_subset(env_rules) := envs {
     envs := {env |
         some env in input.envList
         some rule in env_rules
-        env_ok(rule.pattern, rule.strategy, env)
+        env_rule_ok(rule, env)
     }
 }
 
@@ -1147,17 +1207,24 @@ runtime_logging := {"allowed": true} {
     allow_runtime_logging
 }
 
-default fragment_containers := []
+# Helpers to get data from the fragment that is currently being loaded.  Since
+# input.namespace is the package name the fragment loaded as,
+# data[input.namespace] can be used to access the fragment.  This is only valid
+# during a load_fragment call - the content exported by the fragment needs to be
+# persisted into the metadata for later enforcement use.  (c.f.
+# extract_fragment_includes)
 
+default fragment_containers := []
 fragment_containers := data[input.namespace].containers
 
 default fragment_fragments := []
-
 fragment_fragments := data[input.namespace].fragments
 
 default fragment_external_processes := []
-
 fragment_external_processes := data[input.namespace].external_processes
+
+default fragment_platform_rules := []
+fragment_platform_rules := data[input.namespace].platform_rules
 
 apply_defaults(name, raw_values, framework_version) := values {
     semver.compare(framework_version, version) == 0
@@ -1188,6 +1255,22 @@ apply_defaults("fragment", raw_values, framework_version) := values {
     ]
 }
 
+# platform_rules is introduced in framework version 0.5.0.  If an old policy has it,
+# silently ignore as it might be using the name for something else.
+
+apply_defaults("platform_rules", raw_values, framework_version) := values {
+    semver.compare(framework_version, version) < 0
+    semver.compare(framework_version, "0.5.0") >= 0
+    # This is currently unreachable, otherwise we would call something like
+    # check_platform_rule here, like above (not defined yet).
+    values := raw_values
+}
+
+apply_defaults("platform_rules", raw_values, framework_version) := values {
+    semver.compare(framework_version, "0.5.0") < 0
+    values := []
+}
+
 default fragment_framework_version := null
 fragment_framework_version := data[input.namespace].framework_version
 
@@ -1196,7 +1279,8 @@ extract_fragment_includes(includes) := fragment {
     objects := {
         "containers": apply_defaults("container", fragment_containers, framework_version),
         "fragments": apply_defaults("fragment", fragment_fragments, framework_version),
-        "external_processes": apply_defaults("external_process", fragment_external_processes, framework_version)
+        "external_processes": apply_defaults("external_process", fragment_external_processes, framework_version),
+        "platform_rules": apply_defaults("platform_rules", fragment_platform_rules, framework_version),
     }
 
     fragment := {
@@ -1461,6 +1545,65 @@ registry_changes := {"allowed": true} {
     }
 }
 
+default policy_platform_rules := []
+
+policy_platform_rules := platform_rules {
+    semver.compare(policy_framework_version, version) == 0
+    platform_rules := data.policy.platform_rules
+}
+
+# For policy with framework_version < 0.5.0, apply_defaults will ignore
+# platform_rules and return [].
+
+policy_platform_rules := platform_rules {
+    semver.compare(policy_framework_version, version) < 0
+    platform_rules := apply_defaults("platform_rules", data.policy.platform_rules, policy_framework_version)
+}
+
+default candidate_platform_rules := []
+
+candidate_platform_rules := platform_rules {
+    fragment_platform_rules := [r |
+        feed := data.metadata.issuers[_].feeds[_]
+        fragment := feed[_]
+        r := fragment.platform_rules[_]
+    ]
+
+    platform_rules := array.concat(policy_platform_rules, fragment_platform_rules)
+}
+
+# apply_platform_rules("container", c) applies "platform_rules" to the container
+# object c, and returns a list of containers which are the input container with
+# platform rules applied.  The return value may contain more than one container
+# if multiple platform rules are defined.
+
+# No platform rules - return as-is.
+apply_platform_rules("container", container) := updated_containers {
+    count(candidate_platform_rules) == 0
+    updated_containers := [container]
+}
+
+apply_platform_rules("container", container) := updated_containers {
+    count(candidate_platform_rules) > 0
+    updated_containers := [updated_container |
+        platform_rule := candidate_platform_rules[_]
+        updated_container := apply_single_platform_rule("container", container, platform_rule)
+    ]
+}
+
+apply_single_platform_rule("container", container, platform_rule) := updated_container {
+    container_env_rules := object.get(container, "env_rules", [])
+    updated_env_rules := array.concat(container_env_rules, object.get(platform_rule, "env_rules", []))
+
+    container_mounts := object.get(container, "mounts", [])
+    updated_mounts := array.concat(container_mounts, object.get(platform_rule, "mounts", []))
+
+    updated_container := object.union(container, {
+        "env_rules": updated_env_rules,
+        "mounts": updated_mounts,
+    })
+}
+
 reason := {
     "errors": errors,
     "error_objects": error_objects
@@ -1606,14 +1749,14 @@ env_matches(env) {
     input.rule in ["create_container", "exec_in_container"]
     some container in data.metadata.matches[input.containerID]
     some rule in container.env_rules
-    env_ok(rule.pattern, rule.strategy, env)
+    env_rule_ok(rule, env)
 }
 
 env_matches(env) {
     input.rule in ["exec_external"]
     some process in candidate_external_processes
     some rule in process.env_rules
-    env_ok(rule.pattern, rule.strategy, env)
+    env_rule_ok(rule, env)
 }
 
 errors[envError] {
@@ -1631,7 +1774,7 @@ errors[envError] {
 
 env_rule_matches(rule) {
     some env in input.envList
-    env_ok(rule.pattern, rule.strategy, env)
+    env_rule_ok(rule, env)
 }
 
 errors["missing required environment variable"] {
