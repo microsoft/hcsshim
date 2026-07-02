@@ -4,6 +4,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/fsformatter"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -29,6 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -36,6 +39,10 @@ const (
 	hivesDirName        = "Hives"
 	devPathFormat       = "\\\\.\\PHYSICALDRIVE%d"
 	UVMContainerID      = "00000000-0000-0000-0000-000000000000"
+	// amdSnpPspDLLName is the AMD SNP PSP API DLL used to fetch SNP attestation
+	// reports. It is staged from the UVM's System32 into each confidential
+	// container's security-context directory so workloads can load it.
+	amdSnpPspDLLName = "amdsnppspapi.dll"
 )
 
 // - Handler functions handle the incoming message requests. It
@@ -153,8 +160,19 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		}()
 
 		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-			if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
+			securityContextDir, err := b.hostState.securityOptions.WriteSecurityContextDir(&spec)
+			if err != nil {
 				return fmt.Errorf("failed to write security context dir: %w", err)
+			}
+
+			// Stage the AMD SNP PSP API DLL into the container's security-context
+			// directory so the workload can fetch SNP attestation reports. This
+			// happens after security policy enforcement, consistent with the
+			// UVM_SECURITY_CONTEXT_DIR env injection done by WriteSecurityContextDir.
+			if securityContextDir != "" {
+				if err := stageSnpPspDLL(ctx, securityContextDir); err != nil {
+					return fmt.Errorf("failed to stage %s: %w", amdSnpPspDLLName, err)
+				}
 			}
 			cwcowHostedSystemConfig.Spec = spec
 		}
@@ -199,6 +217,49 @@ func (b *Bridge) createContainer(req *request) (err error) {
 
 	b.forwardRequestToGcs(req)
 	return nil
+}
+
+// stageSnpPspDLL copies the AMD SNP PSP API DLL from the UVM's System32 into the
+// container's security-context directory so the workload can fetch SNP
+// attestation reports. The directory is exposed to the container via the
+// UVM_SECURITY_CONTEXT_DIR environment variable. If the DLL is not present in
+// the UVM (e.g. a non-SNP UVM), staging is skipped without error.
+func stageSnpPspDLL(ctx context.Context, securityContextDir string) error {
+	sysDir, err := windows.GetSystemDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get system directory: %w", err)
+	}
+
+	srcPath := filepath.Join(sysDir, amdSnpPspDLLName)
+	staged, err := stageDLL(ctx, srcPath, securityContextDir)
+	if err != nil {
+		return err
+	}
+	if staged {
+		log.G(ctx).Debugf("staged %s into %s", amdSnpPspDLLName, securityContextDir)
+	} else {
+		log.G(ctx).Debugf("%s not found in %s; skipping staging", amdSnpPspDLLName, sysDir)
+	}
+	return nil
+}
+
+// stageDLL copies the DLL at srcPath into dstDir. If the source DLL does not
+// exist it is a no-op and returns false without error, so callers can tolerate
+// environments where the DLL is not present.
+func stageDLL(ctx context.Context, srcPath, dstDir string) (bool, error) {
+	if _, err := os.Stat(srcPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat %s: %w", srcPath, err)
+	}
+
+	dstPath := filepath.Join(dstDir, filepath.Base(srcPath))
+	if err := copyfile.CopyFile(ctx, srcPath, dstPath, true); err != nil {
+		return false, fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
+	}
+
+	return true, nil
 }
 
 // processParamEnvToOCIEnv converts an Environment field from ProcessParameters

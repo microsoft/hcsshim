@@ -191,39 +191,43 @@ func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) 
 // containing the files is exposed via UVM_SECURITY_CONTEXT_DIR env var.
 // It may be an error to have a security policy but not expose it to the
 // container as in that case it can never be checked as correct by a verifier.
-func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) error {
+//
+// On success it returns the path (in the UVM/guest namespace) of the created
+// security context directory, or an empty string if no directory was created
+// because there was nothing to write.
+func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, error) {
 	encodedPolicy := s.PolicyEnforcer.EncodedSecurityPolicy()
 	hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
 	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 {
 		// Use os.MkdirTemp to make sure that the directory is unique.
 		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
 		if err != nil {
-			return fmt.Errorf("failed to create security context directory: %w", err)
+			return "", fmt.Errorf("failed to create security context directory: %w", err)
 		}
 		// Make sure that files inside directory are readable
 		if err := os.Chmod(securityContextDir, 0755); err != nil {
-			return fmt.Errorf("failed to chmod security context directory: %w", err)
+			return "", fmt.Errorf("failed to chmod security context directory: %w", err)
 		}
 
 		if len(encodedPolicy) > 0 {
 			if err := writeFileInDir(securityContextDir, PolicyFilename, []byte(encodedPolicy), 0777); err != nil {
-				return fmt.Errorf("failed to write security policy: %w", err)
+				return "", fmt.Errorf("failed to write security policy: %w", err)
 			}
 		}
 		if len(s.UvmReferenceInfo) > 0 {
 			if err := writeFileInDir(securityContextDir, ReferenceInfoFilename, []byte(s.UvmReferenceInfo), 0777); err != nil {
-				return fmt.Errorf("failed to write UVM reference info: %w", err)
+				return "", fmt.Errorf("failed to write UVM reference info: %w", err)
 			}
 		}
 		if len(s.UvmHashEnvelopeReferenceInfo) > 0 {
 			if err := writeFileInDir(securityContextDir, HashEnvelopeReferenceInfoFilename, []byte(s.UvmHashEnvelopeReferenceInfo), 0777); err != nil {
-				return fmt.Errorf("failed to write UVM hash envelope reference info: %w", err)
+				return "", fmt.Errorf("failed to write UVM hash envelope reference info: %w", err)
 			}
 		}
 
 		if len(hostAMDCert) > 0 {
 			if err := writeFileInDir(securityContextDir, HostAMDCertFilename, []byte(hostAMDCert), 0777); err != nil {
-				return fmt.Errorf("failed to write host AMD certificate: %w", err)
+				return "", fmt.Errorf("failed to write host AMD certificate: %w", err)
 			}
 		}
 
@@ -231,6 +235,7 @@ func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) error {
 		secCtxEnv := fmt.Sprintf("UVM_SECURITY_CONTEXT_DIR=%s", containerCtxDir)
 		spec.Process.Env = append(spec.Process.Env, secCtxEnv)
 
+		return securityContextDir, nil
 	}
-	return nil
+	return "", nil
 }
