@@ -701,3 +701,269 @@ func TestExecuteProcess_InitExec_AllowsAndAppliesEnv(t *testing.T) {
 		t.Errorf("forwarded Environment = %v, want %v", gotParams.Environment, want)
 	}
 }
+
+// TestEnforceStdioParams covers the stdio-access decision helper: allowed
+// leaves params untouched, denied clears the stdio pipe flags, denied with no
+// pipes reports no change, and denied for a console process is rejected.
+func TestEnforceStdioParams(t *testing.T) {
+	tests := []struct {
+		name        string
+		allowStdio  bool
+		params      hcsschema.ProcessParameters
+		wantErr     bool
+		wantChanged bool
+		wantPipes   bool
+	}{
+		{
+			name:        "allowed leaves params untouched",
+			allowStdio:  true,
+			params:      hcsschema.ProcessParameters{CreateStdInPipe: true, CreateStdOutPipe: true, CreateStdErrPipe: true},
+			wantChanged: false,
+			wantPipes:   true,
+		},
+		{
+			name:       "denied with console is rejected",
+			allowStdio: false,
+			params:     hcsschema.ProcessParameters{EmulateConsole: true},
+			wantErr:    true,
+		},
+		{
+			name:        "denied clears stdio pipes",
+			allowStdio:  false,
+			params:      hcsschema.ProcessParameters{CreateStdInPipe: true, CreateStdOutPipe: true, CreateStdErrPipe: true},
+			wantChanged: true,
+			wantPipes:   false,
+		},
+		{
+			name:        "denied with no pipes reports no change",
+			allowStdio:  false,
+			params:      hcsschema.ProcessParameters{},
+			wantChanged: false,
+			wantPipes:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := tt.params
+			changed, err := enforceStdioParams(tt.allowStdio, &params)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+			if params.CreateStdInPipe != tt.wantPipes ||
+				params.CreateStdOutPipe != tt.wantPipes ||
+				params.CreateStdErrPipe != tt.wantPipes {
+				t.Errorf("pipe flags = (%v,%v,%v), want all %v",
+					params.CreateStdInPipe, params.CreateStdOutPipe, params.CreateStdErrPipe, tt.wantPipes)
+			}
+		})
+	}
+}
+
+// stdioDenyExternalEnforcer denies stdio access on the external-exec path while
+// allowing everything else via the embedded open-door enforcer.
+type stdioDenyExternalEnforcer struct {
+	securitypolicy.OpenDoorSecurityPolicyEnforcer
+}
+
+func (stdioDenyExternalEnforcer) EnforceExecExternalProcessPolicy(
+	_ context.Context, _ []string, _ []string, _ string,
+) (securitypolicy.EnvList, bool, error) {
+	return nil, false, nil
+}
+
+// TestExecuteProcess_External_DeniedStdioClearsPipes verifies the external-exec
+// branch clears the stdio pipe flags before forwarding when policy denies stdio.
+func TestExecuteProcess_External_DeniedStdioClearsPipes(t *testing.T) {
+	b := newTestBridge(&stdioDenyExternalEnforcer{})
+
+	params := hcsschema.ProcessParameters{
+		CommandLine:      "cmd.exe /c exit",
+		CreateStdInPipe:  true,
+		CreateStdOutPipe: true,
+		CreateStdErrPipe: true,
+	}
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{ContainerID: UVMContainerID, ActivityID: guid.GUID{}},
+		Settings:    prot.ExecuteProcessSettings{ProcessParameters: prot.AnyInString{Value: &params}},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   1,
+		},
+		message: msg,
+	}
+
+	if err := b.executeProcess(req); err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	if gotParams.CreateStdInPipe || gotParams.CreateStdOutPipe || gotParams.CreateStdErrPipe {
+		t.Errorf("stdio pipes not cleared: %+v", gotParams)
+	}
+}
+
+// TestExecuteProcess_External_DeniedStdioWithConsoleRejected verifies that a
+// console-requesting external process is rejected (not forwarded) when policy
+// denies stdio.
+func TestExecuteProcess_External_DeniedStdioWithConsoleRejected(t *testing.T) {
+	b := newTestBridge(&stdioDenyExternalEnforcer{})
+
+	params := hcsschema.ProcessParameters{CommandLine: "cmd.exe", EmulateConsole: true}
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{ContainerID: UVMContainerID, ActivityID: guid.GUID{}},
+		Settings:    prot.ExecuteProcessSettings{ProcessParameters: prot.AnyInString{Value: &params}},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   1,
+		},
+		message: msg,
+	}
+
+	err = b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "console") {
+		t.Fatalf("expected console denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_DeniedStdioClearsPipes verifies the init-process
+// branch applies the create-time stdio decision (c.allowStdio=false) by
+// clearing the stdio pipe flags before forwarding.
+func TestExecuteProcess_InitExec_DeniedStdioClearsPipes(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	c := &Container{
+		id:              cid,
+		spec:            oci.Spec{Process: enforcedInitProcess()},
+		processes:       make(map[uint32]*containerProcess),
+		commandLine:     true,
+		commandLineExec: false,
+		allowStdio:      false,
+	}
+	if err := b.hostState.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+		CreateStdInPipe:  true,
+		CreateStdOutPipe: true,
+		CreateStdErrPipe: true,
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- b.executeProcess(req) }()
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	b.pendingMu.Lock()
+	ch := b.pending[got.header.ID]
+	b.pendingMu.Unlock()
+	if ch == nil {
+		t.Fatal("no pending response channel registered for forwarded request")
+	}
+	ch <- &prot.ContainerExecuteProcessResponse{ProcessID: 42}
+
+	if err := <-done; err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	if gotParams.CreateStdInPipe || gotParams.CreateStdOutPipe || gotParams.CreateStdErrPipe {
+		t.Errorf("stdio pipes not cleared: %+v", gotParams)
+	}
+}
+
+// TestExecuteProcess_InitExec_AllowsStdioKeepsPipes verifies the init-process
+// branch leaves the stdio pipe flags intact when the create-time decision
+// allows stdio (c.allowStdio=true).
+func TestExecuteProcess_InitExec_AllowsStdioKeepsPipes(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	c := &Container{
+		id:              cid,
+		spec:            oci.Spec{Process: enforcedInitProcess()},
+		processes:       make(map[uint32]*containerProcess),
+		commandLine:     true,
+		commandLineExec: false,
+		allowStdio:      true,
+	}
+	if err := b.hostState.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+		CreateStdInPipe:  true,
+		CreateStdOutPipe: true,
+		CreateStdErrPipe: true,
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- b.executeProcess(req) }()
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	b.pendingMu.Lock()
+	ch := b.pending[got.header.ID]
+	b.pendingMu.Unlock()
+	if ch == nil {
+		t.Fatal("no pending response channel registered for forwarded request")
+	}
+	ch <- &prot.ContainerExecuteProcessResponse{ProcessID: 42}
+
+	if err := <-done; err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	if !gotParams.CreateStdInPipe || !gotParams.CreateStdOutPipe || !gotParams.CreateStdErrPipe {
+		t.Errorf("stdio pipes should be preserved when allowed: %+v", gotParams)
+	}
+}

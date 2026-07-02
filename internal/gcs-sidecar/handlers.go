@@ -131,7 +131,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		if envToKeep != nil {
 			spec.Process.Env = []string(envToKeep)
 		}
-		_ = allowStdio // TODO: enforce stdio access for Windows containers
 
 		commandLine := len(spec.Process.Args) > 0
 		c := &Container{
@@ -140,6 +139,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			processes:       make(map[uint32]*containerProcess),
 			commandLine:     commandLine,
 			commandLineExec: false,
+			allowStdio:      allowStdio,
 		}
 
 		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
@@ -496,6 +496,29 @@ func rewriteExecRequest(req *request, r prot.ContainerExecuteProcess, params hcs
 	return newReq, nil
 }
 
+// enforceStdioParams applies a stdio-access policy decision. When denied, a
+// process that requires a console is rejected (there is no console without
+// stdio); otherwise the stdio pipe flags are cleared. Returns whether params
+// changed so callers can skip an unnecessary rewrite.
+func enforceStdioParams(allowStdio bool, params *hcsschema.ProcessParameters) (bool, error) {
+	if allowStdio {
+		return false, nil
+	}
+
+	// A console can't be honored without stdio, so reject rather than silently
+	// dropping EmulateConsole and running a non-interactive process the caller
+	// didn't ask for.
+	if params.EmulateConsole {
+		return false, errors.New("process that requires console access denied due to policy not allowing stdio access")
+	}
+
+	changed := params.CreateStdInPipe || params.CreateStdOutPipe || params.CreateStdErrPipe
+	params.CreateStdInPipe = false
+	params.CreateStdOutPipe = false
+	params.CreateStdErrPipe = false
+	return changed, nil
+}
+
 func (b *Bridge) startContainer(req *request) (err error) {
 	_, span := oc.StartSpan(req.ctx, "sidecar::startContainer")
 	defer span.End()
@@ -567,7 +590,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 
 	if containerID == UVMContainerID {
 		log.G(req.ctx).Tracef("Enforcing policy on external exec process")
-		envToKeep, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
+		envToKeep, stdioAllowed, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
 			req.ctx,
 			commandLine,
 			processParamEnvToOCIEnv(processParams.Environment),
@@ -576,11 +599,20 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		if err != nil {
 			return errors.Wrapf(err, "exec is denied due to policy")
 		}
+		needsRewrite := false
 		if envToKeep != nil {
 			processParams.Environment = ociEnvToProcessParamEnv(envToKeep)
+			needsRewrite = true
+		}
+		stdioChanged, err := enforceStdioParams(stdioAllowed, &processParams)
+		if err != nil {
+			return errors.Wrapf(err, "exec is denied due to policy")
+		}
+		needsRewrite = needsRewrite || stdioChanged
+		if needsRewrite {
 			req, err = rewriteExecRequest(req, r, processParams)
 			if err != nil {
-				return fmt.Errorf("failed to rewrite exec request with filtered env: %w", err)
+				return fmt.Errorf("failed to rewrite exec request: %w", err)
 			}
 		}
 		b.forwardRequestToGcs(req)
@@ -609,7 +641,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				Name: processParams.User,
 			}
 			log.G(req.ctx).Tracef("Enforcing policy on exec in container")
-			envToKeep, _, _, err := b.hostState.securityOptions.PolicyEnforcer.
+			envToKeep, _, stdioAllowed, err := b.hostState.securityOptions.PolicyEnforcer.
 				EnforceExecInContainerPolicyV2(
 					req.ctx,
 					containerID,
@@ -622,11 +654,20 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			if err != nil {
 				return errors.Wrapf(err, "exec in container denied due to policy")
 			}
+			needsRewrite := false
 			if envToKeep != nil {
 				processParams.Environment = ociEnvToProcessParamEnv(envToKeep)
+				needsRewrite = true
+			}
+			stdioChanged, err := enforceStdioParams(stdioAllowed, &processParams)
+			if err != nil {
+				return errors.Wrapf(err, "exec in container denied due to policy")
+			}
+			needsRewrite = needsRewrite || stdioChanged
+			if needsRewrite {
 				req, err = rewriteExecRequest(req, r, processParams)
 				if err != nil {
-					return fmt.Errorf("failed to rewrite exec request with filtered env: %w", err)
+					return fmt.Errorf("failed to rewrite exec request: %w", err)
 				}
 			}
 		} else {
@@ -662,9 +703,14 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 			// produced (dropped variables removed, nothing injected) so the
 			// init process runs with exactly the enforced environment.
 			processParams.Environment = ociEnvToProcessParamEnv(enforced.Env)
+
+			if _, err = enforceStdioParams(c.allowStdio, &processParams); err != nil {
+				return errors.Wrapf(err, "exec in container denied due to policy")
+			}
+
 			req, err = rewriteExecRequest(req, r, processParams)
 			if err != nil {
-				return fmt.Errorf("failed to rewrite init exec request with enforced env: %w", err)
+				return fmt.Errorf("failed to rewrite init exec request: %w", err)
 			}
 		}
 		headerID := req.header.ID
