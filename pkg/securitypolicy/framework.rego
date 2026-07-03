@@ -1498,29 +1498,79 @@ registry_value_matches(policy_value, input_value) {
     policy_value.type == "None"
 }
 
-# Filter input registry values to only include those that match policy
-filtered_registry_values(input_values, policy_values) := [input_val |
-    input_val := input_values[_]
-    some policy_val in policy_values
-    registry_value_matches(policy_val, input_val)
-]
-
 # TODO: have allow_registry_changes_dropping switch like environment variable's allow_environment_variable_dropping.
 
-registry_changes := {"allowed": true} {
-    containers := data.metadata.matches[input.containerID]
-    container := containers[_]
-    
-    # Check if container has registry_changes defined in policy
-    container.registry_changes
-    
-    # If input has registry changes, filter to only matching ones
-    input.registryChanges.AddValues
-    matched_values := filtered_registry_values(input.registryChanges.AddValues, container.registry_changes.add_values)
-    
-    # Build result with filtered AddValues
-    result := {
-        "AddValues": matched_values
+# valid_registry_subset is the set of requested registry values that the
+# container's policy authorizes.
+valid_registry_subset(container) := values {
+    values := {input_value |
+        some input_value in input.registryChanges.AddValues
+        some policy_value in container.registry_changes.add_values
+        registry_value_matches(policy_value, input_value)
+    }
+}
+
+# valid_registry_for_all selects the most specific (largest) authorized subset
+# across the candidate containers, mirroring valid_envs_for_all. If several
+# containers tie for the largest subset, they must authorize the same set
+# (intersection == union) for the result to be decidable.
+valid_registry_for_all(containers) := values {
+    valid := [subset |
+        some container in containers
+        subset := valid_registry_subset(container)
+    ]
+
+    counts := [count(subset) | subset := valid[_]]
+    max_count := max(counts)
+
+    largest_value_sets := {subset |
+        some i
+        counts[i] == max_count
+        subset := valid[i]
+    }
+
+    values_i := intersection(largest_value_sets)
+    values_u := union(largest_value_sets)
+    values_i == values_u
+    values := values_i
+}
+
+# registryValues_ok holds when the container's registry_changes policy
+# authorizes every value in registryValues. This mirrors envList_ok. Note we
+# pass the whole container rather than container.registry_changes because that
+# field is optional: for empty registryValues the `every` is vacuously true, so
+# a container with no registry_changes correctly matches the "drop everything"
+# case (and the missing field is never dereferenced).
+registryValues_ok(container, registryValues) {
+    every input_value in registryValues {
+        some policy_value in container.registry_changes.add_values
+        registry_value_matches(policy_value, input_value)
+    }
+}
+
+# registry_changes uses "dropping" semantics like allow_environment_variable_dropping:
+# it keeps the subset of requested values that policy authorizes (dropping the
+# rest), narrows matches to the container(s) that authorize exactly that
+# most-specific set, and returns those values (as registry_changes_to_keep) so
+# the host-side enforcer applies only them. Recording the narrowing into
+# data.metadata.matches makes the decision compose with create_container
+# regardless of the order in which the two run.
+registry_changes := {"metadata": [updateMatches], "registry_changes_to_keep": registry_values, "allowed": true} {
+    matches := data.metadata.matches[input.containerID]
+    registry_values := valid_registry_for_all(matches)
+
+    containers := [container |
+        container := matches[_]
+        registryValues_ok(container, registry_values)
+    ]
+
+    count(containers) > 0
+
+    updateMatches := {
+        "name": "matches",
+        "action": "update",
+        "key": input.containerID,
+        "value": containers,
     }
 }
 
@@ -1961,6 +2011,20 @@ errors["no matching mapped directory in policy"] {
 errors["no mapped directory at path to unmount"] {
     input.rule == "mapped_directory_unmount"
     not mapped_directory_mounted(input.unmountTarget)
+}
+
+default registry_changes_allowed := false
+
+registry_changes_allowed {
+    matches := data.metadata.matches[input.containerID]
+    registry_values := valid_registry_for_all(matches)
+    some container in matches
+    registryValues_ok(container, registry_values)
+}
+
+errors["invalid registry changes"] {
+    input.rule == "registry_changes"
+    not registry_changes_allowed
 }
 
 errors[framework_version_error] {

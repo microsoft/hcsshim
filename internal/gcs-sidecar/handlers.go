@@ -78,26 +78,24 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		containerJSON, _ := json.Marshal(container)
 		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %s}}", string(req.message), schemaVersion, containerJSON)
 
-		// Enforce registry changes policy
+		// Enforce registry changes policy. This may drop unauthorized
+		// non-default registry values from the container before forwarding.
 		if container != nil && container.RegistryChanges != nil {
 			log.G(ctx).Trace("Container has registry changes, validating against policy")
 
-			// First, separate default values from non-default values
+			// First, separate default values from non-default values.
 			var defaultValues []hcsschema.RegistryValue
 			var nonDefaultValues []hcsschema.RegistryValue
-
-			if container.RegistryChanges.AddValues != nil {
-				for _, value := range container.RegistryChanges.AddValues {
-					if isDefaultRegistryValue(value) {
-						defaultValues = append(defaultValues, value)
-						log.G(ctx).WithField("name", value.Name).Trace("Registry value matches default, accepting without policy check")
-					} else {
-						nonDefaultValues = append(nonDefaultValues, value)
-					}
+			for _, value := range container.RegistryChanges.AddValues {
+				if isDefaultRegistryValue(value) {
+					defaultValues = append(defaultValues, value)
+					log.G(ctx).WithField("name", value.Name).Trace("Registry value matches default, accepting without policy check")
+				} else {
+					nonDefaultValues = append(nonDefaultValues, value)
 				}
 			}
 
-			// If there are non-default values, validate them against policy
+			// If there are non-default values, validate them against policy.
 			if len(nonDefaultValues) > 0 {
 				log.G(ctx).Tracef("Validating %d registry values against policy", len(nonDefaultValues))
 
@@ -105,16 +103,22 @@ func (b *Bridge) createContainer(req *request) (err error) {
 					AddValues: nonDefaultValues,
 				}
 
-				err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
+				keptRaw, err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
 				if err != nil {
 					log.G(ctx).WithError(err).Warn("Registry changes validation failed - rejecting")
 					return fmt.Errorf("registry entry operation is denied by policy: %w", err)
 				}
-				log.G(ctx).Tracef("All container registry values validated successfully")
+
+				// The policy uses dropping semantics: it may authorize only a
+				// subset of the requested non-default values. Rebuild the
+				// container's registry changes as the pre-approved defaults plus
+				// the policy-kept non-default values so the guest only applies
+				// what policy sanctioned.
+				container.RegistryChanges.AddValues = mergeKeptRegistryValues(defaultValues, keptRaw)
 			}
 
-			log.G(ctx).Infof("Registry validation complete: %d total values (%d defaults + %d validated)",
-				len(container.RegistryChanges.AddValues), len(defaultValues), len(nonDefaultValues))
+			log.G(ctx).Infof("Registry validation complete: %d total values now applied (%d defaults)",
+				len(container.RegistryChanges.AddValues), len(defaultValues))
 		}
 
 		// We enforce `spec`, which is not passed to inbox gcs within this createContainer.
@@ -337,6 +341,23 @@ func (b *Bridge) createContainer(req *request) (err error) {
 
 	b.forwardRequestToGcs(req)
 	return nil
+}
+
+// mergeKeptRegistryValues combines the pre-approved default registry values
+// with the policy-kept subset returned by EnforceRegistryChangesPolicy. Because
+// the policy uses dropping semantics, it may authorize only a subset of the
+// requested non-default values; the returned slice is what the guest should
+// apply (defaults plus the kept non-default values).
+func mergeKeptRegistryValues(defaultValues []hcsschema.RegistryValue, kept interface{}) []hcsschema.RegistryValue {
+	var keptNonDefault []hcsschema.RegistryValue
+	if k, ok := kept.(*hcsschema.RegistryChanges); ok && k != nil {
+		keptNonDefault = k.AddValues
+	}
+
+	newValues := make([]hcsschema.RegistryValue, 0, len(defaultValues)+len(keptNonDefault))
+	newValues = append(newValues, defaultValues...)
+	newValues = append(newValues, keptNonDefault...)
+	return newValues
 }
 
 // namedPipePrefix is the prefix used for Windows named pipe paths. A mount

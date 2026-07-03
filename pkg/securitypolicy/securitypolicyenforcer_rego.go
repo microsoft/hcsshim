@@ -763,7 +763,6 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 			log.G(ctx).WithError(err).Warn("failed to obtain policy metadata snapshot")
 		}
 
-		// TODO: we should handle registry here? for narrowing
 		input = inputData{
 			"mounts":      appendMountData([]interface{}{}, mounts),
 			"containerID": containerID,
@@ -1188,14 +1187,14 @@ func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, conta
 	return err
 }
 
-func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
+func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) (interface{}, error) {
 	log.G(ctx).Trace("Enforcing registry changes policy")
 
 	// Import the schema type for proper conversion
 	regChanges, ok := registryValues.(*hcsschema.RegistryChanges)
 	if !ok {
 		log.G(ctx).Warn("Input registry values are not of expected type")
-		return errors.New("invalid registry values type")
+		return nil, errors.New("invalid registry values type")
 	}
 
 	input := inputData{
@@ -1203,8 +1202,27 @@ func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, co
 		"registryChanges": regChanges,
 	}
 
-	_, err := policy.enforce(ctx, "registry_changes", input)
-	return err
+	result, err := policy.enforce(ctx, "registry_changes", input)
+	if err != nil {
+		return nil, err
+	}
+
+	// The policy uses dropping semantics: it authorizes a subset of the
+	// requested values and returns that subset in "registry_changes_to_keep".
+	// Round-trip it back into the schema type so the caller applies only the
+	// kept values.
+	kept := &hcsschema.RegistryChanges{}
+	if raw, verr := result.Value("registry_changes_to_keep"); verr == nil && raw != nil {
+		buf, merr := json.Marshal(raw)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to marshal kept registry values: %w", merr)
+		}
+		if uerr := json.Unmarshal(buf, &kept.AddValues); uerr != nil {
+			return nil, fmt.Errorf("failed to unmarshal kept registry values: %w", uerr)
+		}
+	}
+
+	return kept, nil
 }
 
 func (policy *regoEnforcer) GetUserInfo(process *oci.Process, rootPath string) (IDName, []IDName, string, error) {

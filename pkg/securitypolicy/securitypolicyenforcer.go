@@ -129,7 +129,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceMappedDirectoryUnmountPolicy(ctx context.Context, containerPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) (err error)
-	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error
+	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) (interface{}, error)
 }
 
 //nolint:unused
@@ -330,8 +330,8 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Cont
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
-	return nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) (interface{}, error) {
+	return registryValues, nil
 }
 
 type ClosedDoorSecurityPolicyEnforcer struct{}
@@ -467,6 +467,6 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Co
 	return nil
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
-	return errors.New("registry changes are denied by policy")
+func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) (interface{}, error) {
+	return nil, errors.New("registry changes are denied by policy")
 }
