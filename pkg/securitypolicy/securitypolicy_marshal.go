@@ -445,6 +445,43 @@ func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string
 	writeLine(builder, `%s"mounts": [%s],`, indent, strings.Join(values, ","))
 }
 
+func (v registryValueInternal) marshalRego() string {
+	key := fmt.Sprintf(`{"hive": "%s", "name": "%s", "volatile": %t}`,
+		escapeRegoString(v.Key.Hive), escapeRegoString(v.Key.Name), v.Key.Volatile)
+	fields := []string{
+		fmt.Sprintf(`"key": %s`, key),
+		fmt.Sprintf(`"name": "%s"`, escapeRegoString(v.Name)),
+		fmt.Sprintf(`"type": "%s"`, escapeRegoString(v.Type)),
+	}
+	// Type selects which value field is significant; emit only that one so the
+	// policy value matches the shape registry_value_matches compares against.
+	switch v.Type {
+	case "String", "ExpandedString", "MultiString":
+		fields = append(fields, fmt.Sprintf(`"string_value": "%s"`, escapeRegoString(v.StringValue)))
+	case "DWord":
+		fields = append(fields, fmt.Sprintf(`"dword_value": %d`, v.DWordValue))
+	case "QWord":
+		fields = append(fields, fmt.Sprintf(`"qword_value": %d`, v.QWordValue))
+	case "Binary":
+		fields = append(fields, fmt.Sprintf(`"binary_value": "%s"`, escapeRegoString(v.BinaryValue)))
+	case "CustomType":
+		fields = append(fields, fmt.Sprintf(`"custom_type": %d`, v.CustomType))
+		fields = append(fields, fmt.Sprintf(`"binary_value": "%s"`, escapeRegoString(v.BinaryValue)))
+	case "None":
+		// No value to compare, just key, name and type.
+	}
+	return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
+}
+
+func writeRegistryChanges(builder *strings.Builder, registryChanges registryChangesInternal, indent string) {
+	values := make([]string, len(registryChanges.AddValues))
+	for i, value := range registryChanges.AddValues {
+		values[i] = value.marshalRego()
+	}
+
+	writeLine(builder, `%s"registry_changes": {"add_values": [%s]},`, indent, strings.Join(values, ", "))
+}
+
 // Windows-specific marshal functions
 func writeWindowsSignals(builder *strings.Builder, signals []guestrequest.SignalValueWCOW, indent string) {
 	signalsArray := make([]string, len(signals))
@@ -485,10 +522,13 @@ func writeWindowsContainer(builder *strings.Builder, container *securityPolicyWi
 	writeLayers(builder, container.Layers, indent+indentUsing)
 	writeMountedCim(builder, container.MountedCim, indent+indentUsing)
 	writeMounts(builder, container.Mounts, indent+indentUsing)
+	if len(container.RegistryChanges.AddValues) > 0 {
+		writeRegistryChanges(builder, container.RegistryChanges, indent+indentUsing)
+	}
 	writeWindowsExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeWindowsSignals(builder, container.Signals, indent+indentUsing)
 	writeWindowsUser(builder, container.User, indent+indentUsing)
-	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, container.WorkingDir)
+	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, escapeRegoString(container.WorkingDir))
 	writeLine(builder, `%s"allow_stdio_access": %t,`, indent+indentUsing, container.AllowStdioAccess)
 	writeLine(builder, "%s},", indent)
 }

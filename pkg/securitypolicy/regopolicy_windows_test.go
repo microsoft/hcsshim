@@ -1734,95 +1734,46 @@ func Test_Rego_EnforceRegistryChangesPolicy_Default_Values_Allowed_Windows(t *te
 	}
 }
 
-// regoTwoContainersSharedLayersRegistry is a hand-written policy with two
-// containers that share the same layers/mounted_cim (so both survive
-// mount_cims) but differ in command, and only B declares a registry_changes
-// rule that sanctions a "dangerous" value. It is used to prove that
-// registry_changes narrows data.metadata.matches so the decision composes with
-// create_container regardless of enforcement order.
-const regoTwoContainersSharedLayersRegistry = `package policy
-
-api_version := "%s"
-framework_version := "%s"
-
-containers := [
-    {
-        "allow_stdio_access": true,
-        "command": ["cmd"],
-        "env_rules": [],
-        "exec_processes": [],
-        "id": "test-image",
-        "layers": ["layerA", "layerB"],
-        "mounted_cim": ["merged"],
-        "mounts": [],
-        "name": "A",
-        "signals": [],
-        "user": "ContainerUser",
-        "working_dir": "C:\\app"
-    },
-    {
-        "allow_stdio_access": true,
-        "command": ["ping"],
-        "env_rules": [],
-        "exec_processes": [],
-        "id": "test-image",
-        "layers": ["layerA", "layerB"],
-        "mounted_cim": ["merged"],
-        "mounts": [],
-        "name": "B",
-        "registry_changes": {
-            "add_values": [
-                {
-                    "key": {"hive": "System", "name": "TestControl"},
-                    "name": "Danger",
-                    "type": "String",
-                    "string_value": "danger"
-                }
-            ]
-        },
-        "signals": [],
-        "user": "ContainerUser",
-        "working_dir": "C:\\app"
-    }
-]
-
-fragments := []
-external_processes := []
-mapped_directories := []
-
-allow_properties_access := false
-allow_dump_stacks := false
-allow_runtime_logging := false
-allow_environment_variable_dropping := false
-allow_unencrypted_scratch := false
-allow_capability_dropping := false
-allow_registry_changes_dropping := %t
-
-mount_device := data.framework.mount_device
-rw_mount_device := data.framework.rw_mount_device
-unmount_device := data.framework.unmount_device
-rw_unmount_device := data.framework.rw_unmount_device
-mount_overlay := data.framework.mount_overlay
-unmount_overlay := data.framework.unmount_overlay
-mount_cims := data.framework.mount_cims
-registry_changes := data.framework.registry_changes
-create_container := data.framework.create_container
-exec_in_container := data.framework.exec_in_container
-exec_external := data.framework.exec_external
-shutdown_container := data.framework.shutdown_container
-signal_container_process := data.framework.signal_container_process
-plan9_mount := data.framework.plan9_mount
-plan9_unmount := data.framework.plan9_unmount
-get_properties := data.framework.get_properties
-dump_stacks := data.framework.dump_stacks
-runtime_logging := data.framework.runtime_logging
-load_fragment := data.framework.load_fragment
-scratch_mount := data.framework.scratch_mount
-scratch_unmount := data.framework.scratch_unmount
-mapped_directory_mount := data.framework.mapped_directory_mount
-mapped_directory_unmount := data.framework.mapped_directory_unmount
-reason := data.framework.reason
-`
+// twoContainersSharedLayersRegistryRego builds, via the Go policy producer, a
+// policy with two containers that share the same layers/mounted_cim (so both
+// survive mount_cims) but differ in command, where only B declares a
+// registry_changes rule that sanctions a "dangerous" value. It is used to prove
+// that registry_changes narrows data.metadata.matches so the decision composes
+// with create_container regardless of enforcement order.
+func twoContainersSharedLayersRegistryRego(dropping bool) string {
+	constraints := &generatedWindowsConstraints{
+		allowRegistryChangesDropping: dropping,
+		containers: []*securityPolicyWindowsContainer{
+			{
+				Command:          []string{"cmd"},
+				Layers:           []string{"layerA", "layerB"},
+				MountedCim:       []string{"merged"},
+				WorkingDir:       `C:\app`,
+				User:             "ContainerUser",
+				AllowStdioAccess: true,
+			},
+			{
+				Command:          []string{"ping"},
+				Layers:           []string{"layerA", "layerB"},
+				MountedCim:       []string{"merged"},
+				WorkingDir:       `C:\app`,
+				User:             "ContainerUser",
+				AllowStdioAccess: true,
+				RegistryChanges: registryChangesInternal{
+					AddValues: []registryValueInternal{
+						{
+							Key:         registryKeyInternal{Hive: "System", Name: "TestControl"},
+							Name:        "Danger",
+							Type:        "String",
+							StringValue: "danger",
+						},
+					},
+				},
+			},
+		},
+	}
+	return constraints.toPolicy().marshalWindowsRego()
+}
 
 // Test_Rego_RegistryChanges_NarrowsMatches_Windows verifies that the registry
 // enforcement point narrows data.metadata.matches so it composes with
@@ -1864,8 +1815,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	user := IDName{Name: "ContainerUser"}
 
 	newPolicy := func(dropping bool) *regoEnforcer {
-		rego := fmt.Sprintf(regoTwoContainersSharedLayersRegistry, apiVersion, frameworkVersion, dropping)
-		policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
+		policy, err := newRegoPolicy(twoContainersSharedLayersRegistryRego(dropping), []oci.Mount{}, []oci.Mount{}, testOSType)
 		if err != nil {
 			t.Fatalf("failed to create policy: %v", err)
 		}

@@ -317,10 +317,40 @@ type WindowsContainer struct {
 	MountedCim       []string                       `json:"mounted_cim"`
 	WorkingDir       string                         `json:"working_dir"`
 	Mounts           Mounts                         `json:"mounts"`
+	RegistryChanges  WindowsRegistryChanges         `json:"registry_changes"`
 	ExecProcesses    []WindowsExecProcessConfig     `json:"-"`
 	Signals          []guestrequest.SignalValueWCOW `json:"-"`
 	AllowStdioAccess bool                           `json:"-"`
 	User             string                         `json:"-"`
+}
+
+// WindowsRegistryChanges is the set of registry changes a Windows container is
+// allowed to make. Registry changes are a Windows-only concept.
+type WindowsRegistryChanges struct {
+	AddValues []WindowsRegistryValue `json:"add_values"`
+}
+
+// WindowsRegistryKey identifies the registry key that a registry value applies
+// to.
+type WindowsRegistryKey struct {
+	Hive     string `json:"hive"`
+	Name     string `json:"name"`
+	Volatile bool   `json:"volatile"`
+}
+
+// WindowsRegistryValue is a single registry value a container is allowed to
+// write. Type selects which of the value fields is significant, mirroring the
+// registry value types understood by the runtime ("String", "ExpandedString",
+// "MultiString", "DWord", "QWord", "Binary", "CustomType", "None").
+type WindowsRegistryValue struct {
+	Key         WindowsRegistryKey `json:"key"`
+	Name        string             `json:"name"`
+	Type        string             `json:"type"`
+	StringValue string             `json:"string_value,omitempty"`
+	DWordValue  int32              `json:"dword_value,omitempty"`
+	QWordValue  int32              `json:"qword_value,omitempty"`
+	BinaryValue string             `json:"binary_value,omitempty"`
+	CustomType  int32              `json:"custom_type,omitempty"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.

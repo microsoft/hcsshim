@@ -197,6 +197,9 @@ type securityPolicyWindowsContainer struct {
 	// The set of mount constraints that the container is allowed to be created
 	// with. Matched against the OCI spec mounts at container creation time.
 	Mounts []mountInternal `json:"mounts"`
+	// The set of registry changes the container is allowed to make. Matched
+	// against the registry changes requested at container creation time.
+	RegistryChanges registryChangesInternal `json:"registry_changes,omitempty"`
 	// A list of lists of commands that can be used to execute additional
 	// processes within the container
 	ExecProcesses []windowsContainerExecProcess `json:"exec_processes"`
@@ -234,6 +237,30 @@ type mountInternal struct {
 	Destination string   `json:"destination"`
 	Type        string   `json:"type"`
 	Options     []string `json:"options"`
+}
+
+// Internal version of WindowsRegistryChanges
+type registryChangesInternal struct {
+	AddValues []registryValueInternal `json:"add_values"`
+}
+
+// Internal version of WindowsRegistryKey
+type registryKeyInternal struct {
+	Hive     string `json:"hive"`
+	Name     string `json:"name"`
+	Volatile bool   `json:"volatile"`
+}
+
+// Internal version of WindowsRegistryValue
+type registryValueInternal struct {
+	Key         registryKeyInternal `json:"key"`
+	Name        string              `json:"name"`
+	Type        string              `json:"type"`
+	StringValue string              `json:"string_value,omitempty"`
+	DWordValue  int32               `json:"dword_value,omitempty"`
+	QWordValue  int32               `json:"qword_value,omitempty"`
+	BinaryValue string              `json:"binary_value,omitempty"`
+	CustomType  int32               `json:"custom_type,omitempty"`
 }
 
 // Internal version of Capabilities
@@ -335,11 +362,33 @@ func (c *WindowsContainer) toInternal() (*securityPolicyWindowsContainer, error)
 		Layers:           layers,
 		WorkingDir:       c.WorkingDir,
 		Mounts:           mounts,
+		RegistryChanges:  c.RegistryChanges.toInternal(),
 		ExecProcesses:    execProcesses,
 		Signals:          c.Signals,
 		AllowStdioAccess: c.AllowStdioAccess,
 		User:             c.User,
 	}, nil
+}
+
+func (r WindowsRegistryChanges) toInternal() registryChangesInternal {
+	addValues := make([]registryValueInternal, len(r.AddValues))
+	for i, v := range r.AddValues {
+		addValues[i] = registryValueInternal{
+			Key: registryKeyInternal{
+				Hive:     v.Key.Hive,
+				Name:     v.Key.Name,
+				Volatile: v.Key.Volatile,
+			},
+			Name:        v.Name,
+			Type:        v.Type,
+			StringValue: v.StringValue,
+			DWordValue:  v.DWordValue,
+			QWordValue:  v.QWordValue,
+			BinaryValue: v.BinaryValue,
+			CustomType:  v.CustomType,
+		}
+	}
+	return registryChangesInternal{AddValues: addValues}
 }
 
 func (c CommandArgs) toInternal() ([]string, error) {
