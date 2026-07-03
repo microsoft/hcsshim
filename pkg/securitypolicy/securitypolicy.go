@@ -65,8 +65,9 @@ type PolicyConfig struct {
 	AllowEnvironmentVariableDropping bool                    `json:"allow_environment_variable_dropping" toml:"allow_environment_variable_dropping"`
 	// AllowUnencryptedScratch is a global policy configuration that allows
 	// all containers within a pod to be run without scratch encryption.
-	AllowUnencryptedScratch bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
-	AllowCapabilityDropping bool `json:"allow_capability_dropping" toml:"allow_capability_dropping"`
+	AllowUnencryptedScratch      bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
+	AllowCapabilityDropping      bool `json:"allow_capability_dropping" toml:"allow_capability_dropping"`
+	AllowRegistryChangesDropping bool `json:"allow_registry_changes_dropping" toml:"allow_registry_changes_dropping"`
 }
 
 func NewPolicyConfig(opts ...PolicyConfigOpt) (*PolicyConfig, error) {

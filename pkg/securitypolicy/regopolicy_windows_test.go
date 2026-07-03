@@ -1796,6 +1796,7 @@ allow_runtime_logging := false
 allow_environment_variable_dropping := false
 allow_unencrypted_scratch := false
 allow_capability_dropping := false
+allow_registry_changes_dropping := %t
 
 mount_device := data.framework.mount_device
 rw_mount_device := data.framework.rw_mount_device
@@ -1824,19 +1825,18 @@ reason := data.framework.reason
 `
 
 // Test_Rego_RegistryChanges_NarrowsMatches_Windows verifies that the registry
-// enforcement point uses dropping semantics that compose with create_container
-// in either order. Registry narrows data.metadata.matches to the container(s)
-// that authorize the kept subset, and returns that kept subset so the host can
-// drop the rest. Containers A (command "cmd", no registry rule) and B (command
+// enforcement point narrows data.metadata.matches so it composes with
+// create_container in either order, under both allow_registry_changes_dropping
+// settings. Containers A (command "cmd", no registry rule) and B (command
 // "ping", authorizes a dangerous registry value) share layers, so both survive
 // mount_cims; the danger is that a request could pass the dangerous value while
-// running A's command. In either enforcement order, "cmd" never runs with the
-// dangerous value: either create(cmd) is denied (registry narrowed to B first),
-// or the dangerous value is dropped (create(cmd) narrowed to A first).
+// running A's command. With dropping on, "cmd" never runs with the dangerous
+// value (either create(cmd) is denied when registry narrows to B first, or the
+// value is dropped when create(cmd) narrows to A first). With dropping off, a
+// request is only allowed if a matched container authorizes every requested
+// value, so registry(dangerous) against A is denied outright.
 // TODO: maybe delete it if it's too much.
 func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
-	rego := fmt.Sprintf(regoTwoContainersSharedLayersRegistry, apiVersion, frameworkVersion)
-
 	dangerous := &hcsschema.RegistryChanges{
 		AddValues: []hcsschema.RegistryValue{
 			{
@@ -1863,7 +1863,8 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	ctx := context.Background()
 	user := IDName{Name: "ContainerUser"}
 
-	newPolicy := func() *regoEnforcer {
+	newPolicy := func(dropping bool) *regoEnforcer {
+		rego := fmt.Sprintf(regoTwoContainersSharedLayersRegistry, apiVersion, frameworkVersion, dropping)
 		policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{}, testOSType)
 		if err != nil {
 			t.Fatalf("failed to create policy: %v", err)
@@ -1874,7 +1875,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	// Order 1: registry (kept via B) then create with A's command. Registry
 	// narrows matches to [B], so create with "cmd" must be denied.
 	t.Run("registry_then_create_denied", func(t *testing.T) {
-		policy := newPolicy()
+		policy := newPolicy(true)
 		cid := testDataGenerator.uniqueContainerID()
 		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
 			t.Fatalf("mount_cims: %v", err)
@@ -1896,7 +1897,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	// registry rule, so the dangerous value must be dropped (kept empty), but
 	// the request is still allowed since dropping is permissive.
 	t.Run("create_then_registry_drops", func(t *testing.T) {
-		policy := newPolicy()
+		policy := newPolicy(true)
 		cid := testDataGenerator.uniqueContainerID()
 		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
 			t.Fatalf("mount_cims: %v", err)
@@ -1915,7 +1916,44 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 
 	// Legit path: B's command with B's registry value keeps the value.
 	t.Run("create_ping_then_registry_keeps", func(t *testing.T) {
-		policy := newPolicy()
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(ping) should be allowed as B: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous)
+		if err != nil {
+			t.Fatalf("registry(dangerous) after create(ping) should be allowed via B: %v", err)
+		}
+		if n := keptCount(t, kept); n != 1 {
+			t.Errorf("dangerous value should be kept for B, got %d kept values", n)
+		}
+	})
+
+	// With dropping disabled, a request is only allowed if a matched container
+	// authorizes every requested value. After create(cmd) narrows to A (no
+	// registry rule), registry(dangerous) must be denied rather than dropped.
+	t.Run("no_dropping_create_then_registry_denied", func(t *testing.T) {
+		policy := newPolicy(false)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(cmd) should be allowed as A: %v", err)
+		}
+		if _, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous); err == nil {
+			t.Error("registry(dangerous) after create(cmd) should be denied without dropping (A authorizes nothing)")
+		}
+	})
+
+	// With dropping disabled, the legit path (B authorizes the value) is still
+	// allowed and keeps the value.
+	t.Run("no_dropping_create_ping_then_registry_keeps", func(t *testing.T) {
+		policy := newPolicy(false)
 		cid := testDataGenerator.uniqueContainerID()
 		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
 			t.Fatalf("mount_cims: %v", err)

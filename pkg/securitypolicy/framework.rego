@@ -1498,8 +1498,6 @@ registry_value_matches(policy_value, input_value) {
     policy_value.type == "None"
 }
 
-# TODO: have allow_registry_changes_dropping switch like environment variable's allow_environment_variable_dropping.
-
 # valid_registry_subset is the set of requested registry values that the
 # container's policy authorizes.
 valid_registry_subset(container) := values {
@@ -1510,11 +1508,16 @@ valid_registry_subset(container) := values {
     }
 }
 
-# valid_registry_for_all selects the most specific (largest) authorized subset
-# across the candidate containers, mirroring valid_envs_for_all. If several
-# containers tie for the largest subset, they must authorize the same set
-# (intersection == union) for the result to be decidable.
+# valid_registry_for_all selects the registry values to keep across the
+# candidate containers, mirroring valid_envs_for_all. With
+# allow_registry_changes_dropping it keeps the most specific (largest)
+# authorized subset, dropping the rest; if several containers tie for the
+# largest subset they must authorize the same set (intersection == union) for
+# the result to be decidable. Without dropping it keeps every requested value,
+# so a container must authorize all of them for the request to be allowed.
 valid_registry_for_all(containers) := values {
+    allow_registry_changes_dropping
+
     valid := [subset |
         some container in containers
         subset := valid_registry_subset(container)
@@ -1535,6 +1538,13 @@ valid_registry_for_all(containers) := values {
     values := values_i
 }
 
+valid_registry_for_all(containers) := values {
+    not allow_registry_changes_dropping
+
+    # no dropping: keep every requested value, so a container must authorize all
+    values := {input_value | some input_value in input.registryChanges.AddValues}
+}
+
 # registryValues_ok holds when the container's registry_changes policy
 # authorizes every value in registryValues. This mirrors envList_ok. Note we
 # pass the whole container rather than container.registry_changes because that
@@ -1548,13 +1558,12 @@ registryValues_ok(container, registryValues) {
     }
 }
 
-# registry_changes uses "dropping" semantics like allow_environment_variable_dropping:
-# it keeps the subset of requested values that policy authorizes (dropping the
-# rest), narrows matches to the container(s) that authorize exactly that
-# most-specific set, and returns those values (as registry_changes_to_keep) so
-# the host-side enforcer applies only them. Recording the narrowing into
-# data.metadata.matches makes the decision compose with create_container
-# regardless of the order in which the two run.
+# registry_changes keeps the registry values that policy authorizes (via
+# valid_registry_for_all, which honors allow_registry_changes_dropping), narrows
+# matches to the container(s) that authorize exactly that set, and returns those
+# values (as registry_changes_to_keep) so the host-side enforcer applies only
+# them. Recording the narrowing into data.metadata.matches makes the decision
+# compose with create_container regardless of the order in which the two run.
 registry_changes := {"metadata": [updateMatches], "registry_changes_to_keep": registry_values, "allowed": true} {
     matches := data.metadata.matches[input.containerID]
     registry_values := valid_registry_for_all(matches)
@@ -2013,18 +2022,9 @@ errors["no mapped directory at path to unmount"] {
     not mapped_directory_mounted(input.unmountTarget)
 }
 
-default registry_changes_allowed := false
-
-registry_changes_allowed {
-    matches := data.metadata.matches[input.containerID]
-    registry_values := valid_registry_for_all(matches)
-    some container in matches
-    registryValues_ok(container, registry_values)
-}
-
 errors["invalid registry changes"] {
     input.rule == "registry_changes"
-    not registry_changes_allowed
+    not registry_changes.allowed
 }
 
 errors[framework_version_error] {
@@ -2517,6 +2517,10 @@ allow_capability_dropping := flag {
     semver.compare(policy_framework_version, "0.2.2") >= 0
     flag := data.policy.allow_capability_dropping
 }
+
+default allow_registry_changes_dropping := false
+
+allow_registry_changes_dropping := data.policy.allow_registry_changes_dropping
 
 default policy_framework_version := null
 default policy_api_version := null

@@ -2037,6 +2037,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
+		AllowRegistryChangesDropping:     constraints.allowRegistryChangesDropping,
 	}
 }
 
@@ -2298,6 +2299,7 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 		namespace:                        generateFragmentNamespace(testRand),
 		svn:                              generateSVN(testRand),
 		allowCapabilityDropping:          false,
+		allowRegistryChangesDropping:     false,
 		ctx:                              context.Background(),
 	}
 }
@@ -2959,6 +2961,7 @@ type generatedConstraints struct {
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
+	allowRegistryChangesDropping     bool
 	ctx                              context.Context
 }
 
@@ -2975,6 +2978,7 @@ type generatedWindowsConstraints struct {
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
+	allowRegistryChangesDropping     bool
 	ctx                              context.Context
 }
 
@@ -2990,6 +2994,7 @@ func (constraints *generatedWindowsConstraints) toPolicy() *securityPolicyWindow
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
+		AllowRegistryChangesDropping:     constraints.allowRegistryChangesDropping,
 	}
 }
 
@@ -3034,6 +3039,7 @@ func generateWindowsConstraints(r *rand.Rand, maxContainers int32) *generatedWin
 		allowEnvironmentVariableDropping: false,
 		allowUnencryptedScratch:          false,
 		allowCapabilityDropping:          false,
+		allowRegistryChangesDropping:     false,
 		namespace:                        generateFragmentNamespace(r),
 		svn:                              generateSVN(r),
 		ctx:                              context.Background(),

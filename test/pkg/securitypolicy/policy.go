@@ -64,6 +64,7 @@ func PolicyWithOpts(tb testing.TB, policyType string, pOpts ...securitypolicy.Po
 		config.AllowEnvironmentVariableDropping,
 		config.AllowUnencryptedScratch,
 		config.AllowCapabilityDropping,
+		config.AllowRegistryChangesDropping,
 	)
 	if err != nil {
 		tb.Fatal(err)
