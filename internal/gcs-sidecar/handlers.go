@@ -137,6 +137,15 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
 		}
 
+		// Create the source directory for each mapped directory if it does not
+		// already exist. In non-confidential WCOW the host does this for
+		// sandbox:// mounts by exec'ing `cmd /c mkdir ... & dir ...` inside the
+		// UVM (see resources_wcow.go:setupMounts), but for confidential, we
+		// handle this here in the sidecar GCS.
+		if err := createMappedDirectorySourceDirs(ctx, container.MappedDirectories); err != nil {
+			return fmt.Errorf("failed to create mapped directory source directories: %w", err)
+		}
+
 		commandLine := len(spec.Process.Args) > 0
 		c := &Container{
 			id:              containerID,
@@ -260,6 +269,28 @@ func stageDLL(ctx context.Context, srcPath, dstDir string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// createMappedDirectorySourceDirs creates the host-side source directory for
+// every mapped directory (i.e. "mounts") in the container document, if it does
+// not already exist.
+func createMappedDirectorySourceDirs(ctx context.Context, mappedDirectories []hcsschema.MappedDirectory) error {
+	for _, md := range mappedDirectories {
+		source := md.HostPath
+
+		if _, err := os.Stat(source); err == nil {
+			// exists
+			continue
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to stat mapped directory source %q: %w", source, err)
+		}
+
+		if err := os.MkdirAll(source, 0755); err != nil {
+			return fmt.Errorf("failed to create mapped directory source %q: %w", source, err)
+		}
+		log.G(ctx).WithField("source", source).Debug("created mapped directory source directory")
+	}
+	return nil
 }
 
 // processParamEnvToOCIEnv converts an Environment field from ProcessParameters

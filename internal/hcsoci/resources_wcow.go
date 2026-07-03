@@ -203,23 +203,30 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 			// so first convert to a path in the sandboxmounts path itself.
 			sandboxPath := convertToWCOWSandboxMountPath(mount.Source)
 
-			// Now we need to exec a process in the vm that will make these directories as theres
+			// Now we need to exec a process in the vm that will make these directories as there's
 			// no functionality in the Windows gcs to create an arbitrary directory.
 			//
-			// Create the directory, but also run dir afterwards regardless of if mkdir succeeded to handle the case where the directory already exists
-			// e.g. from a previous container specifying the same mount (and thus creating the same directory).
-			b := &bytes.Buffer{}
-			stderr, err := cmd.CreatePipeAndListen(b, false)
-			if err != nil {
-				return err
-			}
-			req := &cmd.CmdProcessRequest{
-				Args:   []string{"cmd", "/c", "mkdir", sandboxPath, "&", "dir", sandboxPath},
-				Stderr: stderr,
-			}
-			exitCode, err := coi.HostingSystem.ExecInUVM(ctx, req)
-			if err != nil {
-				return errors.Wrapf(err, "failed to create sandbox mount directory in utility VM with exit code %d %q", exitCode, b.String())
+			// We do not need to do this for Confidential WCOW, because in that case the gcs-sidecar
+			// handles the create container request and will do this for us.  This way the policy
+			// does not have to have exceptions for allowing such mkdir commands.
+			//
+			// Create the directory, but also run dir afterwards regardless of if mkdir succeeded to
+			// handle the case where the directory already exists e.g. from a previous container
+			// specifying the same mount (and thus creating the same directory).
+			if !coi.HostingSystem.HasConfidentialPolicy() {
+				b := &bytes.Buffer{}
+				stderr, err := cmd.CreatePipeAndListen(b, false)
+				if err != nil {
+					return err
+				}
+				req := &cmd.CmdProcessRequest{
+					Args:   []string{"cmd", "/c", "mkdir", sandboxPath, "&", "dir", sandboxPath},
+					Stderr: stderr,
+				}
+				exitCode, err := coi.HostingSystem.ExecInUVM(ctx, req)
+				if err != nil {
+					return errors.Wrapf(err, "failed to create sandbox mount directory in utility VM with exit code %d %q", exitCode, b.String())
+				}
 			}
 		} else if np, ok := uvm.ParseNamedPipe(coi.HostingSystem, mount); ok {
 			if !np.UVMPipe {
