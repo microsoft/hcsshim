@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -124,11 +125,16 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}
-		_, _, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
+		envToKeep, _, allowStdio, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
 
 		if err != nil {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
 		}
+
+		if envToKeep != nil {
+			spec.Process.Env = []string(envToKeep)
+		}
+		_ = allowStdio // TODO: enforce stdio access for Windows containers
 
 		commandLine := len(spec.Process.Args) > 0
 		c := &Container{
@@ -215,6 +221,39 @@ func processParamEnvToOCIEnv(environment map[string]string) []string {
 	return environmentList
 }
 
+// ociEnvToProcessParamEnv is the inverse of processParamEnvToOCIEnv. It converts
+// an OCI-style env list (["KEY=VALUE", ...]) back to a ProcessParameters
+// Environment map.
+func ociEnvToProcessParamEnv(envs []string) map[string]string {
+	paramEnv := make(map[string]string, len(envs))
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			paramEnv[parts[0]] = parts[1]
+		}
+	}
+	return paramEnv
+}
+
+// rewriteExecRequest re-marshals an execute process request with updated
+// ProcessParameters (e.g., after env filtering by policy).
+func rewriteExecRequest(req *request, r prot.ContainerExecuteProcess, params hcsschema.ProcessParameters) (*request, error) {
+	r.Settings.ProcessParameters.Value = &params
+
+	buf, err := json.Marshal(r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal updated exec request: %w", err)
+	}
+
+	newReq := &request{
+		ctx:     req.ctx,
+		header:  req.header,
+		message: buf,
+	}
+	newReq.header.Size = uint32(len(buf)) + prot.HdrSize
+	return newReq, nil
+}
+
 func (b *Bridge) startContainer(req *request) (err error) {
 	_, span := oc.StartSpan(req.ctx, "sidecar::startContainer")
 	defer span.End()
@@ -283,7 +322,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 
 	if containerID == UVMContainerID {
 		log.G(req.ctx).Tracef("Enforcing policy on external exec process")
-		_, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
+		envToKeep, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
 			req.ctx,
 			commandLine,
 			processParamEnvToOCIEnv(processParams.Environment),
@@ -291,6 +330,13 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		)
 		if err != nil {
 			return errors.Wrapf(err, "exec is denied due to policy")
+		}
+		if envToKeep != nil {
+			processParams.Environment = ociEnvToProcessParamEnv(envToKeep)
+			req, err = rewriteExecRequest(req, r, processParams)
+			if err != nil {
+				return fmt.Errorf("failed to rewrite exec request with filtered env: %w", err)
+			}
 		}
 		b.forwardRequestToGcs(req)
 	} else {
@@ -315,7 +361,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				Name: processParams.User,
 			}
 			log.G(req.ctx).Tracef("Enforcing policy on exec in container")
-			_, _, _, err = b.hostState.securityOptions.PolicyEnforcer.
+			envToKeep, _, _, err := b.hostState.securityOptions.PolicyEnforcer.
 				EnforceExecInContainerPolicyV2(
 					req.ctx,
 					containerID,
@@ -327,6 +373,13 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				)
 			if err != nil {
 				return errors.Wrapf(err, "exec in container denied due to policy")
+			}
+			if envToKeep != nil {
+				processParams.Environment = ociEnvToProcessParamEnv(envToKeep)
+				req, err = rewriteExecRequest(req, r, processParams)
+				if err != nil {
+					return fmt.Errorf("failed to rewrite exec request with filtered env: %w", err)
+				}
 			}
 		}
 		headerID := req.header.ID
@@ -649,6 +702,13 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedVirtualDisk:
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("wcowMappedVirtualDisk { %v}", wcowMappedVirtualDisk)
+			if wcowMappedVirtualDisk.ContainerPath != "" {
+				matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, wcowMappedVirtualDisk.ContainerPath)
+				if merr != nil || !matched {
+					return fmt.Errorf("virtual disk mount path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
+						wcowMappedVirtualDisk.ContainerPath)
+				}
+			}
 
 		case guestresource.ResourceTypeHvSocket:
 			hvSocketAddress := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
@@ -657,6 +717,18 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedDirectory:
 			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.MappedDirectory)
 			log.G(ctx).Tracef("hcsschema.MappedDirectory { %v }", settings)
+			switch modifyGuestSettingsRequest.RequestType {
+			case guestrequest.RequestTypeAdd:
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceMappedDirectoryMountPolicy(
+					ctx, settings.ContainerPath, settings.ReadOnly); err != nil {
+					return fmt.Errorf("mapped directory mount is denied by policy: %w", err)
+				}
+			case guestrequest.RequestTypeRemove:
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceMappedDirectoryUnmountPolicy(
+					ctx, settings.ContainerPath); err != nil {
+					return fmt.Errorf("mapped directory unmount is denied by policy: %w", err)
+				}
+			}
 
 		case guestresource.ResourceTypeSecurityPolicy:
 			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.ConfidentialOptions)
@@ -815,6 +887,15 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedVirtualDiskForContainerScratch:
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("ResourceTypeMappedVirtualDiskForContainerScratch: { %v }", wcowMappedVirtualDisk)
+
+			// Validate the scratch disk mount path matches the expected pattern
+			if wcowMappedVirtualDisk.ContainerPath != "" {
+				matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, wcowMappedVirtualDisk.ContainerPath)
+				if merr != nil || !matched {
+					return fmt.Errorf("scratch disk mount path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
+						wcowMappedVirtualDisk.ContainerPath)
+				}
+			}
 
 			// This will return the volume path of the mounted scratch.
 			// Scratch disk should be >= 30 GB for refs formatter to work.
