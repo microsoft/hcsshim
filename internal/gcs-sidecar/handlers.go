@@ -1130,37 +1130,28 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			return fmt.Errorf("WCOWCombinedLayers is not supported.")
 
 		case guestresource.ResourceTypeNetworkNamespace:
+			// Forwarded to inbox GCS without enforcement, by design: the host
+			// controls the UVM's networking regardless of what is configured here,
+			// so there is nothing meaningful for the guest to enforce.
+			// LCOW does the same (see modifyNetwork in internal\guest\runtime\hcsv2\uvm.go).
 			settings := modifyGuestSettingsRequest.Settings.(*hcn.HostComputeNamespace)
 			log.G(ctx).Tracef("HostComputeNamespaces { %v}", settings)
-			// We don't enforce policy for network namespace.
-			// TODO: Maybe we could enforce NamespaceType and SchemaVersion?
-			// What's the justification not to enforce them?
-			// TODO: see what lcow does
 
 		case guestresource.ResourceTypeNetwork:
+			// Forwarded without enforcement for the same reason as
+			// ResourceTypeNetworkNamespace above: networking is host-controlled.
 			settings := modifyGuestSettingsRequest.Settings.(*guestrequest.NetworkModifyRequest)
 			log.G(ctx).Tracef("NetworkModifyRequest { %v}", settings)
-			// We don't enforce policy for network setttings.
-			// There is no field that policy authors can expect a value to be set.
-			// TODO: see what lcow does
 
 		case guestresource.ResourceTypeMappedVirtualDisk:
-			// We don't know if it's used for CWCOW.
-			// The change is added in case it's used for CWCOW. TODO: to see if it's used or not, maybe try attaching a test VHD through pod.json
-			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
-			log.G(ctx).Tracef("wcowMappedVirtualDisk { %v}", wcowMappedVirtualDisk)
-			if wcowMappedVirtualDisk.ContainerPath != "" {
-				matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, wcowMappedVirtualDisk.ContainerPath)
-				if merr != nil || !matched {
-					return fmt.Errorf("virtual disk mount path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
-						wcowMappedVirtualDisk.ContainerPath)
-				}
-			}
+			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
+			log.G(ctx).Tracef("WCOWMappedVirtualDisk: {%v}", settings)
+			return fmt.Errorf("MappedVirtualDisk is not supported")
 
 		case guestresource.ResourceTypeHvSocket:
-			hvSocketAddress := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
-			log.G(ctx).Tracef("hvSocketAddress { %v }", hvSocketAddress)
-			// If host doesn't use it maybe remove it TODO
+			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
+			log.G(ctx).Tracef("HvSocketAddress { %v }", settings)
+			return fmt.Errorf("HvSocket is not supported")
 
 		case guestresource.ResourceTypeMappedDirectory:
 			// We don't have hostpath enforcement because anyway contents of the dir can be changed by the host.
