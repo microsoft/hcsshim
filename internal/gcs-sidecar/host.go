@@ -27,6 +27,10 @@ type Host struct {
 	blockCIMVolumeHashes map[guid.GUID][]string
 	// mapping of volumeGUID to container IDs
 	blockCIMVolumeContainers map[guid.GUID]map[string]struct{}
+	// mapping of containerID to the ContainerRootPath recorded when
+	// CWCOWCombinedLayers mounted it, used to validate the createContainer
+	// Storage.Path.
+	containerRootPaths map[string]string
 }
 
 type Container struct {
@@ -60,6 +64,7 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 		containers:               make(map[string]*Container),
 		blockCIMVolumeHashes:     make(map[guid.GUID][]string),
 		blockCIMVolumeContainers: make(map[guid.GUID]map[string]struct{}),
+		containerRootPaths:       make(map[string]string),
 		securityOptions:          securityPolicyOptions,
 	}
 }
@@ -88,6 +93,7 @@ func (h *Host) RemoveContainer(ctx context.Context, id string) error {
 	}
 
 	delete(h.containers, id)
+	delete(h.containerRootPaths, id)
 	return nil
 }
 

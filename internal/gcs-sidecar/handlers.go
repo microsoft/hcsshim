@@ -290,6 +290,12 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
 		}
 
+		// Cross-check the forwarded Container.Storage against the root path and
+		// block-CIM volume the sidecar recorded for this container during layer setup.
+		if err := reconcileHostedSystemStorage(b.hostState, containerID, container); err != nil {
+			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
+
 		// Marshal the original cwcowHostedSystem from the request. That's safe
 		// because we've enforced `spec` above and reconciled the forwarded
 		// MappedDirectories/MappedPipes against it.
@@ -467,6 +473,67 @@ func reconcileHostedSystemMounts(mounts []oci.Mount, container *hcsschema.Contai
 		}
 	}
 
+	return nil
+}
+
+// volumeGUIDFromStoragePath extracts the volume GUID from a Container.Storage
+// layer path of the form `\\?\Volume{<guid>}\` (the volume root, as the host
+// writes it in the createContainer document). This differs from
+// volumeGUIDFromLayerPath, which parses the `...}\Files` form used in the
+// CWCOWCombinedLayers modify request.
+func volumeGUIDFromStoragePath(path string) (string, bool) {
+	if p, ok := strings.CutPrefix(path, `\\?\Volume{`); ok {
+		if q, ok := strings.CutSuffix(p, `}\`); ok {
+			return q, true
+		}
+	}
+	return "", false
+}
+
+// reconcileHostedSystemStorage checks that the host-forwarded Container.Storage
+// matches the verified handles the sidecar recorded for this container during
+// layer setup:
+//   - Storage.Path must equal the combined-layers root that CWCOWCombinedLayers
+//     mounted for this container (the scratch that becomes the container root).
+//   - Storage.Layers must be the single block-CIM volume whose hashes mount_cims
+//     verified for this container.
+//
+// The bytes at that volume are already verity-verified, so this does not re-check
+// content. It closes a cross-wiring gap: without it a host could forward a create
+// document that points the container root at a different (even if separately
+// verified) volume than the one enforced for this container.
+func reconcileHostedSystemStorage(host *Host, containerID string, container *hcsschema.Container) error {
+	if container == nil || container.Storage == nil {
+		return fmt.Errorf("container storage is missing")
+	}
+	storage := container.Storage
+
+	wantRootPath, ok := host.containerRootPaths[containerID]
+	if !ok {
+		return fmt.Errorf("no container root path recorded for container %s", containerID)
+	}
+	if !strings.EqualFold(storage.Path, wantRootPath) {
+		return fmt.Errorf("storage path %q does not match the enforced container root path %q", storage.Path, wantRootPath)
+	}
+
+	if len(storage.Layers) != 1 {
+		return fmt.Errorf("expected exactly one storage layer, got %d", len(storage.Layers))
+	}
+	guidStr, ok := volumeGUIDFromStoragePath(storage.Layers[0].Path)
+	if !ok {
+		return fmt.Errorf("storage layer path %q is not a volume path", storage.Layers[0].Path)
+	}
+	volGUID, err := guid.FromString(guidStr)
+	if err != nil {
+		return fmt.Errorf("invalid storage layer volume GUID %q: %w", guidStr, err)
+	}
+	containers, ok := host.blockCIMVolumeContainers[volGUID]
+	if !ok {
+		return fmt.Errorf("storage layer volume %s was not verified", volGUID)
+	}
+	if _, ok := containers[containerID]; !ok {
+		return fmt.Errorf("storage layer volume %s was not verified for container %s", volGUID, containerID)
+	}
 	return nil
 }
 
@@ -1381,6 +1448,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
 					return fmt.Errorf("scratch mounting denied by policy: %w", err)
 				}
+
+				// Record the container root path so createContainer can cross-check
+				// the forwarded Storage.Path against it.
+				b.hostState.containerRootPaths[containerID] = settings.CombinedLayers.ContainerRootPath
 				// The following two folders are expected to be present in the scratch.
 				// But since we have just formatted the scratch we would need to
 				// create them manually.
