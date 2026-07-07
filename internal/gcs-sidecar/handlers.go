@@ -78,6 +78,11 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		containerJSON, _ := json.Marshal(container)
 		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %s}}", string(req.message), schemaVersion, containerJSON)
 
+		// Reject HostedSystem Container fields we don't yet support.
+		if err := denyUnsupportedContainerFields(container); err != nil {
+			return fmt.Errorf("CreateContainer operation rejected: %w", err)
+		}
+
 		// Enforce registry changes policy. This may drop unauthorized
 		// non-default registry values from the container before forwarding.
 		if container != nil && container.RegistryChanges != nil {
@@ -153,41 +158,6 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
 			return fmt.Errorf("failed to write security context dir: %w", err)
 		}
-
-		// TODO!! enforce over various fields in HostedSystem.
-		/*
-				type Container struct {
-					GuestOs *GuestOs `json:"GuestOs,omitempty"`
-				->?	Storage *Storage `json:"Storage,omitempty"` # Looks like it's scratch.
-				->	MappedDirectories []MappedDirectory `json:"MappedDirectories,omitempty"` # Used with `mounts`
-				->?	MappedPipes []MappedPipe `json:"MappedPipes,omitempty"`
-					Memory *Memory `json:"Memory,omitempty"` # We can't do anything about this. Host can do denial of service attack anyway.
-				?	Processor *Processor `json:"Processor,omitempty"`
-					Networking *Networking `json:"Networking,omitempty"`
-					HvSocket *HvSocket `json:"HvSocket,omitempty"` # At the moment host doesn't pass it (createWindowsContainerDocument internal\hcsoci\hcsdoc_wcow.go). We just should reject any value here?
-					ContainerCredentialGuard *ContainerCredentialGuardState `json:"ContainerCredentialGuard,omitempty"` # TODO: what's credential guard and can we block it for now?
-				->	RegistryChanges *RegistryChanges `json:"RegistryChanges,omitempty"` -> It's already enforced by EnforceRegistryChangesPolicy() above.
-				->?	AssignedDevices []Device `json:"AssignedDevices,omitempty"` # Block these for now. See below for the details.
-				->?	AdditionalDeviceNamespace *ContainerDefinitionDevice `json:"AdditionalDeviceNamespace,omitempty"` # Block these for now. See below for the details.
-				}
-
-			For hvsocket, UVMHyperVSocketConfigPrefix annotation seem to be available somehow. TODO: check
-
-			AssignedDevices: Looks like it's exposing VPCI device on L1 to uvm.
-			host-populated from Spec.Windows.Devices
-			(parseAssignedDevices, internal/hcsoci/hcsdoc_wcow.go:513,529), only for v2
-			argon/xenon (hcsdoc_wcow.go:508). Each device is first VPCI-assigned into the
-			UVM via handleAssignedDevicesWindows -> devices.AddDevice -> uvm.AssignDevice
-			(internal/hcsoci/resources_wcow.go:94, internal/hcsoci/devices.go:134,
-			internal/devices/assigned_devices.go:45). It seems to require VPCI device instance
-			on L1. TODO: Try it and see if we need an enforcement point here now.
-
-			AdditionalDeviceNamespace: host-populated from getDeviceExtensions(coi.Spec.Annotations)
-			(internal/hcsoci/hcsdoc_wcow.go:391,395). It's driven purely by the annotation
-			"io.microsoft.container.wcow.deviceextensions" (pkg/annotations/annotations.go:223).
-			TODO: What's device extension? Do we need to support it for the first release or
-			can we just reject for now?
-		*/
 
 		/*
 			Test container.json:
@@ -533,6 +503,36 @@ func reconcileHostedSystemStorage(host *Host, containerID string, container *hcs
 	}
 	if _, ok := containers[containerID]; !ok {
 		return fmt.Errorf("storage layer volume %s was not verified for container %s", volGUID, containerID)
+	}
+	return nil
+}
+
+// denyUnsupportedContainerFields rejects HostedSystem Container fields that the
+// sidecar does not yet enforce a policy over. They may be needed in the future,
+// but until we have enforcement for them we block them rather than forward
+// host-controlled values unchecked.
+//
+// Memory, Processor and Networking are deliberately not checked: the host
+// controls the UVM's resources and networking regardless, so there is nothing
+// we can meaningfully enforce over them here.
+func denyUnsupportedContainerFields(container *hcsschema.Container) error {
+	if container == nil {
+		return nil
+	}
+	if container.GuestOs != nil {
+		return fmt.Errorf("GuestOs is not supported")
+	}
+	if container.HvSocket != nil {
+		return fmt.Errorf("HvSocket is not supported")
+	}
+	if container.ContainerCredentialGuard != nil {
+		return fmt.Errorf("ContainerCredentialGuard is not supported")
+	}
+	if len(container.AssignedDevices) > 0 {
+		return fmt.Errorf("AssignedDevices is not supported")
+	}
+	if container.AdditionalDeviceNamespace != nil {
+		return fmt.Errorf("AdditionalDeviceNamespace is not supported")
 	}
 	return nil
 }
