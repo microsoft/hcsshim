@@ -2179,6 +2179,10 @@ func setupRegoCreateContainerTestWindows(gc *generatedWindowsConstraints, testCo
 	}, nil
 }
 
+// testCIMVolumeGUID is a placeholder volume GUID for tests that mount a CIM but
+// don't exercise unmount; the unmount tests use their own GUIDs.
+const testCIMVolumeGUID = "test-cim-volume-guid"
+
 //nolint:unused
 func mountImageForWindowsContainer(policy *regoEnforcer, container *securityPolicyWindowsContainer) (string, error) {
 	ctx := context.Background()
@@ -2194,7 +2198,7 @@ func mountImageForWindowsContainer(policy *regoEnforcer, container *securityPoli
 
 	// Mount the CIMFS for the Windows container
 	// layerHashes are the individual layer hashes, mountedCim is the merged CIM from the policy
-	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, layerHashes, container.MountedCim)
+	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, layerHashes, container.MountedCim, testCIMVolumeGUID)
 	if err != nil {
 		return "", fmt.Errorf("error mounting CIMFS: %w", err)
 	}

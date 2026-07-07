@@ -582,11 +582,104 @@ func Test_Rego_EnforceVerifiedCIMSPolicy_Multiple_Instances_Same_Container(t *te
 			// The runtime sends individual layers as hashesToVerify
 			// and the merged CIM hash separately
 			id := testDataGenerator.uniqueContainerID()
-			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes, container.MountedCim)
+			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes, container.MountedCim, testCIMVolumeGUID)
 			if err != nil {
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}
 		}
+	}
+}
+
+// setupMountedCIMVolume builds a generated Windows policy, mounts container[0]'s
+// CIM under the given volume GUID (so mount_cims records it), and returns the
+// enforcer ready for an unmount_cims call.
+func setupMountedCIMVolume(t *testing.T, p *generatedWindowsConstraints, volumeGUID string) *regoEnforcer {
+	t.Helper()
+	securityPolicy := p.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalWindowsRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	container := p.containers[0]
+	layerHashes := make([]string, len(container.Layers))
+	for i, layer := range container.Layers {
+		layerHashes[len(container.Layers)-1-i] = layer
+	}
+
+	id := testDataGenerator.uniqueContainerID()
+	if err := policy.EnforceVerifiedCIMsPolicy(context.Background(), id, layerHashes, container.MountedCim, volumeGUID); err != nil {
+		t.Fatalf("mount should succeed: %v", err)
+	}
+	return policy
+}
+
+// Unmounting a CIM volume that was recorded at mount time is allowed.
+func Test_Rego_EnforceCIMUnmountPolicy_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		if len(p.containers) == 0 {
+			return true
+		}
+		volumeGUID := "12345678-1234-1234-1234-123456789abc"
+		policy := setupMountedCIMVolume(t, p, volumeGUID)
+
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), volumeGUID); err != nil {
+			t.Errorf("unmount of a mounted CIM volume should succeed: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCIMUnmountPolicy_Windows: %v", err)
+	}
+}
+
+// Unmounting a CIM volume GUID that was never mounted is denied (no symmetry).
+func Test_Rego_EnforceCIMUnmountPolicy_NotMounted_Denied_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalWindowsRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("failed to create policy: %v", err)
+			return false
+		}
+
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), "never-mounted-guid"); err == nil {
+			t.Error("unmount of a never-mounted CIM volume should be denied")
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCIMUnmountPolicy_NotMounted_Denied_Windows: %v", err)
+	}
+}
+
+// Unmounting the same CIM volume twice is denied: the first unmount removes the
+// record, so the second has nothing to match.
+func Test_Rego_EnforceCIMUnmountPolicy_DoubleUnmount_Denied_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		if len(p.containers) == 0 {
+			return true
+		}
+		volumeGUID := "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+		policy := setupMountedCIMVolume(t, p, volumeGUID)
+
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), volumeGUID); err != nil {
+			t.Errorf("first unmount should succeed: %v", err)
+			return false
+		}
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), volumeGUID); err == nil {
+			t.Error("second unmount of the same CIM volume should be denied")
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCIMUnmountPolicy_DoubleUnmount_Denied_Windows: %v", err)
 	}
 }
 
@@ -1824,7 +1917,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	t.Run("registry_then_create_denied", func(t *testing.T) {
 		policy := newPolicy(true)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous)
@@ -1846,7 +1939,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	t.Run("create_then_registry_drops", func(t *testing.T) {
 		policy := newPolicy(true)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
@@ -1865,7 +1958,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	t.Run("create_ping_then_registry_keeps", func(t *testing.T) {
 		policy := newPolicy(true)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
@@ -1886,7 +1979,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	t.Run("no_dropping_create_then_registry_denied", func(t *testing.T) {
 		policy := newPolicy(false)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
@@ -1902,7 +1995,7 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	t.Run("no_dropping_create_ping_then_registry_keeps", func(t *testing.T) {
 		policy := newPolicy(false)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
@@ -1961,7 +2054,7 @@ func Test_Rego_RegistryChanges_DeleteKeys_Windows(t *testing.T) {
 	t.Run("registry_delete_then_create_denied", func(t *testing.T) {
 		policy := newPolicy(true)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest)
@@ -1983,7 +2076,7 @@ func Test_Rego_RegistryChanges_DeleteKeys_Windows(t *testing.T) {
 	t.Run("create_then_registry_delete_drops", func(t *testing.T) {
 		policy := newPolicy(true)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
@@ -2004,7 +2097,7 @@ func Test_Rego_RegistryChanges_DeleteKeys_Windows(t *testing.T) {
 	t.Run("no_dropping_create_then_delete_denied", func(t *testing.T) {
 		policy := newPolicy(false)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
@@ -2018,7 +2111,7 @@ func Test_Rego_RegistryChanges_DeleteKeys_Windows(t *testing.T) {
 	t.Run("no_dropping_create_ping_then_delete_keeps", func(t *testing.T) {
 		policy := newPolicy(false)
 		cid := testDataGenerator.uniqueContainerID()
-		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
 			t.Fatalf("mount_cims: %v", err)
 		}
 		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {

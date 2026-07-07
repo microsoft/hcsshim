@@ -1213,13 +1213,13 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					hashesToVerify = layerHashes[1:]
 				}
 
-				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify, mountedCim)
+				// Volume GUID from request.
+				volGUID := wcowBlockCimMounts.VolumeGUID
+
+				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify, mountedCim, volGUID.String())
 				if err != nil {
 					return errors.Wrap(err, "CIM mount is denied by policy")
 				}
-
-				// Volume GUID from request
-				volGUID := wcowBlockCimMounts.VolumeGUID
 
 				// Cache hashes along with volGUID
 				b.hostState.blockCIMVolumeHashes[volGUID] = layerHashes
@@ -1247,12 +1247,21 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			case guestrequest.RequestTypeRemove:
 				log.G(ctx).Tracef("WCOWBlockCIMMounts: Remove")
 				wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWBlockCIMMounts)
-				volumePath := fmt.Sprintf(cimfs.VolumePathFormat, wcowBlockCimMounts.VolumeGUID.String())
-				err := cimfs.Unmount(volumePath)
+				volGUID := wcowBlockCimMounts.VolumeGUID
 
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceCIMUnmountPolicy(req.ctx, volGUID.String()); err != nil {
+					return fmt.Errorf("CIM unmount is denied by policy: %w", err)
+				}
+
+				volumePath := fmt.Sprintf(cimfs.VolumePathFormat, volGUID.String())
+				err := cimfs.Unmount(volumePath)
 				if err != nil {
 					return fmt.Errorf("error unmounting block cim: %w", err)
 				}
+
+				// Drop the cached mount state now that the volume is gone.
+				delete(b.hostState.blockCIMVolumeHashes, volGUID)
+				delete(b.hostState.blockCIMVolumeContainers, volGUID)
 			}
 			// Send response back to shim
 			resp := &prot.ResponseBase{
@@ -1361,7 +1370,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 						if len(hashes) > 1 {
 							hashesToVerify = hashes[1:]
 						}
-						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim); err != nil {
+						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim, volGUID.String()); err != nil {
 							return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
 						}
 						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)

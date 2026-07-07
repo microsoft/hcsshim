@@ -26,4 +26,5 @@ enforcement_points := {
     "scratch_unmount": {"introducedVersion": "0.10.0", "default_results": {"allowed": true}, "use_framework": false},
     "mapped_directory_mount": {"introducedVersion": "0.11.0", "default_results": {"allowed": true}, "use_framework": false},
     "mapped_directory_unmount": {"introducedVersion": "0.11.0", "default_results": {"allowed": true}, "use_framework": false},
+    "unmount_cims": {"introducedVersion": "0.11.0", "default_results": {"allowed": true}, "use_framework": false},
 }

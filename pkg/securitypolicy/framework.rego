@@ -168,7 +168,7 @@ candidate_containers := containers {
 
 default mount_cims := {"allowed": false}
 
-mount_cims := {"metadata": [addMatches], "allowed": true} {
+mount_cims := {"metadata": [addMatches, addCimVolume], "allowed": true} {
     not overlay_exists
 
     containers := [container |
@@ -183,6 +183,36 @@ mount_cims := {"metadata": [addMatches], "allowed": true} {
         "action": "add",
         "key": input.containerID,
         "value": containers,
+    }
+
+    # Record the host-minted volume GUID (a runtime handle, not a policy-authored
+    # value) so unmount_cims can require it later. A single block CIM volume is
+    # shared by every container from the same image and is mounted/unmounted once
+    # for its whole lifetime: the host physically mounts it once, then re-drives
+    # this rule per container that reuses it, and unmounts it once when the last
+    # reference is gone (per-container teardown does not touch the CIM). "update"
+    # keeps those repeated mounts of the same volume idempotent (one record), so
+    # the matching single unmount stays symmetric.
+    addCimVolume := {
+        "name": "mountedCimVolumes",
+        "action": "update",
+        "key": input.volumeGUID,
+        "value": true,
+    }
+}
+
+cim_volume_mounted(volumeGUID) {
+    data.metadata.mountedCimVolumes[volumeGUID]
+}
+
+default unmount_cims := {"allowed": false}
+
+unmount_cims := {"metadata": [removeCimVolume], "allowed": true} {
+    cim_volume_mounted(input.volumeGUID)
+    removeCimVolume := {
+        "name": "mountedCimVolumes",
+        "action": "remove",
+        "key": input.volumeGUID,
     }
 }
 
@@ -2040,6 +2070,11 @@ errors["unencrypted scratch not allowed"] {
 errors["no scratch at path to unmount"] {
     input.rule == "scratch_unmount"
     not scratch_mounted(input.unmountTarget)
+}
+
+errors["no CIM volume at GUID to unmount"] {
+    input.rule == "unmount_cims"
+    not cim_volume_mounted(input.volumeGUID)
 }
 
 errors["mapped directory already mounted at path"] {

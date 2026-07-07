@@ -1175,15 +1175,26 @@ func (policy *regoEnforcer) EnforceMappedDirectoryUnmountPolicy(ctx context.Cont
 	return err
 }
 
-func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) error {
+func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string, volumeGUID string) error {
 	log.G(ctx).Tracef("Enforcing verified cims in securitypolicy pkg %+v", layerHashes)
 	input := inputData{
 		"containerID": containerID,
 		"layerHashes": layerHashes,
 		"mountedCim":  mountedCim,
+		"volumeGUID":  volumeGUID,
 	}
 
 	_, err := policy.enforce(ctx, "mount_cims", input)
+	return err
+}
+
+func (policy *regoEnforcer) EnforceCIMUnmountPolicy(ctx context.Context, volumeGUID string) error {
+	log.G(ctx).Trace("Enforcing CIM unmount policy")
+	input := inputData{
+		"volumeGUID": volumeGUID,
+	}
+
+	_, err := policy.enforce(ctx, "unmount_cims", input)
 	return err
 }
 
