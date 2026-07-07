@@ -78,87 +78,9 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		containerJSON, _ := json.Marshal(container)
 		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %s}}", string(req.message), schemaVersion, containerJSON)
 
-		// Reject HostedSystem Container fields we don't yet support.
-		if err := denyUnsupportedContainerFields(container); err != nil {
-			return fmt.Errorf("CreateContainer operation rejected: %w", err)
-		}
-
-		// Enforce registry changes policy. This may drop unauthorized
-		// non-default registry values from the container before forwarding.
-		if container != nil && container.RegistryChanges != nil {
-			log.G(ctx).Trace("Container has registry changes, validating against policy")
-
-			// Separate the pre-approved defaults from the changes that must be
-			// validated against policy (non-default add values plus all delete
-			// keys).
-			defaultValues, nonDefaultChanges := splitRegistryChanges(container.RegistryChanges)
-
-			// If there are non-default values or any delete keys, validate them
-			// against policy.
-			if len(nonDefaultChanges.AddValues) > 0 || len(nonDefaultChanges.DeleteKeys) > 0 {
-				log.G(ctx).Tracef("Validating %d registry values and %d delete keys against policy", len(nonDefaultChanges.AddValues), len(nonDefaultChanges.DeleteKeys))
-
-				keptRaw, err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
-				if err != nil {
-					log.G(ctx).WithError(err).Warn("Registry changes validation failed - rejecting")
-					return fmt.Errorf("registry entry operation is denied by policy: %w", err)
-				}
-
-				// The policy uses dropping semantics: it may authorize only a
-				// subset of the requested non-default values and delete keys.
-				// Rebuild the container's registry changes as the pre-approved
-				// defaults plus the policy-kept non-default values, and the
-				// policy-kept delete keys, so the guest only applies what policy
-				// sanctioned.
-				container.RegistryChanges.AddValues, container.RegistryChanges.DeleteKeys = mergeKeptRegistryChanges(defaultValues, keptRaw)
-			}
-
-			log.G(ctx).Infof("Registry validation complete: %d total values now applied (%d defaults), %d delete keys",
-				len(container.RegistryChanges.AddValues), len(defaultValues), len(container.RegistryChanges.DeleteKeys))
-		}
-
-		// We enforce `spec`, which is not passed to inbox gcs within this createContainer.
-		// The result of enforcement is stored in memory and used for executeProcess.
-		user := securitypolicy.IDName{
-			Name: spec.Process.User.Username,
-		}
-		envToKeep, _, allowStdio, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
-
-		if err != nil {
-			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
-		}
-
-		if envToKeep != nil {
-			spec.Process.Env = []string(envToKeep)
-		}
-
-		commandLine := len(spec.Process.Args) > 0
-		c := &Container{
-			id:              containerID,
-			spec:            spec,
-			processes:       make(map[uint32]*containerProcess),
-			commandLine:     commandLine,
-			commandLineExec: false,
-			allowStdio:      allowStdio,
-		}
-
-		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
-		if err := b.hostState.AddContainer(req.ctx, containerID, c); err != nil {
-			log.G(ctx).Tracef("Container exists in the map. containerID: %v", containerID)
-			return err
-		}
-		defer func() {
-			if err != nil {
-				if removeErr := b.hostState.RemoveContainer(ctx, containerID); removeErr != nil {
-					log.G(ctx).WithError(removeErr).Errorf("Failed to remove container: %v", containerID)
-				}
-			}
-		}()
-
-		if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
-			return fmt.Errorf("failed to write security context dir: %w", err)
-		}
-
+		// The block below is a reference example (not executed): a sample CRI
+		// container.json and the HostedSystem.Container the host derives from it.
+		// It documents the shapes this handler enforces and forwards.
 		/*
 			Test container.json:
 
@@ -249,6 +171,87 @@ func (b *Bridge) createContainer(req *request) (err error) {
 				}
 			}
 		*/
+
+		// Reject HostedSystem Container fields we don't yet support.
+		if err := denyUnsupportedContainerFields(container); err != nil {
+			return fmt.Errorf("CreateContainer operation rejected: %w", err)
+		}
+
+		// Enforce registry changes policy. This may drop unauthorized
+		// non-default registry values from the container before forwarding.
+		if container != nil && container.RegistryChanges != nil {
+			log.G(ctx).Trace("Container has registry changes, validating against policy")
+
+			// Separate the pre-approved defaults from the changes that must be
+			// validated against policy (non-default add values plus all delete
+			// keys).
+			defaultValues, nonDefaultChanges := splitRegistryChanges(container.RegistryChanges)
+
+			// If there are non-default values or any delete keys, validate them
+			// against policy.
+			if len(nonDefaultChanges.AddValues) > 0 || len(nonDefaultChanges.DeleteKeys) > 0 {
+				log.G(ctx).Tracef("Validating %d registry values and %d delete keys against policy", len(nonDefaultChanges.AddValues), len(nonDefaultChanges.DeleteKeys))
+
+				keptRaw, err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
+				if err != nil {
+					log.G(ctx).WithError(err).Warn("Registry changes validation failed - rejecting")
+					return fmt.Errorf("registry entry operation is denied by policy: %w", err)
+				}
+
+				// The policy uses dropping semantics: it may authorize only a
+				// subset of the requested non-default values and delete keys.
+				// Rebuild the container's registry changes as the pre-approved
+				// defaults plus the policy-kept non-default values, and the
+				// policy-kept delete keys, so the guest only applies what policy
+				// sanctioned.
+				container.RegistryChanges.AddValues, container.RegistryChanges.DeleteKeys = mergeKeptRegistryChanges(defaultValues, keptRaw)
+			}
+
+			log.G(ctx).Infof("Registry validation complete: %d total values now applied (%d defaults), %d delete keys",
+				len(container.RegistryChanges.AddValues), len(defaultValues), len(container.RegistryChanges.DeleteKeys))
+		}
+
+		// We enforce `spec`, which is not passed to inbox gcs within this createContainer.
+		// The result of enforcement is stored in memory and used for executeProcess.
+		user := securitypolicy.IDName{
+			Name: spec.Process.User.Username,
+		}
+		envToKeep, _, allowStdio, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
+
+		if err != nil {
+			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
+
+		if envToKeep != nil {
+			spec.Process.Env = []string(envToKeep)
+		}
+
+		commandLine := len(spec.Process.Args) > 0
+		c := &Container{
+			id:              containerID,
+			spec:            spec,
+			processes:       make(map[uint32]*containerProcess),
+			commandLine:     commandLine,
+			commandLineExec: false,
+			allowStdio:      allowStdio,
+		}
+
+		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
+		if err := b.hostState.AddContainer(req.ctx, containerID, c); err != nil {
+			log.G(ctx).Tracef("Container exists in the map. containerID: %v", containerID)
+			return err
+		}
+		defer func() {
+			if err != nil {
+				if removeErr := b.hostState.RemoveContainer(ctx, containerID); removeErr != nil {
+					log.G(ctx).WithError(removeErr).Errorf("Failed to remove container: %v", containerID)
+				}
+			}
+		}()
+
+		if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
+			return fmt.Errorf("failed to write security context dir: %w", err)
+		}
 
 		// Reconcile the host-provided HostedSystem mounts against the enforced
 		// spec. spec.Mounts has already been validated against policy by
