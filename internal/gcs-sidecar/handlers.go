@@ -1171,6 +1171,8 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					ctx, settings.ContainerPath); err != nil {
 					return fmt.Errorf("mapped directory unmount is denied by policy: %w", err)
 				}
+			default:
+				return fmt.Errorf("unsupported request type %v for MappedDirectory", modifyGuestSettingsRequest.RequestType)
 			}
 
 		case guestresource.ResourceTypeSecurityPolicy:
@@ -1323,6 +1325,8 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				// Drop the cached mount state now that the volume is gone.
 				delete(b.hostState.blockCIMVolumeHashes, volGUID)
 				delete(b.hostState.blockCIMVolumeContainers, volGUID)
+			default:
+				return fmt.Errorf("unsupported request type %v for WCOWBlockCims", modifyGuestSettingsRequest.RequestType)
 			}
 			// Send response back to shim
 			resp := &prot.ResponseBase{
@@ -1466,6 +1470,8 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchUnmountPolicy(ctx, settings.CombinedLayers.ContainerRootPath); err != nil {
 					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
 				}
+			default:
+				return fmt.Errorf("unsupported request type %v for CWCOWCombinedLayers", modifyGuestSettingsRequest.RequestType)
 			}
 
 			// Reconstruct WCOWCombinedLayers{} req before forwarding to GCS
