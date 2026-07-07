@@ -83,25 +83,15 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		if container != nil && container.RegistryChanges != nil {
 			log.G(ctx).Trace("Container has registry changes, validating against policy")
 
-			// First, separate default values from non-default values.
-			var defaultValues []hcsschema.RegistryValue
-			var nonDefaultValues []hcsschema.RegistryValue
-			for _, value := range container.RegistryChanges.AddValues {
-				if isDefaultRegistryValue(value) {
-					defaultValues = append(defaultValues, value)
-					log.G(ctx).WithField("name", value.Name).Trace("Registry value matches default, accepting without policy check")
-				} else {
-					nonDefaultValues = append(nonDefaultValues, value)
-				}
-			}
+			// Separate the pre-approved defaults from the changes that must be
+			// validated against policy (non-default add values plus all delete
+			// keys).
+			defaultValues, nonDefaultChanges := splitRegistryChanges(container.RegistryChanges)
 
-			// If there are non-default values, validate them against policy.
-			if len(nonDefaultValues) > 0 {
-				log.G(ctx).Tracef("Validating %d registry values against policy", len(nonDefaultValues))
-
-				nonDefaultChanges := &hcsschema.RegistryChanges{
-					AddValues: nonDefaultValues,
-				}
+			// If there are non-default values or any delete keys, validate them
+			// against policy.
+			if len(nonDefaultChanges.AddValues) > 0 || len(nonDefaultChanges.DeleteKeys) > 0 {
+				log.G(ctx).Tracef("Validating %d registry values and %d delete keys against policy", len(nonDefaultChanges.AddValues), len(nonDefaultChanges.DeleteKeys))
 
 				keptRaw, err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
 				if err != nil {
@@ -110,15 +100,16 @@ func (b *Bridge) createContainer(req *request) (err error) {
 				}
 
 				// The policy uses dropping semantics: it may authorize only a
-				// subset of the requested non-default values. Rebuild the
-				// container's registry changes as the pre-approved defaults plus
-				// the policy-kept non-default values so the guest only applies
-				// what policy sanctioned.
-				container.RegistryChanges.AddValues = mergeKeptRegistryValues(defaultValues, keptRaw)
+				// subset of the requested non-default values and delete keys.
+				// Rebuild the container's registry changes as the pre-approved
+				// defaults plus the policy-kept non-default values, and the
+				// policy-kept delete keys, so the guest only applies what policy
+				// sanctioned.
+				container.RegistryChanges.AddValues, container.RegistryChanges.DeleteKeys = mergeKeptRegistryChanges(defaultValues, keptRaw)
 			}
 
-			log.G(ctx).Infof("Registry validation complete: %d total values now applied (%d defaults)",
-				len(container.RegistryChanges.AddValues), len(defaultValues))
+			log.G(ctx).Infof("Registry validation complete: %d total values now applied (%d defaults), %d delete keys",
+				len(container.RegistryChanges.AddValues), len(defaultValues), len(container.RegistryChanges.DeleteKeys))
 		}
 
 		// We enforce `spec`, which is not passed to inbox gcs within this createContainer.
@@ -343,21 +334,43 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	return nil
 }
 
-// mergeKeptRegistryValues combines the pre-approved default registry values
+// splitRegistryChanges separates a container's requested registry changes into
+// the pre-approved default add values (which bypass policy) and the changes
+// that must be validated against policy: the non-default add values plus all
+// delete keys, which have no default allowance.
+func splitRegistryChanges(changes *hcsschema.RegistryChanges) (defaultValues []hcsschema.RegistryValue, nonDefaultChanges *hcsschema.RegistryChanges) {
+	var nonDefaultValues []hcsschema.RegistryValue
+	for _, value := range changes.AddValues {
+		if isDefaultRegistryValue(value) {
+			defaultValues = append(defaultValues, value)
+		} else {
+			nonDefaultValues = append(nonDefaultValues, value)
+		}
+	}
+	return defaultValues, &hcsschema.RegistryChanges{
+		AddValues:  nonDefaultValues,
+		DeleteKeys: changes.DeleteKeys,
+	}
+}
+
+// mergeKeptRegistryChanges combines the pre-approved default registry values
 // with the policy-kept subset returned by EnforceRegistryChangesPolicy. Because
 // the policy uses dropping semantics, it may authorize only a subset of the
-// requested non-default values; the returned slice is what the guest should
-// apply (defaults plus the kept non-default values).
-func mergeKeptRegistryValues(defaultValues []hcsschema.RegistryValue, kept interface{}) []hcsschema.RegistryValue {
+// requested non-default values and delete keys; the returned slices are what
+// the guest should apply (defaults plus the kept non-default values, and the
+// kept delete keys).
+func mergeKeptRegistryChanges(defaultValues []hcsschema.RegistryValue, kept interface{}) ([]hcsschema.RegistryValue, []hcsschema.RegistryKey) {
 	var keptNonDefault []hcsschema.RegistryValue
+	var keptDeleteKeys []hcsschema.RegistryKey
 	if k, ok := kept.(*hcsschema.RegistryChanges); ok && k != nil {
 		keptNonDefault = k.AddValues
+		keptDeleteKeys = k.DeleteKeys
 	}
 
 	newValues := make([]hcsschema.RegistryValue, 0, len(defaultValues)+len(keptNonDefault))
 	newValues = append(newValues, defaultValues...)
 	newValues = append(newValues, keptNonDefault...)
-	return newValues
+	return newValues, keptDeleteKeys
 }
 
 // namedPipePrefix is the prefix used for Windows named pipe paths. A mount

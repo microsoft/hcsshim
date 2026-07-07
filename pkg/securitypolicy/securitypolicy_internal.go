@@ -241,7 +241,8 @@ type mountInternal struct {
 
 // Internal version of WindowsRegistryChanges
 type registryChangesInternal struct {
-	AddValues []registryValueInternal `json:"add_values"`
+	AddValues  []registryValueInternal `json:"add_values"`
+	DeleteKeys []registryKeyInternal   `json:"delete_keys"`
 }
 
 // Internal version of WindowsRegistryKey
@@ -388,7 +389,15 @@ func (r WindowsRegistryChanges) toInternal() registryChangesInternal {
 			CustomType:  v.CustomType,
 		}
 	}
-	return registryChangesInternal{AddValues: addValues}
+	deleteKeys := make([]registryKeyInternal, len(r.DeleteKeys))
+	for i, k := range r.DeleteKeys {
+		deleteKeys[i] = registryKeyInternal{
+			Hive:     k.Hive,
+			Name:     k.Name,
+			Volatile: k.Volatile,
+		}
+	}
+	return registryChangesInternal{AddValues: addValues, DeleteKeys: deleteKeys}
 }
 
 func (c CommandArgs) toInternal() ([]string, error) {

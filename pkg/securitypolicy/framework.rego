@@ -1498,24 +1498,50 @@ registry_value_matches(policy_value, input_value) {
     policy_value.type == "None"
 }
 
-# valid_registry_subset is the set of requested registry values that the
-# container's policy authorizes.
-valid_registry_subset(container) := values {
-    values := {input_value |
+# requested_registry_changes is the tagged set of all requested registry
+# changes: each requested add value and each requested delete key, tagged by
+# kind so the add and delete cases share the same dropping/narrowing machinery.
+requested_registry_changes := changes {
+    adds := {{"kind": "add", "value": input_value} |
         some input_value in input.registryChanges.AddValues
-        some policy_value in container.registry_changes.add_values
-        registry_value_matches(policy_value, input_value)
+    }
+    deletes := {{"kind": "delete", "key": input_key} |
+        some input_key in input.registryChanges.DeleteKeys
+    }
+    changes := adds | deletes
+}
+
+# registry_change_authorized holds when the container's registry_changes policy
+# authorizes the requested change (an add value or a delete key).
+registry_change_authorized(container, change) {
+    change.kind == "add"
+    some policy_value in container.registry_changes.add_values
+    registry_value_matches(policy_value, change.value)
+}
+
+registry_change_authorized(container, change) {
+    change.kind == "delete"
+    some policy_key in container.registry_changes.delete_keys
+    registry_keys_match(policy_key, change.key)
+}
+
+# valid_registry_subset is the set of requested registry changes that the
+# container's policy authorizes.
+valid_registry_subset(container) := changes {
+    changes := {change |
+        some change in requested_registry_changes
+        registry_change_authorized(container, change)
     }
 }
 
-# valid_registry_for_all selects the registry values to keep across the
+# valid_registry_for_all selects the registry changes to keep across the
 # candidate containers, mirroring valid_envs_for_all. With
 # allow_registry_changes_dropping it keeps the most specific (largest)
 # authorized subset, dropping the rest; if several containers tie for the
 # largest subset they must authorize the same set (intersection == union) for
-# the result to be decidable. Without dropping it keeps every requested value,
+# the result to be decidable. Without dropping it keeps every requested change,
 # so a container must authorize all of them for the request to be allowed.
-valid_registry_for_all(containers) := values {
+valid_registry_for_all(containers) := changes {
     allow_registry_changes_dropping
 
     valid := [subset |
@@ -1526,54 +1552,63 @@ valid_registry_for_all(containers) := values {
     counts := [count(subset) | subset := valid[_]]
     max_count := max(counts)
 
-    largest_value_sets := {subset |
+    largest_change_sets := {subset |
         some i
         counts[i] == max_count
         subset := valid[i]
     }
 
-    values_i := intersection(largest_value_sets)
-    values_u := union(largest_value_sets)
-    values_i == values_u
-    values := values_i
+    changes_i := intersection(largest_change_sets)
+    changes_u := union(largest_change_sets)
+    changes_i == changes_u
+    changes := changes_i
 }
 
-valid_registry_for_all(containers) := values {
+valid_registry_for_all(containers) := changes {
     not allow_registry_changes_dropping
 
-    # no dropping: keep every requested value, so a container must authorize all
-    values := {input_value | some input_value in input.registryChanges.AddValues}
+    # no dropping: keep every requested change, so a container must authorize all
+    changes := requested_registry_changes
 }
 
-# registryValues_ok holds when the container's registry_changes policy
-# authorizes every value in registryValues. This mirrors envList_ok. Note we
-# pass the whole container rather than container.registry_changes because that
-# field is optional: for empty registryValues the `every` is vacuously true, so
-# a container with no registry_changes correctly matches the "drop everything"
-# case (and the missing field is never dereferenced).
-registryValues_ok(container, registryValues) {
-    every input_value in registryValues {
-        some policy_value in container.registry_changes.add_values
-        registry_value_matches(policy_value, input_value)
+# registryChanges_ok holds when the container authorizes every change in
+# `changes`.
+registryChanges_ok(container, changes) {
+    every change in changes {
+        registry_change_authorized(container, change)
     }
 }
 
-# registry_changes keeps the registry values that policy authorizes (via
-# valid_registry_for_all, which honors allow_registry_changes_dropping), narrows
-# matches to the container(s) that authorize exactly that set, and returns those
-# values (as registry_changes_to_keep) so the host-side enforcer applies only
-# them. Recording the narrowing into data.metadata.matches makes the decision
-# compose with create_container regardless of the order in which the two run.
-registry_changes := {"metadata": [updateMatches], "registry_changes_to_keep": registry_values, "allowed": true} {
+# registry_changes decides whether the requested registry changes are allowed,
+# returning the add values and delete keys to keep (add_values_to_keep /
+# delete_keys_to_keep). It also narrows the matched containers so the decision
+# stays consistent with create_container whichever order the two run in.
+registry_changes := {
+    "metadata": [updateMatches],
+    "add_values_to_keep": add_values,
+    "delete_keys_to_keep": delete_keys,
+    "allowed": true,
+} {
     matches := data.metadata.matches[input.containerID]
-    registry_values := valid_registry_for_all(matches)
+
+    # honors allow_registry_changes_dropping
+    kept := valid_registry_for_all(matches)
 
     containers := [container |
         container := matches[_]
-        registryValues_ok(container, registry_values)
+        registryChanges_ok(container, kept)
     ]
 
     count(containers) > 0
+
+    add_values := [change.value |
+        some change in kept
+        change.kind == "add"
+    ]
+    delete_keys := [change.key |
+        some change in kept
+        change.kind == "delete"
+    ]
 
     updateMatches := {
         "name": "matches",

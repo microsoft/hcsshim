@@ -1734,12 +1734,6 @@ func Test_Rego_EnforceRegistryChangesPolicy_Default_Values_Allowed_Windows(t *te
 	}
 }
 
-// twoContainersSharedLayersRegistryRego builds, via the Go policy producer, a
-// policy with two containers that share the same layers/mounted_cim (so both
-// survive mount_cims) but differ in command, where only B declares a
-// registry_changes rule that sanctions a "dangerous" value. It is used to prove
-// that registry_changes narrows data.metadata.matches so the decision composes
-// with create_container regardless of enforcement order.
 func twoContainersSharedLayersRegistryRego(dropping bool) string {
 	constraints := &generatedWindowsConstraints{
 		allowRegistryChangesDropping: dropping,
@@ -1767,6 +1761,9 @@ func twoContainersSharedLayersRegistryRego(dropping bool) string {
 							Type:        "String",
 							StringValue: "danger",
 						},
+					},
+					DeleteKeys: []registryKeyInternal{
+						{Hive: "System", Name: "TestControl\\Obsolete"},
 					},
 				},
 			},
@@ -1917,6 +1914,122 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 		}
 		if n := keptCount(t, kept); n != 1 {
 			t.Errorf("dangerous value should be kept for B, got %d kept values", n)
+		}
+	})
+}
+
+// Test_Rego_RegistryChanges_DeleteKeys_Windows verifies that delete keys flow
+// through the same narrowing/dropping machinery as add values. Container B
+// authorizes deleting a specific key; container A authorizes nothing. With
+// dropping on, deleting B's authorized key narrows matches to B (so create(cmd)
+// is then denied) or, if create(cmd) narrows to A first, the delete is dropped.
+// With dropping off, the delete is only allowed against a container (B) that
+// authorizes it.
+// TODO: maybe delete it if it's too much.
+func Test_Rego_RegistryChanges_DeleteKeys_Windows(t *testing.T) {
+	deleteRequest := &hcsschema.RegistryChanges{
+		DeleteKeys: []hcsschema.RegistryKey{
+			{Hive: "System", Name: "TestControl\\Obsolete"},
+		},
+	}
+
+	keptDeleteCount := func(t *testing.T, keptRaw interface{}) int {
+		t.Helper()
+		kept, ok := keptRaw.(*hcsschema.RegistryChanges)
+		if !ok || kept == nil {
+			t.Fatalf("expected *hcsschema.RegistryChanges, got %T", keptRaw)
+		}
+		return len(kept.DeleteKeys)
+	}
+
+	// mount_cims reverses the layer order, so pass layers reversed.
+	layerHashes := []string{"layerB", "layerA"}
+	mountedCim := []string{"merged"}
+	ctx := context.Background()
+	user := IDName{Name: "ContainerUser"}
+
+	newPolicy := func(dropping bool) *regoEnforcer {
+		policy, err := newRegoPolicy(twoContainersSharedLayersRegistryRego(dropping), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("failed to create policy: %v", err)
+		}
+		return policy
+	}
+
+	// Order 1: delete (kept via B) then create with A's command. The delete
+	// narrows matches to [B], so create with "cmd" must be denied.
+	t.Run("registry_delete_then_create_denied", func(t *testing.T) {
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest)
+		if err != nil {
+			t.Fatalf("registry delete should be allowed (kept via B): %v", err)
+		}
+		if n := keptDeleteCount(t, kept); n != 1 {
+			t.Errorf("expected the delete key kept via B, got %d kept keys", n)
+		}
+		_, _, _, err = policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil)
+		if err == nil {
+			t.Error("create(cmd) after registry(delete) should be denied: registry narrowed matches to B (command ping)")
+		}
+	})
+
+	// Order 2: create with A's command (narrows to [A]) then delete. A has no
+	// registry rule, so the delete must be dropped (kept empty), but the request
+	// is still allowed since dropping is permissive.
+	t.Run("create_then_registry_delete_drops", func(t *testing.T) {
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(cmd) should be allowed as A: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest)
+		if err != nil {
+			t.Fatalf("registry delete after create(cmd) should be allowed with dropping: %v", err)
+		}
+		if n := keptDeleteCount(t, kept); n != 0 {
+			t.Errorf("delete key should be dropped for A, got %d kept keys", n)
+		}
+	})
+
+	// With dropping disabled, the delete is only allowed against a container
+	// that authorizes it. After create(cmd) narrows to A, the delete is denied;
+	// the legit path via B keeps it.
+	t.Run("no_dropping_create_then_delete_denied", func(t *testing.T) {
+		policy := newPolicy(false)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(cmd) should be allowed as A: %v", err)
+		}
+		if _, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest); err == nil {
+			t.Error("registry(delete) after create(cmd) should be denied without dropping (A authorizes nothing)")
+		}
+	})
+
+	t.Run("no_dropping_create_ping_then_delete_keeps", func(t *testing.T) {
+		policy := newPolicy(false)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(ping) should be allowed as B: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest)
+		if err != nil {
+			t.Fatalf("registry(delete) after create(ping) should be allowed via B: %v", err)
+		}
+		if n := keptDeleteCount(t, kept); n != 1 {
+			t.Errorf("delete key should be kept for B, got %d kept keys", n)
 		}
 	})
 }

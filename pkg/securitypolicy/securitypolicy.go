@@ -327,7 +327,8 @@ type WindowsContainer struct {
 // WindowsRegistryChanges is the set of registry changes a Windows container is
 // allowed to make. Registry changes are a Windows-only concept.
 type WindowsRegistryChanges struct {
-	AddValues []WindowsRegistryValue `json:"add_values"`
+	AddValues  []WindowsRegistryValue `json:"add_values"`
+	DeleteKeys []WindowsRegistryKey   `json:"delete_keys"`
 }
 
 // WindowsRegistryKey identifies the registry key that a registry value applies

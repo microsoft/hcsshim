@@ -445,11 +445,14 @@ func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string
 	writeLine(builder, `%s"mounts": [%s],`, indent, strings.Join(values, ","))
 }
 
+func (k registryKeyInternal) marshalRego() string {
+	return fmt.Sprintf(`{"hive": "%s", "name": "%s", "volatile": %t}`,
+		escapeRegoString(k.Hive), escapeRegoString(k.Name), k.Volatile)
+}
+
 func (v registryValueInternal) marshalRego() string {
-	key := fmt.Sprintf(`{"hive": "%s", "name": "%s", "volatile": %t}`,
-		escapeRegoString(v.Key.Hive), escapeRegoString(v.Key.Name), v.Key.Volatile)
 	fields := []string{
-		fmt.Sprintf(`"key": %s`, key),
+		fmt.Sprintf(`"key": %s`, v.Key.marshalRego()),
 		fmt.Sprintf(`"name": "%s"`, escapeRegoString(v.Name)),
 		fmt.Sprintf(`"type": "%s"`, escapeRegoString(v.Type)),
 	}
@@ -474,12 +477,17 @@ func (v registryValueInternal) marshalRego() string {
 }
 
 func writeRegistryChanges(builder *strings.Builder, registryChanges registryChangesInternal, indent string) {
-	values := make([]string, len(registryChanges.AddValues))
+	addValues := make([]string, len(registryChanges.AddValues))
 	for i, value := range registryChanges.AddValues {
-		values[i] = value.marshalRego()
+		addValues[i] = value.marshalRego()
+	}
+	deleteKeys := make([]string, len(registryChanges.DeleteKeys))
+	for i, key := range registryChanges.DeleteKeys {
+		deleteKeys[i] = key.marshalRego()
 	}
 
-	writeLine(builder, `%s"registry_changes": {"add_values": [%s]},`, indent, strings.Join(values, ", "))
+	writeLine(builder, `%s"registry_changes": {"add_values": [%s], "delete_keys": [%s]},`,
+		indent, strings.Join(addValues, ", "), strings.Join(deleteKeys, ", "))
 }
 
 // Windows-specific marshal functions
@@ -522,7 +530,7 @@ func writeWindowsContainer(builder *strings.Builder, container *securityPolicyWi
 	writeLayers(builder, container.Layers, indent+indentUsing)
 	writeMountedCim(builder, container.MountedCim, indent+indentUsing)
 	writeMounts(builder, container.Mounts, indent+indentUsing)
-	if len(container.RegistryChanges.AddValues) > 0 {
+	if len(container.RegistryChanges.AddValues) > 0 || len(container.RegistryChanges.DeleteKeys) > 0 {
 		writeRegistryChanges(builder, container.RegistryChanges, indent+indentUsing)
 	}
 	writeWindowsExecProcesses(builder, container.ExecProcesses, indent+indentUsing)

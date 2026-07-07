@@ -1187,11 +1187,11 @@ func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, conta
 	return err
 }
 
-func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) (interface{}, error) {
+func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryChanges interface{}) (interface{}, error) {
 	log.G(ctx).Trace("Enforcing registry changes policy")
 
 	// Import the schema type for proper conversion
-	regChanges, ok := registryValues.(*hcsschema.RegistryChanges)
+	regChanges, ok := registryChanges.(*hcsschema.RegistryChanges)
 	if !ok {
 		log.G(ctx).Warn("Input registry values are not of expected type")
 		return nil, errors.New("invalid registry values type")
@@ -1208,17 +1208,26 @@ func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, co
 	}
 
 	// The policy uses dropping semantics: it authorizes a subset of the
-	// requested values and returns that subset in "registry_changes_to_keep".
-	// Round-trip it back into the schema type so the caller applies only the
-	// kept values.
+	// requested changes and returns the kept add values and delete keys in
+	// "add_values_to_keep" / "delete_keys_to_keep". Round-trip them back into
+	// the schema type so the caller applies only the kept changes.
 	kept := &hcsschema.RegistryChanges{}
-	if raw, verr := result.Value("registry_changes_to_keep"); verr == nil && raw != nil {
+	if raw, verr := result.Value("add_values_to_keep"); verr == nil && raw != nil {
 		buf, merr := json.Marshal(raw)
 		if merr != nil {
 			return nil, fmt.Errorf("failed to marshal kept registry values: %w", merr)
 		}
 		if uerr := json.Unmarshal(buf, &kept.AddValues); uerr != nil {
 			return nil, fmt.Errorf("failed to unmarshal kept registry values: %w", uerr)
+		}
+	}
+	if raw, verr := result.Value("delete_keys_to_keep"); verr == nil && raw != nil {
+		buf, merr := json.Marshal(raw)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to marshal kept registry delete keys: %w", merr)
+		}
+		if uerr := json.Unmarshal(buf, &kept.DeleteKeys); uerr != nil {
+			return nil, fmt.Errorf("failed to unmarshal kept registry delete keys: %w", uerr)
 		}
 	}
 
