@@ -1276,6 +1276,13 @@ func (w *Writer) Close() error {
 				dirCount++
 			}
 		}
+		// Bits beyond inodesPerGroup don't correspond to real inodes; e2fsck
+		// expects this padding to be set so allocators never consider them
+		// free. Don't count them in usedInodeCount: free-inode accounting is
+		// based on inodesPerGroup real inodes.
+		for j := inodesPerGroup; j < BlockSize*8; j++ {
+			b[BlockSize+j/8] |= 1 << (j % 8)
+		}
 		_, err := w.write(b[:])
 		if err != nil {
 			return err
