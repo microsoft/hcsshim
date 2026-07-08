@@ -1,6 +1,7 @@
 # Dependabot bumps `/` and `/test` as independent modules, but `/test` inherits the
 # root's dependencies via `replace ... => ../`, so a root bump leaves test/go.{mod,sum}
-# (and vendoring) stale. This re-tidies both and pushes the fix back to the PR branch.
+# stale. This re-tidies both modules and re-vendors the root (the only vendored module),
+# then pushes the fix back to the PR branch.
 name: Dependabot Tidy
 
 on: pull_request
@@ -29,7 +30,7 @@ jobs:
         with:
           fill-module-cache: true
 
-      - name: Run go mod tidy and vendor
+      - name: Tidy both modules and vendor the root
         run: |
           go mod tidy -e
           go mod vendor -e
