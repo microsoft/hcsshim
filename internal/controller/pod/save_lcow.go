@@ -142,10 +142,18 @@ func (c *Controller) Resume(ctx context.Context, vm vmController, events chan in
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Resume only applies to a pod that is mid-migration.
+	if !c.isMigrating {
+		return fmt.Errorf("pod %q is not migrating; nothing to resume", c.podID)
+	}
+
 	// Bind the live VM and re-wire the network to it.
 	c.vm = vm
 	c.isMigrating = false
-	c.network.Resume(ctx, vm.VM(), vm.Guest())
+
+	if err := c.network.Resume(ctx, vm.VM(), vm.Guest()); err != nil {
+		return fmt.Errorf("resume network for migration: %w", err)
+	}
 
 	// Fetch the SCSI controller shared by all containers in this VM.
 	scsiCtrl, err := vm.SCSIController(ctx)
@@ -195,10 +203,18 @@ func (c *Controller) Patch(
 	request *task.CreateTaskRequest,
 	spec specs.Spec,
 ) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// A destination request with a container ID is required before we mutate
 	// any state.
 	if request == nil || request.ID == "" {
 		return fmt.Errorf("invalid create task request: %+v", request)
+	}
+
+	// Patch only applies to a pod imported for migration.
+	if !c.isMigrating {
+		return fmt.Errorf("pod %q is not migrating; cannot patch", c.podID)
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
@@ -207,9 +223,6 @@ func (c *Controller) Patch(
 		"IsSandbox":                isSandbox,
 		"Spec":                     log.Format(ctx, spec),
 	}).Debug("patching pod")
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	// Resolve the container by its source-side ID and guard against colliding
 	// with an existing container on destination when the ID is changing.
@@ -246,7 +259,9 @@ func (c *Controller) Patch(
 		}
 
 		// Hand the destination namespace to the network controller for later attach.
-		c.network.Patch(ctx, spec.Windows.Network.NetworkNamespace)
+		if err := c.network.Patch(ctx, spec.Windows.Network.NetworkNamespace); err != nil {
+			return fmt.Errorf("patch network for migration: %w", err)
+		}
 	}
 
 	log.G(ctx).WithField(logfields.DestinationPodID, c.podID).Debug("patched migrated pod")
@@ -259,6 +274,11 @@ func (c *Controller) Patch(
 func (c *Controller) AbortMigrated(ctx context.Context, events chan interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Nothing to abort unless the pod is mid-migration.
+	if !c.isMigrating {
+		return
+	}
 
 	for _, ctr := range c.containers {
 		ctr.AbortMigrated(ctx, events)

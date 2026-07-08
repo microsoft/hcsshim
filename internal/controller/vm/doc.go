@@ -17,52 +17,85 @@
 //
 // A VM follows the state machine below.
 //
-//		         ┌─────────────────┐
-//		         │ StateNotCreated │
-//		         └────────┬────────┘
-//		                  │ CreateVM ok
-//		                  ▼
-//		         ┌─────────────────┐           StartVM fails /
-//		         │  StateCreated   │──────── TerminateVM fails ──────┐
-//		         └──┬─────┬────────┘                                 │
-//		            │     │ StartVM ok                               ▼
-//		            │     ▼                                  ┌───────────────┐
-//		            │  ┌─────────────────┐  TerminateVM      │  StateInvalid │
-//		            │  │  StateRunning   │───── fails ──────►│               │
-//		            │  └────────┬────────┘                   └───────┬───────┘
-//		            │           │ VM exits /                         │ TerminateVM ok
-//	      TerminateVM ok        │ TerminateVM ok                     │
-//		            │           ▼                                    ▼
-//		            │  ┌─────────────────────────────────────────────────┐
-//		            └─►│                 StateTerminated                 │
-//		               └─────────────────────────────────────────────────┘
+//	      ┌─────────────────┐
+//	      │ StateNotCreated │
+//	      └────────┬────────┘
+//	               │ CreateVM ok
+//	               ▼
+//	      ┌─────────────────┐           StartVM fails /
+//	      │  StateCreated   │──────── TerminateVM fails ──────┐
+//	      └──┬─────┬────────┘                                 │
+//	         │     │ StartVM ok                               ▼
+//	         │     ▼                                  ┌───────────────┐
+//	         │  ┌─────────────────┐  TerminateVM      │  StateInvalid │
+//	         │  │  StateRunning   │───── fails ──────►│               │
+//	         │  └────────┬────────┘                   └───────┬───────┘
+//	         │           │ VM exits /                         │ TerminateVM ok
+//	TerminateVM ok       │ TerminateVM ok                     │
+//	         │           ▼                                    ▼
+//	         │  ┌─────────────────────────────────────────────────┐
+//	         └─►│                 StateTerminated                 │
+//	            └─────────────────────────────────────────────────┘
 //
-// Live migration adds side-specific paths. The source toggles a running VM into
-// [StateSourceMigrating]; the destination walks a dedicated path —
-// [Controller.Import] → [Controller.CreateVM] → [Controller.StartWithMigrationOptions].
-// From either migrating state the resumed side returns to [StateRunning] via
-// [Controller.Resume], while the stopped side reaches [StateTerminated] via a
-// finalize Stop or a teardown ([Controller.TerminateVM]). The forward flow stops
-// the source and resumes the destination; the reverse flow resumes the source and
-// stops the destination.
+// Live migration walks a granular, side-specific path. Each side's synchronous memory
+// transfer converges on the shared [StateMemoryTransferred], then a resume finalize
+// reaches [StateMigrationFinalized] (from which [Controller.Resume] returns it to
+// [StateRunning]); a stop finalize or [Controller.TerminateVM] reaches [StateTerminated].
 //
-//	      source                                  destination
-//	┌──────────────────────┐         ┌───────────────────────────┐
-//	│ StateSourceMigrating │         │  StateMigratingImported   │
-//	└───┬──────────────┬───┘         └─────────────┬─────────────┘
-//	    │ Resume       │ Finalize(Stop)/Terminate  │ CreateVM
-//	    ▼              ▼                           ▼
-//	StateRunning  StateTerminated     ┌───────────────────────────┐
-//	                                  │   StateMigratingCreated   │
-//	                                  └─────────────┬─────────────┘
-//	                                                │ StartWithMigrationOptions
-//	                                                ▼
-//	                                  ┌───────────────────────────┐
-//	                                  │ StateDestinationMigrating │
-//	                                  └──────┬─────────────┬──────┘
-//	                                  Resume │             │ Finalize(Stop)/Terminate
-//	                                         ▼             ▼
-//	                                   StateRunning   StateTerminated
+//	source
+//	┌─────────────────────────────────┐
+//	│           StateRunning          │
+//	└────────────────┬────────────────┘
+//	                 │ InitializeLiveMigrationOnSource
+//	                 ▼
+//	┌─────────────────────────────────┐
+//	│ StateSourceMigrationInitialized │  ── Save ──▶ (self)
+//	└────────────────┬────────────────┘
+//	                 │ StartLiveMigrationOnSource
+//	                 ▼
+//	┌─────────────────────────────────┐
+//	│   StateSourceMigrationStarted   │
+//	└────────────────┬────────────────┘
+//	                 │ StartLiveMigrationTransfer
+//	                 ▼
+//	┌─────────────────────────────────┐
+//	│      StateMemoryTransferred     │  ── Finalize(Stop) ──▶ StateTerminated
+//	└────────────────┬────────────────┘
+//	                 │ Finalize(Resume)
+//	                 ▼
+//	┌─────────────────────────────────┐
+//	│     StateMigrationFinalized     │  ── Resume ──▶ StateRunning
+//	└─────────────────────────────────┘
+//
+//	destination
+//	┌───────────────────────────────────┐
+//	│ StateDestinationMigrationImported │
+//	└──────────────────┬────────────────┘
+//	                   │ CreateVM
+//	                   ▼
+//	┌───────────────────────────────────┐
+//	│  StateDestinationMigrationCreated │
+//	└──────────────────┬────────────────┘
+//	                   │ Patch
+//	                   ▼
+//	┌───────────────────────────────────┐
+//	│  StateDestinationMigrationPatched │
+//	└──────────────────┬────────────────┘
+//	                   │ StartWithMigrationOptions
+//	                   ▼
+//	┌───────────────────────────────────┐
+//	│  StateDestinationMigrationStarted │
+//	└──────────────────┬────────────────┘
+//	                   │ StartLiveMigrationTransfer
+//	                   ▼
+//	┌───────────────────────────────────┐
+//	│       StateMemoryTransferred      │  ── Finalize(Stop) ──▶ StateTerminated
+//	└──────────────────┬────────────────┘
+//	                   │ Finalize(Resume)
+//	                   ▼
+//	┌───────────────────────────────────┐
+//	│      StateMigrationFinalized      │  ── Resume ──▶ StateRunning
+//	└───────────────────────────────────┘
 //
 // State descriptions:
 //
@@ -73,22 +106,23 @@
 //   - [StateTerminated]: terminal state reached after the VM exits naturally or
 //     [Controller.TerminateVM] completes successfully.
 //   - [StateInvalid]: error state entered when [Controller.StartVM] fails after the underlying
-//     HCS VM has already started, or when [Controller.TerminateVM] fails during uvm.Close
-//     (from [StateCreated], [StateRunning], or [StateMigratingCreated]).
+//     HCS VM has already started, or when [Controller.TerminateVM] fails during uvm.Close.
 //     A VM in this state can only be cleaned up by calling [Controller.TerminateVM].
-//   - [StateSourceMigrating]: the running source VM has begun an outgoing migration;
-//     only live-migration calls and [Controller.Save] are permitted. [Controller.Resume]
-//     rolls it back to [StateRunning]; a finalize Stop (forward flow) or
-//     [Controller.TerminateVM] terminates it to [StateTerminated].
-//   - [StateMigratingImported]: the destination has been rehydrated from a snapshot via
+//   - [StateSourceMigrationInitialized]: the running source VM has begun an outgoing migration
+//     via [Controller.InitializeLiveMigrationOnSource]; only [Controller.Save] and live-migration
+//     calls are permitted.
+//   - [StateSourceMigrationStarted]: the source is streaming state via [Controller.StartLiveMigrationOnSource].
+//   - [StateDestinationMigrationImported]: the destination has been rehydrated from a snapshot via
 //     [Controller.Import] but the VM does not exist yet; [Controller.CreateVM] is the next step.
-//   - [StateMigratingCreated]: the destination VM has been created from the snapshot but not
-//     started; disks are rebound via [Controller.Patch] and
-//     [Controller.StartWithMigrationOptions] advances it to [StateDestinationMigrating].
-//   - [StateDestinationMigrating]: the destination VM is running against the migration
-//     transport awaiting the source's state; [Controller.Resume] reaches [StateRunning],
-//     while a finalize Stop (reverse flow) or [Controller.TerminateVM] terminates it to
-//     [StateTerminated].
+//   - [StateDestinationMigrationCreated]: the destination VM has been created from the snapshot but
+//     not started; [Controller.Patch] rebinds its disks.
+//   - [StateDestinationMigrationPatched]: the destination VM's disks have been rebound; [Controller.StartWithMigrationOptions] is next.
+//   - [StateDestinationMigrationStarted]: the destination VM is running against the migration
+//     transport awaiting the source's state.
+//   - [StateMemoryTransferred]: the synchronous memory transfer has completed on either side via
+//     [Controller.StartLiveMigrationTransfer]; [Controller.FinalizeLiveMigration] is next.
+//   - [StateMigrationFinalized]: a resume finalize has completed on either side; [Controller.Resume]
+//     returns it to [StateRunning].
 //
 // # Platform Variants
 //

@@ -507,6 +507,26 @@ func TestResume_SourceRollback(t *testing.T) {
 	}
 }
 
+// TestResume_WrongState verifies that Resume is rejected unless the container is
+// migrating on the source or destination.
+func TestResume_WrongState(t *testing.T) {
+	t.Parallel()
+	invalidStates := []State{StateNotCreated, StateCreated, StateRunning, StateStopped, StateInvalid}
+
+	for _, state := range invalidStates {
+		t.Run(state.String(), func(t *testing.T) {
+			t.Parallel()
+			c, scsiCtrl, plan9Ctrl, vpciCtrl, guestCtrl := newContainerTestController(t)
+			c.state = state
+
+			err := c.Resume(t.Context(), testVMID, testPodID, guestCtrl, scsiCtrl, plan9Ctrl, vpciCtrl, nil)
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("Resume() = %v; want ErrFailedPrecondition", err)
+			}
+		})
+	}
+}
+
 // --- AbortMigrated ---
 
 // TestAbortMigrated_NoOp verifies that AbortMigrated leaves a non-migrating

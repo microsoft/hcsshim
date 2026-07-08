@@ -38,7 +38,7 @@ func (c *Controller) InitializeLiveMigrationOnSource(ctx context.Context, option
 	}
 
 	// From here on only live-migration APIs are permitted.
-	c.vmState = StateSourceMigrating
+	c.vmState = StateSourceMigrationInitialized
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("initialized live migration on source")
 
 	return nil
@@ -53,7 +53,8 @@ func (c *Controller) CompatibilityInfo(ctx context.Context) ([]byte, error) {
 	defer c.mu.RUnlock()
 
 	// The blob is read from a live source VM, including once it has begun migrating.
-	if c.vmState != StateRunning && c.vmState != StateSourceMigrating {
+	if c.vmState != StateRunning && c.vmState != StateSourceMigrationInitialized &&
+		c.vmState != StateSourceMigrationStarted {
 		return nil, fmt.Errorf("cannot query compatibility info: VM is in state %s", c.vmState)
 	}
 
@@ -88,11 +89,14 @@ func (c *Controller) MigrationNotifications() (<-chan hcsschema.OperationSystemM
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Notifications are valid from creation through the migration window,
-	// on both the source and destination sides.
-	if c.vmState != StateCreated && c.vmState != StateRunning &&
-		c.vmState != StateSourceMigrating && c.vmState != StateMigratingCreated &&
-		c.vmState != StateDestinationMigrating {
+	// Notifications are valid from creation through the migration window, on
+	// both the source and destination sides, once the VM (uvm) exists.
+	switch c.vmState {
+	case StateCreated, StateRunning,
+		StateSourceMigrationInitialized, StateSourceMigrationStarted,
+		StateDestinationMigrationCreated, StateDestinationMigrationPatched,
+		StateDestinationMigrationStarted, StateMigrationTransferCompleted, StateMigrationFinalized:
+	default:
 		return nil, fmt.Errorf("cannot query migration notifications: VM is in state %s", c.vmState)
 	}
 
@@ -106,8 +110,8 @@ func (c *Controller) StartWithMigrationOptions(ctx context.Context, config *hcs.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Destination start is only valid on a created migrating VM.
-	if c.vmState != StateMigratingCreated {
+	// Destination start is only valid once the imported VM has been patched.
+	if c.vmState != StateDestinationMigrationPatched {
 		return fmt.Errorf("cannot start with migration options: VM is in state %s", c.vmState)
 	}
 
@@ -123,7 +127,7 @@ func (c *Controller) StartWithMigrationOptions(ctx context.Context, config *hcs.
 
 	// Watch for VM exit in the background.
 	go c.waitForVMExit(ctx)
-	c.vmState = StateDestinationMigrating
+	c.vmState = StateDestinationMigrationStarted
 
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("started destination VM with migration options")
 	return nil
@@ -137,7 +141,7 @@ func (c *Controller) StartLiveMigrationOnSource(ctx context.Context, config *hcs
 	defer c.mu.Unlock()
 
 	// Source start is only valid once the migration has been initialized.
-	if c.vmState != StateSourceMigrating {
+	if c.vmState != StateSourceMigrationInitialized {
 		return fmt.Errorf("cannot start live migration on source: VM is in state %s", c.vmState)
 	}
 
@@ -149,6 +153,7 @@ func (c *Controller) StartLiveMigrationOnSource(ctx context.Context, config *hcs
 		return fmt.Errorf("failed to start live migration on source: %w", err)
 	}
 
+	c.vmState = StateSourceMigrationStarted
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("started live migration on source")
 	return nil
 }
@@ -159,8 +164,8 @@ func (c *Controller) StartLiveMigrationTransfer(ctx context.Context, options *hc
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Transfer is only valid mid-migration, on either source or destination.
-	if c.vmState != StateSourceMigrating && c.vmState != StateDestinationMigrating {
+	// Transfer is only valid once the started side is streaming, on either source or destination.
+	if c.vmState != StateSourceMigrationStarted && c.vmState != StateDestinationMigrationStarted {
 		return fmt.Errorf("cannot start live migration transfer: VM is in state %s", c.vmState)
 	}
 
@@ -168,6 +173,8 @@ func (c *Controller) StartLiveMigrationTransfer(ctx context.Context, options *hc
 		return fmt.Errorf("failed to start live migration transfer: %w", err)
 	}
 
+	// The transfer call is synchronous: on return the memory has been transferred.
+	c.vmState = StateMigrationTransferCompleted
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("started live migration memory transfer")
 	return nil
 }
@@ -179,8 +186,8 @@ func (c *Controller) FinalizeLiveMigration(ctx context.Context, options *hcssche
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Finalize is only valid mid-migration, on either source or destination.
-	if c.vmState != StateSourceMigrating && c.vmState != StateDestinationMigrating {
+	// Finalize is only valid once the memory transfer has completed.
+	if c.vmState != StateMigrationTransferCompleted {
 		return fmt.Errorf("cannot finalize live migration: VM is in state %s", c.vmState)
 	}
 
@@ -206,6 +213,10 @@ func (c *Controller) FinalizeLiveMigration(ctx context.Context, options *hcssche
 		log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("finalized live migration: VM terminated")
 		return nil
 	}
+
+	// A resume finalize leaves the VM ready for Resume; advance to the shared
+	// finalized state Resume gates on.
+	c.vmState = StateMigrationFinalized
 
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("finalized live migration")
 	return nil

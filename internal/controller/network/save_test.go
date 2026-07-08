@@ -228,10 +228,25 @@ func TestSaveImport_RoundTrip(t *testing.T) {
 func TestPatch_RecordsDestinationNamespace(t *testing.T) {
 	c := &Controller{netState: StateDestinationMigrating}
 
-	c.Patch(t.Context(), "dst-ns")
+	if err := c.Patch(t.Context(), "dst-ns"); err != nil {
+		t.Fatalf("Patch() = %v; want nil", err)
+	}
 
 	if c.migratedNamespaceID != "dst-ns" {
 		t.Errorf("expected migrated namespace dst-ns, got %q", c.migratedNamespaceID)
+	}
+}
+
+// TestPatch_RejectsNonDestinationMigrating verifies Patch is refused unless the
+// controller was imported on the destination.
+func TestPatch_RejectsNonDestinationMigrating(t *testing.T) {
+	for _, st := range []State{StateNotConfigured, StateConfigured, StateInvalid, StateTornDown, StateSourceMigrating} {
+		t.Run(st.String(), func(t *testing.T) {
+			c := &Controller{netState: st}
+			if err := c.Patch(t.Context(), "dst-ns"); err == nil {
+				t.Errorf("Patch() in state %s = nil; want error", st)
+			}
+		})
 	}
 }
 
@@ -246,10 +261,25 @@ func TestResume_TransitionsToConfigured(t *testing.T) {
 				vmEndpoints: map[string]*hcn.HostComputeEndpoint{},
 			}
 
-			c.Resume(t.Context(), (*vmmanager.UtilityVM)(nil), (*guestmanager.Guest)(nil))
+			if err := c.Resume(t.Context(), (*vmmanager.UtilityVM)(nil), (*guestmanager.Guest)(nil)); err != nil {
+				t.Fatalf("Resume() = %v; want nil", err)
+			}
 
 			if c.netState != StateConfigured {
 				t.Errorf("expected state Configured after resume, got %s", c.netState)
+			}
+		})
+	}
+}
+
+// TestResume_RejectsNonMigrating verifies Resume is refused unless the network
+// is mid-migration on the source or destination.
+func TestResume_RejectsNonMigrating(t *testing.T) {
+	for _, st := range []State{StateNotConfigured, StateConfigured, StateInvalid, StateTornDown} {
+		t.Run(st.String(), func(t *testing.T) {
+			c := &Controller{netState: st, vmEndpoints: map[string]*hcn.HostComputeEndpoint{}}
+			if err := c.Resume(t.Context(), (*vmmanager.UtilityVM)(nil), (*guestmanager.Guest)(nil)); err == nil {
+				t.Errorf("Resume() in state %s = nil; want error", st)
 			}
 		})
 	}

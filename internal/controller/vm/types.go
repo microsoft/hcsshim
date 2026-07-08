@@ -33,7 +33,7 @@ type CreateOptions struct {
 	// MigrationOptions, when non-nil, marks this CreateVM as the
 	// destination side of a live migration: the imported HCS document is
 	// reused and these options are stamped into VirtualMachine.MigrationOptions.
-	// Requires the controller to be in [StateMigratingImported].
+	// Requires the controller to be in [StateDestinationMigrationImported].
 	MigrationOptions *hcsschema.MigrationInitializeOptions
 }
 

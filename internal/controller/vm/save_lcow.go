@@ -36,7 +36,7 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 	defer c.mu.RUnlock()
 
 	// Save is only valid once the source has begun migrating.
-	if c.vmState != StateSourceMigrating {
+	if c.vmState != StateSourceMigrationInitialized {
 		return nil, fmt.Errorf("cannot save VM: VM is in state %s", c.vmState)
 	}
 
@@ -144,7 +144,7 @@ func (c *Controller) Import(ctx context.Context, env *anypb.Any) error {
 	c.nextGuestPort = state.GetGcsNextPort()
 	c.nextBridgeID = state.GetBridgeNextID()
 	c.compatInfo = state.GetCompatInfo()
-	c.vmState = StateMigratingImported
+	c.vmState = StateDestinationMigrationImported
 
 	// Decode the HCS document so [Controller.CreateVM] (called next on the
 	// destination with MigrationOptions populated) can reuse it verbatim.
@@ -177,7 +177,7 @@ func (c *Controller) Patch(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.vmState != StateMigratingImported && c.vmState != StateMigratingCreated {
+	if c.vmState != StateDestinationMigrationCreated {
 		return fmt.Errorf("cannot patch VM: VM is in state %s", c.vmState)
 	}
 
@@ -195,6 +195,7 @@ func (c *Controller) Patch(ctx context.Context) error {
 		}
 	}
 
+	c.vmState = StateDestinationMigrationPatched
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("patched VM disk access for migration")
 	return nil
 }
@@ -207,7 +208,7 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 	defer c.mu.Unlock()
 
 	// Resume returns either migration side to the running state.
-	if c.vmState != StateSourceMigrating && c.vmState != StateDestinationMigrating {
+	if c.vmState != StateMigrationFinalized {
 		return fmt.Errorf("cannot resume from migration: VM is in state %s", c.vmState)
 	}
 

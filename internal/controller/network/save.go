@@ -121,9 +121,14 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 
 // Patch records the destination-side namespace ID that a later
 // [Controller.ResetAfterMigration] uses to rebind endpoints on the new host.
-func (c *Controller) Patch(ctx context.Context, networkNamespaceID string) {
+func (c *Controller) Patch(ctx context.Context, networkNamespaceID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Patch only applies to a controller imported on the destination.
+	if c.netState != StateDestinationMigrating {
+		return fmt.Errorf("network controller in state %s; want %s", c.netState, StateDestinationMigrating)
+	}
 
 	c.migratedNamespaceID = networkNamespaceID
 
@@ -131,14 +136,21 @@ func (c *Controller) Patch(ctx context.Context, networkNamespaceID string) {
 		logfields.GuestNetworkNamespaceID: c.namespaceID,
 		logfields.MigratedNamespaceID:     c.migratedNamespaceID,
 	}).Debug("network controller patched with migrated namespace ID")
+
+	return nil
 }
 
 // Resume returns a migrating controller to the configured, operational state.
 // On the destination it binds the live VM and guest; on the source it rolls the
 // snapshot back, lifting the freeze that Save applied.
-func (c *Controller) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest *guestmanager.Guest) {
+func (c *Controller) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest *guestmanager.Guest) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Resume is only valid mid-migration, on either the source or destination.
+	if c.netState != StateSourceMigrating && c.netState != StateDestinationMigrating {
+		return fmt.Errorf("network controller in state %s; want %s or %s", c.netState, StateSourceMigrating, StateDestinationMigrating)
+	}
 
 	c.vmNetwork = vm
 	// The guest manager provides both guest-side network ops and capability checks.
@@ -147,6 +159,8 @@ func (c *Controller) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest 
 	c.netState = StateConfigured
 
 	log.G(ctx).WithField(logfields.GuestNetworkNamespaceID, c.namespaceID).Debug("network controller resumed")
+
+	return nil
 }
 
 // ResetAfterMigration swaps the endpoints carried over from the source for the

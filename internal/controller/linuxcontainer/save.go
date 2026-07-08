@@ -216,6 +216,11 @@ func (c *Controller) Resume(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Resume is only valid mid-migration, on either the source or destination.
+	if c.state != StateSourceMigrating && c.state != StateDestinationMigrating {
+		return fmt.Errorf("container %s is in state %s; cannot resume: %w", c.containerID, c.state, errdefs.ErrFailedPrecondition)
+	}
+
 	// Source rollback: bindings and running processes are intact, so just lift
 	// the freeze that Save applied — on the container and each of its processes.
 	if c.state == StateSourceMigrating {

@@ -173,9 +173,11 @@ func (m *MocknetworkController) EXPECT() *MocknetworkControllerMockRecorder {
 }
 
 // Patch mocks base method.
-func (m *MocknetworkController) Patch(ctx context.Context, networkNamespaceID string) {
+func (m *MocknetworkController) Patch(ctx context.Context, networkNamespaceID string) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Patch", ctx, networkNamespaceID)
+	ret := m.ctrl.Call(m, "Patch", ctx, networkNamespaceID)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Patch indicates an expected call of Patch.
@@ -199,9 +201,11 @@ func (mr *MocknetworkControllerMockRecorder) ResetAfterMigration(ctx any) *gomoc
 }
 
 // Resume mocks base method.
-func (m *MocknetworkController) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest *guestmanager.Guest) {
+func (m *MocknetworkController) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest *guestmanager.Guest) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Resume", ctx, vm, guest)
+	ret := m.ctrl.Call(m, "Resume", ctx, vm, guest)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Resume indicates an expected call of Resume.

@@ -235,7 +235,9 @@ func TestUpdateDiskHostPath(t *testing.T) {
 	})
 	t.Run("rejected after resume", func(t *testing.T) {
 		c, id := importedReserved(t)
-		c.Resume(t.Context(), &mockVMOps{}, newMockGuestOps())
+		if err := c.Resume(t.Context(), &mockVMOps{}, newMockGuestOps()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if err := c.UpdateDiskHostPath(t.Context(), id, `C:\x.vhdx`); err == nil ||
 			!strings.Contains(err.Error(), "migrating") {
 			t.Fatalf("expected migrating error, got %v", err)

@@ -56,11 +56,11 @@ type networkController interface {
 
 	// Patch supplies the destination host's network namespace ID, which is used
 	// later to attach endpoints when migration completes.
-	Patch(ctx context.Context, networkNamespaceID string)
+	Patch(ctx context.Context, networkNamespaceID string) error
 
 	// Resume binds live host/guest dependencies during destination-side
 	// migration rehydration.
-	Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest *guestmanager.Guest)
+	Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest *guestmanager.Guest) error
 
 	// ResetAfterMigration detaches the stale source endpoints and wires up the
 	// destination namespace's endpoints in the guest.

@@ -304,11 +304,13 @@ func TestResume(t *testing.T) {
 	tests := []struct {
 		name          string
 		isDestination bool
+		resumeErr     error
 		scsiErr       error
 		resetErr      error
 		wantErr       bool
 	}{
 		{name: "destination happy path", isDestination: true},
+		{name: "network resume fails", isDestination: true, resumeErr: errTest, wantErr: true},
 		{name: "scsi controller fails", isDestination: true, scsiErr: errTest, wantErr: true},
 		{name: "network reset fails", isDestination: true, resetErr: errTest, wantErr: true},
 		{name: "source skips network reset"},
@@ -321,11 +323,14 @@ func TestResume(t *testing.T) {
 
 			vm.EXPECT().VM().Return(nil)
 			vm.EXPECT().Guest().Return(nil)
-			net.EXPECT().Resume(gomock.Any(), gomock.Any(), gomock.Any())
-			vm.EXPECT().SCSIController(gomock.Any()).Return(nil, tt.scsiErr)
-			// ResetAfterMigration runs only on the destination once SCSI lookup succeeds.
-			if tt.isDestination && tt.scsiErr == nil {
-				net.EXPECT().ResetAfterMigration(gomock.Any()).Return(tt.resetErr)
+			net.EXPECT().Resume(gomock.Any(), gomock.Any(), gomock.Any()).Return(tt.resumeErr)
+			// The remainder of Resume runs only once the network is rebound.
+			if tt.resumeErr == nil {
+				vm.EXPECT().SCSIController(gomock.Any()).Return(nil, tt.scsiErr)
+				// ResetAfterMigration runs only on the destination once SCSI lookup succeeds.
+				if tt.isDestination && tt.scsiErr == nil {
+					net.EXPECT().ResetAfterMigration(gomock.Any()).Return(tt.resetErr)
+				}
 			}
 
 			c := &Controller{podID: testPodID, gcsPodID: testPodID, network: net, containers: map[string]*linuxcontainer.Controller{}, isMigrating: true}
@@ -338,6 +343,15 @@ func TestResume(t *testing.T) {
 				t.Error("expected isMigrating to be cleared after Resume")
 			}
 		})
+	}
+}
+
+// TestResume_RejectsWhenNotMigrating verifies Resume fails on a pod that is not
+// mid-migration, before it touches the VM or network.
+func TestResume_RejectsWhenNotMigrating(t *testing.T) {
+	c := &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{}}
+	if err := c.Resume(t.Context(), nil, nil, false); err == nil {
+		t.Error("Resume() on a non-migrating pod = nil; want error")
 	}
 }
 
@@ -377,7 +391,7 @@ func TestPatch(t *testing.T) {
 			name: "source container not found",
 			build: func(t *testing.T) *Controller {
 				t.Helper()
-				return &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{}}
+				return &Controller{podID: testPodID, isMigrating: true, containers: map[string]*linuxcontainer.Controller{}}
 			},
 			sourceID: "missing",
 			request:  &task.CreateTaskRequest{ID: "dst"},
@@ -387,7 +401,7 @@ func TestPatch(t *testing.T) {
 			name: "destination id already exists",
 			build: func(t *testing.T) *Controller {
 				t.Helper()
-				return &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{
+				return &Controller{podID: testPodID, isMigrating: true, containers: map[string]*linuxcontainer.Controller{
 					"src": linuxcontainer.New("vm-1", testPodID, "src", nil, nil, nil, nil),
 					"dst": linuxcontainer.New("vm-1", testPodID, "dst", nil, nil, nil, nil),
 				}}
@@ -401,7 +415,7 @@ func TestPatch(t *testing.T) {
 			build: func(t *testing.T) *Controller {
 				t.Helper()
 				// A non-migrating container rejects Patch, surfacing as a wrapped error.
-				return &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{
+				return &Controller{podID: testPodID, isMigrating: true, containers: map[string]*linuxcontainer.Controller{
 					"src": linuxcontainer.New("vm-1", testPodID, "src", nil, nil, nil, nil),
 				}}
 			},
@@ -413,7 +427,7 @@ func TestPatch(t *testing.T) {
 			name: "workload container retargeted and re-keyed",
 			build: func(t *testing.T) *Controller {
 				t.Helper()
-				return &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{"src": migratingContainer(t, "src")}}
+				return &Controller{podID: testPodID, isMigrating: true, containers: map[string]*linuxcontainer.Controller{"src": migratingContainer(t, "src")}}
 			},
 			sourceID: "src",
 			request:  &task.CreateTaskRequest{ID: "dst"},
@@ -435,8 +449,8 @@ func TestPatch(t *testing.T) {
 			build: func(t *testing.T) *Controller {
 				t.Helper()
 				net := newNetMock(t)
-				net.EXPECT().Patch(gomock.Any(), "ns-dst")
-				return &Controller{podID: testPodID, network: net, containers: map[string]*linuxcontainer.Controller{"src": migratingContainer(t, "src")}}
+				net.EXPECT().Patch(gomock.Any(), "ns-dst").Return(nil)
+				return &Controller{podID: testPodID, isMigrating: true, network: net, containers: map[string]*linuxcontainer.Controller{"src": migratingContainer(t, "src")}}
 			},
 			sourceID:  "src",
 			isSandbox: true,
@@ -456,13 +470,23 @@ func TestPatch(t *testing.T) {
 			name: "sandbox without namespace fails",
 			build: func(t *testing.T) *Controller {
 				t.Helper()
-				return &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{"src": migratingContainer(t, "src")}}
+				return &Controller{podID: testPodID, isMigrating: true, containers: map[string]*linuxcontainer.Controller{"src": migratingContainer(t, "src")}}
 			},
 			sourceID:  "src",
 			isSandbox: true,
 			request:   &task.CreateTaskRequest{ID: "sbx-dst"},
 			spec:      specs.Spec{},
 			wantErr:   true,
+		},
+		{
+			name: "pod not migrating rejected",
+			build: func(t *testing.T) *Controller {
+				t.Helper()
+				return &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{}}
+			},
+			sourceID: "src",
+			request:  &task.CreateTaskRequest{ID: "dst"},
+			wantErr:  true,
 		},
 	}
 	for _, tt := range tests {

@@ -12,108 +12,101 @@ package vm
 // [Controller.TerminateVM], the VM transitions to [StateInvalid] instead.
 // A VM in [StateInvalid] can only be cleaned up via [Controller.TerminateVM].
 //
-// Live migration has two side-specific migrating states. The source toggles a
-// running VM into [StateSourceMigrating]; the destination walks a dedicated
-// path: [Controller.Import] → [StateMigratingImported], [Controller.CreateVM] →
-// [StateMigratingCreated], [Controller.StartWithMigrationOptions] →
-// [StateDestinationMigrating]. From either migrating state the resumed side
-// returns to [StateRunning] via [Controller.Resume], while the stopped side
-// reaches [StateTerminated] via a finalize Stop or a teardown
-// ([Controller.TerminateVM]). The forward flow stops the source and resumes the
-// destination; the reverse flow resumes the source and stops the destination.
+// Live migration walks a granular, side-specific path. The source advances
+// StateRunning → [StateSourceMigrationInitialized] → [StateSourceMigrationStarted];
+// the destination advances StateNotCreated → [StateDestinationMigrationImported] →
+// [StateDestinationMigrationCreated] → [StateDestinationMigrationPatched] →
+// [StateDestinationMigrationStarted]. Both then converge: StartLiveMigrationTransfer
+// reaches the shared [StateMigrationTransferCompleted], and a resume finalize reaches
+// [StateMigrationFinalized] (then [Controller.Resume] → StateRunning); a stop finalize
+// or [Controller.TerminateVM] reaches [StateTerminated].
 //
 // Full state-transition table:
 //
-//	Current State             │ Trigger                            │ Next State
-//	──────────────────────────┼────────────────────────────────────┼───────────────────────
-//	StateNotCreated           │ CreateVM succeeds                  │ StateCreated
-//	StateCreated              │ StartVM succeeds                   │ StateRunning
-//	StateCreated              │ TerminateVM succeeds               │ StateTerminated
-//	StateCreated              │ StartVM fails                      │ StateInvalid
-//	StateCreated              │ TerminateVM fails                  │ StateInvalid
-//	StateRunning              │ VM exits or TerminateVM succeeds   │ StateTerminated
-//	StateRunning              │ TerminateVM fails (uvm.Close)      │ StateInvalid
-//	StateRunning              │ InitializeLiveMigrationOnSource    │ StateSourceMigrating
-//	StateSourceMigrating      │ StartLiveMigrationOnSource         │ StateSourceMigrating
-//	StateSourceMigrating      │ StartLiveMigrationTransfer         │ StateSourceMigrating
-//	StateSourceMigrating      │ Save                               │ StateSourceMigrating
-//	StateSourceMigrating      │ FinalizeLiveMigration (Resume)     │ StateSourceMigrating
-//	StateSourceMigrating      │ FinalizeLiveMigration (Stop)       │ StateTerminated
-//	StateSourceMigrating      │ Resume                             │ StateRunning
-//	StateSourceMigrating      │ TerminateVM (abort)                │ StateTerminated
-//	StateNotCreated           │ Import (destination)               │ StateMigratingImported
-//	StateMigratingImported    │ CreateVM (destination)             │ StateMigratingCreated
-//	StateMigratingCreated     │ Patch                              │ StateMigratingCreated
-//	StateMigratingCreated     │ StartWithMigrationOptions          │ StateDestinationMigrating
-//	StateMigratingImported    │ TerminateVM                        │ StateTerminated
-//	StateMigratingCreated     │ TerminateVM succeeds               │ StateTerminated
-//	StateMigratingCreated     │ TerminateVM fails (uvm.Close)      │ StateInvalid
-//	StateDestinationMigrating │ StartLiveMigrationTransfer         │ StateDestinationMigrating
-//	StateDestinationMigrating │ FinalizeLiveMigration (Resume)     │ StateDestinationMigrating
-//	StateDestinationMigrating │ FinalizeLiveMigration (Stop)       │ StateTerminated
-//	StateDestinationMigrating │ Resume                             │ StateRunning
-//	StateDestinationMigrating │ TerminateVM (abort)                │ StateTerminated
-//	StateInvalid              │ TerminateVM called                 │ StateTerminated
-//	StateTerminated           │ (terminal — no further transitions)│ —
+//	Current State                        │ Trigger                          │ Next State
+//	─────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────────
+//	StateNotCreated                      │ CreateVM succeeds                │ StateCreated
+//	StateCreated                         │ StartVM succeeds                 │ StateRunning
+//	StateCreated                         │ TerminateVM succeeds             │ StateTerminated
+//	StateCreated                         │ StartVM/TerminateVM fails        │ StateInvalid
+//	StateRunning                         │ VM exits or TerminateVM succeeds │ StateTerminated
+//	StateRunning                         │ TerminateVM fails (uvm.Close)    │ StateInvalid
+//	StateRunning                         │ InitializeLiveMigrationOnSource  │ StateSourceMigrationInitialized
+//	StateSourceMigrationInitialized      │ Save                             │ StateSourceMigrationInitialized
+//	StateSourceMigrationInitialized      │ StartLiveMigrationOnSource       │ StateSourceMigrationStarted
+//	StateSourceMigrationStarted          │ StartLiveMigrationTransfer       │ StateMigrationTransferCompleted
+//	StateNotCreated                      │ Import (destination)             │ StateDestinationMigrationImported
+//	StateDestinationMigrationImported    │ CreateVM (destination)           │ StateDestinationMigrationCreated
+//	StateDestinationMigrationCreated     │ Patch                            │ StateDestinationMigrationPatched
+//	StateDestinationMigrationPatched     │ StartWithMigrationOptions        │ StateDestinationMigrationStarted
+//	StateDestinationMigrationStarted     │ StartLiveMigrationTransfer       │ StateMigrationTransferCompleted
+//	StateMigrationTransferCompleted      │ FinalizeLiveMigration (Resume)   │ StateMigrationFinalized
+//	StateMigrationTransferCompleted      │ FinalizeLiveMigration (Stop)     │ StateTerminated
+//	StateMigrationFinalized              │ Resume                           │ StateRunning
+//	(any migrating state)                │ TerminateVM                      │ StateTerminated / StateInvalid
+//	StateInvalid                         │ TerminateVM called               │ StateTerminated
+//	StateTerminated                      │ (terminal)                       │ —
 type State int32
 
 const (
 	// StateNotCreated indicates the VM has not been created yet.
 	// This is the initial state when a Controller is first instantiated via [New].
-	// Valid transitions: StateNotCreated → StateCreated (via [Controller.CreateVM])
 	StateNotCreated State = iota
 
 	// StateCreated indicates the VM has been created but not yet started.
-	// Valid transitions:
-	//   - StateCreated → StateRunning     (via [Controller.StartVM], on success)
-	//   - StateCreated → StateTerminated  (via [Controller.TerminateVM], on success)
-	//   - StateCreated → StateInvalid     (via [Controller.StartVM], on failure)
 	StateCreated
 
-	// StateRunning indicates the VM has been started and is running.
-	// The guest OS is up and the Guest Compute Service (GCS) connection is established.
-	// Valid transitions:
-	//   - StateRunning → StateTerminated (VM exits naturally or [Controller.TerminateVM] succeeds)
-	//   - StateRunning → StateInvalid    ([Controller.TerminateVM] fails during uvm.Close)
-	//   - StateRunning → StateSourceMigrating ([Controller.InitializeLiveMigrationOnSource] succeeds)
+	// StateRunning indicates the VM has been started and is running. The guest OS
+	// is up and the Guest Compute Service (GCS) connection is established.
 	StateRunning
 
 	// StateTerminated indicates the VM has exited or been successfully terminated.
 	// This is a terminal state — once reached, no further state transitions are possible.
 	StateTerminated
 
-	// StateInvalid indicates that an unrecoverable error has occurred.
-	// The VM transitions to this state when:
-	//   - [Controller.StartVM] fails after the underlying HCS VM has already started, or
-	//   - [Controller.TerminateVM] fails during uvm.Close (from [StateCreated],
-	//     [StateRunning], or [StateMigratingCreated]).
-	// A VM in this state can only be cleaned up by calling [Controller.TerminateVM].
+	// StateInvalid indicates that an unrecoverable error has occurred (a failed
+	// [Controller.StartVM] after the HCS VM started, or a failed uvm.Close during
+	// [Controller.TerminateVM]). It can only be cleaned up via [Controller.TerminateVM].
 	StateInvalid
 
-	// StateSourceMigrating indicates this VM is the source of an in-progress live
-	// migration. Entered from [StateRunning] via [Controller.InitializeLiveMigrationOnSource].
-	// Only live-migration APIs and [Controller.Save] are permitted; [Controller.Resume]
-	// returns it to [StateRunning], while a finalize Stop (forward flow) or
-	// [Controller.TerminateVM] terminates it.
-	StateSourceMigrating
+	// StateSourceMigrationInitialized indicates the running source VM has begun an
+	// outgoing migration via [Controller.InitializeLiveMigrationOnSource]. Only
+	// [Controller.Save] and live-migration calls are permitted.
+	StateSourceMigrationInitialized
 
-	// StateMigratingImported indicates the destination controller has been
-	// rehydrated from a snapshot via [Controller.Import] but the VM does not
-	// exist yet. Only [Controller.CreateVM] (or [Controller.TerminateVM]) is
-	// permitted next.
-	StateMigratingImported
+	// StateSourceMigrationStarted indicates the source has started streaming state via
+	// [Controller.StartLiveMigrationOnSource]; [Controller.StartLiveMigrationTransfer]
+	// advances it to [StateMigrationTransferCompleted].
+	StateSourceMigrationStarted
 
-	// StateMigratingCreated indicates the destination VM has been created from
-	// an imported snapshot but not yet started. [Controller.Patch] is valid
-	// only in this state; [Controller.StartWithMigrationOptions] advances it to
-	// [StateDestinationMigrating], and [Controller.TerminateVM] tears it down.
-	StateMigratingCreated
+	// StateDestinationMigrationImported indicates the destination has been rehydrated
+	// from a snapshot via [Controller.Import] but the VM does not exist yet;
+	// [Controller.CreateVM] is the next step.
+	StateDestinationMigrationImported
 
-	// StateDestinationMigrating indicates this VM is the destination of an
-	// in-progress live migration. Entered via [Controller.StartWithMigrationOptions].
-	// Only live-migration APIs are permitted; [Controller.Resume] reaches [StateRunning],
-	// while a finalize Stop (reverse flow) or [Controller.TerminateVM] terminates it.
-	StateDestinationMigrating
+	// StateDestinationMigrationCreated indicates the destination VM has been created
+	// from the snapshot but not started; [Controller.Patch] is next.
+	StateDestinationMigrationCreated
+
+	// StateDestinationMigrationPatched indicates the destination VM's disks have been
+	// rebound via [Controller.Patch]; [Controller.StartWithMigrationOptions] is next.
+	StateDestinationMigrationPatched
+
+	// StateDestinationMigrationStarted indicates the destination VM is running against
+	// the migration transport via [Controller.StartWithMigrationOptions], awaiting the
+	// source's state; [Controller.StartLiveMigrationTransfer] advances it to
+	// [StateMigrationTransferCompleted].
+	StateDestinationMigrationStarted
+
+	// StateMigrationTransferCompleted indicates the synchronous memory transfer has
+	// completed on either side via [Controller.StartLiveMigrationTransfer].
+	// [Controller.FinalizeLiveMigration] advances it: a resume finalize to
+	// [StateMigrationFinalized], a stop finalize to [StateTerminated].
+	StateMigrationTransferCompleted
+
+	// StateMigrationFinalized indicates a resume finalize has completed on either the
+	// source or the destination; [Controller.Resume] returns it to [StateRunning].
+	StateMigrationFinalized
 )
 
 // String returns a human-readable string representation of the VM State.
@@ -129,14 +122,22 @@ func (s State) String() string {
 		return "Terminated"
 	case StateInvalid:
 		return "Invalid"
-	case StateSourceMigrating:
-		return "SourceMigrating"
-	case StateMigratingImported:
-		return "MigratingImported"
-	case StateMigratingCreated:
-		return "MigratingCreated"
-	case StateDestinationMigrating:
-		return "DestinationMigrating"
+	case StateSourceMigrationInitialized:
+		return "SourceMigrationInitialized"
+	case StateSourceMigrationStarted:
+		return "SourceMigrationStarted"
+	case StateDestinationMigrationImported:
+		return "DestinationMigrationImported"
+	case StateDestinationMigrationCreated:
+		return "DestinationMigrationCreated"
+	case StateDestinationMigrationPatched:
+		return "DestinationMigrationPatched"
+	case StateDestinationMigrationStarted:
+		return "DestinationMigrationStarted"
+	case StateMigrationTransferCompleted:
+		return "MigrationTransferCompleted"
+	case StateMigrationFinalized:
+		return "MigrationFinalized"
 	default:
 		return "Unknown"
 	}
