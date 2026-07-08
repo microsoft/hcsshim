@@ -511,7 +511,9 @@ func TestResume_LiftsMigrationGuard(t *testing.T) {
 	}
 
 	// Resuming binds live interfaces and lifts the guard.
-	c.Resume(ctx, &mockVMOps{}, newMockGuestOps())
+	if err := c.Resume(ctx, &mockVMOps{}, newMockGuestOps()); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
 	dc := disk.Config{HostPath: `C:\other.vhdx`, Type: disk.TypeVirtualDisk}
 	if _, err := c.Reserve(ctx, dc, defaultMountConfig()); err != nil {
 		t.Fatalf("Reserve after Resume: %v", err)

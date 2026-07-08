@@ -244,7 +244,9 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 
 	// Sub-controller Resume: required on destination, no-op on source.
 	if c.scsiController != nil {
-		c.scsiController.Resume(ctx, c.uvm, c.guest)
+		if err := c.scsiController.Resume(ctx, c.uvm, c.guest); err != nil {
+			return fmt.Errorf("resume scsi controller: %w", err)
+		}
 	}
 
 	c.vmState = StateRunning

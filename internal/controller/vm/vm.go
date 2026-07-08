@@ -4,6 +4,7 @@ package vm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -147,13 +148,28 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 		hcsDocument = doc
 	case StateMigratingImported:
 		nextState = StateMigratingCreated
+		if opts.MigrationOptions == nil {
+			return fmt.Errorf("cannot create VM in state %s: migration options are required", c.vmState)
+		}
 		if c.hcsDocument == nil {
 			return fmt.Errorf("cannot create VM in state %s: no imported HCS document available", c.vmState)
 		}
 		if c.hcsDocument.VirtualMachine == nil {
 			return fmt.Errorf("cannot create VM in state %s: imported HCS document has no VirtualMachine", c.vmState)
 		}
-		hcsDocument = c.hcsDocument
+
+		// Deep-copy the imported document via JSON round-trip so migration
+		// stamping targets a private copy, leaving the retained source-of-truth
+		// pristine if this call fails and is retried.
+		raw, err := json.Marshal(c.hcsDocument)
+		if err != nil {
+			return fmt.Errorf("marshal imported HCS document: %w", err)
+		}
+		hcsDocument = &hcsschema.ComputeSystem{}
+		if err := json.Unmarshal(raw, hcsDocument); err != nil {
+			return fmt.Errorf("unmarshal imported HCS document: %w", err)
+		}
+
 		hcsDocument.VirtualMachine.MigrationOptions = opts.MigrationOptions
 		if c.compatInfo != nil {
 			hcsDocument.VirtualMachine.MigrationOptions.CompatibilityData = &hcsschema.CompatibilityInfo{

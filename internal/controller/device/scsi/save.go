@@ -140,23 +140,29 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 
 // Resume binds the live host and guest interfaces to an imported controller,
 // enabling normal disk operations. It must be called on the destination
-// before any reserve, attach, or mount calls.
-func (c *Controller) Resume(ctx context.Context, vm VMSCSIOps, guest GuestSCSIOps) {
+// before any reserve, attach, or mount calls. It errors unless a migration is
+// in progress, so a stray call cannot overwrite the live host and guest.
+func (c *Controller) Resume(ctx context.Context, vm VMSCSIOps, guest GuestSCSIOps) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if !c.isMigrating {
+		return fmt.Errorf("cannot resume scsi controller: not migrating")
+	}
 
 	c.vm = vm
 	c.guest = guest
 	c.isMigrating = false
 
 	log.G(ctx).Debug("resumed scsi controller")
+	return nil
 }
 
 // Disks returns the configuration of every disk currently attached to the
 // controller.
 func (c *Controller) Disks() []disk.Config {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Collect the config of each indexed disk.
 	configs := make([]disk.Config, 0, len(c.disksByPath))
@@ -172,8 +178,8 @@ func (c *Controller) Disks() []disk.Config {
 // HCSAttachments returns every attached disk described in HCS schema form, ready
 // to be handed to HCS when constructing or resuming a VM.
 func (c *Controller) HCSAttachments() map[string]hcsschema.Scsi {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Group attachments by their controller GUID.
 	out := map[string]hcsschema.Scsi{}

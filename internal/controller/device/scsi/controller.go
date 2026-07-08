@@ -34,7 +34,7 @@ import (
 // it succeeds to release the reservation and all resources.
 type Controller struct {
 	// mu serializes all public operations on the Controller.
-	mu sync.RWMutex
+	mu sync.Mutex
 
 	// vm is the host-side interface for adding and removing SCSI disks.
 	// Immutable after construction.
@@ -98,6 +98,8 @@ func (c *Controller) ReserveForRootfs(ctx context.Context, controller, lun uint,
 		return fmt.Errorf("slot for controller %d and lun %d is already reserved", controller, lun)
 	}
 	c.controllerSlots[slot] = disk.NewReserved(controller, lun, cfg)
+	c.disksByPath[cfg.HostPath] = slot
+
 	return nil
 }
 

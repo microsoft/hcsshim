@@ -194,7 +194,9 @@ func (c *Controller) FinalizeLiveMigration(ctx context.Context, options *hcssche
 		// Source stop: lift the Save-time freeze so the defunct containers'
 		// scratch-layer unmap on delete is no longer rejected.
 		if options.Origin == hcsschema.MigrationOriginSource && c.scsiController != nil {
-			c.scsiController.Resume(ctx, c.uvm, c.guest)
+			if err := c.scsiController.Resume(ctx, c.uvm, c.guest); err != nil {
+				return fmt.Errorf("resume scsi controller: %w", err)
+			}
 		}
 
 		c.guest.SetMigrating(false)

@@ -18,7 +18,7 @@ import (
 )
 
 type Controller struct {
-	mu sync.RWMutex
+	mu sync.Mutex
 
 	// namespaceID is the HCN namespace ID in use after a successful Setup.
 	namespaceID string
