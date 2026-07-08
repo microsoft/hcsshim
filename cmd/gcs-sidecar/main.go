@@ -146,6 +146,7 @@ func main() {
 	}
 	defer logFileHandle.Close()
 
+	logrus.SetOutput(logFileHandle)
 	logrus.AddHook(shimlog.NewHook())
 
 	level, err := logrus.ParseLevel(*logLevel)

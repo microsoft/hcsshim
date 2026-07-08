@@ -39,6 +39,12 @@ const (
 	UVMContainerID      = "00000000-0000-0000-0000-000000000000"
 )
 
+// allowUnsupportedForDebug, when true, downgrades the "not supported" and
+// "unsupported request type" denials in this file to a logged warning plus
+// pass-through, so the full RPC flow can be captured in the sidecar log.
+// TEMPORARY: must be set back to false before shipping.
+var allowUnsupportedForDebug = true
+
 // - Handler functions handle the incoming message requests. It
 // also enforces security policy for confidential cwcow containers.
 // - These handler functions may do some additional processing before
@@ -174,7 +180,10 @@ func (b *Bridge) createContainer(req *request) (err error) {
 
 		// Reject HostedSystem Container fields we don't yet support.
 		if err := denyUnsupportedContainerFields(container); err != nil {
-			return fmt.Errorf("CreateContainer operation rejected: %w", err)
+			if !allowUnsupportedForDebug {
+				return fmt.Errorf("CreateContainer operation rejected: %w", err)
+			}
+			log.G(ctx).Warnf("DEBUG: allowing unsupported container field: %v", err)
 		}
 
 		// Enforce registry changes policy. This may drop unauthorized
@@ -1130,7 +1139,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			// we don't have a policy enforcer for it.
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWCombinedLayers)
 			log.G(ctx).Tracef("WCOWCombinedLayers: {%v}", settings)
-			return fmt.Errorf("WCOWCombinedLayers is not supported.")
+			if !allowUnsupportedForDebug {
+				return fmt.Errorf("WCOWCombinedLayers is not supported.")
+			}
+			log.G(ctx).Warn("DEBUG: allowing unsupported ResourceTypeCombinedLayers")
 
 		case guestresource.ResourceTypeNetworkNamespace:
 			// Forwarded to inbox GCS without enforcement, by design: the host
@@ -1149,12 +1161,17 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedVirtualDisk:
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("WCOWMappedVirtualDisk: {%v}", settings)
-			return fmt.Errorf("MappedVirtualDisk is not supported")
+			if !allowUnsupportedForDebug {
+				return fmt.Errorf("MappedVirtualDisk is not supported")
+			}
+			log.G(ctx).Warn("DEBUG: allowing unsupported ResourceTypeMappedVirtualDisk")
 
 		case guestresource.ResourceTypeHvSocket:
+			// Forwarded without enforcement: this configures the hvsock relay for
+			// the external GCS (the sidecar) during UVM setup, so it must be
+			// allowed. hvsock addressing is host-controlled regardless.
 			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
 			log.G(ctx).Tracef("HvSocketAddress { %v }", settings)
-			return fmt.Errorf("HvSocket is not supported")
 
 		case guestresource.ResourceTypeMappedDirectory:
 			// We don't have hostpath enforcement because anyway contents of the dir can be changed by the host.
@@ -1172,7 +1189,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					return fmt.Errorf("mapped directory unmount is denied by policy: %w", err)
 				}
 			default:
-				return fmt.Errorf("unsupported request type %v for MappedDirectory", modifyGuestSettingsRequest.RequestType)
+				if !allowUnsupportedForDebug {
+					return fmt.Errorf("unsupported request type %v for MappedDirectory", modifyGuestSettingsRequest.RequestType)
+				}
+				log.G(ctx).Warnf("DEBUG: allowing unsupported request type %v for MappedDirectory", modifyGuestSettingsRequest.RequestType)
 			}
 
 		case guestresource.ResourceTypeSecurityPolicy:
@@ -1326,7 +1346,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				delete(b.hostState.blockCIMVolumeHashes, volGUID)
 				delete(b.hostState.blockCIMVolumeContainers, volGUID)
 			default:
-				return fmt.Errorf("unsupported request type %v for WCOWBlockCims", modifyGuestSettingsRequest.RequestType)
+				if !allowUnsupportedForDebug {
+					return fmt.Errorf("unsupported request type %v for WCOWBlockCims", modifyGuestSettingsRequest.RequestType)
+				}
+				log.G(ctx).Warnf("DEBUG: allowing unsupported request type %v for WCOWBlockCims", modifyGuestSettingsRequest.RequestType)
 			}
 			// Send response back to shim
 			resp := &prot.ResponseBase{
@@ -1471,7 +1494,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
 				}
 			default:
-				return fmt.Errorf("unsupported request type %v for CWCOWCombinedLayers", modifyGuestSettingsRequest.RequestType)
+				if !allowUnsupportedForDebug {
+					return fmt.Errorf("unsupported request type %v for CWCOWCombinedLayers", modifyGuestSettingsRequest.RequestType)
+				}
+				log.G(ctx).Warnf("DEBUG: allowing unsupported request type %v for CWCOWCombinedLayers", modifyGuestSettingsRequest.RequestType)
 			}
 
 			// Reconstruct WCOWCombinedLayers{} req before forwarding to GCS
