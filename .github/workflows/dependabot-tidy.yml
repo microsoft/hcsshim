@@ -43,7 +43,7 @@ jobs:
             echo 'modules already tidy, nothing to push'
             exit 0
           fi
-          git config user.name 'dependabot[bot]'
-          git config user.email '49699333+dependabot[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -s -m 'go mod tidy && go mod vendor'
           git push origin HEAD:"${{ github.head_ref }}"
