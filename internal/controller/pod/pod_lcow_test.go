@@ -42,7 +42,7 @@ func newSetup(t *testing.T) (*mocks.MockvmController, *mocks.MocknetworkControll
 func expectVMCallsForNewContainer(vm *mocks.MockvmController) {
 	vm.EXPECT().RuntimeID().Return("vm-runtime-1")
 	vm.EXPECT().Guest().Return(nil)
-	vm.EXPECT().SCSIController().Return(nil)
+	vm.EXPECT().SCSIController(gomock.Any()).Return(nil, nil)
 	vm.EXPECT().Plan9Controller().Return(nil)
 	vm.EXPECT().VPCIController().Return(nil)
 }
@@ -189,6 +189,18 @@ func TestNewContainer(t *testing.T) {
 			if _, ok := c.containers[id]; !ok {
 				t.Errorf("container %q missing from map", id)
 			}
+		}
+	})
+
+	t.Run("scsi controller error", func(t *testing.T) {
+		vm, _, c := newSetup(t)
+		vm.EXPECT().SCSIController(gomock.Any()).Return(nil, errTest)
+
+		if _, err := c.NewContainer(t.Context(), "container-scsi-fail"); !errors.Is(err, errTest) {
+			t.Fatalf("NewContainer error = %v, want %v", err, errTest)
+		}
+		if _, ok := c.containers["container-scsi-fail"]; ok {
+			t.Error("container should not be registered when SCSIController fails")
 		}
 	})
 }

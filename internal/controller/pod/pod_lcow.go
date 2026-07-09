@@ -89,12 +89,17 @@ func (c *Controller) NewContainer(ctx context.Context, containerID string) (*lin
 		return nil, fmt.Errorf("container %q already exists in pod %q", containerID, c.podID)
 	}
 
+	scsiCtrl, err := c.vm.SCSIController(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get SCSI controller for pod %s: %w", c.podID, err)
+	}
+
 	containerCtrl := linuxcontainer.New(
 		c.vm.RuntimeID(),
 		c.gcsPodID,
 		containerID,
 		c.vm.Guest(),
-		c.vm.SCSIController(),
+		scsiCtrl,
 		c.vm.Plan9Controller(),
 		c.vm.VPCIController(),
 	)
