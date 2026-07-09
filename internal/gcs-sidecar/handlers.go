@@ -75,6 +75,9 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		container := cwcowHostedSystem.Container
 		spec := cwcowHostedSystemConfig.Spec
 		containerID := createContainerRequest.ContainerID
+		if err := validateContainerID(containerID); err != nil {
+			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
 		containerJSON, _ := json.Marshal(container)
 		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %s}}", string(req.message), schemaVersion, containerJSON)
 
@@ -506,6 +509,21 @@ func reconcileHostedSystemStorage(host *Host, containerID string, container *hcs
 	}
 	if _, ok := containers[containerID]; !ok {
 		return fmt.Errorf("storage layer volume %s was not verified for container %s", volGUID, containerID)
+	}
+	return nil
+}
+
+// containerIDRegex matches the identifier format used for container IDs: one
+// or more alphanumeric segments joined by single '.', '_' or '-' separators
+// (the same shape containerd enforces for identifiers). GUIDs and hex digests
+// both satisfy it. It rejects empty strings, path separators, ".." and
+// absolute paths, so a host-supplied container ID cannot be used to escape an
+// intended directory if it is later joined into a filesystem path.
+var containerIDRegex = regexp.MustCompile(`^[a-zA-Z0-9]+(?:[._-][a-zA-Z0-9]+)*$`)
+
+func validateContainerID(id string) error {
+	if !containerIDRegex.MatchString(id) {
+		return fmt.Errorf("invalid container ID %q", id)
 	}
 	return nil
 }
