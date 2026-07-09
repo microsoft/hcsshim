@@ -1463,6 +1463,11 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
 					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
+				if matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, settings.CombinedLayers.ContainerRootPath); merr != nil || !matched {
+					return fmt.Errorf("combined-layers container root path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
+						settings.CombinedLayers.ContainerRootPath)
+				}
+
 				// The layers size is only one, as this is the volume path
 				if len(settings.CombinedLayers.Layers) != 1 {
 					return fmt.Errorf("expected exactly one layer in CWCOWCombinedLayers, got %d", len(settings.CombinedLayers.Layers))
