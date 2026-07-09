@@ -1170,39 +1170,8 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			return fmt.Errorf("MappedVirtualDisk is not supported")
 
 		case guestresource.ResourceTypeHvSocket:
-			// Forwarded without enforcement: this configures the hvsock relay for
-			// the external GCS (the sidecar) during UVM setup, so it must be
-			// allowed. hvsock addressing is host-controlled regardless.
-			/*
-									\"Settings\":{\"LocalAddress\":\"3d9f5488-46b8-5fea-bfc6-e58193392bd5\",\"ParentAddress\":\"894cc2d6-9d79-424f-93fe-42969ae6d8d1\"}}}\n"
-
-									internal\gcs\prot\protocol.go
-									var WindowsGcsHvHostID = guid.GUID{
-										Data1: 0x894cc2d6,
-										Data2: 0x9d79,
-										Data3: 0x424f,
-										Data4: [8]uint8{0x93, 0xfe, 0x42, 0x96, 0x9a, 0xe6, 0xd8, 0xd1},
-									}
-
-
-								If we block this:
-
-								PS C:\w\readonly-mount\test> .\run.ps1 -Mode snp -PodJson .\pod-hostedsystem.json -ContainerJson .\container-hostedsystem.json
-					ACR login OK (takurosatodevacr); token suppressed.
-					Image is up to date for sha256:9abd13771394646ea3d5730f2a018dee30edee5956be43dcdb4df5f671b0e8bf
-					a9ac1a798a2bb5f77e6c02d949d4a7823b59978cb0e0beec41d645a37be4bf7e
-					a9ac1a798a2bb5f77e6c02d949d4a7823b59978cb0e0beec41d645a37be4bf7e
-					Stopped sandbox 5f4a393fd069de788cd9bc211438f1459180fedb138b18283a1ea22babce722c
-					Removed sandbox 5f4a393fd069de788cd9bc211438f1459180fedb138b18283a1ea22babce722c
-					Using explicit pod manifest: .\pod-hostedsystem.json
-					E0707 17:46:22.310248    5692 remote_runtime.go:237] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to start sandbox \"77485df817152875f0262968ccfb241ea2440445b69c59e69f2f249e2d6abb72\": failed to create containerd task: failed to create shim task: failed to do initial GCS setup: failed to configure HVSOCK for external GCS: guest modify: guest RPC failure: HvSocket is not supported"
-					time="2026-07-07T17:46:22Z" level=fatal msg="run pod sandbox: rpc error: code = Unknown desc = failed to start sandbox \"77485df817152875f0262968ccfb241ea2440445b69c59e69f2f249e2d6abb72\": failed to create containerd task: failed to create shim task: failed to do initial GCS setup: failed to configure HVSOCK for external GCS: guest modify: guest RPC failure: HvSocket is not supported"
-
-					FAIL: runp.ps1 unexpectedly failed (Expect=ok, podID='').
-
-				The error comes from configureHvSocketForGCS in start.go
-
-			*/
+			// Forwarded without enforcement: this is just for configuration
+			// to help guest to resolve hvsocket targets.
 			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
 			log.G(ctx).Tracef("HvSocketAddress { %v }", settings)
 
