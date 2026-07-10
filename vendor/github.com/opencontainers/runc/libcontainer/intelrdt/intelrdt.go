@@ -147,10 +147,11 @@ import (
  */
 
 type Manager struct {
-	mu     sync.Mutex
-	config *configs.Config
-	id     string
-	path   string
+	mu               sync.Mutex
+	config           *configs.Config
+	id               string
+	path             string
+	shouldCleanupDir bool
 }
 
 // NewManager returns a new instance of Manager, or nil if the Intel RDT
@@ -460,7 +461,10 @@ func (m *Manager) Apply(pid int) (err error) {
 		}
 	}
 
-	if err := os.Mkdir(path, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+	if err := os.Mkdir(path, 0o755); err == nil || errors.Is(err, os.ErrExist) {
+		// Only clean up the directory if we actually created it.
+		m.shouldCleanupDir = err == nil
+	} else {
 		return newLastCmdError(err)
 	}
 
@@ -489,8 +493,9 @@ func (m *Manager) Destroy() error {
 	}
 	// Don't remove resctrl group if closid has been explicitly specified. The
 	// group is likely externally managed, i.e. by some other entity than us.
-	// There are probably other containers/tasks sharing the same group.
-	if m.config.IntelRdt.ClosID == "" {
+	// There are probably other containers/tasks sharing the same group. Also
+	// only remove the directory if it was created by us.
+	if m.config.IntelRdt.ClosID == "" && m.shouldCleanupDir {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if err := os.Remove(m.GetPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
