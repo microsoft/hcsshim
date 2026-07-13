@@ -274,7 +274,24 @@ func trapClosedConnErr(err error) error {
 // readOptions reads in bytes from the reader and converts it to a shim options
 // struct. If no data is available from the reader, returns (nil, nil).
 func readOptions(r io.Reader) (*runhcsopts.Options, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	readDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Forcefully break the blocking io.ReadAll if the daemon disconnects
+			if c, ok := r.(io.Closer); ok {
+				c.Close()
+			}
+		case <-readDone:
+			// Read completed successfully, exit the monitor
+		}
+	}()
+
 	d, err := io.ReadAll(r)
+	close(readDone)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read input")
 	}
