@@ -27,6 +27,7 @@ require (
 	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
 	k8s.io/cri-api v0.34.1
+	k8s.io/cri-client v0.34.1
 )
 
 require (

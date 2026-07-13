@@ -395,5 +395,7 @@ honnef.co/go/tools v0.0.0-20190102054323-c2f93a96b099/go.mod h1:rf3lG4BRIbNafJWh
 honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 k8s.io/cri-api v0.34.1 h1:n2bU++FqqJq0CNjP/5pkOs0nIx7aNpb1Xa053TecQkM=
 k8s.io/cri-api v0.34.1/go.mod h1:4qVUjidMg7/Z9YGZpqIDygbkPWkg3mkS1PvOx/kpHTE=
+k8s.io/cri-client v0.34.1 h1:eq6FcEPDDL379w0WhPnItj2egsMZqOtU7nv1JaJmwP0=
+k8s.io/cri-client v0.34.1/go.mod h1:Dq6mKWV2ugO5tMv4xqVgcQ8vD7csP//e4KkzcFi2Pio=
 sigs.k8s.io/yaml v1.6.0 h1:G8fkbMSAFqgEFgh4b1wmtzDnioxFCUgTZhlbj5P9QYs=
 sigs.k8s.io/yaml v1.6.0/go.mod h1:796bPqUfzR/0jLAl6XjHl3Ck7MiyVv8dbTdyT3/pMf4=

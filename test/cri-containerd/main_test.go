@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	kubeutil "github.com/containerd/containerd/v2/integration/remote/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
+	kubeutil "k8s.io/cri-client/pkg/util"
 
 	"github.com/Microsoft/hcsshim/osversion"
 	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"

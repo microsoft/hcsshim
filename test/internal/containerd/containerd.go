@@ -14,12 +14,12 @@ import (
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/core/remotes/docker/config"
 	"github.com/containerd/containerd/v2/core/snapshots"
-	kubeutil "github.com/containerd/containerd/v2/integration/remote/util"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
 	"github.com/opencontainers/image-spec/identity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	kubeutil "k8s.io/cri-client/pkg/util"
 
 	imagesutil "github.com/Microsoft/hcsshim/test/pkg/images"
 	"github.com/Microsoft/hcsshim/test/pkg/timeout"
