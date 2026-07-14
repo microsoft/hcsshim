@@ -12,9 +12,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 
-	"github.com/Microsoft/hcsshim/internal/computecore"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/pkg/computecore"
 )
 
 // migrationNotificationBufferSize is the capacity of a System's live migration
