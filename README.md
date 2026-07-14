@@ -119,7 +119,7 @@ subsection below.
 - **Implementation:** coming soon.
 - **Build Tag:** wcow
 
-#### containerd-shim-process-v2
+#### containerd-shim-wcowprocess-v2
 
 - **Purpose:** Runs Process-isolated Windows Server containers and Host
   Process Containers — workloads that execute directly on the host with no utility VM.
@@ -130,8 +130,8 @@ subsection below.
   the rest of the pod attaches to.
 - **Tasks:** the actual workload containers belonging to the pod, linked back to the
   pause via the `io.kubernetes.cri.sandbox-id` annotation.
-- **Implementation:** coming soon.
-- **Build Tag:** process
+- **Implementation:** [`./cmd/containerd-shim-wcowprocess-v2`](./cmd/containerd-shim-wcowprocess-v2).
+- **Build Tag:** wcowprocess
 
 ##### Building
 

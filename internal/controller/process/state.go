@@ -1,4 +1,4 @@
-//go:build windows && (lcow || wcow)
+//go:build windows && (lcow || wcow || wcowprocess)
 
 package process
 

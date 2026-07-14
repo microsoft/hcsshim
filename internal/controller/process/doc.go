@@ -1,4 +1,4 @@
-//go:build windows && (lcow || wcow)
+//go:build windows && (lcow || wcow || wcowprocess)
 
 // Package process provides a controller for managing individual process
 // (init or exec) instances within a container. It handles the full lifecycle
