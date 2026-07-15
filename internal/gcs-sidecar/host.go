@@ -33,6 +33,11 @@ type Host struct {
 	// CWCOWCombinedLayers mounted it, used to validate the createContainer
 	// Storage.Path.
 	containerRootPaths map[string]string
+	// mountedRoots holds the combined-layers container roots that are currently
+	// mounted (set on CWCOWCombinedLayers Add, cleared on Remove), keyed by the
+	// lower-cased root path. Used to refuse deleting a container whose root is
+	// still mounted.
+	mountedRoots map[string]struct{}
 }
 
 type Container struct {
@@ -70,6 +75,7 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 		blockCIMVolumeHashes:     make(map[guid.GUID][]string),
 		blockCIMVolumeContainers: make(map[guid.GUID]map[string]struct{}),
 		containerRootPaths:       make(map[string]string),
+		mountedRoots:             make(map[string]struct{}),
 		securityOptions:          securityPolicyOptions,
 	}
 }
@@ -97,6 +103,9 @@ func (h *Host) RemoveContainer(ctx context.Context, id string) error {
 		return gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 
+	if rootPath, ok := h.containerRootPaths[id]; ok {
+		delete(h.mountedRoots, strings.ToLower(rootPath))
+	}
 	delete(h.containers, id)
 	delete(h.containerRootPaths, id)
 	return nil
@@ -132,6 +141,35 @@ func (h *Host) IsContainerRootInUse(rootPath string) bool {
 		}
 	}
 	return false
+}
+
+// SetContainerRootMounted records (mounted=true) or clears (mounted=false)
+// whether the combined-layers root at rootPath is currently mounted.
+func (h *Host) SetContainerRootMounted(rootPath string, mounted bool) {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	key := strings.ToLower(rootPath)
+	if mounted {
+		h.mountedRoots[key] = struct{}{}
+	} else {
+		delete(h.mountedRoots, key)
+	}
+}
+
+// IsContainerRootMountedForContainer reports whether the combined-layers root
+// recorded for the given container is still mounted.
+// (cf. LCOW hostMounts.HasOverlayMountedAt)
+func (h *Host) IsContainerRootMountedForContainer(cid string) bool {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	rootPath, ok := h.containerRootPaths[cid]
+	if !ok {
+		return false
+	}
+	_, mounted := h.mountedRoots[strings.ToLower(rootPath)]
+	return mounted
 }
 
 // GetProcess returns the Process with the matching 'pid'. If the 'pid' does

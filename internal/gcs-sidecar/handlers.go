@@ -1007,8 +1007,23 @@ func (b *Bridge) deleteContainerState(req *request) (err error) {
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal deleteContainerState: %w", err)
 	}
-	err = b.hostState.RemoveContainer(req.ctx, r.ContainerID)
+
+	// Refuse to delete the state of a container that is still running, or whose
+	// combined-layers root is still mounted, so the host can't wipe a live
+	// container's rootfs (cf. LCOW Host.DeleteContainerState).
+	c, err := b.hostState.GetCreatedContainer(req.ctx, r.ContainerID)
 	if err != nil {
+		log.G(req.ctx).Tracef("Container not found during deleteContainerState: %v", r.ContainerID)
+		return fmt.Errorf("container not found: %w", err)
+	}
+	if !c.terminated.Load() {
+		return fmt.Errorf("deleteContainerState denied: container %s is still running", r.ContainerID)
+	}
+	if b.hostState.IsContainerRootMountedForContainer(r.ContainerID) {
+		return fmt.Errorf("deleteContainerState denied: container %s combined-layers root is still mounted", r.ContainerID)
+	}
+
+	if err = b.hostState.RemoveContainer(req.ctx, r.ContainerID); err != nil {
 		log.G(req.ctx).Tracef("Container not found during deleteContainerState: %v", r.ContainerID)
 		return fmt.Errorf("container not found: %w", err)
 	}
@@ -1472,8 +1487,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				}
 
 				// Record the container root path so createContainer can cross-check
-				// the forwarded Storage.Path against it.
+				// the forwarded Storage.Path against it, and mark the root mounted so
+				// deleteContainerState can refuse deletion until it's unmounted.
 				b.hostState.containerRootPaths[containerID] = settings.CombinedLayers.ContainerRootPath
+				b.hostState.SetContainerRootMounted(settings.CombinedLayers.ContainerRootPath, true)
 				// The following two folders are expected to be present in the scratch.
 				// But since we have just formatted the scratch we would need to
 				// create them manually.
@@ -1500,6 +1517,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchUnmountPolicy(ctx, settings.CombinedLayers.ContainerRootPath); err != nil {
 					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
 				}
+				b.hostState.SetContainerRootMounted(settings.CombinedLayers.ContainerRootPath, false)
 			default:
 				return fmt.Errorf("unsupported request type %v for CWCOWCombinedLayers", modifyGuestSettingsRequest.RequestType)
 			}

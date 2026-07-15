@@ -1003,3 +1003,60 @@ func TestIsContainerRootInUse(t *testing.T) {
 		t.Errorf("expected root %q to be free after container terminated", rootPath)
 	}
 }
+
+// TestDeleteContainerState_DeniesRunningOrMounted verifies deleteContainerState
+// refuses to delete the state of a container that is still running or whose
+// combined-layers root is still mounted, and allows it once terminated and
+// unmounted.
+func TestDeleteContainerState_DeniesRunningOrMounted(t *testing.T) {
+	const cid = "container-1"
+	const rootPath = `C:\mounts\scsi\m0`
+
+	newReq := func() *request {
+		msg, err := json.Marshal(prot.DeleteContainerStateRequest{
+			RequestBase: prot.RequestBase{ContainerID: cid},
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		return &request{
+			ctx: context.Background(),
+			header: messageHeader{
+				Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCDeleteContainerState),
+				Size: uint32(len(msg)) + prot.HdrSize,
+				ID:   1,
+			},
+			message: msg,
+		}
+	}
+
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	c := &Container{id: cid, processes: make(map[uint32]*containerProcess)}
+	if err := b.hostState.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+	b.hostState.containerRootPaths[cid] = rootPath
+	b.hostState.SetContainerRootMounted(rootPath, true)
+
+	// Still running -> denied.
+	if err := b.deleteContainerState(newReq()); err == nil || !strings.Contains(err.Error(), "still running") {
+		t.Fatalf("expected running denial, got %v", err)
+	}
+
+	// Terminated but root still mounted -> denied.
+	c.terminated.Store(true)
+	if err := b.deleteContainerState(newReq()); err == nil || !strings.Contains(err.Error(), "still mounted") {
+		t.Fatalf("expected mounted denial, got %v", err)
+	}
+
+	// Terminated and unmounted -> allowed and forwarded to GCS.
+	b.hostState.SetContainerRootMounted(rootPath, false)
+	if err := b.deleteContainerState(newReq()); err != nil {
+		t.Fatalf("expected allow, got %v", err)
+	}
+	select {
+	case <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("expected request forwarded to GCS")
+	}
+}
