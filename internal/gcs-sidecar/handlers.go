@@ -1491,6 +1491,12 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 
 			case guestrequest.RequestTypeRemove:
 				log.G(ctx).Tracef("CWCOWCombinedLayers: Remove")
+				// Refuse to unmount the combined-layers root while a running
+				// container still uses it as its rootfs, so the host can't swap a
+				// live container's rootfs (cf. LCOW Host.IsOverlayInUse).
+				if b.hostState.IsContainerRootInUse(settings.CombinedLayers.ContainerRootPath) {
+					return fmt.Errorf("combined-layers unmount denied: container root %q is in use by a running container", settings.CombinedLayers.ContainerRootPath)
+				}
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchUnmountPolicy(ctx, settings.CombinedLayers.ContainerRootPath); err != nil {
 					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
 				}

@@ -967,3 +967,39 @@ func TestExecuteProcess_InitExec_AllowsStdioKeepsPipes(t *testing.T) {
 		t.Errorf("stdio pipes should be preserved when allowed: %+v", gotParams)
 	}
 }
+
+// TestIsContainerRootInUse verifies that a container's combined-layers root is
+// treated as in-use only while the container is running (not terminated), and
+// only for the matching root path (case-insensitive).
+func TestIsContainerRootInUse(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	host := b.hostState
+
+	const cid = "container-1"
+	const rootPath = `C:\mounts\scsi\m0`
+
+	c := &Container{id: cid, processes: make(map[uint32]*containerProcess)}
+	if err := host.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+	host.containerRootPaths[cid] = rootPath
+
+	// Running container: its root is in use.
+	if !host.IsContainerRootInUse(rootPath) {
+		t.Errorf("expected root %q to be in use for a running container", rootPath)
+	}
+	// Paths compare with EqualFold, so a differently-cased path still matches.
+	if !host.IsContainerRootInUse(`c:\mounts\scsi\m0`) {
+		t.Errorf("expected case-insensitive match for %q", rootPath)
+	}
+	// An unrelated path is not in use.
+	if host.IsContainerRootInUse(`C:\mounts\scsi\m1`) {
+		t.Errorf("did not expect unrelated path to be in use")
+	}
+
+	// Once the container has exited, its root is no longer in use.
+	c.terminated.Store(true)
+	if host.IsContainerRootInUse(rootPath) {
+		t.Errorf("expected root %q to be free after container terminated", rootPath)
+	}
+}

@@ -463,6 +463,24 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 					b.pendingMu.Unlock()
 				}
 
+				// If this is a container-exit notification, mark the container
+				// terminated so a later combined-layers unmount isn't blocked as
+				// in-use.
+				const MsgNotifyContainer prot.MsgType = prot.MsgTypeNotify | prot.ComputeSystem | prot.NotifyContainer
+
+				if header.Type == MsgNotifyContainer {
+					var ntf prot.ContainerNotification
+					ntf.ResultInfo.Value = &json.RawMessage{}
+					if uerr := json.Unmarshal(message, &ntf); uerr != nil {
+						log.G(ctx).WithError(uerr).Error("failed to unmarshal container notification")
+					} else if c, cerr := b.hostState.GetCreatedContainer(ctx, ntf.ContainerID); cerr == nil {
+						// A not-found error just means the notification is for
+						// something we don't track (the UVM itself, or a container
+						// already deleted).
+						c.terminated.Store(true)
+					}
+				}
+
 				// Forward to shim
 				resp := bridgeResponse{
 					ctx:      context.Background(),

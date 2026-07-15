@@ -6,7 +6,9 @@ package bridge
 import (
 	"context"
 	"io"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
@@ -42,6 +44,9 @@ type Container struct {
 	commandLineExec bool
 	// allowStdio is the create-time stdio-access policy decision.
 	allowStdio bool
+	// terminated is set once the container's init process has exited (via the
+	// guest container-exit notification).
+	terminated atomic.Bool
 }
 
 // Process is a struct that defines the lifetime and operations associated with
@@ -107,6 +112,26 @@ func (h *Host) GetCreatedContainer(ctx context.Context, id string) (*Container, 
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 	return c, nil
+}
+
+// IsContainerRootInUse reports whether a container that has not exited is still
+// using the combined-layers root mounted at rootPath as its rootfs, so the
+// sidecar can refuse to unmount it. (cf. LCOW Host.IsOverlayInUse in
+// internal/guest/runtime/hcsv2/uvm.go; WCOW uses a filesystem filter / combined
+// layers rather than an overlayfs.)
+func (h *Host) IsContainerRootInUse(rootPath string) bool {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	for id, c := range h.containers {
+		if c.terminated.Load() {
+			continue
+		}
+		if strings.EqualFold(h.containerRootPaths[id], rootPath) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetProcess returns the Process with the matching 'pid'. If the 'pid' does
