@@ -74,12 +74,28 @@ func (c *Controller) generateContainerDocument(
 	}
 	linuxSpec.Root.Path = c.layers.rootfsPath
 
+	// Rewrite sandbox-id to the GCS-known pod ID, which differs from the
+	// spec's pod ID after live migration. No-op pre-migration.
+	rewriteSandboxIDAnnotation(linuxSpec, c.gcsPodID)
+
 	return &vmHostedContainerSettingsV2{
 		SchemaVersion:    schemaversion.SchemaV21(),
 		OCIBundlePath:    ospath.Join("linux", guestpath.LCOWV2RootPrefixInVM, c.gcsPodID, c.gcsContainerID),
 		OCISpecification: linuxSpec,
 		ScratchDirPath:   c.layers.scratch.guestPath,
 	}, nil
+}
+
+// rewriteSandboxIDAnnotation sets [annotations.KubernetesSandboxID] to gcsPodID
+// if the annotation is present.
+func rewriteSandboxIDAnnotation(spec *specs.Spec, gcsPodID string) {
+	if spec == nil || spec.Annotations == nil {
+		return
+	}
+	if _, ok := spec.Annotations[annotations.KubernetesSandboxID]; !ok {
+		return
+	}
+	spec.Annotations[annotations.KubernetesSandboxID] = gcsPodID
 }
 
 // sanitizeSpec deep-copies the OCI spec and strips fields unsupported by the GCS.

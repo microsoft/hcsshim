@@ -35,6 +35,10 @@ const (
 	// UVM info file, which can be made available to workload containers and used for
 	// validation purposes.
 	DefaultUVMReferenceInfoFile = "reference_info.cose"
+	// DefaultUVMHashEnvelopeReferenceInfoFile is the default file name for a COSE_Sign1
+	// hash envelope reference UVM info file, which can be made available to workload
+	// containers and used for validation purposes.
+	DefaultUVMHashEnvelopeReferenceInfoFile = "reference_info_hash_envelope.cose"
 
 	// InitrdFile is the default file name for an initrd.img used to boot LCOW.
 	InitrdFile = "initrd.img"

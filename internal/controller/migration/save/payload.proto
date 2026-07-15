@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package hcsshim.controller.migration.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/migration/save;save";
+
+import "google/protobuf/any.proto";
+
+// Payload is the top-level migration envelope exchanged between
+// source and destination shims. The VM and pod payloads are carried as
+// opaque [Any]s so each owning controller is independently versioned.
+message Payload {
+  // schema_version is bumped whenever this envelope's semantics change.
+  uint32 schema_version = 1;
+
+  // vm is the VM controller's [Payload] envelope.
+  google.protobuf.Any vm = 2;
+
+  // pods holds one [Payload] envelope per pod controller in the sandbox.
+  repeated google.protobuf.Any pods = 3;
+}

@@ -82,7 +82,7 @@ jobs:
       # setup runner before initializing & running CodeQL
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           show-progress: false
 

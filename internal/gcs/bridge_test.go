@@ -147,8 +147,34 @@ func TestBridgeRPCBridgeClosed(t *testing.T) {
 	eerr := errors.New("forcibly terminated")
 	b.kill(eerr)
 	err := b.RPC(context.Background(), prot.RPCCreate, nil, nil, false)
-	if err != eerr { //nolint:errorlint
-		t.Fatal("unexpected: ", err)
+	// Must wrap both the transport error and ErrBridgeClosed.
+	if !errors.Is(err, eerr) {
+		t.Fatalf("expected err to wrap eerr; got: %v", err)
+	}
+	if !errors.Is(err, ErrBridgeClosed) {
+		t.Fatalf("expected err to wrap ErrBridgeClosed; got: %v", err)
+	}
+}
+
+// TestBridgeKillWrapsSentinel verifies that once the bridge has been killed,
+// any subsequent or in-flight operation surfaces an error recognizable as a
+// closed bridge, so cleanup paths can safely give up after the guest dies
+// instead of retrying forever.
+func TestBridgeKillWrapsSentinel(t *testing.T) {
+	b := startReflectedBridge(t, 0)
+	transportErr := errors.New("bridge read failed: header read: EOF")
+	b.kill(transportErr)
+
+	if err := b.Wait(); !errors.Is(err, ErrBridgeClosed) || !errors.Is(err, transportErr) {
+		t.Fatalf("Wait(): expected err to wrap both ErrBridgeClosed and transportErr; got: %v", err)
+	}
+
+	err := b.RPC(context.Background(), prot.RPCCreate, &testReq{}, &testResp{}, false)
+	if !errors.Is(err, ErrBridgeClosed) {
+		t.Fatalf("post-kill RPC: expected errors.Is(err, ErrBridgeClosed); got: %v", err)
+	}
+	if !errors.Is(err, transportErr) {
+		t.Fatalf("post-kill RPC: expected errors.Is(err, transportErr); got: %v", err)
 	}
 }
 

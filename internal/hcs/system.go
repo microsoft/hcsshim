@@ -7,13 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/computecore"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -40,15 +38,6 @@ type System struct {
 	os, typ, owner string
 	startTime      time.Time
 	stopTime       time.Time
-
-	// Live Migration specific fields.
-	migrationHandle   computecore.HcsSystem
-	migrationNotifyCh chan hcsschema.OperationSystemMigrationNotificationInfo
-	// migrationPinner pins &migrationNotifyCh while it is registered as the
-	// callback context with HCS, so the GC sees the cgo-held uintptr as a
-	// live reference. Unpinned in closeMigrationHandle after HCS guarantees
-	// no further callbacks will fire.
-	migrationPinner runtime.Pinner
 }
 
 var _ cow.Container = &System{}
@@ -202,31 +191,8 @@ func GetComputeSystems(ctx context.Context, q schema1.ComputeSystemQuery) ([]sch
 	return computeSystems, nil
 }
 
-// Start synchronously starts the computeSystem.
-func (computeSystem *System) Start(ctx context.Context) error {
-	computeSystem.handleLock.RLock()
-	defer computeSystem.handleLock.RUnlock()
-
-	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, "hcs::System::Start", ErrAlreadyClosed, nil)
-	}
-
-	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
-	if err != nil {
-		return makeSystemError(computeSystem, "hcs::System::Start", err, nil)
-	}
-	defer computecore.HcsCloseOperation(ctx, op)
-
-	return computeSystem.start(ctx, op, "")
-}
-
-// start is the shared implementation used by Start and StartWithMigrationOptions.
-// The caller provides a pre-created computecore operation (with any resources already
-// attached) and the JSON-encoded options string to pass to HcsStartComputeSystem.
-//
-// The caller MUST hold computeSystem.handleLock and verify the handle is valid
-// before calling this method.
-func (computeSystem *System) start(ctx context.Context, op computecore.HcsOperation, opts string) (err error) {
+// Start synchronously starts the computeSystem using HCS V1 API.
+func (computeSystem *System) Start(ctx context.Context) (err error) {
 	operation := "hcs::System::Start"
 
 	// hcsStartComputeSystemContext is an async operation. Start the outer span
@@ -236,19 +202,21 @@ func (computeSystem *System) start(ctx context.Context, op computecore.HcsOperat
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
-	if err := computecore.HcsStartComputeSystem(
-		ctx,
-		computecore.HcsSystem(computeSystem.handle),
-		op,
-		opts,
-	); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
+
+	// prevent starting an exited system because waitblock we do not recreate waitBlock
+	// or rerun waitBackground, so we have no way to be notified of it closing again
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
 	}
 
-	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
-		return makeSystemError(computeSystem, operation, err, nil)
+	resultJSON, err := vmcompute.HcsStartComputeSystem(ctx, computeSystem.handle, "")
+	events, err := processAsyncHcsResult(ctx, err, resultJSON, computeSystem.callbackNumber,
+		hcsNotificationSystemStartCompleted, &timeout.SystemStart)
+	if err != nil {
+		return makeSystemError(computeSystem, operation, err, events)
 	}
-
 	computeSystem.startTime = time.Now()
 	return nil
 }
@@ -411,6 +379,20 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 	return properties, nil
 }
 
+// openSilo opens the container's server silo job object by its well-known name
+// (`\Container_<id>`). HCS owns the silo; the only way to open it from the shim is
+// by name, and only while running as SYSTEM. The caller owns the returned handle and
+// must Close it.
+//
+// In the future we can make use of some new functionality in HCS that allows you to
+// pass a job object for HCS to use for the container.
+func (computeSystem *System) openSilo(ctx context.Context) (*jobobject.JobObject, error) {
+	return jobobject.Open(ctx, &jobobject.Options{
+		UseNTVariant: true,
+		Name:         siloNameFmt(computeSystem.id),
+	})
+}
+
 // queryInProc handles querying for container properties without reaching out to HCS. `props`
 // will be updated to contain any data returned from the queries present in `types`. If any properties
 // failed to be queried they will be tallied up and returned in as the first return value. Failures on
@@ -421,14 +403,7 @@ func (computeSystem *System) queryInProc(
 	props *hcsschema.Properties,
 	types []hcsschema.PropertyType,
 ) ([]hcsschema.PropertyType, error) {
-	// In the future we can make use of some new functionality in the HCS that allows you
-	// to pass a job object for HCS to use for the container. Currently, the only way we'll
-	// be able to open the job/silo is if we're running as SYSTEM.
-	jobOptions := &jobobject.Options{
-		UseNTVariant: true,
-		Name:         siloNameFmt(computeSystem.id),
-	}
-	job, err := jobobject.Open(ctx, jobOptions)
+	job, err := computeSystem.openSilo(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -520,6 +495,48 @@ func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcssch
 			WriteSizeBytes:       storageInfo.WriteStats.TotalSize,
 		},
 	}, nil
+}
+
+// SetCPUGroupAffinities pins the container's server silo to the given processor
+// group affinities. HCS does not expose a CPU-affinity field on the container Processor
+// schema, so for process-isolated (Argon) containers we set the affinity directly on the
+// silo's job object via SetInformationJobObject(JobObjectGroupInformationEx).
+//
+// HCS owns the silo; we only open a transient handle (by the silo's well-known job name,
+// the same handle queryInProc opens) to record the affinity property. The kernel enforces
+// it on every process that joins the silo via AssignProcessToJobObject — including the init
+// process at Start and any descendants it spawns.
+//
+// This must be called after the compute system is created but before it is started, so the
+// affinity is already recorded on the job when HCS assigns the init process. Applying it to
+// an already-running silo is also safe: the kernel re-applies the mask to current members and
+// migrates threads at the next scheduling dispatch.
+//
+// It implements the cow.Container interface.
+func (computeSystem *System) SetCPUGroupAffinities(ctx context.Context, affinities []jobobject.GroupAffinity) error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
+
+	// Guard the compute system's lifecycle while we touch its silo: the RLock blocks
+	// a concurrent Close(), and handle == 0 means it is already torn down.
+	if computeSystem.handle == 0 {
+		return fmt.Errorf("set cpu group affinities on %s silo: %w", computeSystem.ID(), ErrAlreadyClosed)
+	}
+	// The silo job object only exists for containers, not VM-based compute systems.
+	if computeSystem.typ != "container" {
+		return fmt.Errorf("cpu group affinities are only supported on container compute systems, got %q", computeSystem.typ)
+	}
+
+	job, err := computeSystem.openSilo(ctx)
+	if err != nil {
+		return fmt.Errorf("open %s silo: %w", computeSystem.ID(), err)
+	}
+	defer job.Close()
+
+	if err := job.SetCPUGroupAffinities(affinities); err != nil {
+		return fmt.Errorf("set cpu group affinities on %s silo: %w", computeSystem.ID(), err)
+	}
+	return nil
 }
 
 // hcsPropertiesV2Query is a helper to make a HcsGetComputeSystemProperties call using the V2 schema property types.
@@ -866,9 +883,6 @@ func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 		computeSystem.waitError = ErrAlreadyClosed
 		close(computeSystem.waitBlock)
 	})
-
-	// Clean up migration handle if it was opened.
-	computeSystem.closeMigrationHandle(ctx)
 
 	return nil
 }

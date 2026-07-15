@@ -25,7 +25,8 @@ type VirtualMachine struct {
 	StorageQoS       *StorageQoS       `json:"StorageQoS,omitempty"`
 	DebugOptions     *DebugOptions     `json:"DebugOptions,omitempty"`
 	GuestConnection  *GuestConnection  `json:"GuestConnection,omitempty"`
-	SecuritySettings *SecuritySettings `json:"SecuritySettings,omitempty"`
+	SecuritySettings  *SecuritySettings  `json:"SecuritySettings,omitempty"`
+	ResourcePartitionId string            `json:"ResourcePartitionId,omitempty"`
 	// Live migration options to be used on destination.
 	MigrationOptions *MigrationInitializeOptions `json:"MigrationOptions,omitempty"`
 }

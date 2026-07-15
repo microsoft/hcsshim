@@ -19,7 +19,7 @@
 //
 // # Usage
 //
-//	c := scsi.New(numControllers, vmOps, linuxGuestOps, windowsGuestOps)
+//	c := scsi.New(numControllers, vmOps, guestOps)
 //
 //	// Reserve a slot (no I/O yet):
 //	id, err := c.Reserve(ctx, diskConfig, mountConfig)
@@ -36,6 +36,14 @@
 // fully mapped. [Controller.UnmapFromGuest] is retryable: if it fails
 // partway through teardown, calling it again with the same reservation ID
 // resumes from where the previous attempt stopped.
+//
+// # Migration
+//
+// Taking a snapshot blocks all operations until migration is resumed, so the
+// live state cannot diverge from the captured snapshot while it is handed off.
+// A controller reconstructed from a snapshot on the destination is likewise
+// blocked; resuming binds the live host and guest interfaces and lifts the
+// block on both source and destination.
 //
 // # Layered Design
 //

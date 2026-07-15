@@ -494,16 +494,3 @@ func TestConvertV2StatsToV1_NilInput(t *testing.T) {
 		t.Error("ConvertV2StatsToV1(nil) should return empty metrics with all nil fields")
 	}
 }
-
-func TestHost_InitializeVirtualPodSupport_ErrorCases(t *testing.T) {
-	host := &Host{}
-
-	// Test with nil input
-	err := host.InitializeVirtualPodSupport(nil)
-	if err == nil {
-		t.Error("Expected error for nil input")
-	}
-	if err != nil && err.Error() != "no valid cgroup manager provided for virtual pod support" {
-		t.Errorf("Unexpected error message: %s", err.Error())
-	}
-}

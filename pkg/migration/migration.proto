@@ -11,7 +11,7 @@ import "github.com/Microsoft/hcsshim/pkg/migration/migration_options.proto";
 // migration (LM) of a sandbox (utility VM and its containers) from a SOURCE
 // host to a DESTINATION host.
 //
-// High-level flow (in order):
+// High-level success flow (in order):
 //
 //   SOURCE                                  DESTINATION
 //   ------                                  -----------
@@ -22,6 +22,13 @@ import "github.com/Microsoft/hcsshim/pkg/migration/migration_options.proto";
 //   6. Notifications (stream)               6. Notifications (stream)
 //   7. TransferSandbox          ◄────────►  7. TransferSandbox
 //   8. FinalizeSandbox                      8. FinalizeSandbox
+//   9. Cleanup                              9. Cleanup
+//
+// Cancel is invoked on BOTH sides whenever a migration is aborted, to stop
+// the in-flight transfer. Cleanup is the terminal call on BOTH sides and is
+// always issued last to revert the shim state machine, regardless of
+// whether the migration succeeded, failed, or was cancelled. Both Cancel
+// and Cleanup are mandatory on both sides when cancelling a migration.
 //
 // NewTask is part of the existing task service (not this service) and is what
 // the destination uses to attach updated resource paths to the rehydrated
@@ -122,6 +129,30 @@ service Migration {
     // the duplicated sockets in the shim continue to work and the shim can
     // finish the live migration on its own.
     rpc CreateDuplicateSocket(CreateDuplicateSocketRequest) returns (CreateDuplicateSocketResponse);
+
+    // Cancel aborts an in-flight live migration. It is mandatory on BOTH
+    // the source and the destination to cancel a migration that is already
+    // underway, and is the only way to do so.
+    //
+    // Cancel calls into HCS to cancel the migration on the underlying
+    // compute system and closes the migration socket. It does NOT revert
+    // the shim's migration state machine back to the normal state; that is
+    // done exclusively by Cleanup. Consequently, after Cancel returns, the
+    // sandbox is still considered to be migrating and the regular task APIs
+    // remain unavailable until Cleanup is called.
+    rpc Cancel(CancelRequest) returns (CancelResponse);
+
+    // Cleanup is the LAST, terminal call of a live migration and is invoked
+    // in ALL cases — whether the migration completed successfully, failed,
+    // or was cancelled. It is called on BOTH the source and the destination.
+    //
+    // Cleanup reverts the migration controller's state machine, along with
+    // all other controllers, back to the normal state. The migration
+    // controller tracks the current state of the migration; based on that
+    // state Cleanup either resumes or aborts the controllers as appropriate.
+    // On resume, the regular task APIs become available again once Cleanup
+    // completes.
+    rpc Cleanup(CleanupRequest) returns (CleanupResponse);
 }
 
 message PrepareAndExportSandboxRequest {
@@ -246,3 +277,20 @@ message CreateDuplicateSocketRequest {
 }
 
 message CreateDuplicateSocketResponse {}
+
+message CancelRequest {
+    // Identifier for the active LM session. Must match the session_id used
+    // for the rest of this LM on this side.
+    string session_id = 1;
+}
+
+message CancelResponse {}
+
+message CleanupRequest {
+    // Identifier for the active LM session. Must match the session_id used
+    // for the rest of this LM on this side.
+    string session_id = 1;
+}
+
+message CleanupResponse {}
+

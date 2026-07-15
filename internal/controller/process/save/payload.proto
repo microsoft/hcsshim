@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package hcsshim.controller.process.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/process/save;save";
+
+import "google/protobuf/duration.proto";
+
+// Payload is the migration payload owned by a single process controller. It is
+// the top-level message wrapped in an [anypb.Any] when handed off between
+// source and destination shims.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // exec_id is the process's exec identifier; empty for the container's
+  // init process.
+  string exec_id = 2;
+
+  // pid is the process ID inside the guest.
+  int32 pid = 3;
+
+  // bundle is the OCI bundle path on the host.
+  string bundle = 4;
+
+  // oci_process_spec_json is the JSON-encoded OCI process specification.
+  bytes oci_process_spec_json = 5;
+
+  // io_retry_timeout is how long IO relay reconnects are retried for this
+  // process.
+  google.protobuf.Duration io_retry_timeout = 6;
+
+  // stdin_port, stdout_port and stderr_port are the vsock ports used by
+  // the GCS<->shim IO relay for this process. The destination reattaches
+  // IO on the same ports so streams do not need to be renegotiated.
+  uint32 stdin_port  = 7;
+  uint32 stdout_port = 8;
+  uint32 stderr_port = 9;
+
+  // wait_call_id is the source bridge's outstanding WaitForProcess request
+  // id. The destination pre-registers a stub rpc against this id instead of
+  // issuing a duplicate wait. Zero if absent.
+  int64 wait_call_id = 10;
+}

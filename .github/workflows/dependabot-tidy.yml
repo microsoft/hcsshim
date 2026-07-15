@@ -1,0 +1,49 @@
+# Dependabot bumps `/` and `/test` as independent modules, but `/test` inherits the
+# root's dependencies via `replace ... => ../`, so a root bump leaves test/go.{mod,sum}
+# stale. This re-tidies both modules and re-vendors the root (the only vendored module),
+# then pushes the fix back to the PR branch.
+name: Dependabot Tidy
+
+on: pull_request
+
+# contents:write lets the built-in GITHUB_TOKEN push the fix; no PAT/App token needed.
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  tidy:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          show-progress: false
+
+      - name: Install Go
+        uses: ./.github/actions/setup-go
+        with:
+          fill-module-cache: true
+
+      - name: Tidy both modules and vendor the root
+        run: |
+          go mod tidy -e
+          go mod vendor -e
+          (cd test && go mod tidy -e)
+
+      - name: Commit and push if changed
+        run: |
+          git add -A go.mod go.sum vendor test/go.mod test/go.sum
+          if git diff --cached --quiet; then
+            echo 'modules already tidy, nothing to push'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -s -m 'go mod tidy && go mod vendor'
+          git push origin HEAD:"${{ github.head_ref }}"

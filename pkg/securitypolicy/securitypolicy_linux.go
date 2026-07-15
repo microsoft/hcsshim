@@ -18,12 +18,8 @@ import (
 //nolint:unused
 const osType = "linux"
 
-func ExtendPolicyWithNetworkingMounts(sandboxID string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {
-	roSpec := &oci.Spec{
-		Root:        spec.Root,
-		Annotations: spec.Annotations,
-	}
-	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
+func ExtendPolicyWithNetworkingMounts(sandboxRoot string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {
+	networkingMounts := specInternal.GenerateWorkloadContainerNetworkMountsFromRoot(sandboxRoot, spec)
 	if err := enforcer.ExtendDefaultMounts(networkingMounts); err != nil {
 		return err
 	}

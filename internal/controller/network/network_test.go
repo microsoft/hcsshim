@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/mock/gomock"
 
+	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/controller/network/mocks"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
@@ -191,5 +192,39 @@ func TestTeardown_NoOpFromTornDown(t *testing.T) {
 	}
 	if c.netState != StateTornDown {
 		t.Errorf("expected state to remain TornDown, got %s", c.netState)
+	}
+}
+
+// TestTeardown_FromMigratingDropsBindings verifies that tearing down a migrating
+// controller (destination abort or source termination) drops its endpoint
+// bindings without touching the guest and moves to TornDown.
+func TestTeardown_FromMigratingDropsBindings(t *testing.T) {
+	for _, st := range []State{StateDestinationMigrating, StateSourceMigrating} {
+		t.Run(st.String(), func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			vm := mocks.NewMockvmNetworkManager(ctrl)
+			guest := mocks.NewMockguestNetwork(ctrl)
+			c := New(
+				&Options{NetworkNamespace: "ns-1"},
+				vm,
+				guest,
+				newCapsProvider(t, ctrl, true),
+			)
+			c.netState = st
+			c.vmEndpoints = map[string]*hcn.HostComputeEndpoint{
+				"nic-1": {Id: "ep-1", Name: "eth0"},
+			}
+
+			// No EXPECT() on vm or guest — no guest-side removal must occur.
+			if err := c.Teardown(context.Background()); err != nil {
+				t.Fatalf("expected nil from Teardown in %s, got: %v", st, err)
+			}
+			if c.netState != StateTornDown {
+				t.Errorf("expected state TornDown, got %s", c.netState)
+			}
+			if len(c.vmEndpoints) != 0 {
+				t.Errorf("expected endpoint bindings to be dropped, got %d", len(c.vmEndpoints))
+			}
+		})
 	}
 }

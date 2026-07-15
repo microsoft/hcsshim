@@ -24,12 +24,11 @@
 #
 
 
-# note test-fail is expected to fail
-
-AUTOPARSE_CHAIN:=0
+# Opaque label written into the COSE `iss` header. It is NOT validated against
+# the chain at create time; the Go unit test asserts the round-trip preserves
+# this exact string, so don't change it without updating the test.
 ISSUER_DID:="TestIssuer"
 FEED:="TestFeed"
-DID_FINGERPRINT:=""
 
 all: chain.pem cose test-fail test-pass
 
@@ -37,11 +36,6 @@ cose: infra.rego.cose
 
 %.pem:
 	 $(MAKE) -f Makefile.certs chain.pem
-
-ifeq "$(AUTOPARSE_CHAIN)" "1"
-ISSUER_DID = $(shell ./sign1util did-x509 -chain chain.pem -policy cn)
-DID_FINGERPRINT = $(shell ./sign1util did-x509 -chain chain.pem -policy cn | cut -d: -f5)
-endif
 
 # from these media types have to match containerd. The also need to change and the security policy one ought to be x-ms-ccepolicy-frag
 #     fragment atrifact type = application/x-ms-ccepolicy-frag
@@ -74,13 +68,13 @@ show: sign1util
 didx509: chain.pem sign1util
 	./sign1util did-x509 -chain chain.pem -i 1 -policy "subject:CN:Test Leaf (DO NOT TRUST)" -verbose
 
-info: chain.pem sign1util
-	@echo "ISSUER_DID: $(ISSUER_DID)"
-	@echo "DID_FINGERPRINT: $(DID_FINGERPRINT)"
-
-# for this to pass the did:x509 fingerprint (RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U here) needs to be the one output from make print
-did-check: chain.pem infra.rego.cose sign1util info
-	./sign1util check -in infra.rego.cose -did $(ISSUER_DID)
+# did-check derives the REAL did:x509 from chain.pem at run time and resolves
+# it against the chain. Fails loudly if did-x509 returns empty.
+did-check: chain.pem infra.rego.cose sign1util
+	@did="$$(./sign1util did-x509 -chain chain.pem -policy cn)"; \
+	  test -n "$$did" || { echo "did-x509 returned empty - check chain.pem"; exit 1; }; \
+	  echo "did-check: using did=$$did"; \
+	  ./sign1util check -in infra.rego.cose -did "$$did"
 
 # For normal workflow start from the chain.pem, here we'd take the chain from inside the cose sign1 doc, eg to manually confirm it is
 # as otherwise expected (ie that the issuer DID matches the chain) or to shortcut getting a DID from a cose document.
@@ -92,12 +86,18 @@ did-from-cose: sign1util infra.rego.cose
 # note that since the infra.rego.cose is actually good the first part of the check will report a pass "checkCoseSign1 passed"
 
 # expect "DID resolvers failed: err: DID verification failed: unexpected certificate fingerprint"
+# The recipe is expected to fail at the tool level; invert the exit code so the make target succeeds.
 did-fail-fingerprint: chain.pem sign1util infra.rego.cose
-	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:XXXi_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
+	! ./sign1util check -in infra.rego.cose -did did:x509:0:sha256:XXXi_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
 
 # expect "DID resolvers failed: err: DID verification failed: invalid subject value: CN=Test XXXX (DO NOT TRUST)"
+# Builds a DID with the REAL fingerprint but a WRONG subject; recipe must still
+# fail at the tool level - `!` inverts that into a make-level success.
 did-fail-subject: chain.pem sign1util infra.rego.cose
-	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:$(DID_FINGERPRINT)::subject:CN:Test+XXXX+%28DO+NOT+TRUST%29
+	@fp="$$(./sign1util did-x509 -chain chain.pem -policy cn | cut -d: -f5)"; \
+	  test -n "$$fp" || { echo "could not derive fingerprint - check chain.pem"; exit 1; }; \
+	  ! ./sign1util check -in infra.rego.cose \
+	      -did "did:x509:0:sha256:$$fp::subject:CN:Test+XXXX+%28DO+NOT+TRUST%29"
 
 did-fail: did-fail-subject did-fail-fingerprint 
 

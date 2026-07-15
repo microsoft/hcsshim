@@ -15,7 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/exec"
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -195,6 +195,12 @@ func (p *JobProcess) ExitCode() (int, error) {
 // Pid returns the processes PID
 func (p *JobProcess) Pid() int {
 	return p.cmd.Pid()
+}
+
+// MigrationState returns the zero value: job-container processes route
+// stdio over OS pipes and don't use a GCS bridge.
+func (p *JobProcess) MigrationState() cow.MigrationState {
+	return cow.MigrationState{}
 }
 
 // Close cleans up any state associated with the process but does not kill it.

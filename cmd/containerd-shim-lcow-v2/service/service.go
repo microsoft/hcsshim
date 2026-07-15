@@ -14,7 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 
 	sandboxsvc "github.com/containerd/containerd/api/runtime/sandbox/v1"
-	tasksvc "github.com/containerd/containerd/api/runtime/task/v2"
+	tasksvc "github.com/containerd/containerd/api/runtime/task/v3"
 	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/shutdown"
@@ -42,8 +42,9 @@ type Service struct {
 	// For LCOW shim, sandboxID corresponds 1-1 with the UtilityVM managed by the shim.
 	sandboxID string
 
-	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
-	vmController *vm.Controller
+	// vmController is responsible for managing the lifecycle of the underlying
+	// utility VM.
+	vmController vmController
 
 	// podControllers maps podID -> PodController for each active pod.
 	podControllers map[string]*pod.Controller
@@ -91,7 +92,7 @@ func NewService(ctx context.Context, eventsPublisher shim.Publisher, sd shutdown
 // RegisterTTRPC registers the Task, Sandbox, and ShimDiag TTRPC services on
 // the provided server so that containerd can call into the shim over TTRPC.
 func (s *Service) RegisterTTRPC(server *ttrpc.Server) error {
-	tasksvc.RegisterTaskService(server, s)
+	tasksvc.RegisterTTRPCTaskService(server, s)
 	sandboxsvc.RegisterTTRPCSandboxService(server, s)
 	shimdiag.RegisterShimDiagService(server, s)
 	return nil

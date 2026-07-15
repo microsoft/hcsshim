@@ -5,6 +5,7 @@ package lcow
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -26,6 +27,7 @@ func buildKernelArgs(
 	kernelDirect bool,
 	hasConsole bool,
 	rootFsFile string,
+	liveMigrationSupportEnabled bool,
 ) (string, error) {
 
 	log.G(ctx).WithField("rootFsFile", rootFsFile).Debug("buildKernelArgs: starting kernel arguments construction")
@@ -80,7 +82,8 @@ func buildKernelArgs(
 	args = append(args, "brd.rd_nr=0", "pmtmr=0")
 
 	// 8. Init arguments (passed after "--" separator)
-	initArgs := buildInitArgs(ctx, opts, writableOverlayDirs, disableTimeSyncService, processDumpLocation, rootFsFile, hasConsole)
+	initArgs := buildInitArgs(ctx, opts, annotations,
+		writableOverlayDirs, disableTimeSyncService, processDumpLocation, rootFsFile, hasConsole, liveMigrationSupportEnabled)
 	args = append(args, "--", initArgs)
 
 	result := strings.Join(args, " ")
@@ -144,11 +147,13 @@ func buildConsoleArgs(hasConsole bool) []string {
 func buildInitArgs(
 	ctx context.Context,
 	opts *runhcsoptions.Options,
+	annotations map[string]string,
 	writableOverlayDirs bool,
 	disableTimeSyncService bool,
 	processDumpLocation string,
 	rootFsFile string,
 	hasConsole bool,
+	liveMigrationSupportEnabled bool,
 ) string {
 	log.G(ctx).WithFields(logrus.Fields{
 		"rootFsFile": rootFsFile,
@@ -158,7 +163,7 @@ func buildInitArgs(
 	entropyArgs := fmt.Sprintf("-e %d", vmutils.LinuxEntropyVsockPort)
 
 	// Build GCS execution command
-	gcsCmd := buildGCSCommand(opts, disableTimeSyncService, processDumpLocation)
+	gcsCmd := buildGCSCommand(opts, annotations, disableTimeSyncService, processDumpLocation, liveMigrationSupportEnabled)
 
 	// Construct init arguments
 	var initArgsList []string
@@ -190,16 +195,11 @@ func buildInitArgs(
 // buildGCSCommand constructs the GCS (Guest Compute Service) command line.
 func buildGCSCommand(
 	opts *runhcsoptions.Options,
+	annotations map[string]string,
 	disableTimeSyncService bool,
 	processDumpLocation string,
+	liveMigrationSupportEnabled bool,
 ) string {
-	// Start with vsockexec wrapper
-	var cmdParts []string
-	cmdParts = append(cmdParts, "/bin/vsockexec")
-
-	// Add logging vsock port
-	cmdParts = append(cmdParts, fmt.Sprintf("-e %d", vmutils.LinuxLogVsockPort))
-
 	// Determine log level
 	logLevel := "info"
 	if opts != nil && opts.LogLevel != "" {
@@ -219,16 +219,32 @@ func buildGCSCommand(
 		gcsParts = append(gcsParts, "-disable-time-sync")
 	}
 
-	if opts != nil && opts.ScrubLogs {
-		gcsParts = append(gcsParts, "-scrub-logs")
+	// Scrubbing is enabled by default. Only pass the flag if explicitly set.
+	if opts != nil && opts.ScrubLogs != nil {
+		gcsParts = append(gcsParts, fmt.Sprintf("-scrub-logs=%s", strconv.FormatBool(*opts.ScrubLogs)))
 	}
 
 	if processDumpLocation != "" {
 		gcsParts = append(gcsParts, "-core-dump-location", processDumpLocation)
 	}
 
-	// Combine vsockexec and GCS command
-	cmdParts = append(cmdParts, strings.Join(gcsParts, " "))
+	if s := oci.ParseAnnotationsString(annotations, iannotations.ExtraLCOWExecArgs, ""); s != "" {
+		gcsParts = append(gcsParts, s)
+	}
 
-	return strings.Join(cmdParts, " ")
+	gcsCmd := strings.Join(gcsParts, " ")
+
+	// Live-migratable pods skip the /bin/vsockexec wrapper. The wrapper exists
+	// solely to forward GCS stderr to the host-side log listener, but that listener
+	// is host-local state that live migration does not transfer, so the host
+	// does not run it for these pods.
+	// Without a listener, vsockexec's outbound connect would block and stall guest init,
+	// so we emit /bin/gcs directly instead.
+	if liveMigrationSupportEnabled {
+		return gcsCmd
+	}
+
+	// vsockexec `-e <port>` wires gcs's stderr to LinuxLogVsockPort, which
+	// the host listener reads and republishes.
+	return fmt.Sprintf("/bin/vsockexec -e %d %s", vmutils.LinuxLogVsockPort, gcsCmd)
 }

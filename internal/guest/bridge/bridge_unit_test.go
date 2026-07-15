@@ -546,10 +546,10 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 			ActivityID: rBody.ActivityID,
 		}, nil
 	}
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV4, resizeFn)
+	// ListenAndServe resets protVer to PvInvalid on entry.
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvInvalid, resizeFn)
 	b := &Bridge{
 		Handler: mux,
-		protVer: prot.PvV4,
 	}
 
 	go func() {
@@ -615,12 +615,12 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 			Result: 10,
 		}, nil
 	}
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV4, firstFn)
-	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV4, secondFn)
+	// ListenAndServe resets protVer to PvInvalid on entry.
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvInvalid, firstFn)
+	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvInvalid, secondFn)
 
 	b := &Bridge{
 		Handler: mux,
-		protVer: prot.PvV4,
 	}
 
 	go func() {

@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 )
 
 // HostProcessorInfo queries HCS for the host's processor information, including topology

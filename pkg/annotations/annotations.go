@@ -280,6 +280,18 @@ const (
 	// Attaches the EFI/boot VHD in the writable mode (instead of the default read-only mode). This is usually required
 	// when debugging boot to capture bootstat traces.
 	WCOWWritableEFI = "io.microsoft.virtualmachine.wcow.writable_efi"
+
+	// WCOWDebugMode enables debug mode for confidential WCOW. When enabled, the per-UVM boot/EFI VHD and
+	// scratch VHD are saved to WCOWDebugDataPath when the UVM is torn down, so they can be inspected for
+	// troubleshooting (e.g. boot failures). To also capture the bootstat trace in the saved boot/EFI VHD,
+	// enable WCOWWritableEFI alongside this option. This option is only valid for confidential WCOW and
+	// requires WCOWDebugDataPath to be set to a non-empty path.
+	WCOWDebugMode = "io.microsoft.wcow.debug"
+
+	// WCOWDebugDataPath specifies the directory to which the boot/EFI VHD and scratch VHD are saved when
+	// WCOWDebugMode is enabled. The directory is created if it does not exist and the saved files are
+	// prefixed with the UVM id to avoid collisions when multiple UVMs share the directory.
+	WCOWDebugDataPath = "io.microsoft.wcow.debug_data_path"
 )
 
 // WCOW host process container annotations.
@@ -297,6 +309,11 @@ const (
 
 // uVM annotations.
 const (
+	// BootFilesRootPath indicates the path to find the boot files to use when creating the UVM. It applies
+	// to LCOW and confidential WCOW (where it locates boot.vhd, rootfs.vhd, VMGS, and reference info). If
+	// unset, a platform-specific default location is used.
+	BootFilesRootPath = "io.microsoft.virtualmachine.bootfilesrootpath"
+
 	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
 	// case the UVM crashes.
 	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
@@ -310,6 +327,12 @@ const (
 	// include .sys, .inf, .cer, and/or other files used during standard installation with pnputil.
 	// For LCOW, this may include a vhd file that contains kernel modules as *.ko files.
 	VirtualMachineKernelDrivers = "io.microsoft.virtualmachine.kerneldrivers"
+)
+
+// Confidential UVM annotations.
+const (
+	// UVMHashEnvelopeReferenceInfoFile specifies the filename of a hash envelope signed UVM reference file to be passed to UVM.
+	UVMHashEnvelopeReferenceInfoFile = "io.microsoft.virtualmachine.uvm-hash-envelope-reference-info-file"
 )
 
 // uVM CPU annotations.
@@ -479,9 +502,6 @@ const (
 
 // LCOW uVM annotations.
 const (
-	// BootFilesRootPath indicates the path to find the LCOW boot files to use when creating the UVM.
-	BootFilesRootPath = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
-
 	// DisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.
 	DisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"
@@ -533,14 +553,13 @@ const (
 
 // Live Migration annotations.
 const (
-	// LiveMigrationAllowed is a gatekeeping annotation scoped to a pod/sandbox that indicates
-	// the pod is intended to be live-migratable. When set on a pod, any container within that
-	// pod which requests a feature incompatible with live migration will fail to be created.
+	// LiveMigrationSupportEnabled is a sandbox-scoped annotation that enables the live
+	// migration feature set for a pod. When enabled, the pod is constrained to the subset
+	// of features that are compatible with live migration.
 	//
-	// For example, if a pod is started with this annotation and a container within it
-	// subsequently requests a plan9 share (which is not compatible with live migration),
-	// the container creation will be failed.
-	LiveMigrationAllowed = "io.microsoft.migration.allowed"
+	// For example, the sandbox runs without the host-side GCS log listener,
+	// since that listener is host-local and cannot survive migration.
+	LiveMigrationSupportEnabled = "io.microsoft.migration.support-enabled"
 
 	// LiveMigrationSourceContainerID is used only on the destination node during a live
 	// migration. It is set on the NewTask request to identify the corresponding container

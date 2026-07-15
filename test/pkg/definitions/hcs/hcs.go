@@ -3,7 +3,7 @@
 package hcs
 
 import (
-	internalhcs "github.com/Microsoft/hcsshim/internal/hcs"
+	internalhcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 )
 
 var (

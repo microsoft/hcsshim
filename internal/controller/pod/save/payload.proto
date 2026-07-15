@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package hcsshim.controller.pod.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/pod/save;save";
+
+import "google/protobuf/any.proto";
+
+// Payload is the migration payload owned by a single pod controller. It is
+// the top-level message wrapped in an [anypb.Any] when handed off between
+// source and destination shims. The embedded network controller and
+// container controllers are carried as opaque [anypb.Any] payloads so each
+// child controller fully owns its own schema.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // pod_id is the pod identifier.
+  string pod_id = 2;
+
+  // gcs_pod_id is the pod identifier as known by the GCS inside the
+  // guest, which may differ from pod_id.
+  string gcs_pod_id = 3;
+
+  // network is the per-pod network controller's [anypb.Any] envelope.
+  google.protobuf.Any network = 4;
+
+  // containers is the set of container [Payload] envelopes for this pod,
+  // one [anypb.Any] per container controller.
+  repeated google.protobuf.Any containers = 5;
+}

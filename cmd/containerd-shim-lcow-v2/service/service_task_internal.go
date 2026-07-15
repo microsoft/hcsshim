@@ -12,8 +12,9 @@ import (
 	container "github.com/Microsoft/hcsshim/internal/controller/linuxcontainer"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
 	"github.com/Microsoft/hcsshim/internal/controller/process"
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/memory"
@@ -23,7 +24,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/runtime/task/v3"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -33,7 +34,12 @@ import (
 )
 
 // getContainerController looks up the container controller for the given container ID.
-func (s *Service) getContainerController(containerID string) (*container.Controller, error) {
+//
+// It is a package-level function variable rather than a plain method so that
+// unit tests can substitute a mock [containerController] for a given Service
+// without having to construct a real pod/container chain. Production code never
+// reassigns it.
+var getContainerController = func(s *Service, containerID string) (containerController, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -69,12 +75,8 @@ func (s *Service) getPodController(podID string) (*pod.Controller, bool) {
 
 // stateInternal returns the current status of a process within a container.
 func (s *Service) stateInternal(_ context.Context, request *task.StateRequest) (*task.StateResponse, error) {
-	if err := s.ensureVMRunning(); err != nil {
-		return nil, err
-	}
-
 	// Look up the container controller for the requested container.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for state request: %w", err)
 	}
@@ -227,7 +229,7 @@ func (s *Service) startInternal(ctx context.Context, request *task.StartRequest)
 	}
 
 	// Get the container controller for the requested task.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for start request: %w", err)
 	}
@@ -277,12 +279,8 @@ func (s *Service) startInternal(ctx context.Context, request *task.StartRequest)
 
 // deleteInternal deletes a process, container, or pod sandbox depending on the request.
 func (s *Service) deleteInternal(ctx context.Context, request *task.DeleteRequest) (*task.DeleteResponse, error) {
-	if err := s.ensureVMRunning(); err != nil {
-		return nil, err
-	}
-
 	// Look up the container controller for the target ID.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for delete request: %w", err)
 	}
@@ -328,7 +326,7 @@ func (s *Service) deleteInternal(ctx context.Context, request *task.DeleteReques
 		// left should be the sandbox container itself (request.ID).
 		remaining := podCtrl.ListContainers()
 		delete(remaining, request.ID) // exclude the sandbox container itself
-		if len(remaining) > 0 {
+		if len(remaining) > 0 && s.vmController.State() == vm.StateRunning {
 			return nil, fmt.Errorf("cannot delete sandbox container %s: %d workload container(s) still exist in the pod: %w",
 				request.ID, len(remaining), errdefs.ErrFailedPrecondition)
 		}
@@ -370,7 +368,7 @@ func (s *Service) pidsInternal(ctx context.Context, request *task.PidsRequest) (
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for pids request: %w", err)
 	}
@@ -407,7 +405,7 @@ func (s *Service) killInternal(ctx context.Context, request *task.KillRequest) (
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for kill request: %w", err)
 	}
@@ -454,7 +452,7 @@ func (s *Service) execInternal(ctx context.Context, request *task.ExecProcessReq
 		return nil, fmt.Errorf("unmarshal process spec: %w", err)
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for exec request: %w", err)
 	}
@@ -489,7 +487,7 @@ func (s *Service) resizePtyInternal(ctx context.Context, request *task.ResizePty
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for resize pty request: %w", err)
 	}
@@ -512,7 +510,7 @@ func (s *Service) closeIOInternal(ctx context.Context, request *task.CloseIORequ
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for close IO request: %w", err)
 	}
@@ -552,7 +550,7 @@ func (s *Service) updateInternal(ctx context.Context, request *task.UpdateTaskRe
 	}
 
 	// Otherwise, find the container controller and call Update on it.
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update resources for container %s: %w", request.ID, err)
 	}
@@ -569,7 +567,8 @@ func (s *Service) updateVMResources(ctx context.Context, resources interface{}, 
 	switch res := resources.(type) {
 	case *ctrdtaskapi.PolicyFragment:
 		return s.vmController.UpdatePolicyFragment(ctx, guestresource.SecurityPolicyFragment{
-			Fragment: res.Fragment,
+			Fragment:  res.Fragment,
+			MediaType: res.MediaType,
 		})
 	case *specs.LinuxResources:
 		// Update memory if specified.
@@ -613,7 +612,7 @@ func (s *Service) waitInternal(ctx context.Context, request *task.WaitRequest) (
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for wait request: %w", err)
 	}
@@ -650,7 +649,7 @@ func (s *Service) statsInternal(ctx context.Context, request *task.StatsRequest)
 		return nil, err
 	}
 
-	ctrCtrl, err := s.getContainerController(request.ID)
+	ctrCtrl, err := getContainerController(s, request.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for stats request: %w", err)
 	}

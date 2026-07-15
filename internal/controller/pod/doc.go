@@ -10,4 +10,11 @@
 //     the [network.Controller].
 //   - Creating, retrieving, listing, and deleting container controllers
 //     within the pod.
+//
+// # Migration
+//
+// Taking a snapshot blocks the pod's operations until migration is resumed,
+// so its live state cannot diverge from the captured snapshot during handoff.
+// A pod reconstructed from a snapshot on the destination is likewise blocked
+// until resumed.
 package pod

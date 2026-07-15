@@ -15,6 +15,12 @@ type PolicyFragment struct {
 	// The value is a base64 encoded COSE_Sign1 document that contains the
 	// fragment and any additional information required for validation.
 	Fragment string `json:"fragment,omitempty"`
+	// MediaType is the media type of the blob carried in Fragment. It allows
+	// the same delivery mechanism to carry payloads other than Rego policy
+	// fragments (e.g. a Transparency Trust List). An empty value is treated by
+	// the guest as the default "application/cose-x509+rego" for backward
+	// compatibility with older hosts that do not set this field.
+	MediaType string `json:"mediaType,omitempty"`
 }
 
 type ContainerMount struct {

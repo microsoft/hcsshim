@@ -8,7 +8,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -94,39 +93,40 @@ import (
 // errVmcomputeOperationPending is an error encountered when the operation is being completed asynchronously
 const errVmcomputeOperationPending = syscall.Errno(0xC0370103)
 
+// execute runs f synchronously to completion. ctx and timeout are
+// watchdogs only: each emits a one-shot warning when exceeded and the
+// wait continues until f returns.
+//
+// Callers of the wrapping HCS API typically release the handles they
+// passed in via defer once the call returns. Abandoning f mid-flight
+// would let those defers tear down handles the syscall is still using,
+// which has been observed to crash the shim with EXCEPTION_ACCESS_VIOLATION
+// inside computecore.dll. Long-running operations should be bounded via
+// HcsCancelOperation rather than by returning early.
 func execute(ctx gcontext.Context, timeout time.Duration, f func() error) error {
-	now := time.Now()
-	if timeout > 0 {
-		var cancel gcontext.CancelFunc
-		ctx, cancel = gcontext.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-
-	deadline, ok := ctx.Deadline()
-	trueTimeout := timeout
-	if ok {
-		trueTimeout = deadline.Sub(now)
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.Timeout: trueTimeout,
-			"desiredTimeout":  timeout,
-		}).Trace("Executing syscall with deadline")
-	}
-
 	done := make(chan error, 1)
-	go func() {
-		done <- f()
-	}()
-	select {
-	case <-ctx.Done():
-		if ctx.Err() == gcontext.DeadlineExceeded {
-			log.G(ctx).WithField(logfields.Timeout, trueTimeout).
-				Warning("Syscall did not complete within operation timeout. This may indicate a platform issue. " +
-					"If it appears to be making no forward progress, obtain the stacks and see if there is a syscall " +
-					"stuck in the platform API for a significant length of time.")
+	go func() { done <- f() }()
+
+	var watcher <-chan time.Time
+	if timeout > 0 {
+		t := time.NewTimer(timeout)
+		defer t.Stop()
+		watcher = t.C
+	}
+
+	for {
+		select {
+		case err := <-done:
+			return err
+		case <-watcher:
+			log.G(ctx).WithField(logfields.Timeout, timeout).
+				Warning("HCS syscall exceeded timeout; still waiting to avoid use-after-free in computecore.dll")
+			watcher = nil
+		case <-ctx.Done():
+			log.G(ctx).WithError(ctx.Err()).
+				Warning("HCS syscall context canceled; still waiting to avoid use-after-free in computecore.dll")
+			ctx = gcontext.WithoutCancel(ctx)
 		}
-		return ctx.Err()
-	case err := <-done:
-		return err
 	}
 }
 

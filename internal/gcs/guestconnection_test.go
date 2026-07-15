@@ -51,7 +51,10 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 	for {
 		id, typ, b, err := readMessage(rw)
 		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
+			// EOF, ErrClosedPipe, and ErrUnexpectedEOF can all surface when
+			// the test's bridge closes the pipe mid-message during teardown.
+			// Treat them all as a clean shutdown of the fake guest.
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) || errors.Is(err, io.ErrUnexpectedEOF) {
 				err = nil
 			}
 			return err
@@ -154,7 +157,15 @@ func connectGcs(ctx context.Context, t *testing.T) *GuestConnection {
 			c.Close()
 		}()
 	}
-	go simpleGcs(t, c)
+	// Join the fake-guest goroutine before the test returns so that any
+	// t.Error it makes during teardown lands inside the test scope, instead
+	// of panicking the runtime ("Fail in goroutine after Test... completed").
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		simpleGcs(t, c)
+	}()
+	t.Cleanup(func() { <-done })
 	gcc := &GuestConnectionConfig{
 		Conn:     s,
 		Log:      logrus.NewEntry(logrus.StandardLogger()),

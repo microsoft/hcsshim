@@ -17,15 +17,16 @@ import (
 	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/exec"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/winapi"
+	"github.com/containerd/errdefs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
@@ -203,7 +204,7 @@ func Create(ctx context.Context, id string, s *specs.Spec, createOpts CreateOpti
 	}
 
 	// Set resource limits on the job object based off of oci spec.
-	if err := container.job.SetResourceLimits(limits); err != nil {
+	if err := container.job.SetResourceLimits(ctx, limits); err != nil {
 		return nil, nil, fmt.Errorf("failed to set resource limits: %w", err)
 	}
 
@@ -423,6 +424,13 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 func (c *JobContainer) Modify(ctx context.Context, config interface{}) (err error) {
 	return errors.New("modify not supported for job containers")
+}
+
+// SetCPUGroupAffinities implements the cow.Container interface. Job (HostProcess)
+// containers apply CPU affinity at create time rather than via a post-start
+// update, so this returns ErrNotImplemented.
+func (c *JobContainer) SetCPUGroupAffinities(_ context.Context, _ []jobobject.GroupAffinity) error {
+	return fmt.Errorf("cpu affinity update is not supported for job containers: %w", errdefs.ErrNotImplemented)
 }
 
 // Start starts the container. There's nothing to "start" for job containers, so this just

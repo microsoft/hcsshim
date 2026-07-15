@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package hcsshim.controller.vm.save.v1;
+
+option go_package = "github.com/Microsoft/hcsshim/internal/controller/vm/save;save";
+
+import "google/protobuf/any.proto";
+
+// Payload is the migration payload owned by the VM controller. It is the
+// top-level message wrapped in an [anypb.Any] when handed off between source
+// and destination shims. The SCSI sub-controller is carried as an opaque
+// [anypb.Any] so it fully owns its own schema and versioning.
+message Payload {
+  // schema_version is bumped whenever a field's semantics change. The
+  // destination MUST reject states whose version it does not recognise.
+  uint32 schema_version = 1;
+
+  // vm_id is the HCS identifier of the running VM.
+  string vm_id = 2;
+
+  // sandbox_options is the original set of options the VM was built from,
+  // so the destination can recreate an equivalent VM.
+  SandboxOptions sandbox_options = 3;
+
+  // scsi is the SCSI sub-controller's [anypb.Any] envelope (attached
+  // disks, mounts and outstanding reservations).
+  google.protobuf.Any scsi = 4;
+
+  // gcs_next_port is the next free vsock port in the GCS port allocator.
+  // The destination seeds its allocator with this value so newly opened
+  // IO channels do not collide with per-process ports restored elsewhere.
+  uint32 gcs_next_port = 5;
+
+  // compat_info is the opaque, host-emitted compatibility blob describing
+  // the source VM's compatibility surface. The destination passes it back
+  // to HCS when starting the target VM so the platform can verify that the
+  // two VMs can interchange live-migration state.
+  bytes compat_info = 6;
+
+  // hcs_document is the JSON-encoded HCS [hcsschema.ComputeSystem] document
+  // that was used to create the source VM. The destination reuses this
+  // document verbatim (with [hcsschema.VirtualMachine.MigrationOptions]
+  // set) when creating the destination VM, ensuring the two VMs have
+  // identical hardware topology required for live-migration compatibility.
+  bytes hcs_document = 7;
+
+  // bridge_next_id is the source bridge's next request-id. The destination
+  // seeds its bridge above this so newly issued ids cannot collide with
+  // requests the guest still has outstanding from the source.
+  int64 bridge_next_id = 8;
+}
+
+// SandboxOptions is the set of VM-creation options preserved verbatim so the
+// destination can build an equivalent VM.
+message SandboxOptions {
+  // no_writable_file_shares disallows read/write file shares into the guest.
+  bool no_writable_file_shares = 1;
+
+  // enable_scratch_encryption enables dm-crypt on the scratch disk.
+  bool enable_scratch_encryption = 2;
+
+  // policy_based_routing enables policy-based routing in the guest network
+  // stack.
+  bool policy_based_routing = 3;
+
+  // architecture is the guest CPU architecture (e.g. "amd64", "arm64").
+  string architecture = 4;
+
+  // fully_physically_backed forces all guest memory to be backed by physical
+  // memory (disables hot-add) and, as a side effect, disables VPMEM.
+  bool fully_physically_backed = 5;
+}

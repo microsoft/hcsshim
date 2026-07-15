@@ -143,8 +143,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		DisableTimeSyncService:  false,
 		ConfidentialLCOWOptions: &ConfidentialLCOWOptions{
 			ConfidentialCommonOptions: &ConfidentialCommonOptions{
-				SecurityPolicyEnabled: false,
-				UVMReferenceInfoFile:  vmutils.DefaultUVMReferenceInfoFile,
+				SecurityPolicyEnabled:            false,
+				UVMReferenceInfoFile:             vmutils.DefaultUVMReferenceInfoFile,
+				UVMHashEnvelopeReferenceInfoFile: vmutils.DefaultUVMHashEnvelopeReferenceInfoFile,
 			},
 		},
 	}
@@ -635,8 +636,8 @@ func MakeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	if opts.ResourcePartitionID != nil {
-		// TODO (maksiman): assign pod to resource partition and potentially do an OS version check before that
 		log.G(ctx).WithField("resource-partition-id", opts.ResourcePartitionID.String()).Debug("setting resource partition ID")
+		doc.VirtualMachine.ResourcePartitionId = opts.ResourcePartitionID.String()
 	}
 
 	// Add optional devices that were specified on the UVM spec
@@ -841,8 +842,10 @@ func MakeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		opts.ExecCommandLine = fmt.Sprintf("%s -disable-time-sync", opts.ExecCommandLine)
 	}
 
-	if log.IsScrubbingEnabled() {
-		opts.ExecCommandLine += " -scrub-logs"
+	// Scrubbing is enabled by default in GCS. Only pass the flag when scrubbing
+	// has been explicitly disabled on the host to inform GCS to turn it off.
+	if !log.IsScrubbingEnabled() {
+		opts.ExecCommandLine += " -scrub-logs=false"
 	}
 
 	execCmdArgs += " " + opts.ExecCommandLine
@@ -952,7 +955,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 
 	// HCS config for SNP isolated vm is quite different to the usual case
 	var doc *hcsschema.ComputeSystem
-	if opts.SecurityPolicyEnabled {
+	if opts.GuestStateFilePath != "" {
 		doc, err = makeLCOWSecurityDoc(ctx, opts, uvm)
 		if logrus.IsLevelEnabled(logrus.TraceLevel) {
 			log.G(ctx).WithFields(logrus.Fields{

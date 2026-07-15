@@ -41,6 +41,7 @@ const (
 	shareFilesArgName             = "share"
 	securityPolicyArgName         = "security-policy"
 	securityHardwareFlag          = "security-hardware"
+	noVerityBoot                  = "no-verity-boot"
 	securityPolicyEnforcerArgName = "security-policy-enforcer"
 )
 
@@ -104,6 +105,10 @@ var lcowCommand = cli.Command{
 		cli.BoolFlag{
 			Name:  securityHardwareFlag,
 			Usage: "Use VMGS file to run on secure hardware. ('root-fs-type' must be set to 'none')",
+		},
+		cli.BoolFlag{
+			Name:  noVerityBoot,
+			Usage: "Do not use verity boot. (IMPORTANT: can only be used together with --security-hardware flag)",
 		},
 		cli.StringFlag{
 			Name:  execCommandLineArgName,
@@ -276,8 +281,16 @@ func createLCOWOptions(ctx context.Context, c *cli.Context, id string) (*uvm.Opt
 	}
 	if c.IsSet(securityHardwareFlag) {
 		options.GuestStateFilePath = vmutils.DefaultGuestStateFile
+		hclEnabled := false
+		options.HclEnabled = &hclEnabled
 		options.SecurityPolicyEnabled = true
+		options.BundleDirectory = os.TempDir()
 		options.AllowOvercommit = false
+
+		if !c.IsSet(noVerityBoot) {
+			options.DmVerityRootFsVhd = vmutils.DefaultDmVerityRootfsVhd
+			options.DmVerityMode = true
+		}
 	}
 
 	return options, nil

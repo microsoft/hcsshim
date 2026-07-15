@@ -19,3 +19,20 @@ func TestCreateBadBootFilesPath(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestConfidentialVMGSFileName(t *testing.T) {
+	for _, tc := range []struct {
+		isolationType string
+		want          string
+	}{
+		{"SecureNestedPaging", "cwcow.snp.vmgs"},
+		{"VirtualizationBasedSecurity", "cwcow.vbs.vmgs"},
+		{"GuestStateOnly", "cwcow.gso.vmgs"},
+		{"", "cwcow.snp.vmgs"},              // unknown defaults to SNP
+		{"SomethingElse", "cwcow.snp.vmgs"}, // unknown defaults to SNP
+	} {
+		if got := ConfidentialVMGSFileName(tc.isolationType); got != tc.want {
+			t.Errorf("ConfidentialVMGSFileName(%q) = %q, want %q", tc.isolationType, got, tc.want)
+		}
+	}
+}

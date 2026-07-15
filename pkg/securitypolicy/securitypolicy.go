@@ -47,10 +47,11 @@ const (
 const plan9Prefix = "plan9://"
 
 const (
-	SecurityContextDirTemplate = "security-context-*"
-	PolicyFilename             = "security-policy-base64"
-	HostAMDCertFilename        = "host-amd-cert-base64"
-	ReferenceInfoFilename      = "reference-info-base64"
+	SecurityContextDirTemplate        = "security-context-*"
+	PolicyFilename                    = "security-policy-base64"
+	HostAMDCertFilename               = "host-amd-cert-base64"
+	ReferenceInfoFilename             = "reference-info-base64"
+	HashEnvelopeReferenceInfoFilename = "transparent-reference-info-base64"
 )
 
 // PolicyConfig contains toml or JSON config for security policy.
@@ -116,6 +117,14 @@ type EnvRuleConfig struct {
 	Strategy EnvVarRule `json:"strategy" toml:"strategy"`
 	Rule     string     `json:"rule" toml:"rule"`
 	Required bool       `json:"required" toml:"required"`
+
+	// If UseNameValue is true, the marshalled Rego will use rules with name and
+	// value separately, and ignore .Rule and .Strategy.
+	UseNameValue  bool
+	Name          string
+	NameStrategy  EnvVarRule
+	Value         string
+	ValueStrategy EnvVarRule
 }
 
 type IDNameConfig struct {
@@ -215,10 +224,17 @@ type CapabilitiesConfig struct {
 }
 
 //go:embed version_api
-var apiVersion string
+var apiVersionRaw string
 
 //go:embed version_framework
-var frameworkVersion string
+var frameworkVersionRaw string
+
+// Trim whitespace so the embedded version files are tolerant of trailing
+// newlines added by editors.
+var (
+	apiVersion       = strings.TrimSpace(apiVersionRaw)
+	frameworkVersion = strings.TrimSpace(frameworkVersionRaw)
+)
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
 // strings slice.

@@ -191,7 +191,9 @@ func readMessage(r io.Reader) (messageHeader, []byte, error) {
 	}
 
 	n := header.Size
-	if n < prot.HdrSize || n > prot.MaxMsgSize {
+	// Deliberately don't enforce MaxMsgSize here. This follows what the LCOW
+	// gcs does, and allows us to inject long fragments.
+	if n < prot.HdrSize {
 		logrus.Errorf("invalid message size %d", n)
 		return messageHeader{}, nil, fmt.Errorf("invalid message size %d: %w", n, err)
 	}

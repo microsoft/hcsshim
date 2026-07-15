@@ -435,8 +435,8 @@ func TestOOMEventFD_ContainerKill(t *testing.T) {
 
 	// --- Set up OOMEventFD on the container's cgroup ---
 	//
-	// Standalone containers get cgroup path "/containers/<id>".
-	cgroupPath := "/containers/" + id
+	// Standalone containers get cgroup path "/pods/<id>".
+	cgroupPath := "/pods/" + id
 
 	// LoadManager works for both v1 and v2 — the cgroup already exists (created by runc).
 	mgr, err := cgroup.LoadManager(cgroupPath)

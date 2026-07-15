@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 
@@ -63,8 +63,12 @@ func ParseGCSLogrus(vmID string) OutputHandler {
 			if err != nil {
 				// Handle decoding errors, EOF, or disconnections
 				// Log the error unless it's an expected EOF or network disconnect
-				// (WSAECONNABORTED or WSAECONNRESET indicate expected shutdown/disconnect)
-				if !errors.Is(err, io.EOF) && !hcs.IsAny(err, windows.WSAECONNABORTED, windows.WSAECONNRESET) {
+				// (WSAECONNABORTED or WSAECONNRESET indicate expected shutdown/disconnect).
+				// A *json.SyntaxError means GCS wrote a non-JSON line (e.g. a Go
+				// runtime panic dump). The trailing-bytes read below logs the
+				// raw payload as "gcs terminated", so skip the noisy parse error.
+				var syntaxErr *json.SyntaxError
+				if !errors.Is(err, io.EOF) && !hcs.IsAny(err, windows.WSAECONNABORTED, windows.WSAECONNRESET) && !errors.As(err, &syntaxErr) {
 					logrus.WithFields(logrus.Fields{
 						logfields.UVMID: vmID,
 						logrus.ErrorKey: err,

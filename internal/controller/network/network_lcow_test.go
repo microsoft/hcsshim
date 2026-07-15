@@ -5,6 +5,7 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"go.uber.org/mock/gomock"
@@ -14,7 +15,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 )
 
 var (
@@ -77,7 +80,7 @@ func TestLCOW_AddEndpoint_Success_NamespaceSupport(t *testing.T) {
 	c, vm, guest := newLCOWController(t, ctrl, true)
 
 	ep := newLCOWEndpoint("eth0")
-	expectedAdapter, err := guestresource.BuildLCOWNetworkAdapter("nic-1", ep, false)
+	expectedAdapter, err := guestresource.BuildLCOWNetworkAdapter(ep.HostComputeNamespace, "nic-1", ep, false)
 	if err != nil {
 		t.Fatalf("failed to build expected adapter: %v", err)
 	}
@@ -90,7 +93,7 @@ func TestLCOW_AddEndpoint_Success_NamespaceSupport(t *testing.T) {
 		guest.EXPECT().AddNetworkInterface(gomock.Any(), expectedAdapter).Return(nil),
 	)
 
-	if err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false); err != nil {
+	if err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, ok := c.vmEndpoints["nic-1"]; !ok || got != ep {
@@ -114,7 +117,7 @@ func TestLCOW_AddEndpoint_Success_NoNamespaceSupport(t *testing.T) {
 	// guest.AddNetworkInterface is intentionally not expected — gomock will
 	// fail the test if the controller calls it without namespace support.
 
-	if err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false); err != nil {
+	if err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, ok := c.vmEndpoints["nic-1"]; !ok {
@@ -135,7 +138,7 @@ func TestLCOW_AddEndpoint_HostFails_NotTracked(t *testing.T) {
 	vm.EXPECT().AddNIC(gomock.Any(), "nic-1", gomock.Any()).Return(errLCOWHostAdd)
 	// guest.AddNetworkInterface must not be called when host add fails.
 
-	err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false)
+	err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false)
 	if !errors.Is(err, errLCOWHostAdd) {
 		t.Fatalf("expected host add error to wrap, got: %v", err)
 	}
@@ -191,6 +194,52 @@ func TestLCOW_RemoveEndpoint_GuestFails_HostNotCalled(t *testing.T) {
 	}
 }
 
+// TestLCOW_RemoveEndpoint_BridgeClosed_HostStillCalled verifies that when the
+// guest-side removal fails because the bridge is closed (the GCS is gone and
+// its state with it), the controller still hot-removes the NIC from the host
+// so cleanup completes instead of stalling on a doomed retry.
+func TestLCOW_RemoveEndpoint_BridgeClosed_HostStillCalled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	c, vm, guest := newLCOWController(t, ctrl, true)
+
+	ep := newLCOWEndpoint("eth0")
+
+	gomock.InOrder(
+		guest.EXPECT().RemoveNetworkInterface(gomock.Any(), gomock.Any()).
+			Return(fmt.Errorf("transport gone: %w", gcs.ErrBridgeClosed)),
+		vm.EXPECT().RemoveNIC(gomock.Any(), "nic-1", &hcsschema.NetworkAdapter{
+			EndpointId: ep.Id,
+			MacAddress: ep.MacAddress,
+		}).Return(nil),
+	)
+
+	if err := c.removeEndpointFromGuestNamespace(context.Background(), "nic-1", ep); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestLCOW_RemoveEndpoint_GuestConnectionUnavailable_HostStillCalled mirrors
+// the bridge-closed case for [guestmanager.ErrGuestConnectionUnavailable].
+func TestLCOW_RemoveEndpoint_GuestConnectionUnavailable_HostStillCalled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	c, vm, guest := newLCOWController(t, ctrl, true)
+
+	ep := newLCOWEndpoint("eth0")
+
+	gomock.InOrder(
+		guest.EXPECT().RemoveNetworkInterface(gomock.Any(), gomock.Any()).
+			Return(fmt.Errorf("guest RPC: %w", guestmanager.ErrGuestConnectionUnavailable)),
+		vm.EXPECT().RemoveNIC(gomock.Any(), "nic-1", &hcsschema.NetworkAdapter{
+			EndpointId: ep.Id,
+			MacAddress: ep.MacAddress,
+		}).Return(nil),
+	)
+
+	if err := c.removeEndpointFromGuestNamespace(context.Background(), "nic-1", ep); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestLCOW_RemoveEndpoint_NoNamespaceSupport_HostOnly verifies that when the
 // guest never received the namespace, the controller skips the guest-side
 // removal and only hot-removes the NIC from the host.
@@ -208,6 +257,45 @@ func TestLCOW_RemoveEndpoint_NoNamespaceSupport_HostOnly(t *testing.T) {
 
 	if err := c.removeEndpointFromGuestNamespace(context.Background(), "nic-1", ep); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestLCOW_RemoveEndpoint_HostFails_VMGone_Tolerated verifies that when the
+// host-side RemoveNIC fails because the UVM has already exited (HCS reports
+// the system as gone / already stopped / invalid state / handle closed), the
+// controller treats the failure as success. The NIC is destroyed alongside
+// the VM, so propagating the error would only leak the cached endpoint
+// mapping and block teardown — symmetric with the bridge-closed tolerance on
+// the guest side.
+func TestLCOW_RemoveEndpoint_HostFails_VMGone_Tolerated(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"ComputeSystemDoesNotExist", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrComputeSystemDoesNotExist)},
+		{"VmcomputeAlreadyStopped", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeAlreadyStopped)},
+		{"VmcomputeOperationInvalidState", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeOperationInvalidState)},
+		{"AlreadyClosed", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrAlreadyClosed)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			c, vm, guest := newLCOWController(t, ctrl, true)
+
+			ep := newLCOWEndpoint("eth0")
+
+			gomock.InOrder(
+				guest.EXPECT().RemoveNetworkInterface(gomock.Any(), gomock.Any()).Return(nil),
+				vm.EXPECT().RemoveNIC(gomock.Any(), "nic-1", gomock.Any()).Return(tc.err),
+			)
+
+			if err := c.removeEndpointFromGuestNamespace(context.Background(), "nic-1", ep); err != nil {
+				t.Fatalf("expected VM-gone error from host RemoveNIC to be tolerated, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -339,7 +427,7 @@ func TestLCOW_AddEndpoint_HostOK_GuestFails_TeardownUnwindsHost(t *testing.T) {
 		guest.EXPECT().AddNetworkInterface(gomock.Any(), gomock.Any()).Return(errLCOWGuestAdd),
 	)
 
-	if err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false); !errors.Is(err, errLCOWGuestAdd) {
+	if err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false); !errors.Is(err, errLCOWGuestAdd) {
 		t.Fatalf("expected guest add error to wrap, got: %v", err)
 	}
 	if _, ok := c.vmEndpoints["nic-1"]; !ok {

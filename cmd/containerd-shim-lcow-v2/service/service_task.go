@@ -9,14 +9,14 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 
-	"github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/runtime/task/v3"
 	"github.com/containerd/errdefs/pkg/errgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // Ensure Service implements the TTRPCTaskService interface at compile time.
-var _ task.TaskService = &Service{}
+var _ task.TTRPCTaskService = &Service{}
 
 // State returns the current state of a task or process.
 // This method is part of the instrumentation layer and business logic is included in stateInternal.

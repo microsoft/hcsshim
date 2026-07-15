@@ -7,10 +7,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -41,10 +44,18 @@ const (
 	// containerCreated is the status when a runtime container and init process
 	// have been assigned, but runtime start command has not been issued yet
 	containerCreated
+	// containerRunning is the status when the init process has started and has
+	// not yet exited.
+	containerRunning
+	// containerTerminated is the status when the init process has exited.
+	containerTerminated
 )
 
 type Container struct {
+	// id is the unique container identifier.
 	id string
+	// sandboxID is the pod this container belongs to. For sandbox containers, sandboxID == id.
+	sandboxID string
 
 	vsock   transport.Transport
 	logPath string   // path to [logFile].
@@ -130,6 +141,8 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 	err = c.container.Start()
 	if err != nil {
 		stdioSet.Close()
+	} else {
+		c.setStatus(containerRunning)
 	}
 	return int(c.initProcess.pid), err
 }
@@ -266,6 +279,16 @@ func (c *Container) Delete(ctx context.Context) error {
 			retErr = fmt.Errorf("errors deleting container oci bundle dir: %w; %w", retErr, err)
 		} else {
 			retErr = err
+		}
+	}
+
+	// For V2 sandbox containers, remove the now-empty pod directory
+	// (parent of c.ociBundlePath, e.g. /run/gcs/pods/<podID>).
+	if c.isSandbox && strings.HasPrefix(c.ociBundlePath, guestpath.LCOWV2RootPrefixInVM) {
+		podDir := filepath.Dir(c.ociBundlePath)
+		if err := os.Remove(podDir); err != nil && !os.IsNotExist(err) {
+			entity.WithError(err).WithField("podDir", podDir).
+				Warn("failed to remove pod directory after sandbox delete")
 		}
 	}
 

@@ -5,6 +5,7 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"go.uber.org/mock/gomock"
@@ -14,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
@@ -92,7 +94,7 @@ func TestWCOW_AddEndpoint_3PhaseSequence_Success(t *testing.T) {
 		).Return(nil),
 	)
 
-	if err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false); err != nil {
+	if err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, ok := c.vmEndpoints["nic-1"]; !ok || got != ep {
@@ -115,7 +117,7 @@ func TestWCOW_AddEndpoint_PreAddFails_NotTracked(t *testing.T) {
 	).Return(errWCOWGuestPreAdd)
 	// No vm.AddNIC, no second guest.AddNetworkInterface — gomock fails if either is called.
 
-	err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false)
+	err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false)
 	if !errors.Is(err, errWCOWGuestPreAdd) {
 		t.Fatalf("expected pre-add error to wrap, got: %v", err)
 	}
@@ -140,7 +142,7 @@ func TestWCOW_AddEndpoint_HostFails_NotTracked(t *testing.T) {
 		vm.EXPECT().AddNIC(gomock.Any(), "nic-1", gomock.Any()).Return(errWCOWHostAdd),
 	)
 
-	err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false)
+	err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false)
 	if !errors.Is(err, errWCOWHostAdd) {
 		t.Fatalf("expected host add error to wrap, got: %v", err)
 	}
@@ -193,6 +195,72 @@ func TestWCOW_RemoveEndpoint_GuestFails_HostNotCalled(t *testing.T) {
 	err := c.removeEndpointFromGuestNamespace(context.Background(), "nic-1", ep)
 	if !errors.Is(err, errWCOWGuestRemove) {
 		t.Fatalf("expected guest remove error to wrap, got: %v", err)
+	}
+}
+
+// TestWCOW_RemoveEndpoint_BridgeClosed_HostStillCalled verifies that when the
+// guest-side removal fails because the GCS bridge is closed (the guest agent
+// is gone and its state with it), the controller still hot-removes the NIC
+// from the host so cleanup completes instead of stalling on a doomed retry.
+// Symmetric with the VM-gone tolerance on the host side.
+func TestWCOW_RemoveEndpoint_BridgeClosed_HostStillCalled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	c, vm, guest := newWCOWController(t, ctrl, true)
+
+	ep := newWCOWEndpoint("eth0")
+
+	gomock.InOrder(
+		guest.EXPECT().RemoveNetworkInterface(
+			gomock.Any(), "nic-1", guestrequest.RequestTypeRemove, gomock.Nil(),
+		).Return(fmt.Errorf("transport gone: %w", gcs.ErrBridgeClosed)),
+		vm.EXPECT().RemoveNIC(gomock.Any(), "nic-1", &hcsschema.NetworkAdapter{
+			EndpointId: ep.Id,
+			MacAddress: ep.MacAddress,
+		}).Return(nil),
+	)
+
+	if err := c.removeEndpointFromGuestNamespace(context.Background(), "nic-1", ep); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestWCOW_RemoveEndpoint_HostFails_VMGone_Tolerated verifies that when the
+// host-side RemoveNIC fails because the UVM has already exited (HCS reports
+// the system as gone / already stopped / invalid state / handle closed), the
+// controller treats the failure as success. The NIC is destroyed alongside
+// the VM, so propagating the error would only leak the cached endpoint
+// mapping and block teardown.
+func TestWCOW_RemoveEndpoint_HostFails_VMGone_Tolerated(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"ComputeSystemDoesNotExist", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrComputeSystemDoesNotExist)},
+		{"VmcomputeAlreadyStopped", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeAlreadyStopped)},
+		{"VmcomputeOperationInvalidState", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrVmcomputeOperationInvalidState)},
+		{"AlreadyClosed", fmt.Errorf("hcs::System::Modify: %w", hcs.ErrAlreadyClosed)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			c, vm, guest := newWCOWController(t, ctrl, true)
+
+			ep := newWCOWEndpoint("eth0")
+
+			gomock.InOrder(
+				guest.EXPECT().RemoveNetworkInterface(
+					gomock.Any(), "nic-1", guestrequest.RequestTypeRemove, gomock.Nil(),
+				).Return(nil),
+				vm.EXPECT().RemoveNIC(gomock.Any(), "nic-1", gomock.Any()).Return(tc.err),
+			)
+
+			if err := c.removeEndpointFromGuestNamespace(context.Background(), "nic-1", ep); err != nil {
+				t.Fatalf("expected VM-gone error from host RemoveNIC to be tolerated, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -305,7 +373,7 @@ func TestWCOW_AddEndpoint_FinalAddFails_TeardownUnwindsHost(t *testing.T) {
 		).Return(errWCOWGuestAdd),
 	)
 
-	if err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false); !errors.Is(err, errWCOWGuestAdd) {
+	if err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false); !errors.Is(err, errWCOWGuestAdd) {
 		t.Fatalf("expected guest add error to wrap, got: %v", err)
 	}
 	if _, ok := c.vmEndpoints["nic-1"]; !ok {

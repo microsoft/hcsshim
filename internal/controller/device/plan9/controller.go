@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9/mount"
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9/share"
+	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
@@ -84,7 +85,7 @@ func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, moun
 
 	// Validate write-share policy before touching shared state.
 	if !shareConfig.ReadOnly && c.noWritableFileShares {
-		return guid.GUID{}, fmt.Errorf("adding writable Plan9 shares is denied")
+		return guid.GUID{}, fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied)
 	}
 
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.HostPath, shareConfig.HostPath))

@@ -8,14 +8,35 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi"
+	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/disk"
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
-// SCSIController returns the singleton SCSI device controller for this VM.
-func (c *Controller) SCSIController() *scsi.Controller {
-	return c.scsiController
+// SCSIController returns the SCSI device controller for this VM, lazily
+// initializing it from the VM's HCS document on first use.
+func (c *Controller) SCSIController(ctx context.Context) (*scsi.Controller, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.scsiController != nil {
+		return c.scsiController, nil
+	}
+
+	if c.hcsDocument == nil {
+		return nil, fmt.Errorf("cannot initialize SCSI controller: VM has no HCS document")
+	}
+
+	s, err := newSCSIController(ctx, c.hcsDocument, c.uvm, c.guest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize SCSI controller: %w", err)
+	}
+	c.scsiController = s
+
+	log.G(ctx).Debug("lazily initialized SCSI controller from HCS document")
+	return c.scsiController, nil
 }
 
 // VPCIController returns the singleton vPCI device controller for this VM.
@@ -58,13 +79,19 @@ func newSCSIController(
 		}
 
 		// Found the controller GUID in the document.
-		for lunStr := range c.Attachments {
+		for lunStr, att := range c.Attachments {
 			lun, err := strconv.ParseUint(lunStr, 10, 32)
 			if err != nil {
 				continue
 			}
 
-			if err := ctrl.ReserveForRootfs(ctx, uint(ctrlIdx), uint(lun)); err != nil {
+			cfg := disk.Config{
+				HostPath: att.Path,
+				ReadOnly: att.ReadOnly,
+				Type:     disk.Type(att.Type_),
+				EVDType:  att.ExtensibleVirtualDiskType,
+			}
+			if err := ctrl.ReserveForRootfs(ctx, uint(ctrlIdx), uint(lun), cfg); err != nil {
 				return nil, fmt.Errorf("reserve SCSI slot (controller=%d, lun=%d): %w", ctrlIdx, lun, err)
 			}
 		}

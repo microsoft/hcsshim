@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"time"
+	"unsafe"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
@@ -183,6 +184,19 @@ func main() {
 			return
 		}
 	}
+
+	// Mark gcs-sidecar as a critical process. If it exits, the UVM will bugcheck.
+	breakOnTermination := uint32(1)
+	if err := windows.NtSetInformationProcess(
+		windows.CurrentProcess(),
+		windows.ProcessBreakOnTermination,
+		unsafe.Pointer(&breakOnTermination),
+		uint32(unsafe.Sizeof(breakOnTermination)),
+	); err != nil {
+		logrus.WithError(err).Error("failed to set gcs-sidecar as critical process")
+		return
+	}
+	logrus.Info("gcs-sidecar marked as critical process")
 
 	logrus.Println("Initializing VSMB redirector!!!")
 	var vsmbError error

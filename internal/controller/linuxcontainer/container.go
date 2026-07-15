@@ -4,6 +4,7 @@ package linuxcontainer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -20,11 +21,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/runtime/task/v3"
 	containerdtypes "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
@@ -90,6 +92,9 @@ type Controller struct {
 
 	// ioRetryTimeout is the duration to retry IO relay operations before giving up.
 	ioRetryTimeout time.Duration
+
+	// isContainerStateDeleted tracks whether guest-side container state has been deleted.
+	isContainerStateDeleted bool
 }
 
 // New creates a ready-to-use Controller.
@@ -158,9 +163,8 @@ func (c *Controller) Create(ctx context.Context, spec *specs.Spec, opts *task.Cr
 			if releaseErr := c.releaseResources(ctx); releaseErr != nil {
 				log.G(ctx).WithError(releaseErr).Error("failed to release resources during create")
 			}
-			if closeErr := c.closeContainer(ctx); closeErr != nil {
-				log.G(ctx).WithError(closeErr).Error("failed to close container during create")
-			}
+			// Close the container handle.
+			c.closeContainer()
 		}
 	}()
 
@@ -200,17 +204,8 @@ func (c *Controller) Create(ctx context.Context, spec *specs.Spec, opts *task.Cr
 
 // closeContainer performs container teardown. It is safe to retry on
 // failure. Needs to be called while holding c.mu lock.
-func (c *Controller) closeContainer(ctx context.Context) error {
+func (c *Controller) closeContainer() {
 	if c.container != nil {
-		// Delete the guest-side container state if supported. If this
-		// fails, return early without nil'ing c.container so a retry
-		// re-issues the request.
-		if c.guest.Capabilities().IsDeleteContainerStateSupported() {
-			if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil {
-				return fmt.Errorf("delete container state: %w", err)
-			}
-		}
-
 		// Close the container handle. The calling code never returns error.
 		_ = c.container.Close()
 		c.container = nil
@@ -224,7 +219,16 @@ func (c *Controller) closeContainer(ctx context.Context) error {
 	default:
 		close(c.terminatedCh)
 	}
-	return nil
+}
+
+// isResourceAlreadyReleased reports whether a teardown failure indicates the
+// resource is already gone — either the in-guest agent died (so guest-side
+// state went with it) or the VM itself has exited (so host-side state went
+// with it). Either way, teardown can move on instead of retrying.
+func isResourceAlreadyReleased(err error) bool {
+	return errors.Is(err, gcs.ErrBridgeClosed) ||
+		errors.Is(err, guestmanager.ErrGuestConnectionUnavailable) ||
+		vmutils.IsVMNotAvailableError(err)
 }
 
 // releaseResources undoes each allocation in reverse order.
@@ -243,7 +247,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 			ContainerRootPath: c.layers.rootfsPath,
 			Layers:            hcsLayers,
 			ScratchPath:       c.layers.scratch.guestPath,
-		}); err != nil {
+		}); err != nil && !isResourceAlreadyReleased(err) {
 			return fmt.Errorf("remove combined layers from guest: %w", err)
 		}
 
@@ -255,7 +259,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 	// unmapped on a prior call.
 	var zeroGUID guid.GUID
 	if c.layers != nil && c.layers.scratch.id != zeroGUID {
-		if err := c.scsi.UnmapFromGuest(ctx, c.layers.scratch.id); err != nil {
+		if err := c.scsi.UnmapFromGuest(ctx, c.layers.scratch.id); err != nil && !isResourceAlreadyReleased(err) {
 			return fmt.Errorf("unmap scratch layer: %w", err)
 		}
 		c.layers.scratch = scsiReservation{}
@@ -265,7 +269,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 	// resumes from the first failure.
 	if c.layers != nil {
 		for i, layer := range c.layers.roLayers {
-			if err := c.scsi.UnmapFromGuest(ctx, layer.id); err != nil {
+			if err := c.scsi.UnmapFromGuest(ctx, layer.id); err != nil && !isResourceAlreadyReleased(err) {
 				c.layers.roLayers = c.layers.roLayers[i:]
 				return fmt.Errorf("unmap ro layer: %w", err)
 			}
@@ -274,7 +278,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 
 	// Unmap additional SCSI mounts.
 	for i, id := range c.scsiResources {
-		if err := c.scsi.UnmapFromGuest(ctx, id); err != nil {
+		if err := c.scsi.UnmapFromGuest(ctx, id); err != nil && !isResourceAlreadyReleased(err) {
 			c.scsiResources = c.scsiResources[i:]
 			return fmt.Errorf("unmap scsi resource: %w", err)
 		}
@@ -282,7 +286,7 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 
 	// Unmap Plan9 shares.
 	for i, id := range c.plan9Resources {
-		if err := c.plan9.UnmapFromGuest(ctx, id); err != nil {
+		if err := c.plan9.UnmapFromGuest(ctx, id); err != nil && !isResourceAlreadyReleased(err) {
 			c.plan9Resources = c.plan9Resources[i:]
 			return fmt.Errorf("unmap plan9 share: %w", err)
 		}
@@ -290,9 +294,26 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 
 	// Remove VPCI devices.
 	for i, id := range c.devices {
-		if err := c.vpci.RemoveFromVM(ctx, id); err != nil {
+		if err := c.vpci.RemoveFromVM(ctx, id); err != nil && !isResourceAlreadyReleased(err) {
 			c.devices = c.devices[i:]
 			return fmt.Errorf("remove vpci device: %w", err)
+		}
+	}
+
+	// After layer overlay has been removed, we can safely delete the
+	// bundle path inside the UVM for the container. Therefore, delete
+	// the guest-side container state if supported. Short-circuit on
+	// isContainerStateDeleted so retries don't re-issue Capabilities.
+	if !c.isContainerStateDeleted {
+		if caps := c.guest.Capabilities(); caps != nil && caps.IsDeleteContainerStateSupported() {
+			// GCS bridge evicts the container from its host-state map even if the inner Delete fails,
+			// so retries will always return not-found.
+			if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !isResourceAlreadyReleased(err) {
+				return fmt.Errorf("delete container state: %w", err)
+			}
+
+			// Set isContainerStateDeleted to true so that we do not retry this post successful delete.
+			c.isContainerStateDeleted = true
 		}
 	}
 
@@ -345,12 +366,7 @@ func (c *Controller) handleInitProcessExit(ctx context.Context, initProcess *pro
 
 	c.mu.Lock()
 	c.state = StateStopped
-	if err := c.closeContainer(ctx); err != nil {
-		// Leave state as StateStopped so DeleteProcess can retry the
-		// teardown. The exit event below still informs the caller that
-		// the init process is gone.
-		log.G(ctx).WithError(err).Error("failed to close container after init exit")
-	}
+	c.closeContainer()
 	c.mu.Unlock()
 
 	// Publish the exit event after teardown is complete.
@@ -532,24 +548,35 @@ func (c *Controller) KillProcess(ctx context.Context, execID string, signal uint
 		return fmt.Errorf("cannot signal all for non-empty exec %q: %w", execID, errdefs.ErrFailedPrecondition)
 	}
 
-	signalsSupported := c.guest.Capabilities().IsSignalProcessSupported()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// The container must have been created (and not be mid-migration on either
+	// the source or destination) for any process to exist or for c.guest to be
+	// safe to dereference.
+	if c.state == StateNotCreated || c.state == StateDestinationMigrating || c.state == StateSourceMigrating {
+		return fmt.Errorf("container %s is in state %s; cannot kill: %w", c.containerID, c.state, errdefs.ErrFailedPrecondition)
+	}
+
+	// Already terminal (e.g. aborted destination-migrated container): no-op
+	// rather than dereference c.guest, which may be nil.
+	if c.state == StateStopped || c.state == StateInvalid {
+		return nil
+	}
+
+	signalsSupported := false
+	if caps := c.guest.Capabilities(); caps != nil {
+		signalsSupported = caps.IsSignalProcessSupported()
+	}
 	signalOptions, err := signals.ValidateLCOW(int(signal), signalsSupported)
 	if err != nil {
 		return fmt.Errorf("validate signal %d for container %s: %w", signal, c.containerID, err)
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// The container must have been created for any process to exist.
-	if c.state == StateNotCreated {
-		return fmt.Errorf("container %s is in state %s; cannot kill: %w", c.containerID, c.state, errdefs.ErrFailedPrecondition)
-	}
-
 	// When "all" is requested, deliver the signal to every additional exec
 	// on a best-effort basis. Errors are logged but do not prevent the
 	// target process from being signaled.
-	if all {
+	if all || execID == "" {
 		for eid, proc := range c.processes {
 			if eid == "" {
 				// The init process is signaled as the explicit target below.
@@ -592,8 +619,9 @@ func (c *Controller) DeleteProcess(ctx context.Context, execID string) (*task.St
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// The container must have been created for any process to exist.
-	if c.state == StateNotCreated {
+	// The container must have been created (and not be mid-migration on either
+	// the source or destination) for any process to exist.
+	if c.state == StateNotCreated || c.state == StateDestinationMigrating || c.state == StateSourceMigrating {
 		return nil, fmt.Errorf("container %s is in state %s; cannot delete process: %w", c.containerID, c.state, errdefs.ErrFailedPrecondition)
 	}
 
@@ -616,11 +644,11 @@ func (c *Controller) DeleteProcess(ctx context.Context, execID string) (*task.St
 		// For containers that were created but never started, handleInitProcessExit
 		// was never launched, so closeContainer was never called. Perform full
 		// teardown now. closeContainer is retriable.
-		if err = c.closeContainer(ctx); err != nil {
-			return nil, fmt.Errorf("close container %s: %w", c.containerID, err)
-		}
-		if err = c.releaseResources(ctx); err != nil {
-			return nil, fmt.Errorf("releasing resources for container %s: %w", c.containerID, err)
+		if c.guest != nil {
+			if err = c.releaseResources(ctx); err != nil {
+				return nil, fmt.Errorf("releasing resources for container %s: %w", c.containerID, err)
+			}
+			c.closeContainer()
 		}
 	}
 

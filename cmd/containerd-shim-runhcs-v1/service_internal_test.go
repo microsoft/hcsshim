@@ -17,7 +17,7 @@ import (
 
 func verifyExpectedError(t *testing.T, resp interface{}, actual, expected error) {
 	t.Helper()
-	if actual == nil || errors.Cause(actual) != expected || !errors.Is(actual, expected) { //nolint:errorlint
+	if actual == nil || !errors.Is(actual, expected) {
 		t.Fatalf("expected error: %v, got: %v", expected, actual)
 	}
 

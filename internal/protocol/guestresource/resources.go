@@ -232,11 +232,16 @@ type SignalProcessOptionsWCOW struct {
 // ConfidentialOptions is used to set various confidential container specific
 // options.
 type ConfidentialOptions struct {
-	EnforcerType          string `json:"EnforcerType,omitempty"`
-	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
-	EncodedUVMReference   string `json:"EncodedUVMReference,omitempty"`
+	EnforcerType                    string `json:"EnforcerType,omitempty"`
+	EncodedSecurityPolicy           string `json:"EncodedSecurityPolicy,omitempty"`
+	EncodedUVMReference             string `json:"EncodedUVMReference,omitempty"`
+	EncodedUVMHashEnvelopeReference string `json:"EncodedUVMHashEnvelopeReference,omitempty"`
 }
 
 type SecurityPolicyFragment struct {
 	Fragment string `json:"Fragment,omitempty"`
+	// MediaType is the media type of the blob carried in Fragment. An empty
+	// value is treated by the guest as the default "application/cose-x509+rego"
+	// for backward compatibility with older hosts that do not set this field.
+	MediaType string `json:"MediaType,omitempty"`
 }

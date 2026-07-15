@@ -25,7 +25,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/blang/semver/v4"
-	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/rego"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -44,33 +45,34 @@ const (
 	maxPlan9MountIndex                         = 16
 
 	// variables that influence generated test fixtures
-	minStringLength                           = 10
-	maxContainersInGeneratedConstraints       = 32
-	maxLayersInGeneratedContainer             = 32
-	maxGeneratedCommandLength                 = 128
-	maxGeneratedCommandArgs                   = 12
-	maxGeneratedEnvironmentVariables          = 16
-	maxGeneratedEnvironmentVariableRuleLength = 64
-	maxGeneratedEnvironmentVariableRules      = 8
-	maxGeneratedFragmentNamespaceLength       = 32
-	maxGeneratedMountTargetLength             = 256
-	maxGeneratedVersion                       = 10
-	rootHashLength                            = 64
-	maxGeneratedMounts                        = 4
-	maxGeneratedMountSourceLength             = 32
-	maxGeneratedMountDestinationLength        = 32
-	maxGeneratedMountOptions                  = 5
-	maxGeneratedMountOptionLength             = 32
-	maxGeneratedExecProcesses                 = 4
-	maxGeneratedWorkingDirLength              = 128
-	maxGeneratedMappedDirectories             = 8
-	maxGeneratedMappedDirectoryPathLength     = 64
-	maxSignalNumber                           = 64
-	maxGeneratedNameLength                    = 8
-	maxGeneratedGroupNames                    = 4
-	maxGeneratedCapabilities                  = 12
-	maxGeneratedCapabilitesLength             = 24
-	maxWindowsSignalLength                    = 64
+	minStringLength                            = 10
+	maxContainersInGeneratedConstraints        = 32
+	maxLayersInGeneratedContainer              = 32
+	maxGeneratedCommandLength                  = 128
+	maxGeneratedCommandArgs                    = 12
+	maxGeneratedEnvironmentVariables           = 16
+	maxGeneratedEnvironmentVariableNameLength  = 31
+	maxGeneratedEnvironmentVariableValueLength = 32
+	maxGeneratedEnvironmentVariableRules       = 8
+	maxGeneratedFragmentNamespaceLength        = 32
+	maxGeneratedMountTargetLength              = 256
+	maxGeneratedVersion                        = 10
+	rootHashLength                             = 64
+	maxGeneratedMounts                         = 4
+	maxGeneratedMountSourceLength              = 32
+	maxGeneratedMountDestinationLength         = 32
+	maxGeneratedMountOptions                   = 5
+	maxGeneratedMountOptionLength              = 32
+	maxGeneratedExecProcesses                  = 4
+	maxGeneratedWorkingDirLength               = 128
+	maxGeneratedMappedDirectories              = 8
+	maxGeneratedMappedDirectoryPathLength      = 64
+	maxSignalNumber                            = 64
+	maxGeneratedNameLength                     = 8
+	maxGeneratedGroupNames                     = 4
+	maxGeneratedCapabilities                   = 12
+	maxGeneratedCapabilitesLength              = 24
+	maxWindowsSignalLength                     = 64
 	// additional consts
 	// the standard enforcer tests don't do anything with the encoded policy
 	// string. this const exists to make that explicit
@@ -97,6 +99,7 @@ func init() {
 func Test_RegoTemplates(t *testing.T) {
 	query := rego.New(
 		rego.Query("data.api"),
+		rego.SetRegoVersion(ast.RegoV0),
 		rego.Module("api.rego", APICode))
 
 	ctx := context.Background()
@@ -126,6 +129,7 @@ func Test_RegoTemplates(t *testing.T) {
 func verifyPolicyRules(apiVersion string, enforcementPoints map[string]interface{}, policyCode string) error {
 	query := rego.New(
 		rego.Query("data.policy"),
+		rego.SetRegoVersion(ast.RegoV0),
 		rego.Module("policy.rego", policyCode),
 		rego.Module("framework.rego", FrameworkCode),
 	)
@@ -349,18 +353,25 @@ type regoPlan9MountTestConfig struct {
 }
 
 func mountImageForContainer(policy *regoEnforcer, container *securityPolicyContainer) (string, error) {
-	ctx := context.Background()
 	containerID := testDataGenerator.uniqueContainerID()
+	if err := mountImageForContainerWithID(policy, container, containerID); err != nil {
+		return "", err
+	}
+	return containerID, nil
+}
+
+func mountImageForContainerWithID(policy *regoEnforcer, container *securityPolicyContainer, containerID string) error {
+	ctx := context.Background()
 
 	layerPaths, err := testDataGenerator.createValidOverlayForContainer(policy, container)
 	if err != nil {
-		return "", fmt.Errorf("error creating valid overlay: %w", err)
+		return fmt.Errorf("error creating valid overlay: %w", err)
 	}
 
 	scratchDisk := getScratchDiskMountTarget(containerID)
 	err = policy.EnforceRWDeviceMountPolicy(ctx, scratchDisk, true, true, "xfs")
 	if err != nil {
-		return "", fmt.Errorf("error mounting scratch disk: %w", err)
+		return fmt.Errorf("error mounting scratch disk: %w", err)
 	}
 
 	overlayTarget := getOverlayMountTarget(containerID)
@@ -369,10 +380,10 @@ func mountImageForContainer(policy *regoEnforcer, container *securityPolicyConta
 	err = policy.EnforceOverlayMountPolicy(
 		ctx, containerID, copyStrings(layerPaths), overlayTarget)
 	if err != nil {
-		return "", fmt.Errorf("error mounting filesystem: %w", err)
+		return fmt.Errorf("error mounting filesystem: %w", err)
 	}
 
-	return containerID, nil
+	return nil
 }
 
 func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
@@ -1427,6 +1438,10 @@ func setupRegoCreateContainerTest(gc *generatedConstraints, testContainer *secur
 		return nil, err
 	}
 
+	return createTestContainerSpec(gc, containerID, testContainer, privilegedError, policy, defaultMounts, privilegedMounts)
+}
+
+func createTestContainerSpec(gc *generatedConstraints, containerID string, testContainer *securityPolicyContainer, privilegedError bool, policy *regoEnforcer, defaultMounts, privilegedMounts []mountInternal) (*regoContainerTestConfig, error) {
 	envList := buildEnvironmentVariablesFromEnvRules(testContainer.EnvRules, testRand)
 	sandboxID := testDataGenerator.uniqueSandboxID()
 
@@ -2254,7 +2269,7 @@ func (*SecurityPolicy) Generate(r *rand.Rand, _ int) reflect.Value {
 		for j := 0; j < numEnvRules; j++ {
 			rule := EnvRuleConfig{
 				Strategy: "string",
-				Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
+				Rule:     generateRandomEnvironmentVariable(r),
 				Required: false,
 			}
 			c.EnvRules.Elements[strconv.Itoa(j)] = rule
@@ -2473,14 +2488,29 @@ func generateEnvironmentVariableRules(r *rand.Rand) []EnvRuleConfig {
 
 	numArgs := atLeastOneAtMost(r, maxGeneratedEnvironmentVariableRules)
 	for i := 0; i < int(numArgs); i++ {
-		rule := EnvRuleConfig{
-			Strategy: "string",
-			Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
+		var rule EnvRuleConfig
+		rule.UseNameValue = randBool(r)
+		name := randVariableString(r, maxGeneratedEnvironmentVariableNameLength)
+		value := randVariableString(r, maxGeneratedEnvironmentVariableValueLength)
+		if rule.UseNameValue {
+			rule.Name = name
+			rule.NameStrategy = EnvVarRuleString
+			rule.Value = value
+			rule.ValueStrategy = EnvVarRuleString
+		} else {
+			rule.Rule = fmt.Sprintf("%s=%s", name, value)
+			rule.Strategy = EnvVarRuleString
 		}
 		rules = append(rules, rule)
 	}
 
 	return rules
+}
+
+func generateRandomEnvironmentVariable(r *rand.Rand) string {
+	name := randVariableString(r, maxGeneratedEnvironmentVariableNameLength)
+	value := randVariableString(r, maxGeneratedEnvironmentVariableValueLength)
+	return fmt.Sprintf("%s=%s", name, value)
 }
 
 func generateExecProcesses(r *rand.Rand) []containerExecProcess {
@@ -2552,15 +2582,26 @@ func generateEnvironmentVariables(r *rand.Rand) []string {
 
 	numVars := atLeastOneAtMost(r, maxGeneratedEnvironmentVariables)
 	for i := 0; i < int(numVars); i++ {
-		variable := randVariableString(r, maxGeneratedEnvironmentVariableRuleLength)
+		variable := generateRandomEnvironmentVariable(r)
 		envVars = append(envVars, variable)
 	}
 
 	return envVars
 }
 
-func generateNeverMatchingEnvironmentVariable(r *rand.Rand) string {
-	return randString(r, maxGeneratedEnvironmentVariableRuleLength+1)
+func envRuleToStr(rule EnvRuleConfig) string {
+	if rule.UseNameValue {
+		if strings.Contains(rule.Name, "=") {
+			panic(fmt.Sprintf("expected env rule name %q to not contain '='", rule.Name))
+		}
+		return fmt.Sprintf("%s=%s", rule.Name, rule.Value)
+	} else {
+		return rule.Rule
+	}
+}
+
+func hasRegexInRule(rule EnvRuleConfig) bool {
+	return rule.Strategy == EnvVarRuleRegex || rule.NameStrategy == EnvVarRuleRegex || rule.ValueStrategy == EnvVarRuleRegex
 }
 
 func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) []string {
@@ -2578,8 +2619,8 @@ func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) 
 	// tests
 	for _, rule := range rules {
 		if rule.Required {
-			if rule.Strategy != EnvVarRuleRegex {
-				vars = append(vars, rule.Rule)
+			if !hasRegexInRule(rule) {
+				vars = append(vars, envRuleToStr(rule))
 			}
 			numberOfMatches--
 		}
@@ -2607,9 +2648,8 @@ func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) 
 			}
 		}
 
-		// include it if it's not regex
-		if rules[anIndex].Strategy != EnvVarRuleRegex {
-			vars = append(vars, rules[anIndex].Rule)
+		if !hasRegexInRule(rules[anIndex]) {
+			vars = append(vars, envRuleToStr(rules[anIndex]))
 			usedIndexes[anIndex] = struct{}{}
 		}
 		numberOfMatches--

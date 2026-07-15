@@ -148,6 +148,14 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 
 // handleAnnotationBootFilesPath handles parsing annotations.BootFilesRootPath and setting
 // implied options from the result.
+func handleLCOWAnnotationExtraExecArgs(_ context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
+	if s := ParseAnnotationsString(a, iannotations.ExtraLCOWExecArgs, ""); s != "" {
+		lopts.ExecCommandLine += " " + s
+	}
+}
+
+// handleAnnotationBootFilesPath handles parsing annotations.BootFilesRootPath and setting
+// implied options from the result.
 func handleAnnotationBootFilesPath(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
 	lopts.UpdateBootFilesPath(ctx, ParseAnnotationsString(a, annotations.BootFilesRootPath, lopts.BootFilesPath))
 }
@@ -203,14 +211,17 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 	// this might change if the building of the vmgs file were to be done on demand but that is likely
 	// much slower and noy very useful. We do respect the filename of the vmgs file so if it is necessary to
 	// have different options then multiple files could be used.
-	if len(lopts.SecurityPolicy) > 0 && !noSecurityHardware {
+	if len(lopts.SecurityPolicy) > 0 {
+		lopts.SecurityPolicyEnabled = true
+	}
+
+	if lopts.SecurityPolicyEnabled && !noSecurityHardware {
 		// VPMem not supported by the enlightened kernel for SNP so set count to zero.
 		lopts.VPMemDeviceCount = 0
 		// set the default GuestState filename.
 		lopts.GuestStateFilePath = vmutils.DefaultGuestStateFile
 		lopts.KernelBootOptions = ""
 		lopts.AllowOvercommit = false
-		lopts.SecurityPolicyEnabled = true
 
 		// There are two possible ways to boot SNP mode. Either kernelinitrd.vmgs which consists of kernel plus initrd.cpio.gz
 		// Or a kernel.vmgs file (without an initrd) plus a separate vhd file which is dmverity protected via a hash tree
@@ -224,7 +235,7 @@ func handleLCOWSecurityPolicy(ctx context.Context, a map[string]string, lopts *u
 		lopts.DmVerityMode = true
 	}
 
-	if len(lopts.SecurityPolicy) > 0 {
+	if lopts.SecurityPolicyEnabled {
 		// will only be false if explicitly set false by the annotation. We will otherwise default to true when there is a security policy
 		lopts.EnableScratchEncryption = ParseAnnotationsBool(ctx, a, annotations.LCOWEncryptedScratchDisk, true)
 	}
@@ -248,8 +259,8 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 
 	wopts.SecurityPolicyEnforcer = ParseAnnotationsString(a, annotations.WCOWSecurityPolicyEnforcer, wopts.SecurityPolicyEnforcer)
 	wopts.DisableSecureBoot = ParseAnnotationsBool(ctx, a, annotations.WCOWDisableSecureBoot, false)
-	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.GetDefaultConfidentialVMGSPath())
-	wopts.UVMReferenceInfoFile = ParseAnnotationsString(a, annotations.WCOWReferenceInfoFile, uvm.GetDefaultReferenceInfoFilePath())
+
+	// Resolve the isolation type first so the default VMGS file can be selected accordingly.
 	wopts.IsolationType = "SecureNestedPaging"
 	if noSecurityHardware := ParseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false); noSecurityHardware {
 		wopts.IsolationType = "GuestStateOnly"
@@ -257,6 +268,10 @@ func handleWCOWSecurityPolicy(ctx context.Context, a map[string]string, wopts *u
 	if err := handleWCOWIsolationType(ctx, a, wopts); err != nil {
 		return err
 	}
+
+	wopts.GuestStateFilePath = ParseAnnotationsString(a, annotations.WCOWGuestStateFile, uvm.ConfidentialVMGSPath(wopts.BootFilesRootPath, wopts.IsolationType))
+	wopts.UVMReferenceInfoFile = ParseAnnotationsString(a, annotations.WCOWReferenceInfoFile, uvm.ConfidentialReferenceInfoFilePath(wopts.BootFilesRootPath))
+	wopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(a, annotations.UVMHashEnvelopeReferenceInfoFile, uvm.ConfidentialHashEnvelopeReferenceInfoFilePath(wopts.BootFilesRootPath))
 
 	return nil
 }
@@ -377,12 +392,14 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.SecurityPolicy = ParseAnnotationsString(s.Annotations, annotations.LCOWSecurityPolicy, lopts.SecurityPolicy)
 		lopts.SecurityPolicyEnforcer = ParseAnnotationsString(s.Annotations, annotations.LCOWSecurityPolicyEnforcer, lopts.SecurityPolicyEnforcer)
 		lopts.UVMReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.LCOWReferenceInfoFile, lopts.UVMReferenceInfoFile)
+		lopts.UVMHashEnvelopeReferenceInfoFile = ParseAnnotationsString(s.Annotations, annotations.UVMHashEnvelopeReferenceInfoFile, lopts.UVMHashEnvelopeReferenceInfoFile)
 		lopts.KernelBootOptions = ParseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 		lopts.WritableOverlayDirs = ParseAnnotationsBool(ctx, s.Annotations, iannotations.WritableOverlayDirs, lopts.WritableOverlayDirs)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
+		handleLCOWAnnotationExtraExecArgs(ctx, s.Annotations, lopts)
 
 		// SecurityPolicy is very sensitive to other settings and will silently change those that are incompatible.
 		// Eg VMPem device count, overridden kernel option cannot be respected.
@@ -415,9 +432,26 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		// Writable EFI is valid for both confidential and regular Hyper-V isolated WCOW.
 		wopts.WritableEFI = ParseAnnotationsBool(ctx, s.Annotations, annotations.WCOWWritableEFI, wopts.WritableEFI)
 
+		// Debug mode (confidential WCOW only) saves the boot/EFI and scratch VHDs on teardown.
+		wopts.DebugMode = ParseAnnotationsBool(ctx, s.Annotations, annotations.WCOWDebugMode, wopts.DebugMode)
+		wopts.DebugDataPath = ParseAnnotationsString(s.Annotations, annotations.WCOWDebugDataPath, wopts.DebugDataPath)
+
+		// Optional override for the directory containing the confidential WCOW boot files.
+		wopts.BootFilesRootPath = ParseAnnotationsString(s.Annotations, annotations.BootFilesRootPath, wopts.BootFilesRootPath)
+
 		// Handle WCOW security policy settings
 		if err := handleWCOWSecurityPolicy(ctx, s.Annotations, wopts); err != nil {
 			return nil, err
+		}
+
+		// Debug mode is only supported for confidential WCOW and requires a non-empty data path.
+		if wopts.DebugMode {
+			if !wopts.SecurityPolicyEnabled {
+				return nil, fmt.Errorf("%q is only supported for confidential WCOW", annotations.WCOWDebugMode)
+			}
+			if wopts.DebugDataPath == "" {
+				return nil, fmt.Errorf("%q must be set to a non-empty path when %q is enabled", annotations.WCOWDebugDataPath, annotations.WCOWDebugMode)
+			}
 		}
 		// If security policy is enable, wopts.LogForwardingEnabled default value should be false (CWCOW should not allow log forwarding by default)
 		if wopts.SecurityPolicyEnabled {

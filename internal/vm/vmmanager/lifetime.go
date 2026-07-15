@@ -87,6 +87,17 @@ func (uvm *UtilityVM) PropertiesV2(ctx context.Context, types ...hcsschema.Prope
 	return props, nil
 }
 
+// PropertiesV3 returns the properties of the utility VM from HCS using the V2
+// property query schema.
+func (uvm *UtilityVM) PropertiesV3(ctx context.Context, query *hcsschema.PropertyQuery) (*hcsschema.Properties, error) {
+	props, err := uvm.cs.PropertiesV3(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get properties from HCS: %w", err)
+	}
+
+	return props, nil
+}
+
 // StartedTime returns the time when the utility VM entered the running state.
 func (uvm *UtilityVM) StartedTime() time.Time {
 	return uvm.cs.StartedTime()

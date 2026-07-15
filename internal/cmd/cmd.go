@@ -136,6 +136,29 @@ func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg 
 	return cmd
 }
 
+// Attach wires IO relays to a process the caller has already resolved.
+// Counterpart of [Command] / [CommandContext] for the destination side
+// of live migration: caller obtains `p` via the host's restore path
+// (e.g. gcs.Container.OpenProcessWithIO) and Attach binds the
+// process's stdio to the supplied destination streams.
+func Attach(ctx context.Context, p cow.Process, stdin io.Reader, stdout, stderr io.Writer) (*Cmd, error) {
+	cmd := &Cmd{
+		Process:              p,
+		Stdin:                stdin,
+		Stdout:               stdout,
+		Stderr:               stderr,
+		Log:                  log.G(ctx).WithField("pid", p.Pid()),
+		Context:              ctx,
+		ExitState:            &ExitState{},
+		allDoneCh:            make(chan struct{}),
+		CopyAfterExitTimeout: time.Second,
+	}
+	if err := cmd.startRelay(); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
 // Start starts a command. The caller must ensure that if Start succeeds,
 // Wait is eventually called to clean up resources.
 func (c *Cmd) Start() error {
@@ -209,7 +232,13 @@ func (c *Cmd) Start() error {
 		c.Log = c.Log.WithField("pid", p.Pid())
 	}
 
-	// Start relaying process IO.
+	return c.startRelay()
+}
+
+// startRelay wires the IO relay goroutines and the context-cancel
+// killer to [Cmd.Process].
+func (c *Cmd) startRelay() error {
+	p := c.Process
 	stdin, stdout, stderr := p.Stdio()
 	if c.Stdin != nil {
 		// Do not make stdin part of the error group because there is no way for

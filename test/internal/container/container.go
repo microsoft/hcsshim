@@ -48,7 +48,7 @@ func Create(
 		tb.Fatalf("layer parsing failed: %s", err)
 	}
 
-	if oci.IsJobContainer(spec) {
+	if oci.IsJobContainer(spec) && !oci.IsIsolated(spec) {
 		c, r, err = jobcontainers.Create(ctx, name, spec, jobcontainers.CreateOptions{WCOWLayers: wcowLayers})
 	} else {
 		co := &hcsoci.CreateOptions{
