@@ -914,6 +914,19 @@ mountConstraint_ok(constraint, mount) {
 # rely on the destination + options (mirroring the top-level mapped_directories
 # rule, which matches on container_path + read_only). windows_mount_type_ok
 # rejects disk/device mount types so they can't pass as a directory.
+#
+# Note on state: this create-time match (reached via mountList_ok in the Windows
+# create_container) records NO per-container mount state - unlike LCOW, where a
+# container's mounts are established by separate, independently-unmountable
+# modifySettings ops (plan9_mount / scsi / overlay) whose metadata
+# create_container then reads via mountSource_ok. We deliberately track nothing
+# here, resting on the assumption that there is no operation to "remove mount X
+# from container Y" independently of the container: a Windows container's
+# create-time mounts live and die with the container (torn down wholesale when
+# its combined layers are removed), so no independent unmount could ever consume
+# such state - hence there is nothing to track. (The UVM-level mapped directory
+# added/removed via mapped_directory_mount / mapped_directory_unmount has a
+# separate mechanism that keeps its own state.)
 mountConstraint_ok(constraint, mount) {
     is_windows
     windows_mount_type_ok(mount)
