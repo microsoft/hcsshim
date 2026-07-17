@@ -6,6 +6,7 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
@@ -52,10 +53,137 @@ func newTestBridge(enforcer securitypolicy.SecurityPolicyEnforcer) *Bridge {
 	host := NewHost(enforcer, io.Discard)
 	return &Bridge{
 		pending:        make(map[sequenceID]chan *prot.ContainerExecuteProcessResponse),
+		monitoredIDs:   make(map[sequenceID]struct{}),
 		rpcHandlerList: make(map[prot.RPCProc]HandlerFunc),
 		hostState:      host,
 		sendToGCSCh:    make(chan request, 10),
 		sendToShimCh:   make(chan bridgeResponse, 10),
+	}
+}
+
+// TestResponseFailure verifies responseFailure classifies inbox GCS responses:
+// a zero Result is success, a non-zero Result is a failure, and an unparseable
+// message is treated as success so a malformed message cannot by itself fail
+// the UVM closed.
+func TestResponseFailure(t *testing.T) {
+	mustMarshal := func(v interface{}) []byte {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		return b
+	}
+
+	tests := []struct {
+		name    string
+		message []byte
+		wantErr bool
+	}{
+		{name: "success", message: mustMarshal(prot.ResponseBase{Result: 0}), wantErr: false},
+		{name: "failure with message", message: mustMarshal(prot.ResponseBase{Result: 1, ErrorMessage: "boom"}), wantErr: true},
+		{name: "failure without message", message: mustMarshal(prot.ResponseBase{Result: 1}), wantErr: true},
+		{name: "unparseable", message: []byte("not json"), wantErr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := responseFailure(tt.message)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("responseFailure() err = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestCheckState_BlocksHandlers verifies that once the UVM is marked
+// inconsistent, container creation/deletion and settings changes are refused
+// (fail-closed), matching the LCOW behavior.
+func TestCheckState_BlocksHandlers(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	// Before failing closed, checkState is clear.
+	if err := b.hostState.checkState(); err != nil {
+		t.Fatalf("checkState should be nil before setUVMInconsistent, got %v", err)
+	}
+
+	b.hostState.setUVMInconsistent(errors.New("inbox mount failed"))
+
+	if err := b.hostState.checkState(); err == nil {
+		t.Fatal("checkState should be non-nil after setUVMInconsistent")
+	}
+
+	// createContainer refuses before it even parses the request (gate is at the top).
+	createReq := &request{
+		ctx:    context.Background(),
+		header: messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCCreate), ID: 1},
+	}
+	if err := b.createContainer(createReq); err == nil {
+		t.Error("createContainer should be denied when UVM is inconsistent")
+	}
+
+	// deleteContainerState refuses similarly.
+	deleteReq := &request{
+		ctx:    context.Background(),
+		header: messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCDeleteContainerState), ID: 2},
+	}
+	if err := b.deleteContainerState(deleteReq); err == nil {
+		t.Error("deleteContainerState should be denied when UVM is inconsistent")
+	}
+
+	// modifySettings refuses too (checkState runs after unmarshalling a valid request).
+	msg := buildModifySettingsRequest(t,
+		guestresource.ResourceTypeSecurityPolicy,
+		guestrequest.RequestTypeAdd,
+		guestresource.ConfidentialOptions{EnforcerType: "rego"},
+	)
+	modifyReq := &request{
+		ctx:     context.Background(),
+		header:  messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifySettings), Size: uint32(len(msg)) + prot.HdrSize, ID: 3},
+		message: msg,
+	}
+	if err := b.modifySettings(modifyReq); err == nil {
+		t.Error("modifySettings should be denied when UVM is inconsistent")
+	}
+}
+
+// TestModifySettings_MappedDirectory_TagsInboxResponse verifies that a forwarded
+// mapped-directory operation registers its request ID for inbox-response
+// monitoring and is forwarded to the inbox GCS, so a later failure response can
+// fail the UVM closed.
+func TestModifySettings_MappedDirectory_TagsInboxResponse(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	msg := buildModifySettingsRequest(t,
+		guestresource.ResourceTypeMappedDirectory,
+		guestrequest.RequestTypeAdd,
+		hcsschema.MappedDirectory{ContainerPath: `C:\mnt\ro`, ReadOnly: true},
+	)
+	const id sequenceID = 77
+	req := &request{
+		ctx:     context.Background(),
+		header:  messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifySettings), Size: uint32(len(msg)) + prot.HdrSize, ID: id},
+		message: msg,
+	}
+
+	if err := b.modifySettings(req); err != nil {
+		t.Fatalf("modifySettings returned error: %v", err)
+	}
+
+	// The request ID must be registered for monitoring.
+	b.monitoredMu.Lock()
+	_, monitored := b.monitoredIDs[id]
+	b.monitoredMu.Unlock()
+	if !monitored {
+		t.Errorf("mapped-directory request ID %d was not registered for inbox-response monitoring", id)
+	}
+
+	// And the request must have been forwarded to the inbox GCS.
+	select {
+	case got := <-b.sendToGCSCh:
+		if got.header.ID != id {
+			t.Errorf("forwarded request ID = %d, want %d", got.header.ID, id)
+		}
+	default:
+		t.Error("mapped-directory request was not forwarded to inbox GCS")
 	}
 }
 

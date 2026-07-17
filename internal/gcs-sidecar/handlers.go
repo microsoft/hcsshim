@@ -57,6 +57,12 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
+	// Refuse to create containers once the UVM has been marked inconsistent by a
+	// failed forwarded mount/unmount (cf. LCOW Host.checkState).
+	if err := b.hostState.checkState(); err != nil {
+		return fmt.Errorf("CreateContainer denied: %w", err)
+	}
+
 	var createContainerRequest prot.ContainerCreate
 	var containerConfig json.RawMessage
 	createContainerRequest.ContainerConfig.Value = &containerConfig
@@ -1066,6 +1072,12 @@ func (b *Bridge) deleteContainerState(req *request) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
+	// Refuse to delete container state once the UVM has been marked inconsistent
+	// by a failed forwarded mount/unmount (cf. LCOW Host.checkState).
+	if err := b.hostState.checkState(); err != nil {
+		return fmt.Errorf("deleteContainerState denied: %w", err)
+	}
+
 	var r prot.DeleteContainerStateRequest
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal deleteContainerState: %w", err)
@@ -1216,6 +1228,20 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		return fmt.Errorf("invald guestRequestType %v", guestRequestType)
 	}
 
+	// If a previously forwarded mount/unmount operation failed in the inbox GCS,
+	// the sidecar's policy state may be out of sync with what is actually mounted
+	// and cannot be safely recovered, so refuse all further settings changes
+	// (cf. LCOW checkState gating in internal/guest/runtime/hcsv2/uvm.go).
+	if err := b.hostState.checkState(); err != nil {
+		return fmt.Errorf("modifySettings denied: %w", err)
+	}
+
+	// monitorResponse is set for forwarded combined-layers / mapped-directory
+	// operations whose real work happens in the inbox GCS. Their inbox response
+	// is watched (see monitorInboxResponse) so a failure fails the UVM closed,
+	// since the sidecar cannot revert the policy state it staged for them.
+	monitorResponse := false
+
 	// Question: should we enforce policy for each type? Maybe just reject if we don't implement policy?
 	if guestResourceType != "" {
 		switch guestResourceType {
@@ -1271,6 +1297,10 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			default:
 				return fmt.Errorf("unsupported request type %v for MappedDirectory", modifyGuestSettingsRequest.RequestType)
 			}
+			// The sidecar enforced policy here but the actual VSMB mount/unmount
+			// happens in the inbox GCS, so watch its response and fail closed on
+			// failure (the staged policy metadata cannot be reverted).
+			monitorResponse = true
 
 		case guestresource.ResourceTypeSecurityPolicy:
 			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.ConfidentialOptions)
@@ -1377,32 +1407,35 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				// Volume GUID from request.
 				volGUID := wcowBlockCimMounts.VolumeGUID
 
-				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify, mountedCim, volGUID.String())
-				if err != nil {
-					return errors.Wrap(err, "CIM mount is denied by policy")
-				}
-
-				// Cache hashes along with volGUID
-				b.hostState.blockCIMVolumeHashes[volGUID] = layerHashes
-
-				// Store the containerID (associated with volGUID) to mark that hashes are verified for this container
-				if _, ok := b.hostState.blockCIMVolumeContainers[volGUID]; !ok {
-					b.hostState.blockCIMVolumeContainers[volGUID] = make(map[string]struct{})
-				}
-				b.hostState.blockCIMVolumeContainers[volGUID][containerID] = struct{}{}
-
-				log.G(ctx).Tracef("Cached %d verified CIM layer hashes for volume %s (container %s)", len(hashesToVerify), volGUID, containerID)
-
-				if len(layerCIMs) > 1 {
-					_, err = cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
-					if err != nil {
-						return fmt.Errorf("error mounting multilayer block cims: %w", err)
+				// Enforce policy, mount, then record the verified state as a single
+				// transaction: if the real mount fails after the policy check,
+				// WithMetadataRollback reverts the policy metadata and we skip the
+				// sidecar caches, so policy state can't desync from what is mounted.
+				if rberr := b.hostState.securityOptions.PolicyEnforcer.WithMetadataRollback(func() error {
+					if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify, mountedCim, volGUID.String()); err != nil {
+						return errors.Wrap(err, "CIM mount is denied by policy")
 					}
-				} else {
-					_, err = cimfs.MountVerifiedBlockCIM(layerCIMs[0], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
-					if err != nil {
-						return fmt.Errorf("error mounting verified block cim: %w", err)
+
+					if len(layerCIMs) > 1 {
+						if _, merr := cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0]); merr != nil {
+							return fmt.Errorf("error mounting multilayer block cims: %w", merr)
+						}
+					} else {
+						if _, merr := cimfs.MountVerifiedBlockCIM(layerCIMs[0], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0]); merr != nil {
+							return fmt.Errorf("error mounting verified block cim: %w", merr)
+						}
 					}
+
+					// Real mount succeeded: record the verified state.
+					b.hostState.blockCIMVolumeHashes[volGUID] = layerHashes
+					if _, ok := b.hostState.blockCIMVolumeContainers[volGUID]; !ok {
+						b.hostState.blockCIMVolumeContainers[volGUID] = make(map[string]struct{})
+					}
+					b.hostState.blockCIMVolumeContainers[volGUID][containerID] = struct{}{}
+					log.G(ctx).Tracef("Cached %d verified CIM layer hashes for volume %s (container %s)", len(hashesToVerify), volGUID, containerID)
+					return nil
+				}); rberr != nil {
+					return rberr
 				}
 
 			case guestrequest.RequestTypeRemove:
@@ -1526,48 +1559,58 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				if err != nil {
 					return fmt.Errorf("failed to parse volume GUID %s: %w", guidStr, err)
 				}
-				hashes, haveHashes := b.hostState.blockCIMVolumeHashes[volGUID]
-				if haveHashes {
-					// Only do this if the ContainerID is not already seen for this volume
-					containers := b.hostState.blockCIMVolumeContainers[volGUID]
-					if _, seen := containers[containerID]; !seen {
-						// This is a container with similar layers as an existing container, hence already mounted.
-						// Call EnforceVerifiedCIMsPolicy on this new container.
-						hashesToVerify := hashes
-						mountedCim := []string{hashes[0]}
-						if len(hashes) > 1 {
-							hashesToVerify = hashes[1:]
+
+				// Enforce policy and set up the scratch as a single transaction: if a
+				// later step (e.g. mkdir) fails, WithMetadataRollback reverts the
+				// policy metadata and we skip the sidecar caches, so policy state
+				// can't desync from reality.
+				if rberr := b.hostState.securityOptions.PolicyEnforcer.WithMetadataRollback(func() error {
+					hashes, haveHashes := b.hostState.blockCIMVolumeHashes[volGUID]
+					markVolumeContainer := false
+					if haveHashes {
+						// Only re-verify if this container hasn't been seen for this volume.
+						containers := b.hostState.blockCIMVolumeContainers[volGUID]
+						if _, seen := containers[containerID]; !seen {
+							hashesToVerify := hashes
+							mountedCim := []string{hashes[0]}
+							if len(hashes) > 1 {
+								hashesToVerify = hashes[1:]
+							}
+							if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim, volGUID.String()); err != nil {
+								return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
+							}
+							log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
+							markVolumeContainer = true
 						}
-						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim, volGUID.String()); err != nil {
-							return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
-						}
-						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
-						containers[containerID] = struct{}{}
 					}
-				}
 
-				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
-					return fmt.Errorf("scratch mounting denied by policy: %w", err)
-				}
+					if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
+						return fmt.Errorf("scratch mounting denied by policy: %w", err)
+					}
 
-				// Record the container root path so createContainer can cross-check
-				// the forwarded Storage.Path against it, and mark the root mounted so
-				// deleteContainerState can refuse deletion until it's unmounted.
-				b.hostState.containerRootPaths[containerID] = settings.CombinedLayers.ContainerRootPath
-				b.hostState.SetContainerRootMounted(settings.CombinedLayers.ContainerRootPath, true)
-				// The following two folders are expected to be present in the scratch.
-				// But since we have just formatted the scratch we would need to
-				// create them manually.
-				sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
-				err = os.Mkdir(sandboxStateDirectory, 0777)
-				if err != nil {
-					return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
-				}
+					// The following two folders are expected to be present in the
+					// scratch. Since we just formatted it, create them manually.
+					sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
+					if err := os.Mkdir(sandboxStateDirectory, 0777); err != nil {
+						return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
+					}
+					hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
+					if err := os.Mkdir(hivesDirectory, 0777); err != nil {
+						return fmt.Errorf("failed to create hivesDirectory: %w", err)
+					}
 
-				hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
-				err = os.Mkdir(hivesDirectory, 0777)
-				if err != nil {
-					return fmt.Errorf("failed to create hivesDirectory: %w", err)
+					// Everything succeeded: record the sidecar state. containerRootPaths
+					// lets createContainer cross-check the forwarded Storage.Path, and
+					// the mounted-root flag lets deleteContainerState refuse deletion
+					// until the root is unmounted.
+					if markVolumeContainer {
+						b.hostState.blockCIMVolumeContainers[volGUID][containerID] = struct{}{}
+					}
+					b.hostState.containerRootPaths[containerID] = settings.CombinedLayers.ContainerRootPath
+					b.hostState.SetContainerRootMounted(settings.CombinedLayers.ContainerRootPath, true)
+					return nil
+				}); rberr != nil {
+					return rberr
 				}
 
 			case guestrequest.RequestTypeRemove:
@@ -1585,6 +1628,12 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			default:
 				return fmt.Errorf("unsupported request type %v for CWCOWCombinedLayers", modifyGuestSettingsRequest.RequestType)
 			}
+
+			// The sidecar enforced policy and staged the scratch here, but the
+			// actual union mount/unmount happens in the inbox GCS, so watch its
+			// response and fail closed on failure (the staged policy metadata and
+			// sidecar caches cannot be reverted).
+			monitorResponse = true
 
 			// Reconstruct WCOWCombinedLayers{} req before forwarding to GCS
 			// as GCS does not understand ResourceTypeCWCOWCombinedLayers
@@ -1608,6 +1657,9 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		}
 	}
 
+	if monitorResponse {
+		b.monitorInboxResponse(req.header.ID)
+	}
 	b.forwardRequestToGcs(req)
 	return nil
 }

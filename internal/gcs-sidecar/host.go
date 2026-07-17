@@ -5,6 +5,7 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -38,6 +39,46 @@ type Host struct {
 	// lower-cased root path. Used to refuse deleting a container whose root is
 	// still mounted.
 	mountedRoots map[string]struct{}
+
+	// uvmError is set when the UVM has entered an inconsistent state from which
+	// the sidecar cannot safely recover. Once set, checkState makes all further
+	// container creation/deletion and mount/unmount operations fail (cf. LCOW
+	// hcsv2 Host.uvmError in internal/guest/runtime/hcsv2/uvm.go). See the
+	// setUVMInconsistent call sites for the conditions that trigger it.
+	uvmError uvmConsistencyError
+}
+
+// uvmConsistencyError records that the UVM has entered an inconsistent state
+// from which the sidecar cannot safely recover, so it must fail closed. See the
+// setUVMInconsistent call sites for what can cause this.
+type uvmConsistencyError struct {
+	mu sync.Mutex
+	// cause is the error describing why the UVM entered an inconsistent state.
+	// If nil, Check returns nil.
+	cause error
+}
+
+// Set records the cause of the inconsistency, keeping the first cause if one is
+// already set.
+func (u *uvmConsistencyError) Set(cause error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.cause == nil {
+		u.cause = cause
+	}
+}
+
+// Check returns a non-nil error if the UVM has been marked inconsistent.
+func (u *uvmConsistencyError) Check() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.cause == nil {
+		return nil
+	}
+	return fmt.Errorf(
+		"mount, unmount, container creation and deletion have been disabled in this UVM due to a previous error: %w",
+		u.cause,
+	)
 }
 
 type Container struct {
@@ -79,6 +120,22 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 		mountedRoots:             make(map[string]struct{}),
 		securityOptions:          securityPolicyOptions,
 	}
+}
+
+// checkState returns an error if the UVM has entered an inconsistent state from
+// which the sidecar cannot safely recover, in which case further mount/unmount,
+// container creation and deletion must be refused.
+func (h *Host) checkState() error {
+	return h.uvmError.Check()
+}
+
+// setUVMInconsistent records that the UVM has entered an inconsistent state and
+// logs the cause. After this, checkState refuses further operations. The caller
+// passes the specific cause; see its call sites for the conditions that trigger
+// it.
+func (h *Host) setUVMInconsistent(cause error) {
+	h.uvmError.Set(cause)
+	log.G(context.Background()).WithError(cause).Error("Host marked inconsistent. All further mounts/unmounts, container creation and deletion will fail.")
 }
 
 func (h *Host) AddContainer(ctx context.Context, id string, c *Container) error {
