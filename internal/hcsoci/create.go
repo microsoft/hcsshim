@@ -266,12 +266,12 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}
 
 	var hcsDocument, gcsDocument interface{}
-	log.G(ctx).Debug("hcsshim::CreateContainer allocating resources")
+	log.G(ctx).Trace("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
 			return nil, r, errors.New("LCOW v1 not supported")
 		}
-		log.G(ctx).Debug("hcsshim::CreateContainer allocateLinuxResources")
+		log.G(ctx).Trace("hcsshim::CreateContainer allocateLinuxResources")
 		err = allocateLinuxResources(ctx, coi, r, isSandbox)
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed to allocateLinuxResources")

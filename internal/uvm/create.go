@@ -12,7 +12,7 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/copyfile"
@@ -21,7 +21,7 @@ import (
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -303,10 +303,10 @@ func (uvm *UtilityVM) Close() error { return uvm.CloseCtx(context.Background()) 
 // The context is used for all operations, including waits, so timeouts/cancellations may prevent
 // proper uVM cleanup.
 func (uvm *UtilityVM) CloseCtx(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "uvm::Close")
+	ctx, span := ot.StartSpan(ctx, "uvm::Close")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String(logfields.UVMID, uvm.id))
 
 	// TODO: check if uVM already closed
 

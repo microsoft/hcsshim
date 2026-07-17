@@ -4,8 +4,6 @@ package gcs
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,12 +15,13 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
-
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const pipePortFmt = `\\.\pipe\gctest-port-%d`
@@ -294,13 +293,26 @@ func Test_makeRequestNoSpan(t *testing.T) {
 	if r.ActivityID != empty {
 		t.Fatalf("expected ActivityID empty, got: %q", r.ActivityID.String())
 	}
-	if r.OpenCensusSpanContext != nil {
+	if len(r.OpenTelemetrySpanContext) != 0 {
 		t.Fatal("expected nil span context")
 	}
 }
 
+func setupTestOtel(t *testing.T) {
+	t.Helper()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	t.Cleanup(func() { tp.Shutdown(context.Background()) })
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+}
+
 func Test_makeRequestWithSpan(t *testing.T) {
-	ctx, span := oc.StartSpan(context.Background(), t.Name())
+	setupTestOtel(t)
+
+	ctx, span := ot.StartSpan(context.Background(), t.Name())
 	defer span.End()
 	r := makeRequest(ctx, t.Name())
 
@@ -311,66 +323,77 @@ func Test_makeRequestWithSpan(t *testing.T) {
 	if r.ActivityID != empty {
 		t.Fatalf("expected ActivityID empty, got: %q", r.ActivityID.String())
 	}
-	if r.OpenCensusSpanContext == nil {
+	if len(r.OpenTelemetrySpanContext) == 0 {
 		t.Fatal("expected non-nil span context")
 	}
+	otsc := r.OpenTelemetrySpanContext
+	if _, ok := otsc["traceparent"]; !ok {
+		t.Fatalf("expected traceparent key in otsc, got: %v", otsc)
+	}
+
+	// Roundtrip: extract otsc and verify trace context matches.
 	sc := span.SpanContext()
-	encodedTraceID := hex.EncodeToString(sc.TraceID[:])
-	if r.OpenCensusSpanContext.TraceID != encodedTraceID {
-		t.Fatalf("expected encoded TraceID: %q, got: %q", encodedTraceID, r.OpenCensusSpanContext.TraceID)
+	extractedCtx := otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(otsc))
+	extractedSC := trace.SpanContextFromContext(extractedCtx)
+	if extractedSC.TraceID() != sc.TraceID() {
+		t.Fatalf("roundtrip TraceID mismatch: got %s, want %s", extractedSC.TraceID(), sc.TraceID())
 	}
-	encodedSpanID := hex.EncodeToString(sc.SpanID[:])
-	if r.OpenCensusSpanContext.SpanID != encodedSpanID {
-		t.Fatalf("expected encoded SpanID: %q, got: %q", encodedSpanID, r.OpenCensusSpanContext.SpanID)
-	}
-	encodedTraceOptions := uint32(sc.TraceOptions)
-	if r.OpenCensusSpanContext.TraceOptions != encodedTraceOptions {
-		t.Fatalf("expected encoded TraceOptions: %v, got: %v", encodedTraceOptions, r.OpenCensusSpanContext.TraceOptions)
-	}
-	if r.OpenCensusSpanContext.Tracestate != "" {
-		t.Fatalf("expected encoded TraceState: '', got: %q", r.OpenCensusSpanContext.Tracestate)
+	if extractedSC.SpanID() != sc.SpanID() {
+		t.Fatalf("roundtrip SpanID mismatch: got %s, want %s", extractedSC.SpanID(), sc.SpanID())
 	}
 }
 
 func Test_makeRequestWithSpan_TraceStateEmptyEntries(t *testing.T) {
+	setupTestOtel(t)
+
 	// Start a remote context span so we can forward trace state.
-	ts, err := tracestate.New(nil)
-	if err != nil {
-		t.Fatalf("failed to make test Tracestate")
-	}
-	parent := trace.SpanContext{
-		Tracestate: ts,
-	}
-	ctx, span := trace.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
+	ts := trace.TraceState{}
+	parent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceState: ts,
+	})
+	ctx, span := ot.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
 	defer span.End()
 	r := makeRequest(ctx, t.Name())
 
-	if r.OpenCensusSpanContext == nil {
+	if len(r.OpenTelemetrySpanContext) == 0 {
 		t.Fatal("expected non-nil span context")
 	}
-	if r.OpenCensusSpanContext.Tracestate != "" {
-		t.Fatalf("expected encoded TraceState: '', got: %q", r.OpenCensusSpanContext.Tracestate)
+	otsc := r.OpenTelemetrySpanContext
+	// With empty trace state, traceparent should still be present.
+	if _, ok := otsc["traceparent"]; !ok {
+		t.Fatalf("expected traceparent key in otsc, got: %v", otsc)
+	}
+	// tracestate should not be present (empty).
+	if ts, ok := otsc["tracestate"]; ok && ts != "" {
+		t.Fatalf("expected no tracestate, got: %q", ts)
 	}
 }
 
 func Test_makeRequestWithSpan_TraceStateEntries(t *testing.T) {
+	setupTestOtel(t)
+
 	// Start a remote context span so we can forward trace state.
-	ts, err := tracestate.New(nil, tracestate.Entry{Key: "test", Value: "test"})
+	ts := trace.TraceState{}
+	ts, err := ts.Insert("test", "test")
 	if err != nil {
-		t.Fatalf("failed to make test Tracestate")
+		t.Fatal(err)
 	}
-	parent := trace.SpanContext{
-		Tracestate: ts,
-	}
-	ctx, span := trace.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
+	parent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceState: ts,
+	})
+	ctx, span := ot.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
 	defer span.End()
 	r := makeRequest(ctx, t.Name())
 
-	if r.OpenCensusSpanContext == nil {
+	if len(r.OpenTelemetrySpanContext) == 0 {
 		t.Fatal("expected non-nil span context")
 	}
-	encodedTraceState := base64.StdEncoding.EncodeToString([]byte(`[{"Key":"test","Value":"test"}]`))
-	if r.OpenCensusSpanContext.Tracestate != encodedTraceState {
-		t.Fatalf("expected encoded TraceState: %q, got: %q", encodedTraceState, r.OpenCensusSpanContext.Tracestate)
+	otsc := r.OpenTelemetrySpanContext
+	if _, ok := otsc["traceparent"]; !ok {
+		t.Fatalf("expected traceparent key in otsc, got: %v", otsc)
+	}
+	// tracestate should be present with the test entry.
+	if tsVal, ok := otsc["tracestate"]; !ok || tsVal == "" {
+		t.Fatalf("expected non-empty tracestate, got: %q", tsVal)
 	}
 }

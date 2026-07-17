@@ -7,9 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +15,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -26,7 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -220,39 +220,21 @@ func (b *Bridge) forwardRequestToGcs(req *request) {
 	b.sendToGCSCh <- *req
 }
 
-func getContextAndSpan(baseSpanCtx *prot.Ocspancontext) (context.Context, *trace.Span) {
+func getContextAndSpan(baseSpanCtx prot.Otelspancontext) (context.Context, trace.Span) {
 	var ctx context.Context
-	var span *trace.Span
-	if baseSpanCtx != nil {
-		sc := trace.SpanContext{}
-		if bytes, err := hex.DecodeString(baseSpanCtx.TraceID); err == nil {
-			copy(sc.TraceID[:], bytes)
-		}
-		if bytes, err := hex.DecodeString(baseSpanCtx.SpanID); err == nil {
-			copy(sc.SpanID[:], bytes)
-		}
-		sc.TraceOptions = trace.TraceOptions(baseSpanCtx.TraceOptions)
-		if baseSpanCtx.Tracestate != "" {
-			if bytes, err := base64.StdEncoding.DecodeString(baseSpanCtx.Tracestate); err == nil {
-				var entries []tracestate.Entry
-				if err := json.Unmarshal(bytes, &entries); err == nil {
-					if ts, err := tracestate.New(nil, entries...); err == nil {
-						sc.Tracestate = ts
-					}
-				}
-			}
-		}
-		ctx, span = oc.StartSpanWithRemoteParent(
+	var span trace.Span
+	if len(baseSpanCtx) > 0 {
+		ctx = otel.GetTextMapPropagator().Extract(
 			context.Background(),
-			"sidecar::request",
-			sc,
-			oc.WithServerSpanKind,
+			propagation.MapCarrier(baseSpanCtx),
 		)
+		ctx, span = ot.StartSpan(ctx, "sidecar::request",
+			trace.WithSpanKind(trace.SpanKindServer))
 	} else {
-		ctx, span = oc.StartSpan(
+		ctx, span = ot.StartSpan(
 			context.Background(),
 			"sidecar::request",
-			oc.WithServerSpanKind,
+			trace.WithSpanKind(trace.SpanKindServer),
 		)
 	}
 
@@ -334,12 +316,12 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 
 				var msgBase prot.RequestBase
 				_ = json.Unmarshal(msg, &msgBase)
-				reqCtx, span := getContextAndSpan(msgBase.OpenCensusSpanContext)
-				span.AddAttributes(
-					trace.Int64Attribute("message-id", int64(header.ID)),
-					trace.StringAttribute("message-type", header.Type.String()),
-					trace.StringAttribute("activityID", msgBase.ActivityID.String()),
-					trace.StringAttribute("containerID", msgBase.ContainerID))
+				reqCtx, span := getContextAndSpan(msgBase.OpenTelemetrySpanContext)
+				span.SetAttributes(
+					attribute.Int64("message-id", int64(header.ID)),
+					attribute.String("message-type", header.Type.String()),
+					attribute.String("activityID", msgBase.ActivityID.String()),
+					attribute.String("containerID", msgBase.ContainerID))
 
 				req := request{
 					ctx:        reqCtx,

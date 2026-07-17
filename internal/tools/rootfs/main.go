@@ -4,14 +4,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
-	"go.opencensus.io/trace"
-
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // TODO: add tests for:
@@ -21,11 +22,24 @@ import (
 // - overriding UID and GUID
 // TODO: output CPIO archive?
 
+func initOtelTracer() (func(context.Context) error, error) {
+	exporter := &ot.LogrusExporter{}
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	otel.SetTracerProvider(traceProvider)
+	return traceProvider.Shutdown, nil
+}
+
 func main() {
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	// Register our Otel logrus exporter
+	_, err := initOtelTracer()
+	if err != nil {
+		logrus.Fatalf("failed to initialize ot tracer: %v", err)
+	}
 
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

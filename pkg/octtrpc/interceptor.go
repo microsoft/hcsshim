@@ -1,3 +1,4 @@
+// Deprecated: Use github.com/containerd/otelttrpc instead.
 package octtrpc
 
 import (

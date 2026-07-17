@@ -225,16 +225,28 @@ type Ocspancontext struct {
 	Tracestate string `json:",omitempty"`
 }
 
+// Otelspancontext is the W3C TraceContext propagation headers used by
+// OpenTelemetry's TextMapPropagator for forwarding to a GCS that supports it.
+// The map typically contains "traceparent" and optionally "tracestate" keys.
+type Otelspancontext map[string]string
+
 type RequestBase struct {
 	ContainerID string    `json:"ContainerId"`
 	ActivityID  guid.GUID `json:"ActivityId"`
 
-	// OpenCensusSpanContext is the encoded OpenCensus `trace.SpanContext` if
+	// OpenTelemetrySpanContext is the encoded OpenTelemetry `trace.SpanContext` if
 	// set when making the request.
 	//
 	// NOTE: This is not a part of the protocol but because its a JSON protocol
 	// adding fields is a non-breaking change. If the guest supports it this is
 	// just additive context.
+	OpenTelemetrySpanContext Otelspancontext `json:"otsc,omitempty"`
+
+	// OpenCensusSpanContext is the encoded OpenCensus `trace.SpanContext` if
+	// set when making the request.
+	// This field is kept temporarily for backward compatibility with gcs-sidecar.
+	//
+	// Deprecated: Use [OpenTelemetrySpanContext] instead.
 	OpenCensusSpanContext *Ocspancontext `json:"ocsc,omitempty"`
 }
 

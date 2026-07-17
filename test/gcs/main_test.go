@@ -14,7 +14,8 @@ import (
 	cgroups "github.com/containerd/cgroups/v3/cgroup1"
 	cgroupsv2 "github.com/containerd/cgroups/v3/cgroup2"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
@@ -23,7 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 
 	"github.com/Microsoft/hcsshim/test/internal/util"
@@ -111,8 +112,11 @@ func TestMain(m *testing.M) {
 func setup() (err error) {
 	_ = os.MkdirAll(guestpath.LCOWRootPrefixInUVM, 0755)
 
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(&ot.LogrusExporter{}),
+		sdktrace.WithSampler(ot.DefaultSampler),
+	)
+	otel.SetTracerProvider(traceProvider)
 
 	logrus.SetLevel(flagLogLevel.Level)
 	// test2json does not consume stderr

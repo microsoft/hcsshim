@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 )
 
 type requestMessage interface {
@@ -326,7 +326,7 @@ func (brdg *bridge) recvLoopRoutine() {
 }
 
 func readMessage(r io.Reader) (int64, prot.MsgType, []byte, error) {
-	_, span := oc.StartSpan(context.Background(), "bridge receive read message", oc.WithClientSpanKind)
+	_, span := ot.StartSpan(context.Background(), "bridge receive read message", ot.WithClientSpanKind)
 	defer span.End()
 
 	var h [prot.HdrSize]byte
@@ -337,9 +337,9 @@ func readMessage(r io.Reader) (int64, prot.MsgType, []byte, error) {
 	typ := prot.MsgType(binary.LittleEndian.Uint32(h[prot.HdrOffType:]))
 	n := binary.LittleEndian.Uint32(h[prot.HdrOffSize:])
 	id := int64(binary.LittleEndian.Uint64(h[prot.HdrOffID:]))
-	span.AddAttributes(
-		trace.StringAttribute("type", typ.String()),
-		trace.Int64Attribute("message-id", id))
+	span.SetAttributes(
+		attribute.String("type", typ.String()),
+		attribute.Int64("message-id", id))
 
 	if n < prot.HdrSize || n > prot.MaxMsgSize {
 		return 0, 0, nil, fmt.Errorf("invalid message size %d", n)
@@ -454,12 +454,12 @@ func (brdg *bridge) sendLoop() {
 
 func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ prot.MsgType, id int64, req interface{}) error {
 	var err error
-	_, span := oc.StartSpan(context.Background(), "bridge send", oc.WithClientSpanKind)
+	_, span := ot.StartSpan(context.Background(), "bridge send", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("type", typ.String()),
-		trace.Int64Attribute("message-id", id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("type", typ.String()),
+		attribute.Int64("message-id", id))
 
 	// Prepare the buffer with the message.
 	var h [prot.HdrSize]byte

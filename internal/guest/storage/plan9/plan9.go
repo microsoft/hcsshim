@@ -11,9 +11,9 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
 )
 
@@ -44,15 +44,15 @@ func ValidateShareName(name string) error {
 // `target` will be created. On mount failure the created `target` will be
 // automatically cleaned up.
 func Mount(ctx context.Context, vsock transport.Transport, target, share string, port uint32, readonly bool) (err error) {
-	_, span := oc.StartSpan(ctx, "plan9::Mount")
+	_, span := ot.StartSpan(ctx, "plan9::Mount")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("target", target),
-		trace.StringAttribute("share", share),
-		trace.Int64Attribute("port", int64(port)),
-		trace.BoolAttribute("readonly", readonly))
+	span.SetAttributes(
+		attribute.String("target", target),
+		attribute.String("share", share),
+		attribute.Int64("port", int64(port)),
+		attribute.Bool("readonly", readonly))
 
 	if err := osMkdirAll(target, 0700); err != nil {
 		return err

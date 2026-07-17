@@ -13,15 +13,16 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/ot"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"go.opencensus.io/trace"
-
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	hcsversion "github.com/Microsoft/hcsshim/internal/version"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	// register common types spec with typeurl
 	_ "github.com/containerd/containerd/v2/core/runtime"
@@ -68,8 +69,23 @@ func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, m
 	}
 }
 
+func initOtelTracer() (func(context.Context) error, error) {
+	exporter := &ot.LogrusExporter{}
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	otel.SetTracerProvider(traceProvider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+	return traceProvider.Shutdown, nil
+}
+
 func main() {
 	logrus.AddHook(log.NewHook())
+	logrus.SetLevel(logrus.DebugLevel)
 
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
 	// Provider and hook aren't closed explicitly, as they will exist until process exit.
@@ -102,9 +118,12 @@ func main() {
 		),
 	)
 
-	// Register our OpenCensus logrus exporter
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	// Register our Otel logrus exporter
+	shutdownTracer, err := initOtelTracer()
+	if err != nil {
+		logrus.Fatalf("failed to initialize ot tracer: %v", err)
+	}
+	defer shutdownTracer(context.Background())
 
 	app := cli.NewApp()
 	app.Name = "containerd-shim-runhcs-v1"

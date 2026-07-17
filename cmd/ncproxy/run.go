@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -19,8 +21,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"go.opencensus.io/plugin/ocgrpc"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,7 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	nodenetsvcV0 "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v0"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 )
@@ -135,6 +137,16 @@ and 'node network' services.`
 	return app
 }
 
+func initOtelTracer() (func(context.Context) error, error) {
+	exporter := &ot.LogrusExporter{}
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	otel.SetTracerProvider(traceProvider)
+	return traceProvider.Shutdown, nil
+}
+
 // Run ncproxy
 func run(clicontext *cli.Context) error {
 	var (
@@ -158,9 +170,11 @@ func run(clicontext *cli.Context) error {
 		logrus.Error(err)
 	}
 
-	// Register our OpenCensus logrus exporter
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	// Register our Otel logrus exporter
+	_, err := initOtelTracer()
+	if err != nil {
+		logrus.Fatalf("failed to initialize ot tracer: %v", err)
+	}
 
 	// If no logging directory passed in use where ncproxy is located.
 	if logDir == "" {
@@ -226,7 +240,7 @@ func run(clicontext *cli.Context) error {
 		dialCtx := ctx
 		opts := []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
+			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		}
 		if conf.Timeout > 0 {
 			var cancel context.CancelFunc

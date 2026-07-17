@@ -13,12 +13,6 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guestpath"
-	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
@@ -27,11 +21,16 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // containerStatus has been introduced to enable parallel container creation
@@ -302,9 +301,9 @@ func (c *Container) Update(ctx context.Context, resources interface{}) error {
 
 // Wait waits for the container's init process to exit.
 func (c *Container) Wait() prot.NotificationType {
-	_, span := oc.StartSpan(context.Background(), "opengcs::Container::Wait")
+	_, span := ot.StartSpan(context.Background(), "opengcs::Container::Wait")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
+	span.SetAttributes(attribute.String(logfields.ContainerID, c.id))
 
 	c.initProcess.writersWg.Wait()
 	c.etL.Lock()
@@ -329,9 +328,9 @@ func (c *Container) setExitType(signal syscall.Signal) {
 // GetStats returns the cgroup metrics for the container.
 // Works with both cgroup v1 and v2 systems.
 func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
-	_, span := oc.StartSpan(ctx, "opengcs::Container::GetStats")
+	_, span := ot.StartSpan(ctx, "opengcs::Container::GetStats")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	return cgroup.LoadAndStat(c.spec.Linux.CgroupsPath)
 }

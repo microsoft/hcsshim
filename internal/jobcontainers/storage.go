@@ -42,7 +42,7 @@ func (*JobContainer) mountLayers(
 	var closer resources.ResourceCloser
 	if s.Root.Path == "" {
 		var mountedLayers *layers.MountedWCOWLayers
-		log.G(ctx).Debug("mounting job container storage")
+		log.G(ctx).Trace("mounting job container storage")
 		mountedLayers, closer, err = layers.MountWCOWLayers(ctx, containerID, nil, wl)
 		if err != nil {
 			return nil, fmt.Errorf("failed to mount job container storage: %w", err)
