@@ -1132,6 +1132,53 @@ func TestIsContainerRootInUse(t *testing.T) {
 	}
 }
 
+// TestModifySettings_CombinedLayers_RejectsDuplicateAdd verifies that a second
+// CWCOWCombinedLayers Add for a container that already has combined layers set
+// up is rejected, so a repeated Add can't overwrite the recorded root path or
+// leak the previous root's mounted-root entry.
+func TestModifySettings_CombinedLayers_RejectsDuplicateAdd(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	const cid = "container-1"
+	const rootPath = `C:\mounts\scsi\m0`
+
+	// Pretend combined layers were already set up for this container.
+	b.hostState.containerRootPaths[cid] = rootPath
+	b.hostState.SetContainerRootMounted(rootPath, true)
+
+	msg := buildModifySettingsRequest(t,
+		guestresource.ResourceTypeCWCOWCombinedLayers,
+		guestrequest.RequestTypeAdd,
+		guestresource.CWCOWCombinedLayers{
+			ContainerID: cid,
+			CombinedLayers: guestresource.WCOWCombinedLayers{
+				ContainerRootPath: `C:\mounts\scsi\m1`,
+				Layers:            []hcsschema.Layer{{Path: rootPath}},
+			},
+		},
+	)
+	req := &request{
+		ctx:     context.Background(),
+		header:  messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifySettings), Size: uint32(len(msg)) + prot.HdrSize, ID: 1},
+		message: msg,
+	}
+
+	err := b.modifySettings(req)
+	if err == nil || !strings.Contains(err.Error(), "already set up") {
+		t.Fatalf("expected duplicate-add denial, got %v", err)
+	}
+
+	// The recorded root path must be unchanged and nothing forwarded to GCS.
+	if got := b.hostState.containerRootPaths[cid]; got != rootPath {
+		t.Errorf("containerRootPaths[%q] = %q, want %q (unchanged)", cid, got, rootPath)
+	}
+	select {
+	case <-b.sendToGCSCh:
+		t.Error("duplicate CombinedLayers Add must not be forwarded to inbox GCS")
+	default:
+	}
+}
+
 // TestDeleteContainerState_DeniesRunningOrMounted verifies deleteContainerState
 // refuses to delete the state of a container that is still running or whose
 // combined-layers root is still mounted, and allows it once terminated and

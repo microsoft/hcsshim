@@ -1541,6 +1541,14 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
 					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
+				// Combined layers are set up once per container. Reject a repeated
+				// Add for the same container: otherwise a second Add with a
+				// different root would overwrite containerRootPaths[containerID]
+				// and leak the previous root's mounted-root entry.
+				if b.hostState.HasContainerRoot(containerID) {
+					return fmt.Errorf("combined layers already set up for container %q", containerID)
+				}
+
 				if matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, settings.CombinedLayers.ContainerRootPath); merr != nil || !matched {
 					return fmt.Errorf("combined-layers container root path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
 						settings.CombinedLayers.ContainerRootPath)

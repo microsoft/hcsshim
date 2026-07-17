@@ -215,6 +215,18 @@ func (h *Host) SetContainerRootMounted(rootPath string, mounted bool) {
 	}
 }
 
+// HasContainerRoot reports whether a combined-layers root has already been
+// recorded for the given container. It lets the CWCOWCombinedLayers Add handler
+// stay idempotent: a second Add for the same container would otherwise overwrite
+// containerRootPaths[cid] and leak the previous root's mounted-root entry.
+func (h *Host) HasContainerRoot(cid string) bool {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	_, ok := h.containerRootPaths[cid]
+	return ok
+}
+
 // IsContainerRootMountedForContainer reports whether the combined-layers root
 // recorded for the given container is still mounted.
 // (cf. LCOW hostMounts.HasOverlayMountedAt)
