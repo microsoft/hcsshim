@@ -1443,19 +1443,28 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWBlockCIMMounts)
 				volGUID := wcowBlockCimMounts.VolumeGUID
 
-				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceCIMUnmountPolicy(req.ctx, volGUID.String()); err != nil {
-					return fmt.Errorf("CIM unmount is denied by policy: %w", err)
-				}
+				// Enforce policy, unmount, then drop the cached state as a single
+				// transaction: unmount_cims removes the mountedCimVolumes record,
+				// so if the real unmount fails after the policy check,
+				// WithMetadataRollback restores that record and we skip the cache
+				// deletes, keeping policy state in sync with what is mounted.
+				if rberr := b.hostState.securityOptions.PolicyEnforcer.WithMetadataRollback(func() error {
+					if err := b.hostState.securityOptions.PolicyEnforcer.EnforceCIMUnmountPolicy(req.ctx, volGUID.String()); err != nil {
+						return fmt.Errorf("CIM unmount is denied by policy: %w", err)
+					}
 
-				volumePath := fmt.Sprintf(cimfs.VolumePathFormat, volGUID.String())
-				err := cimfs.Unmount(volumePath)
-				if err != nil {
-					return fmt.Errorf("error unmounting block cim: %w", err)
-				}
+					volumePath := fmt.Sprintf(cimfs.VolumePathFormat, volGUID.String())
+					if err := cimfs.Unmount(volumePath); err != nil {
+						return fmt.Errorf("error unmounting block cim: %w", err)
+					}
 
-				// Drop the cached mount state now that the volume is gone.
-				delete(b.hostState.blockCIMVolumeHashes, volGUID)
-				delete(b.hostState.blockCIMVolumeContainers, volGUID)
+					// Real unmount succeeded: drop the cached mount state.
+					delete(b.hostState.blockCIMVolumeHashes, volGUID)
+					delete(b.hostState.blockCIMVolumeContainers, volGUID)
+					return nil
+				}); rberr != nil {
+					return rberr
+				}
 			default:
 				return fmt.Errorf("unsupported request type %v for WCOWBlockCims", modifyGuestSettingsRequest.RequestType)
 			}
