@@ -64,9 +64,6 @@ var _ transport.Connection = (*closeSignalConn)(nil)
 // copying onto the new connection, and only completes Wait once the process
 // stdio is truly finished.
 func TestPipeRelayPauseResume(t *testing.T) {
-	SetBridgeDown(false)
-	defer SetBridgeDown(false)
-
 	// Each redial hands the test the new host end of a fresh net.Pipe so it can
 	// read what the resumed relay writes.
 	redialedHosts := make(chan net.Conn, 4)
@@ -105,11 +102,10 @@ func TestPipeRelayPauseResume(t *testing.T) {
 		t.Fatalf("pre-pause got %q, want hello", got)
 	}
 
-	// Simulate a bridge drop: mark the bridge down, close the host stdio conn,
-	// then nudge the copier so its next write hits the closed conn and pauses.
-	// The "x" is read from the pipe but cannot be written to the dead conn, so
-	// the relay must hold it and replay it on the re-dialed conn (no drop).
-	SetBridgeDown(true)
+	// Simulate a bridge drop: close the host stdio conn so the copier's next
+	// write hits the closed conn and pauses. The "x" is read from the pipe but
+	// cannot be written to the dead conn, so the relay must hold it and replay
+	// it on the re-dialed conn (no drop).
 	_ = out1.Close()
 	if _, err := stdoutW.Write([]byte("x")); err != nil {
 		t.Fatalf("write pause trigger: %v", err)
@@ -142,7 +138,6 @@ func TestPipeRelayPauseResume(t *testing.T) {
 	// finishes and Wait returns.
 	_ = stdoutW.Close()
 	_ = host2.Close()
-	SetBridgeDown(false)
 
 	waitDone := make(chan struct{})
 	go func() {
@@ -337,9 +332,6 @@ func TestIoCopyDropsInFlightBytes(t *testing.T) {
 // (see TestIoCopyDropsInFlightBytes) and replays it intact, in order, on the
 // re-dialed connection.
 func TestCopyOutRetainsInFlightBytes(t *testing.T) {
-	SetBridgeDown(true)
-	defer SetBridgeDown(false)
-
 	// > one read but < relayBufferSize, so the payload is a single in-flight
 	// chunk held whole on the failed write.
 	payload := testPattern(5000)
@@ -405,9 +397,6 @@ func TestCopyOutRetainsInFlightBytes(t *testing.T) {
 // re-dialed conn (bridge still down) must be re-held, not dropped or truncated,
 // and is replayed once a working conn appears.
 func TestCopyOutRetainsAcrossDoublePause(t *testing.T) {
-	SetBridgeDown(true)
-	defer SetBridgeDown(false)
-
 	payload := testPattern(5000)
 
 	// First re-dial still bridge-down: the replay of the held remainder fails,
@@ -498,9 +487,6 @@ func TestWriteAllShortWriteGuard(t *testing.T) {
 // reordering. This is the end-to-end proof that the in-flight bytes io.Copy
 // dropped are now retained and replayed.
 func TestPipeRelayRetainsBurstAcrossPause(t *testing.T) {
-	SetBridgeDown(false)
-	defer SetBridgeDown(false)
-
 	const (
 		burstLen = 16 * 1024
 		splitAt  = 8 * 1024
@@ -548,10 +534,9 @@ func TestPipeRelayRetainsBurstAcrossPause(t *testing.T) {
 		t.Fatalf("read first half on original host: %v", err)
 	}
 
-	// Drop the bridge: mark it down, then close the host conn so the relay's
-	// blocked write fails. copyOut must hold the undelivered remainder and replay
-	// it on the re-dialed conn rather than drop it (the old io.Copy bug).
-	SetBridgeDown(true)
+	// Drop the bridge: close the host conn so the relay's blocked write fails.
+	// copyOut must hold the undelivered remainder and replay it on the re-dialed
+	// conn rather than drop it (the old io.Copy bug).
 	_ = out1.Close()
 
 	var host2 net.Conn
@@ -590,7 +575,6 @@ func TestPipeRelayRetainsBurstAcrossPause(t *testing.T) {
 	// Process exit: close stdout and the host conn so the relay finishes.
 	_ = stdoutW.Close()
 	_ = host2.Close()
-	SetBridgeDown(false)
 
 	waitDone := make(chan struct{})
 	go func() {
@@ -611,9 +595,6 @@ func TestPipeRelayRetainsBurstAcrossPause(t *testing.T) {
 // accepted bytes are socket-level loss the relay cannot recover, and only
 // payload[K:] is retained for replay on the re-dialed conn.
 func TestCopyOutHoldsPartialWriteRemainder(t *testing.T) {
-	SetBridgeDown(true)
-	defer SetBridgeDown(false)
-
 	// A single in-flight chunk (< relayBufferSize) so copyOut issues exactly one
 	// Write; the conn takes k bytes then fails.
 	const k = 1500
@@ -686,9 +667,6 @@ func (r errReader) Read(p []byte) (int, error) { return 0, r.err }
 // Together they prove copyIn decides by which side failed, not by a single
 // collapsed error as the old io.Copy did.
 func TestCopyInFinishesOnStdinCloseWhileBridgeDown(t *testing.T) {
-	SetBridgeDown(true)
-	defer SetBridgeDown(false)
-
 	// Process closed stdin: the reader yields bytes (so a write is attempted)
 	// then blocks, and the sink's Write fails (EPIPE). copyIn must return via the
 	// write side as false (done); the block guarantees no read error or EOF can
@@ -728,9 +706,6 @@ func TestCopyInFinishesOnStdinCloseWhileBridgeDown(t *testing.T) {
 // held-buffer state leaks from one migration into the next. Synchronization is
 // net.Pipe's blocking reads plus the redial handoff channel; there are no sleeps.
 func TestPipeRelaySurvivesMultipleMigrations(t *testing.T) {
-	SetBridgeDown(false)
-	defer SetBridgeDown(false)
-
 	const cycles = 4 // > 3 back-and-forth migrations
 
 	// Carve every chunk from one position-dependent pattern so the concatenation
@@ -793,10 +768,9 @@ func TestPipeRelaySurvivesMultipleMigrations(t *testing.T) {
 		}
 		read = append(read, buf...)
 
-		// Drop the bridge and close this host so the relay's next write fails and
+		// Drop the bridge: close this host so the relay's next write fails and
 		// pauses. The single nudge byte is read from the pipe but cannot be
 		// delivered, so the relay must hold it and replay it on the next conn.
-		SetBridgeDown(true)
 		_ = host.Close()
 		nudge := take(1)
 		if _, err := stdoutW.Write(nudge); err != nil {
@@ -809,7 +783,6 @@ func TestPipeRelaySurvivesMultipleMigrations(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("cycle %d: relay did not redial after pause", i)
 		}
-		SetBridgeDown(false)
 	}
 
 	// Final connection: read the last held byte plus a final chunk, then drive a
@@ -828,7 +801,6 @@ func TestPipeRelaySurvivesMultipleMigrations(t *testing.T) {
 
 	_ = stdoutW.Close()
 	_ = host.Close()
-	SetBridgeDown(false)
 
 	waitDone := make(chan struct{})
 	go func() {
@@ -861,9 +833,6 @@ func TestPipeRelaySurvivesMultipleMigrations(t *testing.T) {
 // CloseRead and the conn Close under the relay mutex. The test asserts only that
 // nothing panics and that Wait returns.
 func TestPipeRelayWaitRaceWithTeardown(t *testing.T) {
-	SetBridgeDown(false)
-	defer SetBridgeDown(false)
-
 	// In is a closeSignalConn so Wait's read of ConnectionSet.In and the manager
 	// goroutine's write of it race on the field with no conn-level happens-before
 	// edge to mask it (see closeSignalConn). The stdin copier blocks on the conn's
@@ -913,4 +882,44 @@ func TestPipeRelayWaitRaceWithTeardown(t *testing.T) {
 	// The relay closed the guest side of Out during teardown; close the host side
 	// so the test owns its cleanup (double close is harmless).
 	_ = outHost.Close()
+}
+
+// fakeTransport is a transport.Transport whose Dial returns an inert recordConn,
+// for exercising Connect.
+type fakeTransport struct{}
+
+func (fakeTransport) Dial(uint32) (transport.Connection, error) { return &recordConn{}, nil }
+
+// TestConnectPopulatesRedial asserts Connect always wires the redial closure, the
+// invariant the relay relies on to recover stdio across a migration.
+func TestConnectPopulatesRedial(t *testing.T) {
+	port := uint32(1)
+	set, err := Connect(fakeTransport{}, ConnectionSettings{StdOut: &port})
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if set.redial == nil {
+		t.Fatal("Connect left redial nil; the relay cannot recover stdio across a migration")
+	}
+}
+
+// TestRedialWithRetrySucceedsAfterRetries verifies redialWithRetry keeps retrying
+// a failing redial (the process stdio ports return after the migration) and
+// resumes once one succeeds.
+func TestRedialWithRetrySucceedsAfterRetries(t *testing.T) {
+	calls := 0
+	redial := func() (*ConnectionSet, error) {
+		calls++
+		if calls < 3 {
+			return nil, errors.New("redial failed")
+		}
+		return &ConnectionSet{}, nil
+	}
+	ns, err := redialWithRetry(redial)
+	if err != nil || ns == nil {
+		t.Fatalf("redialWithRetry err = %v ns = %v, want success", err, ns)
+	}
+	if calls != 3 {
+		t.Fatalf("redialWithRetry made %d attempts, want 3", calls)
+	}
 }

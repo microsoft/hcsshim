@@ -30,28 +30,25 @@ func Connect(tport transport.Transport, settings ConnectionSettings) (_ *Connect
 		}
 	}()
 	if settings.StdIn != nil {
-		port := *settings.StdIn
-		c, err := tport.Dial(port)
+		c, err := tport.Dial(*settings.StdIn)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stdin Connection")
 		}
-		connSet.In = transport.NewLogConnection(c, port)
+		connSet.In = transport.NewLogConnection(c, *settings.StdIn)
 	}
 	if settings.StdOut != nil {
-		port := *settings.StdOut
-		c, err := tport.Dial(port)
+		c, err := tport.Dial(*settings.StdOut)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stdout Connection")
 		}
-		connSet.Out = transport.NewLogConnection(c, port)
+		connSet.Out = transport.NewLogConnection(c, *settings.StdOut)
 	}
 	if settings.StdErr != nil {
-		port := *settings.StdErr
-		c, err := tport.Dial(port)
+		c, err := tport.Dial(*settings.StdErr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stderr Connection")
 		}
-		connSet.Err = transport.NewLogConnection(c, port)
+		connSet.Err = transport.NewLogConnection(c, *settings.StdErr)
 	}
 	// redial re-establishes a fresh ConnectionSet over the same vsock ports
 	// after a bridge drop, so the stdio relays can pause and resume across a

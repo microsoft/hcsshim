@@ -5,27 +5,12 @@ package stdio
 
 import (
 	"io"
-	"sync/atomic"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
-
-// bridgeDown reports whether the GCS bridge to the host is currently down (for
-// example because a live migration is tearing down and re-establishing the
-// vsock connections). The stdio relays consult it to tell a live-migration
-// disconnect (pause and resume) apart from a normal process-driven copy error
-// (tear down). It is set by cmd/gcs around the bridge reconnect loop.
-var bridgeDown atomic.Bool
-
-// SetBridgeDown records whether the host bridge is currently down. cmd/gcs sets
-// it true when ListenAndServe returns (and it is not a shutdown) and false once
-// the bridge has reconnected.
-func SetBridgeDown(v bool) {
-	bridgeDown.Store(v)
-}
 
 const (
 	// redialInterval is the delay between attempts to re-establish the stdio
@@ -116,9 +101,7 @@ func copyIn(w io.Writer, r io.Reader, name string, pauseOnError bool) (paused bo
 			if rerr == io.EOF {
 				return false
 			}
-			if pauseOnError && bridgeDown.Load() {
-				// A conn read error while the bridge is down is the
-				// live-migration drop: pause so the manager re-dials.
+			if pauseOnError {
 				return true
 			}
 			l.WithError(rerr).Error("opengcs::stdio::copyIn - error reading input")
@@ -147,8 +130,7 @@ func copyOut(c transport.Connection, r io.Reader, name string, pending []byte, p
 	// bytes already read from the pipe before the bridge dropped are not lost.
 	if len(pending) > 0 {
 		if n, err := writeAll(c, pending); err != nil {
-			if pauseOnError && bridgeDown.Load() {
-				l.WithError(err).Info("opengcs::stdio::copyOut - pausing on bridge down")
+			if pauseOnError {
 				h := make([]byte, len(pending)-n)
 				copy(h, pending[n:])
 				return h, true
@@ -163,8 +145,7 @@ func copyOut(c transport.Connection, r io.Reader, name string, pending []byte, p
 		nr, rerr := r.Read(buf)
 		if nr > 0 {
 			if nw, werr := writeAll(c, buf[:nr]); werr != nil {
-				if pauseOnError && bridgeDown.Load() {
-					l.WithError(werr).Info("opengcs::stdio::copyOut - pausing on bridge down")
+				if pauseOnError {
 					h := make([]byte, nr-nw)
 					copy(h, buf[nw:nr])
 					return h, true
