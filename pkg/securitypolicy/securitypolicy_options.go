@@ -4,16 +4,19 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
+	"sync/atomic"
 
 	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -33,6 +36,18 @@ type SecurityOptions struct {
 	UvmHashEnvelopeReferenceInfo string
 	policyMutex                  sync.Mutex
 	logWriter                    io.Writer
+}
+
+// Global counter for fragment injection requests, used to create unique
+// error / success marker files even when the same fragment is injected
+// multiple times.
+var FragmentRequestId atomic.Uint64
+
+func fragmentsPath() string {
+	if osType == "windows" {
+		return guestpath.WCOWFragmentsPath
+	}
+	return guestpath.LCOWFragmentsPath
 }
 
 func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, uvmHashEnvelopeReferenceInfo string, logWriter io.Writer) *SecurityOptions {
@@ -57,6 +72,14 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 
 	if s.PolicyEnforcerSet {
 		return errors.New("security policy has already been set")
+	}
+
+	// Pre-create this directory so that we can mount this dir into
+	// containers even if no fragments have been injected yet when the
+	// container starts.
+	if err := os.MkdirAll(fragmentsPath(), 0755); err != nil {
+		// This is not fatal, don't fail here.
+		log.G(ctx).WithError(err).Error("failed to create injected fragments directory")
 	}
 
 	hostData, err := NewSecurityPolicyDigest(encodedSecurityPolicy)
@@ -140,6 +163,42 @@ func asInt64(v interface{}) (int64, error) {
 	}
 }
 
+func writeFileIfNotExists(filename string, data []byte, perm os.FileMode) error {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if os.IsExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+func writeFragmentMetadata(ctx context.Context, filename, issuer, feed string, headerSVN *int64) {
+	metadata := struct {
+		Issuer    string `json:"issuer"`
+		Feed      string `json:"feed"`
+		HeaderSVN *int64 `json:"headerSvn"`
+	}{
+		Issuer:    issuer,
+		Feed:      feed,
+		HeaderSVN: headerSVN,
+	}
+	contents, err := json.Marshal(metadata)
+	if err != nil {
+		log.G(ctx).WithError(err).Warn("failed to marshal injected fragment metadata")
+		return
+	}
+	if err := writeFileIfNotExists(filename, contents, 0644); err != nil {
+		log.G(ctx).WithError(err).Warn("failed to write injected fragment metadata")
+	}
+}
+
 // Fragment extends current security policy with additional constraints
 // from the incoming fragment. Note that it is base64 encoded over the bridge/
 //
@@ -155,12 +214,39 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
 	span.SetAttributes(attribute.String("fragment", fmt.Sprintf("%+v", fragment)))
+	currReqId := FragmentRequestId.Add(1)
 
 	// An empty media type defaults to a Rego policy fragment, for backward
 	// compatibility with older hosts that do not set the field.
 	mediaType := fragment.MediaType
 	if mediaType == "" {
 		mediaType = mediaTypeFragment
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(fragment.Fragment)
+	if err != nil {
+		return fmt.Errorf("failed to decode fragment: %w", err)
+	}
+	sha := sha256.Sum256(raw)
+	shaHex := hex.EncodeToString(sha[:])
+	thisFragmentDir := filepath.Join(fragmentsPath(), shaHex)
+	defer func() {
+		markerName := fmt.Sprintf("%d.succeed", currReqId)
+		var markerContents []byte
+		if err != nil {
+			markerName = fmt.Sprintf("%d.fail", currReqId)
+			markerContents = []byte(err.Error())
+		}
+		if markerErr := os.WriteFile(filepath.Join(thisFragmentDir, markerName), markerContents, 0644); markerErr != nil {
+			log.G(ctx).WithError(markerErr).Warnf("failed to write injected fragment outcome marker %s", markerName)
+		}
+	}()
+
+	if err := os.MkdirAll(thisFragmentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create injected fragment directory: %w", err)
+	}
+	if err := writeFileIfNotExists(filepath.Join(thisFragmentDir, "fragment.cose"), raw, 0644); err != nil {
+		return fmt.Errorf("failed to write fragment.cose: %w", err)
 	}
 	switch mediaType {
 	case mediaTypeFragment, mediaTypeTransparencyTrustList:
@@ -172,23 +258,12 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		return fmt.Errorf("cannot inject fragment blob with unsupported media type %q", mediaType)
 	}
 
-	raw, err := base64.StdEncoding.DecodeString(fragment.Fragment)
-	if err != nil {
-		return fmt.Errorf("failed to decode fragment: %w", err)
-	}
-	blob := []byte(fragment.Fragment)
-	// keep a copy of the fragment, so we can manually figure out what went wrong
-	// will be removed eventually. Give it a unique name to avoid any potential
-	// race conditions.
-	sha := sha256.New()
-	sha.Write(blob)
-	timestamp := time.Now()
-	fragmentPath := fmt.Sprintf("fragment-%x-%d.blob", sha.Sum(nil), timestamp.UnixMilli())
-	_ = os.WriteFile(filepath.Join(os.TempDir(), fragmentPath), blob, 0644)
-
 	unpacked, err := cosesign1.UnpackAndValidateCOSE1CertChain(raw)
 	if err != nil {
 		return fmt.Errorf("InjectFragment failed COSE validation: %w", err)
+	}
+	if err := writeFileIfNotExists(filepath.Join(thisFragmentDir, "fragment"), unpacked.Payload, 0644); err != nil {
+		return fmt.Errorf("failed to write injected fragment payload: %w", err)
 	}
 
 	cwtClaimsRaw, hasCwtClaims := unpacked.Protected[cosesign1.COSE_Header_CWTClaims]
@@ -241,6 +316,7 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 			svnFromCwt = &svn
 		}
 	}
+	writeFragmentMetadata(ctx, filepath.Join(thisFragmentDir, "metadata.json"), issuer, feed, svnFromCwt)
 
 	switch mediaType {
 	case mediaTypeTransparencyTrustList:
