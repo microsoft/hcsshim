@@ -826,8 +826,23 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	}
 
 	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.LCOWSecurityPolicyEnv, true) {
-		if _, err := h.securityOptions.WriteSecurityContextDir(settings.OCISpecification); err != nil {
+		securityContextDir, err := h.securityOptions.WriteSecurityContextDir(settings.OCISpecification)
+		if err != nil {
 			return nil, fmt.Errorf("failed to write security context dir: %w", err)
+		}
+		// Add this special fragments debug mount after policy enforcement
+		// so the policy does not have to explicitly allow it.
+		if securityContextDir != "" {
+			if err := os.MkdirAll(guestpath.LCOWFragmentsPath, 0755); err != nil {
+				log.G(ctx).WithError(err).WithField(logfields.Path, guestpath.LCOWFragmentsPath).Warn("failed to create fragments debug mount path in uVM")
+			} else {
+				settings.OCISpecification.Mounts = append(settings.OCISpecification.Mounts, specs.Mount{
+					Destination: path.Join("/", filepath.Base(securityContextDir), "fragments.debug"),
+					Type:        "bind",
+					Source:      guestpath.LCOWFragmentsPath,
+					Options:     []string{"bind", "ro"},
+				})
+			}
 		}
 	}
 
