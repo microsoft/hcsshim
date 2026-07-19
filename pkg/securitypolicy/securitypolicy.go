@@ -68,6 +68,12 @@ type PolicyConfig struct {
 	// all containers within a pod to be run without scratch encryption.
 	AllowUnencryptedScratch bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
 	AllowCapabilityDropping bool `json:"allow_capability_dropping" toml:"allow_capability_dropping"`
+	// AllowLogProviderDropping controls how EnforceLogProviderPolicy handles
+	// requested ETW providers that are not on the allow-list. When false
+	// (default, fail-close) any disallowed provider causes the entire
+	// modifyServiceSettings call to be denied. When true, disallowed providers
+	// are silently dropped and the call continues with the kept subset.
+	AllowLogProviderDropping bool `json:"allow_log_provider_dropping" toml:"allow_log_provider_dropping"`
 }
 
 func NewPolicyConfig(opts ...PolicyConfigOpt) (*PolicyConfig, error) {

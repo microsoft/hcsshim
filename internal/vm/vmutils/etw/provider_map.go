@@ -36,7 +36,7 @@ func GetDefaultLogSources() LogSourcesInfo {
 }
 
 // GetProviderGUIDFromName returns the provider GUID for a given provider name. If the provider name is not found in the map, it returns an empty string.
-func getProviderGUIDFromName(providerName string) string {
+func GetProviderGUIDFromName(providerName string) string {
 	if guid, ok := etwNameToGUIDMap[strings.ToLower(providerName)]; ok {
 		return guid
 	}
@@ -92,8 +92,8 @@ func mergeLogSources(resultSources []Source, userSources []Source) []Source {
 	return resultSources
 }
 
-// decodeAndUnmarshalLogSources decodes a base64-encoded JSON string and unmarshals it into a LogSourcesInfo.
-func decodeAndUnmarshalLogSources(base64EncodedJSONLogConfig string) (LogSourcesInfo, error) {
+// DecodeAndUnmarshalLogSources decodes a base64-encoded JSON string and unmarshals it into a LogSourcesInfo.
+func DecodeAndUnmarshalLogSources(base64EncodedJSONLogConfig string) (LogSourcesInfo, error) {
 	jsonBytes, err := base64.StdEncoding.DecodeString(base64EncodedJSONLogConfig)
 	if err != nil {
 		return LogSourcesInfo{}, fmt.Errorf("error decoding base64 log config: %w", err)
@@ -127,7 +127,7 @@ func resolveGUIDsWithLookup(sources []Source) ([]Source, error) {
 				sources[i].Providers[j].ProviderGUID = strings.ToLower(guid.String())
 			}
 			if provider.ProviderName != "" && provider.ProviderGUID == "" {
-				sources[i].Providers[j].ProviderGUID = getProviderGUIDFromName(provider.ProviderName)
+				sources[i].Providers[j].ProviderGUID = GetProviderGUIDFromName(provider.ProviderName)
 			}
 		}
 	}
@@ -147,7 +147,7 @@ func stripRedundantGUIDs(sources []Source) ([]Source, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid GUID %q for provider %q: %w", provider.ProviderGUID, provider.ProviderName, err)
 			}
-			if strings.EqualFold(guid.String(), getProviderGUIDFromName(provider.ProviderName)) {
+			if strings.EqualFold(guid.String(), GetProviderGUIDFromName(provider.ProviderName)) {
 				sources[i].Providers[j].ProviderGUID = ""
 			} else {
 				// If the GUID doesn't match the well-known GUID for the provider name,
@@ -188,19 +188,29 @@ func marshalAndEncodeLogSources(logCfg LogSourcesInfo) (string, error) {
 // configuration and returns the updated log sources as a base64 encoded JSON string.
 // If there is an error in the process, it returns the original user provided log sources string.
 func UpdateLogSources(base64EncodedJSONLogConfig string, useDefaultLogSources bool, includeGUIDs bool) (string, error) {
+	var userLogSources LogSourcesInfo
+	if base64EncodedJSONLogConfig != "" {
+		var err error
+		userLogSources, err = DecodeAndUnmarshalLogSources(base64EncodedJSONLogConfig)
+		if err != nil {
+			return "", fmt.Errorf("failed to decode and unmarshal user log sources: %w", err)
+		}
+	}
+	return UpdateLogSourcesFromInfo(userLogSources, useDefaultLogSources, includeGUIDs)
+}
+
+// UpdateLogSourcesFromInfo is the parsed-input variant of UpdateLogSources for
+// callers that already have a LogSourcesInfo in hand (e.g. the gcs-sidecar
+// after it decoded the payload for policy enforcement) and want to avoid a
+// second base64-decode + JSON-unmarshal round-trip.
+//
+// An empty userLogSources is equivalent to passing "" to UpdateLogSources.
+func UpdateLogSourcesFromInfo(userLogSources LogSourcesInfo, useDefaultLogSources bool, includeGUIDs bool) (string, error) {
 	var resultLogCfg LogSourcesInfo
 	if useDefaultLogSources {
 		resultLogCfg = defaultLogSourcesInfo
 	}
-
-	if base64EncodedJSONLogConfig != "" {
-		userLogSources, err := decodeAndUnmarshalLogSources(base64EncodedJSONLogConfig)
-		if err != nil {
-			return "", fmt.Errorf("failed to decode and unmarshal user log sources: %w", err)
-		}
-		resultLogCfg.LogConfig.Sources = mergeLogSources(resultLogCfg.LogConfig.Sources, userLogSources.LogConfig.Sources)
-
-	}
+	resultLogCfg.LogConfig.Sources = mergeLogSources(resultLogCfg.LogConfig.Sources, userLogSources.LogConfig.Sources)
 
 	var err error
 	resultLogCfg.LogConfig.Sources, err = applyGUIDPolicy(resultLogCfg.LogConfig.Sources, includeGUIDs)
