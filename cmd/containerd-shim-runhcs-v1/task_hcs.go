@@ -613,7 +613,7 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]*runhcsopts.ProcessDetails, erro
 		pairs[i].MemoryWorkingSetPrivateBytes = p.MemoryWorkingSetPrivateBytes
 		pairs[i].MemoryWorkingSetSharedBytes = p.MemoryWorkingSetSharedBytes
 		pairs[i].ProcessID = p.ProcessId
-		pairs[i].UserTime_100Ns = p.KernelTime100ns
+		pairs[i].UserTime_100Ns = p.UserTime100ns
 
 		if eid, ok := pidMap[int(p.ProcessId)]; ok {
 			pairs[i].ExecID = eid
