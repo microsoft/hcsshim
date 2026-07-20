@@ -76,7 +76,7 @@ func writeAll(w io.Writer, p []byte) (int, error) {
 // copyIn copies host input from conn r into the process sink w (a stdin pipe or
 // a pty master). It decides by which side failed, mirroring copyOut: a read
 // error on r is the host conn, so a bridge drop during a live migration
-// (pauseOnError and bridgeDown) returns true (a pause) and the manager re-dials
+// returns true (a pause) when pauseOnError is set and the manager re-dials
 // so the next call resumes reading from the fresh conn; a write error on w is
 // the process closing its stdin (EPIPE), which is a normal end and returns false
 // even while the bridge is down (otherwise a post-resume stdin close would be
