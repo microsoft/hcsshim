@@ -266,6 +266,21 @@ func (c *Container) Delete(ctx context.Context) error {
 		retErr = err
 	}
 
+	// If the bundle was bind-mounted onto the scratch disk during create
+	// (modifyCombinedLayers), undo that bind. The same path-based rule is used
+	// here as at create time, so both shims are handled identically. Order
+	// matters: this runs before removing the scratch/bundle dirs below (the
+	// bind's source lives under scratchDirPath) and before the host unmaps the
+	// scratch disk, so no mount still references that disk. removeTarget=false
+	// detaches the bind only - the ociBundlePath directory itself remains and is
+	// deleted by RemoveAll below.
+	if bundleNeedsScratchBind(c.ociBundlePath, c.scratchDirPath) {
+		if err := storage.UnmountPath(ctx, c.ociBundlePath, false); err != nil {
+			entity.WithError(err).WithField("bundle", c.ociBundlePath).
+				Warn("failed to unmount scratch-backed bundle bind")
+		}
+	}
+
 	if err := os.RemoveAll(c.scratchDirPath); err != nil {
 		if retErr != nil {
 			retErr = fmt.Errorf("errors deleting container state: %w; %w", retErr, err)

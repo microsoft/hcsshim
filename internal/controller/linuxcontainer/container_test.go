@@ -675,12 +675,15 @@ func TestReleaseResources_StopsOnFirstError(t *testing.T) {
 
 			scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scsiGUID).Return(tc.scsiErr)
 
+			// The DeleteContainerState capability gate now runs early (after
+			// RemoveCombinedLayers, before the unmaps), so Capabilities is always
+			// queried regardless of whether a later unmap fails.
+			guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
+
 			if !tc.wantStops {
-				// Tolerated error: the chain must proceed through plan9, vpci,
-				// and the DeleteContainerState capability gate.
+				// Tolerated error: the chain must proceed through plan9 and vpci.
 				plan9Ctrl.EXPECT().UnmapFromGuest(gomock.Any(), plan9GUID).Return(nil)
 				vpciCtrl.EXPECT().RemoveFromVM(gomock.Any(), deviceGUID).Return(nil)
-				guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
 			}
 
 			err := c.releaseResources(t.Context())
@@ -777,12 +780,15 @@ func TestReleaseResources_RemoveCombinedLayersFails(t *testing.T) {
 // failure leaves the scratch reservation intact for retry.
 func TestReleaseResources_ScratchUnmapFails(t *testing.T) {
 	t.Parallel()
-	c, scsiCtrl, _, _, _ := newContainerTestController(t)
+	c, scsiCtrl, _, _, guestCtrl := newContainerTestController(t)
 
 	scratchGUID, _ := guid.NewV4()
 	c.layers = &scsiLayers{
 		scratch: scsiReservation{id: scratchGUID, guestPath: "/dev/scratch"},
 	}
+
+	// DeleteContainerState's capability gate runs before the scratch unmap.
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
 
 	wantErr := errors.New("scratch unmap failed")
 	scsiCtrl.EXPECT().UnmapFromGuest(gomock.Any(), scratchGUID).Return(wantErr)
@@ -801,7 +807,7 @@ func TestReleaseResources_ScratchUnmapFails(t *testing.T) {
 // retained while already-unmapped entries are dropped.
 func TestReleaseResources_ROLayerUnmapMidwayFails(t *testing.T) {
 	t.Parallel()
-	c, scsiCtrl, _, _, _ := newContainerTestController(t)
+	c, scsiCtrl, _, _, guestCtrl := newContainerTestController(t)
 
 	roGUIDs := [3]guid.GUID{}
 	for i := range roGUIDs {
@@ -815,6 +821,9 @@ func TestReleaseResources_ROLayerUnmapMidwayFails(t *testing.T) {
 			{id: roGUIDs[2]},
 		},
 	}
+
+	// DeleteContainerState's capability gate runs before the RO layer unmaps.
+	guestCtrl.EXPECT().Capabilities().Return(&gcs.LCOWGuestDefinedCapabilities{})
 
 	wantErr := errors.New("ro layer unmap failed")
 	gomock.InOrder(
