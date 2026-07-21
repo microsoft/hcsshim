@@ -70,7 +70,7 @@ func (le *LogrusExporter) ExportSpans(ctx context.Context, spans []sdktrace.Read
 		data[logfields.EndTime] = s.EndTime()
 		data[logfields.Duration] = s.EndTime().Sub(s.StartTime())
 		if sk := spanKindToString(s.SpanKind()); sk != "" {
-			data["spanKind"] = sk //
+			data["spanKind"] = sk
 		}
 
 		level := logrus.InfoLevel

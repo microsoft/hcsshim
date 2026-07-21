@@ -2,6 +2,7 @@ package ot
 
 import (
 	"context"
+
 	"github.com/Microsoft/hcsshim/internal/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -15,15 +16,23 @@ const (
 
 var DefaultSampler = sdktrace.AlwaysSample()
 
-// SetSpanStatus sets `span.SetStatus` to the proper status depending on `err`. If
-// `err` is `nil` assumes `trace.StatusCodeOk`.
+// SetSpanStatus sets the span's OpenTelemetry status based on `err`.
+//
+// If `err` is non-nil the error is recorded on the span and the status is
+// set to `codes.Error`.
+//
+// If `err` is nil the span is left in its default (Unset) status. The
+// exporter treats Unset the same as Ok for level selection (Info), so
+// downstream log level does not change. Leaving the status Unset instead of
+// calling SetStatus(Ok, "") avoids the OpenTelemetry spec's "Ok is terminal"
+// rule, under which a subsequent SetStatus(Error, ...) would be silently
+// dropped.
 func SetSpanStatus(span trace.Span, err error) {
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-	} else {
-		span.SetStatus(codes.Ok, "")
+	if err == nil {
+		return
 	}
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 }
 
 // StartSpan wraps otel.Start(), but, if the span is sampling,

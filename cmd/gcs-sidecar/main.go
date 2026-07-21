@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -126,10 +127,16 @@ func runService(name string, isDebug bool) error {
 func initOtelTracer() (func(context.Context) error, error) {
 	exporter := &ot.LogrusExporter{}
 	traceProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSyncer(exporter),
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	)
+	if traceProvider == nil {
+		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+	}
 	otel.SetTracerProvider(traceProvider)
+	if otel.GetTracerProvider() != traceProvider {
+		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+	}
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
@@ -176,7 +183,7 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("failed to initialize ot tracer: %v", err)
 	}
-	defer shutdownTracer(context.Background())
+	defer func() { _ = shutdownTracer(context.Background()) }()
 
 	if err := windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(logFileHandle.Fd())); err != nil {
 		logrus.WithError(err).Error("error redirecting handle")

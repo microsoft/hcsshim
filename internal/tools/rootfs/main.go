@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -25,10 +27,20 @@ import (
 func initOtelTracer() (func(context.Context) error, error) {
 	exporter := &ot.LogrusExporter{}
 	traceProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSyncer(exporter),
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	)
+	if traceProvider == nil {
+		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+	}
 	otel.SetTracerProvider(traceProvider)
+	if otel.GetTracerProvider() != traceProvider {
+		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+	}
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 	return traceProvider.Shutdown, nil
 }
 

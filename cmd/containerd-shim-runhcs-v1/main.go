@@ -72,10 +72,16 @@ func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, m
 func initOtelTracer() (func(context.Context) error, error) {
 	exporter := &ot.LogrusExporter{}
 	traceProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSyncer(exporter),
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	)
+	if traceProvider == nil {
+		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+	}
 	otel.SetTracerProvider(traceProvider)
+	if otel.GetTracerProvider() != traceProvider {
+		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+	}
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
@@ -85,7 +91,6 @@ func initOtelTracer() (func(context.Context) error, error) {
 
 func main() {
 	logrus.AddHook(log.NewHook())
-	logrus.SetLevel(logrus.DebugLevel)
 
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
 	// Provider and hook aren't closed explicitly, as they will exist until process exit.
@@ -123,7 +128,7 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("failed to initialize ot tracer: %v", err)
 	}
-	defer shutdownTracer(context.Background())
+	defer func() { _ = shutdownTracer(context.Background()) }()
 
 	app := cli.NewApp()
 	app.Name = "containerd-shim-runhcs-v1"

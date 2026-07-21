@@ -14,24 +14,49 @@ import (
 	_ "github.com/Microsoft/hcsshim/cmd/containerd-shim-lcow-v2/service/plugin"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/shim"
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // Add a manifest to get proper Windows version detection.
 //go:generate pwsh -Command "../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'containerd-shim-lcow-v2' -UseVersionFile -Architecture 'all'"
 
+func initOtelTracer() (func(context.Context) error, error) {
+	exporter := &ot.LogrusExporter{}
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	if traceProvider == nil {
+		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+	}
+	otel.SetTracerProvider(traceProvider)
+	if otel.GetTracerProvider() != traceProvider {
+		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+	}
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+	return traceProvider.Shutdown, nil
+}
+
 func main() {
 	logrus.AddHook(log.NewHook())
 
-	// Register our OpenCensus logrus exporter so that trace spans are emitted via logrus.
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	// Register our OpenTelemetry logrus exporter so that trace spans are emitted via logrus.
+	shutdownTracer, err := initOtelTracer()
+	if err != nil {
+		logrus.Fatalf("failed to initialize ot tracer: %v", err)
+	}
+	defer func() { _ = shutdownTracer(context.Background()) }()
 
 	logrus.SetFormatter(log.NopFormatter{})
 	logrus.SetOutput(io.Discard)
