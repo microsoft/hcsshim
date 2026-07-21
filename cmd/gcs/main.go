@@ -5,7 +5,7 @@ package main
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"flag"
 	"fmt"
 	"io"
@@ -19,7 +19,7 @@ import (
 	cgroups1 "github.com/containerd/cgroups/v3/cgroup1"
 	cgroups1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	pkgerrors "github.com/pkg/errors"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -147,12 +147,12 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 func startTimeSyncService() error {
 	ptpClassDir, err := os.Open("/sys/class/ptp")
 	if err != nil {
-		return pkgerrors.Wrap(err, "failed to open PTP class directory")
+		return errors.Wrap(err, "failed to open PTP class directory")
 	}
 
 	ptpDirList, err := ptpClassDir.Readdirnames(-1)
 	if err != nil {
-		return pkgerrors.Wrap(err, "failed to list PTP class directory")
+		return errors.Wrap(err, "failed to list PTP class directory")
 	}
 
 	var ptpDirPath string
@@ -163,7 +163,7 @@ func startTimeSyncService() error {
 		clockNameFilePath := filepath.Join(ptpClassDir.Name(), ptpDirPath, "clock_name")
 		buf, err := os.ReadFile(clockNameFilePath)
 		if err != nil && !os.IsNotExist(err) {
-			return pkgerrors.Wrapf(err, "failed to read clock name file at %s", clockNameFilePath)
+			return errors.Wrapf(err, "failed to read clock name file at %s", clockNameFilePath)
 		}
 
 		if string(buf) == expectedClockName {
@@ -173,7 +173,7 @@ func startTimeSyncService() error {
 	}
 
 	if !found {
-		return pkgerrors.Errorf("no PTP device found with name \"%s\"", expectedClockName)
+		return errors.Errorf("no PTP device found with name \"%s\"", expectedClockName)
 	}
 
 	// create chronyd config file
@@ -183,7 +183,7 @@ func startTimeSyncService() error {
 	chronydConfPath := "/tmp/chronyd.conf"
 	err = os.WriteFile(chronydConfPath, []byte(chronydConfigString), 0644)
 	if err != nil {
-		return pkgerrors.Wrapf(err, "failed to create chronyd conf file %s", chronydConfPath)
+		return errors.Wrapf(err, "failed to create chronyd conf file %s", chronydConfPath)
 	}
 
 	// start chronyd. Do NOT start chronyd as daemon because creating a daemon
@@ -200,11 +200,11 @@ func initOtelTracer() (func(context.Context) error, error) {
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	)
 	if traceProvider == nil {
-		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+		return nil, stderrors.New("failed to construct OpenTelemetry tracer provider")
 	}
 	otel.SetTracerProvider(traceProvider)
 	if otel.GetTracerProvider() != traceProvider {
-		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+		return nil, stderrors.New("failed to register OpenTelemetry tracer provider globally")
 	}
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},

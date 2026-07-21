@@ -4,7 +4,7 @@ package main
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,7 +19,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/containerd/ttrpc"
-	pkgerrors "github.com/pkg/errors"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -146,11 +146,11 @@ func initOtelTracer() (func(context.Context) error, error) {
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	)
 	if traceProvider == nil {
-		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+		return nil, stderrors.New("failed to construct OpenTelemetry tracer provider")
 	}
 	otel.SetTracerProvider(traceProvider)
 	if otel.GetTracerProvider() != traceProvider {
-		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+		return nil, stderrors.New("failed to register OpenTelemetry tracer provider globally")
 	}
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
@@ -199,7 +199,7 @@ func run(clicontext *cli.Context) error {
 		// If a log dir was provided, make sure it exists.
 		if _, err := os.Stat(logDir); err != nil {
 			if err := os.MkdirAll(logDir, 0); err != nil {
-				return pkgerrors.Wrap(err, "failed to make log directory")
+				return errors.Wrap(err, "failed to make log directory")
 			}
 		}
 	}
@@ -208,7 +208,7 @@ func run(clicontext *cli.Context) error {
 	// ncproxy's commandline to launch with the -run-service flag set.
 	if unregisterSvc {
 		if registerSvc {
-			return pkgerrors.New("-register-service and -unregister-service cannot be used together")
+			return errors.New("-register-service and -unregister-service cannot be used together")
 		}
 		return unregisterService()
 	}
@@ -234,15 +234,15 @@ func run(clicontext *cli.Context) error {
 	ctx := context.Background()
 	conf, err := loadConfig(configPath)
 	if err != nil {
-		return pkgerrors.Wrap(err, "failed getting configuration file")
+		return errors.Wrap(err, "failed getting configuration file")
 	}
 
 	if conf.GRPCAddr == "" {
-		return pkgerrors.New("missing GRPC endpoint in config")
+		return errors.New("missing GRPC endpoint in config")
 	}
 
 	if conf.TTRPCAddr == "" {
-		return pkgerrors.New("missing TTRPC endpoint in config")
+		return errors.New("missing TTRPC endpoint in config")
 	}
 
 	// If there's a node network service in the config, assign this to our global client.
@@ -295,7 +295,7 @@ func run(clicontext *cli.Context) error {
 		dir := filepath.Dir(dbPath)
 		if _, err := os.Stat(dir); err != nil {
 			if err := os.MkdirAll(dir, 0); err != nil {
-				return pkgerrors.Wrap(err, "failed to make database directory")
+				return errors.Wrap(err, "failed to make database directory")
 			}
 		}
 	}
@@ -315,13 +315,13 @@ func run(clicontext *cli.Context) error {
 	// Create new server and then register NetworkConfigProxyServices.
 	server, err := newServer(ctx, conf, dbPath)
 	if err != nil {
-		return pkgerrors.New("failed to make new ncproxy server")
+		return errors.New("failed to make new ncproxy server")
 	}
 	defer server.cleanupResources(ctx)
 
 	ttrpcListener, grpcListener, err := server.setup(ctx)
 	if err != nil {
-		return pkgerrors.New("failed to setup ncproxy server")
+		return errors.New("failed to setup ncproxy server")
 	}
 
 	server.serve(ctx, ttrpcListener, grpcListener, serveErr)
@@ -332,7 +332,7 @@ func run(clicontext *cli.Context) error {
 		log.G(ctx).Info("Received interrupt. Closing")
 	case err := <-serveErr:
 		if err != nil {
-			return pkgerrors.Wrap(err, "server failure")
+			return errors.Wrap(err, "server failure")
 		}
 	case <-serviceDone:
 		log.G(ctx).Info("Windows service stopped or shutdown")
