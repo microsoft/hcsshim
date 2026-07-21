@@ -268,6 +268,29 @@ func TestBuildSandboxConfig(t *testing.T) {
 			},
 		},
 		{
+			// FullyPhysicallyBacked tracks the VM's memory backing (!AllowOvercommit),
+			// so disabling overcommit alone (without the annotation) marks it true.
+			name: "overcommit off alone marks VM physically backed",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: validBootFilesPath,
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.AllowOvercommit: "false",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if doc.VirtualMachine.ComputeTopology.Memory.AllowOvercommit != false {
+					t.Errorf("expected allow overcommit false, got %v", doc.VirtualMachine.ComputeTopology.Memory.AllowOvercommit)
+				}
+				if sandboxOpts.FullyPhysicallyBacked != true {
+					t.Errorf("expected fully physically backed true when overcommit off, got %v", sandboxOpts.FullyPhysicallyBacked)
+				}
+			},
+		},
+		{
 			name: "memory MMIO configuration",
 			opts: &runhcsoptions.Options{
 				SandboxPlatform:   "linux/amd64",

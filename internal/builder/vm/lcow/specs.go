@@ -72,6 +72,9 @@ func BuildSandboxConfig(
 	// When no-security-hardware is set, we still plumb the policy but use the standard HCS doc.
 	isConfidentialSNP := sandboxOptions.ConfidentialConfig != nil && !noSecurityHardware
 
+	// The FullyPhysicallyBacked annotation forces memory overcommit off.
+	fullyPhysicallyBacked := oci.ParseAnnotationsBool(ctx, spec.Annotations, shimannotations.FullyPhysicallyBacked, false)
+
 	// ================== Parse Topology (CPU, Memory, NUMA) options =================
 	// ===============================================================================
 
@@ -88,7 +91,7 @@ func BuildSandboxConfig(
 	}
 
 	// Parse memory configuration.
-	memoryConfig, err := parseMemoryOptions(ctx, opts, spec.Annotations, sandboxOptions.FullyPhysicallyBacked)
+	memoryConfig, err := parseMemoryOptions(ctx, opts, spec.Annotations, fullyPhysicallyBacked)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse memory parameters: %w", err)
 	}
@@ -149,7 +152,7 @@ func BuildSandboxConfig(
 		spec.Devices,
 		rootFsFullPath,
 		numa != nil && numaProcessors != nil, // isNumaEnabled
-		sandboxOptions.FullyPhysicallyBacked, // isFullyPhysicallyBacked
+		fullyPhysicallyBacked,                // isFullyPhysicallyBacked
 		isConfidentialSNP,                    // isConfidential
 	)
 	if err != nil {
@@ -206,6 +209,10 @@ func BuildSandboxConfig(
 		log.G(ctx).Debug("disabling memory overcommit for confidential VM")
 		memoryConfig.AllowOvercommit = false
 	}
+
+	// Record whether the VM's own memory is physically backed (!AllowOvercommit).
+	// This is VM memory backing only, not additional-device backing.
+	sandboxOptions.FullyPhysicallyBacked = !memoryConfig.AllowOvercommit
 
 	// ================== Parse and set Kernel Args ==================================
 	// ===============================================================================
@@ -332,7 +339,6 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 	sandboxOptions := &SandboxOptions{
 		// Extract architecture from platform string (e.g., "linux/amd64" -> "amd64")
 		Architecture:                platform[strings.IndexByte(platform, '/')+1:],
-		FullyPhysicallyBacked:       oci.ParseAnnotationsBool(ctx, annotations, shimannotations.FullyPhysicallyBacked, false),
 		PolicyBasedRouting:          oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
 		NoWritableFileShares:        oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
 		LiveMigrationSupportEnabled: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.LiveMigrationSupportEnabled, false),

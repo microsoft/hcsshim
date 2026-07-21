@@ -19,7 +19,10 @@ type SandboxOptions struct {
 	// Architecture is the processor architecture (e.g., "amd64", "arm64").
 	Architecture string
 
-	// FullyPhysicallyBacked indicates all memory allocations are backed by physical memory.
+	// FullyPhysicallyBacked reports whether the VM's own memory is physically
+	// backed (equal to !AllowOvercommit). It does not cover additional devices
+	// added to the running VM (e.g. file shares or mounted layer disks), whose
+	// physical backing is determined directly by the FullyPhysicallyBacked annotation.
 	FullyPhysicallyBacked bool
 
 	// ConfidentialConfig carries confidential computing fields that are not
