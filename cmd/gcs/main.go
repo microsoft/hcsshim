@@ -113,10 +113,6 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 	}
 }
 
-type cgroupUpdater interface {
-	Update(resources *oci.LinuxResources) error
-}
-
 // Sanity checks the memory limit value
 func calculateContainersMemoryLimit(totalMemoryBytes, rootMemReserveBytes uint64) (int64, error) {
 	if totalMemoryBytes <= rootMemReserveBytes {
@@ -152,41 +148,12 @@ func currentTotalMemoryBytes() (uint64, error) {
 	return totalMemoryBytes, nil
 }
 
-// Set the cgroup memory limits for the containers and virtual-pods cgroups (pass-through to setCGroupMemoryLimits)
-func updateCgroupMemoryLimits(podControl cgroupUpdater, rootMemReserveBytes uint64, lastAppliedLimit int64) (int64, bool, error) {
-	totalMemoryBytes, err := currentTotalMemoryBytes()
-	if err != nil {
-		return lastAppliedLimit, false, err
-	}
-	return setCgroupMemoryLimits(podControl, totalMemoryBytes, rootMemReserveBytes, lastAppliedLimit)
-}
-
-// Set the cgroup memory limits for the containers and virtual-pods cgroups if they've changed
-func setCgroupMemoryLimits(podControl cgroupUpdater, totalMemoryBytes, rootMemReserveBytes uint64, lastAppliedLimit int64) (int64, bool, error) {
-	podLimit, err := calculateContainersMemoryLimit(totalMemoryBytes, rootMemReserveBytes)
-	if err != nil {
-		return lastAppliedLimit, false, err
-	}
-	if podLimit == lastAppliedLimit {
-		return lastAppliedLimit, false, nil
-	}
-	resources := &oci.LinuxResources{
-		Memory: &oci.LinuxMemory{Limit: &podLimit},
-	}
-
-	if err := podControl.Update(resources); err != nil {
-		return lastAppliedLimit, false, errors.Wrap(err, "failed to update containers cgroup memory limit")
-	}
-	return podLimit, true, nil
-}
-
-// Start a periodic goroutine to monitor and update the cgroup memory limits for the containers and virtual-pods cgroups
-func monitorCgroupMemoryLimits(containersControl cgroupUpdater, rootMemReserveBytes uint64, initialLimit int64, interval time.Duration) {
+// Start a periodic goroutine to monitor and update the pods cgroup memory limit.
+func monitorCgroupMemoryLimits(h *hcsv2.Host, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	lastAppliedLimit := initialLimit
 	for range ticker.C {
-		podLimit, updated, err := updateCgroupMemoryLimits(containersControl, rootMemReserveBytes, lastAppliedLimit)
+		podLimit, updated, err := h.UpdateCgroupMemoryLimits()
 		if err != nil {
 			logrus.WithError(err).Error("failed to refresh cgroup memory limits")
 			continue
@@ -194,7 +161,6 @@ func monitorCgroupMemoryLimits(containersControl cgroupUpdater, rootMemReserveBy
 		if !updated {
 			continue
 		}
-		lastAppliedLimit = podLimit
 		logrus.WithField("memoryLimitBytes", podLimit).Debug("refreshed cgroup memory limits")
 	}
 }
@@ -471,9 +437,10 @@ func main() {
 	}
 
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
+	h.InitializeCgroupMemoryLimitUpdater(podsControl, *rootMemReserveBytes, podsLimit)
 
-	// Start periodic task to update cgroup memory limits for containers and virtual-pods cgroups
-	go monitorCgroupMemoryLimits(podsControl, *rootMemReserveBytes, podsLimit, 60*time.Second)
+	// Start periodic task to update the pods cgroup memory limit.
+	go monitorCgroupMemoryLimits(h, 60*time.Second)
 
 	// During live migration the VM is frozen and only wakes up when the host
 	// shim is ready, so the vsock port should be immediately available. We

@@ -55,6 +55,8 @@ const (
 	ResourceTypeSecurityPolicy guestrequest.ResourceType = "SecurityPolicy"
 	// ResourceTypePolicyFragment is the modify resource type for injecting policy fragments.
 	ResourceTypePolicyFragment guestrequest.ResourceType = "SecurityPolicyFragment"
+	// ResourceTypePodCgroupMemoryLimit is used to force a cgroup memory limit update in the guest.
+	ResourceTypePodCgroupMemoryLimit guestrequest.ResourceType = "PodCgroupMemoryLimit"
 )
 
 // This class is used by a modify request to add or remove a combined layers
