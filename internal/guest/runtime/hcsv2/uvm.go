@@ -1811,9 +1811,9 @@ func bundleNeedsScratchBind(bundleDir, scratchDir string) bool {
 		// Unrelated paths: the scratch is not under the bundle, so it needs a bind.
 		return true
 	}
-	// scratchDir is under bundleDir when the relative path does not escape it.
-	underBundle := rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-	return !underBundle
+	// A bind is needed only when scratchDir is not nested under bundleDir, i.e.
+	// when the relative path escapes the bundle (is ".." or starts with "../").
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // bindBundleToScratch backs a container bundle directory with a directory on the
