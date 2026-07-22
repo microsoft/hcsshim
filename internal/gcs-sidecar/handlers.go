@@ -586,24 +586,30 @@ func validateContainerID(id string) error {
 // Memory, Processor and Networking are deliberately not checked: the host
 // controls the UVM's resources and networking regardless, so there is nothing
 // we can meaningfully enforce over them here.
+// GuestOs is not checked as it just sets hostname string.
 func denyUnsupportedContainerFields(container *hcsschema.Container) error {
 	if container == nil {
 		return nil
 	}
-	if container.GuestOs != nil {
-		return fmt.Errorf("GuestOs is not supported")
-	}
+
+	// In case we get any error here, we include entire container JSON
+	// in the error message for debugging so that we know all the fields
+	// that need to be enforced by policy.
+
+	// Error is ignored as it's a best-effort debug string.
+	containerJSON, _ := json.Marshal(container)
+
 	if container.HvSocket != nil {
-		return fmt.Errorf("HvSocket is not supported")
+		return fmt.Errorf("HvSocket is not supported. Container: %s", containerJSON)
 	}
 	if container.ContainerCredentialGuard != nil {
-		return fmt.Errorf("ContainerCredentialGuard is not supported")
+		return fmt.Errorf("ContainerCredentialGuard is not supported. Container: %s", containerJSON)
 	}
 	if len(container.AssignedDevices) > 0 {
-		return fmt.Errorf("AssignedDevices is not supported")
+		return fmt.Errorf("AssignedDevices is not supported. Container: %s", containerJSON)
 	}
 	if container.AdditionalDeviceNamespace != nil {
-		return fmt.Errorf("AdditionalDeviceNamespace is not supported")
+		return fmt.Errorf("AdditionalDeviceNamespace is not supported. Container: %s", containerJSON)
 	}
 	return nil
 }
@@ -1252,7 +1258,7 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			// we don't have a policy enforcer for it.
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWCombinedLayers)
 			log.G(ctx).Tracef("WCOWCombinedLayers: {%v}", settings)
-			return fmt.Errorf("WCOWCombinedLayers is not supported.")
+			return fmt.Errorf("WCOWCombinedLayers is not supported")
 
 		case guestresource.ResourceTypeNetworkNamespace:
 			// Forwarded to inbox GCS without enforcement, by design: the host
@@ -1271,7 +1277,9 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedVirtualDisk:
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("WCOWMappedVirtualDisk: {%v}", settings)
-			return fmt.Errorf("MappedVirtualDisk is not supported")
+			// Error is ignored as it's a best-effort debug string.
+			settingsJSON, _ := json.Marshal(settings)
+			return fmt.Errorf("MappedVirtualDisk is not supported. Settings: %s", settingsJSON)
 
 		case guestresource.ResourceTypeHvSocket:
 			// Forwarded without enforcement: this is just for configuration
