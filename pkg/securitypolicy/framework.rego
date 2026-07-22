@@ -2121,6 +2121,37 @@ errors["no matching containers for overlay"] {
     not overlay_matches
 }
 
+default cim_matches := false
+
+cim_matches {
+    some container in candidate_containers
+    layerHashes_ok(container.layers)
+    input.mountedCim == container.mounted_cim
+}
+
+errors["the container image layers have already been matched by a prior mount_cims"] {
+    input.rule == "mount_cims"
+    overlay_exists
+}
+
+errors["no matching containers for CIM mount"] {
+    input.rule == "mount_cims"
+    not overlay_exists
+    not cim_matches
+}
+
+# Actionable hint for the common misconfiguration: a policy that uses CIM
+# mounts (mounted_cim) but declares a framework_version older than when CIM
+# support was added. In that case check_container reconstructs the container
+# without mounted_cim, so cim_matches can never be true and the mount is denied.
+errors[cimVersionError] {
+    input.rule == "mount_cims"
+    not overlay_exists
+    not cim_matches
+    semver.compare(policy_framework_version, "0.5.0") < 0
+    cimVersionError := concat(" ", ["policy framework_version", policy_framework_version, "predates CIM mount support (mounted_cim added in 0.5.0); set it to the UVM framework version:", version])
+}
+
 default privileged_matches := false
 
 privileged_matches {
@@ -2963,6 +2994,7 @@ check_container(raw_container, framework_version) := container {
         "user": check_user(raw_container, framework_version),
         "capabilities": check_capabilities(raw_container, framework_version),
         "seccomp_profile_sha256": check_seccomp_profile_sha256(raw_container, framework_version),
+        "mounted_cim": check_mounted_cim(raw_container, framework_version),
     }
 }
 
@@ -3030,6 +3062,16 @@ check_signals(raw_container, framework_version) := signals {
 check_signals(raw_container, framework_version) := signals {
     semver.compare(framework_version, "0.4.1") < 0
     signals := array.concat(raw_container.signals, [9, 15])
+}
+
+check_mounted_cim(raw_container, framework_version) := mounted_cim {
+    semver.compare(framework_version, "0.5.0") >= 0
+    mounted_cim := object.get(raw_container, "mounted_cim", [])
+}
+
+check_mounted_cim(raw_container, framework_version) := mounted_cim {
+    semver.compare(framework_version, "0.5.0") < 0
+    mounted_cim := []
 }
 
 check_external_process(raw_process, framework_version) := process {
