@@ -3,6 +3,7 @@ package securitypolicy
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -45,15 +46,28 @@ type SecurityOptions struct {
 }
 
 // Global counter for fragment injection requests, used to create unique
-// error / success marker files even when the same fragment is injected
+// deny / success marker files even when the same fragment is injected
 // multiple times.
 var FragmentRequestId atomic.Uint64
+
+//go:embed fragments_info_README
+var fragmentsInfoREADME []byte
 
 func fragmentsPath() string {
 	if osType == "windows" {
 		return guestpath.WCOWFragmentsPath
 	}
 	return guestpath.LCOWFragmentsPath
+}
+
+// EnsureFragmentDiagnosticsDir creates the fragment diagnostics directory and
+// its informational README.
+func (s *SecurityOptions) EnsureFragmentDiagnosticsDir() error {
+	dir := fragmentsPath()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "README"), fragmentsInfoREADME, 0644)
 }
 
 func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, uvmHashEnvelopeReferenceInfo string, logWriter io.Writer) *SecurityOptions {
@@ -83,9 +97,9 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 	// Pre-create this directory so that we can mount this dir into
 	// containers even if no fragments have been injected yet when the
 	// container starts.
-	if err := os.MkdirAll(fragmentsPath(), 0755); err != nil {
+	if err := s.EnsureFragmentDiagnosticsDir(); err != nil {
 		// This is not fatal, don't fail here.
-		log.G(ctx).WithError(err).Error("failed to create injected fragments directory")
+		log.G(ctx).WithError(err).Error("failed to prepare injected fragments directory")
 	}
 
 	hostData, err := NewSecurityPolicyDigest(encodedSecurityPolicy)
@@ -246,7 +260,7 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		markerName := fmt.Sprintf("%d.succeed", currReqId)
 		var markerContents []byte
 		if err != nil {
-			markerName = fmt.Sprintf("%d.fail", currReqId)
+			markerName = fmt.Sprintf("%d.deny", currReqId)
 			markerContents = []byte(err.Error())
 		}
 		if markerErr := os.WriteFile(filepath.Join(thisFragmentDir, markerName), markerContents, 0644); markerErr != nil {
