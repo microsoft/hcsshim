@@ -1277,9 +1277,22 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		case guestresource.ResourceTypeMappedVirtualDisk:
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("WCOWMappedVirtualDisk: {%v}", settings)
-			// Error is ignored as it's a best-effort debug string.
-			settingsJSON, _ := json.Marshal(settings)
-			return fmt.Errorf("MappedVirtualDisk is not supported. Settings: %s", settingsJSON)
+			// The container scratch disk is *added* via
+			// ResourceTypeMappedVirtualDiskForContainerScratch (which formats it
+			// and rewrites the request to MappedVirtualDisk before forwarding),
+			// but it is *removed* as a plain MappedVirtualDisk. So a Remove here
+			// is the scratch (or other disk) detach on teardown and must be
+			// forwarded to the inbox GCS: rejecting it leaves the scratch
+			// attached, which breaks a later re-mount of the same container root.
+			// Detaching a disk grants no access, so forwarding Remove is safe. A
+			// raw Add, on the other hand, is the host trying to attach an
+			// arbitrary disk we don't enforce over, so it stays rejected.
+			if modifyGuestSettingsRequest.RequestType != guestrequest.RequestTypeRemove {
+				// Error is ignored as it's a best-effort debug string.
+				settingsJSON, _ := json.Marshal(settings)
+				return fmt.Errorf("MappedVirtualDisk Add is not supported. Settings: %s", settingsJSON)
+			}
+			// Remove falls through to forwardRequestToGcs below.
 
 		case guestresource.ResourceTypeHvSocket:
 			// Forwarded without enforcement: this is just for configuration
