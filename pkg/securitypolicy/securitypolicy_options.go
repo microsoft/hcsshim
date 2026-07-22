@@ -32,6 +32,8 @@ type SecurityOptions struct {
 	UvmReferenceInfo             string
 	UvmHashEnvelopeReferenceInfo string
 	policyMutex                  sync.Mutex
+	tcbReferenceInfoMutex        sync.RWMutex
+	tcbReferenceInfo             []byte
 	logWriter                    io.Writer
 }
 
@@ -114,6 +116,9 @@ const (
 	mediaTypeFragment = "application/cose-x509+rego"
 	// mediaTypeTransparencyTrustList is a signed Transparency Trust List (TTL).
 	mediaTypeTransparencyTrustList = "application/vnd.transparency-trust-list.v1+cose"
+	// mediaTypeTCBReferenceInfo is a TCB reference information COSE blob made
+	// available to subsequently created containers.
+	mediaTypeTCBReferenceInfo = "application/vnd.tcb-reference-info.v1+cose"
 )
 
 // asInt64 coerces a CBOR-decoded integer value (which may be returned as
@@ -163,7 +168,7 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		mediaType = mediaTypeFragment
 	}
 	switch mediaType {
-	case mediaTypeFragment, mediaTypeTransparencyTrustList:
+	case mediaTypeFragment, mediaTypeTransparencyTrustList, mediaTypeTCBReferenceInfo:
 	default:
 		// The host (azcri) only ever injects blobs whose media type it knows
 		// we handle, so receiving an unrecognized one means either a host bug
@@ -189,6 +194,13 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 	unpacked, err := cosesign1.UnpackAndValidateCOSE1CertChain(raw)
 	if err != nil {
 		return fmt.Errorf("InjectFragment failed COSE validation: %w", err)
+	}
+	// We do not need to validate this.
+	if mediaType == mediaTypeTCBReferenceInfo {
+		s.tcbReferenceInfoMutex.Lock()
+		s.tcbReferenceInfo = append(s.tcbReferenceInfo[:0], raw...)
+		s.tcbReferenceInfoMutex.Unlock()
+		return nil
 	}
 
 	cwtClaimsRaw, hasCwtClaims := unpacked.Protected[cosesign1.COSE_Header_CWTClaims]
@@ -338,8 +350,11 @@ func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) 
 // because there was nothing to write.
 func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, error) {
 	encodedPolicy := s.PolicyEnforcer.EncodedSecurityPolicy()
+	s.tcbReferenceInfoMutex.RLock()
+	tcbReferenceInfo := append([]byte(nil), s.tcbReferenceInfo...)
+	s.tcbReferenceInfoMutex.RUnlock()
 	hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 {
+	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 || len(tcbReferenceInfo) > 0 {
 		// Use os.MkdirTemp to make sure that the directory is unique.
 		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
 		if err != nil {
@@ -363,6 +378,11 @@ func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, err
 		if len(s.UvmHashEnvelopeReferenceInfo) > 0 {
 			if err := writeFileInDir(securityContextDir, HashEnvelopeReferenceInfoFilename, []byte(s.UvmHashEnvelopeReferenceInfo), 0777); err != nil {
 				return "", fmt.Errorf("failed to write UVM hash envelope reference info: %w", err)
+			}
+		}
+		if len(tcbReferenceInfo) > 0 {
+			if err := writeFileInDir(securityContextDir, TCBReferenceInfoFilename, tcbReferenceInfo, 0777); err != nil {
+				return "", fmt.Errorf("failed to write TCB reference info: %w", err)
 			}
 		}
 
