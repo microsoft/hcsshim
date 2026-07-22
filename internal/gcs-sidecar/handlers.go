@@ -181,16 +181,16 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			cwcowHostedSystemConfig.Spec = spec
 		}
 
-		// Add this fragments.debug mount after policy enforcement and
+		// Add this fragments.info mount after policy enforcement and
 		// reconcile checks so the policy does not have to explicitly
 		// allow it.
 		if securityContextDir != "" {
-			if err := os.MkdirAll(guestpath.WCOWFragmentsPath, 0755); err != nil {
-				log.G(ctx).WithError(err).WithField(logfields.Path, guestpath.WCOWFragmentsPath).Warn("failed to create fragments debug mount path in uVM")
+			if err := b.hostState.securityOptions.EnsureFragmentDiagnosticsDir(); err != nil {
+				log.G(ctx).WithError(err).WithField(logfields.Path, guestpath.WCOWFragmentsPath).Warn("failed to prepare fragments.info mount path in uVM")
 			} else {
 				container.MappedDirectories = append(container.MappedDirectories, hcsschema.MappedDirectory{
 					HostPath:      guestpath.WCOWFragmentsPath,
-					ContainerPath: filepath.Join(`C:\`, filepath.Base(securityContextDir), "fragments.debug"),
+					ContainerPath: filepath.Join(`C:\`, filepath.Base(securityContextDir), "fragments.info"),
 					ReadOnly:      true,
 				})
 			}
