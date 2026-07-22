@@ -5,11 +5,13 @@ package hcsv2
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -72,7 +74,7 @@ func TestModifyHostSettingsRejectsInvalidPodCgroupMemoryLimitRequestType(t *test
 		guestrequest.RequestTypePreAdd,
 	} {
 		t.Run(string(requestType), func(t *testing.T) {
-			host := &Host{}
+			host := NewHost(nil, nil, &securitypolicy.OpenDoorSecurityPolicyEnforcer{}, io.Discard)
 			err := host.modifyHostSettings(context.Background(), UVMContainerID, &guestrequest.ModificationRequest{
 				ResourceType: guestresource.ResourceTypePodCgroupMemoryLimit,
 				RequestType:  requestType,
