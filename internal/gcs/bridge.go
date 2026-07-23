@@ -221,6 +221,22 @@ func (call *rpc) complete(err error) {
 	close(call.ch)
 }
 
+// forceComplete completes a still-pending RPC out of band when the guest will
+// never send its response (e.g. a signal reported the process missing). It
+// removes the call from the map under lock first so a late response can't
+// double-complete it; returns false if the RPC is no longer tracked.
+func (brdg *bridge) forceComplete(call *rpc, err error) bool {
+	brdg.mu.Lock()
+	if _, ok := brdg.rpcs[call.id]; !ok {
+		brdg.mu.Unlock()
+		return false
+	}
+	delete(brdg.rpcs, call.id)
+	brdg.mu.Unlock()
+	call.complete(err)
+	return true
+}
+
 type rpcError struct {
 	result  int32
 	message string
@@ -389,7 +405,14 @@ func (brdg *bridge) recvLoop() error {
 			delete(brdg.rpcs, id)
 			brdg.mu.Unlock()
 			if call == nil {
-				return fmt.Errorf("bridge received unknown rpc response for id %d, type %s", id, typ)
+				// No pending call: force-completed out of band and the guest's
+				// real response arrived late. Dropping it (vs. fatal) avoids
+				// tearing down the shared pod UVM.
+				brdg.log.WithFields(logrus.Fields{
+					"message-id": id,
+					"type":       typ.String(),
+				}).Warning("bridge received response for unknown rpc id; ignoring")
+				continue
 			}
 			err := json.Unmarshal(b, call.resp)
 			if err != nil {
