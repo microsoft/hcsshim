@@ -3,9 +3,7 @@
 package migration
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"sync"
 	"unsafe"
@@ -43,9 +41,9 @@ const connectTimeNotConnected uint32 = 0xFFFFFFFF
 
 // RegisterDuplicateSocket adopts a duplicated migration transport socket,
 // described by protocolInfo, into this process and makes it available to the
-// pending transfer for the given session. A repeat call for an already-adopted
-// session is a no-op.
-func (c *Controller) RegisterDuplicateSocket(ctx context.Context, sessionID string, protocolInfo []byte) error {
+// pending transfer for the given session. A repeat call once a socket is already
+// registered is rejected.
+func (c *Controller) RegisterDuplicateSocket(ctx context.Context, sessionID string, protocolInfo []byte) (err error) {
 	// Reject input too small to hold a serialized socket descriptor before
 	// attempting to decode it.
 	wantSize := int(unsafe.Sizeof(windows.WSAProtocolInfo{}))
@@ -53,12 +51,10 @@ func (c *Controller) RegisterDuplicateSocket(ctx context.Context, sessionID stri
 		return fmt.Errorf("protocol info is %d bytes, want at least %d: %w", len(protocolInfo), wantSize, errdefs.ErrInvalidArgument)
 	}
 
-	// Decode the opaque caller-supplied bytes into the socket descriptor
-	// used to recreate the duplicated socket.
+	// The bytes are the descriptor's raw native memory as the caller
+	// serialized it, so copy them back over the same layout to decode.
 	var info windows.WSAProtocolInfo
-	if err := binary.Read(bytes.NewReader(protocolInfo), binary.LittleEndian, &info); err != nil {
-		return fmt.Errorf("decode WSAProtocolInfo: %w", err)
-	}
+	copy(unsafe.Slice((*byte)(unsafe.Pointer(&info)), wantSize), protocolInfo)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -67,41 +63,59 @@ func (c *Controller) RegisterDuplicateSocket(ctx context.Context, sessionID stri
 		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
 	}
 
-	// Idempotent: a repeat call for the same session is a no-op once the
-	// socket has been adopted.
+	// If socket has already been adopted for a session, return an error.
 	if c.dupSocket != 0 {
-		return nil
+		return fmt.Errorf("duplicate socket already registered for session %q: %w", sessionID, errdefs.ErrAlreadyExists)
 	}
 
 	// Transfer may have already claimed the session (StateSocketWaiting) and
 	// be waiting on the socket; allow registration in that case too.
 	if c.state != StateSourceExported && c.state != StateDestinationPrepared && c.state != StateSocketWaiting {
-		return fmt.Errorf("register duplicate socket requires state %s or %s (current: %s): %w", StateSourceExported, StateDestinationPrepared, c.state, errdefs.ErrFailedPrecondition)
+		return fmt.Errorf("invalid register duplicate socket state (current: %s): %w", c.state, errdefs.ErrFailedPrecondition)
 	}
 
+	// sock holds the recreated socket once WSASocket succeeds; until then it
+	// stays 0 so the failure cleanup below only closes a socket we own.
+	var sock windows.Handle
+
+	// Past the state guard, any failure aborts the session: fail it, drop the
+	// socket we created (if any), and close socketReady so a Transfer goroutine
+	// blocked on it wakes, observes the failure, and bails instead of
+	// hanging until its timeout.
+	defer func() {
+		if err != nil {
+			if sock != 0 {
+				_ = windows.Closesocket(sock)
+			}
+
+			c.state = StateFailed
+			close(c.socketReady)
+			log.G(ctx).WithError(err).Error("duplicate migration socket registration failed, session failed")
+		}
+	}()
+
 	// Make sure Winsock is up for this process before recreating the socket.
-	if err := ensureWinsock(); err != nil {
+	if err = ensureWinsock(); err != nil {
 		return err
 	}
 
 	// Recreate the duplicated socket in this process from the descriptor so
 	// the transfer can use it as its transport.
-	sock, err := windows.WSASocket(info.AddressFamily, info.SocketType, info.Protocol, &info, 0, 0)
+	s, err := windows.WSASocket(info.AddressFamily, info.SocketType, info.Protocol, &info, 0, 0)
 	if err != nil {
 		return fmt.Errorf("WSASocket: %w", err)
 	}
+	sock = s
 
 	// Verify the duplicated handle actually represents a connected socket;
 	// HCS will fail the migration if we hand it an unconnected endpoint.
 	var connectTime uint32
 	optLen := int32(unsafe.Sizeof(connectTime))
-	if err := windows.Getsockopt(sock, windows.SOL_SOCKET, soConnectTime, (*byte)(unsafe.Pointer(&connectTime)), &optLen); err != nil {
-		_ = windows.Closesocket(sock)
+	if err = windows.Getsockopt(sock, windows.SOL_SOCKET, soConnectTime, (*byte)(unsafe.Pointer(&connectTime)), &optLen); err != nil {
 		return fmt.Errorf("getsockopt SO_CONNECT_TIME: %w", err)
 	}
 
 	if connectTime == connectTimeNotConnected {
-		_ = windows.Closesocket(sock)
 		return fmt.Errorf("duplicated socket is not connected: %w", errdefs.ErrFailedPrecondition)
 	}
 

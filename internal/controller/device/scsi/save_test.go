@@ -4,12 +4,14 @@ package scsi
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/disk"
 	scsisave "github.com/Microsoft/hcsshim/internal/controller/device/scsi/save"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/containerd/errdefs"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"google.golang.org/protobuf/proto"
@@ -152,30 +154,37 @@ func TestImport_Errors(t *testing.T) {
 		return &anypb.Any{TypeUrl: scsisave.TypeURL, Value: b}
 	}
 
+	// wantIs, when set, is the sentinel error the failure must wrap so
+	// callers can classify it with errors.Is.
 	tests := []struct {
 		name    string
 		env     *anypb.Any
 		wantErr string
+		wantIs  error
 	}{
-		{"nil envelope", nil, "nil"},
-		{"wrong type url", &anypb.Any{TypeUrl: "bogus"}, "unsupported scsi saved-state type"},
-		{"corrupt payload", &anypb.Any{TypeUrl: scsisave.TypeURL, Value: []byte{0xff}}, "unmarshal"},
-		{"schema mismatch", wrap(&scsisave.Payload{SchemaVersion: scsisave.SchemaVersion + 1}), "schema version"},
+		{"nil envelope", nil, "nil", nil},
+		{"wrong type url", &anypb.Any{TypeUrl: "bogus"}, "unsupported scsi saved-state type", errdefs.ErrInvalidArgument},
+		{"corrupt payload", &anypb.Any{TypeUrl: scsisave.TypeURL, Value: []byte{0xff}}, "unmarshal", nil},
+		{"schema mismatch", wrap(&scsisave.Payload{SchemaVersion: scsisave.SchemaVersion + 1}), "schema version", errdefs.ErrInvalidArgument},
 		{"slot out of range", wrap(&scsisave.Payload{
 			SchemaVersion:  scsisave.SchemaVersion,
 			NumControllers: 1,
 			Disks:          map[uint32]*scsisave.DiskState{numLUNsPerController: {}},
-		}), "invalid controller slot"},
+		}), "invalid controller slot", errdefs.ErrInvalidArgument},
 		{"bad reservation id", wrap(&scsisave.Payload{
 			SchemaVersion:  scsisave.SchemaVersion,
 			NumControllers: 1,
 			Reservations:   map[string]*scsisave.Reservation{"not-a-guid": {}},
-		}), "invalid reservation id"},
+		}), "invalid reservation id", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := Import(t.Context(), tt.env); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+			_, err := Import(t.Context(), tt.env)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
+				t.Fatalf("expected error to wrap %v, got %v", tt.wantIs, err)
 			}
 		})
 	}
@@ -238,9 +247,14 @@ func TestUpdateDiskHostPath(t *testing.T) {
 		if err := c.Resume(t.Context(), &mockVMOps{}, newMockGuestOps()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if err := c.UpdateDiskHostPath(t.Context(), id, `C:\x.vhdx`); err == nil ||
-			!strings.Contains(err.Error(), "migrating") {
+		// After resume the controller is no longer migrating, so the update
+		// is rejected as a failed precondition.
+		err := c.UpdateDiskHostPath(t.Context(), id, `C:\x.vhdx`)
+		if err == nil || !strings.Contains(err.Error(), "migrating") {
 			t.Fatalf("expected migrating error, got %v", err)
+		}
+		if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+			t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 		}
 	})
 }

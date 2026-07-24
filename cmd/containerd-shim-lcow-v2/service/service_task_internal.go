@@ -98,7 +98,7 @@ func (s *Service) stateInternal(_ context.Context, request *task.StateRequest) (
 
 // createInternal creates a new pod sandbox or workload container based on the OCI spec.
 func (s *Service) createInternal(ctx context.Context, request *task.CreateTaskRequest) (*task.CreateTaskResponse, error) {
-	if state := s.vmController.State(); state != vm.StateRunning && state != vm.StateMigratingImported {
+	if state := s.vmController.State(); state != vm.StateRunning && state != vm.StateDestinationMigrationImported {
 		return nil, fmt.Errorf("vm is not running or migrating (state: %s): %w", state, errdefs.ErrFailedPrecondition)
 	}
 

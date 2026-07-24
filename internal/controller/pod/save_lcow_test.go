@@ -3,9 +3,11 @@
 package pod
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/containerd/containerd/api/runtime/task/v3"
+	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
@@ -19,8 +21,8 @@ import (
 	procsave "github.com/Microsoft/hcsshim/internal/controller/process/save"
 )
 
-// migratingContainer restores a real container into StateMigrating with a
-// single init process whose IO paths are empty, so Patch needs no live guest.
+// migratingContainer restores a real container as imported on the destination
+// with a single init process whose IO paths are empty, so Patch needs no live guest.
 func migratingContainer(t *testing.T, id string) *linuxcontainer.Controller {
 	t.Helper()
 	proc := mustAny(t, procsave.TypeURL, &procsave.Payload{SchemaVersion: procsave.SchemaVersion})
@@ -158,6 +160,7 @@ func TestImport(t *testing.T) {
 		name    string
 		env     func(t *testing.T) *anypb.Any
 		wantErr bool
+		wantIs  error
 		check   func(t *testing.T, c *Controller)
 	}{
 		{
@@ -169,6 +172,7 @@ func TestImport(t *testing.T) {
 			name:    "wrong type url",
 			env:     func(t *testing.T) *anypb.Any { t.Helper(); return &anypb.Any{TypeUrl: "type.microsoft.com/bogus"} },
 			wantErr: true,
+			wantIs:  errdefs.ErrInvalidArgument,
 		},
 		{
 			name: "corrupt payload",
@@ -185,6 +189,7 @@ func TestImport(t *testing.T) {
 				return mustAny(t, podsave.TypeURL, &podsave.Payload{SchemaVersion: podsave.SchemaVersion + 1, PodID: testPodID})
 			},
 			wantErr: true,
+			wantIs:  errdefs.ErrInvalidArgument,
 		},
 		{
 			name: "network import fails",
@@ -264,6 +269,9 @@ func TestImport(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
+				if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
+					t.Fatalf("error = %v; want wrapped %v", err, tt.wantIs)
+				}
 				return
 			}
 			if err != nil {
@@ -338,20 +346,22 @@ func TestResume(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Resume() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			// Resume clears the migrating guard so normal ops are allowed again.
-			if c.isMigrating {
-				t.Error("expected isMigrating to be cleared after Resume")
+			// isMigrating is cleared only on full success, so a failed resume
+			// stays retriable while a successful one flips the guard off.
+			if c.isMigrating != tt.wantErr {
+				t.Errorf("isMigrating = %v; want %v (cleared only on success)", c.isMigrating, tt.wantErr)
 			}
 		})
 	}
 }
 
-// TestResume_RejectsWhenNotMigrating verifies Resume fails on a pod that is not
-// mid-migration, before it touches the VM or network.
-func TestResume_RejectsWhenNotMigrating(t *testing.T) {
+// TestResume_NoOpWhenNotMigrating verifies Resume on a pod that is not
+// mid-migration is a no-op (rather than an error), so a retry after a completed
+// resume is safe.
+func TestResume_NoOpWhenNotMigrating(t *testing.T) {
 	c := &Controller{podID: testPodID, containers: map[string]*linuxcontainer.Controller{}}
-	if err := c.Resume(t.Context(), nil, nil, false); err == nil {
-		t.Error("Resume() on a non-migrating pod = nil; want error")
+	if err := c.Resume(t.Context(), nil, nil, false); err != nil {
+		t.Errorf("Resume() on a non-migrating pod = %v; want nil (no-op)", err)
 	}
 }
 
@@ -367,6 +377,7 @@ func TestPatch(t *testing.T) {
 		request   *task.CreateTaskRequest
 		spec      specs.Spec
 		wantErr   bool
+		wantIs    error
 		check     func(t *testing.T, c *Controller)
 	}{
 		{
@@ -377,6 +388,7 @@ func TestPatch(t *testing.T) {
 			},
 			request: nil,
 			wantErr: true,
+			wantIs:  errdefs.ErrInvalidArgument,
 		},
 		{
 			name: "empty request id",
@@ -386,6 +398,7 @@ func TestPatch(t *testing.T) {
 			},
 			request: &task.CreateTaskRequest{ID: ""},
 			wantErr: true,
+			wantIs:  errdefs.ErrInvalidArgument,
 		},
 		{
 			name: "source container not found",
@@ -487,6 +500,7 @@ func TestPatch(t *testing.T) {
 			sourceID: "src",
 			request:  &task.CreateTaskRequest{ID: "dst"},
 			wantErr:  true,
+			wantIs:   errdefs.ErrFailedPrecondition,
 		},
 	}
 	for _, tt := range tests {
@@ -495,6 +509,9 @@ func TestPatch(t *testing.T) {
 			err := c.Patch(t.Context(), tt.sourceID, tt.isSandbox, nil, tt.request, tt.spec)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Patch() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
+				t.Fatalf("Patch() error = %v; want wrapped %v", err, tt.wantIs)
 			}
 			if err == nil && tt.check != nil {
 				tt.check(t, c)

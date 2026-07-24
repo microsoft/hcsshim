@@ -7,12 +7,12 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/pkg/migration"
 
 	"github.com/containerd/errdefs/pkg/errgrpc"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Ensure Service implements the MigrationService interface at compile time.
@@ -22,13 +22,13 @@ var _ migration.MigrationService = &Service{}
 // exports an opaque config that the destination shim can use to import it.
 // This method is part of the instrumentation layer and business logic is included in prepareAndExportSandboxInternal.
 func (s *Service) PrepareAndExportSandbox(ctx context.Context, request *migration.PrepareAndExportSandboxRequest) (resp *migration.PrepareAndExportSandboxResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "PrepareAndExportSandbox")
+	ctx, span := ot.StartSpan(ctx, "PrepareAndExportSandbox")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))
@@ -41,13 +41,13 @@ func (s *Service) PrepareAndExportSandbox(ctx context.Context, request *migratio
 // config produced by PrepareAndExportSandbox on the source.
 // This method is part of the instrumentation layer and business logic is included in importSandboxInternal.
 func (s *Service) ImportSandbox(ctx context.Context, request *migration.ImportSandboxRequest) (resp *migration.ImportSandboxResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "ImportSandbox")
+	ctx, span := ot.StartSpan(ctx, "ImportSandbox")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))
@@ -60,13 +60,13 @@ func (s *Service) ImportSandbox(ctx context.Context, request *migration.ImportSa
 // migrated sandbox state.
 // This method is part of the instrumentation layer and business logic is included in prepareSandboxInternal.
 func (s *Service) PrepareSandbox(ctx context.Context, request *migration.PrepareSandboxRequest) (resp *migration.PrepareSandboxResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "PrepareSandbox")
+	ctx, span := ot.StartSpan(ctx, "PrepareSandbox")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))
@@ -79,15 +79,15 @@ func (s *Service) PrepareSandbox(ctx context.Context, request *migration.Prepare
 // over the previously established migration transport.
 // This method is part of the instrumentation layer and business logic is included in transferSandboxInternal.
 func (s *Service) TransferSandbox(ctx context.Context, request *migration.TransferSandboxRequest) (resp *migration.TransferSandboxResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "TransferSandbox")
+	ctx, span := ot.StartSpan(ctx, "TransferSandbox")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 	if request.Timeout != nil {
-		span.AddAttributes(trace.Int64Attribute(logfields.Timeout, int64(request.Timeout.AsDuration())))
+		span.SetAttributes(attribute.Int64(logfields.Timeout, int64(request.Timeout.AsDuration())))
 	}
 
 	// Set the session id in the logger context for all subsequent logs in this request.
@@ -101,14 +101,14 @@ func (s *Service) TransferSandbox(ctx context.Context, request *migration.Transf
 // source, resume on the destination (per the requested action).
 // This method is part of the instrumentation layer and business logic is included in finalizeSandboxInternal.
 func (s *Service) FinalizeSandbox(ctx context.Context, request *migration.FinalizeSandboxRequest) (resp *migration.FinalizeSandboxResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "FinalizeSandbox")
+	ctx, span := ot.StartSpan(ctx, "FinalizeSandbox")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID),
-		trace.StringAttribute(logfields.Action, request.Action.String()))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID),
+		attribute.String(logfields.Action, request.Action.String()))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))
@@ -121,13 +121,13 @@ func (s *Service) FinalizeSandbox(ctx context.Context, request *migration.Finali
 // the lifetime of the migration session.
 // This method is part of the instrumentation layer and business logic is included in notificationsInternal.
 func (s *Service) Notifications(ctx context.Context, request *migration.NotificationsRequest, server migration.Migration_NotificationsServer) (err error) {
-	ctx, span := oc.StartSpan(ctx, "Notifications")
+	ctx, span := ot.StartSpan(ctx, "Notifications")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))
@@ -139,13 +139,13 @@ func (s *Service) Notifications(ctx context.Context, request *migration.Notifica
 // shim process for use as the migration transport.
 // This method is part of the instrumentation layer and business logic is included in createDuplicateSocketInternal.
 func (s *Service) CreateDuplicateSocket(ctx context.Context, request *migration.CreateDuplicateSocketRequest) (resp *migration.CreateDuplicateSocketResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "CreateDuplicateSocket")
+	ctx, span := ot.StartSpan(ctx, "CreateDuplicateSocket")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))
@@ -160,13 +160,13 @@ func (s *Service) CreateDuplicateSocket(ctx context.Context, request *migration.
 // the migrating state until Cleanup is called.
 // This method is part of the instrumentation layer and business logic is included in cancelInternal.
 func (s *Service) Cancel(ctx context.Context, request *migration.CancelRequest) (resp *migration.CancelResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Cancel")
+	ctx, span := ot.StartSpan(ctx, "Cancel")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))
@@ -180,13 +180,13 @@ func (s *Service) Cancel(ctx context.Context, request *migration.CancelRequest) 
 // migration controller's state machine back to the normal state.
 // This method is part of the instrumentation layer and business logic is included in cleanupInternal.
 func (s *Service) Cleanup(ctx context.Context, request *migration.CleanupRequest) (resp *migration.CleanupResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Cleanup")
+	ctx, span := ot.StartSpan(ctx, "Cleanup")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute(logfields.SandboxID, s.sandboxID),
-		trace.StringAttribute(logfields.SessionID, request.SessionID))
+	span.SetAttributes(
+		attribute.String(logfields.SandboxID, s.sandboxID),
+		attribute.String(logfields.SessionID, request.SessionID))
 
 	// Set the session id in the logger context for all subsequent logs in this request.
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.SessionID, request.SessionID))

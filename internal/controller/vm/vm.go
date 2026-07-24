@@ -605,6 +605,10 @@ func (c *Controller) TerminateVM(ctx context.Context) (err error) {
 	// Best effort attempt to clean up the open vmmem handle.
 	_ = windows.Close(c.vmmemProcess)
 
+	// Explicitly set migrating to false so that we release
+	// the bridge prior to removing the VM.
+	c.guest.SetMigrating(false)
+
 	// Skip HCS Terminate for a never-started VM (cold-created, or a destination
 	// migration VM created/patched but not yet started). The HCS document sets
 	// ShouldTerminateOnLastHandleClosed, so uvm.Close below is sufficient.

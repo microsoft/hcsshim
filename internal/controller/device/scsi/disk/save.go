@@ -7,13 +7,14 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/mount"
 	scsisave "github.com/Microsoft/hcsshim/internal/controller/device/scsi/save"
+	"github.com/containerd/errdefs"
 )
 
 // Save returns a migration snapshot of the disk and its mounts. It fails unless
 // the disk is attached or reserved and every mount can be saved.
 func (d *Disk) Save() (*scsisave.DiskState, error) {
 	if d.state != StateAttached && d.state != StateReserved {
-		return nil, fmt.Errorf("scsi disk controller=%d lun=%d in state %s; want %s", d.controller, d.lun, d.state, StateAttached)
+		return nil, fmt.Errorf("scsi disk controller=%d lun=%d in state %s; want %s: %w", d.controller, d.lun, d.state, StateAttached, errdefs.ErrFailedPrecondition)
 	}
 
 	out := &scsisave.DiskState{

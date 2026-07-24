@@ -15,9 +15,12 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	lcsave "github.com/Microsoft/hcsshim/internal/controller/linuxcontainer/save"
 	"github.com/Microsoft/hcsshim/internal/controller/migration/mocks"
 	save "github.com/Microsoft/hcsshim/internal/controller/migration/save"
+	netsave "github.com/Microsoft/hcsshim/internal/controller/network/save"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
+	podsave "github.com/Microsoft/hcsshim/internal/controller/pod/save"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -58,6 +61,33 @@ func importOptions(vmc vmController, saved *anypb.Any) *ImportStateOptions {
 		SavedState:          saved,
 		ContainerPodMapping: map[string]string{},
 	}
+}
+
+// marshalAny marshals a proto message and wraps it in a typed Any envelope.
+func marshalAny(t *testing.T, typeURL string, m proto.Message) *anypb.Any {
+	t.Helper()
+	b, err := proto.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal %s: %v", typeURL, err)
+	}
+	return &anypb.Any{TypeUrl: typeURL, Value: b}
+}
+
+// importablePod builds a valid, importable pod payload envelope carrying the
+// given pod ID and container IDs.
+func importablePod(t *testing.T, podID string, containerIDs ...string) *anypb.Any {
+	t.Helper()
+	containers := make([]*anypb.Any, 0, len(containerIDs))
+	for _, id := range containerIDs {
+		containers = append(containers, marshalAny(t, lcsave.TypeURL, &lcsave.Payload{SchemaVersion: lcsave.SchemaVersion, ContainerID: id}))
+	}
+	return marshalAny(t, podsave.TypeURL, &podsave.Payload{
+		SchemaVersion: podsave.SchemaVersion,
+		PodID:         podID,
+		GcsPodID:      podID,
+		Network:       marshalAny(t, netsave.TypeURL, &netsave.Payload{SchemaVersion: netsave.SchemaVersion}),
+		Containers:    containers,
+	})
 }
 
 // importVM returns a VM mock reporting the not-created state that ImportState
@@ -134,16 +164,18 @@ func TestImportState_RejectsUndecodableState(t *testing.T) {
 	}
 }
 
-// TestImportState_IdempotentSameSession verifies a repeat import for the active
-// session is a no-op that does not re-import the VM.
-func TestImportState_IdempotentSameSession(t *testing.T) {
+// TestImportState_RejectsAlreadyImported verifies a repeat import while the
+// controller already holds an imported snapshot is rejected as a failed
+// precondition rather than re-importing the VM.
+func TestImportState_RejectsAlreadyImported(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	c := New()
 	c.state = StateDestinationImported
 	c.sessionID = "sess-1"
 
-	if err := c.ImportState(t.Context(), importOptions(importVM(ctrl), importEnvelope(t, validImportPayload()))); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	err := c.ImportState(t.Context(), importOptions(importVM(ctrl), importEnvelope(t, validImportPayload())))
+	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 	}
 }
 
@@ -156,8 +188,8 @@ func TestImportState_RejectsConflictingState(t *testing.T) {
 	c.sessionID = "other"
 
 	err := c.ImportState(t.Context(), importOptions(importVM(ctrl), importEnvelope(t, validImportPayload())))
-	if !errors.Is(err, errdefs.ErrAlreadyExists) {
-		t.Fatalf("expected ErrAlreadyExists, got %v", err)
+	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 	}
 }
 
@@ -215,6 +247,37 @@ func TestImportState_Success(t *testing.T) {
 	}
 }
 
+// TestImportState_PartialPodFailureIsAtomic verifies that when a later pod
+// fails to import, no pod or container entries from earlier pods are committed
+// to the caller's borrowed maps and the controller stays idle.
+func TestImportState_PartialPodFailureIsAtomic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vmc := importVM(ctrl)
+
+	// The first pod imports cleanly; the second is rejected by pod.Import.
+	payload := validImportPayload()
+	payload.Pods = []*anypb.Any{
+		importablePod(t, "pod-1", "ctr-1"),
+		{TypeUrl: "type.bogus"},
+	}
+
+	c := New()
+	opts := importOptions(vmc, importEnvelope(t, payload))
+	if err := c.ImportState(t.Context(), opts); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if c.state != StateIdle {
+		t.Errorf("expected state Idle after failure, got %s", c.state)
+	}
+	if len(opts.PodControllers) != 0 {
+		t.Errorf("expected borrowed pod controllers untouched, got %d entries", len(opts.PodControllers))
+	}
+	if len(opts.ContainerPodMapping) != 0 {
+		t.Errorf("expected borrowed container-pod mapping untouched, got %d entries", len(opts.ContainerPodMapping))
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PatchResourcePaths
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,8 +326,8 @@ func TestPatchResourcePaths_RejectsAlreadyPatched(t *testing.T) {
 	c.containerPodMapping = map[string]string{}
 
 	err := c.PatchResourcePaths(t.Context(), &task.CreateTaskRequest{ID: "dst-1"}, patchSpec("ctr-1", nil))
-	if !errors.Is(err, errdefs.ErrAlreadyExists) {
-		t.Fatalf("expected ErrAlreadyExists, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "not pending a patch") {
+		t.Fatalf("expected not-pending error, got %v", err)
 	}
 }
 
@@ -277,8 +340,8 @@ func TestPatchResourcePaths_RejectsUnknownContainer(t *testing.T) {
 	c.containerPodMapping = map[string]string{}
 
 	err := c.PatchResourcePaths(t.Context(), &task.CreateTaskRequest{ID: "dst-1"}, patchSpec("ctr-1", nil))
-	if !errors.Is(err, errdefs.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected not-found error, got %v", err)
 	}
 }
 

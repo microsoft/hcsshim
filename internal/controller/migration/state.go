@@ -17,10 +17,12 @@ package migration
 //	  → StateTransferring → StateTransferCompleted → StateFinalized → StateIdle
 //
 // [StateSocketWaiting] is entered instead of [StateSocketReady] when
-// [Controller.Transfer] runs before the socket arrives. A failed transfer
-// enters [StateFailed], from which [Controller.Cancel] moves to
-// [StateCancelled]; [Controller.Finalize] then [Controller.Cleanup] wind a
-// canceled or completed session down to [StateIdle].
+// [Controller.Transfer] runs before the socket arrives. A step that fails past its
+// point of no return enters [StateFailed] (earlier failures stay retriable in the
+// prior state). [Controller.Cancel] moves an active session to [StateCancelled]—
+// directly from [StateDestinationImported], otherwise via a transient
+// [StateCancelling]. A completed, failed, or cancelled session is wound down by
+// [Controller.Finalize] then [Controller.Cleanup], back to [StateIdle].
 type State int32
 
 const (
@@ -35,8 +37,8 @@ const (
 	StateSourcePrepared
 
 	// StateSourceExported indicates the source has produced its opaque saved-state
-	// envelope via [Controller.ExportState]. The next valid call is
-	// [Controller.RegisterDuplicateSocket].
+	// envelope via [Controller.ExportState]. The next valid calls are
+	// [Controller.RegisterDuplicateSocket] and [Controller.Transfer], in either order.
 	StateSourceExported
 
 	// StateDestinationImported indicates the destination has rehydrated the source
@@ -46,13 +48,13 @@ const (
 	StateDestinationImported
 
 	// StateDestinationPrepared indicates the destination has materialized the
-	// HCS compute system via [Controller.PrepareDestination]. The next
-	// valid call is [Controller.RegisterDuplicateSocket].
+	// HCS compute system via [Controller.PrepareDestination]. The next valid calls
+	// are [Controller.RegisterDuplicateSocket] and [Controller.Transfer], in either order.
 	StateDestinationPrepared
 
-	// StateSocketWaiting indicates [Controller.Transfer] has claimed the
-	// session and a single goroutine is driving it, waiting for the duplicate
-	// socket if it is not yet ready.
+	// StateSocketWaiting indicates [Controller.Transfer] has claimed the session
+	// and is waiting in the background for the duplicate socket; it advances to
+	// [StateTransferring] once [Controller.RegisterDuplicateSocket] supplies it.
 	StateSocketWaiting
 
 	// StateSocketReady indicates the duplicated migration transport socket
@@ -78,8 +80,12 @@ const (
 	// [Controller.Cleanup] to return the controller to [StateIdle].
 	StateCancelled
 
-	// StateFailed indicates the memory transfer failed. The next valid call is
-	// [Controller.Cancel] to abort the session.
+	// StateCancelling indicates [Controller.Cancel] is aborting the in-flight
+	// migration; it becomes [StateCancelled] on success or [StateFailed] on error.
+	StateCancelling
+
+	// StateFailed indicates the session hit an unrecoverable error. The next call
+	// is [Controller.Finalize] or [Controller.Cancel], then [Controller.Cleanup].
 	StateFailed
 )
 
@@ -108,6 +114,8 @@ func (s State) String() string {
 		return "Finalized"
 	case StateCancelled:
 		return "Cancelled"
+	case StateCancelling:
+		return "Cancelling"
 	case StateFailed:
 		return "Failed"
 	default:

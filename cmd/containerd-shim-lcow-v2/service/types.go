@@ -126,6 +126,9 @@ type vmController interface {
 	// StartLiveMigrationTransfer begins the memory transfer.
 	StartLiveMigrationTransfer(ctx context.Context, options *hcsschema.MigrationTransferOptions) error
 
+	// CancelLiveMigration aborts an in-flight migration on the VM.
+	CancelLiveMigration(ctx context.Context) error
+
 	// FinalizeLiveMigration applies the migration's final operation to the VM.
 	FinalizeLiveMigration(ctx context.Context, options *hcsschema.MigrationFinalizedOptions) error
 

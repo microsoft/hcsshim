@@ -25,8 +25,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ImportState rehydrates a source-side migration snapshot onto this controller.
-// A repeat call for the same session is a no-op.
+// ImportState rehydrates a source-side migration snapshot onto an idle controller.
+// A repeat call, or any call once a session is already active, is rejected.
 func (c *Controller) ImportState(ctx context.Context, opts *ImportStateOptions) error {
 	// Reject malformed input up front so the controller is never mutated
 	// on the basis of a half-specified request.
@@ -64,21 +64,16 @@ func (c *Controller) ImportState(ctx context.Context, opts *ImportStateOptions) 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Idempotent retry for the same session; any other non-idle state is a conflict.
-	if c.state == StateDestinationImported && c.sessionID == opts.SessionID {
-		return nil
-	}
 	if c.state != StateIdle {
-		return fmt.Errorf("controller is in state %s for session %q: %w", c.state, c.sessionID, errdefs.ErrAlreadyExists)
-	}
-
-	// Rehydrate the VM controller from the saved VM payload.
-	if err := opts.VMController.Import(ctx, decoded.GetVm()); err != nil {
-		return fmt.Errorf("import vm controller: %w", err)
+		return fmt.Errorf("controller is in state %s for session %q: %w", c.state, c.sessionID, errdefs.ErrFailedPrecondition)
 	}
 
 	// Rehydrate each pod and index its containers so PatchResourcePaths
-	// can look up the owning pod.
+	// can look up the owning pod. Build into local maps and commit them to the
+	// caller's borrowed maps only on success, so a mid-loop failure leaves the
+	// borrowed maps untouched.
+	podControllers := make(map[string]*pod.Controller)
+	containerPodMapping := make(map[string]string)
 	pending := make(map[string]struct{})
 	for _, podAny := range decoded.GetPods() {
 		// Rebuild the pod controller from its saved payload.
@@ -87,7 +82,7 @@ func (c *Controller) ImportState(ctx context.Context, opts *ImportStateOptions) 
 			return fmt.Errorf("import pod: %w", err)
 		}
 
-		opts.PodControllers[importedPod.PodID()] = importedPod
+		podControllers[importedPod.PodID()] = importedPod
 
 		// Source container IDs must be unique across pods so the later patch
 		// lookup is unambiguous.
@@ -98,9 +93,19 @@ func (c *Controller) ImportState(ctx context.Context, opts *ImportStateOptions) 
 
 			// Track the container as awaiting a patch and map it to its pod.
 			pending[containerID] = struct{}{}
-			opts.ContainerPodMapping[containerID] = importedPod.PodID()
+			containerPodMapping[containerID] = importedPod.PodID()
 		}
 	}
+
+	// Rehydrate the VM controller from the saved VM payload.
+	if err := opts.VMController.Import(ctx, decoded.GetVm()); err != nil {
+		return fmt.Errorf("import vm controller: %w", err)
+	}
+
+	// Import fully succeeded: merge the local index into the borrowed maps,
+	// preserving the service/controller shared-map instances.
+	maps.Copy(opts.PodControllers, podControllers)
+	maps.Copy(opts.ContainerPodMapping, containerPodMapping)
 
 	c.sessionID = opts.SessionID
 	c.sandboxID = opts.SandboxID
@@ -117,7 +122,10 @@ func (c *Controller) ImportState(ctx context.Context, opts *ImportStateOptions) 
 
 // PatchResourcePaths rewrites the imported source container's identifiers to
 // the destination IDs carried by request and spec. A container may be patched
-// only once; a repeat call for an already-patched container fails.
+// only once.
+//
+// The controller advances its own bookkeeping only after the patch succeeds;
+// once a container is patched, a repeat call for it fails.
 func (c *Controller) PatchResourcePaths(
 	ctx context.Context,
 	request *task.CreateTaskRequest,
@@ -145,18 +153,20 @@ func (c *Controller) PatchResourcePaths(
 		return fmt.Errorf("patch not valid in state %s: %w", c.state, errdefs.ErrFailedPrecondition)
 	}
 
-	// A container may be patched only once; once patched, it drops out of
-	// pendingPatches. Hence, a non-pending ID has already been patched.
+	// A container may be patched only once and drops out of the pending set when it
+	// is; an ID absent from that set was already patched or was never imported.
 	if _, pending := c.pendingPatches[sourceContainerID]; !pending {
-		return fmt.Errorf("source container %q is not pending a patch: %w", sourceContainerID, errdefs.ErrAlreadyExists)
+		return fmt.Errorf("source container %q is not pending a patch", sourceContainerID)
 	}
 
 	// containerPodMapping is the source-of-truth index built in ImportState
 	// and rewritten in place here, so a direct lookup beats scanning pods.
 	sourcePodID, ok := c.containerPodMapping[sourceContainerID]
 	if !ok {
-		return fmt.Errorf("source container %q not found: %w", sourceContainerID, errdefs.ErrNotFound)
+		return fmt.Errorf("source container %q not found", sourceContainerID)
 	}
+
+	// Get pod controller from pod ID.
 	podCtrl := c.podControllers[sourcePodID]
 
 	// Sandbox is detected structurally as container ID == pod ID.
@@ -179,6 +189,8 @@ func (c *Controller) PatchResourcePaths(
 	}
 
 	// Rebind the container's resources within its pod to the destination IDs.
+	// On failure the controller's own maps are left unadvanced; the pod itself
+	// may already be partly rebound.
 	if err := podCtrl.Patch(ctx, sourceContainerID, isSandbox, scsiCtrl, request, spec); err != nil {
 		return fmt.Errorf("patch source container %q in pod %q: %w", sourceContainerID, sourcePodID, err)
 	}
@@ -190,8 +202,7 @@ func (c *Controller) PatchResourcePaths(
 		delete(c.podControllers, sourcePodID)
 		c.podControllers[request.ID] = podCtrl
 
-		// Repoint any container (this sandbox plus worker containers patched earlier)
-		// that still references the old pod ID at the new pod ID.
+		// Repoint every container still mapped to the old pod ID at the new pod ID.
 		for cid, pid := range c.containerPodMapping {
 			if pid == sourcePodID {
 				c.containerPodMapping[cid] = request.ID
@@ -243,6 +254,8 @@ func (c *Controller) PrepareDestination(ctx context.Context, sessionID string, m
 	migrationOpts.Origin = c.origin
 
 	// Build the destination VM's HCS compute system from the imported config.
+	// Till the VM is created, all the above errors are benign and the API can
+	// be retried.
 	if err := c.vmController.CreateVM(ctx,
 		&vm.CreateOptions{
 			ID:               fmt.Sprintf("%s@vm", c.sandboxID),
@@ -254,6 +267,9 @@ func (c *Controller) PrepareDestination(ctx context.Context, sessionID string, m
 	// Re-ACL the patched (destination-host) VHDs against the freshly
 	// created VM's SID so it can open them once it starts.
 	if err := c.vmController.Patch(ctx); err != nil {
+		// On error, fail the session so the caller can cancel or finalize it
+		// before cleanup.
+		c.state = StateFailed
 		return fmt.Errorf("patch destination vm: %w", err)
 	}
 

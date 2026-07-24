@@ -45,6 +45,14 @@ func (uvm *UtilityVM) StartLiveMigrationTransfer(ctx context.Context, options *h
 	return nil
 }
 
+// CancelLiveMigration aborts an in-flight live migration on the utility VM.
+func (uvm *UtilityVM) CancelLiveMigration(ctx context.Context) error {
+	if err := uvm.cs.CancelLiveMigration(ctx); err != nil {
+		return fmt.Errorf("failed to cancel live migration: %w", err)
+	}
+	return nil
+}
+
 // FinalizeLiveMigration completes the live migration workflow. If resume is true
 // the utility VM is resumed; otherwise it is stopped.
 func (uvm *UtilityVM) FinalizeLiveMigration(ctx context.Context, options *hcsschema.MigrationFinalizedOptions) error {

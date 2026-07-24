@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/controller/migration/mocks"
+	vmpkg "github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/pkg/migration"
 )
@@ -161,6 +162,35 @@ func TestTransfer_SocketTimeout(t *testing.T) {
 	waitForState(t, c, StateFailed)
 }
 
+// TestTransfer_CompletionDoesNotClobberCancel verifies that a Cancel landing
+// while the transfer runs wins: the successful transfer leaves the session
+// Cancelled rather than advancing it to TransferCompleted.
+func TestTransfer_CompletionDoesNotClobberCancel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.origin = hcsschema.MigrationOriginSource
+	c.vmController = vm
+	c.state = StateSocketReady
+	close(c.socketReady) // socket already arrived
+
+	vm.EXPECT().StartLiveMigrationOnSource(gomock.Any(), gomock.Any()).Return(nil)
+	// Simulate a concurrent Cancel arriving mid-transfer, once the goroutine has
+	// released the lock to run the transfer.
+	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(nil)
+	vm.EXPECT().StartLiveMigrationTransfer(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *hcsschema.MigrationTransferOptions) error {
+			return c.Cancel(context.Background(), "sess-1")
+		})
+
+	if err := c.Transfer(t.Context(), "sess-1", time.Minute); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	waitForState(t, c, StateCancelled)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Finalize
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,16 +210,35 @@ func TestFinalize_RejectsUnspecifiedAction(t *testing.T) {
 func TestFinalize_IdempotentFinalized(t *testing.T) {
 	c := New()
 	c.state = StateFinalized
+	c.sessionID = "sess-1"
 
 	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_RESUME, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
+// TestFinalize_DestinationCancelledNoop verifies a cancelled destination, which
+// winds down through Cleanup rather than Finalize, treats Finalize as a no-op.
+func TestFinalize_DestinationCancelledNoop(t *testing.T) {
+	c := New()
+	c.sessionID = "sess-1"
+	c.state = StateCancelled
+	c.origin = hcsschema.MigrationOriginDestination
+
+	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_STOP, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateCancelled {
+		t.Errorf("state = %s; want unchanged Cancelled", c.State())
+	}
+}
+
 // TestFinalize_RejectsWrongState verifies finalize is rejected before a transfer
 // has completed or been cancelled.
 func TestFinalize_RejectsWrongState(t *testing.T) {
-	c := New() // StateIdle
+	c := New()
+	c.state = StateTransferring
+	c.sessionID = "sess-1"
 
 	err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_RESUME, nil)
 	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
@@ -213,9 +262,11 @@ func TestFinalize_RejectsUnsupportedAction(t *testing.T) {
 func TestFinalize_FinalizeError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().State().Return(vmpkg.StateMigrationTransferCompleted)
 	vm.EXPECT().FinalizeLiveMigration(gomock.Any(), gomock.Any()).Return(errors.New("boom"))
 
 	c := New()
+	c.sessionID = "sess-1"
 	c.state = StateTransferCompleted
 	c.origin = hcsschema.MigrationOriginSource
 	c.vmController = vm
@@ -242,10 +293,12 @@ func TestFinalize_ResumeSucceeds(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			vm := mocks.NewMockvmController(ctrl)
+			vm.EXPECT().State().Return(vmpkg.StateMigrationTransferCompleted)
 			vm.EXPECT().FinalizeLiveMigration(gomock.Any(), gomock.Any()).Return(nil)
 			vm.EXPECT().Resume(gomock.Any(), tc.rebuildBridge).Return(nil)
 
 			c := New()
+			c.sessionID = "sess-1"
 			c.state = StateTransferCompleted
 			c.origin = tc.origin
 			c.vmController = vm
@@ -267,9 +320,11 @@ func TestFinalize_StopSucceeds(t *testing.T) {
 		t.Run(string(origin), func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			vm := mocks.NewMockvmController(ctrl)
+			vm.EXPECT().State().Return(vmpkg.StateMigrationTransferCompleted)
 			vm.EXPECT().FinalizeLiveMigration(gomock.Any(), gomock.Any()).Return(nil)
 
 			c := New()
+			c.sessionID = "sess-1"
 			c.state = StateTransferCompleted
 			c.origin = origin
 			c.vmController = vm
@@ -289,16 +344,106 @@ func TestFinalize_StopSucceeds(t *testing.T) {
 func TestFinalize_ResumeError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().State().Return(vmpkg.StateMigrationTransferCompleted)
 	vm.EXPECT().FinalizeLiveMigration(gomock.Any(), gomock.Any()).Return(nil)
 	vm.EXPECT().Resume(gomock.Any(), false).Return(errors.New("boom"))
 
 	c := New()
+	c.sessionID = "sess-1"
 	c.state = StateTransferCompleted
 	c.origin = hcsschema.MigrationOriginDestination
 	c.vmController = vm
 
 	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_RESUME, nil); err == nil {
 		t.Fatal("expected error, got nil")
+	}
+	if c.State() != StateTransferCompleted {
+		t.Errorf("state = %s; want unchanged TransferCompleted", c.State())
+	}
+}
+
+// TestFinalize_StopAfterResumeTerminates verifies a stop finalize retried after
+// the VM was already resume-finalized tears the VM down via TerminateVM instead
+// of re-issuing the finalize.
+func TestFinalize_StopAfterResumeTerminates(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().State().Return(vmpkg.StateMigrationFinalized)
+	vm.EXPECT().TerminateVM(gomock.Any()).Return(nil)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.state = StateTransferCompleted
+	c.origin = hcsschema.MigrationOriginSource
+	c.vmController = vm
+
+	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_STOP, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateFinalized {
+		t.Errorf("state = %s; want Finalized", c.State())
+	}
+}
+
+// TestFinalize_ResumeAfterResumeReRunsResume verifies a resume finalize retried
+// after the VM was already resume-finalized skips re-finalizing and re-runs the
+// resume steps.
+func TestFinalize_ResumeAfterResumeReRunsResume(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().State().Return(vmpkg.StateMigrationFinalized)
+	vm.EXPECT().Resume(gomock.Any(), true).Return(nil)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.state = StateTransferCompleted
+	c.origin = hcsschema.MigrationOriginSource
+	c.vmController = vm
+
+	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_RESUME, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateFinalized {
+		t.Errorf("state = %s; want Finalized", c.State())
+	}
+}
+
+// TestFinalize_StopAfterTerminateNoop verifies a stop finalize retried after the
+// VM was already terminated is a no-op that neither re-finalizes nor re-terminates.
+func TestFinalize_StopAfterTerminateNoop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().State().Return(vmpkg.StateTerminated)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.state = StateTransferCompleted
+	c.origin = hcsschema.MigrationOriginSource
+	c.vmController = vm
+
+	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_STOP, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateFinalized {
+		t.Errorf("state = %s; want Finalized", c.State())
+	}
+}
+
+// TestFinalize_ResumeAfterTerminateErrors verifies a resume finalize is rejected
+// once the VM has already been terminated by a stop finalize.
+func TestFinalize_ResumeAfterTerminateErrors(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().State().Return(vmpkg.StateTerminated)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.state = StateTransferCompleted
+	c.origin = hcsschema.MigrationOriginSource
+	c.vmController = vm
+
+	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_RESUME, nil); !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 	}
 	if c.State() != StateTransferCompleted {
 		t.Errorf("state = %s; want unchanged TransferCompleted", c.State())
@@ -315,8 +460,8 @@ func TestCancel_RejectsSessionMismatch(t *testing.T) {
 	c := New()
 	c.sessionID = "sess-1"
 
-	if err := c.Cancel(t.Context(), "other"); !errors.Is(err, errdefs.ErrFailedPrecondition) {
-		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
+	if err := c.Cancel(t.Context(), "other"); !errors.Is(err, errdefs.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument, got %v", err)
 	}
 }
 
@@ -335,12 +480,60 @@ func TestCancel_Idempotent(t *testing.T) {
 	}
 }
 
-// TestCancel_Success verifies cancelling an in-flight session moves it to
-// cancelled.
+// TestCancel_Success verifies cancelling an in-flight session aborts the
+// migration in HCS and moves the session to cancelled.
 func TestCancel_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(nil)
+
 	c := New()
 	c.sessionID = "sess-1"
+	c.vmController = vm
 	c.state = StateTransferCompleted
+
+	if err := c.Cancel(t.Context(), "sess-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateCancelled {
+		t.Errorf("state = %s; want Cancelled", c.State())
+	}
+}
+
+// TestCancel_VMError verifies a failure aborting the migration in HCS surfaces
+// to the caller and leaves the session failed so Cancel can be retried.
+func TestCancel_VMError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(errors.New("boom"))
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.vmController = vm
+	c.state = StateFailed
+
+	if err := c.Cancel(t.Context(), "sess-1"); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if c.State() != StateFailed {
+		t.Errorf("state = %s; want Failed", c.State())
+	}
+}
+
+// TestCancel_DestinationImported verifies cancelling a destination that has only
+// imported the snapshot moves it to cancelled without issuing an HCS abort,
+// since the compute system has not been materialized yet.
+func TestCancel_DestinationImported(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	// No CancelLiveMigration call is expected: gomock fails the test if the
+	// controller erroneously issues an HCS abort at this state.
+	vm := mocks.NewMockvmController(ctrl)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.vmController = vm
+	c.origin = hcsschema.MigrationOriginDestination
+	c.state = StateDestinationImported
 
 	if err := c.Cancel(t.Context(), "sess-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -370,8 +563,8 @@ func TestCleanup_RejectsSessionMismatch(t *testing.T) {
 	c.state = StateFinalized
 	c.sessionID = "sess-1"
 
-	if err := c.Cleanup(t.Context(), "other", nil); !errors.Is(err, errdefs.ErrFailedPrecondition) {
-		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
+	if err := c.Cleanup(t.Context(), "other", nil); !errors.Is(err, errdefs.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument, got %v", err)
 	}
 }
 
@@ -403,6 +596,22 @@ func TestCleanup_Success(t *testing.T) {
 	}
 	if c.sessionID != "" || c.vmController != nil || c.podControllers != nil {
 		t.Errorf("session state not cleared: %+v", c)
+	}
+}
+
+// TestCleanup_DestinationCancelled verifies a cancelled destination cleans up
+// directly from the cancelled state, returning the controller to idle.
+func TestCleanup_DestinationCancelled(t *testing.T) {
+	c := New()
+	c.state = StateCancelled
+	c.sessionID = "sess-1"
+	c.origin = hcsschema.MigrationOriginDestination
+
+	if err := c.Cleanup(t.Context(), "sess-1", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateIdle {
+		t.Errorf("state = %s; want Idle", c.State())
 	}
 }
 
@@ -530,5 +739,34 @@ func TestFailTransfer_BroadcastsToSubscribers(t *testing.T) {
 				t.Fatal("expected a failure notification")
 			}
 		})
+	}
+}
+
+// TestFailTransfer_SkipsWhenCancelled verifies a transfer error is swallowed
+// once the session is Cancelled: the state is left Cancelled and no failure
+// event is broadcast to subscribers.
+func TestFailTransfer_SkipsWhenCancelled(t *testing.T) {
+	n := newTestNotifications(hcsschema.MigrationOriginSource)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sub, err := n.subscribe(ctx)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	c := New()
+	c.origin = hcsschema.MigrationOriginSource
+	c.notifier = n
+	c.state = StateCancelled
+
+	c.failTransfer(context.Background(), errors.New("boom"))
+
+	if c.State() != StateCancelled {
+		t.Errorf("state = %s; want unchanged Cancelled", c.State())
+	}
+	select {
+	case got := <-sub:
+		t.Fatalf("expected no notification, got %+v", got)
+	case <-time.After(100 * time.Millisecond):
 	}
 }

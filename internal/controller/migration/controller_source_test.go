@@ -11,18 +11,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/Microsoft/hcsshim/internal/builder/vm/lcow"
 	"github.com/Microsoft/hcsshim/internal/controller/migration/mocks"
 	save "github.com/Microsoft/hcsshim/internal/controller/migration/save"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
-	vmpkg "github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
-
-// migrationEnabledOptions returns sandbox options that permit live migration.
-func migrationEnabledOptions() *lcow.SandboxOptions {
-	return &lcow.SandboxOptions{LiveMigrationSupportEnabled: true}
-}
 
 // sourceOptions returns a valid PrepareSourceOptions bound to the given VM mock.
 func sourceOptions(vm vmController) *PrepareSourceOptions {
@@ -78,62 +71,20 @@ func TestPrepareSource_RejectsWrongState(t *testing.T) {
 	}
 }
 
-// TestPrepareSource_IdempotentSameSession verifies re-arming the same session is
-// a no-op that does not touch the VM.
-func TestPrepareSource_IdempotentSameSession(t *testing.T) {
+// TestPrepareSource_RejectsAlreadyPrepared verifies re-arming a controller that
+// has already prepared the same session is rejected without touching the VM.
+func TestPrepareSource_RejectsAlreadyPrepared(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	c := New()
 	c.state = StateSourcePrepared
 	c.sessionID = "sess-1"
 
-	// No VM calls are expected on a duplicate arm.
-	if err := c.PrepareSource(t.Context(), sourceOptions(mocks.NewMockvmController(ctrl))); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// No VM calls are expected: the state guard rejects before the VM is armed.
+	if err := c.PrepareSource(t.Context(), sourceOptions(mocks.NewMockvmController(ctrl))); !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 	}
 	if c.state != StateSourcePrepared {
 		t.Errorf("expected state SourcePrepared, got %s", c.state)
-	}
-}
-
-// TestPrepareSource_RejectsMigrationDisabled verifies a sandbox that was not
-// created with live migration enabled cannot be armed.
-func TestPrepareSource_RejectsMigrationDisabled(t *testing.T) {
-	cases := map[string]*lcow.SandboxOptions{
-		"NilOptions":      nil,
-		"FeatureDisabled": {LiveMigrationSupportEnabled: false},
-	}
-	for name, sandboxOpts := range cases {
-		t.Run(name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			vm := mocks.NewMockvmController(ctrl)
-			vm.EXPECT().State().Return(vmpkg.StateRunning)
-			vm.EXPECT().SandboxOptions().Return(sandboxOpts)
-
-			c := New()
-			err := c.PrepareSource(t.Context(), sourceOptions(vm))
-			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
-				t.Fatalf("expected ErrFailedPrecondition, got %v", err)
-			}
-			if c.state != StateIdle {
-				t.Errorf("expected state Idle, got %s", c.state)
-			}
-		})
-	}
-}
-
-// TestPrepareSource_RejectsWrongVMState verifies the source cannot be armed
-// unless the VM is running.
-func TestPrepareSource_RejectsWrongVMState(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	vm := mocks.NewMockvmController(ctrl)
-	vm.EXPECT().State().Return(vmpkg.StateCreated).AnyTimes()
-
-	c := New()
-	if err := c.PrepareSource(t.Context(), sourceOptions(vm)); !errors.Is(err, errdefs.ErrFailedPrecondition) {
-		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
-	}
-	if c.state != StateIdle {
-		t.Errorf("expected state Idle, got %s", c.state)
 	}
 }
 
@@ -142,8 +93,6 @@ func TestPrepareSource_RejectsWrongVMState(t *testing.T) {
 func TestPrepareSource_InitializeError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
-	vm.EXPECT().State().Return(vmpkg.StateRunning)
-	vm.EXPECT().SandboxOptions().Return(migrationEnabledOptions())
 	vm.EXPECT().InitializeLiveMigrationOnSource(gomock.Any(), gomock.Any()).Return(errors.New("boom"))
 
 	c := New()
@@ -160,8 +109,6 @@ func TestPrepareSource_InitializeError(t *testing.T) {
 func TestPrepareSource_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
-	vm.EXPECT().State().Return(vmpkg.StateRunning)
-	vm.EXPECT().SandboxOptions().Return(migrationEnabledOptions())
 	vm.EXPECT().InitializeLiveMigrationOnSource(gomock.Any(), gomock.Any()).Return(nil)
 
 	c := New()
@@ -202,8 +149,8 @@ func TestExportState_RejectsSessionMismatch(t *testing.T) {
 	}
 }
 
-// TestExportState_RejectsWrongState verifies a snapshot is only produced from a
-// prepared (or already-exported) source.
+// TestExportState_RejectsWrongState verifies a snapshot is refused unless the
+// source has been prepared.
 func TestExportState_RejectsWrongState(t *testing.T) {
 	c := New()
 	c.sessionID = "sess-1"
@@ -218,7 +165,7 @@ func TestExportState_RejectsWrongState(t *testing.T) {
 }
 
 // TestExportState_VMSaveError verifies a failure saving the VM aborts the export
-// without advancing the state.
+// and poisons the session into the failed state.
 func TestExportState_VMSaveError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
@@ -233,8 +180,8 @@ func TestExportState_VMSaveError(t *testing.T) {
 	if _, err := c.ExportState(t.Context(), "sess-1"); err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if c.state != StateSourcePrepared {
-		t.Errorf("expected state SourcePrepared after failure, got %s", c.state)
+	if c.state != StateFailed {
+		t.Errorf("expected state Failed after failure, got %s", c.state)
 	}
 }
 

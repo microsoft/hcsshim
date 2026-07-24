@@ -53,6 +53,20 @@ func (m *MockvmController) EXPECT() *MockvmControllerMockRecorder {
 	return m.recorder
 }
 
+// CancelLiveMigration mocks base method.
+func (m *MockvmController) CancelLiveMigration(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelLiveMigration", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CancelLiveMigration indicates an expected call of CancelLiveMigration.
+func (mr *MockvmControllerMockRecorder) CancelLiveMigration(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelLiveMigration", reflect.TypeOf((*MockvmController)(nil).CancelLiveMigration), ctx)
+}
+
 // CreateVM mocks base method.
 func (m *MockvmController) CreateVM(ctx context.Context, opts *vm.CreateOptions) error {
 	m.ctrl.T.Helper()
@@ -306,6 +320,20 @@ func (m *MockvmController) State() vm.State {
 func (mr *MockvmControllerMockRecorder) State() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*MockvmController)(nil).State))
+}
+
+// TerminateVM mocks base method.
+func (m *MockvmController) TerminateVM(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TerminateVM", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TerminateVM indicates an expected call of TerminateVM.
+func (mr *MockvmControllerMockRecorder) TerminateVM(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateVM", reflect.TypeOf((*MockvmController)(nil).TerminateVM), ctx)
 }
 
 // VM mocks base method.

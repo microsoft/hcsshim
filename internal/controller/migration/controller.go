@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
+	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -63,7 +64,8 @@ type Controller struct {
 	// dupSocket is the duplicated transport socket used for the memory transfer.
 	dupSocket windows.Handle
 
-	// socketReady is closed by RegisterDuplicateSocket on transition to StateSocketReady.
+	// socketReady is closed once socket registration completes—on success or
+	// failure—so a Transfer waiting on it unblocks and then proceeds or bails.
 	socketReady chan struct{}
 
 	// notifier is created lazily on the first Subscribe. Guarded by mu.
@@ -130,27 +132,37 @@ func (c *Controller) Transfer(ctx context.Context, sessionID string, timeout tim
 		// Detached ctx so the transfer outlives the gRPC call.
 		ctx = context.WithoutCancel(ctx)
 
+		var err error
+		// In case we encounter error from this point onwards, fail the migration.
+		defer func() {
+			if err != nil {
+				c.failTransfer(ctx, err)
+			}
+		}()
+
 		// Wait for the duplicate socket to arrive, or give up after the timeout.
-		var socketTimeoutErr error
 		select {
 		case <-socketReady:
 		case <-time.After(timeout):
-			socketTimeoutErr = fmt.Errorf("timed out waiting for socket ready after %s: %w", timeout, errdefs.ErrFailedPrecondition)
-		}
-
-		c.mu.Lock()
-		defer c.mu.Unlock()
-
-		// If the socket connection was not ready within timeout, return an error.
-		if socketTimeoutErr != nil {
-			c.failTransfer(ctx, socketTimeoutErr)
+			// If the socket connection was not ready within timeout, return an error.
+			err = fmt.Errorf("timed out waiting for socket ready after %s: %w", timeout, errdefs.ErrFailedPrecondition)
 			return
 		}
 
-		// Gate: only the first goroutine finds StateSocketReady and claims the
-		// transfer by moving to StateTransferring; any later goroutine (or a
-		// torn-down session) bails.
+		// Take lock for checking and modifying the state.
+		c.mu.Lock()
+
+		// Gate: only a goroutine that still finds StateSocketReady claims the
+		// transfer below (by moving to StateTransferring); any other state bails.
 		if c.state != StateSocketReady {
+			// StateFailed here means the session failed before the transfer could
+			// start (e.g. destination socket registration failed after this goroutine
+			// began waiting), so surface it as an error rather than returning silently.
+			if c.state == StateFailed {
+				err = fmt.Errorf("migration session failed before transfer could start: %w", errdefs.ErrFailedPrecondition)
+			}
+
+			c.mu.Unlock()
 			return
 		}
 
@@ -158,13 +170,23 @@ func (c *Controller) Transfer(ctx context.Context, sessionID string, timeout tim
 		// will return early from above and there is a single driver for transfer.
 		c.state = StateTransferring
 
+		// Unlock here prior to running the transfer so that other APIs can be called
+		// while the long-running transfer is in progress.
+		c.mu.Unlock()
+
 		// Run the transfer; a failure marks the session failed for subscribers.
-		if err := c.runTransfer(ctx); err != nil {
-			c.failTransfer(ctx, err)
+		if err = c.runTransfer(ctx); err != nil {
 			return
 		}
 
-		c.state = StateTransferCompleted
+		c.mu.Lock()
+		// A concurrent Cancel may have moved the session on while the lock was
+		// released, so only a still-transferring session completes here.
+		if c.state == StateTransferring {
+			c.state = StateTransferCompleted
+		}
+		c.mu.Unlock()
+
 		log.G(ctx).Info("migration transfer completed")
 	}()
 
@@ -174,6 +196,16 @@ func (c *Controller) Transfer(ctx context.Context, sessionID string, timeout tim
 // failTransfer marks the session failed and surfaces err to notification
 // subscribers as a PHASE_FAILED event.
 func (c *Controller) failTransfer(ctx context.Context, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Cancel takes precedence: a session canceled while the transfer ran owns
+	// the outcome, so the expected transfer error is swallowed without failing.
+	if c.state == StateCancelled {
+		log.G(ctx).WithError(err).Debug("migration transfer error ignored; session cancelled")
+		return
+	}
+
 	c.state = StateFailed
 
 	log.G(ctx).WithError(err).Error("migration transfer failed")
@@ -211,6 +243,7 @@ func sessionIDToUint32(sessionID string) uint32 {
 }
 
 // runTransfer issues the per-origin HCS calls for the memory transfer.
+// Caller should ensure that it is called at most once.
 func (c *Controller) runTransfer(ctx context.Context) error {
 	config := &hcs.MigrationConfig{
 		Socket:    syscall.Handle(c.dupSocket),
@@ -251,13 +284,20 @@ func (c *Controller) Finalize(ctx context.Context, sessionID string, action migr
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Idempotent: an already-finalized session succeeds without redoing work.
-	if c.state == StateFinalized {
+	if c.sessionID != sessionID {
+		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
+	}
+
+	// Nothing to finalize, so return early: the session is already finalized
+	// (idempotent repeat), idle (no active session), or a canceled destination,
+	// which winds down directly through Cleanup rather than Finalize.
+	if c.state == StateFinalized || c.state == StateIdle ||
+		(c.origin == hcsschema.MigrationOriginDestination && c.state == StateCancelled) {
 		return nil
 	}
 
-	// Finalize is valid only after a completed transfer or a cancellation.
-	if c.state != StateTransferCompleted && c.state != StateCancelled {
+	// Finalize is valid only after a completed transfer, a cancellation or a failure.
+	if c.state != StateTransferCompleted && c.state != StateCancelled && c.state != StateFailed {
 		return fmt.Errorf("finalize not valid in state %s: %w", c.state, errdefs.ErrFailedPrecondition)
 	}
 
@@ -272,17 +312,38 @@ func (c *Controller) Finalize(ctx context.Context, sessionID string, action migr
 		return fmt.Errorf("unsupported finalize action %s: %w", action, errdefs.ErrInvalidArgument)
 	}
 
-	// Apply the final operation (resume or stop) to the underlying VM.
-	if err := c.vmController.FinalizeLiveMigration(ctx,
-		&hcsschema.MigrationFinalizedOptions{
-			Origin:             c.origin,
-			FinalizedOperation: finalOp,
-		}); err != nil {
-		return fmt.Errorf("finalize live migration (origin=%s, action=%s): %w", c.origin, action, err)
+	// Reconcile the requested operation against the VM's migration state. A first
+	// finalize finds the VM still migrating and drives it; a retry after a
+	// partially applied finalize finds the VM already settled and reconciles
+	// against where it landed rather than re-issuing finalize.
+	switch c.vmController.State() {
+	case vm.StateTerminated:
+		// A prior stop finalize already tore the VM down: a repeat stop is a
+		// no-op, while a resume is no longer possible.
+		if finalOp == hcsschema.MigrationFinalOperationResume {
+			return fmt.Errorf("cannot resume finalize: VM already terminated by a stop finalize: %w", errdefs.ErrFailedPrecondition)
+		}
+	case vm.StateMigrationFinalized:
+		// A prior resume finalize already completed on the VM: a stop now tears
+		// it down, while a repeat resume falls through to re-run the resume steps.
+		if finalOp == hcsschema.MigrationFinalOperationStop {
+			if err := c.vmController.TerminateVM(ctx); err != nil {
+				return fmt.Errorf("terminate resumed vm on stop finalize: %w", err)
+			}
+		}
+	default:
+		// The VM is still migrating: apply the final operation.
+		if err := c.vmController.FinalizeLiveMigration(ctx,
+			&hcsschema.MigrationFinalizedOptions{
+				Origin:             c.origin,
+				FinalizedOperation: finalOp,
+			}); err != nil {
+			return fmt.Errorf("finalize live migration (origin=%s, action=%s): %w", c.origin, action, err)
+		}
 	}
 
-	// On RESUME, rebuild the GCS bridge. Destination also walks pods to
-	// reattach gcs.Container/gcs.Process; source has nothing else to restore.
+	// On RESUME, resume the VM (the source also rebuilds its GCS bridge), then
+	// resume every pod on both sides to reattach containers and lift the freeze.
 	if finalOp == hcsschema.MigrationFinalOperationResume {
 		switch c.origin {
 		case hcsschema.MigrationOriginDestination:
@@ -313,28 +374,6 @@ func (c *Controller) Finalize(ctx context.Context, sessionID string, action migr
 		}
 	}
 
-	if finalOp == hcsschema.MigrationFinalOperationStop {
-		// For both source and destination, there is nothing to do for VM.
-		// vm.FinalizeLiveMigration + STOP will stop the VM itself.
-		// We only need to take care of tasks.
-		switch c.origin {
-		case hcsschema.MigrationOriginDestination:
-			// On the destination side, we would not create the exit handlers until resume
-			// which happens in Finalize + Resume. Therefore, containers would not have
-			// any way to report the exit event. Hence, we explicitly abort the
-			// in-migration tasks.
-			for _, podCtrl := range c.podControllers {
-				podCtrl.AbortMigrated(ctx, events)
-			}
-		case hcsschema.MigrationOriginSource:
-			// On the source side, all the exit handlers for containers and processes
-			// are already running. Therefore, during vm.FinalizeLiveMigration, if the
-			// operation was stop, we would collapse the bridge which would lead to all
-			// the exit handlers observing the VM exiting and report the exit event.
-			// Therefore, nothing to do here.
-		}
-	}
-
 	// Mark the session finalized so Cleanup can run and repeat calls no-op.
 	c.state = StateFinalized
 
@@ -349,21 +388,47 @@ func (c *Controller) Cancel(ctx context.Context, sessionID string) error {
 	defer c.mu.Unlock()
 
 	if c.sessionID != sessionID {
-		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrFailedPrecondition)
+		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
 	}
 
-	// Idempotent: already canceled.
-	if c.state == StateCancelled {
+	// Idempotent: already canceled or not initialized.
+	if c.state == StateIdle || c.state == StateCancelled || c.state == StateCancelling {
 		return nil
 	}
 
-	// TODO: call into HCS to cancel the in-flight migration once the cancel API is available.
+	// The destination imported the snapshot but never materialized the HCS
+	// compute system (that happens in PrepareDestination), so there is no live
+	// migration to abort. Mark it canceled directly so Cleanup can wind the
+	// session down.
+	if c.state == StateDestinationImported {
+		c.state = StateCancelled
+		log.G(ctx).Info("migration session cancelled")
+		return nil
+	}
 
-	// Mark the session canceled; Cleanup later returns it to idle.
+	// Enter the cancelling state before the abort so a concurrent transfer yields
+	// instead of completing; a successful abort then marks the session cancelled.
+	c.state = StateCancelling
+
+	if err := c.cancelLiveMigration(ctx); err != nil {
+		// Abort did not take hold; mark failed so the caller can retry Cancel.
+		c.state = StateFailed
+		return fmt.Errorf("cancel live migration: %w", err)
+	}
+
 	c.state = StateCancelled
 
 	log.G(ctx).Info("migration session cancelled")
 	return nil
+}
+
+// cancelLiveMigration issues the HCS abort with c.mu released so the possibly
+// blocking call does not stall other callers, re-acquiring it before returning.
+// Must be called with c.mu held.
+func (c *Controller) cancelLiveMigration(ctx context.Context) error {
+	c.mu.Unlock()
+	defer c.mu.Lock()
+	return c.vmController.CancelLiveMigration(ctx)
 }
 
 // Cleanup is the terminal call of a migration session on either side. It
@@ -381,12 +446,18 @@ func (c *Controller) Cleanup(ctx context.Context, sessionID string, events chan 
 	}
 
 	if c.sessionID != sessionID {
-		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrFailedPrecondition)
+		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
 	}
 
-	// Cleanup is only valid once the session has been finalized.
-	if c.state != StateFinalized {
-		return fmt.Errorf("cleanup not valid in state %s: %w", c.state, errdefs.ErrFailedPrecondition)
+	// Cleanup is valid only from a settled state:
+	//   - StateFinalized: either side after a successful Finalize. The normal
+	//     path finalizes both ends; a cancel or error still finalizes the source.
+	//   - StateCancelled: the destination only, whose Finalize is a no-op, so it
+	//     cleans up directly from the canceled state.
+	canCleanup := c.state == StateFinalized ||
+		(c.origin == hcsschema.MigrationOriginDestination && c.state == StateCancelled)
+	if !canCleanup {
+		return fmt.Errorf("cleanup not valid for %s in state %s: %w", c.origin, c.state, errdefs.ErrFailedPrecondition)
 	}
 
 	// The transport socket is unused past this point and the notifier is
@@ -398,6 +469,7 @@ func (c *Controller) Cleanup(ctx context.Context, sessionID string, events chan 
 		c.dupSocket = 0
 	}
 
+	// Tear down the notifier: stop the forwarder and close all subscriber streams.
 	if c.notifier != nil {
 		c.notifier.close()
 		c.notifier = nil

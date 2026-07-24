@@ -4,9 +4,11 @@ package mount
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	scsisave "github.com/Microsoft/hcsshim/internal/controller/device/scsi/save"
+	"github.com/containerd/errdefs"
 )
 
 func TestSave_ErrorWhenUnmounted(t *testing.T) {
@@ -14,8 +16,13 @@ func TestSave_ErrorWhenUnmounted(t *testing.T) {
 	if err := m.UnmountFromGuest(context.Background(), newDefaultUnmounter()); err != nil {
 		t.Fatalf("setup UnmountFromGuest: %v", err)
 	}
-	if _, err := m.Save(); err == nil {
+	// An unmounted mount cannot be saved; the failure is a failed precondition.
+	_, err := m.Save()
+	if err == nil {
 		t.Fatal("expected error saving an unmounted mount")
+	}
+	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	save "github.com/Microsoft/hcsshim/internal/controller/migration/save"
-	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 
@@ -17,8 +16,7 @@ import (
 )
 
 // PrepareSource readies the source side of a migration session so a subsequent
-// [Controller.ExportState] can capture its state. A repeat call for the same
-// session is a no-op.
+// [Controller.ExportState] can capture its state.
 func (c *Controller) PrepareSource(ctx context.Context, opts *PrepareSourceOptions) error {
 	switch {
 	case opts == nil:
@@ -35,24 +33,7 @@ func (c *Controller) PrepareSource(ctx context.Context, opts *PrepareSourceOptio
 	defer c.mu.Unlock()
 
 	if c.state != StateIdle {
-		// If we already called this API, then this is a no-op.
-		if c.state == StateSourcePrepared && c.sessionID == opts.SessionID {
-			return nil
-		}
 		return fmt.Errorf("controller is in state %s for session %q: %w", c.state, c.sessionID, errdefs.ErrFailedPrecondition)
-	}
-
-	// VM must be running in order to initiate the migration.
-	if opts.VMController.State() != vm.StateRunning {
-		return fmt.Errorf("vm controller is in invalid state %s: %w", opts.VMController.State(), errdefs.ErrFailedPrecondition)
-	}
-
-	// The sandbox must have been created with live migration enabled.
-	// Reject otherwise so callers learn the session cannot proceed before
-	// any source-side state is mutated.
-	sandboxOpts := opts.VMController.SandboxOptions()
-	if sandboxOpts == nil || !sandboxOpts.LiveMigrationSupportEnabled {
-		return fmt.Errorf("sandbox is not configured to allow live migration: %w", errdefs.ErrFailedPrecondition)
 	}
 
 	if opts.MigrationOpts == nil {
@@ -61,6 +42,7 @@ func (c *Controller) PrepareSource(ctx context.Context, opts *PrepareSourceOptio
 	opts.MigrationOpts.Origin = opts.Origin
 
 	// Prepare the running source VM; afterward it accepts only live-migration compatible calls.
+	// The session is recorded only after this succeeds; on failure the controller is left unchanged.
 	if err := opts.VMController.InitializeLiveMigrationOnSource(ctx, opts.MigrationOpts); err != nil {
 		return fmt.Errorf("initialize live migration on source vm: %w", err)
 	}
@@ -78,8 +60,9 @@ func (c *Controller) PrepareSource(ctx context.Context, opts *PrepareSourceOptio
 // ExportState captures the prepared source sandbox into an opaque, versioned
 // saved state that the destination consumes via [Controller.ImportState]. The VM
 // and per-pod payloads it carries are themselves opaque, owned by their
-// respective controllers. A repeat call returns a fresh snapshot.
-func (c *Controller) ExportState(ctx context.Context, sessionID string) (*anypb.Any, error) {
+// respective controllers. A repeat call after a successful export is rejected,
+// and a failure partway through leaves the session unusable.
+func (c *Controller) ExportState(ctx context.Context, sessionID string) (_ *anypb.Any, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -87,10 +70,19 @@ func (c *Controller) ExportState(ctx context.Context, sessionID string) (*anypb.
 		return nil, fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
 	}
 
-	// Allow re-export after a prior success so duplicate calls are idempotent.
-	if c.state != StateSourcePrepared && c.state != StateSourceExported {
+	if c.state != StateSourcePrepared {
 		return nil, fmt.Errorf("export requires state %s or %s (current: %s): %w", StateSourcePrepared, StateSourceExported, c.state, errdefs.ErrFailedPrecondition)
 	}
+
+	// Past the state guard the source begins producing its snapshot, so any
+	// failure leaves the session partially exported and unsafe to retry.
+	// Poison the controller into StateFailed.
+	defer func() {
+		if err != nil {
+			c.state = StateFailed
+			log.G(ctx).WithError(err).Error("migration source export failed, moving to invalid state")
+		}
+	}()
 
 	// Save the VM state.
 	vmAny, err := c.vmController.Save(ctx)

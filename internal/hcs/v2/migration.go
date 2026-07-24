@@ -241,6 +241,30 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, opts *hc
 	return nil
 }
 
+// CancelLiveMigration is currently a stub: it verifies the compute system is
+// still open and returns success without contacting HCS or interrupting any
+// migration (pending the compute-core cancel API).
+//
+// It deliberately takes no handleLock so that, once implemented, it can interrupt
+// an in-flight transfer that holds it.
+func (computeSystem *System) CancelLiveMigration(ctx context.Context) (err error) {
+	operation := "hcs::System::CancelLiveMigration"
+
+	_, span := ot.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
+
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
+	}
+
+	// TODO: wire this to the HcsCancelLiveMigration compute-core API once it is
+	//  available. Until then this is a stub that reports success without contacting HCS.
+
+	return nil
+}
+
 // MigrationNotifications returns a read-only channel of live migration events
 // for this System. The channel exists for the System's lifetime and is safe
 // to subscribe to before any migration call, so callers do not miss early
