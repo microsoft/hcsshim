@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29
@@ -26,9 +26,9 @@ require (
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/grpc v1.82.1
-	google.golang.org/protobuf v1.36.11
-	k8s.io/cri-api v0.34.1
-	k8s.io/cri-client v0.34.1
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
+	k8s.io/cri-api v0.36.3
+	k8s.io/cri-client v0.36.3
 )
 
 require (
