@@ -9,8 +9,6 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
@@ -38,14 +36,15 @@ func (c *Controller) InitializeLiveMigrationOnSource(ctx context.Context, option
 	// Live migration requires the guest log relay to run in reconnect mode so it can
 	// re-dial the destination host's log listener after the move.
 	var kernelCmdLine string
-	if chipset := c.hcsDocument.VirtualMachine.Chipset; chipset != nil {
-		if chipset.LinuxKernelDirect != nil {
+	if c.hcsDocument != nil && c.hcsDocument.VirtualMachine != nil && c.hcsDocument.VirtualMachine.Chipset != nil {
+		switch chipset := c.hcsDocument.VirtualMachine.Chipset; {
+		case chipset.LinuxKernelDirect != nil:
 			kernelCmdLine = chipset.LinuxKernelDirect.KernelCmdLine
-		} else if chipset.Uefi != nil && chipset.Uefi.BootThis != nil {
+		case chipset.Uefi != nil && chipset.Uefi.BootThis != nil:
 			kernelCmdLine = chipset.Uefi.BootThis.OptionalData
 		}
 	}
-	if !strings.Contains(kernelCmdLine, fmt.Sprintf("/bin/vsockexec -r -e %d", vmutils.LinuxLogVsockPort)) {
+	if !strings.Contains(kernelCmdLine, vmutils.LinuxLogForwarderCommand(true)) {
 		return fmt.Errorf("cannot initialize live migration on source: VM was not created with live-migration support enabled")
 	}
 
@@ -132,19 +131,6 @@ func (c *Controller) StartWithMigrationOptions(ctx context.Context, config *hcs.
 		return fmt.Errorf("cannot start with migration options: VM is in state %s", c.vmState)
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
-	defer func() {
-		_ = g.Wait()
-	}()
-
-	// The source's log listener is host-local and does not transfer with the
-	// migration. Arm a fresh listener on the destination before start so the
-	// resumed guest's vsockexec (reconnect mode) can re-dial LinuxLogVsockPort
-	// and resume streaming GCS logs without racing the guest's dial.
-	if err := c.setupLoggingListener(gctx, g); err != nil {
-		return fmt.Errorf("failed to set up logging listener: %w", err)
-	}
-
 	// Arm the host-side GCS listener before start so the guest's dial cannot race it.
 	if err := c.guest.PrepareConnection(winio.VsockServiceID(prot.LinuxGcsVsockPort)); err != nil {
 		return fmt.Errorf("prepare destination gcs connection: %w", err)
@@ -157,11 +143,6 @@ func (c *Controller) StartWithMigrationOptions(ctx context.Context, config *hcs.
 
 	// Watch for VM exit in the background.
 	go c.waitForVMExit(ctx)
-
-	// Collect any errors from establishing the log connection.
-	if err := g.Wait(); err != nil {
-		return err
-	}
 
 	c.vmState = StateDestinationMigrationStarted
 

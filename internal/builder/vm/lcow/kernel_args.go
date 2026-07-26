@@ -198,19 +198,14 @@ func buildGCSCommand(
 	disableTimeSyncService bool,
 	processDumpLocation string,
 ) string {
-	// Start with vsockexec wrapper
 	var cmdParts []string
-	cmdParts = append(cmdParts, "/bin/vsockexec")
 
+	// Start with the vsockexec log forwarder.
 	// When live migration is enabled, run vsockexec in reconnect mode (-r) so
 	// guest logging tolerates the host log listener being absent at boot and
 	// reconnects to the destination host's listener after a migration.
-	if oci.ParseAnnotationsBool(ctx, annotations, shimannotations.LiveMigrationSupportEnabled, false) {
-		cmdParts = append(cmdParts, "-r")
-	}
-
-	// Add logging vsock port
-	cmdParts = append(cmdParts, fmt.Sprintf("-e %d", vmutils.LinuxLogVsockPort))
+	reconnect := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.LiveMigrationSupportEnabled, false)
+	cmdParts = append(cmdParts, vmutils.LinuxLogForwarderCommand(reconnect))
 
 	// Determine log level
 	logLevel := "info"

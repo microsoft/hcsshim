@@ -15,10 +15,11 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/Microsoft/go-winio"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -213,6 +214,27 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 		return fmt.Errorf("cannot resume from migration: VM is in state %s", c.vmState)
 	}
 
+	// On the destination, the log connection was never established.
+	// On source, the blackout dropped the source's GCS log connection, which tore
+	// down its listener and closed logOutputDone. Install a fresh signal and
+	// re-arm the listener so the resumed guest's reconnect-mode vsockexec can
+	// reconnect and host-side logs resume.
+	c.logOutputDone = make(chan struct{})
+	// We expect the reconnect to complete within the GCS connection timeout,
+	// otherwise we want to fail.
+	ctx, cancel := context.WithTimeout(ctx, timeout.GCSConnectionTimeout)
+	log.G(ctx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
+
+	g, gctx := errgroup.WithContext(ctx)
+	defer func() {
+		_ = g.Wait()
+	}()
+	defer cancel()
+
+	if err := c.setupLoggingListener(gctx, g); err != nil {
+		return fmt.Errorf("re-arm logging listener on resume: %w", err)
+	}
+
 	switch {
 	case rebuildBridge:
 		// Source rollback: re-arm the listener and swap the bridge transport
@@ -223,32 +245,17 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 		if err := c.guest.ResumeConnection(ctx); err != nil {
 			return fmt.Errorf("resume guest connection: %w", err)
 		}
-
-		// The blackout also dropped the source's GCS log connection, which tore
-		// down its listener and closed logOutputDone. Install a fresh signal and
-		// re-arm the listener so the resumed guest's reconnect-mode vsockexec can
-		// reconnect and host-side logs resume. The accept runs in the background
-		// (WithoutCancel so it outlives this call; AcceptConnection still returns
-		// on VM exit) so a slow guest re-dial cannot stall resume.
-		c.logOutputDone = make(chan struct{})
-		g, gctx := errgroup.WithContext(ctx)
-		defer func() {
-			_ = g.Wait()
-		}()
-
-		if err := c.setupLoggingListener(gctx, g); err != nil {
-			return fmt.Errorf("re-arm logging listener on resume: %w", err)
-		}
-
-		// Collect any errors from establishing the log connection.
-		if err := g.Wait(); err != nil {
-			return err
-		}
 	default:
 		// Destination: reuse the connection already armed at start.
 		if err := c.guest.CreateConnection(ctx, false); err != nil {
 			return fmt.Errorf("resume guest connection: %w", err)
 		}
+	}
+
+	// Collect any errors from establishing the log connection.
+	// If the connection is not established then we need to error out.
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	// Clear migrating flag only now that the new transport is in place.

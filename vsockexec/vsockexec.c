@@ -85,6 +85,13 @@ static int dial_retry(unsigned int port) {
 // from that pipe and forwards the data to the host. If the host connection is
 // missing or drops, only run_relay notices; it quietly reconnects and keeps
 // going, so the program never sees a problem and stays alive.
+//
+// This mode is intentionally scoped to that one job: forward a single GCS log
+// stream to a single host listener. It ignores stdin (-i) and merges stdout and
+// stderr onto one output port instead of acting as a general stdio forwarder --
+// a reconnecting input stream or a second output port would each need their own
+// buffering and reconnect logic that the logging use case never needs. The
+// default (non -r) path still forwards -i/-o/-e independently.
 static int run_relay(unsigned int ports[3], char** child_argv) {
     // In reconnect mode we forward the program's OUTPUT (stdout and/or stderr)
     // to one host port. Use whichever output port was requested.
