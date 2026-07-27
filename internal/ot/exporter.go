@@ -2,6 +2,7 @@ package ot
 
 import (
 	"context"
+	"maps"
 
 	"github.com/sirupsen/logrus"
 
@@ -21,7 +22,7 @@ type LogrusExporter struct{}
 
 var _ sdktrace.SpanExporter = &LogrusExporter{}
 
-// ExportSpan exports each `spans` based on the the following rules:
+// ExportSpans exports each `spans` based on the following rules:
 //
 // 1. All output will contain `s.Attributes`, `s.SpanKind`, `s.TraceID`,
 // `s.SpanID`, and `s.ParentSpanID` for correlation
@@ -35,7 +36,7 @@ func (le *LogrusExporter) ExportSpans(ctx context.Context, spans []sdktrace.Read
 	for _, s := range spans {
 		if s.DroppedAttributes() > 0 {
 			logrus.WithFields(logrus.Fields{
-				"name":            s.Name,
+				"name":            s.Name(),
 				logfields.TraceID: s.SpanContext().TraceID().String(),
 				logfields.SpanID:  s.SpanContext().SpanID().String(),
 				"dropped":         s.DroppedAttributes(),
@@ -46,15 +47,13 @@ func (le *LogrusExporter) ExportSpans(ctx context.Context, spans []sdktrace.Read
 		entry := log.L.Dup()
 		// Combine all span annotations with span data (eg, trace ID, span ID, parent span ID,
 		// error, status code)
-		// Span attributes are guaranteed to be  strings, bools, or int64s, so we can
-		// can skip overhead in entry.WithFields() and add them directly to entry.Data.
+		// Span attributes are guaranteed to be strings, bools, or int64s, so we can
+		// skip overhead in entry.WithFields() and add them directly to entry.Data.
 		// Preallocate ahead of time, since we should add, at most, 10 additional entries
 		data := make(logrus.Fields, len(entry.Data)+len(s.Attributes())+10)
 
 		// Default log entry may have prexisting/application-wide data
-		for k, v := range entry.Data {
-			data[k] = v
-		}
+		maps.Copy(data, entry.Data)
 		for _, attr := range s.Attributes() {
 			data[string(attr.Key)] = attr.Value.AsInterface()
 		}
