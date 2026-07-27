@@ -86,3 +86,32 @@ func TestDefaultLCOWOSBootFilesPath_PathConstruction(t *testing.T) {
 		t.Errorf("DefaultLCOWOSBootFilesPath() returned unexpected base path: %q", base)
 	}
 }
+
+func TestLinuxLogForwarderCommand(t *testing.T) {
+	// Golden strings lock the exact command the migration gate matches on, so
+	// any flag/spacing drift fails here. 109 is LinuxLogVsockPort.
+	tests := []struct {
+		name      string
+		reconnect bool
+		want      string
+	}{
+		{
+			name:      "default mode omits the reconnect flag",
+			reconnect: false,
+			want:      "/bin/vsockexec -e 109",
+		},
+		{
+			name:      "reconnect mode adds the -r flag",
+			reconnect: true,
+			want:      "/bin/vsockexec -r -e 109",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := LinuxLogForwarderCommand(tt.reconnect); got != tt.want {
+				t.Errorf("LinuxLogForwarderCommand(%v) = %q, want %q", tt.reconnect, got, tt.want)
+			}
+		})
+	}
+}

@@ -6,14 +6,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Microsoft/go-winio"
-
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 // compatibilityInfoProperty is the HCS property name used to retrieve the
@@ -30,6 +31,21 @@ func (c *Controller) InitializeLiveMigrationOnSource(ctx context.Context, option
 	// Only a running VM can begin a migration.
 	if c.vmState != StateRunning {
 		return fmt.Errorf("cannot initialize live migration on source: VM is in state %s", c.vmState)
+	}
+
+	// Live migration requires the guest log relay to run in reconnect mode so it can
+	// re-dial the destination host's log listener after the move.
+	var kernelCmdLine string
+	if c.hcsDocument != nil && c.hcsDocument.VirtualMachine != nil && c.hcsDocument.VirtualMachine.Chipset != nil {
+		switch chipset := c.hcsDocument.VirtualMachine.Chipset; {
+		case chipset.LinuxKernelDirect != nil:
+			kernelCmdLine = chipset.LinuxKernelDirect.KernelCmdLine
+		case chipset.Uefi != nil && chipset.Uefi.BootThis != nil:
+			kernelCmdLine = chipset.Uefi.BootThis.OptionalData
+		}
+	}
+	if !strings.Contains(kernelCmdLine, vmutils.LinuxLogForwarderCommand(true)) {
+		return fmt.Errorf("cannot initialize live migration on source: VM was not created with live-migration support enabled")
 	}
 
 	// Hand the initialize request to the HCS for the UVM.
@@ -127,6 +143,7 @@ func (c *Controller) StartWithMigrationOptions(ctx context.Context, config *hcs.
 
 	// Watch for VM exit in the background.
 	go c.waitForVMExit(ctx)
+
 	c.vmState = StateDestinationMigrationStarted
 
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("started destination VM with migration options")

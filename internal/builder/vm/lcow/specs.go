@@ -229,7 +229,6 @@ func BuildSandboxConfig(
 			bootOptions.LinuxKernelDirect != nil, // isKernelDirectBoot
 			comPorts != nil,                      // hasConsole
 			filepath.Base(rootFsFullPath),
-			sandboxOptions.LiveMigrationSupportEnabled,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to build kernel args: %w", err)
@@ -338,10 +337,9 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 	log.G(ctx).WithField("platform", platform).Debug("parseSandboxOptions: starting sandbox options parsing")
 	sandboxOptions := &SandboxOptions{
 		// Extract architecture from platform string (e.g., "linux/amd64" -> "amd64")
-		Architecture:                platform[strings.IndexByte(platform, '/')+1:],
-		PolicyBasedRouting:          oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
-		NoWritableFileShares:        oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
-		LiveMigrationSupportEnabled: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.LiveMigrationSupportEnabled, false),
+		Architecture:         platform[strings.IndexByte(platform, '/')+1:],
+		PolicyBasedRouting:   oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
+		NoWritableFileShares: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
 	}
 
 	// Determine if this is a confidential VM early, as it affects boot options parsing

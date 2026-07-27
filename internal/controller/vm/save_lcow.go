@@ -15,7 +15,9 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/Microsoft/go-winio"
 	"google.golang.org/protobuf/proto"
@@ -212,6 +214,27 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 		return fmt.Errorf("cannot resume from migration: VM is in state %s", c.vmState)
 	}
 
+	// On the destination, the log connection was never established.
+	// On source, the blackout dropped the source's GCS log connection, which tore
+	// down its listener and closed logOutputDone. Install a fresh signal and
+	// re-arm the listener so the resumed guest's reconnect-mode vsockexec can
+	// reconnect and host-side logs resume.
+	c.logOutputDone = make(chan struct{})
+	// We expect the reconnect to complete within the GCS connection timeout,
+	// otherwise we want to fail.
+	ctx, cancel := context.WithTimeout(ctx, timeout.GCSConnectionTimeout)
+	log.G(ctx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
+
+	g, gctx := errgroup.WithContext(ctx)
+	defer func() {
+		_ = g.Wait()
+	}()
+	defer cancel()
+
+	if err := c.setupLoggingListener(gctx, g); err != nil {
+		return fmt.Errorf("re-arm logging listener on resume: %w", err)
+	}
+
 	switch {
 	case rebuildBridge:
 		// Source rollback: re-arm the listener and swap the bridge transport
@@ -227,6 +250,12 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 		if err := c.guest.CreateConnection(ctx, false); err != nil {
 			return fmt.Errorf("resume guest connection: %w", err)
 		}
+	}
+
+	// Collect any errors from establishing the log connection.
+	// If the connection is not established then we need to error out.
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	// Clear migrating flag only now that the new transport is in place.
@@ -251,18 +280,6 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 	}
 
 	c.vmState = StateRunning
-
-	if c.sandboxOptions != nil {
-		c.sandboxOptions.LiveMigrationSupportEnabled = true
-	}
-
-	// Destination never ran setupLoggingListener; close so [Controller.Wait]
-	// does not block. Already closed on source — receive falls through.
-	select {
-	case <-c.logOutputDone:
-	default:
-		close(c.logOutputDone)
-	}
 
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("resumed VM from migration")
 	return nil
