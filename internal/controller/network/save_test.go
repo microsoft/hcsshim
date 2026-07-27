@@ -3,9 +3,11 @@
 package network
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/containerd/errdefs"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -42,17 +44,17 @@ func configuredController(eps map[string]*hcn.HostComputeEndpoint) *Controller {
 // Save
 // ─────────────────────────────────────────────────────────────────────────────
 
-// TestSave_RejectsUnstableState verifies that a snapshot is only produced from
-// a fully-configured network; every other state yields an error and no payload.
+// TestSave_RejectsUnstableState verifies a snapshot is refused for states other
+// than a configured or already-saved network, yielding an error and no payload.
 func TestSave_RejectsUnstableState(t *testing.T) {
-	for _, st := range []State{StateNotConfigured, StateInvalid, StateTornDown, StateDestinationMigrating, StateSourceMigrating} {
+	for _, st := range []State{StateNotConfigured, StateInvalid, StateTornDown, StateDestinationMigrating} {
 		t.Run(st.String(), func(t *testing.T) {
 			c := configuredController(map[string]*hcn.HostComputeEndpoint{})
 			c.netState = st
 
 			env, err := c.Save(t.Context())
-			if err == nil {
-				t.Fatalf("expected error saving from state %s, got nil", st)
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Fatalf("expected ErrFailedPrecondition saving from state %s, got %v", st, err)
 			}
 			if env != nil {
 				t.Errorf("expected nil envelope on failure, got %+v", env)
@@ -119,6 +121,20 @@ func TestSave_Success(t *testing.T) {
 	}
 }
 
+// TestSave_FromSourceMigrating verifies a re-save of an already-migrating source
+// still succeeds, so a retried export is safe.
+func TestSave_FromSourceMigrating(t *testing.T) {
+	c := configuredController(map[string]*hcn.HostComputeEndpoint{})
+	c.netState = StateSourceMigrating
+
+	if _, err := c.Save(t.Context()); err != nil {
+		t.Fatalf("Save() from SourceMigrating = %v; want nil", err)
+	}
+	if c.netState != StateSourceMigrating {
+		t.Errorf("netState = %s; want unchanged StateSourceMigrating", c.netState)
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Import
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,17 +144,18 @@ func TestSave_Success(t *testing.T) {
 // unknown schema version, or a binding missing its NIC key.
 func TestImport_Rejects(t *testing.T) {
 	cases := []struct {
-		name string
-		env  *anypb.Any
+		name   string
+		env    *anypb.Any
+		wantIs error
 	}{
-		{"NilEnvelope", nil},
-		{"WrongTypeURL", &anypb.Any{TypeUrl: "type.microsoft.com/bogus", Value: nil}},
-		{"CorruptPayload", &anypb.Any{TypeUrl: netsave.TypeURL, Value: []byte{0x08}}},
-		{"SchemaMismatch", mustEnvelope(t, &netsave.Payload{SchemaVersion: netsave.SchemaVersion + 1})},
+		{"NilEnvelope", nil, errdefs.ErrInvalidArgument},
+		{"WrongTypeURL", &anypb.Any{TypeUrl: "type.microsoft.com/bogus", Value: nil}, errdefs.ErrInvalidArgument},
+		{"CorruptPayload", &anypb.Any{TypeUrl: netsave.TypeURL, Value: []byte{0x08}}, nil},
+		{"SchemaMismatch", mustEnvelope(t, &netsave.Payload{SchemaVersion: netsave.SchemaVersion + 1}), errdefs.ErrInvalidArgument},
 		{"EmptyNICKey", mustEnvelope(t, &netsave.Payload{
 			SchemaVersion: netsave.SchemaVersion,
 			VmEndpoints:   map[string]*netsave.EndpointBinding{"": {EndpointID: "ep-1"}},
-		})},
+		}), nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -148,6 +165,9 @@ func TestImport_Rejects(t *testing.T) {
 			}
 			if c != nil {
 				t.Errorf("expected nil controller on failure, got %+v", c)
+			}
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Errorf("expected error to wrap %v, got %v", tc.wantIs, err)
 			}
 		})
 	}
@@ -243,8 +263,9 @@ func TestPatch_RejectsNonDestinationMigrating(t *testing.T) {
 	for _, st := range []State{StateNotConfigured, StateConfigured, StateInvalid, StateTornDown, StateSourceMigrating} {
 		t.Run(st.String(), func(t *testing.T) {
 			c := &Controller{netState: st}
-			if err := c.Patch(t.Context(), "dst-ns"); err == nil {
-				t.Errorf("Patch() in state %s = nil; want error", st)
+			err := c.Patch(t.Context(), "dst-ns")
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("Patch() in state %s = %v; want ErrFailedPrecondition", st, err)
 			}
 		})
 	}
@@ -272,15 +293,38 @@ func TestResume_TransitionsToConfigured(t *testing.T) {
 	}
 }
 
-// TestResume_RejectsNonMigrating verifies Resume is refused unless the network
-// is mid-migration on the source or destination.
+// TestResume_RejectsNonMigrating verifies Resume is refused for states that are
+// neither mid-migration nor already configured.
 func TestResume_RejectsNonMigrating(t *testing.T) {
-	for _, st := range []State{StateNotConfigured, StateConfigured, StateInvalid, StateTornDown} {
+	for _, st := range []State{StateNotConfigured, StateInvalid, StateTornDown} {
 		t.Run(st.String(), func(t *testing.T) {
 			c := &Controller{netState: st, vmEndpoints: map[string]*hcn.HostComputeEndpoint{}}
-			if err := c.Resume(t.Context(), (*vmmanager.UtilityVM)(nil), (*guestmanager.Guest)(nil)); err == nil {
-				t.Errorf("Resume() in state %s = nil; want error", st)
+			err := c.Resume(t.Context(), (*vmmanager.UtilityVM)(nil), (*guestmanager.Guest)(nil))
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("Resume() in state %s = %v; want ErrFailedPrecondition", st, err)
 			}
 		})
+	}
+}
+
+// TestResume_IdempotentWhenConfigured verifies that resuming an already-resumed
+// network is a no-op, so a retry after a completed resume is safe.
+func TestResume_IdempotentWhenConfigured(t *testing.T) {
+	c := &Controller{netState: StateConfigured, vmEndpoints: map[string]*hcn.HostComputeEndpoint{}}
+	if err := c.Resume(t.Context(), (*vmmanager.UtilityVM)(nil), (*guestmanager.Guest)(nil)); err != nil {
+		t.Fatalf("Resume() = %v; want nil", err)
+	}
+	if c.netState != StateConfigured {
+		t.Errorf("netState = %s; want unchanged Configured", c.netState)
+	}
+}
+
+// TestResetAfterMigration_IdempotentWhenReset verifies that a second reset, once
+// migratedNamespaceID has been cleared, is a no-op rather than re-binding or
+// failing on the empty namespace ID.
+func TestResetAfterMigration_IdempotentWhenReset(t *testing.T) {
+	c := &Controller{migratedNamespaceID: "", vmEndpoints: map[string]*hcn.HostComputeEndpoint{}}
+	if err := c.ResetAfterMigration(t.Context()); err != nil {
+		t.Fatalf("ResetAfterMigration() = %v; want nil", err)
 	}
 }

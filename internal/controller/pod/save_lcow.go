@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/containerd/containerd/api/runtime/task/v3"
+	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 
@@ -88,7 +89,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 	}
 
 	if env.GetTypeUrl() != podsave.TypeURL {
-		return nil, fmt.Errorf("unsupported pod saved-state type %q", env.GetTypeUrl())
+		return nil, fmt.Errorf("unsupported pod saved-state type %q: %w", env.GetTypeUrl(), errdefs.ErrInvalidArgument)
 	}
 
 	// Decode and reject any payload this build cannot interpret.
@@ -98,7 +99,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 	}
 
 	if v := state.GetSchemaVersion(); v != podsave.SchemaVersion {
-		return nil, fmt.Errorf("unsupported pod saved-state schema version %d (want %d)", v, podsave.SchemaVersion)
+		return nil, fmt.Errorf("unsupported pod saved-state schema version %d (want %d): %w", v, podsave.SchemaVersion, errdefs.ErrInvalidArgument)
 	}
 
 	// Restore the network controller in its own inert state.
@@ -142,14 +143,13 @@ func (c *Controller) Resume(ctx context.Context, vm vmController, events chan in
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Resume only applies to a pod that is mid-migration.
+	// Idempotent: a pod fully resumed by a prior attempt is a no-op on retry.
 	if !c.isMigrating {
-		return fmt.Errorf("pod %q is not migrating; nothing to resume", c.podID)
+		return nil
 	}
 
-	// Bind the live VM and re-wire the network to it.
+	// Bind the live VM; the network is re-wired to it below.
 	c.vm = vm
-	c.isMigrating = false
 
 	if err := c.network.Resume(ctx, vm.VM(), vm.Guest()); err != nil {
 		return fmt.Errorf("resume network for migration: %w", err)
@@ -185,6 +185,10 @@ func (c *Controller) Resume(ctx context.Context, vm vmController, events chan in
 		}
 	}
 
+	// Every resource is live again; clear the migrating flag last so any failure
+	// above leaves the pod retriable.
+	c.isMigrating = false
+
 	log.G(ctx).WithField(logfields.DestinationPodID, c.podID).Debug("resumed pod")
 
 	return nil
@@ -209,12 +213,12 @@ func (c *Controller) Patch(
 	// A destination request with a container ID is required before we mutate
 	// any state.
 	if request == nil || request.ID == "" {
-		return fmt.Errorf("invalid create task request: %+v", request)
+		return fmt.Errorf("invalid create task request: %+v: %w", request, errdefs.ErrInvalidArgument)
 	}
 
 	// Patch only applies to a pod imported for migration.
 	if !c.isMigrating {
-		return fmt.Errorf("pod %q is not migrating; cannot patch", c.podID)
+		return fmt.Errorf("pod %q is not migrating; cannot patch: %w", c.podID, errdefs.ErrFailedPrecondition)
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
@@ -266,21 +270,4 @@ func (c *Controller) Patch(
 
 	log.G(ctx).WithField(logfields.DestinationPodID, c.podID).Debug("patched migrated pod")
 	return nil
-}
-
-// AbortMigrated marks every container in the pod as stopped and reports their
-// exit, so that containerd no longer sees them as UNKNOWN and can delete them.
-// This is primarily used on destination during finalize stop.
-func (c *Controller) AbortMigrated(ctx context.Context, events chan interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Nothing to abort unless the pod is mid-migration.
-	if !c.isMigrating {
-		return
-	}
-
-	for _, ctr := range c.containers {
-		ctr.AbortMigrated(ctx, events)
-	}
 }

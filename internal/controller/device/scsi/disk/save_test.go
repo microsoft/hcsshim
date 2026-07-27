@@ -4,10 +4,12 @@ package disk
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi/mount"
 	scsisave "github.com/Microsoft/hcsshim/internal/controller/device/scsi/save"
+	"github.com/containerd/errdefs"
 )
 
 func TestSave_ErrorWhenDetached(t *testing.T) {
@@ -15,8 +17,13 @@ func TestSave_ErrorWhenDetached(t *testing.T) {
 	if err := d.DetachFromVM(context.Background(), &mockVMSCSIRemover{}, newDefaultEjector()); err != nil {
 		t.Fatalf("setup DetachFromVM: %v", err)
 	}
-	if _, err := d.Save(); err == nil {
+	// A detached disk cannot be saved; the failure is a failed precondition.
+	_, err := d.Save()
+	if err == nil {
 		t.Fatal("expected error saving a detached disk")
+	}
+	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 	}
 }
 

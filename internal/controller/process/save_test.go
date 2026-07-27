@@ -28,10 +28,10 @@ const (
 	testWaitCallID = int64(99)
 )
 
-// TestSave_WrongState verifies that only a running process can be saved.
+// TestSave_WrongState verifies Save is refused for non-snapshottable process states.
 func TestSave_WrongState(t *testing.T) {
 	t.Parallel()
-	invalidStates := []State{StateNotCreated, StateCreated, StateTerminated, StateDestinationMigrating, StateSourceMigrating}
+	invalidStates := []State{StateNotCreated, StateCreated, StateTerminated, StateDestinationMigrating}
 
 	for _, state := range invalidStates {
 		t.Run(state.String(), func(t *testing.T) {
@@ -39,8 +39,9 @@ func TestSave_WrongState(t *testing.T) {
 			_, _, _, controller := newSetup(t)
 			controller.state = state
 
-			if _, err := controller.Save(t.Context()); err == nil {
-				t.Errorf("Save() = nil; want error for state %s", state)
+			_, err := controller.Save(t.Context())
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("Save() = %v; want ErrFailedPrecondition for state %s", err, state)
 			}
 		})
 	}
@@ -119,6 +120,21 @@ func TestSave_Succeeds(t *testing.T) {
 	}
 }
 
+// TestSave_FromSourceMigrating verifies a re-save of an already-migrating source
+// process still succeeds, so a retried export is safe.
+func TestSave_FromSourceMigrating(t *testing.T) {
+	t.Parallel()
+	_, _, _, controller := newSetup(t)
+	controller.state = StateSourceMigrating
+
+	if _, err := controller.Save(t.Context()); err != nil {
+		t.Fatalf("Save() from SourceMigrating = %v; want nil", err)
+	}
+	if controller.state != StateSourceMigrating {
+		t.Errorf("state = %s; want unchanged StateSourceMigrating", controller.state)
+	}
+}
+
 // TestImport_InvalidEnvelope verifies that Import rejects malformed or
 // incompatible envelopes.
 func TestImport_InvalidEnvelope(t *testing.T) {
@@ -133,18 +149,24 @@ func TestImport_InvalidEnvelope(t *testing.T) {
 	tests := []struct {
 		name string
 		env  *anypb.Any
+		// wantIs, when set, is the sentinel the rejection must wrap.
+		wantIs error
 	}{
 		{name: "nil envelope", env: nil},
-		{name: "wrong type url", env: &anypb.Any{TypeUrl: "type.microsoft.com/other", Value: nil}},
+		{name: "wrong type url", env: &anypb.Any{TypeUrl: "type.microsoft.com/other", Value: nil}, wantIs: errdefs.ErrInvalidArgument},
 		{name: "undecodable value", env: &anypb.Any{TypeUrl: procsave.TypeURL, Value: []byte{0x08, 0xff}}},
-		{name: "schema version mismatch", env: &anypb.Any{TypeUrl: procsave.TypeURL, Value: badVersion}},
+		{name: "schema version mismatch", env: &anypb.Any{TypeUrl: procsave.TypeURL, Value: badVersion}, wantIs: errdefs.ErrInvalidArgument},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := Import(t.Context(), testCase.env, testContainerID); err == nil {
-				t.Errorf("Import() = nil; want error")
+			_, err := Import(t.Context(), testCase.env, testContainerID)
+			if err == nil {
+				t.Fatal("Import() = nil; want error")
+			}
+			if testCase.wantIs != nil && !errors.Is(err, testCase.wantIs) {
+				t.Errorf("Import() = %v; want %v", err, testCase.wantIs)
 			}
 		})
 	}
@@ -292,11 +314,11 @@ func TestPatch_Succeeds(t *testing.T) {
 	}
 }
 
-// TestResume_WrongState verifies that Resume only operates on a migrating
-// process and rejects other states before touching the host.
+// TestResume_WrongState verifies Resume rejects states that are neither
+// mid-migration nor already running, before touching the host.
 func TestResume_WrongState(t *testing.T) {
 	t.Parallel()
-	invalidStates := []State{StateNotCreated, StateCreated, StateRunning, StateTerminated}
+	invalidStates := []State{StateNotCreated, StateCreated, StateTerminated}
 
 	for _, state := range invalidStates {
 		t.Run(state.String(), func(t *testing.T) {
@@ -328,46 +350,18 @@ func TestResume_SourceRollback(t *testing.T) {
 	}
 }
 
-// TestAbortMigrated_NoOp verifies that AbortMigrated leaves a non-migrating
-// process untouched.
-func TestAbortMigrated_NoOp(t *testing.T) {
-	t.Parallel()
-	otherStates := []State{StateNotCreated, StateCreated, StateRunning, StateTerminated, StateSourceMigrating}
-
-	for _, state := range otherStates {
-		t.Run(state.String(), func(t *testing.T) {
-			t.Parallel()
-			_, _, _, controller := newSetup(t)
-			controller.state = state
-
-			controller.AbortMigrated(t.Context())
-			if controller.state != state {
-				t.Errorf("state = %s; want unchanged %s", controller.state, state)
-			}
-		})
-	}
-}
-
-// TestAbortMigrated_Succeeds verifies that AbortMigrated terminates a migrating
-// process, recording exit code 137 and unblocking waiters.
-func TestAbortMigrated_Succeeds(t *testing.T) {
+// TestResume_IdempotentWhenRunning verifies that resuming an already-resumed
+// process is a no-op, so a retry after a completed resume is safe.
+func TestResume_IdempotentWhenRunning(t *testing.T) {
 	t.Parallel()
 	_, _, _, controller := newSetup(t)
-	controller.state = StateDestinationMigrating
-	// upstreamIO intentionally nil — abort must tolerate it.
+	controller.state = StateRunning
 
-	controller.AbortMigrated(t.Context())
-
-	if controller.state != StateTerminated {
-		t.Errorf("state = %s; want StateTerminated", controller.state)
+	if err := controller.Resume(t.Context(), nil, nil); err != nil {
+		t.Fatalf("Resume() = %v; want nil", err)
 	}
-	if controller.exitCode != 137 {
-		t.Errorf("exitCode = %d; want 137", controller.exitCode)
-	}
-	select {
-	case <-controller.exitedCh:
-	default:
-		t.Error("exitedCh should be closed after AbortMigrated")
+	if controller.state != StateRunning {
+		t.Errorf("state = %s; want unchanged StateRunning", controller.state)
 	}
 }
 

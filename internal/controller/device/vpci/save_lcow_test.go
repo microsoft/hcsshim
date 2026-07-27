@@ -3,9 +3,11 @@
 package vpci
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/containerd/errdefs"
 )
 
 func TestSave_EmptyOK(t *testing.T) {
@@ -28,7 +30,13 @@ func TestSave_NonEmptyErrors(t *testing.T) {
 		deviceToGUID: map[Device]guid.GUID{dev: g},
 	}
 
-	if err := c.Save(); err == nil {
+	// Save is unsupported here, so it must report a failed precondition
+	// that callers can detect with errors.Is.
+	err := c.Save()
+	if err == nil {
 		t.Fatal("expected Save to error when devices are present")
+	}
+	if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+		t.Fatalf("expected ErrFailedPrecondition, got %v", err)
 	}
 }

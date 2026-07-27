@@ -19,6 +19,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/containerd/errdefs"
+
 	"github.com/Microsoft/go-winio"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -39,7 +41,7 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 
 	// Save is only valid once the source has begun migrating.
 	if c.vmState != StateSourceMigrationInitialized {
-		return nil, fmt.Errorf("cannot save VM: VM is in state %s", c.vmState)
+		return nil, fmt.Errorf("cannot save VM: VM is in state %s: %w", c.vmState, errdefs.ErrFailedPrecondition)
 	}
 
 	// Seed the payload with the VM identity, creation options, and compat blob.
@@ -108,24 +110,24 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 // Import rebuilds a controller's static state from a snapshot produced by
 // Save. The controller comes back inert in the migrating state and performs no
 // live work until Resume supplies the running VM.
-func (c *Controller) Import(ctx context.Context, env *anypb.Any) error {
+func (c *Controller) Import(ctx context.Context, env *anypb.Any) (err error) {
 	if env == nil {
-		return fmt.Errorf("vm saved-state envelope is nil")
+		return fmt.Errorf("vm saved-state envelope is nil: %w", errdefs.ErrInvalidArgument)
 	}
 
 	// Reject envelopes that did not originate from a compatible Save.
 	if env.GetTypeUrl() != vmsave.TypeURL {
-		return fmt.Errorf("unsupported vm saved-state type %q", env.GetTypeUrl())
+		return fmt.Errorf("unsupported vm saved-state type %q: %w", env.GetTypeUrl(), errdefs.ErrInvalidArgument)
 	}
 
 	state := &vmsave.Payload{}
-	if err := proto.Unmarshal(env.GetValue(), state); err != nil {
+	if err = proto.Unmarshal(env.GetValue(), state); err != nil {
 		return fmt.Errorf("unmarshal vm saved state: %w", err)
 	}
 
 	// Reject payloads written by an incompatible shim version.
 	if v := state.GetSchemaVersion(); v != vmsave.SchemaVersion {
-		return fmt.Errorf("unsupported vm saved-state schema version %d (want %d)", v, vmsave.SchemaVersion)
+		return fmt.Errorf("unsupported vm saved-state schema version %d (want %d): %w", v, vmsave.SchemaVersion, errdefs.ErrInvalidArgument)
 	}
 
 	c.mu.Lock()
@@ -133,7 +135,25 @@ func (c *Controller) Import(ctx context.Context, env *anypb.Any) error {
 
 	// We can import a new VM only on a freshly created controller.
 	if c.vmState != StateNotCreated {
-		return fmt.Errorf("unsupported vm state during Import %q", c.vmState)
+		return fmt.Errorf("unsupported vm state during Import %q: %w", c.vmState, errdefs.ErrFailedPrecondition)
+	}
+
+	// Decode the HCS document so [Controller.CreateVM] (called next on the
+	// destination with MigrationOptions populated) can reuse it verbatim.
+	var doc = &hcsschema.ComputeSystem{}
+	if raw := state.GetHcsDocument(); len(raw) > 0 {
+		if err := json.Unmarshal(raw, doc); err != nil {
+			return fmt.Errorf("unmarshal hcs document: %w", err)
+		}
+	}
+
+	// Import the SCSI sub-controller.
+	var scsiCtrl *scsi.Controller
+	if scsiEnv := state.GetScsi(); scsiEnv != nil {
+		scsiCtrl, err = scsi.Import(ctx, scsiEnv)
+		if err != nil {
+			return fmt.Errorf("import scsi controller: %w", err)
+		}
 	}
 
 	// Restore the VM identity, allocator floors, and compat blob, then mark
@@ -143,30 +163,12 @@ func (c *Controller) Import(ctx context.Context, env *anypb.Any) error {
 	if c.sandboxOptions != nil {
 		c.isPhysicallyBacked = c.sandboxOptions.FullyPhysicallyBacked
 	}
+	c.hcsDocument = doc
+	c.scsiController = scsiCtrl
 	c.nextGuestPort = state.GetGcsNextPort()
 	c.nextBridgeID = state.GetBridgeNextID()
 	c.compatInfo = state.GetCompatInfo()
 	c.vmState = StateDestinationMigrationImported
-
-	// Decode the HCS document so [Controller.CreateVM] (called next on the
-	// destination with MigrationOptions populated) can reuse it verbatim.
-	if raw := state.GetHcsDocument(); len(raw) > 0 {
-		doc := &hcsschema.ComputeSystem{}
-		if err := json.Unmarshal(raw, doc); err != nil {
-			return fmt.Errorf("unmarshal hcs document: %w", err)
-		}
-
-		c.hcsDocument = doc
-	}
-
-	// Import the SCSI sub-controller.
-	if env := state.GetScsi(); env != nil {
-		s, err := scsi.Import(ctx, env)
-		if err != nil {
-			return fmt.Errorf("import scsi controller: %w", err)
-		}
-		c.scsiController = s
-	}
 
 	log.G(ctx).Debug("imported VM migration state")
 	return nil
@@ -180,11 +182,11 @@ func (c *Controller) Patch(ctx context.Context) error {
 	defer c.mu.Unlock()
 
 	if c.vmState != StateDestinationMigrationCreated {
-		return fmt.Errorf("cannot patch VM: VM is in state %s", c.vmState)
+		return fmt.Errorf("cannot patch VM: VM is in state %s: %w", c.vmState, errdefs.ErrFailedPrecondition)
 	}
 
 	if c.scsiController == nil {
-		return fmt.Errorf("cannot patch VM: SCSI controller is nil")
+		return fmt.Errorf("cannot patch VM: SCSI controller is nil: %w", errdefs.ErrInvalidArgument)
 	}
 
 	// Grant access only for disk types whose host paths the VM must reach.
@@ -209,9 +211,14 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// An already running VM will be a no-op on resume.
+	if c.vmState == StateRunning {
+		return nil
+	}
+
 	// Resume returns either migration side to the running state.
 	if c.vmState != StateMigrationFinalized {
-		return fmt.Errorf("cannot resume from migration: VM is in state %s", c.vmState)
+		return fmt.Errorf("cannot resume from migration: VM is in state %s: %w", c.vmState, errdefs.ErrFailedPrecondition)
 	}
 
 	// On the destination, the log connection was never established.
