@@ -406,6 +406,16 @@ func (c *Controller) Cancel(ctx context.Context, sessionID string) error {
 		return nil
 	}
 
+	// Wake any Transfer goroutine parked on socketReady so it observes the
+	// cancellation and bails instead of blocking until its timeout.
+	// RegisterDuplicateSocket may have already closed it, so guard against a
+	// double-close panic.
+	select {
+	case <-c.socketReady:
+	default:
+		close(c.socketReady)
+	}
+
 	// Enter the cancelling state before the abort so a concurrent transfer yields
 	// instead of completing; a successful abort then marks the session cancelled.
 	c.state = StateCancelling

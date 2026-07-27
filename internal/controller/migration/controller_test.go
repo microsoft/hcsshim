@@ -520,6 +520,29 @@ func TestCancel_VMError(t *testing.T) {
 	}
 }
 
+// TestCancel_SocketReadyAlreadyClosed verifies Cancel does not panic when
+// socketReady was already closed before the cancel (e.g. a prior
+// RegisterDuplicateSocket failed the session and closed it) without a duplicate
+// socket having been adopted.
+func TestCancel_SocketReadyAlreadyClosed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(nil)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.vmController = vm
+	c.state = StateFailed
+	close(c.socketReady) // registration failed earlier and already closed it
+
+	if err := c.Cancel(t.Context(), "sess-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateCancelled {
+		t.Errorf("state = %s; want Cancelled", c.State())
+	}
+}
+
 // TestCancel_DestinationImported verifies cancelling a destination that has only
 // imported the snapshot moves it to cancelled without issuing an HCS abort,
 // since the compute system has not been materialized yet.

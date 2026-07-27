@@ -71,7 +71,7 @@ func (c *Controller) ExportState(ctx context.Context, sessionID string) (_ *anyp
 	}
 
 	if c.state != StateSourcePrepared {
-		return nil, fmt.Errorf("export requires state %s or %s (current: %s): %w", StateSourcePrepared, StateSourceExported, c.state, errdefs.ErrFailedPrecondition)
+		return nil, fmt.Errorf("export requires state %s (current: %s): %w", StateSourcePrepared, c.state, errdefs.ErrFailedPrecondition)
 	}
 
 	// Past the state guard the source begins producing its snapshot, so any
