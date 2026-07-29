@@ -151,6 +151,49 @@ func TestPipeRelayPauseResume(t *testing.T) {
 	}
 }
 
+// TestPipeRelayUsesCurrentRedialCapability verifies that redial availability
+// belongs to the current ConnectionSet. If a replacement set cannot redial, a
+// later connection failure must finish the relay rather than reuse stale
+// capability cached from the original set.
+func TestPipeRelayUsesCurrentRedialCapability(t *testing.T) {
+	deadReplacement := &recordConn{writeErr: errTestWriteFail}
+	redialCalls := 0
+	redial := func() (*ConnectionSet, error) {
+		redialCalls++
+		return &ConnectionSet{Out: deadReplacement}, nil
+	}
+
+	pr, err := NewPipeRelay(nil)
+	if err != nil {
+		t.Fatalf("NewPipeRelay: %v", err)
+	}
+	pr.ReplaceConnectionSet(&ConnectionSet{
+		Out:    &recordConn{writeErr: errTestWriteFail},
+		redial: redial,
+	})
+	pr.CloseUnusedPipes()
+	stdoutW := pr.pipes[3]
+	pr.Start()
+
+	if _, err := stdoutW.Write([]byte("pending")); err != nil {
+		t.Fatalf("write pending output: %v", err)
+	}
+
+	waitDone := make(chan struct{})
+	go func() {
+		pr.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("relay did not finish after the replacement set lacked redial capability")
+	}
+	if redialCalls != 1 {
+		t.Fatalf("redial called %d times, want 1", redialCalls)
+	}
+}
+
 // errTestWriteFail is the failure a dead host connection's Write returns after a
 // live-migration bridge drop. Both the BEFORE baseline (failWriter) and the
 // AFTER proofs (recordConn) raise it so the two behaviors are compared against
@@ -243,9 +286,7 @@ func (c *recordConn) File() (*os.File, error) {
 func (c *recordConn) recorded() []byte {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	b := make([]byte, len(c.written))
-	copy(b, c.written)
-	return b
+	return bytes.Clone(c.written)
 }
 
 var _ transport.Connection = (*recordConn)(nil)
@@ -347,9 +388,9 @@ func TestCopyOutRetainsInFlightBytes(t *testing.T) {
 	// First copyOut: the conn's Write fails while the bridge is down, so copyOut
 	// must pause and hand back the full payload it read but could not deliver.
 	deadConn := &recordConn{writeErr: errTestWriteFail}
-	held, paused := copyOut(deadConn, pr, "stdout", nil, true)
-	if !paused {
-		t.Fatal("copyOut paused = false, want true on a bridge-down write failure")
+	held, err := copyOut(deadConn, pr, "stdout", nil, true)
+	if !errors.Is(err, errNeedsRedial) {
+		t.Fatalf("copyOut err = %v, want errNeedsRedial on a bridge-down write failure", err)
 	}
 	if !bytes.Equal(held, payload) {
 		t.Fatalf("copyOut held %d in-flight bytes, want %d retained intact: got %q want %q",
@@ -365,9 +406,9 @@ func TestCopyOutRetainsInFlightBytes(t *testing.T) {
 	rec := &recordConn{}
 	done := make(chan struct{})
 	var held2 []byte
-	var paused2 bool
+	var err2 error
 	go func() {
-		held2, paused2 = copyOut(rec, pr, "stdout", held, true)
+		held2, err2 = copyOut(rec, pr, "stdout", held, true)
 		close(done)
 	}()
 	_ = pw.Close() // unblock the post-replay read with EOF so copyOut returns
@@ -377,8 +418,8 @@ func TestCopyOutRetainsInFlightBytes(t *testing.T) {
 		t.Fatal("second copyOut did not return after pipe close")
 	}
 
-	if paused2 {
-		t.Fatal("second copyOut paused = true, want false (write succeeds on the fresh conn)")
+	if errors.Is(err2, errNeedsRedial) {
+		t.Fatal("second copyOut err = errNeedsRedial, want nil (write succeeds on the fresh conn)")
 	}
 	if held2 != nil {
 		t.Fatalf("second copyOut held %q, want nil (nothing left to retain)", held2)
@@ -404,9 +445,9 @@ func TestCopyOutRetainsAcrossDoublePause(t *testing.T) {
 	// never consulted because the pending replay fails before copyOut's read
 	// loop.
 	deadConn1 := &recordConn{writeErr: errTestWriteFail}
-	held1, paused1 := copyOut(deadConn1, bytes.NewReader(nil), "stdout", payload, true)
-	if !paused1 {
-		t.Fatal("first re-dial copyOut paused = false, want true (write still failing)")
+	held1, err1 := copyOut(deadConn1, bytes.NewReader(nil), "stdout", payload, true)
+	if !errors.Is(err1, errNeedsRedial) {
+		t.Fatalf("first re-dial copyOut err = %v, want errNeedsRedial (write still failing)", err1)
 	}
 	if !bytes.Equal(held1, payload) {
 		t.Fatalf("first re-dial dropped/truncated the held remainder: got %q want %q", held1, payload)
@@ -415,9 +456,9 @@ func TestCopyOutRetainsAcrossDoublePause(t *testing.T) {
 	// Second re-dial also bridge-down: the re-held remainder must again be
 	// returned whole.
 	deadConn2 := &recordConn{writeErr: errTestWriteFail}
-	held2, paused2 := copyOut(deadConn2, bytes.NewReader(nil), "stdout", held1, true)
-	if !paused2 {
-		t.Fatal("second re-dial copyOut paused = false, want true (write still failing)")
+	held2, err2 := copyOut(deadConn2, bytes.NewReader(nil), "stdout", held1, true)
+	if !errors.Is(err2, errNeedsRedial) {
+		t.Fatalf("second re-dial copyOut err = %v, want errNeedsRedial (write still failing)", err2)
 	}
 	if !bytes.Equal(held2, payload) {
 		t.Fatalf("second re-dial dropped/truncated the re-held remainder: got %q want %q", held2, payload)
@@ -432,9 +473,9 @@ func TestCopyOutRetainsAcrossDoublePause(t *testing.T) {
 	defer pr.Close()
 	rec := &recordConn{}
 	done := make(chan struct{})
-	var paused3 bool
+	var err3 error
 	go func() {
-		_, paused3 = copyOut(rec, pr, "stdout", held2, true)
+		_, err3 = copyOut(rec, pr, "stdout", held2, true)
 		close(done)
 	}()
 	_ = pw.Close()
@@ -443,8 +484,8 @@ func TestCopyOutRetainsAcrossDoublePause(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("final copyOut did not return after pipe close")
 	}
-	if paused3 {
-		t.Fatal("final copyOut paused = true, want false (write succeeds)")
+	if errors.Is(err3, errNeedsRedial) {
+		t.Fatal("final copyOut err = errNeedsRedial, want nil (write succeeds)")
 	}
 	if got := rec.recorded(); !bytes.Equal(got, payload) {
 		t.Fatalf("final replay delivered %q, want the full twice-held payload %q", got, payload)
@@ -609,9 +650,9 @@ func TestCopyOutHoldsPartialWriteRemainder(t *testing.T) {
 	}
 
 	conn := &recordConn{writeErr: errTestWriteFail, partialN: k}
-	held, paused := copyOut(conn, pr, "stdout", nil, true)
-	if !paused {
-		t.Fatal("copyOut paused = false, want true on a bridge-down partial write")
+	held, err := copyOut(conn, pr, "stdout", nil, true)
+	if !errors.Is(err, errNeedsRedial) {
+		t.Fatalf("copyOut err = %v, want errNeedsRedial on a bridge-down partial write", err)
 	}
 	// held must be exactly the bytes after the accepted prefix.
 	want := payload[k:]
@@ -662,29 +703,30 @@ func (r errReader) Read(p []byte) (int, error) { return 0, r.err }
 
 // TestCopyInFinishesOnStdinCloseWhileBridgeDown is the gap the side-aware copyIn
 // closes. With the bridge down, a process that closes its stdin (a pipe WRITE
-// failure) must finish (paused=false), not be mistaken for a live-migration
-// pause; a real bridge-drop conn READ error must still pause (paused=true).
+// failure) must finish (err=nil), not be mistaken for a live-migration pause; a
+// real bridge-drop conn READ error must still return errNeedsRedial.
 // Together they prove copyIn decides by which side failed, not by a single
 // collapsed error as the old io.Copy did.
 func TestCopyInFinishesOnStdinCloseWhileBridgeDown(t *testing.T) {
 	// Process closed stdin: the reader yields bytes (so a write is attempted)
 	// then blocks, and the sink's Write fails (EPIPE). copyIn must return via the
-	// write side as false (done); the block guarantees no read error or EOF can
+	// write side as nil (done); the block guarantees no read error or EOF can
 	// supply the return instead.
 	block := make(chan struct{})
 	t.Cleanup(func() { close(block) })
 	r := &blockUntilReader{data: []byte("stdin-bytes"), block: block}
 
-	done := make(chan bool, 1)
+	done := make(chan error, 1)
 	go func() {
 		// failWriter models the process having closed its stdin: every Write
-		// returns the EPIPE-like errTestWriteFail.
-		done <- copyIn(failWriter{}, r, "stdin", true)
+		// returns the EPIPE-like errTestWriteFail. The signal is unraised, so
+		// this exercises the genuine-write-failure path rather than a wake.
+		done <- copyIn(failWriter{}, r, "stdin", true, newRedialSignal())
 	}()
 	select {
-	case paused := <-done:
-		if paused {
-			t.Fatalf("copyIn paused = %v on a process stdin-close write failure while bridge down, want false: a pipe write error must finish, not pause", paused)
+	case err := <-done:
+		if errors.Is(err, errNeedsRedial) {
+			t.Fatalf("copyIn err = %v on a process stdin-close write failure while bridge down, want nil: a pipe write error must finish, not redial", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("copyIn did not return on a stdin-close write failure: it must decide by the write side, not loop while the bridge is down")
@@ -692,8 +734,8 @@ func TestCopyInFinishesOnStdinCloseWhileBridgeDown(t *testing.T) {
 
 	// Real bridge-drop conn read error while bridge down: copyIn must pause so
 	// the manager re-dials and the next call resumes on the fresh conn.
-	if paused := copyIn(io.Discard, errReader{err: errTestReadFail}, "stdin", true); !paused {
-		t.Fatalf("copyIn paused = %v on a bridge-down conn read error, want true: a conn read failure during migration must pause", paused)
+	if err := copyIn(io.Discard, errReader{err: errTestReadFail}, "stdin", true, newRedialSignal()); !errors.Is(err, errNeedsRedial) {
+		t.Fatalf("copyIn err = %v on a bridge-down conn read error, want errNeedsRedial: a conn read failure during migration must redial", err)
 	}
 }
 
@@ -921,5 +963,260 @@ func TestRedialWithRetrySucceedsAfterRetries(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatalf("redialWithRetry made %d attempts, want 3", calls)
+	}
+}
+
+// TestPipeRelayRedialsWhileSiblingParkedInPipeRead verifies the relay still
+// re-dials when one stream needs it while a sibling is parked in a blocking
+// read. Only the copier writing to the host connection can notice it died; an
+// idle stderr is parked in Read on its process pipe, which yields neither data
+// nor EOF while the container runs, and runCopiers waits on every copier.
+//
+// Deterministic, not timing-based: recordConn.Write fails on its first call, and
+// nothing is ever written to the stderr pipe.
+func TestPipeRelayRedialsWhileSiblingParkedInPipeRead(t *testing.T) {
+	redialed := make(chan struct{}, 4)
+	var redial func() (*ConnectionSet, error)
+	redial = func() (*ConnectionSet, error) {
+		redialed <- struct{}{}
+		return &ConnectionSet{Out: &recordConn{}, Err: &recordConn{}, redial: redial}, nil
+	}
+
+	set := &ConnectionSet{
+		Out:    &recordConn{writeErr: errTestWriteFail},
+		Err:    &recordConn{},
+		redial: redial,
+	}
+
+	pr, err := NewPipeRelay(nil)
+	if err != nil {
+		t.Fatalf("NewPipeRelay: %v", err)
+	}
+	pr.ReplaceConnectionSet(set)
+	pr.CloseUnusedPipes()
+	// Capture the write ends before Start so the test never races the relay
+	// manager's closePipes on the pr.pipes fields.
+	stdoutW := pr.pipes[3]
+	stderrW := pr.pipes[5]
+	pr.Start()
+
+	// The stdout copier reads this byte and its write to the dead connection
+	// fails immediately, so it returns errNeedsRedial. stderr stays parked.
+	if _, err := stdoutW.Write([]byte("x")); err != nil {
+		t.Fatalf("write pause trigger: %v", err)
+	}
+
+	select {
+	case <-redialed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("relay did not redial while the stderr copier was parked in a pipe read")
+	}
+
+	// Process exit: closing both write ends lets the copiers reach EOF so the
+	// relay finishes and Wait returns.
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+
+	waitDone := make(chan struct{})
+	go func() {
+		pr.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after process exit")
+	}
+}
+
+// TestRedialWithBudgetStopsOnElapsedTime verifies the redial budget is spent in
+// wall-clock time rather than attempts.
+//
+// Each attempt here blocks, as a real dial does while the destination is not yet
+// listening. Under an attempt-count budget the relay would run the full count of
+// those, holding the process stdio for far longer than the documented window.
+func TestRedialWithBudgetStopsOnElapsedTime(t *testing.T) {
+	const budget = 200 * time.Millisecond
+
+	attempts := 0
+	redial := func() (*ConnectionSet, error) {
+		attempts++
+		time.Sleep(50 * time.Millisecond)
+		return nil, errors.New("stdio test: destination not listening yet")
+	}
+
+	start := time.Now()
+	ns, err := redialWithBudget(redial, budget)
+	elapsed := time.Since(start)
+
+	if err == nil || ns != nil {
+		t.Fatalf("redialWithBudget err = %v ns = %v, want failure", err, ns)
+	}
+	if attempts == 0 {
+		t.Fatal("redialWithBudget never attempted a redial")
+	}
+	// Generous bound: this only has to fail if the budget is counting attempts,
+	// which would take attempts * (50ms + redialInterval).
+	if max := 2 * time.Second; elapsed > max {
+		t.Fatalf("redialWithBudget gave up after %v (%d attempts), want within %v of a %v budget", elapsed, attempts, max, budget)
+	}
+}
+
+// TestPipeRelayRedialsOnBridgeReconnectWhileIdle verifies the bridge event alone
+// re-dials an idle relay. This is the live-migration case: on the destination
+// every stdio connection is dead, but a silent container never writes, so no
+// copier ever fails and the write-failure path cannot fire. Without the bridge
+// trigger the relay keeps copying into connections that go nowhere.
+func TestPipeRelayRedialsOnBridgeReconnectWhileIdle(t *testing.T) {
+	redialed := make(chan struct{}, 4)
+	var redial func() (*ConnectionSet, error)
+	redial = func() (*ConnectionSet, error) {
+		redialed <- struct{}{}
+		return &ConnectionSet{Out: &recordConn{}, Err: &recordConn{}, redial: redial}, nil
+	}
+
+	pr, err := NewPipeRelay(nil)
+	if err != nil {
+		t.Fatalf("NewPipeRelay: %v", err)
+	}
+	// No write ever fails and nothing is written to either pipe: the bridge
+	// notification is the only thing that can start a redial.
+	pr.ReplaceConnectionSet(&ConnectionSet{Out: &recordConn{}, Err: &recordConn{}, redial: redial})
+	pr.CloseUnusedPipes()
+	stdoutW := pr.pipes[3]
+	stderrW := pr.pipes[5]
+	pr.Start()
+
+	NotifyBridgeReconnected()
+
+	select {
+	case <-redialed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("idle relay did not redial after the bridge reconnected")
+	}
+
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+
+	waitDone := make(chan struct{})
+	go func() {
+		pr.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after process exit")
+	}
+}
+
+// blockingStdinConn is a transport.Connection whose Read blocks until CloseRead
+// shuts it down, modelling a real stdin conn where the copier only ends when
+// the relay calls shutdown(2) on it.
+type blockingStdinConn struct {
+	once   sync.Once
+	closed chan struct{}
+	// closeReads receives once per CloseRead, so a test can order itself against
+	// the relay's shutdown of this connection.
+	closeReads chan struct{}
+}
+
+func newBlockingStdinConn() *blockingStdinConn {
+	return &blockingStdinConn{closed: make(chan struct{}), closeReads: make(chan struct{}, 8)}
+}
+
+func (c *blockingStdinConn) shutdown() {
+	select {
+	case c.closeReads <- struct{}{}:
+	default:
+	}
+	c.once.Do(func() { close(c.closed) })
+}
+func (c *blockingStdinConn) Read([]byte) (int, error)    { <-c.closed; return 0, io.EOF }
+func (c *blockingStdinConn) Write(p []byte) (int, error) { return len(p), nil }
+func (c *blockingStdinConn) Close() error                { c.shutdown(); return nil }
+func (c *blockingStdinConn) CloseRead() error            { c.shutdown(); return nil }
+func (c *blockingStdinConn) CloseWrite() error           { return nil }
+func (c *blockingStdinConn) File() (*os.File, error) {
+	return nil, fmt.Errorf("blockingStdinConn does not support File")
+}
+
+var _ transport.Connection = (*blockingStdinConn)(nil)
+
+// TestPipeRelayWaitDuringRedialClosesFreshStdin verifies a Wait that lands while
+// a redial is in flight still ends the relay.
+//
+// Wait's CloseRead is a one-shot edge and here it lands on the connection that
+// is about to be discarded. The relay then swaps in a fresh set whose stdin was
+// never shut down, so without setConn re-applying the close for a relay that is
+// already closing, that copier blocks forever, runCopiers never returns, done is
+// never closed, and Wait hangs for the life of the process.
+func TestPipeRelayWaitDuringRedialClosesFreshStdin(t *testing.T) {
+	stdinOld, stdinNew := newBlockingStdinConn(), newBlockingStdinConn()
+
+	redialStarted := make(chan struct{})
+	releaseRedial := make(chan struct{})
+	var startedOnce sync.Once
+	var redial func() (*ConnectionSet, error)
+	redial = func() (*ConnectionSet, error) {
+		// Hold the first redial open so Wait is guaranteed to land while the
+		// relay is between connection sets.
+		startedOnce.Do(func() {
+			close(redialStarted)
+			<-releaseRedial
+		})
+		return &ConnectionSet{In: stdinNew, Out: &recordConn{}, redial: redial}, nil
+	}
+
+	pr, err := NewPipeRelay(nil)
+	if err != nil {
+		t.Fatalf("NewPipeRelay: %v", err)
+	}
+	pr.ReplaceConnectionSet(&ConnectionSet{
+		In:     stdinOld,
+		Out:    &recordConn{writeErr: errTestWriteFail},
+		redial: redial,
+	})
+	pr.CloseUnusedPipes()
+	stdoutW := pr.pipes[3]
+	pr.Start()
+
+	// The stdout copier's write to the dead connection fails, which ends the
+	// round and starts the redial.
+	if _, err := stdoutW.Write([]byte("x")); err != nil {
+		t.Fatalf("write redial trigger: %v", err)
+	}
+	select {
+	case <-redialStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("relay never started a redial")
+	}
+
+	// Wait now runs against the old, already-discarded connection.
+	waitDone := make(chan struct{})
+	go func() {
+		pr.Wait()
+		close(waitDone)
+	}()
+
+	// The relay's wake shut the old connection down when the round ended; the
+	// second shutdown is Wait's, and seeing it is what guarantees Wait has
+	// already spent its one-shot before the fresh connection is installed.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-stdinOld.closeReads:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only saw %d shutdowns of the pre-redial stdin connection", i)
+		}
+	}
+
+	close(releaseRedial)
+	// Process exit for the output stream, so only stdin can hold the round open.
+	_ = stdoutW.Close()
+
+	select {
+	case <-waitDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Wait did not return: the redialed stdin never saw the pending close")
 	}
 }

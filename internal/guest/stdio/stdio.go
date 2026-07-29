@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/pkg/errors"
@@ -111,7 +111,9 @@ func (s *ConnectionSet) Files() (_ *FileSet, err error) {
 // NewPipeRelay returns a new pipe relay wrapping the given connection stdin,
 // stdout, stderr set. If s is nil will assume al stdin, stdout, stderr pipes.
 func NewPipeRelay(s *ConnectionSet) (_ *PipeRelay, err error) {
-	pr := &PipeRelay{s: s}
+	// Subscribed here, not at the first round, so a bridge reconnect between
+	// construction and the first round still invalidates these connections.
+	pr := &PipeRelay{s: s, bridge: newBridgeWatcher()}
 	defer func() {
 		if err != nil {
 			pr.closePipes()
@@ -148,10 +150,13 @@ type PipeRelay struct {
 	s  *ConnectionSet
 	// pipes format is stdin [0 read, 1 write], stdout [2 read, 3 write], stderr [4 read, 5 write].
 	pipes [6]*os.File
-	// pauseOnError is true when s carries a redial closure, meaning a copy error
-	// caused by a bridge drop should pause and resume rather than tear down the
-	// process stdio.
-	pauseOnError bool
+	// closing makes setConn re-apply Wait's stdin CloseRead when Wait overlaps a
+	// redial; without it that one-shot lands on the discarded conn and Wait hangs.
+	// It deliberately does not cancel the redial.
+	closing bool
+	// bridge is this relay's durable bridge-reconnect subscription. Owned by the
+	// run goroutine, so it needs no lock.
+	bridge *bridgeWatcher
 	// done is closed by the relay manager goroutine once the relay is truly
 	// finished (process exit), so Wait can block until then across any pauses.
 	done chan struct{}
@@ -182,7 +187,6 @@ func (pr *PipeRelay) Files() (*FileSet, error) {
 // Start starts the relay operation. The caller must call Wait to wait
 // for the relay to finish and release the associated resources.
 func (pr *PipeRelay) Start() {
-	pr.pauseOnError = pr.s != nil && pr.s.redial != nil
 	pr.done = make(chan struct{})
 	go pr.run()
 }
@@ -194,34 +198,31 @@ func (pr *PipeRelay) Start() {
 func (pr *PipeRelay) setConn(ns *ConnectionSet) {
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
-	old := pr.s
+	if pr.s != nil {
+		pr.s.Close()
+	}
 	pr.s = ns
-	if old != nil {
-		old.Close()
+	if ns != nil && ns.In != nil && pr.closing {
+		_ = ns.In.CloseRead()
 	}
 }
 
-// run manages the relay copiers across live-migration pauses. It runs the
-// copiers, and if they exit because the bridge dropped, re-dials the stdio
-// connections and restarts the copiers so the process stdio survives the
-// migration. When the copiers finish for a non-pause reason (process exit) it
-// tears down the pipes and connections and signals done.
+// run restarts the copiers after a connection interruption and tears down the
+// pipes and connections once copying finishes.
 func (pr *PipeRelay) run() {
-	// outPending and errPending carry the in-flight bytes a copier read from
-	// the process pipe but had not yet written to the host conn when the bridge
-	// dropped, so the next iteration replays them on the re-dialed conn.
+	// Pending output is replayed after redial.
 	var outPending, errPending []byte
 	for {
-		var paused bool
-		paused, outPending, errPending = pr.runCopiers(outPending, errPending)
-		if !paused {
+		var err error
+		outPending, errPending, err = pr.runCopiers(outPending, errPending)
+		if !errors.Is(err, errNeedsRedial) {
 			break
 		}
 		// run is the only writer of pr.s, so it reads the redial closure without
 		// mu; the dial can block for seconds and must stay off the lock.
-		ns, err := redialWithRetry(pr.s.redial)
-		if err != nil {
-			logrus.WithError(err).Error("opengcs::PipeRelay::run - redial failed; ending relay")
+		ns, derr := redialWithRetry(pr.s.redial)
+		if derr != nil {
+			logrus.WithError(derr).Error("opengcs::PipeRelay::run - redial failed; ending relay")
 			break
 		}
 		pr.setConn(ns)
@@ -231,89 +232,119 @@ func (pr *PipeRelay) run() {
 	close(pr.done)
 }
 
-// runCopiers launches one copier per present stdio stream and waits for them
-// all to finish. outPending/errPending are the in-flight output remainders held
-// from a prior bridge-drop pause; each is replayed on the (re-dialed) conn
-// before fresh output. It returns true if any copier paused because of a bridge
-// drop (a live migration), along with the new held remainders for stdout and
-// stderr so the caller can thread them into the next iteration.
-func (pr *PipeRelay) runCopiers(outPending, errPending []byte) (paused bool, outPend, errPend []byte) {
+// runCopiers starts one copier per stream and waits for all of them. It reports
+// errNeedsRedial if a host connection failed and must be redialed, plus output
+// to replay.
+func (pr *PipeRelay) runCopiers(outPending, errPending []byte) (outPend, errPend []byte, err error) {
 	// run is the only writer of pr.s and does not swap it until this returns, so
 	// reading it here without mu is safe.
 	s := pr.s
+	stdin := s.In
+	stdout := s.Out
+	stderr := s.Err
+	canRedial := s.redial != nil
+
+	// Capture the reader files up front, like s above: a copier must not read
+	// pr.pipes[i] while the stdin copier clears pr.pipes[1]. CloseUnusedPipes
+	// closes unused read ends without nilling the fields, so only take the ones
+	// that actually have a copier.
+	var readers []*os.File
+	if stdout != nil {
+		readers = append(readers, pr.pipes[2])
+	}
+	if stderr != nil {
+		readers = append(readers, pr.pipes[4])
+	}
+
+	// A deadline left armed by a previous round's wake would fail every read
+	// instantly, which reads as errNeedsRedial and spins the manager.
+	if derr := setReadDeadlines(readers, time.Time{}); derr != nil {
+		logrus.WithError(derr).Error("opengcs::PipeRelay::runCopiers - cannot restore blocking reads; ending relay")
+		return outPending, errPending, derr
+	}
+
+	sig := newRedialSignal()
+	if canRedial {
+		// Only when a redial is possible: a forced wake on a set without a redial
+		// closure would make run call a nil func.
+		if pr.bridge.refresh() {
+			// Reconnected while this relay was between rounds, so these
+			// connections are already dead.
+			sig.raise()
+		}
+		defer watchForRedial(sig, pr.bridge, stdin, readers)()
+	}
 
 	var cwg sync.WaitGroup
-	var pausedFlag atomic.Bool
+	// Each result has one writer and is read after cwg.Wait.
+	var stdinErr, stdoutErr, stderrErr error
 
-	if s.In != nil && pr.pipes[1] != nil {
-		in := s.In
+	if stdin != nil && pr.pipes[1] != nil {
 		cwg.Add(1)
 		go func() {
 			defer cwg.Done()
-			if copyIn(pr.pipes[1], in, "stdin", pr.pauseOnError) {
-				// Live migration pause: leave the stdin write pipe open so the
-				// process keeps its stdin across the redial.
-				pausedFlag.Store(true)
+			stdinErr = copyIn(pr.pipes[1], stdin, "stdin", canRedial, sig)
+			if errors.Is(stdinErr, errNeedsRedial) {
+				sig.raise()
+				// Leave stdin open across redial.
 				return
 			}
-			// Normal end (host closed stdin, or the process closed its stdin):
-			// close the stdin write pipe so the process observes EOF, matching
-			// the original relay behavior.
+			// Close stdin on a normal end so the process observes EOF.
 			if cerr := pr.pipes[1].Close(); cerr != nil {
 				logrus.WithError(cerr).Error("opengcs::PipeRelay::runCopiers - error closing stdin write pipe")
 			}
 			pr.pipes[1] = nil
 		}()
 	}
-	if s.Out != nil {
-		out := s.Out
+	if stdout != nil {
 		cwg.Add(1)
 		go func() {
 			defer cwg.Done()
-			held, p := copyOut(out, pr.pipes[2], "stdout", outPending, pr.pauseOnError)
-			outPend = held
-			if p {
-				pausedFlag.Store(true)
+			outPend, stdoutErr = copyOut(stdout, pr.pipes[2], "stdout", outPending, canRedial)
+			if errors.Is(stdoutErr, errNeedsRedial) {
+				sig.raise()
 			}
 		}()
 	}
-	if s.Err != nil {
-		errc := s.Err
+	if stderr != nil {
 		cwg.Add(1)
 		go func() {
 			defer cwg.Done()
-			held, p := copyOut(errc, pr.pipes[4], "stderr", errPending, pr.pauseOnError)
-			errPend = held
-			if p {
-				pausedFlag.Store(true)
+			errPend, stderrErr = copyOut(stderr, pr.pipes[4], "stderr", errPending, canRedial)
+			if errors.Is(stderrErr, errNeedsRedial) {
+				sig.raise()
 			}
 		}()
 	}
 	cwg.Wait()
-	return pausedFlag.Load(), outPend, errPend
+	if errors.Is(stdinErr, errNeedsRedial) || errors.Is(stdoutErr, errNeedsRedial) || errors.Is(stderrErr, errNeedsRedial) {
+		err = errNeedsRedial
+	}
+	return outPend, errPend, err
 }
 
 // Wait waits for the relaying to finish and closes the associated
 // pipes and connections.
 func (pr *PipeRelay) Wait() {
-	// Snapshot the set, close stdin's read side, and snapshot done all under the
-	// lock so the CloseRead cannot race the relay manager goroutine's Close of
-	// the same ConnectionSet (the redial swap or the final teardown).
+	// Close stdin's read side and snapshot done under the lock so the CloseRead
+	// cannot race the relay manager goroutine's Close of the same ConnectionSet
+	// (the redial swap or the final teardown).
 	pr.mu.Lock()
-	s := pr.s
+	// Recorded under mu so a redial that swaps in a fresh set after this point
+	// re-applies the CloseRead below; see setConn.
+	pr.closing = true
 	// Close stdin so that the copying goroutine is safely unblocked; this is necessary
 	// because the host expects stdin to be closed before it will report process
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which the input copier is blocked reading).
-	if s != nil && s.In != nil {
-		_ = s.In.CloseRead()
+	if pr.s != nil && pr.s.In != nil {
+		_ = pr.s.In.CloseRead()
 	}
 	done := pr.done
 	pr.mu.Unlock()
 
 	if done == nil {
-		// Start was never called (no stdio requested); tear down synchronously
-		// to match the original no-op relay behavior.
+		// Start was never called; tear down synchronously.
 		pr.closePipes()
 		pr.setConn(nil)
 		return
@@ -362,20 +393,22 @@ func (pr *PipeRelay) closePipes() {
 
 // NewTtyRelay returns a new TTY relay for a given master PTY file.
 func NewTtyRelay(s *ConnectionSet, pty *os.File) *TtyRelay {
-	return &TtyRelay{s: s, pty: pty}
+	return &TtyRelay{s: s, pty: pty, bridge: newBridgeWatcher()}
 }
 
 // TtyRelay relays IO between a set of stdio connections and a master PTY file.
 type TtyRelay struct {
-	// m guards closed, the pty teardown, and s (which the relay manager goroutine
-	// swaps when it re-dials the stdio connections after a bridge drop).
+	// m guards closed, closing, the pty teardown, and s (which the relay manager
+	// goroutine swaps when it re-dials the stdio connections after a bridge drop).
 	m      sync.Mutex
 	closed bool
-	s      *ConnectionSet
-	pty    *os.File
-	// pauseOnError is true when s carries a redial closure, meaning a copy error
-	// caused by a bridge drop should pause and resume.
-	pauseOnError bool
+	// closing records that Wait has been called; see PipeRelay.closing.
+	closing bool
+	s       *ConnectionSet
+	pty     *os.File
+	// bridge is this relay's durable bridge-reconnect subscription. Owned by the
+	// run goroutine, so it needs no lock.
+	bridge *bridgeWatcher
 	// done is closed once the relay is truly finished, so Wait can block across
 	// any live-migration pauses.
 	done chan struct{}
@@ -401,7 +434,6 @@ func (r *TtyRelay) ResizeConsole(height, width uint16) error {
 // Start starts the relay operation. The caller must call Wait to wait
 // for the relay to finish and release the associated resources.
 func (r *TtyRelay) Start() {
-	r.pauseOnError = r.s != nil && r.s.redial != nil
 	r.done = make(chan struct{})
 	go r.run()
 }
@@ -411,10 +443,12 @@ func (r *TtyRelay) Start() {
 func (r *TtyRelay) setConn(ns *ConnectionSet) {
 	r.m.Lock()
 	defer r.m.Unlock()
-	old := r.s
+	if r.s != nil {
+		r.s.Close()
+	}
 	r.s = ns
-	if old != nil {
-		old.Close()
+	if ns != nil && ns.In != nil && r.closing {
+		_ = ns.In.CloseRead()
 	}
 }
 
@@ -434,24 +468,22 @@ func (r *TtyRelay) teardown() {
 	}
 }
 
-// run manages the TTY relay copiers across live-migration pauses, re-dialing
-// and restarting them when the bridge drops, and closing the pty and
-// connections once the copiers finish for a non-pause reason (process exit).
+// run restarts the TTY copiers after a connection interruption and tears down
+// the pty and connections once copying finishes.
 func (r *TtyRelay) run() {
-	// outPending carries the in-flight pty output bytes read but not yet
-	// written to the host conn when the bridge dropped, replayed next iteration.
+	// Pending output is replayed after redial.
 	var outPending []byte
 	for {
-		var paused bool
-		paused, outPending = r.runCopiers(outPending)
-		if !paused {
+		var err error
+		outPending, err = r.runCopiers(outPending)
+		if !errors.Is(err, errNeedsRedial) {
 			break
 		}
 		// run is the only writer of r.s, so it reads the redial closure without
 		// m; the dial can block for seconds and must stay off the lock.
-		ns, err := redialWithRetry(r.s.redial)
-		if err != nil {
-			logrus.WithError(err).Error("opengcs::TtyRelay::run - redial failed; ending relay")
+		ns, derr := redialWithRetry(r.s.redial)
+		if derr != nil {
+			logrus.WithError(derr).Error("opengcs::TtyRelay::run - redial failed; ending relay")
 			break
 		}
 		r.setConn(ns)
@@ -460,66 +492,89 @@ func (r *TtyRelay) run() {
 	close(r.done)
 }
 
-// runCopiers launches the stdin->pty and pty->stdout copiers and waits for them
-// to finish. outPending is the in-flight pty output remainder held from a prior
-// bridge-drop pause, replayed on the (re-dialed) conn before fresh output. It
-// returns true if a copier paused because the bridge dropped during a live
-// migration, along with the new held output remainder for the next iteration.
-func (r *TtyRelay) runCopiers(outPending []byte) (paused bool, outPend []byte) {
+// runCopiers starts the stdin and stdout copiers and waits for both. It reports
+// errNeedsRedial if a host connection failed and must be redialed, plus output
+// to replay.
+func (r *TtyRelay) runCopiers(outPending []byte) (outPend []byte, err error) {
 	// run is the only writer of r.s and does not swap it until this returns, so
 	// reading it here without m is safe.
 	s := r.s
+	stdin := s.In
+	stdout := s.Out
+	canRedial := s.redial != nil
+
+	// The pty master is both the stdout read source and the stdin write sink, so
+	// only its READ deadline may be armed; SetDeadline would also fail input.
+	var readers []*os.File
+	if stdout != nil {
+		readers = append(readers, r.pty)
+	}
+	if derr := setReadDeadlines(readers, time.Time{}); derr != nil {
+		logrus.WithError(derr).Error("opengcs::TtyRelay::runCopiers - cannot restore blocking reads; ending relay")
+		return outPending, derr
+	}
+
+	sig := newRedialSignal()
+	if canRedial {
+		if r.bridge.refresh() {
+			sig.raise()
+		}
+		defer watchForRedial(sig, r.bridge, stdin, readers)()
+	}
 
 	var cwg sync.WaitGroup
-	var pausedFlag atomic.Bool
+	// Each result has one writer and is read after cwg.Wait.
+	var stdinErr, stdoutErr error
 
-	if s.In != nil {
-		in := s.In
+	if stdin != nil {
 		cwg.Add(1)
 		go func() {
 			defer cwg.Done()
-			if copyIn(r.pty, in, "stdin", r.pauseOnError) {
-				pausedFlag.Store(true)
+			stdinErr = copyIn(r.pty, stdin, "stdin", canRedial, sig)
+			if errors.Is(stdinErr, errNeedsRedial) {
+				sig.raise()
 			}
 		}()
 	}
-	if s.Out != nil {
-		out := s.Out
+	if stdout != nil {
 		cwg.Add(1)
 		go func() {
 			defer cwg.Done()
-			held, p := copyOut(out, r.pty, "stdout", outPending, r.pauseOnError)
-			outPend = held
-			if p {
-				pausedFlag.Store(true)
+			outPend, stdoutErr = copyOut(stdout, r.pty, "stdout", outPending, canRedial)
+			if errors.Is(stdoutErr, errNeedsRedial) {
+				sig.raise()
 			}
 		}()
 	}
 	cwg.Wait()
-	return pausedFlag.Load(), outPend
+	if errors.Is(stdinErr, errNeedsRedial) || errors.Is(stdoutErr, errNeedsRedial) {
+		err = errNeedsRedial
+	}
+	return outPend, err
 }
 
 // Wait waits for the relaying to finish and closes the associated
 // files and connections.
 func (r *TtyRelay) Wait() {
-	// Snapshot the set, close stdin's read side, and snapshot done all under the
-	// lock so the CloseRead cannot race the relay manager goroutine's Close of
-	// the same ConnectionSet (the redial swap or the final teardown).
+	// Close stdin's read side and snapshot done under the lock so the CloseRead
+	// cannot race the relay manager goroutine's Close of the same ConnectionSet
+	// (the redial swap or the final teardown).
 	r.m.Lock()
-	s := r.s
+	// Recorded under m so a redial that swaps in a fresh set after this point
+	// re-applies the CloseRead below; see setConn.
+	r.closing = true
 	// Close stdin so that the copying goroutine is safely unblocked; this is necessary
 	// because the host expects stdin to be closed before it will report process
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which the input copier is blocked reading).
-	if s != nil && s.In != nil {
-		_ = s.In.CloseRead()
+	if r.s != nil && r.s.In != nil {
+		_ = r.s.In.CloseRead()
 	}
 	done := r.done
 	r.m.Unlock()
 
 	if done == nil {
-		// Start was never called; tear down synchronously to match the original
-		// no-op relay behavior.
+		// Start was never called; tear down synchronously.
 		r.teardown()
 		return
 	}

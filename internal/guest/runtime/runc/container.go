@@ -365,9 +365,8 @@ func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.Conn
 
 // startProcess performs the operations necessary to start a container process
 // and properly handle its stdio. This function is used by both CreateContainer
-// and ExecProcess. For V2 container creation stdioSet will be nil, in this case
-// it is expected that the caller starts the relay previous to calling Start on
-// the container.
+// and ExecProcess. For V2 container creation stdioSet will be nil; the caller
+// supplies the connection set and starts the relay after starting the container.
 func (c *container) startProcess(
 	tempProcessDir string,
 	hasTerminal bool,
