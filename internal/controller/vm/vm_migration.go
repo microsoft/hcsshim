@@ -253,12 +253,12 @@ func (c *Controller) FinalizeLiveMigration(ctx context.Context, options *hcssche
 // safe because uvm is written once in CreateVM and the migration controller
 // serializes Cancel behind its own lock, so that write is already published here.
 // A nil uvm means the VM was never created.
-func (c *Controller) CancelLiveMigration(ctx context.Context) error {
+func (c *Controller) CancelLiveMigration(ctx context.Context, options *hcsschema.MigrationCancelOptions) error {
 	if c.uvm == nil {
 		return fmt.Errorf("cannot cancel live migration: VM not created")
 	}
 
-	if err := c.uvm.CancelLiveMigration(ctx); err != nil {
+	if err := c.uvm.CancelLiveMigration(ctx, options); err != nil {
 		return fmt.Errorf("failed to cancel live migration: %w", err)
 	}
 

@@ -64,6 +64,7 @@ import (
 //sys hcsStartLiveMigrationOnSource(computeSystem HcsSystem, operation HcsOperation, options string) (hr error) = computecore.HcsStartLiveMigrationOnSource?
 //sys hcsStartLiveMigrationTransfer(computeSystem HcsSystem, operation HcsOperation, options string) (hr error) = computecore.HcsStartLiveMigrationTransfer?
 //sys hcsFinalizeLiveMigration(computeSystem HcsSystem, operation HcsOperation, options string) (hr error) = computecore.HcsFinalizeLiveMigration?
+//sys hcsCancelLiveMigration(computeSystem HcsSystem, operation HcsOperation, options string) (hr error) = computecore.HcsCancelLiveMigration?
 
 // Process lifecycle
 //sys hcsCreateProcess(computeSystem HcsSystem, processParameters string, operation HcsOperation, securityDescriptor unsafe.Pointer, process *HcsProcess) (hr error) = computecore.HcsCreateProcess?
@@ -640,6 +641,17 @@ func HcsFinalizeLiveMigration(ctx gcontext.Context, computeSystem HcsSystem, ope
 
 	return execute(ctx, timeout.SyscallWatcher, func() error {
 		return hcsFinalizeLiveMigration(computeSystem, operation, options)
+	})
+}
+
+func HcsCancelLiveMigration(ctx gcontext.Context, computeSystem HcsSystem, operation HcsOperation, options string) (hr error) {
+	ctx, span := ot.StartSpan(ctx, "HcsCancelLiveMigration")
+	defer span.End()
+	defer func() { ot.SetSpanStatus(span, hr) }()
+	span.SetAttributes(attribute.String("options", options))
+
+	return execute(ctx, timeout.SyscallWatcher, func() error {
+		return hcsCancelLiveMigration(computeSystem, operation, options)
 	})
 }
 

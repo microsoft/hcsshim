@@ -40,6 +40,7 @@ var (
 	modcomputecore = windows.NewLazySystemDLL("computecore.dll")
 
 	procHcsAddResourceToOperation                  = modcomputecore.NewProc("HcsAddResourceToOperation")
+	procHcsCancelLiveMigration                     = modcomputecore.NewProc("HcsCancelLiveMigration")
 	procHcsCancelOperation                         = modcomputecore.NewProc("HcsCancelOperation")
 	procHcsCloseComputeSystem                      = modcomputecore.NewProc("HcsCloseComputeSystem")
 	procHcsCloseOperation                          = modcomputecore.NewProc("HcsCloseOperation")
@@ -115,6 +116,30 @@ func _hcsAddResourceToOperation(operation HcsOperation, resourceType uint32, uri
 		return
 	}
 	r0, _, _ := syscall.SyscallN(procHcsAddResourceToOperation.Addr(), uintptr(operation), uintptr(resourceType), uintptr(unsafe.Pointer(uri)), uintptr(handle))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsCancelLiveMigration(computeSystem HcsSystem, operation HcsOperation, options string) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsCancelLiveMigration(computeSystem, operation, _p0)
+}
+
+func _hcsCancelLiveMigration(computeSystem HcsSystem, operation HcsOperation, options *uint16) (hr error) {
+	hr = procHcsCancelLiveMigration.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.SyscallN(procHcsCancelLiveMigration.Addr(), uintptr(computeSystem), uintptr(operation), uintptr(unsafe.Pointer(options)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff

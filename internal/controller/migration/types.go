@@ -35,7 +35,7 @@ type vmController interface {
 	StartWithMigrationOptions(ctx context.Context, config *hcs.MigrationConfig) error
 	StartLiveMigrationTransfer(ctx context.Context, options *hcsschema.MigrationTransferOptions) error
 	FinalizeLiveMigration(ctx context.Context, options *hcsschema.MigrationFinalizedOptions) error
-	CancelLiveMigration(ctx context.Context) error
+	CancelLiveMigration(ctx context.Context, options *hcsschema.MigrationCancelOptions) error
 	TerminateVM(ctx context.Context) error
 	Resume(ctx context.Context, rebuildBridge bool) error
 	MigrationNotifications() (<-chan hcsschema.OperationSystemMigrationNotificationInfo, error)
