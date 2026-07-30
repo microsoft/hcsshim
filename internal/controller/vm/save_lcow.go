@@ -239,15 +239,15 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 	defer cancel()
 
 	if err := c.setupLoggingListener(gctx, g); err != nil {
-		return fmt.Errorf("re-arm logging listener on resume: %w", err)
+		return fmt.Errorf("arm logging listener on resume: %w", err)
 	}
 
 	switch {
 	case rebuildBridge:
-		// Source rollback: re-arm the listener and swap the bridge transport
-		// onto the fresh hvsock so outstanding RPCs (e.g. WaitForProcess) survive.
+		// Source rollback: arm the host GCS listener now, then accept the guest's
+		// post-blackout re-dial and swap it into the running bridge.
 		if err := c.guest.PrepareConnection(winio.VsockServiceID(prot.LinuxGcsVsockPort)); err != nil {
-			return fmt.Errorf("prepare guest connection on resume: %w", err)
+			return fmt.Errorf("prepare source resume listener: %w", err)
 		}
 		if err := c.guest.ResumeConnection(ctx); err != nil {
 			return fmt.Errorf("resume guest connection: %w", err)

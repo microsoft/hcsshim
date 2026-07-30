@@ -244,13 +244,19 @@ func (gc *GuestConnection) SetMigrating(migrating bool) {
 
 // ResumeOnConn resumes the bridge after swaping the bridge
 // transport without dropping outstanding RPCs.
-func (gc *GuestConnection) ResumeOnConn(conn io.ReadWriteCloser) error {
+func (gc *GuestConnection) ResumeOnConn(ctx context.Context, conn io.ReadWriteCloser) error {
 	if gc.brdg == nil {
 		// Not adopting conn; close it so the accepted socket does not leak.
 		_ = conn.Close()
 		return ErrBridgeClosed
 	}
-	return gc.brdg.ResumeOnConn(conn)
+	if err := gc.brdg.ResumeOnConn(conn); err != nil {
+		return err
+	}
+
+	// The guest resets its protocol version when it re-dials after the blackout,
+	// so renegotiate before any version-gated RPC (e.g. exec) is issued.
+	return gc.connect(ctx, false, nil)
 }
 
 // CreateProcess creates a process in the container host.
