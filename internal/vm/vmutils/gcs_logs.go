@@ -5,6 +5,7 @@ package vmutils
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
@@ -141,22 +141,22 @@ func (e *GCSLogEntry) UnmarshalJSON(b []byte) error {
 		e.Level = logrus.ErrorLevel
 	}
 
+	// Delete standard fields to avoid duplication
+	for _, f := range []string{"time", "level", "msg"} {
+		delete(e.Fields, f)
+	}
+
 	// Handle ETW (Event Tracing for Windows) log entries that may have
 	// alternate message field names ("message" or "Message" instead of "msg")
 	if e.Fields["Source"] == "ETW" {
 		// Check for alternate message fields and use the first one found
-		if msg, ok := e.Fields["message"].(string); ok {
-			e.Message = msg
-		} else if msg, ok := e.Fields["Message"].(string); ok {
-			e.Message = msg
+		for _, f := range []string{"message", "Message"} {
+			if msg, ok := e.Fields[f].(string); ok {
+				e.Message = msg
+				delete(e.Fields, f)
+				break
+			}
 		}
-	}
-
-	// Batch delete standard and alternate fields to avoid duplication
-	// This is more efficient than multiple individual delete calls
-	fieldsToDelete := []string{"time", "level", "msg", "message", "Message"}
-	for _, field := range fieldsToDelete {
-		delete(e.Fields, field)
 	}
 
 	// Normalize floating-point values that represent whole numbers to int64.
