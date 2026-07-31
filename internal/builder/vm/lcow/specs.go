@@ -75,6 +75,11 @@ func BuildSandboxConfig(
 	// The FullyPhysicallyBacked annotation forces memory overcommit off.
 	fullyPhysicallyBacked := oci.ParseAnnotationsBool(ctx, spec.Annotations, shimannotations.FullyPhysicallyBacked, false)
 
+	// liveMigrationSupported constrains the sandbox to the feature subset that is
+	// compatible with live migration. Notably, Plan9 file shares cannot be saved
+	// or migrated, so the Plan9 device is omitted when this is set.
+	liveMigrationSupported := oci.ParseAnnotationsBool(ctx, spec.Annotations, shimannotations.LiveMigrationSupportEnabled, false)
+
 	// ================== Parse Topology (CPU, Memory, NUMA) options =================
 	// ===============================================================================
 
@@ -229,6 +234,7 @@ func BuildSandboxConfig(
 			bootOptions.LinuxKernelDirect != nil, // isKernelDirectBoot
 			comPorts != nil,                      // hasConsole
 			filepath.Base(rootFsFullPath),
+			liveMigrationSupported,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to build kernel args: %w", err)
@@ -256,6 +262,23 @@ func BuildSandboxConfig(
 		schema = schemaversion.SchemaV25()
 	}
 
+	// HCS treats the presence of the Plan9 field (even an empty one) as a request
+	// to give the VM file-sharing support. For a normal sandbox we set an empty
+	// Plan9 here so that Plan9/9P file shares can be added to the VM later at
+	// runtime: HCS keys off the field being set, not off whether any shares
+	// currently exist.
+	//
+	// The trade-off is that enabling file sharing attaches an extra virtual device
+	// to the VM. Once the VM powers on, that device becomes part of the VM's saved
+	// device state even when nothing is actually being shared, and that state
+	// cannot be saved and restored cleanly. Live migration relies on save/restore,
+	// so a live-migratable sandbox must omit Plan9 (giving up runtime file sharing)
+	// to keep the VM migratable.
+	var plan9 *hcsschema.Plan9
+	if !liveMigrationSupported {
+		plan9 = &hcsschema.Plan9{}
+	}
+
 	// Build the document.
 	doc := &hcsschema.ComputeSystem{
 		Owner:         owner,
@@ -280,7 +303,7 @@ func BuildSandboxConfig(
 					HvSocketConfig: hvSocketConfig,
 				},
 				ComPorts: comPorts,
-				Plan9:    &hcsschema.Plan9{},
+				Plan9:    plan9,
 			},
 			GuestState:       guestState,
 			SecuritySettings: securitySettings,
