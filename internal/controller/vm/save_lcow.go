@@ -249,12 +249,12 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 			return fmt.Errorf("prepare source resume listener: %w", err)
 		}
 		if err := c.guest.ResumeConnection(ctx); err != nil {
-			return fmt.Errorf("resume guest connection: %w", err)
+			return fmt.Errorf("resume source guest connection: %w", err)
 		}
 	} else {
 		// Destination: reuse the connection already armed at start.
 		if err := c.guest.CreateConnection(ctx, false); err != nil {
-			return fmt.Errorf("resume guest connection: %w", err)
+			return fmt.Errorf("resume destination guest connection: %w", err)
 		}
 	}
 

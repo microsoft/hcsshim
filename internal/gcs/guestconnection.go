@@ -114,7 +114,9 @@ func (gc *GuestConnection) Protocol() uint32 {
 	return protocolVersion
 }
 
-// connect establishes a GCS connection. It must not be called more than once.
+// connect establishes the GCS connection: it negotiates the protocol version,
+// records the guest OS and capabilities, and on a cold start sends the host
+// create/start messages. This method must not be called more than once per active connection.
 // isColdStart should be true when the UVM is being connected to for the first time post-boot.
 // It should be false for subsequent connections (e.g. if reconnecting to an existing UVM).
 func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGuestState *InitialGuestState) (err error) {
