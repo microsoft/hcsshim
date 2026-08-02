@@ -1914,77 +1914,77 @@ reason := {
 # Error messages
 ################################################################
 
-errors["blockdev mounts are not supported"] if {
+errors contains "blockdev mounts are not supported" if {
     input.rule in ["mount_blockdev", "unmount_blockdev"]
 }
 
-errors["deviceHash not found"] if {
+errors contains "deviceHash not found" if {
     input.rule == "mount_device"
     not deviceHash_ok
 }
 
-errors["device already mounted at path"] if {
+errors contains "device already mounted at path" if {
     input.rule in ["mount_device", "rw_mount_device"]
     device_mounted(input.target)
 }
 
-errors["mountpoint invalid"] if {
+errors contains "mountpoint invalid" if {
     input.rule in ["mount_device", "rw_mount_device"]
     not mount_target_ok
 }
 
-errors["no device at path to unmount"] if {
+errors contains "no device at path to unmount" if {
     input.rule == "unmount_device"
     not data.metadata.devices[input.unmountTarget]
     not data.metadata.rw_devices[input.unmountTarget]
 }
 
-errors["received read-only unmount request, but device provided is read-write"] if {
+errors contains "received read-only unmount request, but device provided is read-write" if {
     input.rule == "unmount_device"
     not data.metadata.devices[input.unmountTarget]
     data.metadata.rw_devices[input.unmountTarget]
 }
 
-errors["no device at path to unmount"] if {
+errors contains "no device at path to unmount" if {
     input.rule == "rw_unmount_device"
     not data.metadata.devices[input.unmountTarget]
     not data.metadata.rw_devices[input.unmountTarget]
 }
 
-errors["received read-write unmount request, but device provided is read-only"] if {
+errors contains "received read-write unmount request, but device provided is read-only" if {
     input.rule == "rw_unmount_device"
     not data.metadata.rw_devices[input.unmountTarget]
     data.metadata.devices[input.unmountTarget]
 }
 
 # Error string tested in azcri-containerd Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy
-errors["unencrypted scratch not allowed, non-readonly mount request for SCSI disk must request encryption"] if {
+errors contains "unencrypted scratch not allowed, non-readonly mount request for SCSI disk must request encryption" if {
     input.rule == "rw_mount_device"
     not allow_unencrypted_scratch
     not input.encrypted
 }
 
-errors["ensureFilesystem must be set on rw device mounts"] if {
+errors contains "ensureFilesystem must be set on rw device mounts" if {
     input.rule == "rw_mount_device"
     not input.ensureFilesystem
 }
 
-errors["rw device mounts uses a filesystem that is not allowed"] if {
+errors contains "rw device mounts uses a filesystem that is not allowed" if {
     input.rule == "rw_mount_device"
     not allowed_scratch_fs(input.filesystem)
 }
 
-errors["container already started"] if {
+errors contains "container already started" if {
     input.rule == "create_container"
     container_started
 }
 
-errors["container not started"] if {
+errors contains "container not started" if {
     input.rule in ["exec_in_container", "shutdown_container", "signal_container_process"]
     not container_started
 }
 
-errors["overlay has already been mounted"] if {
+errors contains "overlay has already been mounted" if {
     input.rule == "mount_overlay"
     overlay_exists
 }
@@ -1996,12 +1996,12 @@ overlay_matches if {
     layerPaths_ok(container.layers)
 }
 
-errors["no overlay at path to unmount"] if {
+errors contains "no overlay at path to unmount" if {
     input.rule == "unmount_overlay"
     not overlay_mounted(input.unmountTarget)
 }
 
-errors["no matching containers for overlay"] if {
+errors contains "no matching containers for overlay" if {
     input.rule == "mount_overlay"
     not overlay_matches
 }
@@ -2014,7 +2014,7 @@ privileged_matches if {
     privileged_ok(container.allow_elevated)
 }
 
-errors["privileged escalation not allowed"] if {
+errors contains "privileged escalation not allowed" if {
     is_linux
     input.rule in ["create_container"]
     not privileged_matches
@@ -2041,7 +2041,7 @@ command_matches if {
     command_ok(process.command)
 }
 
-errors["invalid command"] if {
+errors contains "invalid command" if {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
     not command_matches
 }
@@ -2060,7 +2060,7 @@ env_matches(env) if {
     env_rule_ok(rule, env)
 }
 
-errors[envError] if {
+errors contains envError if {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
     bad_envs := [invalid |
         env := input.envList[_]
@@ -2078,7 +2078,7 @@ env_rule_matches(rule) if {
     env_rule_ok(rule, env)
 }
 
-errors["missing required environment variable"] if {
+errors contains "missing required environment variable" if {
     is_linux
     input.rule == "create_container"
 
@@ -2111,7 +2111,7 @@ errors["missing required environment variable"] if {
     count(containers) > 0
 }
 
-errors["missing required environment variable"] if {
+errors contains "missing required environment variable" if {
     input.rule == "exec_in_container"
 
     container_started
@@ -2142,7 +2142,7 @@ errors["missing required environment variable"] if {
     count(containers) > 0
 }
 
-errors["missing required environment variable"] if {
+errors contains "missing required environment variable" if {
     input.rule == "exec_external"
 
     possible_processes := [process |
@@ -2172,7 +2172,7 @@ errors["missing required environment variable"] if {
 # All environment variables matches some rule in some container, but there are
 # no containers with exactly the given combination of rules (i.e. for every
 # container, there is at least one mismatching rule).
-errors["invalid env list"] if {
+errors contains "invalid env list" if {
     input.rule in ["create_container"]
 
     every container in data.metadata.matches[input.containerID] {
@@ -2204,7 +2204,7 @@ workingDirectory_matches if {
     workingDirectory_ok(process.working_dir)
 }
 
-errors["invalid working directory"] if {
+errors contains "invalid working directory" if {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
     not workingDirectory_matches
 }
@@ -2214,7 +2214,7 @@ mount_matches(mount) if {
     mount_ok(container.mounts, container.allow_elevated, mount)
 }
 
-errors[mountError] if {
+errors contains mountError if {
     is_linux
     input.rule == "create_container"
     bad_mounts := [mount.destination |
@@ -2242,17 +2242,17 @@ signal_allowed if {
     signal_ok(process.signals)
 }
 
-errors["target isn't allowed to receive the signal"] if {
+errors contains "target isn't allowed to receive the signal" if {
     input.rule == "signal_container_process"
     not signal_allowed
 }
 
-errors["device already mounted at path"] if {
+errors contains "device already mounted at path" if {
     input.rule == "plan9_mount"
     plan9_mounted(input.target)
 }
 
-errors["no device at path to unmount"] if {
+errors contains "no device at path to unmount" if {
     input.rule == "plan9_unmount"
     not plan9_mounted(input.unmountTarget)
 }
@@ -2264,7 +2264,7 @@ fragment_issuer_matches if {
     fragment.issuer == input.issuer
 }
 
-errors["invalid fragment issuer"] if {
+errors contains "invalid fragment issuer" if {
     input.rule == "load_fragment"
     not fragment_issuer_matches
 }
@@ -2281,7 +2281,7 @@ fragment_feed_matches if {
     input.feed in data.metadata.issuers[input.issuer]
 }
 
-errors["invalid fragment feed"] if {
+errors contains "invalid fragment feed" if {
     input.rule == "load_fragment"
     fragment_issuer_matches
     not fragment_feed_matches
@@ -2358,7 +2358,7 @@ missing_svn if {
     not data[input.namespace].svn
 }
 
-errors["fragment svn is below the specified minimum"] if {
+errors contains "fragment svn is below the specified minimum" if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
@@ -2366,14 +2366,14 @@ errors["fragment svn is below the specified minimum"] if {
     not fragment_version_is_valid
 }
 
-errors["fragment svn and the specified minimum are different types"] if {
+errors contains "fragment svn and the specified minimum are different types" if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
     svn_mismatch
 }
 
-errors[svnMismatchError] if {
+errors contains svnMismatchError if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
@@ -2382,7 +2382,7 @@ errors[svnMismatchError] if {
     svnMismatchError := sprintf("svn in header %v does not match svn in fragment rego %v", [input.header_svn, data[input.namespace].svn])
 }
 
-errors["missing fragment svn in either header or rego payload"] if {
+errors contains "missing fragment svn in either header or rego payload" if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
@@ -2390,7 +2390,7 @@ errors["missing fragment svn in either header or rego payload"] if {
 }
 
 # This will result in one error per missing receipt requirement
-errors[receipt_error] if {
+errors contains receipt_error if {
     input.rule == "load_fragment"
     not input.fragment_loaded
     some fragment in candidate_fragments
@@ -2410,12 +2410,12 @@ ttl_matches if {
     svn_ok(input.svn, ttl.minimum_svn)
 }
 
-errors["no TTL candidate matches the provided TTL's issuer, subject and svn"] if {
+errors contains "no TTL candidate matches the provided TTL's issuer, subject and svn" if {
     input.rule == "load_transparency_trust_list"
     not ttl_matches
 }
 
-errors["The provided TTL does not contain any ledgers it is allowed to load"] if {
+errors contains "The provided TTL does not contain any ledgers it is allowed to load" if {
     input.rule == "load_transparency_trust_list"
     ttl_matches
     ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
@@ -2423,38 +2423,38 @@ errors["The provided TTL does not contain any ledgers it is allowed to load"] if
     count(allowed_ledgers) == 0
 }
 
-errors["scratch already mounted at path"] if {
+errors contains "scratch already mounted at path" if {
     input.rule == "scratch_mount"
     scratch_mounted(input.target)
 }
 
-errors["unencrypted scratch not allowed"] if {
+errors contains "unencrypted scratch not allowed" if {
     input.rule == "scratch_mount"
     not allow_unencrypted_scratch
     not input.encrypted
 }
 
-errors["no scratch at path to unmount"] if {
+errors contains "no scratch at path to unmount" if {
     input.rule == "scratch_unmount"
     not scratch_mounted(input.unmountTarget)
 }
 
-errors["log provider not allowed by policy"] if {
+errors contains "log provider not allowed by policy" if {
     input.rule == "log_provider"
     not log_provider.allowed
 }
 
-errors[framework_version_error] if {
+errors contains framework_version_error if {
     policy_framework_version == null
     framework_version_error := concat(" ", ["framework_version is missing. Current version:", version])
 }
 
-errors[framework_version_error] if {
+errors contains framework_version_error if {
     semver.compare(policy_framework_version, version) > 0
     framework_version_error := concat(" ", ["framework_version is ahead of the current version:", policy_framework_version, "is greater than", version])
 }
 
-errors[fragment_framework_version_error] if {
+errors contains fragment_framework_version_error if {
     input.rule == "load_fragment"
     input.fragment_loaded
     input.namespace
@@ -2462,7 +2462,7 @@ errors[fragment_framework_version_error] if {
     fragment_framework_version_error := concat(" ", ["fragment framework_version is missing. Current version:", version])
 }
 
-errors[fragment_framework_version_error] if {
+errors contains fragment_framework_version_error if {
     input.rule == "load_fragment"
     input.fragment_loaded
     input.namespace
@@ -2470,7 +2470,7 @@ errors[fragment_framework_version_error] if {
     fragment_framework_version_error := concat(" ", ["fragment framework_version is ahead of the current version:", fragment_framework_version, "is greater than", version])
 }
 
-errors["containers only distinguishable by allow_stdio_access"] if {
+errors contains "containers only distinguishable by allow_stdio_access" if {
     is_linux
     input.rule == "create_container"
 
@@ -2519,7 +2519,7 @@ errors["containers only distinguishable by allow_stdio_access"] if {
     c.allow_stdio_access != allow_stdio_access
 }
 
-errors["containers only distinguishable by allow_stdio_access"] if {
+errors contains "containers only distinguishable by allow_stdio_access" if {
     is_windows
     input.rule == "create_container"
 
@@ -2557,7 +2557,7 @@ errors["containers only distinguishable by allow_stdio_access"] if {
     c.allow_stdio_access != allow_stdio_access
 }
 
-errors["external processes only distinguishable by allow_stdio_access"] if {
+errors contains "external processes only distinguishable by allow_stdio_access" if {
     input.rule == "exec_external"
 
     possible_processes := [process |
@@ -2601,7 +2601,7 @@ noNewPrivileges_matches if {
     noNewPrivileges_ok(process.no_new_privileges)
 }
 
-errors["invalid noNewPrivileges"] if {
+errors contains "invalid noNewPrivileges" if {
     is_linux
     input.rule in ["create_container", "exec_in_container"]
     not noNewPrivileges_matches
@@ -2624,12 +2624,12 @@ user_matches if {
     user_ok(process.user)
 }
 
-errors["invalid user"] if {
+errors contains "invalid user" if {
     input.rule in ["create_container", "exec_in_container"]
     not user_matches
 }
 
-errors["capabilities don't match"] if {
+errors contains "capabilities don't match" if {
     is_linux
     input.rule == "create_container"
 
@@ -2669,7 +2669,7 @@ errors["capabilities don't match"] if {
     count(possible_after_caps_containers) == 0
 }
 
-errors["capabilities don't match"] if {
+errors contains "capabilities don't match" if {
     is_linux
     input.rule == "exec_in_container"
 
@@ -2707,7 +2707,7 @@ errors["capabilities don't match"] if {
     count(possible_after_caps_containers) == 0
 }
 
-errors["devices not supported"] if {
+errors contains "devices not supported" if {
     is_linux
     input.rule == "create_container"
     not devices_ok([], input.devices)
@@ -2715,7 +2715,7 @@ errors["devices not supported"] if {
 
 # covers exec_in_container as well. it shouldn't be possible to ever get
 # an exec_in_container as it "inherits" capabilities rules from create_container
-errors["containers only distinguishable by capabilties"] if {
+errors contains "containers only distinguishable by capabilties" if {
     is_linux
     input.rule == "create_container"
 
@@ -2761,7 +2761,7 @@ seccomp_matches if {
     seccomp_ok(container.seccomp_profile_sha256)
 }
 
-errors["invalid seccomp"] if {
+errors contains "invalid seccomp" if {
     is_linux
     input.rule == "create_container"
     not seccomp_matches
