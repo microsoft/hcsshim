@@ -5404,7 +5404,7 @@ framework_version := "%s"
 
 layer := "%s"
 
-mount_device := {"allowed": allowed, "metadata": [addCustom]} {
+mount_device := {"allowed": allowed, "metadata": [addCustom]} if {
 	allowed := input.deviceHash == layer
 	addCustom := {
 		"name": "custom",
@@ -5423,13 +5423,13 @@ framework_version := "%s"
 
 default load_fragment := {"allowed": false}
 
-check_svn_if_loaded {
+check_svn_if_loaded if {
 	not input.fragment_loaded
-} else {
+} else if {
 	data[input.namespace].svn >= 1
 }
 
-load_fragment := {"allowed": true, "add_module": true} {
+load_fragment := {"allowed": true, "add_module": true} if {
 	input.issuer == "%s"
 	input.feed == "%s"
 	check_svn_if_loaded
