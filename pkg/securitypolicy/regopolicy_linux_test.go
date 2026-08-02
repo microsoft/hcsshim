@@ -6447,9 +6447,10 @@ enforcement_point_info := {
     "default_results": {"allowed": true},
     "use_framework": true
 }
-data.framework.load_fragment := load_fragment
-default extract_parameter(_, _, _) := ""
-data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
+# this no longer works in Rego v1, commenting out
+# data.framework.load_fragment := load_fragment
+# default extract_parameter(_, _, _) := ""
+# data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
 `, fragment.constraints.svn, frameworkVersion)
 
 		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
