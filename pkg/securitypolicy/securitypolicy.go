@@ -52,7 +52,7 @@ const (
 	HostAMDCertFilename               = "host-amd-cert-base64"
 	ReferenceInfoFilename             = "reference-info-base64"
 	HashEnvelopeReferenceInfoFilename = "transparent-reference-info-base64"
-	TCBReferenceInfoFilename          = "tcb-reference-info"
+	TCBReferenceInfoFilename          = "tcb-reference-info-base64"
 )
 
 // PolicyConfig contains toml or JSON config for security policy.

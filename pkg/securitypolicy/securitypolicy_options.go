@@ -351,10 +351,13 @@ func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) 
 func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, error) {
 	encodedPolicy := s.PolicyEnforcer.EncodedSecurityPolicy()
 	s.tcbReferenceInfoMutex.RLock()
-	tcbReferenceInfo := append([]byte(nil), s.tcbReferenceInfo...)
+	var tcbReferenceInfoBase64 string
+	if len(s.tcbReferenceInfo) > 0 {
+		tcbReferenceInfoBase64 = base64.StdEncoding.EncodeToString(s.tcbReferenceInfo)
+	}
 	s.tcbReferenceInfoMutex.RUnlock()
 	hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 || len(tcbReferenceInfo) > 0 {
+	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 || len(tcbReferenceInfoBase64) > 0 {
 		// Use os.MkdirTemp to make sure that the directory is unique.
 		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
 		if err != nil {
@@ -380,8 +383,8 @@ func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, err
 				return "", fmt.Errorf("failed to write UVM hash envelope reference info: %w", err)
 			}
 		}
-		if len(tcbReferenceInfo) > 0 {
-			if err := writeFileInDir(securityContextDir, TCBReferenceInfoFilename, tcbReferenceInfo, 0777); err != nil {
+		if len(tcbReferenceInfoBase64) > 0 {
+			if err := writeFileInDir(securityContextDir, TCBReferenceInfoFilename, []byte(tcbReferenceInfoBase64), 0777); err != nil {
 				return "", fmt.Errorf("failed to write TCB reference info: %w", err)
 			}
 		}
