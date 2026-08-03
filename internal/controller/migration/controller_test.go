@@ -179,7 +179,7 @@ func TestTransfer_CompletionDoesNotClobberCancel(t *testing.T) {
 	vm.EXPECT().StartLiveMigrationOnSource(gomock.Any(), gomock.Any()).Return(nil)
 	// Simulate a concurrent Cancel arriving mid-transfer, once the goroutine has
 	// released the lock to run the transfer.
-	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(nil)
+	vm.EXPECT().CancelLiveMigration(gomock.Any(), gomock.Any()).Return(nil)
 	vm.EXPECT().StartLiveMigrationTransfer(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, *hcsschema.MigrationTransferOptions) error {
 			return c.Cancel(context.Background(), "sess-1")
@@ -485,7 +485,7 @@ func TestCancel_Idempotent(t *testing.T) {
 func TestCancel_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
-	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(nil)
+	vm.EXPECT().CancelLiveMigration(gomock.Any(), gomock.Any()).Return(nil)
 
 	c := New()
 	c.sessionID = "sess-1"
@@ -505,7 +505,7 @@ func TestCancel_Success(t *testing.T) {
 func TestCancel_VMError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
-	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(errors.New("boom"))
+	vm.EXPECT().CancelLiveMigration(gomock.Any(), gomock.Any()).Return(errors.New("boom"))
 
 	c := New()
 	c.sessionID = "sess-1"
@@ -527,7 +527,7 @@ func TestCancel_VMError(t *testing.T) {
 func TestCancel_SocketReadyAlreadyClosed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vm := mocks.NewMockvmController(ctrl)
-	vm.EXPECT().CancelLiveMigration(gomock.Any()).Return(nil)
+	vm.EXPECT().CancelLiveMigration(gomock.Any(), gomock.Any()).Return(nil)
 
 	c := New()
 	c.sessionID = "sess-1"

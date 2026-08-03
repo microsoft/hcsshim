@@ -241,16 +241,12 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, opts *hc
 	return nil
 }
 
-// CancelLiveMigration is currently a stub: it verifies the compute system is
-// still open and returns success without contacting HCS or interrupting any
-// migration (pending the compute-core cancel API).
-//
-// It deliberately takes no handleLock so that, once implemented, it can interrupt
-// an in-flight transfer that holds it.
-func (computeSystem *System) CancelLiveMigration(ctx context.Context) (err error) {
+// CancelLiveMigration requests cancellation of an in-flight live migration.
+// It deliberately takes no handleLock so it can interrupt an in-flight transfer that holds it.
+func (computeSystem *System) CancelLiveMigration(ctx context.Context, options *hcsschema.MigrationCancelOptions) (err error) {
 	operation := "hcs::System::CancelLiveMigration"
 
-	_, span := ot.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
 	span.SetAttributes(attribute.String("cid", computeSystem.id))
@@ -259,9 +255,27 @@ func (computeSystem *System) CancelLiveMigration(ctx context.Context) (err error
 		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
 	}
 
-	// TODO: wire this to the HcsCancelLiveMigration compute-core API once it is
-	//  available. Until then this is a stub that reports success without contacting HCS.
+	if options == nil {
+		options = &hcsschema.MigrationCancelOptions{}
+	}
+	optionsJSON, err := json.Marshal(options)
+	if err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
 
+	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
+	if err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
+	defer computecore.HcsCloseOperation(ctx, op)
+
+	// Issue the cancel and wait for completion.
+	if err := computecore.HcsCancelLiveMigration(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
+	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
 	return nil
 }
 

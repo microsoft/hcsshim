@@ -438,7 +438,7 @@ func (c *Controller) Cancel(ctx context.Context, sessionID string) error {
 func (c *Controller) cancelLiveMigration(ctx context.Context) error {
 	c.mu.Unlock()
 	defer c.mu.Lock()
-	return c.vmController.CancelLiveMigration(ctx)
+	return c.vmController.CancelLiveMigration(ctx, &hcsschema.MigrationCancelOptions{Origin: c.origin})
 }
 
 // Cleanup is the terminal call of a migration session on either side. It
