@@ -235,7 +235,13 @@ func (err *rpcError) Error() string {
 }
 
 func (err *rpcError) Unwrap() error {
-	return windows.Errno(err.result)
+	// result is an int32 HRESULT. HCS error codes have the high bit set
+	// (e.g. 0xc037010e), so a direct conversion to Errno (uintptr) would
+	// sign-extend the negative int32 to 0xFFFFFFFF_C037010E and no longer
+	// match the canonical syscall.Errno constants used with errors.Is
+	// (e.g. hcs.ErrComputeSystemDoesNotExist). Convert via uint32 to keep
+	// the code zero-extended.
+	return windows.Errno(uint32(err.result))
 }
 
 // Err returns the RPC's result. This may be a transport error or an error from
