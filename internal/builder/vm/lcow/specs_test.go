@@ -2157,6 +2157,8 @@ func TestBuildSandboxConfig_CPUClamping(t *testing.T) {
 // the /bin/vsockexec wrapper in reconnect mode (-r) so guest logging tolerates a
 // missing host log listener and reconnects after a migration, while non-LM
 // sandboxes use the plain wrapper to forward GCS stderr over LinuxLogVsockPort.
+// It also gates the Plan9 device: live-migratable sandboxes omit Plan9 (its
+// share state cannot be saved or migrated) while non-LM sandboxes keep it.
 func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 	ctx := context.Background()
 
@@ -2184,6 +2186,10 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 				if !strings.Contains(kernelArgs, "/bin/gcs") {
 					t.Errorf("expected /bin/gcs in kernel args, got %q", kernelArgs)
 				}
+				// A non-migratable sandbox keeps the Plan9 device.
+				if doc.VirtualMachine.Devices.Plan9 == nil {
+					t.Errorf("expected Plan9 device to be enabled for non-migratable sandbox, got nil")
+				}
 			},
 		},
 		{
@@ -2201,6 +2207,10 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 				}
 				if strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
 					t.Errorf("expected no vsockexec reconnect mode when LM disabled, got %q", kernelArgs)
+				}
+				// A non-migratable sandbox keeps the Plan9 device.
+				if doc.VirtualMachine.Devices.Plan9 == nil {
+					t.Errorf("expected Plan9 device to be enabled for non-migratable sandbox, got nil")
 				}
 			},
 		},
@@ -2221,6 +2231,10 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 				}
 				if !strings.Contains(kernelArgs, "/bin/gcs") {
 					t.Errorf("expected /bin/gcs in kernel args when LM enabled, got %q", kernelArgs)
+				}
+				// A live-migratable sandbox omits the Plan9 device.
+				if plan9 := doc.VirtualMachine.Devices.Plan9; plan9 != nil {
+					t.Errorf("expected Plan9 device to be omitted for live-migratable sandbox, got %+v", plan9)
 				}
 			},
 		},
@@ -2247,6 +2261,10 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 				if !strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
 					t.Errorf("expected vsockexec reconnect wrapper %q when LM enabled, got %q", vsockexecReconnectPrefix, kernelArgs)
 				}
+				// A live-migratable sandbox omits the Plan9 device.
+				if plan9 := doc.VirtualMachine.Devices.Plan9; plan9 != nil {
+					t.Errorf("expected Plan9 device to be omitted for live-migratable sandbox, got %+v", plan9)
+				}
 			},
 		},
 		{
@@ -2265,6 +2283,10 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 				}
 				if !strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
 					t.Errorf("expected vsockexec reconnect wrapper %q when LM enabled, got %q", vsockexecReconnectPrefix, kernelArgs)
+				}
+				// A live-migratable sandbox omits the Plan9 device.
+				if plan9 := doc.VirtualMachine.Devices.Plan9; plan9 != nil {
+					t.Errorf("expected Plan9 device to be omitted for live-migratable sandbox, got %+v", plan9)
 				}
 			},
 		},
@@ -2286,6 +2308,10 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 				}
 				if strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
 					t.Errorf("expected no vsockexec reconnect mode on invalid LM annotation, got %q", kernelArgs)
+				}
+				// Invalid annotation falls back to false, so Plan9 stays enabled.
+				if doc.VirtualMachine.Devices.Plan9 == nil {
+					t.Errorf("expected Plan9 device to be enabled for non-migratable sandbox, got nil")
 				}
 			},
 		},

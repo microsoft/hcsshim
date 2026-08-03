@@ -114,7 +114,9 @@ func (gc *GuestConnection) Protocol() uint32 {
 	return protocolVersion
 }
 
-// connect establishes a GCS connection. It must not be called more than once.
+// connect establishes the GCS connection: it negotiates the protocol version,
+// records the guest OS and capabilities, and on a cold start sends the host
+// create/start messages. This method must not be called more than once per active connection.
 // isColdStart should be true when the UVM is being connected to for the first time post-boot.
 // It should be false for subsequent connections (e.g. if reconnecting to an existing UVM).
 func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGuestState *InitialGuestState) (err error) {
@@ -244,13 +246,19 @@ func (gc *GuestConnection) SetMigrating(migrating bool) {
 
 // ResumeOnConn resumes the bridge after swaping the bridge
 // transport without dropping outstanding RPCs.
-func (gc *GuestConnection) ResumeOnConn(conn io.ReadWriteCloser) error {
+func (gc *GuestConnection) ResumeOnConn(ctx context.Context, conn io.ReadWriteCloser) error {
 	if gc.brdg == nil {
 		// Not adopting conn; close it so the accepted socket does not leak.
 		_ = conn.Close()
 		return ErrBridgeClosed
 	}
-	return gc.brdg.ResumeOnConn(conn)
+	if err := gc.brdg.ResumeOnConn(conn); err != nil {
+		return err
+	}
+
+	// The guest resets its protocol version when it re-dials after the blackout,
+	// so renegotiate before any version-gated RPC (e.g. exec) is issued.
+	return gc.connect(ctx, false, nil)
 }
 
 // CreateProcess creates a process in the container host.

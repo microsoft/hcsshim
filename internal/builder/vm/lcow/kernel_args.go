@@ -27,6 +27,7 @@ func buildKernelArgs(
 	kernelDirect bool,
 	hasConsole bool,
 	rootFsFile string,
+	liveMigrationSupported bool,
 ) (string, error) {
 
 	log.G(ctx).WithField("rootFsFile", rootFsFile).Debug("buildKernelArgs: starting kernel arguments construction")
@@ -82,7 +83,7 @@ func buildKernelArgs(
 
 	// 8. Init arguments (passed after "--" separator)
 	initArgs := buildInitArgs(ctx, opts, annotations,
-		writableOverlayDirs, disableTimeSyncService, processDumpLocation, rootFsFile, hasConsole)
+		writableOverlayDirs, disableTimeSyncService, processDumpLocation, rootFsFile, hasConsole, liveMigrationSupported)
 	args = append(args, "--", initArgs)
 
 	result := strings.Join(args, " ")
@@ -152,6 +153,7 @@ func buildInitArgs(
 	processDumpLocation string,
 	rootFsFile string,
 	hasConsole bool,
+	liveMigrationSupported bool,
 ) string {
 	log.G(ctx).WithFields(logrus.Fields{
 		"rootFsFile": rootFsFile,
@@ -161,7 +163,7 @@ func buildInitArgs(
 	entropyArgs := fmt.Sprintf("-e %d", vmutils.LinuxEntropyVsockPort)
 
 	// Build GCS execution command
-	gcsCmd := buildGCSCommand(ctx, opts, annotations, disableTimeSyncService, processDumpLocation)
+	gcsCmd := buildGCSCommand(ctx, opts, annotations, disableTimeSyncService, processDumpLocation, liveMigrationSupported)
 
 	// Construct init arguments
 	var initArgsList []string
@@ -197,6 +199,7 @@ func buildGCSCommand(
 	annotations map[string]string,
 	disableTimeSyncService bool,
 	processDumpLocation string,
+	liveMigrationSupported bool,
 ) string {
 	var cmdParts []string
 
@@ -204,8 +207,7 @@ func buildGCSCommand(
 	// When live migration is enabled, run vsockexec in reconnect mode (-r) so
 	// guest logging tolerates the host log listener being absent at boot and
 	// reconnects to the destination host's listener after a migration.
-	reconnect := oci.ParseAnnotationsBool(ctx, annotations, shimannotations.LiveMigrationSupportEnabled, false)
-	cmdParts = append(cmdParts, vmutils.LinuxLogForwarderCommand(reconnect))
+	cmdParts = append(cmdParts, vmutils.LinuxLogForwarderCommand(liveMigrationSupported))
 
 	// Determine log level
 	logLevel := "info"
