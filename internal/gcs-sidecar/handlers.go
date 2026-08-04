@@ -417,8 +417,9 @@ func mountReadOnly(options []string) bool {
 // this binds the forwarded HostedSystem to that enforced view and rejects any
 // host-added mount the policy never saw. Note that HostPath is intentionally
 // not compared: the spec source is a host-side path while the HostedSystem
-// HostPath is a VSMB path, so they legitimately differ and the host controls
-// both regardless.
+// HostPath is the path the host resolved the mount to for the UVM.
+// So it legitimately differs from the spec source,
+// and the host controls both regardless.
 func reconcileHostedSystemMounts(mounts []oci.Mount, container *hcsschema.Container) error {
 	if container == nil {
 		return nil
