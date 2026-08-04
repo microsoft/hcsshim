@@ -268,10 +268,10 @@ type nicInNamespace struct {
 // namespace without moving them. This is used for host-network containers
 // where all containers share the init netns and the NIC must remain there.
 func (n *namespace) ConfigureInInitNS(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "namespace::ConfigureInInitNS")
+	ctx, span := ot.StartSpan(ctx, "namespace::ConfigureInInitNS")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("namespace", n.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("namespace", n.id))
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -293,12 +293,12 @@ func (n *namespace) ConfigureInInitNS(ctx context.Context) (err error) {
 // (no move). It applies IP addresses, routes, and gateway settings just like
 // assignToPid but without calling MoveInterfaceToNS or switching netns.
 func (nin *nicInNamespace) configureInPlace(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "nicInNamespace::configureInPlace")
+	ctx, span := ot.StartSpan(ctx, "nicInNamespace::configureInPlace")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("adapterID", nin.adapter.ID),
-		trace.StringAttribute("ifname", nin.ifname))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("adapterID", nin.adapter.ID),
+		attribute.String("ifname", nin.ifname))
 
 	// Configure directly in the current (init) namespace — no move needed.
 	// Use PID 1 as the "nsPid" parameter for NetNSConfig logging context.
