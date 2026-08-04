@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"syscall"
@@ -288,11 +289,11 @@ func (c *Controller) Finalize(ctx context.Context, sessionID string, action migr
 		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
 	}
 
-	// Nothing to finalize, so return early: the session is already finalized
-	// (idempotent repeat), idle (no active session), or a canceled destination,
-	// which winds down directly through Cleanup rather than Finalize.
+	// Nothing to finalize: already finalized, idle, or a canceled destination not
+	// being resumed—a resume is allowed through to bring its sandbox back up here.
 	if c.state == StateFinalized || c.state == StateIdle ||
-		(c.origin == hcsschema.MigrationOriginDestination && c.state == StateCancelled) {
+		(c.origin == hcsschema.MigrationOriginDestination && c.state == StateCancelled &&
+			action != migration.FinalizeAction_FINALIZE_ACTION_RESUME) {
 		return nil
 	}
 
@@ -420,16 +421,17 @@ func (c *Controller) Cancel(ctx context.Context, sessionID string) error {
 	// instead of completing; a successful abort then marks the session cancelled.
 	c.state = StateCancelling
 
-	if err := c.cancelLiveMigration(ctx); err != nil {
-		// Abort did not take hold; mark failed so the caller can retry Cancel.
-		c.state = StateFailed
-		return fmt.Errorf("cancel live migration: %w", err)
+	err := c.cancelLiveMigration(ctx)
+	// A transfer that already completed leaves nothing to abort, so the session
+	// is canceled, not failed; any other error fails it.
+	next := StateCancelled
+	if err != nil && !errors.Is(err, hcs.ErrInvalidState) {
+		next = StateFailed
 	}
+	c.state = next
 
-	c.state = StateCancelled
-
-	log.G(ctx).Info("migration session cancelled")
-	return nil
+	log.G(ctx).WithError(err).Info("migration session cancellation")
+	return err
 }
 
 // cancelLiveMigration issues the HCS abort with c.mu released so the possibly
@@ -438,7 +440,11 @@ func (c *Controller) Cancel(ctx context.Context, sessionID string) error {
 func (c *Controller) cancelLiveMigration(ctx context.Context) error {
 	c.mu.Unlock()
 	defer c.mu.Lock()
-	return c.vmController.CancelLiveMigration(ctx, &hcsschema.MigrationCancelOptions{Origin: c.origin})
+
+	if err := c.vmController.CancelLiveMigration(ctx, &hcsschema.MigrationCancelOptions{Origin: c.origin}); err != nil {
+		return fmt.Errorf("cancel live migration: %w", err)
+	}
+	return nil
 }
 
 // Cleanup is the terminal call of a migration session on either side. It

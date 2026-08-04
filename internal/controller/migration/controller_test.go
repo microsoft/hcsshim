@@ -217,8 +217,8 @@ func TestFinalize_IdempotentFinalized(t *testing.T) {
 	}
 }
 
-// TestFinalize_DestinationCancelledNoop verifies a cancelled destination, which
-// winds down through Cleanup rather than Finalize, treats Finalize as a no-op.
+// TestFinalize_DestinationCancelledNoop verifies a cancelled destination treats a
+// non-resume Finalize as a no-op, winding down through Cleanup rather than Finalize.
 func TestFinalize_DestinationCancelledNoop(t *testing.T) {
 	c := New()
 	c.sessionID = "sess-1"
@@ -230,6 +230,29 @@ func TestFinalize_DestinationCancelledNoop(t *testing.T) {
 	}
 	if c.State() != StateCancelled {
 		t.Errorf("state = %s; want unchanged Cancelled", c.State())
+	}
+}
+
+// TestFinalize_DestinationCancelledResumeSucceeds verifies a resume Finalize on a
+// cancelled destination is allowed through, resuming the VM and advancing to finalized.
+func TestFinalize_DestinationCancelledResumeSucceeds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().State().Return(vmpkg.StateMigrationTransferCompleted)
+	vm.EXPECT().FinalizeLiveMigration(gomock.Any(), gomock.Any()).Return(nil)
+	vm.EXPECT().Resume(gomock.Any(), false).Return(nil)
+
+	c := New()
+	c.sessionID = "sess-1"
+	c.state = StateCancelled
+	c.origin = hcsschema.MigrationOriginDestination
+	c.vmController = vm
+
+	if err := c.Finalize(t.Context(), "sess-1", migration.FinalizeAction_FINALIZE_ACTION_RESUME, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.State() != StateFinalized {
+		t.Errorf("state = %s; want Finalized", c.State())
 	}
 }
 
