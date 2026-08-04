@@ -27,8 +27,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
 )
 
-const wcowSandboxMountPath = "C:\\SandboxMounts"
-
 func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, isSandbox bool) error {
 	if coi.Spec.Root == nil {
 		coi.Spec.Root = &specs.Root{}
@@ -255,5 +253,5 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 
 func convertToWCOWSandboxMountPath(source string) string {
 	subPath := strings.TrimPrefix(source, guestpath.SandboxMountPrefix)
-	return filepath.Join(wcowSandboxMountPath, subPath)
+	return filepath.Join(guestpath.WCOWSandboxMountPath, subPath)
 }

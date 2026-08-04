@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/fsformatter"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	oci "github.com/Microsoft/hcsshim/internal/oci"
@@ -142,7 +143,7 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		// sandbox:// mounts by exec'ing `cmd /c mkdir ... & dir ...` inside the
 		// UVM (see resources_wcow.go:setupMounts), but for confidential, we
 		// handle this here in the sidecar GCS.
-		if err := createMappedDirectorySourceDirs(ctx, container.MappedDirectories); err != nil {
+		if err := createSandboxMountSourceDirs(ctx, container.MappedDirectories); err != nil {
 			return fmt.Errorf("failed to create mapped directory source directories: %w", err)
 		}
 
@@ -271,24 +272,28 @@ func stageDLL(ctx context.Context, srcPath, dstDir string) (bool, error) {
 	return true, nil
 }
 
-// createMappedDirectorySourceDirs creates the host-side source directory for
-// every mapped directory (i.e. "mounts") in the container document, if it does
-// not already exist.
-func createMappedDirectorySourceDirs(ctx context.Context, mappedDirectories []hcsschema.MappedDirectory) error {
+// createSandboxMountSourceDirs creates source directories for sandbox
+// mounts if they do not already exist.
+func createSandboxMountSourceDirs(ctx context.Context, mappedDirectories []hcsschema.MappedDirectory) error {
 	for _, md := range mappedDirectories {
 		source := md.HostPath
+		if strings.EqualFold(source, guestpath.WCOWSandboxMountPath) ||
+			strings.HasPrefix(strings.ToLower(source), strings.ToLower(guestpath.WCOWSandboxMountPath+`\`)) {
 
-		if _, err := os.Stat(source); err == nil {
-			// exists
-			continue
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to stat mapped directory source %q: %w", source, err)
-		}
+			// do this stat rather than call MkdirAll unconditionally,
+			// since the latter will fail with a source file (not dir)
+			if _, err := os.Stat(source); err == nil {
+				log.G(ctx).WithField("source", source).Debug("source of mapped directory mount exists, not creating directories")
+				continue
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to stat mapped directory source %q: %w", source, err)
+			}
 
-		if err := os.MkdirAll(source, 0755); err != nil {
-			return fmt.Errorf("failed to create mapped directory source %q: %w", source, err)
+			if err := os.MkdirAll(source, 0755); err != nil {
+				return fmt.Errorf("failed to create mapped directory source %q: %w", source, err)
+			}
+			log.G(ctx).WithField("source", source).Debug("created mapped directory source directory")
 		}
-		log.G(ctx).WithField("source", source).Debug("created mapped directory source directory")
 	}
 	return nil
 }
