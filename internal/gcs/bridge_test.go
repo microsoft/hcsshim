@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -228,5 +229,30 @@ func TestBridgeNotifyFailure(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), errMsg) {
 		t.Error("unexpected result: ", err)
+	}
+}
+
+// TestRPCErrorUnwrapHCSCode verifies that an rpcError carrying an HCS HRESULT
+// with the high bit set (a negative int32, e.g. 0xc037010e) unwraps to an errno
+// that errors.Is matches against the canonical syscall.Errno-based HCS
+// constants. Regression test: a naive windows.Errno(int32) conversion
+// sign-extends the value to 0xFFFFFFFF_C037010E, which fails to match
+// hcs.ErrComputeSystemDoesNotExist.
+func TestRPCErrorUnwrapHCSCode(t *testing.T) {
+	// 0xc037010e == hcs.ErrComputeSystemDoesNotExist, stored as an int32 in the
+	// bridge response Result field (decimal -1070137074).
+	err := error(&rpcError{result: -1070137074}) // int32 form of 0xc037010e
+
+	if !errors.Is(err, hcs.ErrComputeSystemDoesNotExist) {
+		t.Fatalf("errors.Is(err, ErrComputeSystemDoesNotExist) = false; want true (err=%v)", err)
+	}
+	if !hcs.IsNotExist(err) {
+		t.Fatalf("hcs.IsNotExist(err) = false; want true (err=%v)", err)
+	}
+
+	// A wrapped rpcError (as produced along real call chains) must still match.
+	wrapped := errors.Join(errors.New("delete container state"), err)
+	if !hcs.IsNotExist(wrapped) {
+		t.Fatalf("hcs.IsNotExist(wrapped) = false; want true (err=%v)", wrapped)
 	}
 }

@@ -2,9 +2,11 @@ package securitypolicy
 
 import (
 	"context"
+	"crypto"
 	"fmt"
 	"syscall"
 
+	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -32,7 +34,9 @@ type CreateContainerOptions struct {
 	// IsSandboxContainer is true when the container being created is the cri
 	// pod sandbox container (usually it is the "pause" image).
 	IsSandboxContainer bool
+	LinuxDevices       []oci.LinuxDevice
 }
+
 type SignalContainerOptions struct {
 	IsInitProcess bool
 	// One of these will be set depending on platform
@@ -41,6 +45,32 @@ type SignalContainerOptions struct {
 
 	LinuxStartupArgs []string
 	WindowsCommand   []string
+}
+
+type LoadFragmentOptions struct {
+	Issuer string
+	Feed   string
+	// If the fragment's COSE envelope contains a CWT Claims with a SVN, pass it
+	// in HeaderSVN.
+	HeaderSVN *int64
+	// Rego is the fragment's Rego payload.
+	Rego string
+	// Receipts are the COSE transparency receipts attached to the fragment's
+	// COSE envelope, if any.  Validation is handled by the enforcer, caller
+	// does not have to validate them.
+	Receipts []cosesign1.ParsedCOSEReceipt
+}
+
+type LoadTransparencyTrustListOptions struct {
+	// Issuer of the signed Transparency Trust List (TTL).
+	Issuer string
+	// Subject of the TTL.
+	Subject string
+	// SVN carried in the TTL's COSE header.
+	SVN int64
+	// ParsedTTL maps each ledger name (receipt issuer) to that ledger's kid ->
+	// public key map.  This is the return value of cosesign1.ParseTTLPayload.
+	ParsedTTL map[string]map[string]crypto.PublicKey
 }
 
 const (
@@ -63,8 +93,10 @@ func init() {
 type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(ctx context.Context, target string, deviceHash string) (err error)
 	EnforceRWDeviceMountPolicy(ctx context.Context, target string, encrypted, ensureFilesystem bool, filesystem string) (err error)
+	EnforceMountBlockDevicePolicy(ctx context.Context, target string) (err error)
 	EnforceDeviceUnmountPolicy(ctx context.Context, unmountTarget string) (err error)
 	EnforceRWDeviceUnmountPolicy(ctx context.Context, unmountTarget string) (err error)
+	EnforceUnmountBlockDevicePolicy(ctx context.Context, unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(ctx context.Context, containerID string, layerPaths []string, target string) (err error)
 	EnforceOverlayUnmountPolicy(ctx context.Context, target string) (err error)
 	EnforceCreateContainerPolicy(
@@ -125,7 +157,8 @@ type SecurityPolicyEnforcer interface {
 	EnforceGetPropertiesPolicy(ctx context.Context) error
 	EnforceDumpStacksPolicy(ctx context.Context) error
 	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
-	LoadFragment(ctx context.Context, issuer string, feed string, rego string) error
+	LoadFragment(ctx context.Context, opts LoadFragmentOptions) error
+	LoadTransparencyTrustList(ctx context.Context, opts LoadTransparencyTrustListOptions) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
@@ -219,11 +252,19 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceRWDeviceMountPolicy(context.Context
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceMountBlockDevicePolicy(context.Context, string) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(context.Context, string) error {
 	return nil
 }
 
 func (OpenDoorSecurityPolicyEnforcer) EnforceRWDeviceUnmountPolicy(context.Context, string) error {
+	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceUnmountBlockDevicePolicy(context.Context, string) error {
 	return nil
 }
 
@@ -300,7 +341,11 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context) e
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) LoadFragment(context.Context, string, string, string) error {
+func (OpenDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragmentOptions) error {
+	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, LoadTransparencyTrustListOptions) error {
 	return nil
 }
 
@@ -356,12 +401,20 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceRWDeviceMountPolicy(context.Conte
 	return errors.New("Read-write device mounting is denied by policy")
 }
 
+func (ClosedDoorSecurityPolicyEnforcer) EnforceMountBlockDevicePolicy(context.Context, string) error {
+	return errors.New("block-device mounting is denied by policy")
+}
+
 func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(context.Context, string) error {
 	return errors.New("unmounting is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceRWDeviceUnmountPolicy(context.Context, string) error {
 	return errors.New("Read-write device unmounting is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceUnmountBlockDevicePolicy(context.Context, string) error {
+	return errors.New("block-device unmounting is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(context.Context, string, []string, string) error {
@@ -437,8 +490,12 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy(context.Context)
 	return errors.New("getting stack dumps is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(context.Context, string, string, string) error {
+func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(context.Context, LoadFragmentOptions) error {
 	return errors.New("loading fragments is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) LoadTransparencyTrustList(context.Context, LoadTransparencyTrustListOptions) error {
+	return errors.New("loading transparency trust lists is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {

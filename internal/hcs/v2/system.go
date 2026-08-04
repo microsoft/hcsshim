@@ -19,10 +19,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type System struct {
@@ -73,10 +73,10 @@ func siloNameFmt(containerID string) string {
 func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface interface{}) (_ *System, err error) {
 	operation := "hcs::CreateComputeSystem"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", id))
 
 	computeSystem := newSystem(id)
 
@@ -221,10 +221,10 @@ func GetComputeSystems(ctx context.Context, q schema1.ComputeSystemQuery) ([]sch
 func (computeSystem *System) Start(ctx context.Context) (err error) {
 	operation := "hcs::System::Start"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
@@ -313,9 +313,9 @@ func (computeSystem *System) Terminate(ctx context.Context) error {
 // safe to call multiple times.
 func (computeSystem *System) waitBackground() {
 	operation := "hcs::System::waitBackground"
-	ctx, span := oc.StartSpan(context.Background(), operation)
+	ctx, span := ot.StartSpan(context.Background(), operation)
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	var raw json.RawMessage
 	var err error
@@ -345,7 +345,7 @@ func (computeSystem *System) waitBackground() {
 		computeSystem.stopTime = time.Now()
 		close(computeSystem.waitBlock)
 	})
-	oc.SetSpanStatus(span, err)
+	ot.SetSpanStatus(span, err)
 }
 
 func (computeSystem *System) WaitChannel() <-chan struct{} {
@@ -641,10 +641,10 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 func (computeSystem *System) PropertiesV3(ctx context.Context, query *hcsschema.PropertyQuery) (_ *hcsschema.Properties, err error) {
 	operation := "hcs::System::PropertiesV3"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
@@ -688,10 +688,10 @@ func (computeSystem *System) PropertiesV3(ctx context.Context, query *hcsschema.
 func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	operation := "hcs::System::Pause"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
@@ -715,10 +715,10 @@ func (computeSystem *System) Pause(ctx context.Context) (err error) {
 func (computeSystem *System) Resume(ctx context.Context) (err error) {
 	operation := "hcs::System::Resume"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
@@ -742,10 +742,10 @@ func (computeSystem *System) Resume(ctx context.Context) (err error) {
 func (computeSystem *System) Save(ctx context.Context, options interface{}) (err error) {
 	operation := "hcs::System::Save"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	saveOptions, err := json.Marshal(options)
 	if err != nil {
@@ -905,10 +905,10 @@ func (computeSystem *System) Close() error {
 // proper system cleanup.
 func (computeSystem *System) CloseCtx(ctx context.Context) (err error) {
 	operation := "hcs::System::Close"
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()

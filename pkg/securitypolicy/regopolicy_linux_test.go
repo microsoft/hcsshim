@@ -4,11 +4,16 @@
 package securitypolicy
 
 import (
+	_ "embed"
+
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,6 +28,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+
+	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 )
 
 const testOSType = "linux"
@@ -1234,7 +1241,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		envList := append(tc.envList, generateNeverMatchingEnvironmentVariable(testRand))
+		// Generate a new random env var that will not be in the allowed list
+		envList := append(tc.envList, generateRandomEnvironmentVariable(testRand))
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// not getting an error means something is broken
@@ -1242,7 +1250,8 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 			return false
 		}
 
-		return assertDecisionJSONContains(t, err, "invalid env list", envList[0])
+		problematicKey := strings.Split(envList[len(envList)-1], "=")[0]
+		return assertDecisionJSONContains(t, err, "invalid env list", problematicKey)
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -1482,7 +1491,11 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
 
 		// getting an error means something is broken
-		return err == nil
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		return true
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
@@ -2149,6 +2162,39 @@ func Test_Rego_EnforceCreateContainer_Capabilities_Drop_NoMatches(t *testing.T) 
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceCreateContainer_Capabilities_Drop_NoMatches: %v", err)
+	}
+}
+
+func Test_Rego_EnforceCreateContainer_RequireNoDevices(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoCreateContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		privileged := false
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, tc.user, &CreateContainerOptions{
+			SandboxID:            tc.sandboxID,
+			Privileged:           &privileged,
+			NoNewPrivileges:      &tc.noNewPrivileges,
+			Groups:               tc.groups,
+			Umask:                tc.umask,
+			Capabilities:         tc.capabilities,
+			SeccompProfileSHA256: tc.seccomp,
+			LinuxDevices: []oci.LinuxDevice{
+				{
+					Path: "/test",
+				},
+			},
+		})
+
+		return assertDecisionJSONContains(t, err, "devices not supported")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCreateContainer_RequireNoDevices: %v", err)
 	}
 }
 
@@ -3021,13 +3067,9 @@ exec_external := {
 	"env_list": ["%s"]
 }`
 
-	generateEnv := func(r *rand.Rand) string {
-		return randVariableString(r, maxGeneratedEnvironmentVariableRuleLength)
-	}
-
 	generateEnvs := func(envSet stringSet) []string {
 		numVars := atLeastOneAtMost(testRand, maxGeneratedEnvironmentVariableRules)
-		return envSet.randUniqueArray(testRand, generateEnv, numVars)
+		return envSet.randUniqueArray(testRand, generateRandomEnvironmentVariable, numVars)
 	}
 
 	testFunc := func(gc *generatedConstraints) bool {
@@ -3185,7 +3227,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 		// add a rule to re2 match
 		requiredRule := EnvRuleConfig{
 			Strategy: "string",
-			Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+			Rule:     generateRandomEnvironmentVariable(testRand),
 			Required: true,
 		}
 
@@ -4140,7 +4182,7 @@ func Test_Rego_LoadFragment_Container(t *testing.T) {
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4204,7 +4246,7 @@ func Test_Rego_LoadFragment_Container_Compat_0_10_0(t *testing.T) {
 		}
 		tc.policy = policy
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4268,7 +4310,7 @@ func Test_Rego_LoadFragment_Container_Compat_0_10_0_allow_all(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4325,13 +4367,13 @@ func Test_Rego_LoadFragment_Fragment(t *testing.T) {
 		fragment := tc.fragments[0]
 		subFragment := tc.subFragments[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: subFragment.info.issuer, Feed: subFragment.info.feed, Rego: subFragment.code})
 		if err != nil {
 			t.Error("unable to load sub-fragment from fragment: %w", err)
 			return false
@@ -4368,7 +4410,7 @@ func Test_Rego_LoadFragment_ExternalProcess(t *testing.T) {
 		fragment := tc.fragments[0]
 		process := tc.externalProcesses[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4404,7 +4446,7 @@ func Test_Rego_LoadFragment_BadIssuer(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		issuer := testDataGenerator.uniqueFragmentIssuer()
-		err = tc.policy.LoadFragment(p.ctx, issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad issuer")
 			return false
@@ -4438,7 +4480,7 @@ func Test_Rego_LoadFragment_BadFeed(t *testing.T) {
 
 		fragment := tc.fragments[0]
 		feed := testDataGenerator.uniqueFragmentFeed()
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad feed")
 			return false
@@ -4525,7 +4567,7 @@ func expectFragmentNotLoaded(t *testing.T, policy *regoEnforcer, issuer, feed st
 		t.Errorf("fragment module is present")
 		return false
 	}
-	mtdIssuer, err := policy.rego.GetMetadata("issuers", issuer)
+	mtdIssuer, err := policy.rego.GetMetadataMapValue("issuers", issuer)
 	if err != nil && !strings.Contains(err.Error(), "value not found") &&
 		!strings.Contains(err.Error(), "metadata not found for name issuers") {
 		t.Errorf("unexpected error when checking issuer metadata: %v", err)
@@ -4561,9 +4603,10 @@ enforcement_point_info := {
     "default_results": {"allowed": true},
     "use_framework": true
 }
+default extract_parameter(_, _, _) := ""
 `, fragment.info.minimumSVN, frameworkVersion)
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
 
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to bad namespace")
@@ -4605,7 +4648,7 @@ framework_version := "%s"
 load_fragment := {"allowed": true, "add_module": true}
 `, fragment.info.minimumSVN, frameworkVersion)
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
 
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid namespace")
@@ -4638,7 +4681,7 @@ func Test_Rego_LoadFragment_InvalidSVN(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid svn")
 			return false
@@ -4671,14 +4714,14 @@ func Test_Rego_LoadFragment_Fragment_InvalidSVN(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
 		subFragment := tc.subFragments[0]
-		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: subFragment.info.issuer, Feed: subFragment.info.feed, Rego: subFragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load subfragment due to invalid svn")
 			return false
@@ -4723,7 +4766,7 @@ func Test_Rego_LoadFragment_SemverVersion(t *testing.T) {
 		fragmentConstraints.svn = mustIncrementSVN(p.fragments[0].minimumSVN)
 		code := fragmentConstraints.toFragment().marshalRego()
 
-		err = policy.LoadFragment(p.ctx, issuer, feed, code)
+		err = policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, Rego: code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4751,7 +4794,7 @@ func Test_Rego_LoadFragment_SVNMismatch(t *testing.T) {
 		}
 
 		fragment := tc.fragments[0]
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load fragment due to invalid version")
 			return false
@@ -4775,6 +4818,322 @@ func Test_Rego_LoadFragment_SVNMismatch(t *testing.T) {
 	}
 }
 
+// removeRegoSVN returns the fragment Rego code with its `svn := "<svn>"`
+// declaration removed, simulating a "SCITT-style" fragment whose SVN is carried
+// in the COSE header instead of the Rego payload.
+func removeRegoSVN(code string, svn string) string {
+	return strings.Replace(code, fmt.Sprintf("svn := %q", svn), "", 1)
+}
+
+// A fragment whose SVN is provided in the COSE header (and not in its Rego
+// payload) loads successfully when the header SVN meets the minimum.
+func Test_Rego_LoadFragment_HeaderSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		container := tc.containers[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		// SCITT-style fragment: the SVN comes from the COSE header and the
+		// fragment's Rego module does not declare one.
+		code := removeRegoSVN(fragment.code, fragment.info.minimumSVN)
+		headerSVN := int64(minSVN)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err != nil {
+			t.Errorf("unable to load fragment with header SVN: %v", err)
+			return false
+		}
+
+		containerID, err := mountImageForContainer(tc.policy, container.container)
+		if err != nil {
+			t.Errorf("unable to mount image for fragment container: %v", err)
+			return false
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicy(p.ctx,
+			container.sandboxID,
+			containerID,
+			copyStrings(container.container.Command),
+			copyStrings(container.envList),
+			container.container.WorkingDir,
+			copyMounts(container.mounts),
+			false,
+			container.container.NoNewPrivileges,
+			container.user,
+			container.groups,
+			container.container.User.Umask,
+			container.capabilities,
+			container.seccomp,
+		)
+		if err != nil {
+			t.Errorf("unable to create container from fragment loaded via header SVN: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN: %v", err)
+	}
+}
+
+// A SCITT-style fragment is rejected (before its module is loaded) when the
+// header SVN is below the policy's minimum.
+func Test_Rego_LoadFragment_HeaderSVN_BelowMinimum(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		code := removeRegoSVN(fragment.code, fragment.info.minimumSVN)
+		headerSVN := int64(minSVN - 1)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to header SVN below minimum")
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN_BelowMinimum: %v", err)
+	}
+}
+
+// When both a header SVN and the SVN in the fragment's Rego module are present
+// and they agree (and meet the minimum), the fragment loads. The Rego SVN is a
+// string (as the tooling generates it) while the header SVN is a number, so the
+// framework must compare them numerically.
+func Test_Rego_LoadFragment_HeaderSVN_MatchesRegoSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		code := fragment.code
+		// it just happens now that the minSVN is always used as the fragment
+		// SVN. To fix.
+		headerSVN := int64(minSVN)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err != nil {
+			t.Errorf("unable to load fragment when header SVN matches Rego SVN: %v", err)
+			return false
+		}
+
+		if tc.policy.rego.IsModuleActive(rpi.ModuleID(fragment.info.issuer, fragment.info.feed)) {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN_MatchesRegoSVN: %v", err)
+	}
+}
+
+// When both a header SVN and a numeric SVN in the fragment's Rego module are
+// present but disagree, the fragment is rejected even though both values meet
+// the minimum.
+func Test_Rego_LoadFragment_HeaderSVN_MismatchRegoSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		minSVN, err := strconv.Atoi(fragment.info.minimumSVN)
+		if err != nil {
+			t.Errorf("unable to parse minimum SVN %q: %v", fragment.info.minimumSVN, err)
+			return false
+		}
+
+		// The Rego SVN equals the minimum, but the header SVN is higher, so
+		// although both are at/above the minimum they do not match.
+		code := fragment.code
+		// It just happens now that the minSVN is always used as the fragment
+		// SVN. To fix.
+		headerSVN := int64(minSVN + 1)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, HeaderSVN: &headerSVN, Rego: code})
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to header/Rego SVN mismatch")
+			return false
+		}
+
+		expectedString := fmt.Sprintf("svn in header %v does not match svn in fragment rego %v", headerSVN, minSVN)
+		if !assertDecisionJSONContains(t, err, expectedString) {
+			t.Errorf("expected error string to contain '%s'", expectedString)
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_HeaderSVN_MismatchRegoSVN: %v", err)
+	}
+}
+
+// A fragment with no SVN in either the header or its Rego payload is rejected.
+func Test_Rego_LoadFragment_MissingSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+
+		// It just happens now that the minSVN is always used as the fragment
+		// SVN. To fix.
+		code := removeRegoSVN(fragment.code, fragment.info.minimumSVN)
+
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
+		if err == nil {
+			t.Error("expected to be unable to load fragment with no SVN in header or Rego")
+			return false
+		}
+
+		if !assertDecisionJSONContains(t, err, "missing fragment svn in either header or rego payload") {
+			t.Error("expected error string to contain 'missing fragment svn in either header or rego payload'")
+			return false
+		}
+
+		if !expectFragmentNotLoaded(t, tc.policy, fragment.info.issuer, fragment.info.feed) {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_MissingSVN: %v", err)
+	}
+}
+
+// A fragment with an SVN of 0 (the lowest valid value) loads successfully
+// whether the SVN is carried in the COSE header or declared in the fragment's
+// Rego body. This guards against a regression where a 0 SVN could be mistaken
+// for "no SVN defined" due to Rego truthiness semantics.
+func Test_Rego_LoadFragment_ZeroSVN(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		p.fragments = generateFragments(testRand, 1)
+		p.fragments[0].minimumSVN = "0"
+		securityPolicy := p.toPolicy()
+
+		defaultMounts := toOCIMounts(generateMounts(testRand))
+		privilegedMounts := toOCIMounts(generateMounts(testRand))
+
+		issuer := p.fragments[0].issuer
+		feed := p.fragments[0].feed
+
+		// Scenario 1: SVN 0 carried in the COSE header, no SVN in the Rego body.
+		{
+			policy, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts, testOSType)
+			if err != nil {
+				t.Fatalf("error compiling policy: %v", err)
+			}
+
+			fragmentConstraints := generateConstraints(testRand, 1)
+			fragmentConstraints.svn = "0"
+			code := removeRegoSVN(fragmentConstraints.toFragment().marshalRego(), "0")
+			headerSVN := int64(0)
+
+			err = policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, HeaderSVN: &headerSVN, Rego: code})
+			if err != nil {
+				t.Errorf("unable to load fragment with SVN 0 in header: %v", err)
+				return false
+			}
+
+			if policy.rego.IsModuleActive(rpi.ModuleID(issuer, feed)) {
+				t.Error("module not removed after load (header SVN 0)")
+				return false
+			}
+		}
+
+		// Scenario 2: SVN 0 declared in the Rego body, no header SVN.
+		{
+			policy, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts, testOSType)
+			if err != nil {
+				t.Fatalf("error compiling policy: %v", err)
+			}
+
+			fragmentConstraints := generateConstraints(testRand, 1)
+			fragmentConstraints.svn = "0"
+			code := fragmentConstraints.toFragment().marshalRego()
+
+			err = policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, Rego: code})
+			if err != nil {
+				t.Errorf("unable to load fragment with SVN 0 in Rego body: %v", err)
+				return false
+			}
+
+			if policy.rego.IsModuleActive(rpi.ModuleID(issuer, feed)) {
+				t.Error("module not removed after load (Rego body SVN 0)")
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_ZeroSVN: %v", err)
+	}
+}
+
 func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupRegoFragmentTwoFeedTestConfig(p, true, false)
@@ -4784,7 +5143,7 @@ func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
 		}
 
 		for _, fragment := range tc.fragments {
-			err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+			err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 			if err != nil {
 				t.Error("unable to load fragment: %w", err)
 				return false
@@ -4837,7 +5196,7 @@ func Test_Rego_LoadFragment_TwoFeeds(t *testing.T) {
 		}
 
 		for _, fragment := range tc.fragments {
-			err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+			err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 			if err != nil {
 				t.Error("unable to load fragment: %w", err)
 				return false
@@ -4889,13 +5248,13 @@ func Test_Rego_LoadFragment_SameFeedTwice(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, tc.fragments[0].info.issuer, tc.fragments[0].info.feed, tc.fragments[0].code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: tc.fragments[0].info.issuer, Feed: tc.fragments[0].info.feed, Rego: tc.fragments[0].code})
 		if err != nil {
 			t.Error("unable to load fragment the first time: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, tc.fragments[1].info.issuer, tc.fragments[1].info.feed, tc.fragments[1].code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: tc.fragments[1].info.issuer, Feed: tc.fragments[1].info.feed, Rego: tc.fragments[1].code})
 		if err != nil {
 			t.Error("expected to be able to load the same issuer/feed twice: %w", err)
 			return false
@@ -4949,7 +5308,7 @@ func Test_Rego_LoadFragment_ExcludedContainer(t *testing.T) {
 		fragment := tc.fragments[0]
 		container := tc.containers[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -4980,13 +5339,13 @@ func Test_Rego_LoadFragment_ExcludedFragment(t *testing.T) {
 		fragment := tc.fragments[0]
 		subFragment := tc.subFragments[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
 		}
 
-		err = tc.policy.LoadFragment(p.ctx, subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: subFragment.info.issuer, Feed: subFragment.info.feed, Rego: subFragment.code})
 		if err == nil {
 			t.Error("expected to be unable to load a sub-fragment from a fragment")
 			return false
@@ -5011,7 +5370,7 @@ func Test_Rego_LoadFragment_ExcludedExternalProcess(t *testing.T) {
 		fragment := tc.fragments[0]
 		process := tc.externalProcesses[0]
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 		if err != nil {
 			t.Error("unable to load fragment: %w", err)
 			return false
@@ -5085,7 +5444,7 @@ mount_device := data.fragment.mount_device
 		t.Fatalf("unable to create Rego policy: %v", err)
 	}
 
-	err = policy.LoadFragment(ctx, issuer, feed, fragmentCode)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, Rego: fragmentCode})
 	if err != nil {
 		t.Fatalf("unable to load fragment: %v", err)
 	}
@@ -5095,12 +5454,894 @@ mount_device := data.fragment.mount_device
 		t.Fatalf("unable to mount device: %v", err)
 	}
 
-	if test, err := policy.rego.GetMetadata("custom", key); err == nil {
+	if test, err := policy.rego.GetMetadataMapValue("custom", key); err == nil {
 		if test != value {
 			t.Error("incorrect metadata value stored by fragment")
 		}
 	} else {
 		t.Errorf("unable to located metadata key stored by fragment: %v", err)
+	}
+}
+
+func generateTestECDSAKey(t *testing.T) crypto.PublicKey {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("unable to generate test key: %v", err)
+	}
+	return priv.Public()
+}
+
+func ttlPolicyCode(issuer, subject string, minimumSVN int, allowedLedgers []string) string {
+	quoted := make([]string, len(allowedLedgers))
+	for i, l := range allowedLedgers {
+		quoted[i] = fmt.Sprintf("%q", l)
+	}
+	return fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+transparency_trust_lists := [
+	{
+		"issuer": "%s",
+		"subject": "%s",
+		"minimum_svn": %d,
+		"allowed_ledgers": [%s],
+	},
+]
+
+load_transparency_trust_list := data.framework.load_transparency_trust_list
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, issuer, subject, minimumSVN, strings.Join(quoted, ", "))
+}
+
+func Test_Rego_LoadTransparencyTrustList(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+	ledger := "esrp-cts-dev.confidential-ledger.azure.com"
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{ledger}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		ledger:                        {"kid1": key},
+		"unauthorized.ledger.example": {"kid2": key},
+	}
+
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       2,
+		ParsedTTL: parsedTTL,
+	}); err != nil {
+		t.Fatalf("expected TTL to load: %v", err)
+	}
+
+	if _, ok := policy.ttlKeys[ledger]["kid1"]; !ok {
+		t.Errorf("expected key for authorized ledger to be stored")
+	}
+	if _, ok := policy.ttlKeys["unauthorized.ledger.example"]; ok {
+		t.Errorf("keys for an unauthorized ledger must not be stored")
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_Wildcard(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{"*"}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		"ledger.one.example": {"kid1": key},
+		"ledger.two.example": {"kid2": key},
+	}
+
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       1,
+		ParsedTTL: parsedTTL,
+	}); err != nil {
+		t.Fatalf("expected TTL to load: %v", err)
+	}
+
+	for _, ledger := range []string{"ledger.one.example", "ledger.two.example"} {
+		if _, ok := policy.ttlKeys[ledger]; !ok {
+			t.Errorf("expected wildcard root to authorize ledger %s", ledger)
+		}
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_NoAuthorizedLedgers(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{"only.this.ledger.example"}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		"some.other.ledger.example": {"kid1": key},
+	}
+
+	err = policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       1,
+		ParsedTTL: parsedTTL,
+	})
+	if err == nil {
+		t.Fatalf("expected TTL load to be denied when no ledgers are authorized")
+	}
+	if len(policy.ttlKeys) != 0 {
+		t.Errorf("no keys should be stored when the TTL is denied")
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_SVNBelowMinimum(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 5, []string{ledger}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	parsedTTL := map[string]map[string]crypto.PublicKey{
+		ledger: {"kid1": key},
+	}
+
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subject,
+		SVN:       4,
+		ParsedTTL: parsedTTL,
+	}); err == nil {
+		t.Fatalf("expected TTL load to be denied when svn is below the minimum")
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_MergeOverride(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subject := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(ttlPolicyCode(issuer, subject, 1, []string{ledger}), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	firstKey := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  issuer,
+		Subject: subject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": firstKey},
+		},
+	}); err != nil {
+		t.Fatalf("expected first TTL to load: %v", err)
+	}
+
+	// A second TTL for the same ledger that adds a new kid and overrides the
+	// existing one with a different key.
+	secondKey := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  issuer,
+		Subject: subject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": secondKey, "kid2": firstKey},
+		},
+	}); err != nil {
+		t.Fatalf("expected second TTL to load: %v", err)
+	}
+
+	eq := policy.ttlKeys[ledger]["kid1"].key.(interface{ Equal(crypto.PublicKey) bool })
+	if !eq.Equal(secondKey) {
+		t.Errorf("expected kid1 to be overridden with the newer key")
+	}
+	if _, ok := policy.ttlKeys[ledger]["kid2"]; !ok {
+		t.Errorf("expected kid2 to be merged in")
+	}
+}
+
+func Test_Rego_LoadFragment_MissingRequiredReceipt(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	feed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "esrp-cts-dev.confidential-ledger.azure.com"
+
+	fragmentCode := fmt.Sprintf(`package fragment
+
+svn := 1
+framework_version := "%s"
+`, frameworkVersion)
+
+	policyCode := fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+		"required_receipts": ["%s"],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, issuer, feed, ledger)
+
+	policy, err := newRegoPolicy(policyCode, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	// No TTL has been loaded, so the enforcer has no keys to validate any
+	// receipt, and the fragment requires one. The load must be denied.
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, HeaderSVN: &svn, Rego: fragmentCode})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied for missing required receipt")
+	}
+	if !assertDecisionJSONContains(t, err, fmt.Sprintf("missing receipt from %s", ledger)) {
+		t.Fatalf("expected denial reason to mention the missing receipt, got: %v", err)
+	}
+
+	if !expectFragmentNotLoaded(t, policy, issuer, feed) {
+		return
+	}
+}
+
+func Test_Rego_LoadFragment_NoReceiptRequired(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	feed := testDataGenerator.uniqueFragmentFeed()
+
+	fragmentCode := fmt.Sprintf(`package fragment
+
+svn := 1
+framework_version := "%s"
+`, frameworkVersion)
+
+	// A fragment object with no required_receipts must load without any receipts,
+	// exactly as before this feature existed.
+	policyCode := fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, issuer, feed)
+
+	policy, err := newRegoPolicy(policyCode, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	svn := int64(1)
+	if err := policy.LoadFragment(ctx, LoadFragmentOptions{Issuer: issuer, Feed: feed, HeaderSVN: &svn, Rego: fragmentCode}); err != nil {
+		t.Fatalf("expected fragment with no required receipts to load: %v", err)
+	}
+}
+
+// receiptFragmentPolicy builds a policy that both trusts a TTL signed by
+// ttlIssuer/ttlSubject (authorizing the given ledger) and allows a fragment
+// from fragIssuer/fragFeed that requires a receipt from requiredLedger.
+func receiptFragmentPolicy(ttlIssuer, ttlSubject, allowedLedger, fragIssuer, fragFeed, requiredLedger string) string {
+	return fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+transparency_trust_lists := [
+	{
+		"issuer": "%s",
+		"subject": "%s",
+		"minimum_svn": 1,
+		"allowed_ledgers": ["%s"],
+	},
+]
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+		"required_receipts": ["%s"],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+load_transparency_trust_list := data.framework.load_transparency_trust_list
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, ttlIssuer, ttlSubject, allowedLedger, fragIssuer, fragFeed, requiredLedger)
+}
+
+func Test_Rego_LoadFragment_ValidReceipt(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "esrp-cts-dev.confidential-ledger.azure.com"
+
+	policy, err := newRegoPolicy(
+		receiptFragmentPolicy(ttlIssuer, ttlSubject, ledger, fragIssuer, fragFeed, ledger),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": key},
+		},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	// Mock receipt validation: assert the enforcer only ever offers us the keys
+	// belonging to the receipt's own claimed issuer, then accept.
+	validateCalled := false
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		validateCalled = true
+		if receipt.Issuer != ledger {
+			t.Errorf("validate called with unexpected issuer %q", receipt.Issuer)
+		}
+		if _, ok := keys["kid1"]; !ok || len(keys) != 1 {
+			t.Errorf("validate offered the wrong key set: %v", keys)
+		}
+		return nil
+	})
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	})
+	if err != nil {
+		t.Fatalf("expected fragment with a valid receipt to load: %v", err)
+	}
+	if !validateCalled {
+		t.Errorf("expected receipt validation to be invoked")
+	}
+}
+
+func Test_Rego_LoadFragment_ReceiptWrongIssuer(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	requiredLedger := "required.ledger.example"
+	otherLedger := "other.ledger.example"
+
+	// The TTL only authorizes otherLedger, and the fragment requires a receipt
+	// from requiredLedger. The attached receipt claims to be from otherLedger.
+	policy, err := newRegoPolicy(
+		receiptFragmentPolicy(ttlIssuer, ttlSubject, otherLedger, fragIssuer, fragFeed, requiredLedger),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			otherLedger: {"kid1": key},
+		},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	// Even though the mock would accept the receipt, its issuer is otherLedger,
+	// not the requiredLedger, so the requirement is not satisfied.
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return nil
+	})
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: otherLedger, Kid: "kid1"}},
+	})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied: receipt issuer does not match the requirement")
+	}
+	if !assertDecisionJSONContains(t, err, fmt.Sprintf("missing receipt from %s", requiredLedger)) {
+		t.Fatalf("expected denial reason to mention the missing receipt, got: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_ReceiptValidationFails(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		receiptFragmentPolicy(ttlIssuer, ttlSubject, ledger, fragIssuer, fragFeed, ledger),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": key},
+		},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	// A receipt whose cryptographic validation fails must not count.
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return errors.New("bad signature")
+	})
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied: receipt failed validation")
+	}
+	if !assertDecisionJSONContains(t, err, fmt.Sprintf("missing receipt from %s", ledger)) {
+		t.Fatalf("expected denial reason to mention the missing receipt, got: %v", err)
+	}
+}
+
+// ttlEntryRego renders a single transparency_trust_lists entry as Rego.
+func ttlEntryRego(issuer, subject string, minimumSVN int, allowedLedgers []string) string {
+	quoted := make([]string, len(allowedLedgers))
+	for i, l := range allowedLedgers {
+		quoted[i] = fmt.Sprintf("%q", l)
+	}
+	return fmt.Sprintf(`{"issuer": %q, "subject": %q, "minimum_svn": %d, "allowed_ledgers": [%s]}`,
+		issuer, subject, minimumSVN, strings.Join(quoted, ", "))
+}
+
+// ttlReceiptFragmentPolicy builds a policy that trusts the given TTL entries and
+// allows a fragment from fragIssuer/fragFeed that requires the given list of
+// receipt issuers (which may include literal ledger names, "*", or
+// "TTL:<subject>").
+func ttlReceiptFragmentPolicy(ttlEntries []string, fragIssuer, fragFeed string, requiredIssuers []string) string {
+	quotedReq := make([]string, len(requiredIssuers))
+	for i, r := range requiredIssuers {
+		quotedReq[i] = fmt.Sprintf("%q", r)
+	}
+	return fmt.Sprintf(`package policy
+
+api_version := "%s"
+framework_version := "%s"
+
+transparency_trust_lists := [%s]
+
+fragments := [
+	{
+		"issuer": "%s",
+		"feed": "%s",
+		"minimum_svn": 1,
+		"includes": [],
+		"required_receipts": [%s],
+	},
+]
+
+load_fragment := data.framework.load_fragment
+load_transparency_trust_list := data.framework.load_transparency_trust_list
+reason := data.framework.reason
+`, apiVersion, frameworkVersion, strings.Join(ttlEntries, ", "), fragIssuer, fragFeed, strings.Join(quotedReq, ", "))
+}
+
+func Test_Rego_LoadFragment_WildcardReceipt(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{ttlEntryRego(ttlIssuer, ttlSubject, 1, []string{ledger})},
+			fragIssuer, fragFeed, []string{"*"}),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	key := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:  ttlIssuer,
+		Subject: ttlSubject,
+		SVN:     1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{
+			ledger: {"kid1": key},
+		},
+	}); err != nil {
+		t.Fatalf("unable to load TTL: %v", err)
+	}
+
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return nil
+	})
+
+	// A "*" requirement is satisfied by any validated receipt, regardless of
+	// which trusted ledger it came from.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	if err := policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	}); err != nil {
+		t.Fatalf("expected fragment requiring \"*\" to load with a valid receipt: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_WildcardReceipt_NoReceipt(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubject := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{ttlEntryRego(ttlIssuer, ttlSubject, 1, []string{ledger})},
+			fragIssuer, fragFeed, []string{"*"}),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	// A fragment requiring "*" still needs at least one validated receipt. With
+	// no receipts attached, the load must be denied.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err = policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+	})
+	if err == nil {
+		t.Fatalf("expected fragment requiring \"*\" to be denied when no receipt is attached")
+	}
+	if !assertDecisionJSONContains(t, err, "missing receipt from *") {
+		t.Fatalf("expected denial reason to mention the missing wildcard receipt, got: %v", err)
+	}
+	if !expectFragmentNotLoaded(t, policy, fragIssuer, fragFeed) {
+		return
+	}
+}
+
+// setupTTLSubjectReceiptPolicy builds a policy where the same ledger is
+// authorized by two different TTL subjects (A and B), each contributing a
+// distinct key id, and a fragment that requires a receipt signed by a key from
+// TTL subject A ("TTL:<subjectA>"). It loads both TTLs (subject A offering kid1,
+// subject B offering kid2) and installs an accepting receipt validation mock.
+func setupTTLSubjectReceiptPolicy(t *testing.T, ctx context.Context) (policy *regoEnforcer, fragIssuer, fragFeed, ledger string) {
+	t.Helper()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	ttlSubjectA := testDataGenerator.uniqueFragmentFeed()
+	ttlSubjectB := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer = testDataGenerator.uniqueFragmentIssuer()
+	fragFeed = testDataGenerator.uniqueFragmentFeed()
+	ledger = "ledger.example"
+
+	var err error
+	policy, err = newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{
+				ttlEntryRego(ttlIssuer, ttlSubjectA, 1, []string{ledger}),
+				ttlEntryRego(ttlIssuer, ttlSubjectB, 1, []string{ledger}),
+			},
+			fragIssuer, fragFeed, []string{"TTL:" + ttlSubjectA}),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	keyA := generateTestECDSAKey(t)
+	keyB := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    ttlIssuer,
+		Subject:   ttlSubjectA,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": keyA}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL A: %v", err)
+	}
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    ttlIssuer,
+		Subject:   ttlSubjectB,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid2": keyB}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL B: %v", err)
+	}
+
+	policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+		return nil
+	})
+	return policy, fragIssuer, fragFeed, ledger
+}
+
+func Test_Rego_LoadFragment_TTLSubjectReceipt(t *testing.T) {
+	ctx := context.Background()
+	policy, fragIssuer, fragFeed, ledger := setupTTLSubjectReceiptPolicy(t, ctx)
+
+	// kid1 was contributed by TTL subject A, so a receipt signed with it
+	// satisfies the fragment's "TTL:<subjectA>" requirement.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	if err := policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+	}); err != nil {
+		t.Fatalf("expected fragment requiring a receipt from TTL subject A to load: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_TTLSubjectReceipt_WrongSubject(t *testing.T) {
+	ctx := context.Background()
+	policy, fragIssuer, fragFeed, ledger := setupTTLSubjectReceiptPolicy(t, ctx)
+
+	// kid2 was contributed by TTL subject B, not A. Even though the receipt
+	// validates against a trusted key for the same ledger, it does not satisfy a
+	// requirement for TTL:<subjectA>.
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	err := policy.LoadFragment(ctx, LoadFragmentOptions{
+		Issuer:    fragIssuer,
+		Feed:      fragFeed,
+		HeaderSVN: &svn,
+		Rego:      fragmentCode,
+		Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid2"}},
+	})
+	if err == nil {
+		t.Fatalf("expected fragment load to be denied: receipt signed by key from the wrong TTL subject")
+	}
+	if !assertDecisionJSONContains(t, err, "missing receipt from TTL:") {
+		t.Fatalf("expected denial reason to mention the missing ttl-subject receipt, got: %v", err)
+	}
+	if !expectFragmentNotLoaded(t, policy, fragIssuer, fragFeed) {
+		return
+	}
+}
+
+// Test_Rego_LoadFragment_MultipleTTLSubjectRequirements covers a fragment that
+// requires receipts from two different TTL subjects ("TTL:A" and "TTL:B"),
+// where both TTLs contribute the exact same key (same kid) for the same ledger.
+// A single receipt signed by that key only satisfies both requirements when we
+// have both TTLs.
+func Test_Rego_LoadFragment_MultipleTTLSubjectRequirements(t *testing.T) {
+	ctx := context.Background()
+	ttlIssuer := testDataGenerator.uniqueFragmentIssuer()
+	subjectA := testDataGenerator.uniqueFragmentFeed()
+	subjectB := testDataGenerator.uniqueFragmentFeed()
+	fragIssuer := testDataGenerator.uniqueFragmentIssuer()
+	fragFeed := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	// A single key shared by both TTLs under the same kid.
+	key := generateTestECDSAKey(t)
+
+	// buildPolicy returns a fresh enforcer that trusts both TTL subjects for the
+	// ledger and whose fragment requires receipts from BOTH TTL:subjectA and
+	// TTL:subjectB.
+	buildPolicy := func() *regoEnforcer {
+		policy, err := newRegoPolicy(
+			ttlReceiptFragmentPolicy(
+				[]string{
+					ttlEntryRego(ttlIssuer, subjectA, 1, []string{ledger}),
+					ttlEntryRego(ttlIssuer, subjectB, 1, []string{ledger}),
+				},
+				fragIssuer, fragFeed, []string{"TTL:" + subjectA, "TTL:" + subjectB}),
+			[]oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("unable to create Rego policy: %v", err)
+		}
+		policy.SetReceiptValidationFunction(func(receipt cosesign1.ParsedCOSEReceipt, keys map[string]crypto.PublicKey) error {
+			return nil
+		})
+		return policy
+	}
+
+	loadTTL := func(policy *regoEnforcer, subject string) {
+		if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+			Issuer:    ttlIssuer,
+			Subject:   subject,
+			SVN:       1,
+			ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": key}},
+		}); err != nil {
+			t.Fatalf("unable to load TTL %s: %v", subject, err)
+		}
+	}
+
+	fragmentCode := fmt.Sprintf("package fragment\n\nsvn := 1\nframework_version := \"%s\"\n", frameworkVersion)
+	svn := int64(1)
+	loadFragment := func(policy *regoEnforcer) error {
+		return policy.LoadFragment(ctx, LoadFragmentOptions{
+			Issuer:    fragIssuer,
+			Feed:      fragFeed,
+			HeaderSVN: &svn,
+			Rego:      fragmentCode,
+			Receipts:  []cosesign1.ParsedCOSEReceipt{{Issuer: ledger, Kid: "kid1"}},
+		})
+	}
+
+	// Only TTL subject A loaded: the receipt's key is only offered by subject A,
+	// so the TTL:subjectB requirement is unmet.
+	policyA := buildPolicy()
+	loadTTL(policyA, subjectA)
+	if err := loadFragment(policyA); err == nil {
+		t.Fatalf("expected fragment to be denied with only TTL subject A loaded")
+	} else if !assertDecisionJSONContains(t, err, "missing receipt from TTL:"+subjectB) {
+		t.Fatalf("expected denial to mention the missing TTL:%s receipt, got: %v", subjectB, err)
+	}
+
+	// Only TTL subject B loaded: now the TTL:subjectA requirement is unmet.
+	policyB := buildPolicy()
+	loadTTL(policyB, subjectB)
+	if err := loadFragment(policyB); err == nil {
+		t.Fatalf("expected fragment to be denied with only TTL subject B loaded")
+	} else if !assertDecisionJSONContains(t, err, "missing receipt from TTL:"+subjectA) {
+		t.Fatalf("expected denial to mention the missing TTL:%s receipt, got: %v", subjectA, err)
+	}
+
+	// No TTL loaded at all: the receipt cannot be validated, so neither
+	// requirement is met and the denial must report both missing requirements.
+	policyNone := buildPolicy()
+	err := loadFragment(policyNone)
+	if err == nil {
+		t.Fatalf("expected fragment to be denied with no TTL loaded")
+	}
+	if !assertDecisionJSONContains(t, err, "missing receipt from TTL:", subjectA, subjectB) {
+		t.Fatalf("expected denial to mention the missing TTL:%s receipt, got: %v", subjectA, err)
+	}
+
+	// Both TTLs loaded: the single key is offered by both subjects, so the same
+	// receipt satisfies both TTL:subjectA and TTL:subjectB.
+	policyBoth := buildPolicy()
+	loadTTL(policyBoth, subjectA)
+	loadTTL(policyBoth, subjectB)
+	if err := loadFragment(policyBoth); err != nil {
+		t.Fatalf("expected fragment to load when both TTLs are injected: %v", err)
+	}
+}
+
+func Test_Rego_LoadTransparencyTrustList_OfferedBy(t *testing.T) {
+	ctx := context.Background()
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	subjectA := testDataGenerator.uniqueFragmentFeed()
+	subjectB := testDataGenerator.uniqueFragmentFeed()
+	ledger := "ledger.example"
+
+	policy, err := newRegoPolicy(
+		ttlReceiptFragmentPolicy(
+			[]string{
+				ttlEntryRego(issuer, subjectA, 1, []string{ledger}),
+				ttlEntryRego(issuer, subjectB, 1, []string{ledger}),
+			},
+			testDataGenerator.uniqueFragmentIssuer(), testDataGenerator.uniqueFragmentFeed(), nil),
+		[]oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	sharedKey := generateTestECDSAKey(t)
+	// Subject A offers sharedKey under kid1.
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subjectA,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": sharedKey}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL A: %v", err)
+	}
+	// Subject B offers the same key under the same kid, so offeredBy accumulates
+	// both subjects.
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subjectB,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": sharedKey}},
+	}); err != nil {
+		t.Fatalf("unable to load TTL B: %v", err)
+	}
+
+	entry := policy.ttlKeys[ledger]["kid1"]
+	if len(entry.offeredBy) != 2 || !slices.Contains(entry.offeredBy, subjectA) || !slices.Contains(entry.offeredBy, subjectB) {
+		t.Fatalf("expected kid1 to be offered by both subjects, got %v", entry.offeredBy)
+	}
+
+	// Subject A now offers a different key under the same kid. The override must
+	// reset offeredBy to only the contributing subject (A).
+	newKey := generateTestECDSAKey(t)
+	if err := policy.LoadTransparencyTrustList(ctx, LoadTransparencyTrustListOptions{
+		Issuer:    issuer,
+		Subject:   subjectA,
+		SVN:       1,
+		ParsedTTL: map[string]map[string]crypto.PublicKey{ledger: {"kid1": newKey}},
+	}); err != nil {
+		t.Fatalf("unable to load overriding TTL: %v", err)
+	}
+
+	entry = policy.ttlKeys[ledger]["kid1"]
+	if len(entry.offeredBy) != 1 || entry.offeredBy[0] != subjectA {
+		t.Fatalf("expected offeredBy to be reset to [subjectA] after key override, got %v", entry.offeredBy)
+	}
+	eq := entry.key.(interface{ Equal(crypto.PublicKey) bool })
+	if !eq.Equal(newKey) {
+		t.Errorf("expected the key to be replaced with the new key")
 	}
 }
 
@@ -5124,9 +6365,11 @@ load_fragment := {"allowed": true, "add_module": true}
 data.framework.load_fragment := {"allowed": true, "add_module": true}
 input.issuer := "%s"
 data.framework.input.issuer := "%s"
+default extract_parameter(_, _, _) := ""
+data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
 `, fragment.info.minimumSVN, frameworkVersion, expectedIssuer, expectedIssuer)
 
-		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: actualIssuer, Feed: fragment.info.feed, Rego: code})
 
 		if !assertDecisionJSONContains(t, err, "invalid fragment issuer") {
 			return false
@@ -5174,9 +6417,11 @@ enforcement_point_info := {
     "use_framework": true
 }
 data.framework.load_fragment := load_fragment
+default extract_parameter(_, _, _) := ""
+data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
 `, fragment.constraints.svn, frameworkVersion)
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})
 
 		if !assertDecisionJSONContains(t, err, "fragment svn is below the specified minimum") {
 			return false
@@ -5206,7 +6451,7 @@ func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego(t *testing.T) {
 		actualIssuer := testDataGenerator.uniqueFragmentIssuer()
 		code := "package fragment\n!invalid!rego"
 
-		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: actualIssuer, Feed: fragment.info.feed, Rego: code})
 
 		if strings.Contains(err.Error(), "error when compiling module") ||
 			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
@@ -5242,7 +6487,7 @@ func Test_Rego_LoadFragment_BadFeed_MustNotTryToLoadRego(t *testing.T) {
 		actualFeed := testDataGenerator.uniqueFragmentFeed()
 		code := "package fragment\n!invalid!rego"
 
-		err = tc.policy.LoadFragment(p.ctx, fragment.info.issuer, actualFeed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: actualFeed, Rego: code})
 
 		if strings.Contains(err.Error(), "error when compiling module") ||
 			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
@@ -5284,7 +6529,7 @@ func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0(t *test
 		actualIssuer := testDataGenerator.uniqueFragmentIssuer()
 		code := "package fragment\n!invalid!rego"
 
-		err = tc.policy.LoadFragment(p.ctx, actualIssuer, fragment.info.feed, code)
+		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: actualIssuer, Feed: fragment.info.feed, Rego: code})
 
 		if strings.Contains(err.Error(), "error when compiling module") ||
 			!assertDecisionJSONDoesNotContain(t, err, "error when compiling module") {
@@ -5303,6 +6548,488 @@ func Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0(t *test
 	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_LoadFragment_BadIssuer_MustNotTryToLoadRego_Compat_0_10_0: %v", err)
 	}
+}
+
+func Test_Rego_LoadFragment_Container_FragmentParameters_Simple(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "allowed.value",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=allowed.value",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value",
+		"ENV_VAR_PARAMETER=allowed_value",
+		"ENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_MultiplePossibilities(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "allowed.value.1",
+						"value_strategy": "string",
+					},
+				},
+				{
+					"env_param": mapOfAny{
+						"value":          "allowed.value.2",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=allowed.value.1",
+		"ENV_VAR_PARAMETER=allowed.value.2",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value.1",
+		"ENV_VAR_PARAMETER=allowed_value.2",
+		"ENV_VAR_PARAMETER=allowed.value.3",
+		"ENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_Default(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=default_is_allow_all_non_empty",
+	}, []string{
+		"ANOTHER_ENV=should.deny",
+		"ENV_VAR_PARAMETER=",
+	})
+}
+
+// Test passing parameters not defined in the fragment. Current behaviour is
+// ignore but this could be changed in the future to be more strict.
+func Test_Rego_LoadFragment_FragmentParameters_UndefinedParameters(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"bogus_param": "some_value",
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=default_is_allow_all_non_empty",
+	}, []string{
+		"ANOTHER_ENV=should.deny",
+		"ENV_VAR_PARAMETER=",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_SpecialChars(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "!@#$%^&*( )_+-=[]{};'\\:\"|,./<>?\n\r\t\x01",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=!@#$%^&*( )_+-=[]{};'\\:\"|,./<>?\n\r\t\x01",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value",
+		"ENV_VAR_PARAMETER=?></.,|\":\\';}{][=-+_)(*&^%$#@!",
+		"ENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER=!@#$%^&*( )_+-=[]{};'\\:\"|,./<>?\n\r\t\x01\n",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_Empty(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnv(t, p, []string{
+		"ENV_VAR_PARAMETER=",
+	}, []string{
+		"ENV_VAR_PARAMETER=denied.value",
+		"ENV_VAR_PARAMETER==",
+		"ENV_VAR_PARAMETER=\n",
+		"ENV_VAR_PARAMETER=.",
+		"\nENV_VAR_PARAMETER=",
+		"ENV_VAR_PARAMETER",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_MultipleParams(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: envRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param_nodefault": mapOfAny{
+						"value":          "aaa",
+						"value_strategy": "string",
+					},
+					"env_string_param_nodefault": "bbb",
+				},
+			},
+		},
+	}, false)
+	correctArray := []string{
+		"ENV_VAR_FIXED=fixed_value",
+		"ENV_VAR_PARAMETER=default_value",
+		"ENV_VAR_PARAMETER_NODEFAULT=aaa",
+		"ENV_STRING_PARAM=default_string_value",
+		"ENV_STRING_PARAM_NODEFAULT=bbb",
+	}
+	wrongArrays := make([][]string, 0)
+
+	// wrong value
+	for idxToChange := range correctArray {
+		wrongArray := make([]string, 0, len(correctArray))
+		for idx, val := range correctArray {
+			if idx == idxToChange {
+				wrongArray = append(wrongArray, val+"_wrong")
+			} else {
+				wrongArray = append(wrongArray, val)
+			}
+		}
+		wrongArrays = append(wrongArrays, wrongArray)
+	}
+
+	fragmentParameterTestCheckMultipleEnv(t, p, [][]string{correctArray}, wrongArrays)
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_MultipleParams_MultipleChoices(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: envRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param_nodefault": mapOfAny{
+						"value":          "aaa",
+						"value_strategy": "string",
+					},
+					"env_string_param_nodefault": "bbb",
+					"env_param": mapOfAny{
+						"value":          "ccc",
+						"value_strategy": "string",
+					},
+					"env_string_param": "ddd",
+				},
+				{
+					"env_param_nodefault": mapOfAny{
+						"value":          "111",
+						"value_strategy": "string",
+					},
+					"env_string_param_nodefault": "222",
+					"env_param": mapOfAny{
+						"value":          "333",
+						"value_strategy": "string",
+					},
+					"env_string_param": "444",
+				},
+			},
+		},
+	}, false)
+
+	correctArray1 := []string{
+		"ENV_VAR_FIXED=fixed_value",
+		"ENV_VAR_PARAMETER=ccc",
+		"ENV_VAR_PARAMETER_NODEFAULT=aaa",
+		"ENV_STRING_PARAM=ddd",
+		"ENV_STRING_PARAM_NODEFAULT=bbb",
+	}
+	correctArray2 := []string{
+		"ENV_VAR_FIXED=fixed_value",
+		"ENV_VAR_PARAMETER=333",
+		"ENV_VAR_PARAMETER_NODEFAULT=111",
+		"ENV_STRING_PARAM=444",
+		"ENV_STRING_PARAM_NODEFAULT=222",
+	}
+	correctArrays := [][]string{correctArray1, correctArray2}
+	wrongArrays := make([][]string, 0)
+
+	// wrong value
+	for _, correctArray := range correctArrays {
+		for idxToChange := range correctArray {
+			wrongArray := make([]string, 0, len(correctArray))
+			for idx, val := range correctArray {
+				if idx == idxToChange {
+					wrongArray = append(wrongArray, val+"_wrong")
+				} else {
+					wrongArray = append(wrongArray, val)
+				}
+			}
+			wrongArrays = append(wrongArrays, wrongArray)
+		}
+	}
+
+	// wrong combination 1
+	invalidCombination := make([]string, 0, len(correctArray1))
+	for i := range correctArray1 {
+		if i%2 == 0 {
+			invalidCombination = append(invalidCombination, correctArray1[i])
+		} else {
+			invalidCombination = append(invalidCombination, correctArray2[i])
+		}
+	}
+	wrongArrays = append(wrongArrays, invalidCombination)
+
+	// wrong combination 2
+	invalidCombination = make([]string, 0, len(correctArray1))
+	for i := range correctArray1 {
+		if i%2 == 1 {
+			invalidCombination = append(invalidCombination, correctArray1[i])
+		} else {
+			invalidCombination = append(invalidCombination, correctArray2[i])
+		}
+	}
+	wrongArrays = append(wrongArrays, invalidCombination)
+
+	fragmentParameterTestCheckMultipleEnv(t, p, correctArrays, wrongArrays)
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_TwoFragments_CommonParameterName(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: simpleEnvRuleParamPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "value1",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+		{
+			fragmentCode: envRuleParamAnotherFragmentPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"env_param": mapOfAny{
+						"value":          "value2",
+						"value_strategy": "string",
+					},
+				},
+			},
+		},
+	}, false)
+
+	fragmentParameterTestCheckOneEnvWithLayer(t, p, []string{paramTestImageBaseLayer}, []string{
+		"ENV_VAR_PARAMETER=value1",
+	}, []string{
+		"ENV_VAR_PARAMETER=value2",
+	})
+
+	fragmentParameterTestCheckOneEnvWithLayer(t, p, []string{paramTestImageLayer1}, []string{
+		"ENV_VAR_PARAMETER=value2",
+	}, []string{
+		"ENV_VAR_PARAMETER=value1",
+	})
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_Nested(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: nestedImporterPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+		{
+			fragmentCode: nestedImporter2PolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+		{
+			fragmentCode: nestedImporter2PolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"l1_param": "l1_value_3",
+				},
+			},
+		},
+	}, true)
+
+	err := p.LoadFragment(context.Background(), LoadFragmentOptions{Issuer: "nested:issuer", Feed: "nested_fragment", Rego: paramTestTemplateFragmentCode(nestedFragmentPolicyCode)})
+	if err != nil {
+		t.Fatalf("unable to load nested fragment: %v", err)
+	}
+
+	fragmentParameterTestCheckMultipleEnvWithLayer(t, p, []string{paramTestImageLayer2}, [][]string{
+		{
+			"L1_PARAM=l1param_default",
+			"L2_PARAM=l2param_from_l1_1",
+		},
+		{
+			"L1_PARAM=l1param_default",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+		{
+			"L1_PARAM=l1param_default_2",
+			"L2_PARAM=l2param_from_l1_1",
+		},
+		{
+			"L1_PARAM=l1param_default_2",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+		{
+			"L1_PARAM=l1_value_3",
+			"L2_PARAM=l2param_from_l1_1",
+		},
+		{
+			"L1_PARAM=l1_value_3",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+	}, [][]string{
+		{
+			"L1_PARAM=l1_invalid",
+			"L2_PARAM=l2param_from_l1_2",
+		},
+		{
+			"L1_PARAM=l1_value_3",
+			"L2_PARAM=l2_invalid",
+		},
+	})
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"L1_PARAM=l1param_default",
+		"L2_PARAM=l2param_from_l1_1",
+	}, []string{"init"}, []string{paramTestImageLayer1}, nil)
+	assertDecisionJSONContains(t, err, "deviceHash not found")
+	assertDecisionJSONDoesNotContain(t, err, "invalid env list")
+
+	p = setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: nestedImporterPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+	}, false)
+
+	err = p.LoadFragment(context.Background(), LoadFragmentOptions{Issuer: "nested:issuer", Feed: "nested_fragment", Rego: paramTestTemplateFragmentCode(nestedFragmentPolicyCode)})
+	if err == nil {
+		t.Fatal("expected error when loading nested fragment when parent fragment does not include fragments")
+	}
+}
+
+func Test_Rego_LoadFragment_FragmentParameters_ParamOnCommand(t *testing.T) {
+	p := setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: paramOnCommandPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"command_param": []string{"custom_command"},
+				},
+			},
+		},
+	}, false)
+
+	err := fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"custom_command"}, []string{paramTestImageBaseLayer}, []string{
+		"MY_ENV=1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating container with custom command: %v", err)
+	}
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"invalid_command"}, []string{paramTestImageBaseLayer}, nil)
+	assertDecisionJSONContains(t, err, "invalid command")
+
+	p = setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: paramOnCommandPolicyCode,
+			possibleParams: []mapOfAny{
+				{},
+			},
+		},
+	}, false)
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"custom_command"}, []string{paramTestImageBaseLayer}, nil)
+	assertDecisionJSONContains(t, err, "invalid command")
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"init"}, []string{paramTestImageBaseLayer}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating container with default command: %v", err)
+	}
+
+	p = setupRegoFragmentParameterTest(t, []fragmentCodeAndParameters{
+		{
+			fragmentCode: paramOnCommandPolicyCode,
+			possibleParams: []mapOfAny{
+				{
+					"command_param": []string{
+						"sleep",
+						"infinity",
+					},
+				},
+			},
+		},
+	}, false)
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"sleep", "infinity"}, []string{paramTestImageBaseLayer}, []string{
+		"MY_ENV=1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating container with custom command: %v", err)
+	}
+
+	err = fragmentParameterTestCreateContainer(p, []string{
+		"MY_ENV=1",
+	}, []string{"bash"}, []string{paramTestImageBaseLayer}, nil)
+	assertDecisionJSONContains(t, err, "invalid command")
 }
 
 func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
@@ -5950,7 +7677,7 @@ func Test_Fragment_FrameworkVersion_Missing(t *testing.T) {
 	}
 
 	fragment := tc.fragments[0]
-	err = tc.policy.LoadFragment(gc.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+	err = tc.policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 	if err == nil {
 		t.Error("unexpected success. Missing framework_version should trigger an error.")
 	}
@@ -5987,7 +7714,7 @@ func Test_Fragment_FrameworkVersion_In_Future(t *testing.T) {
 	}
 
 	fragment := tc.fragments[0]
-	err = tc.policy.LoadFragment(gc.ctx, fragment.info.issuer, fragment.info.feed, fragment.code)
+	err = tc.policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: fragment.code})
 	if err == nil {
 		t.Error("unexpected success. Future framework_version should trigger an error.")
 	}
@@ -6182,7 +7909,7 @@ func Test_Rego_Enforce_CreateContainer_RequiredEnvMissingHasErrorMessage(t *test
 	container := selectContainerFromContainerList(constraints.containers, testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
-		Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+		Rule:     generateRandomEnvironmentVariable(testRand),
 		Required: true,
 	}
 
@@ -6436,7 +8163,7 @@ func Test_Rego_EnforceCreateContainer_RetryEverything(t *testing.T) {
 func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	container := selectContainerFromContainerList(constraints.containers, testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
@@ -6482,7 +8209,7 @@ func Test_Rego_ExecInContainerPolicy_RequiredEnvMissingHasErrorMessage(t *testin
 func Test_Rego_ExecExternalProcessPolicy_RequiredEnvMissingHasErrorMessage(t *testing.T) {
 	constraints := generateConstraints(testRand, 1)
 	process := generateExternalProcess(testRand)
-	neededEnv := randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength)
+	neededEnv := generateRandomEnvironmentVariable(testRand)
 	requiredRule := EnvRuleConfig{
 		Strategy: "string",
 		Rule:     neededEnv,
@@ -7015,6 +8742,15 @@ func Test_Rego_Fragment_FrameworkSVN(t *testing.T) {
 	fragmentConstraints := generateConstraints(testRand, 1)
 	fragmentConstraints.svn = mustIncrementSVN(gc.fragments[0].minimumSVN)
 	code := fragmentConstraints.toFragment().marshalRego()
+
+	// Simulate what the actual fragment loading code does.  We need to add this
+	// definition even if there are no arguments and the main fragment code does
+	// not use the parameter functions, otherwise it will fail Rego compilation
+	// with unsafe variable error.
+	code, err = getRegoWithParameterDefinitions(code, make(map[string]interface{}))
+	if err != nil {
+		t.Fatalf("Error adding parameter definitions to fragment rego: %v", err)
+	}
 
 	policy.rego.AddModule(fragmentConstraints.namespace, &rpi.RegoModule{
 		Namespace: fragmentConstraints.namespace,
@@ -7610,6 +9346,374 @@ func Test_Rego_GetUserInfo_EtcPasswdOnly(t *testing.T) {
 	}
 }
 
+// Test platform rules in fragment, container in main policy
+func Test_Rego_PlatformRules_InFragment1(t *testing.T) {
+	f := func(gc *generatedConstraints, skipLoadFragment bool, fragmentDontIncludePlatformRules bool) bool {
+		platformFragment := fragment{
+			issuer:     testDataGenerator.uniqueFragmentIssuer(),
+			feed:       "infra",
+			minimumSVN: "1",
+			includes: []string{
+				"platform_rules",
+			},
+		}
+
+		if fragmentDontIncludePlatformRules {
+			platformFragment.includes = []string{
+				"containers",
+			}
+		}
+
+		gc.fragments = []*fragment{&platformFragment}
+
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Fatalf("failed to create rego policy: %v", err)
+		}
+
+		if !skipLoadFragment {
+			err = policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: platformFragment.issuer, Feed: platformFragment.feed, Rego: platformRulesFragmentPolicyCode})
+			if err != nil {
+				t.Fatalf("failed to load infra fragment: %v", err)
+			}
+		}
+
+		container := selectContainerFromContainerList(gc.containers, testRand)
+		containerID, err := mountImageForContainer(policy, container)
+		if err != nil {
+			t.Errorf("failed to mount image for container: %v", err)
+			return false
+		}
+
+		tc, err := createTestContainerSpec(gc, containerID, container, false, policy, defaultMounts, privilegedMounts)
+		if err != nil {
+			t.Fatalf("failed to create test container spec: %v", err)
+		}
+		tc.envList = append(tc.envList, "Fabric_NodeIPOrFqdn=10.0.0.1")
+		tc.mounts = append(tc.mounts, oci.Mount{
+			Source:      fmt.Sprintf("/run/gcs/c/%s/sandboxMounts/tmp/atlas/emptydir/serviceaccount", tc.sandboxID),
+			Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+			Type:        "bind",
+			Options:     []string{"rbind", "rshared", "ro"},
+		})
+
+		envsToKeep, _, _, err := tc.policy.EnforceCreateContainerPolicy(gc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+		if skipLoadFragment || fragmentDontIncludePlatformRules {
+			if err == nil {
+				t.Error("expected error due to missing platform rules, got nil")
+				return false
+			}
+			assertDecisionJSONContains(t, err, "invalid env list: Fabric_NodeIPOrFqdn")
+			assertDecisionJSONContains(t, err, "invalid mount list: /var/run/secrets/kubernetes.io/serviceaccount")
+			return true
+		}
+
+		// getting an error means something is broken
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		slices.Sort(tc.envList)
+		slices.Sort(envsToKeep)
+		if !slices.Equal(tc.envList, envsToKeep) {
+			t.Errorf("expected envs to keep = %v, got %v", tc.envList, envsToKeep)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_PlatformRules_InFragment1 failed: %v", err)
+	}
+}
+
+// Test platform rule and container both in separate fragment
+func Test_Rego_PlatformRules_InFragment2(t *testing.T) {
+	f := func(gc *generatedConstraints, loadPlatformRulesFragmentFirst bool, skipLoadPlatformRulesFragment bool) bool {
+		// Generate some random fragments in the policy
+		gc.fragments = generateFragments(testRand, maxFragmentsInGeneratedConstraints)
+		// Pick one or two to use for container create test
+		containerFragments := selectFragmentsFromConstraints(gc, testRand.Intn(2)+1, []string{"containers"}, []string{}, false, frameworkVersion, false)
+		// Now add platform rules fragment in a random position
+		platformFragment := fragment{
+			issuer:     testDataGenerator.uniqueFragmentIssuer(),
+			feed:       "infra",
+			minimumSVN: "1",
+			includes: []string{
+				"platform_rules",
+			},
+		}
+		gc.fragments = append(gc.fragments, &platformFragment)
+		testRand.Shuffle(len(gc.fragments), func(i, j int) {
+			gc.fragments[i], gc.fragments[j] = gc.fragments[j], gc.fragments[i]
+		})
+
+		containers := make([]*regoFragmentContainer, len(containerFragments))
+
+		// c.f. setupRegoFragmentTestConfig
+		for i, fragment := range containerFragments {
+			containers[i] = makeContainerFromGeneratedFragment(fragment)
+
+			containers[i].envList = append(containers[i].envList, "Fabric_NodeIPOrFqdn=10.0.0.1")
+			containers[i].mounts = append(containers[i].mounts, oci.Mount{
+				Source:      fmt.Sprintf("/run/gcs/c/%s/sandboxMounts/tmp/atlas/emptydir/serviceaccount", containers[i].sandboxID),
+				Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+				Type:        "bind",
+				Options:     []string{"rbind", "rshared", "ro"},
+			})
+
+			code := fragment.constraints.toFragment().marshalRego()
+			fragment.code = setFrameworkVersion(code, frameworkVersion)
+		}
+
+		securityPolicy := gc.toPolicy()
+		defaultMounts := generateMounts(testRand)
+		privilegedMounts := generateMounts(testRand)
+
+		policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+			toOCIMounts(defaultMounts),
+			toOCIMounts(privilegedMounts), testOSType)
+		if err != nil {
+			t.Fatalf("failed to create rego policy: %v", err)
+		}
+
+		if loadPlatformRulesFragmentFirst {
+			if !skipLoadPlatformRulesFragment {
+				err = policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: platformFragment.issuer, Feed: platformFragment.feed, Rego: platformRulesFragmentPolicyCode})
+				if err != nil {
+					t.Fatalf("failed to load platform rules fragment: %v", err)
+				}
+			}
+			for _, containerFragment := range containerFragments {
+				err = policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: containerFragment.info.issuer, Feed: containerFragment.info.feed, Rego: containerFragment.code})
+				if err != nil {
+					t.Fatalf("failed to load container fragment: %v", err)
+				}
+			}
+		} else {
+			for _, containerFragment := range containerFragments {
+				err = policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: containerFragment.info.issuer, Feed: containerFragment.info.feed, Rego: containerFragment.code})
+				if err != nil {
+					t.Fatalf("failed to load container fragment: %v", err)
+				}
+			}
+			if !skipLoadPlatformRulesFragment {
+				err = policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: platformFragment.issuer, Feed: platformFragment.feed, Rego: platformRulesFragmentPolicyCode})
+				if err != nil {
+					t.Fatalf("failed to load platform rules fragment: %v", err)
+				}
+			}
+		}
+
+		for _, container := range containers {
+			containerID, err := mountImageForContainer(policy, container.container)
+			if err != nil {
+				t.Errorf("failed to mount image for container: %v", err)
+				return false
+			}
+
+			_, _, _, err = policy.EnforceCreateContainerPolicy(gc.ctx,
+				container.sandboxID,
+				containerID,
+				copyStrings(container.container.Command),
+				copyStrings(container.envList),
+				container.container.WorkingDir,
+				copyMounts(container.mounts),
+				false,
+				container.container.NoNewPrivileges,
+				container.user,
+				container.groups,
+				container.container.User.Umask,
+				container.capabilities,
+				container.seccomp,
+			)
+
+			if !skipLoadPlatformRulesFragment {
+				if err != nil {
+					t.Errorf("unable to create container from fragment: %v", err)
+					return false
+				}
+			} else {
+				if err == nil {
+					t.Error("expected error due to missing platform rules, got nil")
+					return false
+				}
+				assertDecisionJSONContains(t, err, "invalid env list: Fabric_NodeIPOrFqdn")
+				assertDecisionJSONContains(t, err, "invalid mount list: /var/run/secrets/kubernetes.io/serviceaccount")
+			}
+		}
+
+		return true
+	}
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_PlatformRules_InFragment2 failed: %v", err)
+	}
+}
+
+// Test platform rules and container both in main policy
+func Test_Rego_PlatformRules_InPolicy1(t *testing.T) {
+	// We don't actually use fragment in this test, but need some value as
+	// placeholder.
+	fragmentFeed := testDataGenerator.uniqueFragmentFeed()
+	fragmentIssuer := testDataGenerator.uniqueFragmentIssuer()
+
+	rego := getPolicyCode_PolicyWithPlatformRules(fragmentFeed, fragmentIssuer)
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	p, err := newRegoPolicy(rego,
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts), testOSType)
+	if err != nil {
+		t.Errorf("unable to create policy with platform rules: %v", err)
+	}
+
+	container := &securityPolicyContainer{
+		Command: []string{"bash"},
+		EnvRules: []EnvRuleConfig{
+			{
+				Required:      true,
+				UseNameValue:  true,
+				Name:          "Fabric_NodeIPOrFqdn",
+				NameStrategy:  EnvVarRuleString,
+				Value:         "10.0.0.1",
+				ValueStrategy: EnvVarRuleString,
+			},
+		},
+		Layers: []string{
+			paramTestImageBaseLayer,
+		},
+		WorkingDir: "/",
+		Mounts: []mountInternal{
+			{
+				Source:      "sandbox:///tmp/atlas/emptydir/.+",
+				Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+				Type:        "bind",
+				Options:     []string{"rbind", "rshared", "ro"},
+			},
+		},
+		User: UserConfig{
+			UserIDName: generateIDNameConfig(testRand),
+			GroupIDNames: []IDNameConfig{
+				generateIDNameConfig(testRand),
+			},
+			Umask: "0022",
+		},
+		Capabilities: &capabilitiesInternal{
+			Ambient:     []string{},
+			Bounding:    []string{},
+			Effective:   []string{},
+			Inheritable: []string{},
+			Permitted:   []string{},
+		},
+	}
+	containerID, err := mountImageForContainer(p, container)
+	if err != nil {
+		t.Fatalf("failed to mount image for container: %v", err)
+	}
+
+	tc, err := createTestContainerSpec(&generatedConstraints{
+		ctx: context.Background(),
+	}, containerID, container, false, p, defaultMounts, privilegedMounts)
+	if err != nil {
+		t.Fatalf("failed to create test container spec: %v", err)
+	}
+
+	envsToKeep, _, _, err := tc.policy.EnforceCreateContainerPolicy(tc.ctx, tc.sandboxID, tc.containerID, tc.argList, tc.envList, tc.workingDir, tc.mounts, false, tc.noNewPrivileges, tc.user, tc.groups, tc.umask, tc.capabilities, tc.seccomp)
+
+	// getting an error means something is broken
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(tc.envList, envsToKeep) {
+		t.Fatalf("expected envs to keep = %v, got %v", tc.envList, envsToKeep)
+	}
+}
+
+// Test platform rule in main policy, container in fragment
+func Test_Rego_PlatformRules_InPolicy2(t *testing.T) {
+	// Generate a random fragment. We only have one "slot" in
+	// policy_with_platform_rules.rego for an external fragment so we only do
+	// one.  generateFragments' argument is only a minimum, so truncate to one to
+	// keep selectFragmentsFromConstraints' random pick aligned with
+	// fragments[0] below.
+	fragments := generateFragments(testRand, 1)[:1]
+	containerFragments := selectFragmentsFromConstraints(&generatedConstraints{
+		fragments: fragments,
+	}, 1, []string{"containers"}, []string{}, false, frameworkVersion, false)
+	containers := make([]*regoFragmentContainer, len(containerFragments))
+
+	for i, fragment := range containerFragments {
+		containers[i] = makeContainerFromGeneratedFragment(fragment)
+
+		containers[i].envList = append(containers[i].envList, "Fabric_NodeIPOrFqdn=10.0.0.1")
+		containers[i].mounts = append(containers[i].mounts, oci.Mount{
+			Source:      fmt.Sprintf("/run/gcs/c/%s/sandboxMounts/tmp/atlas/emptydir/serviceaccount", containers[i].sandboxID),
+			Destination: "/var/run/secrets/kubernetes.io/serviceaccount",
+			Type:        "bind",
+			Options:     []string{"rbind", "rshared", "ro"},
+		})
+
+		code := fragment.constraints.toFragment().marshalRego()
+		fragment.code = setFrameworkVersion(code, frameworkVersion)
+	}
+
+	rego := getPolicyCode_PolicyWithPlatformRules(fragments[0].feed, fragments[0].issuer)
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	p, err := newRegoPolicy(rego,
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts), testOSType)
+	if err != nil {
+		t.Fatalf("unable to create policy with platform rules: %v", err)
+	}
+
+	for _, containerFragment := range containerFragments {
+		err = p.LoadFragment(context.Background(), LoadFragmentOptions{Issuer: containerFragment.info.issuer, Feed: containerFragment.info.feed, Rego: containerFragment.code})
+		if err != nil {
+			t.Fatalf("failed to load container fragment: %v", err)
+		}
+	}
+
+	for _, container := range containers {
+		containerID, err := mountImageForContainer(p, container.container)
+		if err != nil {
+			t.Fatalf("failed to mount image for container: %v", err)
+		}
+
+		_, _, _, err = p.EnforceCreateContainerPolicy(context.Background(),
+			container.sandboxID,
+			containerID,
+			copyStrings(container.container.Command),
+			copyStrings(container.envList),
+			container.container.WorkingDir,
+			copyMounts(container.mounts),
+			false,
+			container.container.NoNewPrivileges,
+			container.user,
+			container.groups,
+			container.container.User.Umask,
+			container.capabilities,
+			container.seccomp,
+		)
+
+		if err != nil {
+			t.Fatalf("unable to create container from fragment: %v", err)
+		}
+	}
+}
+
 type getUserInfoTestCase struct {
 	userStrs           []string
 	additionalGIDs     []uint32
@@ -7863,4 +9967,291 @@ func Test_Rego_SandboxSysfsCarveOut_PrivilegedRequestDenied(t *testing.T) {
 		t.Fatal("expected create_container to be denied when Privileged=true for a non-elevated sandbox container, but it was allowed")
 	}
 	assertDecisionJSONContains(t, err, "privileged escalation not allowed")
+}
+
+func Test_Rego_EnforceMountBlockDevicePolicy_DefaultDenied(t *testing.T) {
+	p := generateConstraints(testRand, 1)
+	securityPolicy := p.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("cannot make rego policy from constraints: %v", err)
+	}
+
+	target := testDataGenerator.uniqueLayerMountTarget()
+	err = policy.EnforceMountBlockDevicePolicy(p.ctx, target)
+	assertDecisionJSONContains(t, err, "blockdev mounts are not supported")
+
+	err = policy.EnforceUnmountBlockDevicePolicy(p.ctx, target)
+	assertDecisionJSONContains(t, err, "blockdev mounts are not supported")
+}
+
+func Test_Rego_EnforceMountBlockDevicePolicy_OpenDoor(t *testing.T) {
+	policy, err := newRegoPolicy(openDoorRego, []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("cannot compile open door rego policy: %v", err)
+	}
+
+	target := testDataGenerator.uniqueLayerMountTarget()
+	if err = policy.EnforceMountBlockDevicePolicy(context.Background(), target); err != nil {
+		t.Errorf("open door should allow mount_blockdev, got: %v", err)
+	}
+	if err = policy.EnforceUnmountBlockDevicePolicy(context.Background(), target); err != nil {
+		t.Errorf("open door should allow unmount_blockdev, got: %v", err)
+	}
+}
+
+//go:embed fragment_test_policies/_container_common.rego.inc
+var containerCommonCode string
+
+//go:embed fragment_test_policies/simple_env_rule_param.rego
+var simpleEnvRuleParamPolicyCode string
+
+//go:embed fragment_test_policies/env_rule_param.rego
+var envRuleParamPolicyCode string
+
+//go:embed fragment_test_policies/env_rule_param_another_fragment.rego
+var envRuleParamAnotherFragmentPolicyCode string
+
+//go:embed fragment_test_policies/nested_importer.rego
+var nestedImporterPolicyCode string
+
+//go:embed fragment_test_policies/nested_importer_2.rego
+var nestedImporter2PolicyCode string
+
+//go:embed fragment_test_policies/nested_fragment.rego
+var nestedFragmentPolicyCode string
+
+//go:embed fragment_test_policies/param_on_command.rego
+var paramOnCommandPolicyCode string
+
+const paramTestImageBaseLayer = "0000000000000000000000000000000000000000000000000000000000000000"
+const paramTestImageLayer1 = "1111111111111111111111111111111111111111111111111111111111111111"
+const paramTestImageLayer2 = "2222222222222222222222222222222222222222222222222222222222222222"
+
+func paramTestTemplateFragmentCode(code string) string {
+	return strings.ReplaceAll(code, "@@CONTAINER_COMMON@@", containerCommonCode)
+}
+
+type mapOfAny map[string]interface{}
+
+type fragmentCodeAndParameters struct {
+	fragmentCode   string
+	possibleParams []mapOfAny
+}
+
+func setupRegoFragmentParameterTest(
+	t *testing.T,
+	fragmentsToLoad []fragmentCodeAndParameters,
+	allowSubfragments bool,
+) (p *regoEnforcer) {
+	fragmentImports := make([]*fragment, 0)
+
+	includes := []string{
+		"containers",
+	}
+	if allowSubfragments {
+		includes = append(includes, "fragments")
+	}
+	topFragmentIssuer := testDataGenerator.uniqueFragmentIssuer()
+	topFragmentFeedFmt := "feed_%d"
+
+	for i_fragment, f := range fragmentsToLoad {
+		for _, params := range f.possibleParams {
+			importWithParams := fragment{
+				issuer:     topFragmentIssuer,
+				feed:       fmt.Sprintf(topFragmentFeedFmt, i_fragment),
+				minimumSVN: "1",
+				includes:   includes,
+				parameters: params,
+			}
+			fragmentImports = append(fragmentImports, &importWithParams)
+		}
+	}
+
+	gc := &generatedConstraints{
+		fragments: fragmentImports,
+		ctx:       context.Background(),
+	}
+	securityPolicy := gc.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts), testOSType)
+	if err != nil {
+		t.Fatalf("failed to create rego policy: %v", err)
+	}
+
+	for i_fragment, f := range fragmentsToLoad {
+		err = policy.LoadFragment(gc.ctx, LoadFragmentOptions{Issuer: topFragmentIssuer, Feed: fmt.Sprintf(topFragmentFeedFmt, i_fragment), Rego: paramTestTemplateFragmentCode(f.fragmentCode)})
+		if err != nil {
+			t.Fatalf("failed to load fragment: %v", err)
+		}
+	}
+
+	return policy
+}
+
+func fragmentParameterTestCreateContainer(
+	policy *regoEnforcer,
+	envList []string,
+	command []string,
+	layers []string,
+	expectedEnvListAfterEnforcement []string,
+) (err error) {
+	sandboxID := testDataGenerator.uniqueSandboxID()
+	containerID := testDataGenerator.uniqueContainerID()
+	ctx := context.Background()
+	scratchDisk := getScratchDiskMountTarget(sandboxID)
+
+	err = policy.EnforceRWDeviceMountPolicy(ctx, scratchDisk, true, true, "xfs")
+	if err != nil {
+		return fmt.Errorf("error mounting scratch disk: %v", err)
+	}
+
+	layerPaths := make([]string, len(layers))
+	for i, layerHash := range layers {
+		layerPath := testDataGenerator.uniqueLayerMountTarget()
+		err = policy.EnforceDeviceMountPolicy(ctx, layerPath, layerHash)
+		if err != nil {
+			return fmt.Errorf("error mounting layer %s: %v", layerHash, err)
+		}
+		layerPaths[len(layers)-i-1] = layerPath
+	}
+
+	overlayTarget := getOverlayMountTarget(containerID)
+
+	// see NOTE_TESTCOPY
+	err = policy.EnforceOverlayMountPolicy(ctx, containerID, copyStrings(layerPaths), overlayTarget)
+	if err != nil {
+		return fmt.Errorf("error mounting filesystem: %v", err)
+	}
+
+	envToKeep, _, _, err := policy.EnforceCreateContainerPolicy(
+		ctx,
+		sandboxID,
+		containerID,
+		copyStrings(command),
+		copyStrings(envList),
+		"/",
+		[]oci.Mount{},
+		false,
+		false,
+		IDName{
+			ID: "0",
+		},
+		[]IDName{
+			{ID: "0"},
+		},
+		"0022",
+		&oci.LinuxCapabilities{},
+		"",
+	)
+	if err != nil {
+		return err
+	}
+	if expectedEnvListAfterEnforcement != nil {
+		if !areStringArraysEqual(envToKeep, expectedEnvListAfterEnforcement) {
+			return fmt.Errorf("environment variables after enforcement do not match expected values.\nExpected: %v\nActual: %v",
+				expectedEnvListAfterEnforcement,
+				envToKeep)
+		}
+	}
+	return nil
+}
+
+func fragmentParameterTestCheckOneEnv(
+	t *testing.T,
+	p *regoEnforcer,
+	expectAllowEnvs []string,
+	expectDenyEnvs []string,
+) {
+	t.Helper()
+
+	fragmentParameterTestCheckOneEnvWithLayer(t, p, []string{paramTestImageBaseLayer}, expectAllowEnvs, expectDenyEnvs)
+}
+
+func fragmentParameterTestCheckMultipleEnv(
+	t *testing.T,
+	p *regoEnforcer,
+	expectAllowEnvs [][]string,
+	expectDenyEnvs [][]string,
+) {
+	t.Helper()
+
+	fragmentParameterTestCheckMultipleEnvWithLayer(t, p, []string{paramTestImageBaseLayer}, expectAllowEnvs, expectDenyEnvs)
+}
+
+func fragmentParameterTestCheckMultipleEnvWithLayer(
+	t *testing.T,
+	p *regoEnforcer,
+	layerHashs []string,
+	expectAllowEnvs [][]string,
+	expectDenyEnvs [][]string,
+) {
+	t.Helper()
+
+	for _, envs := range expectAllowEnvs {
+		err := fragmentParameterTestCreateContainer(p, envs, []string{"init"}, layerHashs, envs)
+		if err != nil {
+			t.Errorf("expected to allow env list %v, but got error: %v", envs, err)
+		}
+	}
+
+	for _, envs := range expectDenyEnvs {
+		err := fragmentParameterTestCreateContainer(p, envs, []string{"init"}, layerHashs, nil)
+		if err == nil {
+			t.Errorf("expected to deny env list %v, but got no error", envs)
+			continue
+		}
+		assertDecisionJSONContains(t, err, "invalid env list")
+	}
+}
+
+func fragmentParameterTestCheckOneEnvWithLayer(
+	t *testing.T,
+	p *regoEnforcer,
+	layerHashs []string,
+	expectAllowEnvs []string,
+	expectDenyEnvs []string,
+) {
+	t.Helper()
+
+	for _, env := range expectAllowEnvs {
+		err := fragmentParameterTestCreateContainer(p, []string{
+			env,
+		}, []string{"init"}, layerHashs, []string{
+			env,
+		})
+		if err != nil {
+			t.Errorf("expected to allow env %q, but got error: %v", env, err)
+		}
+	}
+
+	for _, env := range expectDenyEnvs {
+		err := fragmentParameterTestCreateContainer(p, []string{
+			env,
+		}, []string{"init"}, layerHashs, nil)
+		if err == nil {
+			t.Errorf("expected to deny env %q, but got no error", env)
+			continue
+		}
+		assertDecisionJSONContains(t, err, "invalid env list")
+	}
+}
+
+//go:embed fragment_test_policies/platform_rules.rego
+var platformRulesFragmentPolicyCode string
+
+//go:embed policy_with_platform_rules.rego
+var policyWithPlatformRules string
+
+func getPolicyCode_PolicyWithPlatformRules(fragmentFeed, fragmentIssuer string) string {
+	s := policyWithPlatformRules
+	s = strings.ReplaceAll(s, "@@API_VERSION@@", apiVersion)
+	s = strings.ReplaceAll(s, "@@FRAMEWORK_VERSION@@", frameworkVersion)
+	s = strings.ReplaceAll(s, "@@FRAGMENT_FEED@@", fragmentFeed)
+	s = strings.ReplaceAll(s, "@@FRAGMENT_ISSUER@@", fragmentIssuer)
+	return s
 }

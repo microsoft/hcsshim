@@ -4,14 +4,17 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
-	"go.opencensus.io/trace"
-
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // TODO: add tests for:
@@ -21,11 +24,34 @@ import (
 // - overriding UID and GUID
 // TODO: output CPIO archive?
 
+func initOtelTracer() (func(context.Context) error, error) {
+	exporter := &ot.LogrusExporter{}
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	if traceProvider == nil {
+		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+	}
+	otel.SetTracerProvider(traceProvider)
+	if otel.GetTracerProvider() != traceProvider {
+		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+	}
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+	return traceProvider.Shutdown, nil
+}
+
 func main() {
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	// Register our Otel logrus exporter
+	_, err := initOtelTracer()
+	if err != nil {
+		logrus.Fatalf("failed to initialize ot tracer: %v", err)
+	}
 
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

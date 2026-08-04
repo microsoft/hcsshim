@@ -93,28 +93,49 @@ func parse(s string) (*Entry, error) {
 	if err != nil {
 		return nil, ErrInvalidFormat
 	}
+
+	// TODO: validate that the message ends in with a \n and parse key/value pairs:
+	//  - "The human readable text string starts directly after the ';' and is terminated by a '\n'"
+	//  - "A line starting with ' ', is a continuation line, adding key/value pairs to the log message"
+	//
+	// See: https://docs.kernel.org/admin-guide/abi-testing.html#abi-dev-kmsg
+	msg := strings.TrimSpace(fields[1])
+
 	return &Entry{
 		Priority:           LogLevel(syslog & 0x7),
 		Facility:           uint8(syslog >> 3),
 		Seq:                seq,
 		TimeSinceBootMicro: timestamp,
 		Flags:              prefixFields[3],
-		Message:            fields[1],
+		Message:            msg,
 	}, nil
 }
 
 // ReadForever reads from /dev/kmsg forever unless /dev/kmsg cannot be opened.
 // Every entry with priority <= 'logLevel' will be logged.
 func ReadForever(logLevel LogLevel) {
+	// TODO:
+	//  - handle continuation fragments:
+	//    "/dev/kmsg users are recommended to implement fragment handling."
+	//    See: https://docs.kernel.org/admin-guide/abi-testing.html#abi-dev-kmsg
+	//  - use `dmesg --follow --json` to avoid string parsing, buffer allocation, and fragment handling
+	//  - check entry sequence numbers are sequential and warn if messages were skipped
 	file, err := os.Open("/dev/kmsg")
 	if err != nil {
 		logrus.WithError(err).Error("failed to open /dev/kmsg")
 		return
 	}
 	defer file.Close()
+	// Buffer size is controlled by LOG_BUF_SHIFT (and LOG_CPU_MAX_BUF_SHIFT) kernel parameters.
+	// Use the default shift value of 17, since records larger than 128 KiB should be unlikely and
+	// allocating the maximum (LOG_BUF_LEN_MAX) 2 GiB is overkill.
+	//
+	// See:
+	//  - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/init/Kconfig?id=11028ab62899e4191e074ee364c712b77823a9c4#n807
+	//  - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/printk/printk.c?id=11028ab62899e4191e074ee364c712b77823a9c4#n503
+	const bufSize = 1 << 17
 	// Reuse buffer for entries
-	// Buffer size from: https://elixir.bootlin.com/linux/latest/source/include/linux/printk.h#L44
-	buf := make([]byte, 8192)
+	buf := make([]byte, bufSize)
 	for {
 		n, err := file.Read(buf)
 		if err != nil {

@@ -6,10 +6,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/shim"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type publisher interface {
@@ -39,12 +39,12 @@ func (e *eventPublisher) close() error {
 }
 
 func (e *eventPublisher) publishEvent(ctx context.Context, topic string, event interface{}) (err error) {
-	ctx, span := oc.StartSpan(ctx, "publishEvent")
+	ctx, span := ot.StartSpan(ctx, "publishEvent")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("topic", topic),
-		trace.StringAttribute("event", fmt.Sprintf("%+v", event)))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("topic", topic),
+		attribute.String("event", fmt.Sprintf("%+v", event)))
 
 	if e == nil {
 		return nil

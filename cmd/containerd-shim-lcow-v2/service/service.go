@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/controller/migration"
 	"github.com/Microsoft/hcsshim/internal/controller/pod"
 	"github.com/Microsoft/hcsshim/internal/controller/vm"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shim"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	migrationsvc "github.com/Microsoft/hcsshim/pkg/migration"
 
 	sandboxsvc "github.com/containerd/containerd/api/runtime/sandbox/v1"
 	tasksvc "github.com/containerd/containerd/api/runtime/task/v3"
@@ -42,8 +44,9 @@ type Service struct {
 	// For LCOW shim, sandboxID corresponds 1-1 with the UtilityVM managed by the shim.
 	sandboxID string
 
-	// vmController is responsible for managing the lifecycle of the underlying utility VM and its associated resources.
-	vmController *vm.Controller
+	// vmController is responsible for managing the lifecycle of the underlying
+	// utility VM.
+	vmController vmController
 
 	// podControllers maps podID -> PodController for each active pod.
 	podControllers map[string]*pod.Controller
@@ -52,6 +55,10 @@ type Service struct {
 	// which pod a container belongs to and then retrieve the corresponding controller
 	// from podControllers.
 	containerPodMapping map[string]string
+
+	// migrationController orchestrates the live-migration session for the
+	// sandbox. There is at most one active session per shim.
+	migrationController *migration.Controller
 
 	// shutdown manages graceful shutdown operations and allows registration of cleanup callbacks.
 	shutdown shutdown.Service
@@ -67,6 +74,7 @@ func NewService(ctx context.Context, eventsPublisher shim.Publisher, sd shutdown
 		vmController:        vm.New(),
 		podControllers:      make(map[string]*pod.Controller),
 		containerPodMapping: make(map[string]string),
+		migrationController: migration.New(),
 		shutdown:            sd,
 	}
 
@@ -94,6 +102,7 @@ func (s *Service) RegisterTTRPC(server *ttrpc.Server) error {
 	tasksvc.RegisterTTRPCTaskService(server, s)
 	sandboxsvc.RegisterTTRPCSandboxService(server, s)
 	shimdiag.RegisterShimDiagService(server, s)
+	migrationsvc.RegisterMigrationService(server, s)
 	return nil
 }
 
@@ -101,6 +110,14 @@ func (s *Service) RegisterTTRPC(server *ttrpc.Server) error {
 func (s *Service) ensureVMRunning() error {
 	if state := s.vmController.State(); state != vm.StateRunning {
 		return fmt.Errorf("vm is not running (state: %s): %w", state, errdefs.ErrFailedPrecondition)
+	}
+	return nil
+}
+
+// ensureMigrationIdle returns an error if a migration session is in progress.
+func (s *Service) ensureMigrationIdle() error {
+	if state := s.migrationController.State(); state != migration.StateIdle {
+		return fmt.Errorf("migration session is in progress (state: %s): %w", state, errdefs.ErrFailedPrecondition)
 	}
 	return nil
 }

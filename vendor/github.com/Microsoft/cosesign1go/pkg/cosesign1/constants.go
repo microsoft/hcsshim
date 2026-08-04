@@ -39,3 +39,5 @@ const (
 	CWT_Issuer  = int64(1)
 	CWT_Subject = int64(2)
 )
+
+const TTL_LedgerEntry_Keys = int64(1)

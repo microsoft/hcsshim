@@ -4,8 +4,6 @@ package gcs
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,12 +15,13 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
-
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const pipePortFmt = `\\.\pipe\gctest-port-%d`
@@ -37,16 +36,19 @@ func dialPort(port uint32) (net.Conn, error) {
 	return winio.DialPipe(fmt.Sprintf(pipePortFmt, port), nil)
 }
 
-func simpleGcs(t *testing.T, rwc io.ReadWriteCloser) {
+func simpleGcs(t *testing.T, rwc io.ReadWriteCloser, negotiated chan<- struct{}) {
 	t.Helper()
 	defer rwc.Close()
-	err := simpleGcsLoop(t, rwc)
+	err := simpleGcsLoop(t, rwc, negotiated)
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
+// simpleGcsLoop answers the RPCs a fake guest needs. If negotiated is non-nil it
+// receives a value whenever a protocol handshake is answered, letting a test
+// observe a (re)negotiation such as the one ResumeOnConn drives after a redial.
+func simpleGcsLoop(t *testing.T, rw io.ReadWriter, negotiated chan<- struct{}) error {
 	t.Helper()
 	for {
 		id, typ, b, err := readMessage(rw)
@@ -69,6 +71,12 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			})
 			if err != nil {
 				return err
+			}
+			// Report the handshake to any observer; non-blocking so the guest
+			// never stalls, and a buffered channel catches it before the test reads.
+			select {
+			case negotiated <- struct{}{}:
+			default:
 			}
 		case prot.RPCCreate:
 			err := sendJSON(t, rw, prot.MsgTypeResponse|prot.MsgType(proc), id, &prot.ContainerCreateResponse{})
@@ -163,7 +171,7 @@ func connectGcs(ctx context.Context, t *testing.T) *GuestConnection {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		simpleGcs(t, c)
+		simpleGcs(t, c, nil)
 	}()
 	t.Cleanup(func() { <-done })
 	gcc := &GuestConnectionConfig{
@@ -182,6 +190,42 @@ func connectGcs(ctx context.Context, t *testing.T) *GuestConnection {
 func TestGcsConnect(t *testing.T) {
 	gc := connectGcs(context.Background(), t)
 	defer gc.Close()
+}
+
+// TestGcsResumeOnConnRenegotiates verifies that ResumeOnConn re-runs the
+// protocol handshake on the swapped-in transport. The guest resets its GCS
+// protocol version when it re-dials after a migration blackout, so a resume
+// that adopts the new connection without renegotiating would leave
+// version-gated RPCs (e.g. exec) broken on source rollback. Nothing in CI
+// exercises live migration, so this unit test is the guard against that
+// regression.
+func TestGcsResumeOnConnRenegotiates(t *testing.T) {
+	gc := connectGcs(t.Context(), t)
+	defer gc.Close()
+
+	// Enter the migration window so the bridge tolerates swapping transports.
+	gc.SetMigrating(true)
+
+	// Emulate the guest re-dialing after the blackout: a fresh transport served
+	// by the same fake guest, signalling when it answers the re-handshake.
+	s, c := pipeConn()
+	negotiated := make(chan struct{}, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		simpleGcs(t, c, negotiated)
+	}()
+	t.Cleanup(func() { <-done })
+
+	if err := gc.ResumeOnConn(t.Context(), s); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-negotiated:
+	case <-time.After(5 * time.Second):
+		t.Fatal("resume did not renegotiate protocol on the new connection")
+	}
 }
 
 func TestGcsCreateContainer(t *testing.T) {
@@ -294,13 +338,26 @@ func Test_makeRequestNoSpan(t *testing.T) {
 	if r.ActivityID != empty {
 		t.Fatalf("expected ActivityID empty, got: %q", r.ActivityID.String())
 	}
-	if r.OpenCensusSpanContext != nil {
+	if len(r.OpenTelemetrySpanContext) != 0 {
 		t.Fatal("expected nil span context")
 	}
 }
 
+func setupTestOtel(t *testing.T) {
+	t.Helper()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+}
+
 func Test_makeRequestWithSpan(t *testing.T) {
-	ctx, span := oc.StartSpan(context.Background(), t.Name())
+	setupTestOtel(t)
+
+	ctx, span := ot.StartSpan(context.Background(), t.Name())
 	defer span.End()
 	r := makeRequest(ctx, t.Name())
 
@@ -311,66 +368,77 @@ func Test_makeRequestWithSpan(t *testing.T) {
 	if r.ActivityID != empty {
 		t.Fatalf("expected ActivityID empty, got: %q", r.ActivityID.String())
 	}
-	if r.OpenCensusSpanContext == nil {
+	if len(r.OpenTelemetrySpanContext) == 0 {
 		t.Fatal("expected non-nil span context")
 	}
+	otsc := r.OpenTelemetrySpanContext
+	if _, ok := otsc["traceparent"]; !ok {
+		t.Fatalf("expected traceparent key in otsc, got: %v", otsc)
+	}
+
+	// Roundtrip: extract otsc and verify trace context matches.
 	sc := span.SpanContext()
-	encodedTraceID := hex.EncodeToString(sc.TraceID[:])
-	if r.OpenCensusSpanContext.TraceID != encodedTraceID {
-		t.Fatalf("expected encoded TraceID: %q, got: %q", encodedTraceID, r.OpenCensusSpanContext.TraceID)
+	extractedCtx := otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(otsc))
+	extractedSC := trace.SpanContextFromContext(extractedCtx)
+	if extractedSC.TraceID() != sc.TraceID() {
+		t.Fatalf("roundtrip TraceID mismatch: got %s, want %s", extractedSC.TraceID(), sc.TraceID())
 	}
-	encodedSpanID := hex.EncodeToString(sc.SpanID[:])
-	if r.OpenCensusSpanContext.SpanID != encodedSpanID {
-		t.Fatalf("expected encoded SpanID: %q, got: %q", encodedSpanID, r.OpenCensusSpanContext.SpanID)
-	}
-	encodedTraceOptions := uint32(sc.TraceOptions)
-	if r.OpenCensusSpanContext.TraceOptions != encodedTraceOptions {
-		t.Fatalf("expected encoded TraceOptions: %v, got: %v", encodedTraceOptions, r.OpenCensusSpanContext.TraceOptions)
-	}
-	if r.OpenCensusSpanContext.Tracestate != "" {
-		t.Fatalf("expected encoded TraceState: '', got: %q", r.OpenCensusSpanContext.Tracestate)
+	if extractedSC.SpanID() != sc.SpanID() {
+		t.Fatalf("roundtrip SpanID mismatch: got %s, want %s", extractedSC.SpanID(), sc.SpanID())
 	}
 }
 
 func Test_makeRequestWithSpan_TraceStateEmptyEntries(t *testing.T) {
+	setupTestOtel(t)
+
 	// Start a remote context span so we can forward trace state.
-	ts, err := tracestate.New(nil)
-	if err != nil {
-		t.Fatalf("failed to make test Tracestate")
-	}
-	parent := trace.SpanContext{
-		Tracestate: ts,
-	}
-	ctx, span := trace.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
+	ts := trace.TraceState{}
+	parent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceState: ts,
+	})
+	ctx, span := ot.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
 	defer span.End()
 	r := makeRequest(ctx, t.Name())
 
-	if r.OpenCensusSpanContext == nil {
+	if len(r.OpenTelemetrySpanContext) == 0 {
 		t.Fatal("expected non-nil span context")
 	}
-	if r.OpenCensusSpanContext.Tracestate != "" {
-		t.Fatalf("expected encoded TraceState: '', got: %q", r.OpenCensusSpanContext.Tracestate)
+	otsc := r.OpenTelemetrySpanContext
+	// With empty trace state, traceparent should still be present.
+	if _, ok := otsc["traceparent"]; !ok {
+		t.Fatalf("expected traceparent key in otsc, got: %v", otsc)
+	}
+	// tracestate should not be present (empty).
+	if ts, ok := otsc["tracestate"]; ok && ts != "" {
+		t.Fatalf("expected no tracestate, got: %q", ts)
 	}
 }
 
 func Test_makeRequestWithSpan_TraceStateEntries(t *testing.T) {
+	setupTestOtel(t)
+
 	// Start a remote context span so we can forward trace state.
-	ts, err := tracestate.New(nil, tracestate.Entry{Key: "test", Value: "test"})
+	ts := trace.TraceState{}
+	ts, err := ts.Insert("test", "test")
 	if err != nil {
-		t.Fatalf("failed to make test Tracestate")
+		t.Fatal(err)
 	}
-	parent := trace.SpanContext{
-		Tracestate: ts,
-	}
-	ctx, span := trace.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
+	parent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceState: ts,
+	})
+	ctx, span := ot.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
 	defer span.End()
 	r := makeRequest(ctx, t.Name())
 
-	if r.OpenCensusSpanContext == nil {
+	if len(r.OpenTelemetrySpanContext) == 0 {
 		t.Fatal("expected non-nil span context")
 	}
-	encodedTraceState := base64.StdEncoding.EncodeToString([]byte(`[{"Key":"test","Value":"test"}]`))
-	if r.OpenCensusSpanContext.Tracestate != encodedTraceState {
-		t.Fatalf("expected encoded TraceState: %q, got: %q", encodedTraceState, r.OpenCensusSpanContext.Tracestate)
+	otsc := r.OpenTelemetrySpanContext
+	if _, ok := otsc["traceparent"]; !ok {
+		t.Fatalf("expected traceparent key in otsc, got: %v", otsc)
+	}
+	// tracestate should be present with the test entry.
+	if tsVal, ok := otsc["tracestate"]; !ok || tsVal == "" {
+		t.Fatalf("expected non-empty tracestate, got: %q", tsVal)
 	}
 }

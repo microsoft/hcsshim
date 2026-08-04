@@ -13,12 +13,6 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guestpath"
-	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
@@ -27,11 +21,16 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // containerStatus has been introduced to enable parallel container creation
@@ -44,6 +43,11 @@ const (
 	// containerCreated is the status when a runtime container and init process
 	// have been assigned, but runtime start command has not been issued yet
 	containerCreated
+	// containerRunning is the status when the init process has started and has
+	// not yet exited.
+	containerRunning
+	// containerTerminated is the status when the init process has exited.
+	containerTerminated
 )
 
 type Container struct {
@@ -136,6 +140,8 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 	err = c.container.Start()
 	if err != nil {
 		stdioSet.Close()
+	} else {
+		c.setStatus(containerRunning)
 	}
 	return int(c.initProcess.pid), err
 }
@@ -259,6 +265,21 @@ func (c *Container) Delete(ctx context.Context) error {
 		retErr = err
 	}
 
+	// If the bundle was bind-mounted onto the scratch disk during create
+	// (modifyCombinedLayers), undo that bind. The same path-based rule is used
+	// here as at create time, so both shims are handled identically. Order
+	// matters: this runs before removing the scratch/bundle dirs below (the
+	// bind's source lives under scratchDirPath) and before the host unmaps the
+	// scratch disk, so no mount still references that disk. removeTarget=false
+	// detaches the bind only - the ociBundlePath directory itself remains and is
+	// deleted by RemoveAll below.
+	if bundleNeedsScratchBind(c.ociBundlePath, c.scratchDirPath) {
+		if err := storage.UnmountPath(ctx, c.ociBundlePath, false); err != nil {
+			entity.WithError(err).WithField("bundle", c.ociBundlePath).
+				Warn("failed to unmount scratch-backed bundle bind")
+		}
+	}
+
 	if err := os.RemoveAll(c.scratchDirPath); err != nil {
 		if retErr != nil {
 			retErr = fmt.Errorf("errors deleting container state: %w; %w", retErr, err)
@@ -295,9 +316,9 @@ func (c *Container) Update(ctx context.Context, resources interface{}) error {
 
 // Wait waits for the container's init process to exit.
 func (c *Container) Wait() prot.NotificationType {
-	_, span := oc.StartSpan(context.Background(), "opengcs::Container::Wait")
+	_, span := ot.StartSpan(context.Background(), "opengcs::Container::Wait")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
+	span.SetAttributes(attribute.String(logfields.ContainerID, c.id))
 
 	c.initProcess.writersWg.Wait()
 	c.etL.Lock()
@@ -322,9 +343,9 @@ func (c *Container) setExitType(signal syscall.Signal) {
 // GetStats returns the cgroup metrics for the container.
 // Works with both cgroup v1 and v2 systems.
 func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
-	_, span := oc.StartSpan(ctx, "opengcs::Container::GetStats")
+	_, span := ot.StartSpan(ctx, "opengcs::Container::GetStats")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	return cgroup.LoadAndStat(c.spec.Linux.CgroupsPath)
 }

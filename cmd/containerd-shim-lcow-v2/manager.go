@@ -16,7 +16,7 @@ import (
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/shim"
 	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 
@@ -183,10 +183,10 @@ func (m *shimManager) Start(ctx context.Context, id string, opts shim.StartOpts)
 // It reads and logs any panic messages written to panic.log, then tries to
 // terminate the associated HCS compute system and waits up to 30 seconds for
 // it to exit.
-func (m *shimManager) Stop(ctx context.Context, id string) (resp shim.StopStatus, err error) {
-	ctx, span := oc.StartSpan(ctx, "delete")
+func (m *shimManager) Stop(_ context.Context, id string) (resp shim.StopStatus, err error) {
+	ctx, span := ot.StartSpan(context.Background(), "delete")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var bundlePath string
 	if opts, ok := ctx.Value(shim.OptsKey{}).(shim.Opts); ok {

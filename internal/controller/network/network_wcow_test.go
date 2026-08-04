@@ -94,7 +94,7 @@ func TestWCOW_AddEndpoint_3PhaseSequence_Success(t *testing.T) {
 		).Return(nil),
 	)
 
-	if err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false); err != nil {
+	if err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, ok := c.vmEndpoints["nic-1"]; !ok || got != ep {
@@ -117,7 +117,7 @@ func TestWCOW_AddEndpoint_PreAddFails_NotTracked(t *testing.T) {
 	).Return(errWCOWGuestPreAdd)
 	// No vm.AddNIC, no second guest.AddNetworkInterface — gomock fails if either is called.
 
-	err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false)
+	err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false)
 	if !errors.Is(err, errWCOWGuestPreAdd) {
 		t.Fatalf("expected pre-add error to wrap, got: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestWCOW_AddEndpoint_HostFails_NotTracked(t *testing.T) {
 		vm.EXPECT().AddNIC(gomock.Any(), "nic-1", gomock.Any()).Return(errWCOWHostAdd),
 	)
 
-	err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false)
+	err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false)
 	if !errors.Is(err, errWCOWHostAdd) {
 		t.Fatalf("expected host add error to wrap, got: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestWCOW_AddEndpoint_FinalAddFails_TeardownUnwindsHost(t *testing.T) {
 		).Return(errWCOWGuestAdd),
 	)
 
-	if err := c.addEndpointToGuestNamespace(context.Background(), "nic-1", ep, false); !errors.Is(err, errWCOWGuestAdd) {
+	if err := c.addEndpointToGuestNamespace(context.Background(), ep.HostComputeNamespace, "nic-1", ep, false); !errors.Is(err, errWCOWGuestAdd) {
 		t.Fatalf("expected guest add error to wrap, got: %v", err)
 	}
 	if _, ok := c.vmEndpoints["nic-1"]; !ok {

@@ -176,7 +176,7 @@ func MountLCOWLayers(
 	if err != nil {
 		return "", "", nil, err
 	}
-	log.G(ctx).Debug("hcsshim::MountLCOWLayers Succeeded")
+	log.G(ctx).Trace("hcsshim::MountLCOWLayers Succeeded")
 	closer := &lcowLayersCloser{
 		uvm:                     vm,
 		guestCombinedLayersPath: rootfs,

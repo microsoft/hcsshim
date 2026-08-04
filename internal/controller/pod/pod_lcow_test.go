@@ -42,7 +42,7 @@ func newSetup(t *testing.T) (*mocks.MockvmController, *mocks.MocknetworkControll
 func expectVMCallsForNewContainer(vm *mocks.MockvmController) {
 	vm.EXPECT().RuntimeID().Return("vm-runtime-1")
 	vm.EXPECT().Guest().Return(nil)
-	vm.EXPECT().SCSIController().Return(nil)
+	vm.EXPECT().SCSIController(gomock.Any()).Return(nil, nil)
 	vm.EXPECT().Plan9Controller().Return(nil)
 	vm.EXPECT().VPCIController().Return(nil)
 }
@@ -191,6 +191,22 @@ func TestNewContainer(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestNewContainer_WhileMigrating verifies that an imported, not-yet-resumed
+// pod rejects NewContainer with a clear error instead of touching its nil VM.
+func TestNewContainer_WhileMigrating(t *testing.T) {
+	c := &Controller{
+		podID:       testPodID,
+		containers:  make(map[string]*linuxcontainer.Controller),
+		isMigrating: true,
+	}
+	if _, err := c.NewContainer(t.Context(), "container-1"); err == nil {
+		t.Fatal("expected error creating a container on a migrating pod")
+	}
+	if len(c.containers) != 0 {
+		t.Error("expected no container to be registered while migrating")
+	}
 }
 
 // TestListContainers verifies snapshots of the live container map.

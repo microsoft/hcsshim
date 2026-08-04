@@ -16,7 +16,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
@@ -26,9 +25,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/ext4"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/xfs"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Test dependencies.
@@ -136,14 +136,14 @@ func Mount(
 	readonly bool,
 	options []string,
 	config *Config) (err error) {
-	spnCtx, span := oc.StartSpan(ctx, "scsi::Mount")
+	spnCtx, span := ot.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)),
-		trace.Int64Attribute("partition", int64(partition)),
+	span.SetAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun)),
+		attribute.Int64("partition", int64(partition)),
 	)
 
 	source, err := getDevicePath(spnCtx, controller, lun, partition)
@@ -296,15 +296,15 @@ func Unmount(
 	target string,
 	config *Config,
 ) (err error) {
-	ctx, span := oc.StartSpan(ctx, "scsi::Unmount")
+	ctx, span := ot.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)),
-		trace.Int64Attribute("partition", int64(partition)),
-		trace.StringAttribute("target", target))
+	span.SetAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun)),
+		attribute.Int64("partition", int64(partition)),
+		attribute.String("target", target))
 
 	// skip unmount logic for block devices, since they are just symlinks
 	if config.BlockDev {
@@ -342,14 +342,14 @@ func Unmount(
 // index `lun` with partition index `partition` and also ensures that the device
 // is available under that path or context is canceled.
 func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64) (_ string, err error) {
-	ctx, span := oc.StartSpan(ctx, "scsi::GetDevicePath")
+	ctx, span := ot.StartSpan(ctx, "scsi::GetDevicePath")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)),
-		trace.Int64Attribute("partition", int64(partition)),
+	span.SetAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun)),
+		attribute.Int64("partition", int64(partition)),
 	)
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
@@ -451,13 +451,13 @@ func GetDevicePath(ctx context.Context, controller, lun uint8, partition uint64)
 //
 // If the device is not attached returns no error.
 func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
-	_, span := oc.StartSpan(ctx, "scsi::UnplugDevice")
+	_, span := ot.StartSpan(ctx, "scsi::UnplugDevice")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)))
+	span.SetAttributes(
+		attribute.Int64("controller", int64(controller)),
+		attribute.Int64("lun", int64(lun)))
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 	f, err := os.OpenFile(filepath.Join(scsiDevicesPath, scsiID, "delete"), os.O_WRONLY, 0644)

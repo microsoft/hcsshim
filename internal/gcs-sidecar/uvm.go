@@ -12,15 +12,15 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 func unmarshalModifyServiceSettings(req *request) (_ *prot.ServiceModificationRequest, err error) {
-	ctx, span := oc.StartSpan(req.ctx, "sidecar::unmarshalModifyServiceSettings")
+	ctx, span := ot.StartSpan(req.ctx, "sidecar::unmarshalModifyServiceSettings")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var serviceModifyRequest prot.ServiceModificationRequest
 	var requestRawSettings json.RawMessage
@@ -49,9 +49,9 @@ func unmarshalModifyServiceSettings(req *request) (_ *prot.ServiceModificationRe
 }
 
 func unmarshalContainerModifySettings(req *request) (_ *prot.ContainerModifySettings, err error) {
-	ctx, span := oc.StartSpan(req.ctx, "sidecar::unmarshalContainerModifySettings")
+	ctx, span := ot.StartSpan(req.ctx, "sidecar::unmarshalContainerModifySettings")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerModifySettings
 	var requestRawSettings json.RawMessage

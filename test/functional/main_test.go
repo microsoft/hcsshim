@@ -21,24 +21,23 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
-	"github.com/containerd/containerd/v2/pkg/namespaces"
-	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli/v2"
-	"go.opencensus.io/trace"
-
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
-
 	testlayers "github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/util"
 	testflag "github.com/Microsoft/hcsshim/test/pkg/flag"
 	testimages "github.com/Microsoft/hcsshim/test/pkg/images"
 	"github.com/Microsoft/hcsshim/test/pkg/require"
 	testuvm "github.com/Microsoft/hcsshim/test/pkg/uvm"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // TODO(go1.24): use [(*"testing".B).Loop()] instead of `for i := 0; i < b.N; i++ { }`
@@ -164,8 +163,11 @@ func runTests(m *testing.M) error {
 		return fmt.Errorf("tests must be run in an elevated context")
 	}
 
-	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(&ot.LogrusExporter{}),
+		sdktrace.WithSampler(ot.DefaultSampler),
+	)
+	otel.SetTracerProvider(traceProvider)
 
 	// default is stderr, but test2json does not consume stderr, so logs would be out of sync
 	// and powershell considers output on stderr as an error when execing

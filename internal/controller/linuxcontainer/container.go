@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
+	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -225,7 +226,9 @@ func (c *Controller) closeContainer() {
 // state went with it) or the VM itself has exited (so host-side state went
 // with it). Either way, teardown can move on instead of retrying.
 func isResourceAlreadyReleased(err error) bool {
-	return errors.Is(err, gcs.ErrBridgeClosed) || vmutils.IsVMNotAvailableError(err)
+	return errors.Is(err, gcs.ErrBridgeClosed) ||
+		errors.Is(err, guestmanager.ErrGuestConnectionUnavailable) ||
+		vmutils.IsVMNotAvailableError(err)
 }
 
 // releaseResources undoes each allocation in reverse order.
@@ -250,6 +253,26 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 
 		// Set layersCombined to false so that we do not retry this post successful remove.
 		c.layers.layersCombined = false
+	}
+
+	// DeleteContainerState performs the guest-side container delete: it unmounts
+	// the pod's sandbox mounts and the scratch-backed bundle bind, deletes the
+	// runtime state, and removes the bundle and scratch directories. We run it
+	// before removing the overlay layer devices and detaching the scratch disk,
+	// so the guest releases everything backed by those disks while they are still
+	// attached (the overlay mount itself has already been removed above).
+	// Short-circuit on isContainerStateDeleted so retries don't re-issue Capabilities.
+	if !c.isContainerStateDeleted {
+		if caps := c.guest.Capabilities(); caps != nil && caps.IsDeleteContainerStateSupported() {
+			// GCS bridge evicts the container from its host-state map even if the inner Delete fails,
+			// so retries will always return not-found.
+			if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !isResourceAlreadyReleased(err) {
+				return fmt.Errorf("delete container state: %w", err)
+			}
+
+			// Set isContainerStateDeleted to true so that we do not retry this post successful delete.
+			c.isContainerStateDeleted = true
+		}
 	}
 
 	// Unmap the scratch layer. A zero ID indicates it has already been
@@ -295,20 +318,6 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 			c.devices = c.devices[i:]
 			return fmt.Errorf("remove vpci device: %w", err)
 		}
-	}
-
-	// After layer overlay has been removed, we can safely delete the
-	// bundle path inside the UVM for the container. Therefore, delete
-	// the guest-side container state if supported.
-	if !c.isContainerStateDeleted && c.guest.Capabilities().IsDeleteContainerStateSupported() {
-		// GCS bridge evicts the container from its host-state map even if the inner Delete fails,
-		// so retries will always return not-found.
-		if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !isResourceAlreadyReleased(err) {
-			return fmt.Errorf("delete container state: %w", err)
-		}
-
-		// Set isContainerStateDeleted to true so that we do not retry this post successful delete.
-		c.isContainerStateDeleted = true
 	}
 
 	return nil
@@ -542,18 +551,29 @@ func (c *Controller) KillProcess(ctx context.Context, execID string, signal uint
 		return fmt.Errorf("cannot signal all for non-empty exec %q: %w", execID, errdefs.ErrFailedPrecondition)
 	}
 
-	signalsSupported := c.guest.Capabilities().IsSignalProcessSupported()
-	signalOptions, err := signals.ValidateLCOW(int(signal), signalsSupported)
-	if err != nil {
-		return fmt.Errorf("validate signal %d for container %s: %w", signal, c.containerID, err)
-	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// The container must have been created for any process to exist.
-	if c.state == StateNotCreated {
+	// The container must have been created (and not be mid-migration on either
+	// the source or destination) for any process to exist or for c.guest to be
+	// safe to dereference.
+	if c.state == StateNotCreated || c.state == StateDestinationMigrating || c.state == StateSourceMigrating {
 		return fmt.Errorf("container %s is in state %s; cannot kill: %w", c.containerID, c.state, errdefs.ErrFailedPrecondition)
+	}
+
+	// Already terminal (e.g. aborted destination-migrated container): no-op
+	// rather than dereference c.guest, which may be nil.
+	if c.state == StateStopped || c.state == StateInvalid {
+		return nil
+	}
+
+	signalsSupported := false
+	if caps := c.guest.Capabilities(); caps != nil {
+		signalsSupported = caps.IsSignalProcessSupported()
+	}
+	signalOptions, err := signals.ValidateLCOW(int(signal), signalsSupported)
+	if err != nil {
+		return fmt.Errorf("validate signal %d for container %s: %w", signal, c.containerID, err)
 	}
 
 	// When "all" is requested, deliver the signal to every additional exec
@@ -602,8 +622,9 @@ func (c *Controller) DeleteProcess(ctx context.Context, execID string) (*task.St
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// The container must have been created for any process to exist.
-	if c.state == StateNotCreated {
+	// The container must have been created (and not be mid-migration on either
+	// the source or destination) for any process to exist.
+	if c.state == StateNotCreated || c.state == StateDestinationMigrating || c.state == StateSourceMigrating {
 		return nil, fmt.Errorf("container %s is in state %s; cannot delete process: %w", c.containerID, c.state, errdefs.ErrFailedPrecondition)
 	}
 
@@ -626,11 +647,12 @@ func (c *Controller) DeleteProcess(ctx context.Context, execID string) (*task.St
 		// For containers that were created but never started, handleInitProcessExit
 		// was never launched, so closeContainer was never called. Perform full
 		// teardown now. closeContainer is retriable.
-		if err = c.releaseResources(ctx); err != nil {
-			return nil, fmt.Errorf("releasing resources for container %s: %w", c.containerID, err)
+		if c.guest != nil {
+			if err = c.releaseResources(ctx); err != nil {
+				return nil, fmt.Errorf("releasing resources for container %s: %w", c.containerID, err)
+			}
+			c.closeContainer()
 		}
-		// Close container handle after the resources are released.
-		c.closeContainer()
 	}
 
 	// Remove the process entry only after all fallible operations have

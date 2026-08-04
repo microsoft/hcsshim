@@ -5,9 +5,7 @@ package bridge
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,15 +16,17 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 )
 
 // UnknownMessage represents the default handler logic for an unmatched request
@@ -177,6 +177,10 @@ type Bridge struct {
 	Handler Handler
 	// EnableV4 enables the v4+ bridge and the schema v2+ interfaces.
 	EnableV4 bool
+	// Setting Sequential to true will force the bridge to only process one
+	// request at a time, except for certain long-running operations (as defined
+	// in asyncMessages).
+	Sequential bool
 
 	// responseChan is the response channel used for both request/response
 	// and publish notification workflows.
@@ -256,6 +260,14 @@ func (b *Bridge) ShutdownRequested() bool {
 	return b.hasQuitPending.Load()
 }
 
+// Identify messages that will be processed asynchronously even in sequential
+// mode.  Note that in sequential mode, these messages will still wait for any
+// in-progress non-async messages to be handled before they are processed, but
+// once they are "acknowledged", the rest will be done asynchronously.
+func alwaysAsync(msgType prot.MessageIdentifier) bool {
+	return msgType == prot.ComputeSystemWaitForProcessV1
+}
+
 // AssignHandlers creates and assigns the appropriate bridge
 // events to be listen for and intercepted on `mux` before forwarding
 // to `gcs` for handling.
@@ -311,6 +323,10 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	defer b.disconnectNotifications()
 	defer close(b.quitChan)
 
+	if b.Sequential {
+		log.G(context.Background()).Info("bridge: ForceSequential enabled")
+	}
+
 	// Receive bridge requests and schedule them to be processed.
 	go func() {
 		var recverr error
@@ -341,45 +357,27 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				_ = json.Unmarshal(message, &base)
 
 				var ctx context.Context
-				var span *trace.Span
-				if base.OpenCensusSpanContext != nil {
-					sc := trace.SpanContext{}
-					if bytes, err := hex.DecodeString(base.OpenCensusSpanContext.TraceID); err == nil {
-						copy(sc.TraceID[:], bytes)
-					}
-					if bytes, err := hex.DecodeString(base.OpenCensusSpanContext.SpanID); err == nil {
-						copy(sc.SpanID[:], bytes)
-					}
-					sc.TraceOptions = trace.TraceOptions(base.OpenCensusSpanContext.TraceOptions)
-					if base.OpenCensusSpanContext.Tracestate != "" {
-						if bytes, err := base64.StdEncoding.DecodeString(base.OpenCensusSpanContext.Tracestate); err == nil {
-							var entries []tracestate.Entry
-							if err := json.Unmarshal(bytes, &entries); err == nil {
-								if ts, err := tracestate.New(nil, entries...); err == nil {
-									sc.Tracestate = ts
-								}
-							}
-						}
-					}
-					ctx, span = oc.StartSpanWithRemoteParent(
+				var span trace.Span
+				if len(base.OpenTelemetrySpanContext) > 0 {
+					ctx = otel.GetTextMapPropagator().Extract(
 						context.Background(),
-						"opengcs::bridge::request",
-						sc,
-						oc.WithServerSpanKind,
+						propagation.MapCarrier(base.OpenTelemetrySpanContext),
 					)
+					ctx, span = ot.StartSpan(ctx, "opengcs::bridge::request",
+						trace.WithSpanKind(trace.SpanKindServer))
 				} else {
-					ctx, span = oc.StartSpan(
+					ctx, span = ot.StartSpan(
 						context.Background(),
 						"opengcs::bridge::request",
-						oc.WithServerSpanKind,
+						trace.WithSpanKind(trace.SpanKindServer),
 					)
 				}
 
-				span.AddAttributes(
-					trace.Int64Attribute("message-id", int64(header.ID)),
-					trace.StringAttribute("message-type", header.Type.String()),
-					trace.StringAttribute("activityID", base.ActivityID),
-					trace.StringAttribute("cid", base.ContainerID))
+				span.SetAttributes(
+					attribute.Int64("message-id", int64(header.ID)),
+					attribute.String("message-type", header.Type.String()),
+					attribute.String("activityID", base.ActivityID),
+					attribute.String("cid", base.ContainerID))
 
 				entry := log.G(ctx)
 				if entry.Logger.IsLevelEnabled(logrus.TraceLevel) {
@@ -413,30 +411,38 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	}()
 	// Process each bridge request async and create the response writer.
 	go func() {
+		doRequest := func(r *Request) {
+			br := bridgeResponse{
+				ctx: r.Context,
+				header: &prot.MessageHeader{
+					Type: prot.GetResponseIdentifier(r.Header.Type),
+					ID:   r.Header.ID,
+				},
+			}
+			resp, err := b.Handler.ServeMsg(r)
+			if resp == nil {
+				resp = &prot.MessageResponseBase{}
+			}
+			resp.Base().ActivityID = r.ActivityID
+			if err != nil {
+				span := trace.SpanFromContext(r.Context)
+				if span != nil {
+					ot.SetSpanStatus(span, err)
+				}
+				setErrorForResponseBase(resp.Base(), err, "gcs" /* moduleName */)
+			}
+			br.response = resp
+			b.responseChan <- br
+		}
+
 		for req := range requestChan {
-			go func(r *Request) {
-				br := bridgeResponse{
-					ctx: r.Context,
-					header: &prot.MessageHeader{
-						Type: prot.GetResponseIdentifier(r.Header.Type),
-						ID:   r.Header.ID,
-					},
-				}
-				resp, err := b.Handler.ServeMsg(r)
-				if resp == nil {
-					resp = &prot.MessageResponseBase{}
-				}
-				resp.Base().ActivityID = r.ActivityID
-				if err != nil {
-					span := trace.FromContext(r.Context)
-					if span != nil {
-						oc.SetSpanStatus(span, err)
-					}
-					setErrorForResponseBase(resp.Base(), err, "gcs" /* moduleName */)
-				}
-				br.response = resp
-				b.responseChan <- br
-			}(req)
+			if b.Sequential && !alwaysAsync(req.Header.Type) {
+				// This will log warn after 5 seconds if the request is still
+				// being processed,
+				runSequentialRequest(req, doRequest)
+			} else {
+				go doRequest(req)
+			}
 		}
 	}()
 	// Process each bridge response sync. This channel is for request/response and publish workflows.
@@ -459,10 +465,10 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				break
 			}
 
-			s := trace.FromContext(resp.ctx)
+			s := trace.SpanFromContext(resp.ctx)
 			if s != nil {
 				log.G(resp.ctx).WithField("message", string(responseBytes)).Trace("request write response")
-				s.AddAttributes(trace.StringAttribute("response-message-type", resp.header.Type.String()))
+				s.SetAttributes(attribute.String("response-message-type", resp.header.Type.String()))
 				s.End()
 			}
 		}
@@ -499,12 +505,38 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 	}
 }
 
+// Do handleFn(r), but prints a warning if handleFn does not, or takes too long
+// to return.
+func runSequentialRequest(r *Request, handleFn func(*Request)) {
+	// Note that this is only a context used for triggering the blockage
+	// warning, the request processing still uses r.Context.  We don't want to
+	// cancel the request handling itself when we reach the 5s timeout.
+	timeoutCtx, cancel := context.WithTimeout(r.Context, 5*time.Second)
+	go func() {
+		<-timeoutCtx.Done()
+		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+			log.G(timeoutCtx).WithFields(logrus.Fields{
+				// We want to log those even though we're providing r.Context, since if
+				// the request never finishes the span end log will never get written,
+				// and we may therefore not be able to find out about the following info
+				// otherwise:
+				"message-type": r.Header.Type.String(),
+				"message-id":   r.Header.ID,
+				"activity-id":  r.ActivityID,
+				"container-id": r.ContainerID,
+			}).Warnf("bridge: request processing thread in sequential mode blocked on the current request for more than 5 seconds")
+		}
+	}()
+	defer cancel()
+	handleFn(r)
+}
+
 // PublishNotification writes a specific notification to the bridge.
 func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
-	ctx, span := oc.StartSpan(context.Background(),
+	ctx, span := ot.StartSpan(context.Background(),
 		"opengcs::bridge::PublishNotification",
-		oc.WithClientSpanKind)
-	span.AddAttributes(trace.StringAttribute("notification", fmt.Sprintf("%+v", n)))
+		ot.WithClientSpanKind)
+	span.SetAttributes(attribute.String("notification", fmt.Sprintf("%+v", n)))
 	// DONT defer span.End() here. Publish is odd because bridgeResponse calls
 	// `End` on the `ctx` after the response is sent.
 

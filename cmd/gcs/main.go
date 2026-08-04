@@ -4,6 +4,8 @@
 package main
 
 import (
+	"context"
+	stderrors "errors"
 	"flag"
 	"fmt"
 	"io"
@@ -16,9 +18,12 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	cgroups1 "github.com/containerd/cgroups/v3/cgroup1"
 	cgroups1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/bridge"
 	"github.com/Microsoft/hcsshim/internal/guest/cgroup"
@@ -28,10 +33,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/version"
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 func memoryLogFormat(metrics *cgroups1stats.Metrics) logrus.Fields {
@@ -188,6 +193,26 @@ func startTimeSyncService() error {
 	return nil
 }
 
+func initOtelTracer() (func(context.Context) error, error) {
+	exporter := &ot.LogrusExporter{}
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	if traceProvider == nil {
+		return nil, stderrors.New("failed to construct OpenTelemetry tracer provider")
+	}
+	otel.SetTracerProvider(traceProvider)
+	if otel.GetTracerProvider() != traceProvider {
+		return nil, stderrors.New("failed to register OpenTelemetry tracer provider globally")
+	}
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+	return traceProvider.Shutdown, nil
+}
+
 func main() {
 	startTime := time.Now()
 	logLevel := flag.String("loglevel",
@@ -231,10 +256,14 @@ func main() {
 
 	flag.Parse()
 
-	// If v4 enable opencensus
+	// If v4 enable otel tracing
 	if *v4 {
-		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-		trace.RegisterExporter(&oc.LogrusExporter{})
+		// Register our Otel logrus exporter
+		shutdownTracer, err := initOtelTracer()
+		if err != nil {
+			logrus.Fatalf("failed to initialize ot tracer: %v", err)
+		}
+		defer func() { _ = shutdownTracer(context.Background()) }()
 	}
 
 	logrus.AddHook(log.NewHook())
@@ -414,6 +443,16 @@ func main() {
 
 	mux := bridge.NewBridgeMux()
 	b := bridge.New(mux, *v4)
+	// For confidential containers, we protect ourselves against attacks caused
+	// by concurrent modifications, by processing one request at a time.
+	sequential, err := amdsevsnp.IsSNP()
+	if err != nil {
+		// IsSNP cannot fail on LCOW
+		log.G(context.TODO()).WithError(err).Error("unexpected error from IsSNP")
+		// If it fails, we proceed with forceSequential enabled to be safe
+		sequential = true
+	}
+	b.Sequential = sequential
 	b.AssignHandlers(mux, h)
 
 	// Reconnect loop: dial the host, serve until the connection drops, then

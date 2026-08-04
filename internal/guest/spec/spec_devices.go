@@ -18,7 +18,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 )
 
 const (
@@ -39,9 +39,9 @@ const (
 //
 // GPU devices are skipped, since they are handled in [addNvidiaDeviceHook].
 func AddAssignedDevice(ctx context.Context, spec *oci.Spec) (err error) {
-	ctx, span := oc.StartSpan(ctx, "AddAssignedDevice")
+	ctx, span := ot.StartSpan(ctx, "AddAssignedDevice")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// Add an explicit timeout before we try to find the dev nodes so we
 	// aren't waiting forever.

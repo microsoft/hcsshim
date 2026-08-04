@@ -7,8 +7,10 @@ framework_version := "@@FRAMEWORK_VERSION@@"
 
 mount_device := data.framework.mount_device
 rw_mount_device := data.framework.rw_mount_device
+mount_blockdev := data.framework.mount_blockdev
 unmount_device := data.framework.unmount_device
 rw_unmount_device := data.framework.rw_unmount_device
+unmount_blockdev := data.framework.unmount_blockdev
 mount_overlay := data.framework.mount_overlay
 unmount_overlay := data.framework.unmount_overlay
 mount_cims:= data.framework.mount_cims
@@ -27,4 +29,5 @@ load_fragment := data.framework.load_fragment
 scratch_mount := data.framework.scratch_mount
 scratch_unmount := data.framework.scratch_unmount
 log_provider := data.framework.log_provider
+load_transparency_trust_list := data.framework.load_transparency_trust_list
 reason := data.framework.reason

@@ -120,8 +120,13 @@ func TestBridge_FullReconnectCycle(t *testing.T) {
 	b.responseChan = make(chan bridgeResponse, 4)
 	b.quitChan = make(chan bool)
 
+	// Bind the writer goroutine to this iteration's channel explicitly.
+	// Ranging over b.responseChan directly reads the field lazily when the
+	// goroutine is scheduled, which can race with the reassignment in
+	// iteration 2 and let this goroutine steal the drained notification.
+	rc1 := b.responseChan
 	go func() {
-		for range b.responseChan {
+		for range rc1 {
 		}
 	}() // drain writer
 

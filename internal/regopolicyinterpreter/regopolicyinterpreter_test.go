@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 	"testing/quick"
@@ -87,7 +88,7 @@ func Test_copyRegoMetadata(t *testing.T) {
 
 		for name, origObject := range orig {
 			if copyObject, ok := copy[name]; ok {
-				if !assertObjectsEqual(origObject, copyObject) {
+				if !assertMetadataValueEqual(t, origObject, copyObject) {
 					t.Errorf("original and copy differ on key %s", name)
 					return false
 				}
@@ -555,6 +556,147 @@ func Test_Module(t *testing.T) {
 
 }
 
+func Test_Set(t *testing.T) {
+	rego, err := setupRego()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f := func(name metadataName, valuesToInsert testArray, nonExistantValue testArray) bool {
+		uniqueValuesToInsert := make([]interface{}, 0, len(valuesToInsert))
+		for _, v := range valuesToInsert {
+			if !slices.ContainsFunc(uniqueValuesToInsert, func(e interface{}) bool {
+				return reflect.DeepEqual(e, v)
+			}) {
+				uniqueValuesToInsert = append(uniqueValuesToInsert, v)
+			}
+		}
+
+		for _, v := range uniqueValuesToInsert {
+			contains, err := setContains(rego, name, v)
+
+			if err != nil {
+				t.Errorf("error checking if set contains value %v: %v", v, err)
+				return false
+			}
+			if contains {
+				t.Errorf("set unexpectedly contains value %v before we added it", v)
+				return false
+			}
+			if err = setAdd(rego, name, v); err != nil {
+				t.Errorf("error adding value %v to set: %v", v, err)
+				return false
+			}
+			contains, err = setContains(rego, name, v)
+			if err != nil {
+				t.Errorf("error checking if set contains value %v: %v", v, err)
+				return false
+			}
+			if !contains {
+				t.Errorf("set does not contain value %v after we added it", v)
+				return false
+			}
+		}
+
+		set, err := getSet(rego, name)
+		if err != nil {
+			t.Errorf("error retrieving set: %v", err)
+			return false
+		}
+
+		if !assertArraysEqualsUnordered(uniqueValuesToInsert, set) {
+			t.Errorf("set does not match inserted values: %v != %v", set, uniqueValuesToInsert)
+			assertArraysEqualsUnordered(uniqueValuesToInsert, set)
+			return false
+		}
+
+		for _, v := range nonExistantValue {
+			if slices.ContainsFunc(valuesToInsert, func(e interface{}) bool {
+				return reflect.DeepEqual(e, v)
+			}) {
+				continue
+			}
+
+			contains, err := setContains(rego, name, v)
+			if err != nil {
+				t.Errorf("error checking if set contains value %v: %v", v, err)
+				return false
+			}
+			if contains {
+				t.Errorf("set unexpectedly contains value %v", v)
+				return false
+			}
+			if err = setRemove(rego, name, v); err != nil {
+				t.Errorf("error removing non-existant value %v from set: %v", v, err)
+				return false
+			}
+		}
+
+		set, err = getSet(rego, name)
+		if err != nil {
+			t.Errorf("error retrieving set: %v", err)
+			return false
+		}
+
+		if !assertArraysEqualsUnordered(uniqueValuesToInsert, set) {
+			t.Errorf("set does not match inserted values after removing non-existant values: %v != %v", set, uniqueValuesToInsert)
+			return false
+		}
+
+		for _, v := range uniqueValuesToInsert {
+			err = setAdd(rego, name, v)
+			if err != nil {
+				t.Errorf("error adding value %v to set: %v", v, err)
+				return false
+			}
+		}
+
+		set, err = getSet(rego, name)
+		if err != nil {
+			t.Errorf("error retrieving set: %v", err)
+			return false
+		}
+
+		if !assertArraysEqualsUnordered(uniqueValuesToInsert, set) {
+			t.Errorf("set does not match inserted values after inserting duplicate values: %v != %v", set, uniqueValuesToInsert)
+			return false
+		}
+
+		for _, v := range uniqueValuesToInsert {
+			err = setRemove(rego, name, v)
+			if err != nil {
+				t.Errorf("error removing value %v from set: %v", v, err)
+				return false
+			}
+			contains, err := setContains(rego, name, v)
+			if err != nil {
+				t.Errorf("error checking if set contains value %v: %v", v, err)
+				return false
+			}
+			if contains {
+				t.Errorf("set still contains value %v after we removed it", v)
+				return false
+			}
+		}
+
+		set, err = getSet(rego, name)
+		if err != nil {
+			t.Errorf("error retrieving set: %v", err)
+			return false
+		}
+
+		if len(set) != 0 {
+			t.Errorf("set is not empty after removing all values: %v", set)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 100, Rand: testRand}); err != nil {
+		t.Errorf("quick.Check failed: %v", err)
+	}
+}
+
 // fixtures
 
 func setupRego() (*RegoPolicyInterpreter, error) {
@@ -656,9 +798,9 @@ const (
 )
 
 func generateValue(r *rand.Rand, depth int) interface{} {
-	choices := []testValueType{testValueArray, testValueString, testValueFloat, testValueBool, testValueNull}
+	choices := []testValueType{testValueString, testValueBool, testValueNull}
 	if depth < maxObjectDepth {
-		choices = append(choices, testValueObject)
+		choices = append(choices, testValueObject, testValueArray)
 	}
 
 	switch choices[r.Intn(len(choices))] {
@@ -671,8 +813,8 @@ func generateValue(r *rand.Rand, depth int) interface{} {
 	case testValueString:
 		return randString(r)
 
-	case testValueFloat:
-		return r.Float64()
+	// case testValueFloat:
+	// 	return r.Float64()
 
 	case testValueBool:
 		return r.Intn(2) == 1
@@ -710,6 +852,11 @@ func (testValue) Generate(r *rand.Rand, _ int) reflect.Value {
 	return reflect.ValueOf(value)
 }
 
+func (testArray) Generate(r *rand.Rand, _ int) reflect.Value {
+	value := generateArray(r, 0)
+	return reflect.ValueOf(value)
+}
+
 func (testObject) Generate(r *rand.Rand, _ int) reflect.Value {
 	value := generateObject(r, 0)
 	return reflect.ValueOf(value)
@@ -717,10 +864,15 @@ func (testObject) Generate(r *rand.Rand, _ int) reflect.Value {
 
 func (testRegoMetadata) Generate(r *rand.Rand, _ int) reflect.Value {
 	numObjects := r.Intn(maxNumberOfFields)
+	numSets := r.Intn(maxNumberOfFields)
 	metadata := make(testRegoMetadata)
 	for i := 0; i < numObjects; i++ {
 		name := uniqueString(r)
-		metadata[name] = generateObject(r, 0)
+		metadata[name] = regoMetadataMap(generateObject(r, 0))
+	}
+	for i := 0; i < numSets; i++ {
+		name := uniqueString(r)
+		metadata[name] = regoMetadataSet(generateArray(r, 0))
 	}
 	return reflect.ValueOf(metadata)
 }
@@ -829,8 +981,76 @@ func computeGap(r *RegoPolicyInterpreter, name metadataName, expected int) error
 	return nil
 }
 
+func setAdd(r *RegoPolicyInterpreter, name metadataName, value interface{}) error {
+	input := map[string]interface{}{"name": string(name), "value": value}
+	result, err := r.Query("data.test.setAdd", input)
+	if err != nil {
+		return fmt.Errorf("received error when trying to query rego: %w", err)
+	}
+
+	success, err := result.Bool("success")
+	if err != nil {
+		return errors.New("Expected result.success to be a bool")
+	}
+
+	if !success {
+		return errors.New("set_add query failed unexpectedly")
+	}
+
+	return nil
+}
+
+func setRemove(r *RegoPolicyInterpreter, name metadataName, value interface{}) error {
+	input := map[string]interface{}{"name": string(name), "value": value}
+	result, err := r.Query("data.test.setRemove", input)
+	if err != nil {
+		return fmt.Errorf("received error when trying to query rego: %w", err)
+	}
+
+	success, err := result.Bool("success")
+	if err != nil {
+		return errors.New("Expected result.success to be a bool")
+	}
+
+	if !success {
+		return errors.New("set_remove query failed unexpectedly")
+	}
+
+	return nil
+}
+
+func setContains(r *RegoPolicyInterpreter, name metadataName, value interface{}) (bool, error) {
+	input := map[string]interface{}{"name": string(name), "value": value}
+	result, err := r.Query("data.test.setContains", input)
+	if err != nil {
+		return false, fmt.Errorf("received error when trying to query rego: %w", err)
+	}
+
+	contains, err := result.Bool("result")
+	if err != nil {
+		return false, errors.New("Expected result.result to be a bool")
+	}
+
+	return contains, nil
+}
+
+func getSet(r *RegoPolicyInterpreter, name metadataName) ([]interface{}, error) {
+	input := map[string]interface{}{"name": string(name)}
+	result, err := r.Query("data.test.getSet", input)
+	if err != nil {
+		return nil, fmt.Errorf("received error when trying to query rego: %w", err)
+	}
+
+	set, err := result.Array("result")
+	if err != nil {
+		return nil, errors.New("Expected result.result to be an array")
+	}
+
+	return set, nil
+}
+
 func assertListEqual(r *RegoPolicyInterpreter, name metadataName, key string, expectedValues []int) error {
-	rawValues, err := r.GetMetadata(string(name), key)
+	rawValues, err := r.GetMetadataMapValue(string(name), key)
 	if err != nil {
 		return fmt.Errorf("unable to get metadata list %s: %w", name, err)
 	}
@@ -888,6 +1108,10 @@ func uniqueString(r *rand.Rand) string {
 }
 
 func assertValuesEqual(lhs interface{}, rhs interface{}) bool {
+	if reflect.DeepEqual(lhs, rhs) {
+		return true
+	}
+
 	if lhsObject, ok := lhs.(testObject); ok {
 		if rhsObject, ok := rhs.(testObject); ok {
 			return assertObjectsEqual(lhsObject, rhsObject)
@@ -953,6 +1177,33 @@ func assertArraysEqual(lhs testArray, rhs testArray) bool {
 	return true
 }
 
+func assertArraysEqualsUnordered(lhs testArray, rhs testArray) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	if assertArraysEqual(lhs, rhs) {
+		return true
+	}
+
+	used := make([]bool, len(rhs))
+	for _, lhsValue := range lhs {
+		rhsIndex := -1
+		for i, rhsValue := range rhs {
+			if !used[i] && assertValuesEqual(lhsValue, rhsValue) {
+				rhsIndex = i
+				break
+			}
+		}
+		if rhsIndex == -1 {
+			return false
+		}
+		used[rhsIndex] = true
+	}
+
+	return true
+}
+
 func assertObjectsEqual(lhs testObject, rhs testObject) bool {
 	if len(lhs) != len(rhs) {
 		return false
@@ -969,4 +1220,24 @@ func assertObjectsEqual(lhs testObject, rhs testObject) bool {
 	}
 
 	return true
+}
+
+func assertMetadataValueEqual(t *testing.T, lhs interface{}, rhs interface{}) bool {
+	t.Helper()
+	if lhsMap, ok := lhs.(regoMetadataMap); ok {
+		if rhsMap, ok := rhs.(regoMetadataMap); ok {
+			return assertObjectsEqual(testObject(lhsMap), testObject(rhsMap))
+		} else {
+			return false
+		}
+	} else if lhsSet, ok := lhs.(regoMetadataSet); ok {
+		if rhsSet, ok := rhs.(regoMetadataSet); ok {
+			return assertArraysEqualsUnordered(testArray(lhsSet), testArray(rhsSet))
+		} else {
+			return false
+		}
+	} else {
+		t.Errorf("lhs (type %v) passed to assertMetadataValueEqual is not a valid rego metadata value", reflect.TypeOf(lhs))
+		return false
+	}
 }

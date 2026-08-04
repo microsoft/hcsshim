@@ -29,7 +29,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 	}
 	containerRootInUVM := r.ContainerRootInUVM()
 	if coi.LCOWLayers != nil {
-		log.G(ctx).Debug("hcsshim::allocateLinuxResources mounting storage")
+		log.G(ctx).Trace("hcsshim::allocateLinuxResources mounting storage")
 		rootPath, scratchPath, closer, err := layers.MountLCOWLayers(ctx, coi.actualID, coi.LCOWLayers, containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return errors.Wrap(err, "failed to mount container storage")

@@ -268,6 +268,29 @@ func TestBuildSandboxConfig(t *testing.T) {
 			},
 		},
 		{
+			// FullyPhysicallyBacked tracks the VM's memory backing (!AllowOvercommit),
+			// so disabling overcommit alone (without the annotation) marks it true.
+			name: "overcommit off alone marks VM physically backed",
+			opts: &runhcsoptions.Options{
+				SandboxPlatform:   "linux/amd64",
+				BootFilesRootPath: validBootFilesPath,
+			},
+			spec: &vm.Spec{
+				Annotations: map[string]string{
+					shimannotations.AllowOvercommit: "false",
+				},
+			},
+			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
+				t.Helper()
+				if doc.VirtualMachine.ComputeTopology.Memory.AllowOvercommit != false {
+					t.Errorf("expected allow overcommit false, got %v", doc.VirtualMachine.ComputeTopology.Memory.AllowOvercommit)
+				}
+				if sandboxOpts.FullyPhysicallyBacked != true {
+					t.Errorf("expected fully physically backed true when overcommit off, got %v", sandboxOpts.FullyPhysicallyBacked)
+				}
+			},
+		},
+		{
 			name: "memory MMIO configuration",
 			opts: &runhcsoptions.Options{
 				SandboxPlatform:   "linux/amd64",
@@ -2129,36 +2152,43 @@ func TestBuildSandboxConfig_CPUClamping(t *testing.T) {
 }
 
 // TestBuildSandboxConfig_LiveMigration validates the wiring for the
-// io.microsoft.migration.support-enabled sandbox annotation. The annotation is parsed
-// into SandboxOptions.LiveMigrationSupportEnabled and threaded down into the kernel
-// command line: live-migratable sandboxes must skip the /bin/vsockexec wrapper
-// (which would otherwise stall init waiting for a host log listener that the
-// LM-enabled host does not run), while non-LM sandboxes must continue to use
-// vsockexec so that GCS stderr is forwarded over LinuxLogVsockPort.
+// io.microsoft.migration.support-enabled sandbox annotation. The annotation is
+// parsed directly when building the GCS command: live-migratable sandboxes run
+// the /bin/vsockexec wrapper in reconnect mode (-r) so guest logging tolerates a
+// missing host log listener and reconnects after a migration, while non-LM
+// sandboxes use the plain wrapper to forward GCS stderr over LinuxLogVsockPort.
+// It also gates the Plan9 device: live-migratable sandboxes omit Plan9 (its
+// share state cannot be saved or migrated) while non-LM sandboxes keep it.
 func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 	ctx := context.Background()
 
 	validBootFilesPath := newBootFilesPath(t)
 	defaultOpts := defaultSandboxOpts(validBootFilesPath)
 
-	// Pre-format the vsockexec prefix once so the assertions are obviously
-	// driven by the same constant the production code uses.
+	// Pre-format the vsockexec prefixes once so the assertions are obviously
+	// driven by the same constants the production code uses.
 	vsockexecPrefix := fmt.Sprintf("/bin/vsockexec -e %d", vmutils.LinuxLogVsockPort)
+	// When live migration is enabled the wrapper runs in reconnect mode (-r).
+	vsockexecReconnectPrefix := fmt.Sprintf("/bin/vsockexec -r -e %d", vmutils.LinuxLogVsockPort)
 
 	tests := []specTestCase{
 		{
 			name: "live migration disabled by default",
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				if sandboxOpts.LiveMigrationSupportEnabled {
-					t.Errorf("expected LiveMigrationSupportEnabled=false by default, got true")
-				}
 				kernelArgs := getKernelArgs(doc)
 				if !strings.Contains(kernelArgs, vsockexecPrefix) {
 					t.Errorf("expected vsockexec wrapper %q in kernel args (LM disabled), got %q", vsockexecPrefix, kernelArgs)
 				}
+				if strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
+					t.Errorf("expected no vsockexec reconnect mode when LM disabled, got %q", kernelArgs)
+				}
 				if !strings.Contains(kernelArgs, "/bin/gcs") {
 					t.Errorf("expected /bin/gcs in kernel args, got %q", kernelArgs)
+				}
+				// A non-migratable sandbox keeps the Plan9 device.
+				if doc.VirtualMachine.Devices.Plan9 == nil {
+					t.Errorf("expected Plan9 device to be enabled for non-migratable sandbox, got nil")
 				}
 			},
 		},
@@ -2171,17 +2201,21 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				if sandboxOpts.LiveMigrationSupportEnabled {
-					t.Errorf("expected LiveMigrationSupportEnabled=false when annotation=\"false\", got true")
-				}
 				kernelArgs := getKernelArgs(doc)
 				if !strings.Contains(kernelArgs, vsockexecPrefix) {
 					t.Errorf("expected vsockexec wrapper %q in kernel args, got %q", vsockexecPrefix, kernelArgs)
 				}
+				if strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
+					t.Errorf("expected no vsockexec reconnect mode when LM disabled, got %q", kernelArgs)
+				}
+				// A non-migratable sandbox keeps the Plan9 device.
+				if doc.VirtualMachine.Devices.Plan9 == nil {
+					t.Errorf("expected Plan9 device to be enabled for non-migratable sandbox, got nil")
+				}
 			},
 		},
 		{
-			name: "live migration enabled drops vsockexec wrapper",
+			name: "live migration enabled uses vsockexec reconnect mode",
 			spec: &vm.Spec{
 				Annotations: map[string]string{
 					shimannotations.LiveMigrationSupportEnabled: "true",
@@ -2189,21 +2223,18 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				if !sandboxOpts.LiveMigrationSupportEnabled {
-					t.Errorf("expected LiveMigrationSupportEnabled=true when annotation=\"true\", got false")
-				}
 				kernelArgs := getKernelArgs(doc)
-				// The vsockexec wrapper must not appear at all when LM is on:
-				// neither the prefix nor the binary path on its own.
-				if strings.Contains(kernelArgs, "vsockexec") {
-					t.Errorf("expected no vsockexec in kernel args when LM enabled, got %q", kernelArgs)
+				// When LM is on the wrapper runs in reconnect mode (-r) so the
+				// guest tolerates a missing or dropped host log listener.
+				if !strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
+					t.Errorf("expected vsockexec reconnect wrapper %q in kernel args when LM enabled, got %q", vsockexecReconnectPrefix, kernelArgs)
 				}
-				if strings.Contains(kernelArgs, fmt.Sprintf("-e %d", vmutils.LinuxLogVsockPort)) {
-					t.Errorf("expected no log vsock port (%d) wiring when LM enabled, got %q", vmutils.LinuxLogVsockPort, kernelArgs)
-				}
-				// /bin/gcs must still be invoked - just without the wrapper.
 				if !strings.Contains(kernelArgs, "/bin/gcs") {
-					t.Errorf("expected /bin/gcs in kernel args even when LM enabled, got %q", kernelArgs)
+					t.Errorf("expected /bin/gcs in kernel args when LM enabled, got %q", kernelArgs)
+				}
+				// A live-migratable sandbox omits the Plan9 device.
+				if plan9 := doc.VirtualMachine.Devices.Plan9; plan9 != nil {
+					t.Errorf("expected Plan9 device to be omitted for live-migratable sandbox, got %+v", plan9)
 				}
 			},
 		},
@@ -2221,22 +2252,23 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				if !sandboxOpts.LiveMigrationSupportEnabled {
-					t.Errorf("expected LiveMigrationSupportEnabled=true, got false")
-				}
 				kernelArgs := getKernelArgs(doc)
-				// Other GCS flags must still be threaded through the command
-				// even when the vsockexec wrapper is removed.
+				// Other GCS flags must still be threaded through the reconnect
+				// wrapper when LM is enabled.
 				if !strings.Contains(kernelArgs, "-loglevel debug") {
 					t.Errorf("expected -loglevel debug in kernel args when LM enabled, got %q", kernelArgs)
 				}
-				if strings.Contains(kernelArgs, "vsockexec") {
-					t.Errorf("expected no vsockexec when LM enabled, got %q", kernelArgs)
+				if !strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
+					t.Errorf("expected vsockexec reconnect wrapper %q when LM enabled, got %q", vsockexecReconnectPrefix, kernelArgs)
+				}
+				// A live-migratable sandbox omits the Plan9 device.
+				if plan9 := doc.VirtualMachine.Devices.Plan9; plan9 != nil {
+					t.Errorf("expected Plan9 device to be omitted for live-migratable sandbox, got %+v", plan9)
 				}
 			},
 		},
 		{
-			name: "live migration with disable time sync still drops vsockexec",
+			name: "live migration with disable time sync uses vsockexec reconnect mode",
 			spec: &vm.Spec{
 				Annotations: map[string]string{
 					shimannotations.LiveMigrationSupportEnabled: "true",
@@ -2245,15 +2277,16 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				if !sandboxOpts.LiveMigrationSupportEnabled {
-					t.Errorf("expected LiveMigrationSupportEnabled=true, got false")
-				}
 				kernelArgs := getKernelArgs(doc)
 				if !strings.Contains(kernelArgs, "-disable-time-sync") {
 					t.Errorf("expected -disable-time-sync flag in kernel args, got %q", kernelArgs)
 				}
-				if strings.Contains(kernelArgs, "vsockexec") {
-					t.Errorf("expected no vsockexec when LM enabled, got %q", kernelArgs)
+				if !strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
+					t.Errorf("expected vsockexec reconnect wrapper %q when LM enabled, got %q", vsockexecReconnectPrefix, kernelArgs)
+				}
+				// A live-migratable sandbox omits the Plan9 device.
+				if plan9 := doc.VirtualMachine.Devices.Plan9; plan9 != nil {
+					t.Errorf("expected Plan9 device to be omitted for live-migratable sandbox, got %+v", plan9)
 				}
 			},
 		},
@@ -2269,12 +2302,16 @@ func TestBuildSandboxConfig_LiveMigration(t *testing.T) {
 			},
 			validate: func(t *testing.T, doc *hcsschema.ComputeSystem, sandboxOpts *SandboxOptions) {
 				t.Helper()
-				if sandboxOpts.LiveMigrationSupportEnabled {
-					t.Errorf("expected LiveMigrationSupportEnabled=false on invalid annotation value, got true")
-				}
 				kernelArgs := getKernelArgs(doc)
 				if !strings.Contains(kernelArgs, vsockexecPrefix) {
 					t.Errorf("expected vsockexec wrapper %q in kernel args, got %q", vsockexecPrefix, kernelArgs)
+				}
+				if strings.Contains(kernelArgs, vsockexecReconnectPrefix) {
+					t.Errorf("expected no vsockexec reconnect mode on invalid LM annotation, got %q", kernelArgs)
+				}
+				// Invalid annotation falls back to false, so Plan9 stays enabled.
+				if doc.VirtualMachine.Devices.Plan9 == nil {
+					t.Errorf("expected Plan9 device to be enabled for non-migratable sandbox, got nil")
 				}
 			},
 		},

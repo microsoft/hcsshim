@@ -3,6 +3,7 @@
 package vmutils
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -17,4 +18,13 @@ func DefaultLCOWOSBootFilesPath() string {
 		return localDirPath
 	}
 	return filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
+}
+
+// LinuxLogForwarderCommand is the guest command that streams GCS stdout/stderr to the
+// host log port. In reconnect mode it re-dials the host listener so logs survive migration.
+func LinuxLogForwarderCommand(reconnect bool) string {
+	if reconnect {
+		return fmt.Sprintf("/bin/vsockexec -r -e %d", LinuxLogVsockPort)
+	}
+	return fmt.Sprintf("/bin/vsockexec -e %d", LinuxLogVsockPort)
 }

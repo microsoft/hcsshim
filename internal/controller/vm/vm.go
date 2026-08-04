@@ -4,6 +4,7 @@ package vm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/controller/device/scsi"
 	"github.com/Microsoft/hcsshim/internal/controller/device/vpci"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -65,6 +67,15 @@ type Controller struct {
 	// vpciController manages virtual PCI device assignments for this VM.
 	vpciController *vpci.Controller
 
+	// hcsDocument is the final HCS document used to create this VM,
+	// retained for lazy SCSI controller construction and for shipping to
+	// the destination during live migration.
+	hcsDocument *hcsschema.ComputeSystem
+
+	// compatInfo is the opaque VM compatibility blob rehydrated from
+	// a migration snapshot on the destination side.
+	compatInfo []byte
+
 	// platformControllers embeds platform-specific sub-controllers (e.g., Plan9 for LCOW).
 	platformControllers //nolint:unused,nolintlint // embedded for cross-platform compatibility; empty on WCOW
 }
@@ -81,6 +92,12 @@ func New() *Controller {
 // The guest manager provides access to guest-host communication.
 func (c *Controller) Guest() *guestmanager.Guest {
 	return c.guest
+}
+
+// VM returns the vm manager instance for this VM.
+// The vm manager provides access to the VM host side operations.
+func (c *Controller) VM() *vmmanager.UtilityVM {
+	return c.uvm
 }
 
 // State returns the current VM state.
@@ -103,22 +120,69 @@ func (c *Controller) RuntimeID() string {
 	return c.uvm.RuntimeID().String()
 }
 
-// CreateVM creates the VM using the HCS document and initializes device state.
+// CreateVM creates the VM from either a freshly built HCS document (cold boot)
+// or the document imported on the migration destination.
 func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithField(logfields.Operation, "CreateVM"))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// In case of duplicate CreateVM call for the same controller, we want to fail.
-	if c.vmState != StateNotCreated {
-		return fmt.Errorf("cannot create VM: VM is in incorrect state %s", c.vmState)
-	}
+	// Pick the HCS document we hand to vmmanager based on the controller's
+	// current state:
+	//   - StateNotCreated: cold-boot path; build a fresh document.
+	//   - StateDestinationMigrationImported: destination side of a live migration;
+	//     reuse the document rehydrated by Import and stamp opts.MigrationOptions
+	//     onto it.
+	// Any other state is invalid for CreateVM.
+	var hcsDocument *hcsschema.ComputeSystem
+	// Cold boot lands in StateCreated; the destination migration path lands in
+	// StateDestinationMigrationCreated.
+	nextState := StateCreated
+	switch c.vmState {
+	case StateNotCreated:
+		doc, err := c.buildHCSConfig(ctx, opts)
+		if err != nil {
+			return fmt.Errorf("failed to build VM config: %w", err)
+		}
+		hcsDocument = doc
+	case StateDestinationMigrationImported:
+		nextState = StateDestinationMigrationCreated
+		if opts.MigrationOptions == nil {
+			return fmt.Errorf("cannot create VM in state %s: migration options are required", c.vmState)
+		}
+		if c.hcsDocument == nil {
+			return fmt.Errorf("cannot create VM in state %s: no imported HCS document available", c.vmState)
+		}
+		if c.hcsDocument.VirtualMachine == nil {
+			return fmt.Errorf("cannot create VM in state %s: imported HCS document has no VirtualMachine", c.vmState)
+		}
 
-	// Build the HCS document and sandbox options from the platform-specific builder.
-	hcsDocument, err := c.buildHCSConfig(ctx, opts)
-	if err != nil {
-		return fmt.Errorf("failed to build VM config: %w", err)
+		// Deep-copy the imported document via JSON round-trip so migration
+		// stamping targets a private copy, leaving the retained source-of-truth
+		// pristine if this call fails and is retried.
+		raw, err := json.Marshal(c.hcsDocument)
+		if err != nil {
+			return fmt.Errorf("marshal imported HCS document: %w", err)
+		}
+		hcsDocument = &hcsschema.ComputeSystem{}
+		if err := json.Unmarshal(raw, hcsDocument); err != nil {
+			return fmt.Errorf("unmarshal imported HCS document: %w", err)
+		}
+
+		hcsDocument.VirtualMachine.MigrationOptions = opts.MigrationOptions
+		if c.compatInfo != nil {
+			hcsDocument.VirtualMachine.MigrationOptions.CompatibilityData = &hcsschema.CompatibilityInfo{
+				Data: c.compatInfo,
+			}
+		}
+		// SCSI controller is the source of truth for the destination
+		// topology (rootfs + hot-added, path-patched); use it verbatim.
+		if c.scsiController != nil {
+			hcsDocument.VirtualMachine.Devices.Scsi = c.scsiController.HCSAttachments()
+		}
+	default:
+		return fmt.Errorf("cannot create VM: VM is in incorrect state %s", c.vmState)
 	}
 
 	// Create the VM via vmmanager.
@@ -130,19 +194,17 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	// Set the Controller parameters after successful creation.
 	c.vmID = opts.ID
 	c.uvm = uvm
+	// Retain the final HCS document for lazy SCSI init and migration save.
+	c.hcsDocument = hcsDocument
 
 	// Initialize the GuestManager for managing guest interactions.
 	// We will create the guest connection via GuestManager during StartVM.
 	c.guest = guestmanager.New(ctx, uvm)
 
-	// Eager initialize the SCSI controller as opposed to all other controllers.
-	// This is because we always use SCSI for attaching scratch VHDs.
-	c.scsiController, err = newSCSIController(ctx, hcsDocument, c.uvm, c.guest)
-	if err != nil {
-		return fmt.Errorf("failed to initialize SCSI controller: %w", err)
-	}
-
-	c.vmState = StateCreated
+	// Cold-boot lands in StateCreated; the destination-side migration path
+	// lands in StateDestinationMigrationCreated, from which Patch and
+	// StartWithMigrationOptions drive the controller forward.
+	c.vmState = nextState
 	return nil
 }
 
@@ -411,7 +473,7 @@ func (c *Controller) DumpStacks(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("cannot dump stacks: VM is in incorrect state %s", c.vmState)
 	}
 
-	if c.guest.Capabilities().IsDumpStacksSupported() {
+	if caps := c.guest.Capabilities(); caps != nil && caps.IsDumpStacksSupported() {
 		return c.guest.DumpStacks(ctx)
 	}
 
@@ -428,6 +490,12 @@ func (c *Controller) Wait(ctx context.Context) error {
 	if c.vmState == StateNotCreated {
 		c.mu.RUnlock()
 		return fmt.Errorf("cannot wait on VM: VM is in incorrect state %s", c.vmState)
+	}
+
+	// Destination terminated before CreateVM: nothing to wait on.
+	if c.uvm == nil {
+		c.mu.RUnlock()
+		return nil
 	}
 	c.mu.RUnlock()
 
@@ -462,15 +530,6 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 		return nil, fmt.Errorf("cannot get stats: VM is in incorrect state %s", c.vmState)
 	}
 
-	// Initialization of vmmemProcess to calculate stats properly for VA-backed UVMs.
-	if c.vmmemProcess == 0 {
-		vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
-		if err != nil {
-			return nil, fmt.Errorf("cannot get stats: %w", err)
-		}
-		c.vmmemProcess = vmmemHandle
-	}
-
 	s := &stats.VirtualMachineStatistics{}
 	props, err := c.uvm.PropertiesV2(ctx, hcsschema.PTStatistics, hcsschema.PTMemory)
 	if err != nil {
@@ -485,6 +544,13 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 		// working set size for a VA-backed UVM. To work around this, we instead
 		// locate the vmmem process for the VM, and query that process's working set
 		// instead, which will be the working set for the VM.
+		if c.vmmemProcess == 0 {
+			vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
+			if err != nil {
+				return nil, fmt.Errorf("cannot get stats: %w", err)
+			}
+			c.vmmemProcess = vmmemHandle
+		}
 		memCounters, err := process.GetProcessMemoryInfo(c.vmmemProcess)
 		if err != nil {
 			return nil, err
@@ -530,10 +596,27 @@ func (c *Controller) TerminateVM(ctx context.Context) (err error) {
 		return nil
 	}
 
+	// Destination migration after Import but before CreateVM: no HCS handle yet.
+	if c.uvm == nil {
+		c.vmState = StateTerminated
+		return nil
+	}
+
 	// Best effort attempt to clean up the open vmmem handle.
 	_ = windows.Close(c.vmmemProcess)
-	// Terminate the utility VM. This will also cause the Wait() call in the background goroutine to unblock.
-	_ = c.uvm.Terminate(ctx)
+
+	// Explicitly set migrating to false so that we release
+	// the bridge prior to removing the VM.
+	c.guest.SetMigrating(false)
+
+	// Skip HCS Terminate for a never-started VM (cold-created, or a destination
+	// migration VM created/patched but not yet started). The HCS document sets
+	// ShouldTerminateOnLastHandleClosed, so uvm.Close below is sufficient.
+	if c.vmState != StateCreated &&
+		c.vmState != StateDestinationMigrationCreated && c.vmState != StateDestinationMigrationPatched {
+		// Terminate the utility VM. This will also cause the Wait() call in the background goroutine to unblock.
+		_ = c.uvm.Terminate(ctx)
+	}
 
 	if err := c.guest.CloseConnection(); err != nil {
 		log.G(ctx).Errorf("close guest connection failed: %s", err)
@@ -558,7 +641,7 @@ func (c *Controller) StartTime() (startTime time.Time) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.vmState == StateRunning || c.vmState == StateTerminated {
+	if (c.vmState == StateRunning || c.vmState == StateTerminated) && c.uvm != nil {
 		return c.uvm.StartedTime()
 	}
 
@@ -576,8 +659,16 @@ func (c *Controller) ExitStatus() (*ExitStatus, error) {
 		return nil, fmt.Errorf("cannot get exit status: VM is in incorrect state %s", c.vmState)
 	}
 
-	return &ExitStatus{
-		StoppedTime: c.uvm.StoppedTime(),
-		Err:         c.uvm.ExitError(),
-	}, nil
+	// Destination terminated before CreateVM: no uvm to query.
+	if c.uvm == nil {
+		return &ExitStatus{}, nil
+	}
+
+	// Close-before-Terminate (never-started VM) surfaces ErrAlreadyClosed; treat as clean exit.
+	err := c.uvm.ExitError()
+	if errors.Is(err, hcs.ErrAlreadyClosed) {
+		err = nil
+	}
+
+	return &ExitStatus{StoppedTime: c.uvm.StoppedTime(), Err: err}, nil
 }

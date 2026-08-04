@@ -13,11 +13,11 @@ import (
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	errdefs "github.com/containerd/errdefs/pkg/errgrpc"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 )
 
@@ -99,24 +99,24 @@ func NewService(o ...ServiceOption) (svc *service, err error) {
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task.StateResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "State")
+	ctx, span := ot.StartSpan(ctx, "State")
 	defer span.End()
 	defer func() {
 		if resp != nil {
-			span.AddAttributes(
-				trace.StringAttribute("status", resp.Status.String()),
-				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
+			span.SetAttributes(
+				attribute.String("status", resp.Status.String()),
+				attribute.Int64("exitStatus", int64(resp.ExitStatus)),
+				attribute.String("exitedAt", resp.ExitedAt.String()))
 		}
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 	}()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.stateInternal(ctx, req)
@@ -124,29 +124,29 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task
 }
 
 func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp *task.CreateTaskResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Create")
+	ctx, span := ot.StartSpan(ctx, "Create")
 	defer span.End()
 	defer func() {
 		if resp != nil {
-			span.AddAttributes(trace.Int64Attribute("pid", int64(resp.Pid)))
+			span.SetAttributes(attribute.Int64("pid", int64(resp.Pid)))
 		}
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 	}()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("bundle", req.Bundle),
-		// trace.StringAttribute("rootfs", req.Rootfs), TODO: JTERRY75 -
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("bundle", req.Bundle),
+		// attribute.String("rootfs", req.Rootfs), TODO: JTERRY75 -
 		// OpenCensus doesnt support slice like our logrus hook
-		trace.BoolAttribute("terminal", req.Terminal),
-		trace.StringAttribute("stdin", req.Stdin),
-		trace.StringAttribute("stdout", req.Stdout),
-		trace.StringAttribute("stderr", req.Stderr),
-		trace.StringAttribute("checkpoint", req.Checkpoint),
-		trace.StringAttribute("parentcheckpoint", req.ParentCheckpoint))
+		attribute.Bool("terminal", req.Terminal),
+		attribute.String("stdin", req.Stdin),
+		attribute.String("stdout", req.Stdout),
+		attribute.String("stderr", req.Stderr),
+		attribute.String("checkpoint", req.Checkpoint),
+		attribute.String("parentcheckpoint", req.ParentCheckpoint))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.createInternal(ctx, req)
@@ -154,21 +154,21 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp
 }
 
 func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task.StartResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Start")
+	ctx, span := ot.StartSpan(ctx, "Start")
 	defer span.End()
 	defer func() {
 		if resp != nil {
-			span.AddAttributes(trace.Int64Attribute("pid", int64(resp.Pid)))
+			span.SetAttributes(attribute.Int64("pid", int64(resp.Pid)))
 		}
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 	}()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.startInternal(ctx, req)
@@ -176,24 +176,24 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task
 }
 
 func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *task.DeleteResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Delete")
+	ctx, span := ot.StartSpan(ctx, "Delete")
 	defer span.End()
 	defer func() {
 		if resp != nil {
-			span.AddAttributes(
-				trace.Int64Attribute("pid", int64(resp.Pid)),
-				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
+			span.SetAttributes(
+				attribute.Int64("pid", int64(resp.Pid)),
+				attribute.Int64("exitStatus", int64(resp.ExitStatus)),
+				attribute.String("exitedAt", resp.ExitedAt.String()))
 		}
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 	}()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.deleteInternal(ctx, req)
@@ -201,14 +201,14 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 }
 
 func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.PidsResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Pids")
+	ctx, span := ot.StartSpan(ctx, "Pids")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+	span.SetAttributes(attribute.String("tid", req.ID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.pidsInternal(ctx, req)
@@ -216,14 +216,14 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 }
 
 func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Pause")
+	ctx, span := ot.StartSpan(ctx, "Pause")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+	span.SetAttributes(attribute.String("tid", req.ID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.pauseInternal(ctx, req)
@@ -231,14 +231,14 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *emptypb
 }
 
 func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Resume")
+	ctx, span := ot.StartSpan(ctx, "Resume")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+	span.SetAttributes(attribute.String("tid", req.ID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.resumeInternal(ctx, req)
@@ -246,16 +246,16 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *empty
 }
 
 func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Checkpoint")
+	ctx, span := ot.StartSpan(ctx, "Checkpoint")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("path", req.Path))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("path", req.Path))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.checkpointInternal(ctx, req)
@@ -263,18 +263,18 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 }
 
 func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Kill")
+	ctx, span := ot.StartSpan(ctx, "Kill")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.Int64Attribute("signal", int64(req.Signal)),
-		trace.BoolAttribute("all", req.All))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID),
+		attribute.Int64("signal", int64(req.Signal)),
+		attribute.Bool("all", req.All))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.killInternal(ctx, req)
@@ -282,20 +282,20 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *emptypb.E
 }
 
 func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Exec")
+	ctx, span := ot.StartSpan(ctx, "Exec")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.BoolAttribute("terminal", req.Terminal),
-		trace.StringAttribute("stdin", req.Stdin),
-		trace.StringAttribute("stdout", req.Stdout),
-		trace.StringAttribute("stderr", req.Stderr))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID),
+		attribute.Bool("terminal", req.Terminal),
+		attribute.String("stdin", req.Stdin),
+		attribute.String("stdout", req.Stdout),
+		attribute.String("stderr", req.Stderr))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.execInternal(ctx, req)
@@ -303,20 +303,20 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *em
 }
 
 func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (_ *shimdiag.ExecProcessResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DiagExecInHost")
+	ctx, span := ot.StartSpan(ctx, "DiagExecInHost")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("args", strings.Join(req.Args, " ")),
-		trace.StringAttribute("workdir", req.Workdir),
-		trace.BoolAttribute("terminal", req.Terminal),
-		trace.StringAttribute("stdin", req.Stdin),
-		trace.StringAttribute("stdout", req.Stdout),
-		trace.StringAttribute("stderr", req.Stderr))
+	span.SetAttributes(
+		attribute.String("args", strings.Join(req.Args, " ")),
+		attribute.String("workdir", req.Workdir),
+		attribute.Bool("terminal", req.Terminal),
+		attribute.String("stdin", req.Stdin),
+		attribute.String("stdout", req.Stdout),
+		attribute.String("stderr", req.Stderr))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.diagExecInHostInternal(ctx, req)
@@ -324,17 +324,17 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 }
 
 func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ *shimdiag.ShareResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DiagShare")
+	ctx, span := ot.StartSpan(ctx, "DiagShare")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("hostpath", req.HostPath),
-		trace.StringAttribute("uvmpath", req.UvmPath),
-		trace.BoolAttribute("readonly", req.ReadOnly))
+	span.SetAttributes(
+		attribute.String("hostpath", req.HostPath),
+		attribute.String("uvmpath", req.UvmPath),
+		attribute.Bool("readonly", req.ReadOnly))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.diagShareInternal(ctx, req)
@@ -342,15 +342,15 @@ func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ 
 }
 
 func (s *service) DiagTasks(ctx context.Context, req *shimdiag.TasksRequest) (_ *shimdiag.TasksResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DiagTasks")
+	ctx, span := ot.StartSpan(ctx, "DiagTasks")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.BoolAttribute("execs", req.Execs))
+	span.SetAttributes(
+		attribute.Bool("execs", req.Execs))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.diagTasksInternal(ctx, req)
@@ -358,18 +358,18 @@ func (s *service) DiagTasks(ctx context.Context, req *shimdiag.TasksRequest) (_ 
 }
 
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "ResizePty")
+	ctx, span := ot.StartSpan(ctx, "ResizePty")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.Int64Attribute("width", int64(req.Width)),
-		trace.Int64Attribute("height", int64(req.Height)))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID),
+		attribute.Int64("width", int64(req.Width)),
+		attribute.Int64("height", int64(req.Height)))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.resizePtyInternal(ctx, req)
@@ -377,17 +377,17 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 }
 
 func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "CloseIO")
+	ctx, span := ot.StartSpan(ctx, "CloseIO")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.BoolAttribute("stdin", req.Stdin))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID),
+		attribute.Bool("stdin", req.Stdin))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.closeIOInternal(ctx, req)
@@ -395,14 +395,14 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *emp
 }
 
 func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Update")
+	ctx, span := ot.StartSpan(ctx, "Update")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+	span.SetAttributes(attribute.String("tid", req.ID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.updateInternal(ctx, req)
@@ -410,23 +410,23 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *e
 }
 
 func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.WaitResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Wait")
+	ctx, span := ot.StartSpan(ctx, "Wait")
 	defer span.End()
 	defer func() {
 		if resp != nil {
-			span.AddAttributes(
-				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
+			span.SetAttributes(
+				attribute.Int64("exitStatus", int64(resp.ExitStatus)),
+				attribute.String("exitedAt", resp.ExitedAt.String()))
 		}
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 	}()
 
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
+	span.SetAttributes(
+		attribute.String("tid", req.ID),
+		attribute.String("eid", req.ExecID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.waitInternal(ctx, req)
@@ -434,14 +434,14 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 }
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Stats")
+	ctx, span := ot.StartSpan(ctx, "Stats")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+	span.SetAttributes(attribute.String("tid", req.ID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.statsInternal(ctx, req)
@@ -449,22 +449,22 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 }
 
 func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Connect")
+	ctx, span := ot.StartSpan(ctx, "Connect")
 	defer span.End()
 	defer func() {
 		if resp != nil {
-			span.AddAttributes(
-				trace.Int64Attribute("shimPid", int64(resp.ShimPid)),
-				trace.Int64Attribute("taskPid", int64(resp.TaskPid)),
-				trace.StringAttribute("version", resp.Version))
+			span.SetAttributes(
+				attribute.Int64("shimPid", int64(resp.ShimPid)),
+				attribute.Int64("taskPid", int64(resp.TaskPid)),
+				attribute.String("version", resp.Version))
 		}
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 	}()
 
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+	span.SetAttributes(attribute.String("tid", req.ID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.connectInternal(ctx, req)
@@ -472,14 +472,14 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *
 }
 
 func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *emptypb.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Shutdown")
+	ctx, span := ot.StartSpan(ctx, "Shutdown")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+	span.SetAttributes(attribute.String("tid", req.ID))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	r, e := s.shutdownInternal(ctx, req)
@@ -490,13 +490,13 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 	if s == nil {
 		return nil, nil
 	}
-	ctx, span := oc.StartSpan(ctx, "DiagStacks")
+	ctx, span := ot.StartSpan(ctx, "DiagStacks")
 	defer span.End()
 
-	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+	span.SetAttributes(attribute.String("tid", s.tid))
 
 	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+		span.SetAttributes(attribute.String("pod-id", s.tid))
 	}
 
 	buf := make([]byte, 4096)
@@ -522,10 +522,10 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 	if s == nil {
 		return nil, nil
 	}
-	ctx, span := oc.StartSpan(ctx, "DiagPid") //nolint:ineffassign,staticcheck
+	ctx, span := ot.StartSpan(ctx, "DiagPid") //nolint:ineffassign,staticcheck
 	defer span.End()
 
-	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+	span.SetAttributes(attribute.String("tid", s.tid))
 
 	return &shimdiag.PidResponse{
 		Pid: int32(os.Getpid()),
@@ -533,10 +533,10 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 }
 
 func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {
-	ctx, span := oc.StartSpan(ctx, "ComputeProcessorInfo")
+	ctx, span := ot.StartSpan(ctx, "ComputeProcessorInfo")
 	defer span.End()
 
-	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+	span.SetAttributes(attribute.String("tid", s.tid))
 
 	r, e := s.computeProcessorInfoInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)

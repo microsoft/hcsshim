@@ -51,6 +51,9 @@ const (
 	// work to support multiple custom network routes per adapter in LCOW breaks existing
 	// LCOW scenarios. Ideally, this annotation should be removed if no issues are found.
 	NetworkingPolicyBasedRouting = "io.microsoft.virtualmachine.lcow.network.policybasedrouting"
+
+	// ExtraLCOWExecArgs specifies additional args to pass to the command exec'd by the LCOW init.
+	ExtraLCOWExecArgs = "io.microsoft.virtualmachine.lcow.extra-exec-command-args"
 )
 
 // WCOW uVM annotations.

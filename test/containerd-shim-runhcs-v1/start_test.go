@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/go-winio"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
@@ -57,9 +58,16 @@ func createStartCommandWithID(t *testing.T, id string) (*exec.Cmd, *bytes.Buffer
 
 func cleanupTestBundle(t *testing.T, dir string) {
 	t.Helper()
-	if err := util.RemoveAll(dir); err != nil {
-		t.Errorf("failed removing test bundle with: %v", err)
+	// A successful shutdown reply does not guarantee the serving process has
+	// exited and released its inherited panic.log handle, so retry until it does.
+	var err error
+	for i := 0; i < 100; i++ {
+		if err = util.RemoveAll(dir); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
+	t.Errorf("failed removing test bundle with: %v", err)
 }
 
 func writeBundleConfig(t *testing.T, dir string, cfg *specs.Spec) {

@@ -5,20 +5,24 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
 	"os"
 	"time"
+	"unsafe"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	shimlog "github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/debug"
@@ -120,6 +124,26 @@ func runService(name string, isDebug bool) error {
 	return <-h.fromsvc
 }
 
+func initOtelTracer() (func(context.Context) error, error) {
+	exporter := &ot.LogrusExporter{}
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	if traceProvider == nil {
+		return nil, errors.New("failed to construct OpenTelemetry tracer provider")
+	}
+	otel.SetTracerProvider(traceProvider)
+	if otel.GetTracerProvider() != traceProvider {
+		return nil, errors.New("failed to register OpenTelemetry tracer provider globally")
+	}
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+	return traceProvider.Shutdown, nil
+}
+
 func main() {
 	logLevel := flag.String("loglevel",
 		defaultLogLevel,
@@ -153,8 +177,13 @@ func main() {
 		logrus.Fatal(err)
 	}
 	logrus.SetLevel(level)
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-	trace.RegisterExporter(&oc.LogrusExporter{})
+
+	// Register our Otel logrus exporter
+	shutdownTracer, err := initOtelTracer()
+	if err != nil {
+		logrus.Fatalf("failed to initialize ot tracer: %v", err)
+	}
+	defer func() { _ = shutdownTracer(context.Background()) }()
 
 	if err := windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(logFileHandle.Fd())); err != nil {
 		logrus.WithError(err).Error("error redirecting handle")
@@ -183,6 +212,19 @@ func main() {
 			return
 		}
 	}
+
+	// Mark gcs-sidecar as a critical process. If it exits, the UVM will bugcheck.
+	breakOnTermination := uint32(1)
+	if err := windows.NtSetInformationProcess(
+		windows.CurrentProcess(),
+		windows.ProcessBreakOnTermination,
+		unsafe.Pointer(&breakOnTermination),
+		uint32(unsafe.Sizeof(breakOnTermination)),
+	); err != nil {
+		logrus.WithError(err).Error("failed to set gcs-sidecar as critical process")
+		return
+	}
+	logrus.Info("gcs-sidecar marked as critical process")
 
 	logrus.Println("Initializing VSMB redirector!!!")
 	var vsmbError error

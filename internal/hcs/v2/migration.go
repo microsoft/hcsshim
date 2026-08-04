@@ -12,9 +12,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/computecore"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // MigrationConfig holds parameters for starting a compute system as a live migration
@@ -35,10 +35,10 @@ func (computeSystem *System) StartWithMigrationOptions(ctx context.Context, conf
 
 	operation := "hcs::System::Start"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
@@ -74,10 +74,10 @@ func (computeSystem *System) StartWithMigrationOptions(ctx context.Context, conf
 func (computeSystem *System) InitializeLiveMigrationOnSource(ctx context.Context, options *hcsschema.MigrationInitializeOptions) (err error) {
 	operation := "hcs::System::InitializeLiveMigrationOnSource"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
@@ -120,10 +120,10 @@ func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, con
 
 	operation := "hcs::System::StartLiveMigrationOnSource"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
@@ -165,10 +165,10 @@ func (computeSystem *System) StartLiveMigrationOnSource(ctx context.Context, con
 func (computeSystem *System) StartLiveMigrationTransfer(ctx context.Context, options *hcsschema.MigrationTransferOptions) (err error) {
 	operation := "hcs::System::StartLiveMigrationTransfer"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
@@ -205,10 +205,10 @@ func (computeSystem *System) StartLiveMigrationTransfer(ctx context.Context, opt
 func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, opts *hcsschema.MigrationFinalizedOptions) (err error) {
 	operation := "hcs::System::FinalizeLiveMigration"
 
-	ctx, span := oc.StartSpan(ctx, operation)
+	ctx, span := ot.StartSpan(ctx, operation)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
@@ -233,6 +233,44 @@ func (computeSystem *System) FinalizeLiveMigration(ctx context.Context, opts *hc
 
 	// Finalize the migration and wait for completion.
 	if err := computecore.HcsFinalizeLiveMigration(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
+	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
+	return nil
+}
+
+// CancelLiveMigration requests cancellation of an in-flight live migration.
+// It deliberately takes no handleLock so it can interrupt an in-flight transfer that holds it.
+func (computeSystem *System) CancelLiveMigration(ctx context.Context, options *hcsschema.MigrationCancelOptions) (err error) {
+	operation := "hcs::System::CancelLiveMigration"
+
+	ctx, span := ot.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", computeSystem.id))
+
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, ErrAlreadyClosed)
+	}
+
+	if options == nil {
+		options = &hcsschema.MigrationCancelOptions{}
+	}
+	optionsJSON, err := json.Marshal(options)
+	if err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
+
+	op, err := computecore.HcsCreateOperation(ctx, 0, 0)
+	if err != nil {
+		return makeSystemError(computeSystem, operation, err)
+	}
+	defer computecore.HcsCloseOperation(ctx, op)
+
+	// Issue the cancel and wait for completion.
+	if err := computecore.HcsCancelLiveMigration(ctx, computeSystem.handle, op, string(optionsJSON)); err != nil {
 		return makeSystemError(computeSystem, operation, err)
 	}
 	if _, err := computecore.HcsWaitForOperationResult(ctx, op, 0xFFFFFFFF); err != nil {

@@ -72,6 +72,14 @@ func BuildSandboxConfig(
 	// When no-security-hardware is set, we still plumb the policy but use the standard HCS doc.
 	isConfidentialSNP := sandboxOptions.ConfidentialConfig != nil && !noSecurityHardware
 
+	// The FullyPhysicallyBacked annotation forces memory overcommit off.
+	fullyPhysicallyBacked := oci.ParseAnnotationsBool(ctx, spec.Annotations, shimannotations.FullyPhysicallyBacked, false)
+
+	// liveMigrationSupported constrains the sandbox to the feature subset that is
+	// compatible with live migration. Notably, Plan9 file shares cannot be saved
+	// or migrated, so the Plan9 device is omitted when this is set.
+	liveMigrationSupported := oci.ParseAnnotationsBool(ctx, spec.Annotations, shimannotations.LiveMigrationSupportEnabled, false)
+
 	// ================== Parse Topology (CPU, Memory, NUMA) options =================
 	// ===============================================================================
 
@@ -88,7 +96,7 @@ func BuildSandboxConfig(
 	}
 
 	// Parse memory configuration.
-	memoryConfig, err := parseMemoryOptions(ctx, opts, spec.Annotations, sandboxOptions.FullyPhysicallyBacked)
+	memoryConfig, err := parseMemoryOptions(ctx, opts, spec.Annotations, fullyPhysicallyBacked)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse memory parameters: %w", err)
 	}
@@ -149,7 +157,7 @@ func BuildSandboxConfig(
 		spec.Devices,
 		rootFsFullPath,
 		numa != nil && numaProcessors != nil, // isNumaEnabled
-		sandboxOptions.FullyPhysicallyBacked, // isFullyPhysicallyBacked
+		fullyPhysicallyBacked,                // isFullyPhysicallyBacked
 		isConfidentialSNP,                    // isConfidential
 	)
 	if err != nil {
@@ -207,6 +215,10 @@ func BuildSandboxConfig(
 		memoryConfig.AllowOvercommit = false
 	}
 
+	// Record whether the VM's own memory is physically backed (!AllowOvercommit).
+	// This is VM memory backing only, not additional-device backing.
+	sandboxOptions.FullyPhysicallyBacked = !memoryConfig.AllowOvercommit
+
 	// ================== Parse and set Kernel Args ==================================
 	// ===============================================================================
 
@@ -222,7 +234,7 @@ func BuildSandboxConfig(
 			bootOptions.LinuxKernelDirect != nil, // isKernelDirectBoot
 			comPorts != nil,                      // hasConsole
 			filepath.Base(rootFsFullPath),
-			sandboxOptions.LiveMigrationSupportEnabled,
+			liveMigrationSupported,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to build kernel args: %w", err)
@@ -250,6 +262,23 @@ func BuildSandboxConfig(
 		schema = schemaversion.SchemaV25()
 	}
 
+	// HCS treats the presence of the Plan9 field (even an empty one) as a request
+	// to give the VM file-sharing support. For a normal sandbox we set an empty
+	// Plan9 here so that Plan9/9P file shares can be added to the VM later at
+	// runtime: HCS keys off the field being set, not off whether any shares
+	// currently exist.
+	//
+	// The trade-off is that enabling file sharing attaches an extra virtual device
+	// to the VM. Once the VM powers on, that device becomes part of the VM's saved
+	// device state even when nothing is actually being shared, and that state
+	// cannot be saved and restored cleanly. Live migration relies on save/restore,
+	// so a live-migratable sandbox must omit Plan9 (giving up runtime file sharing)
+	// to keep the VM migratable.
+	var plan9 *hcsschema.Plan9
+	if !liveMigrationSupported {
+		plan9 = &hcsschema.Plan9{}
+	}
+
 	// Build the document.
 	doc := &hcsschema.ComputeSystem{
 		Owner:         owner,
@@ -274,7 +303,7 @@ func BuildSandboxConfig(
 					HvSocketConfig: hvSocketConfig,
 				},
 				ComPorts: comPorts,
-				Plan9:    &hcsschema.Plan9{},
+				Plan9:    plan9,
 			},
 			GuestState:       guestState,
 			SecuritySettings: securitySettings,
@@ -331,11 +360,9 @@ func parseSandboxOptions(ctx context.Context, platform string, annotations map[s
 	log.G(ctx).WithField("platform", platform).Debug("parseSandboxOptions: starting sandbox options parsing")
 	sandboxOptions := &SandboxOptions{
 		// Extract architecture from platform string (e.g., "linux/amd64" -> "amd64")
-		Architecture:                platform[strings.IndexByte(platform, '/')+1:],
-		FullyPhysicallyBacked:       oci.ParseAnnotationsBool(ctx, annotations, shimannotations.FullyPhysicallyBacked, false),
-		PolicyBasedRouting:          oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
-		NoWritableFileShares:        oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
-		LiveMigrationSupportEnabled: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.LiveMigrationSupportEnabled, false),
+		Architecture:         platform[strings.IndexByte(platform, '/')+1:],
+		PolicyBasedRouting:   oci.ParseAnnotationsBool(ctx, annotations, iannotations.NetworkingPolicyBasedRouting, false),
+		NoWritableFileShares: oci.ParseAnnotationsBool(ctx, annotations, shimannotations.DisableWritableFileShares, false),
 	}
 
 	// Determine if this is a confidential VM early, as it affects boot options parsing

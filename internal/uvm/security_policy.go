@@ -130,7 +130,8 @@ func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdta
 			ResourceType: guestresource.ResourceTypePolicyFragment,
 			RequestType:  guestrequest.RequestTypeAdd,
 			Settings: guestresource.SecurityPolicyFragment{
-				Fragment: fragment.Fragment,
+				Fragment:  fragment.Fragment,
+				MediaType: fragment.MediaType,
 			},
 		},
 	}

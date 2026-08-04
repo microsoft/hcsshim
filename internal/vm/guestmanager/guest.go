@@ -77,8 +77,8 @@ func (gm *Guest) PrepareConnection(GCSServiceID guid.GUID) error {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
-	// Idempotent if already prepared/connected with the same service ID.
-	if gm.gcListener != nil || gm.gc != nil {
+	// Idempotent if a listener is already armed for the same service ID.
+	if gm.gcListener != nil {
 		if gm.gcsServiceID != GCSServiceID {
 			return fmt.Errorf("gcs service id mismatch: expected %s, got %s", gm.gcsServiceID, GCSServiceID)
 		}
@@ -245,5 +245,5 @@ func (gm *Guest) ResumeConnection(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to accept resumed guest connection: %w", err)
 	}
-	return gm.gc.ResumeOnConn(conn)
+	return gm.gc.ResumeOnConn(ctx, conn)
 }

@@ -16,12 +16,13 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/fsformatter"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	oci "github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
@@ -30,6 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -37,6 +39,10 @@ const (
 	hivesDirName        = "Hives"
 	devPathFormat       = "\\\\.\\PHYSICALDRIVE%d"
 	UVMContainerID      = "00000000-0000-0000-0000-000000000000"
+	// amdSnpPspDLLName is the AMD SNP PSP API DLL used to fetch SNP attestation
+	// reports. It is staged from the UVM's System32 into each confidential
+	// container's security-context directory so workloads can load it.
+	amdSnpPspDLLName = "amdsnppspapi.dll"
 )
 
 // - Handler functions handle the incoming message requests. It
@@ -47,9 +53,9 @@ const (
 // messages are returned and responses are sent back to hcsshim from ListenAndServer().
 // TODO (kiashok): Verbose logging is for WIP and will be removed eventually.
 func (b *Bridge) createContainer(req *request) (err error) {
-	ctx, span := oc.StartSpan(req.ctx, "sidecar::createContainer")
+	ctx, span := ot.StartSpan(req.ctx, "sidecar::createContainer")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var createContainerRequest prot.ContainerCreate
 	var containerConfig json.RawMessage
@@ -148,8 +154,19 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		}()
 
 		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-			if err := b.hostState.securityOptions.WriteSecurityContextDir(&spec); err != nil {
+			securityContextDir, err := b.hostState.securityOptions.WriteSecurityContextDir(&spec)
+			if err != nil {
 				return fmt.Errorf("failed to write security context dir: %w", err)
+			}
+
+			// Stage the AMD SNP PSP API DLL into the container's security-context
+			// directory so the workload can fetch SNP attestation reports. This
+			// happens after security policy enforcement, consistent with the
+			// UVM_SECURITY_CONTEXT_DIR env injection done by WriteSecurityContextDir.
+			if securityContextDir != "" {
+				if err := stageSnpPspDLL(ctx, securityContextDir); err != nil {
+					return fmt.Errorf("failed to stage %s: %w", amdSnpPspDLLName, err)
+				}
 			}
 			cwcowHostedSystemConfig.Spec = spec
 		}
@@ -196,6 +213,49 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	return nil
 }
 
+// stageSnpPspDLL copies the AMD SNP PSP API DLL from the UVM's System32 into the
+// container's security-context directory so the workload can fetch SNP
+// attestation reports. The directory is exposed to the container via the
+// UVM_SECURITY_CONTEXT_DIR environment variable. If the DLL is not present in
+// the UVM (e.g. a non-SNP UVM), staging is skipped without error.
+func stageSnpPspDLL(ctx context.Context, securityContextDir string) error {
+	sysDir, err := windows.GetSystemDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get system directory: %w", err)
+	}
+
+	srcPath := filepath.Join(sysDir, amdSnpPspDLLName)
+	staged, err := stageDLL(ctx, srcPath, securityContextDir)
+	if err != nil {
+		return err
+	}
+	if staged {
+		log.G(ctx).Debugf("staged %s into %s", amdSnpPspDLLName, securityContextDir)
+	} else {
+		log.G(ctx).Debugf("%s not found in %s; skipping staging", amdSnpPspDLLName, sysDir)
+	}
+	return nil
+}
+
+// stageDLL copies the DLL at srcPath into dstDir. If the source DLL does not
+// exist it is a no-op and returns false without error, so callers can tolerate
+// environments where the DLL is not present.
+func stageDLL(ctx context.Context, srcPath, dstDir string) (bool, error) {
+	if _, err := os.Stat(srcPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat %s: %w", srcPath, err)
+	}
+
+	dstPath := filepath.Join(dstDir, filepath.Base(srcPath))
+	if err := copyfile.CopyFile(ctx, srcPath, dstPath, true); err != nil {
+		return false, fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
+	}
+
+	return true, nil
+}
+
 // processParamEnvToOCIEnv converts an Environment field from ProcessParameters
 // (a map from environment variable to value) into an array of environment
 // variable assignments (where each is in the form "<variable>=<value>") which
@@ -211,9 +271,9 @@ func processParamEnvToOCIEnv(environment map[string]string) []string {
 }
 
 func (b *Bridge) startContainer(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::startContainer")
+	_, span := ot.StartSpan(req.ctx, "sidecar::startContainer")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -225,9 +285,9 @@ func (b *Bridge) startContainer(req *request) (err error) {
 }
 
 func (b *Bridge) shutdownGraceful(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::shutdownGraceful")
+	_, span := ot.StartSpan(req.ctx, "sidecar::shutdownGraceful")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -244,9 +304,9 @@ func (b *Bridge) shutdownGraceful(req *request) (err error) {
 }
 
 func (b *Bridge) shutdownForced(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::shutdownForced")
+	_, span := ot.StartSpan(req.ctx, "sidecar::shutdownForced")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -258,9 +318,9 @@ func (b *Bridge) shutdownForced(req *request) (err error) {
 }
 
 func (b *Bridge) executeProcess(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::executeProcess")
+	_, span := ot.StartSpan(req.ctx, "sidecar::executeProcess")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerExecuteProcess
 	var processParamSettings json.RawMessage
@@ -367,9 +427,9 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 }
 
 func (b *Bridge) waitForProcess(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::waitForProcess")
+	_, span := ot.StartSpan(req.ctx, "sidecar::waitForProcess")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -381,9 +441,9 @@ func (b *Bridge) waitForProcess(req *request) (err error) {
 }
 
 func (b *Bridge) signalProcess(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::signalProcess")
+	_, span := ot.StartSpan(req.ctx, "sidecar::signalProcess")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerSignalProcess
 	var rawOpts json.RawMessage
@@ -427,9 +487,9 @@ func (b *Bridge) signalProcess(req *request) (err error) {
 }
 
 func (b *Bridge) resizeConsole(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::resizeConsole")
+	_, span := ot.StartSpan(req.ctx, "sidecar::resizeConsole")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -441,9 +501,9 @@ func (b *Bridge) resizeConsole(req *request) (err error) {
 }
 
 func (b *Bridge) getProperties(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::getProperties")
+	_, span := ot.StartSpan(req.ctx, "sidecar::getProperties")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	if err := b.hostState.securityOptions.PolicyEnforcer.EnforceGetPropertiesPolicy(req.ctx); err != nil {
 		return errors.Wrapf(err, "get properties denied due to policy")
@@ -460,9 +520,9 @@ func (b *Bridge) getProperties(req *request) (err error) {
 }
 
 func (b *Bridge) negotiateProtocol(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::negotiateProtocol")
+	_, span := ot.StartSpan(req.ctx, "sidecar::negotiateProtocol")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.NegotiateProtocolRequest
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -474,9 +534,9 @@ func (b *Bridge) negotiateProtocol(req *request) (err error) {
 }
 
 func (b *Bridge) dumpStacks(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::dumpStacks")
+	_, span := ot.StartSpan(req.ctx, "sidecar::dumpStacks")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.DumpStacksRequest
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -488,9 +548,9 @@ func (b *Bridge) dumpStacks(req *request) (err error) {
 }
 
 func (b *Bridge) deleteContainerState(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::deleteContainerState")
+	_, span := ot.StartSpan(req.ctx, "sidecar::deleteContainerState")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.DeleteContainerStateRequest
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -507,9 +567,9 @@ func (b *Bridge) deleteContainerState(req *request) (err error) {
 }
 
 func (b *Bridge) updateContainer(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::updateContainer")
+	_, span := ot.StartSpan(req.ctx, "sidecar::updateContainer")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// No callers in the code for rpcUpdateContainer
 	b.forwardRequestToGcs(req)
@@ -517,9 +577,9 @@ func (b *Bridge) updateContainer(req *request) (err error) {
 }
 
 func (b *Bridge) lifecycleNotification(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::lifecycleNotification")
+	_, span := ot.StartSpan(req.ctx, "sidecar::lifecycleNotification")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// No callers in the code for rpcLifecycleNotification
 	b.forwardRequestToGcs(req)
@@ -527,9 +587,9 @@ func (b *Bridge) lifecycleNotification(req *request) (err error) {
 }
 
 func (b *Bridge) modifyServiceSettings(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::modifyServiceSettings")
+	_, span := ot.StartSpan(req.ctx, "sidecar::modifyServiceSettings")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	modifyRequest, err := unmarshalModifyServiceSettings(req)
 	if err != nil {
@@ -709,9 +769,9 @@ func volumeGUIDFromLayerPath(path string) (string, bool) {
 }
 
 func (b *Bridge) modifySettings(req *request) (err error) {
-	ctx, span := oc.StartSpan(req.ctx, "sidecar::modifySettings")
+	ctx, span := ot.StartSpan(req.ctx, "sidecar::modifySettings")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	log.G(ctx).Tracef("modifySettings: MsgType: %v, Payload: %v", req.header.Type, string(req.message))
 	modifyRequest, err := unmarshalContainerModifySettings(req)

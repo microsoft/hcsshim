@@ -1,3 +1,6 @@
+//go:build go1.16
+// +build go1.16
+
 package pwalkdir
 
 import (
@@ -89,7 +92,7 @@ func WalkN(root string, walkFn fs.WalkDirFunc, num int) error {
 	}()
 
 	wg.Add(num)
-	for range num {
+	for i := 0; i < num; i++ {
 		go func() {
 			for file := range files {
 				if e := walkFn(file.path, file.entry, nil); e != nil {

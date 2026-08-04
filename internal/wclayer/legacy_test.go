@@ -114,6 +114,23 @@ func Test_legacyLayerWriter_reset_ClearsCurrentIsDirOnError(t *testing.T) {
 	}
 }
 
+// Test_legacyLayerWriter_reset_DirFlagWithoutFile verifies reset is robust when
+// currentIsDir is true but currentFile is nil (a state that can occur if an
+// earlier error path closed/cleared currentFile before currentIsDir was reset).
+func Test_legacyLayerWriter_reset_DirFlagWithoutFile(t *testing.T) {
+	w := &legacyLayerWriter{
+		currentIsDir: true,
+		bufWriter:    bufio.NewWriter(io.Discard),
+	}
+
+	if err := w.reset(); err != nil {
+		t.Fatalf("expected reset to succeed when currentFile is nil, got: %v", err)
+	}
+	if w.currentIsDir {
+		t.Error("expected currentIsDir to be false after reset")
+	}
+}
+
 // closes and clears the current file handle.
 func Test_legacyLayerWriter_reset_ClosesFileOnSuccess(t *testing.T) {
 	dir := t.TempDir()
