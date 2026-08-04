@@ -11,6 +11,12 @@ const (
 	// WCOWRootPrefixInUVM is the path inside UVM where WCOW container's root
 	// file system will be mounted
 	WCOWRootPrefixInUVM = `C:\c`
+	// LCOWFragmentsPath is the path inside the UVM where injected security
+	// policy fragments are stored.
+	LCOWFragmentsPath = "/tmp/fragments"
+	// WCOWFragmentsPath is the path inside the UVM where injected security
+	// policy fragments are stored.
+	WCOWFragmentsPath = `C:\InjectedFragments`
 	// SandboxMountPrefix is mount prefix used in container spec to mark a
 	// sandbox-mount
 	SandboxMountPrefix = "sandbox://"
