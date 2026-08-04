@@ -13,22 +13,23 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/vm/guestmanager"
 	"github.com/Microsoft/hcsshim/internal/vm/vmmanager"
+	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // Save serializes the controller's current network state into a portable
-// envelope that can be handed to a migration destination. It succeeds only
-// when the network is fully configured, and on success freezes the source
-// until it is resumed or torn down.
+// envelope that can be handed to a migration destination. It succeeds when the
+// network is configured or already frozen by a prior save (retry-safe), and on
+// success freezes the source until it is resumed or torn down.
 func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Only a fully configured network is in a stable, migratable state.
-	if c.netState != StateConfigured {
-		return nil, fmt.Errorf("network controller in state %s; want %s", c.netState, StateConfigured)
+	// A configured network—or one already frozen by a prior save—can be saved.
+	if c.netState != StateConfigured && c.netState != StateSourceMigrating {
+		return nil, fmt.Errorf("network controller in state %s; want %s: %w", c.netState, StateConfigured, errdefs.ErrFailedPrecondition)
 	}
 
 	// Capture the scalar configuration into the snapshot.
@@ -72,11 +73,11 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 	// Reject an empty or mistyped envelope before touching its bytes.
 	if env == nil {
-		return nil, fmt.Errorf("network saved-state envelope is nil")
+		return nil, fmt.Errorf("network saved-state envelope is nil: %w", errdefs.ErrInvalidArgument)
 	}
 
 	if env.GetTypeUrl() != netsave.TypeURL {
-		return nil, fmt.Errorf("unsupported network saved-state type %q", env.GetTypeUrl())
+		return nil, fmt.Errorf("unsupported network saved-state type %q: %w", env.GetTypeUrl(), errdefs.ErrInvalidArgument)
 	}
 
 	// Decode and reject any payload this build cannot interpret.
@@ -86,7 +87,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 	}
 
 	if v := state.GetSchemaVersion(); v != netsave.SchemaVersion {
-		return nil, fmt.Errorf("unsupported network saved-state schema version %d (want %d)", v, netsave.SchemaVersion)
+		return nil, fmt.Errorf("unsupported network saved-state schema version %d (want %d): %w", v, netsave.SchemaVersion, errdefs.ErrInvalidArgument)
 	}
 
 	// Rehydrate into the destination-migrating state: state is restored but no
@@ -127,7 +128,7 @@ func (c *Controller) Patch(ctx context.Context, networkNamespaceID string) error
 
 	// Patch only applies to a controller imported on the destination.
 	if c.netState != StateDestinationMigrating {
-		return fmt.Errorf("network controller in state %s; want %s", c.netState, StateDestinationMigrating)
+		return fmt.Errorf("network controller in state %s; want %s: %w", c.netState, StateDestinationMigrating, errdefs.ErrFailedPrecondition)
 	}
 
 	c.migratedNamespaceID = networkNamespaceID
@@ -147,9 +148,14 @@ func (c *Controller) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Idempotent: a network resumed by a prior attempt is a no-op on retry.
+	if c.netState == StateConfigured {
+		return nil
+	}
+
 	// Resume is only valid mid-migration, on either the source or destination.
 	if c.netState != StateSourceMigrating && c.netState != StateDestinationMigrating {
-		return fmt.Errorf("network controller in state %s; want %s or %s", c.netState, StateSourceMigrating, StateDestinationMigrating)
+		return fmt.Errorf("network controller in state %s; want %s or %s: %w", c.netState, StateSourceMigrating, StateDestinationMigrating, errdefs.ErrFailedPrecondition)
 	}
 
 	c.vmNetwork = vm
@@ -169,6 +175,11 @@ func (c *Controller) Resume(ctx context.Context, vm *vmmanager.UtilityVM, guest 
 func (c *Controller) ResetAfterMigration(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Idempotent: a reset already applied (or a controller never patched for one) is a no-op.
+	if c.migratedNamespaceID == "" {
+		return nil
+	}
 
 	// Drop the stale source NICs inherited from the saved state.
 	for nicID, ep := range c.vmEndpoints {
@@ -195,6 +206,7 @@ func (c *Controller) ResetAfterMigration(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("generate NIC GUID: %w", err)
 		}
+
 		if err := c.addEndpointToGuestNamespace(ctx, c.namespaceID, nicGUID.String(), endpoint, c.policyBasedRouting); err != nil {
 			return fmt.Errorf("add destination endpoint %s to guest: %w", endpoint.Name, err)
 		}

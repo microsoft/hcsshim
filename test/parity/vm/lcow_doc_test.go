@@ -204,7 +204,7 @@ func checkSandboxOptionsParity(t *testing.T, legacyOpts *uvm.OptionsLCOW, sandbo
 		{"NoWritableFileShares", legacyOpts.NoWritableFileShares, sandboxOpts.NoWritableFileShares},
 		{"EnableScratchEncryption", legacyOpts.EnableScratchEncryption, sandboxOpts.EnableScratchEncryption},
 		{"PolicyBasedRouting", legacyOpts.PolicyBasedRouting, sandboxOpts.PolicyBasedRouting},
-		{"FullyPhysicallyBacked", legacyOpts.FullyPhysicallyBacked, sandboxOpts.FullyPhysicallyBacked},
+		{"PhysicallyBacked", !legacyOpts.AllowOvercommit, sandboxOpts.FullyPhysicallyBacked},
 	}
 
 	for _, c := range checks {

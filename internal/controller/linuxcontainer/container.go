@@ -255,6 +255,26 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 		c.layers.layersCombined = false
 	}
 
+	// DeleteContainerState performs the guest-side container delete: it unmounts
+	// the pod's sandbox mounts and the scratch-backed bundle bind, deletes the
+	// runtime state, and removes the bundle and scratch directories. We run it
+	// before removing the overlay layer devices and detaching the scratch disk,
+	// so the guest releases everything backed by those disks while they are still
+	// attached (the overlay mount itself has already been removed above).
+	// Short-circuit on isContainerStateDeleted so retries don't re-issue Capabilities.
+	if !c.isContainerStateDeleted {
+		if caps := c.guest.Capabilities(); caps != nil && caps.IsDeleteContainerStateSupported() {
+			// GCS bridge evicts the container from its host-state map even if the inner Delete fails,
+			// so retries will always return not-found.
+			if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !isResourceAlreadyReleased(err) {
+				return fmt.Errorf("delete container state: %w", err)
+			}
+
+			// Set isContainerStateDeleted to true so that we do not retry this post successful delete.
+			c.isContainerStateDeleted = true
+		}
+	}
+
 	// Unmap the scratch layer. A zero ID indicates it has already been
 	// unmapped on a prior call.
 	var zeroGUID guid.GUID
@@ -297,23 +317,6 @@ func (c *Controller) releaseResources(ctx context.Context) error {
 		if err := c.vpci.RemoveFromVM(ctx, id); err != nil && !isResourceAlreadyReleased(err) {
 			c.devices = c.devices[i:]
 			return fmt.Errorf("remove vpci device: %w", err)
-		}
-	}
-
-	// After layer overlay has been removed, we can safely delete the
-	// bundle path inside the UVM for the container. Therefore, delete
-	// the guest-side container state if supported. Short-circuit on
-	// isContainerStateDeleted so retries don't re-issue Capabilities.
-	if !c.isContainerStateDeleted {
-		if caps := c.guest.Capabilities(); caps != nil && caps.IsDeleteContainerStateSupported() {
-			// GCS bridge evicts the container from its host-state map even if the inner Delete fails,
-			// so retries will always return not-found.
-			if err := c.guest.DeleteContainerState(ctx, c.gcsContainerID); err != nil && !isResourceAlreadyReleased(err) {
-				return fmt.Errorf("delete container state: %w", err)
-			}
-
-			// Set isContainerStateDeleted to true so that we do not retry this post successful delete.
-			c.isContainerStateDeleted = true
 		}
 	}
 

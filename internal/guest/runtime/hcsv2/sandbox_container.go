@@ -10,15 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
-
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	specGuest "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func getSandboxHostnamePath(sandboxRoot string) string {
@@ -34,10 +33,10 @@ func getSandboxResolvPath(sandboxRoot string) string {
 }
 
 func setupSandboxContainerSpec(ctx context.Context, id, sandboxRoot string, spec *oci.Spec) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcsv2::setupSandboxContainerSpec")
+	ctx, span := ot.StartSpan(ctx, "hcsv2::setupSandboxContainerSpec")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", id))
 
 	if err := os.MkdirAll(sandboxRoot, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create sandbox root directory %q", sandboxRoot)

@@ -11,18 +11,6 @@ import (
 	"sync"
 	"time"
 
-	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/api/types"
-	"github.com/containerd/containerd/v2/core/runtime"
-	"github.com/containerd/errdefs"
-	"github.com/containerd/typeurl/v2"
-	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/Microsoft/go-winio/pkg/fs"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
@@ -39,8 +27,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -50,6 +38,17 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
+	eventstypes "github.com/containerd/containerd/api/events"
+	"github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/api/types"
+	"github.com/containerd/containerd/v2/core/runtime"
+	"github.com/containerd/errdefs"
+	"github.com/containerd/typeurl/v2"
+	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
@@ -170,6 +169,18 @@ func createContainer(
 
 		if shimOpts != nil {
 			opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
+		}
+		// Serialize the per-container bring-up (layer mount + hive-merge + guest
+		// container create) into a single confidential WCOW UVM. Concurrent
+		// container starts in a multi-container CG otherwise issue overlapping
+		// guest mount/create operations that the confidential guest cannot
+		// handle, triggering a guest reset that drops the GCS bridge
+		// ("bridge closed: use of closed network connection"). Serializing makes
+		// the starts effectively one-at-a-time, which is reliable. Only taken for
+		// confidential containers; createContainer is shared with LCOW.
+		if parent != nil && parent.HasConfidentialPolicy() {
+			parent.LockContainerCreate()
+			defer parent.UnlockContainerCreate()
 		}
 		container, resources, err = hcsoci.CreateContainer(ctx, opts)
 		if err != nil {
@@ -628,12 +639,12 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 }
 
 func (ht *hcsTask) waitInitExit() {
-	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitInitExit")
+	ctx, span := ot.StartSpan(context.Background(), "hcsTask::waitInitExit")
 	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", ht.id),
-		trace.BoolAttribute("host", ht.host != nil),
-		trace.BoolAttribute("ownsHost", ht.ownsHost))
+	span.SetAttributes(
+		attribute.String("tid", ht.id),
+		attribute.Bool("host", ht.host != nil),
+		attribute.Bool("ownsHost", ht.ownsHost))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()
@@ -650,12 +661,12 @@ func (ht *hcsTask) waitInitExit() {
 // Note: For Windows process isolated containers there is no host virtual
 // machine so this should not be called.
 func (ht *hcsTask) waitForHostExit() {
-	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitForHostExit")
+	ctx, span := ot.StartSpan(context.Background(), "hcsTask::waitForHostExit")
 	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", ht.id),
-		trace.BoolAttribute("host", ht.host != nil),
-		trace.BoolAttribute("ownsHost", ht.ownsHost))
+	span.SetAttributes(
+		attribute.String("tid", ht.id),
+		attribute.Bool("host", ht.host != nil),
+		attribute.Bool("ownsHost", ht.ownsHost))
 
 	err := ht.host.WaitCtx(ctx)
 	if err != nil {

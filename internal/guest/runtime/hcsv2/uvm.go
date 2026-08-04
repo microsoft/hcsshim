@@ -26,7 +26,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
@@ -46,8 +46,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/verity"
@@ -1292,17 +1292,17 @@ func (h *Host) modifyMappedVirtualDisk(
 	rt guestrequest.RequestType,
 	mvd *guestresource.LCOWMappedVirtualDisk,
 ) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Host::modifyMappedVirtualDisk")
+	ctx, span := ot.StartSpan(ctx, "gcs::Host::modifyMappedVirtualDisk")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("requestType", string(rt)),
-		trace.BoolAttribute("hasHostMounts", h.hostMounts != nil),
-		trace.Int64Attribute("controller", int64(mvd.Controller)),
-		trace.Int64Attribute("lun", int64(mvd.Lun)),
-		trace.Int64Attribute("partition", int64(mvd.Partition)),
-		trace.BoolAttribute("readOnly", mvd.ReadOnly),
-		trace.StringAttribute("mountPath", mvd.MountPath),
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("requestType", string(rt)),
+		attribute.Bool("hasHostMounts", h.hostMounts != nil),
+		attribute.Int64("controller", int64(mvd.Controller)),
+		attribute.Int64("lun", int64(mvd.Lun)),
+		attribute.Int64("partition", int64(mvd.Partition)),
+		attribute.Bool("readOnly", mvd.ReadOnly),
+		attribute.String("mountPath", mvd.MountPath),
 	)
 
 	var verityInfo *guestresource.DeviceVerityInfo
@@ -1311,7 +1311,7 @@ func (h *Host) modifyMappedVirtualDisk(
 	if err != nil {
 		return err
 	}
-	span.AddAttributes(trace.StringAttribute("devicePath", devPath))
+	span.SetAttributes(attribute.String("devicePath", devPath))
 
 	if mvd.ReadOnly {
 		// The only time the policy is empty, and we want it to be empty
@@ -1636,14 +1636,14 @@ func (h *Host) modifyCombinedLayers(
 	rt guestrequest.RequestType,
 	cl *guestresource.LCOWCombinedLayers,
 ) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Host::modifyCombinedLayers")
+	ctx, span := ot.StartSpan(ctx, "gcs::Host::modifyCombinedLayers")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("requestType", string(rt)),
-		trace.BoolAttribute("hasHostMounts", h.hostMounts != nil),
-		trace.StringAttribute("containerRootPath", cl.ContainerRootPath),
-		trace.StringAttribute("scratchPath", cl.ScratchPath),
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("requestType", string(rt)),
+		attribute.Bool("hasHostMounts", h.hostMounts != nil),
+		attribute.String("containerRootPath", cl.ContainerRootPath),
+		attribute.String("scratchPath", cl.ScratchPath),
 	)
 
 	securityPolicy := h.securityOptions.PolicyEnforcer
@@ -1731,11 +1731,31 @@ func (h *Host) modifyCombinedLayers(
 				}()
 			}
 
+			// The sandbox root (the bundle dir) must be disk-backed so that
+			// everything created under it - sandbox:// mounts, logs, etc. - lives
+			// on disk rather than the UVM tmpfs. When the shim already mounts the
+			// scratch disk at the bundle path, the scratch dir is nested under the
+			// bundle and there is nothing to do. Otherwise (the scratch is mounted
+			// elsewhere and the bundle would be tmpfs) bind a scratch directory
+			// onto the bundle. This is decided purely from the paths, so V1 and V2
+			// are handled by the same rule.
+			bundleDir := filepath.Dir(cl.ContainerRootPath)
+			bindBundle := bundleNeedsScratchBind(bundleDir, cl.ScratchPath)
+			if bindBundle {
+				if bindErr := bindBundleToScratch(cl.ScratchPath, bundleDir); bindErr != nil {
+					return bindErr
+				}
+			}
+
 			// Correctness for policy transaction rollback:
 			// MountLayer does two things - mkdir, then mount. On mount failure, the
 			// target directory is cleaned up.  Therefore we're clean in terms of
 			// side effects.
-			return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
+			mountErr := overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
+			if mountErr != nil && bindBundle {
+				_ = storage.UnmountPath(ctx, bundleDir, false)
+			}
+			return mountErr
 		case guestrequest.RequestTypeRemove:
 			// cl.ContainerID is not set on remove requests, but rego checks that we can
 			// only umount previously mounted targets anyway
@@ -1773,6 +1793,46 @@ func (h *Host) modifyCombinedLayers(
 			return newInvalidRequestTypeError(rt)
 		}
 	})
+}
+
+// bundleNeedsScratchBind reports whether the container's bundle directory needs
+// to be bind-mounted onto its scratch disk to be disk-backed. It returns false
+// when there is no scratch, or when the scratch dir is already nested under the
+// bundle dir (i.e. the shim mounted the scratch disk at the bundle path, so the
+// bundle is already on disk). It returns true when the scratch is mounted
+// elsewhere and the bundle would otherwise live on the UVM tmpfs. The decision
+// is derived only from the paths, so it applies identically to both shims.
+func bundleNeedsScratchBind(bundleDir, scratchDir string) bool {
+	if scratchDir == "" {
+		return false
+	}
+	rel, err := filepath.Rel(bundleDir, scratchDir)
+	if err != nil {
+		// Unrelated paths: the scratch is not under the bundle, so it needs a bind.
+		return true
+	}
+	// A bind is needed only when scratchDir is not nested under bundleDir, i.e.
+	// when the relative path escapes the bundle (is ".." or starts with "../").
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// bindBundleToScratch backs a container bundle directory with a directory on the
+// container's scratch disk, so the sandbox root - and everything created under
+// it (sandbox:// mounts, logs, etc.) - is disk-backed rather than tmpfs-backed.
+// The bind is removed during container delete, before the scratch disk is
+// unmapped.
+func bindBundleToScratch(scratchPath, bundleDir string) error {
+	src := filepath.Join(scratchPath, "bundle")
+	if err := os.MkdirAll(src, 0755); err != nil {
+		return fmt.Errorf("create bundle backing dir %s: %w", src, err)
+	}
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		return fmt.Errorf("create bundle dir %s: %w", bundleDir, err)
+	}
+	if err := unix.Mount(src, bundleDir, "", unix.MS_BIND, ""); err != nil {
+		return fmt.Errorf("bind bundle dir %s to %s: %w", src, bundleDir, err)
+	}
+	return nil
 }
 
 func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestresource.LCOWNetworkAdapter) (err error) {

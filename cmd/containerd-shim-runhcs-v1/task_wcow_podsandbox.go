@@ -12,9 +12,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"go.opentelemetry.io/otel/attribute"
 
 	eventstypes "github.com/containerd/containerd/api/events"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
@@ -24,7 +25,6 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
 )
 
 // newWcowPodSandboxTask creates a fake WCOW task with a fake WCOW `init`
@@ -215,9 +215,9 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 }
 
 func (wpst *wcowPodSandboxTask) waitInitExit() {
-	ctx, span := oc.StartSpan(context.Background(), "wcowPodSandboxTask::waitInitExit")
+	ctx, span := ot.StartSpan(context.Background(), "wcowPodSandboxTask::waitInitExit")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
+	span.SetAttributes(attribute.String("tid", wpst.id))
 
 	// Wait for it to exit on its own
 	wpst.init.Wait()
@@ -227,9 +227,9 @@ func (wpst *wcowPodSandboxTask) waitInitExit() {
 }
 
 func (wpst *wcowPodSandboxTask) waitParentExit() {
-	ctx, span := oc.StartSpan(context.Background(), "wcowPodSandboxTask::waitParentExit")
+	ctx, span := ot.StartSpan(context.Background(), "wcowPodSandboxTask::waitParentExit")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
+	span.SetAttributes(attribute.String("tid", wpst.id))
 
 	werr := wpst.host.WaitCtx(ctx)
 	if werr != nil {

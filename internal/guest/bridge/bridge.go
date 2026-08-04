@@ -5,9 +5,7 @@ package bridge
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,15 +16,17 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 )
 
 // UnknownMessage represents the default handler logic for an unmatched request
@@ -357,45 +357,27 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				_ = json.Unmarshal(message, &base)
 
 				var ctx context.Context
-				var span *trace.Span
-				if base.OpenCensusSpanContext != nil {
-					sc := trace.SpanContext{}
-					if bytes, err := hex.DecodeString(base.OpenCensusSpanContext.TraceID); err == nil {
-						copy(sc.TraceID[:], bytes)
-					}
-					if bytes, err := hex.DecodeString(base.OpenCensusSpanContext.SpanID); err == nil {
-						copy(sc.SpanID[:], bytes)
-					}
-					sc.TraceOptions = trace.TraceOptions(base.OpenCensusSpanContext.TraceOptions)
-					if base.OpenCensusSpanContext.Tracestate != "" {
-						if bytes, err := base64.StdEncoding.DecodeString(base.OpenCensusSpanContext.Tracestate); err == nil {
-							var entries []tracestate.Entry
-							if err := json.Unmarshal(bytes, &entries); err == nil {
-								if ts, err := tracestate.New(nil, entries...); err == nil {
-									sc.Tracestate = ts
-								}
-							}
-						}
-					}
-					ctx, span = oc.StartSpanWithRemoteParent(
+				var span trace.Span
+				if len(base.OpenTelemetrySpanContext) > 0 {
+					ctx = otel.GetTextMapPropagator().Extract(
 						context.Background(),
-						"opengcs::bridge::request",
-						sc,
-						oc.WithServerSpanKind,
+						propagation.MapCarrier(base.OpenTelemetrySpanContext),
 					)
+					ctx, span = ot.StartSpan(ctx, "opengcs::bridge::request",
+						trace.WithSpanKind(trace.SpanKindServer))
 				} else {
-					ctx, span = oc.StartSpan(
+					ctx, span = ot.StartSpan(
 						context.Background(),
 						"opengcs::bridge::request",
-						oc.WithServerSpanKind,
+						trace.WithSpanKind(trace.SpanKindServer),
 					)
 				}
 
-				span.AddAttributes(
-					trace.Int64Attribute("message-id", int64(header.ID)),
-					trace.StringAttribute("message-type", header.Type.String()),
-					trace.StringAttribute("activityID", base.ActivityID),
-					trace.StringAttribute("cid", base.ContainerID))
+				span.SetAttributes(
+					attribute.Int64("message-id", int64(header.ID)),
+					attribute.String("message-type", header.Type.String()),
+					attribute.String("activityID", base.ActivityID),
+					attribute.String("cid", base.ContainerID))
 
 				entry := log.G(ctx)
 				if entry.Logger.IsLevelEnabled(logrus.TraceLevel) {
@@ -443,9 +425,9 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 			}
 			resp.Base().ActivityID = r.ActivityID
 			if err != nil {
-				span := trace.FromContext(r.Context)
+				span := trace.SpanFromContext(r.Context)
 				if span != nil {
-					oc.SetSpanStatus(span, err)
+					ot.SetSpanStatus(span, err)
 				}
 				setErrorForResponseBase(resp.Base(), err, "gcs" /* moduleName */)
 			}
@@ -483,10 +465,10 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				break
 			}
 
-			s := trace.FromContext(resp.ctx)
+			s := trace.SpanFromContext(resp.ctx)
 			if s != nil {
 				log.G(resp.ctx).WithField("message", string(responseBytes)).Trace("request write response")
-				s.AddAttributes(trace.StringAttribute("response-message-type", resp.header.Type.String()))
+				s.SetAttributes(attribute.String("response-message-type", resp.header.Type.String()))
 				s.End()
 			}
 		}
@@ -551,10 +533,10 @@ func runSequentialRequest(r *Request, handleFn func(*Request)) {
 
 // PublishNotification writes a specific notification to the bridge.
 func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
-	ctx, span := oc.StartSpan(context.Background(),
+	ctx, span := ot.StartSpan(context.Background(),
 		"opengcs::bridge::PublishNotification",
-		oc.WithClientSpanKind)
-	span.AddAttributes(trace.StringAttribute("notification", fmt.Sprintf("%+v", n)))
+		ot.WithClientSpanKind)
+	span.SetAttributes(attribute.String("notification", fmt.Sprintf("%+v", n)))
 	// DONT defer span.End() here. Publish is odd because bridgeResponse calls
 	// `End` on the `ctx` after the response is sent.
 

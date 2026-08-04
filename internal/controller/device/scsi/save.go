@@ -12,6 +12,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/containerd/errdefs"
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -76,7 +77,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 
 	// Reject payloads that did not come from a compatible Save.
 	if env.GetTypeUrl() != scsisave.TypeURL {
-		return nil, fmt.Errorf("unsupported scsi saved-state type %q", env.GetTypeUrl())
+		return nil, fmt.Errorf("unsupported scsi saved-state type %q: %w", env.GetTypeUrl(), errdefs.ErrInvalidArgument)
 	}
 
 	// Unmarshall the payload.
@@ -87,7 +88,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 
 	// Reject payloads written by an incompatible shim version.
 	if v := state.GetSchemaVersion(); v != scsisave.SchemaVersion {
-		return nil, fmt.Errorf("unsupported scsi saved-state schema version %d (want %d)", v, scsisave.SchemaVersion)
+		return nil, fmt.Errorf("unsupported scsi saved-state schema version %d (want %d): %w", v, scsisave.SchemaVersion, errdefs.ErrInvalidArgument)
 	}
 
 	// Create a new controller.
@@ -103,7 +104,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 	for slot, ds := range state.GetDisks() {
 		idx := int(slot)
 		if idx >= len(c.controllerSlots) {
-			return nil, fmt.Errorf("invalid controller slot: %d", slot)
+			return nil, fmt.Errorf("invalid controller slot: %d: %w", slot, errdefs.ErrInvalidArgument)
 		}
 
 		// Derive the controller and LUN from the slot index and rebuild the disk.
@@ -122,7 +123,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 
 	// Rehydrate all the reservations.
 	for idStr, r := range state.GetReservations() {
-		// Skip any reservation whose ID cannot be parsed.
+		// Fail the import if any reservation ID cannot be parsed.
 		id, err := guid.FromString(idStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid reservation id %q: %w", idStr, err)
@@ -147,7 +148,7 @@ func (c *Controller) Resume(ctx context.Context, vm VMSCSIOps, guest GuestSCSIOp
 	defer c.mu.Unlock()
 
 	if !c.isMigrating {
-		return fmt.Errorf("cannot resume scsi controller: not migrating")
+		return fmt.Errorf("cannot resume scsi controller: not migrating: %w", errdefs.ErrFailedPrecondition)
 	}
 
 	c.vm = vm
@@ -158,8 +159,8 @@ func (c *Controller) Resume(ctx context.Context, vm VMSCSIOps, guest GuestSCSIOp
 	return nil
 }
 
-// Disks returns the configuration of every disk currently attached to the
-// controller.
+// Disks returns the configuration of each attached disk that is indexed by a
+// host path.
 func (c *Controller) Disks() []disk.Config {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -217,7 +218,7 @@ func (c *Controller) UpdateDiskHostPath(ctx context.Context, reservationID guid.
 	defer c.mu.Unlock()
 
 	if !c.isMigrating {
-		return fmt.Errorf("UpdateDiskHostPath is only valid while migrating")
+		return fmt.Errorf("UpdateDiskHostPath is only valid while migrating: %w", errdefs.ErrFailedPrecondition)
 	}
 
 	// Find the reservation.

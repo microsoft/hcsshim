@@ -15,7 +15,11 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/containerd/errdefs"
 
 	"github.com/Microsoft/go-winio"
 	"google.golang.org/protobuf/proto"
@@ -37,7 +41,7 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 
 	// Save is only valid once the source has begun migrating.
 	if c.vmState != StateSourceMigrationInitialized {
-		return nil, fmt.Errorf("cannot save VM: VM is in state %s", c.vmState)
+		return nil, fmt.Errorf("cannot save VM: VM is in state %s: %w", c.vmState, errdefs.ErrFailedPrecondition)
 	}
 
 	// Seed the payload with the VM identity, creation options, and compat blob.
@@ -106,24 +110,24 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 // Import rebuilds a controller's static state from a snapshot produced by
 // Save. The controller comes back inert in the migrating state and performs no
 // live work until Resume supplies the running VM.
-func (c *Controller) Import(ctx context.Context, env *anypb.Any) error {
+func (c *Controller) Import(ctx context.Context, env *anypb.Any) (err error) {
 	if env == nil {
-		return fmt.Errorf("vm saved-state envelope is nil")
+		return fmt.Errorf("vm saved-state envelope is nil: %w", errdefs.ErrInvalidArgument)
 	}
 
 	// Reject envelopes that did not originate from a compatible Save.
 	if env.GetTypeUrl() != vmsave.TypeURL {
-		return fmt.Errorf("unsupported vm saved-state type %q", env.GetTypeUrl())
+		return fmt.Errorf("unsupported vm saved-state type %q: %w", env.GetTypeUrl(), errdefs.ErrInvalidArgument)
 	}
 
 	state := &vmsave.Payload{}
-	if err := proto.Unmarshal(env.GetValue(), state); err != nil {
+	if err = proto.Unmarshal(env.GetValue(), state); err != nil {
 		return fmt.Errorf("unmarshal vm saved state: %w", err)
 	}
 
 	// Reject payloads written by an incompatible shim version.
 	if v := state.GetSchemaVersion(); v != vmsave.SchemaVersion {
-		return fmt.Errorf("unsupported vm saved-state schema version %d (want %d)", v, vmsave.SchemaVersion)
+		return fmt.Errorf("unsupported vm saved-state schema version %d (want %d): %w", v, vmsave.SchemaVersion, errdefs.ErrInvalidArgument)
 	}
 
 	c.mu.Lock()
@@ -131,7 +135,25 @@ func (c *Controller) Import(ctx context.Context, env *anypb.Any) error {
 
 	// We can import a new VM only on a freshly created controller.
 	if c.vmState != StateNotCreated {
-		return fmt.Errorf("unsupported vm state during Import %q", c.vmState)
+		return fmt.Errorf("unsupported vm state during Import %q: %w", c.vmState, errdefs.ErrFailedPrecondition)
+	}
+
+	// Decode the HCS document so [Controller.CreateVM] (called next on the
+	// destination with MigrationOptions populated) can reuse it verbatim.
+	var doc = &hcsschema.ComputeSystem{}
+	if raw := state.GetHcsDocument(); len(raw) > 0 {
+		if err := json.Unmarshal(raw, doc); err != nil {
+			return fmt.Errorf("unmarshal hcs document: %w", err)
+		}
+	}
+
+	// Import the SCSI sub-controller.
+	var scsiCtrl *scsi.Controller
+	if scsiEnv := state.GetScsi(); scsiEnv != nil {
+		scsiCtrl, err = scsi.Import(ctx, scsiEnv)
+		if err != nil {
+			return fmt.Errorf("import scsi controller: %w", err)
+		}
 	}
 
 	// Restore the VM identity, allocator floors, and compat blob, then mark
@@ -141,30 +163,12 @@ func (c *Controller) Import(ctx context.Context, env *anypb.Any) error {
 	if c.sandboxOptions != nil {
 		c.isPhysicallyBacked = c.sandboxOptions.FullyPhysicallyBacked
 	}
+	c.hcsDocument = doc
+	c.scsiController = scsiCtrl
 	c.nextGuestPort = state.GetGcsNextPort()
 	c.nextBridgeID = state.GetBridgeNextID()
 	c.compatInfo = state.GetCompatInfo()
 	c.vmState = StateDestinationMigrationImported
-
-	// Decode the HCS document so [Controller.CreateVM] (called next on the
-	// destination with MigrationOptions populated) can reuse it verbatim.
-	if raw := state.GetHcsDocument(); len(raw) > 0 {
-		doc := &hcsschema.ComputeSystem{}
-		if err := json.Unmarshal(raw, doc); err != nil {
-			return fmt.Errorf("unmarshal hcs document: %w", err)
-		}
-
-		c.hcsDocument = doc
-	}
-
-	// Import the SCSI sub-controller.
-	if env := state.GetScsi(); env != nil {
-		s, err := scsi.Import(ctx, env)
-		if err != nil {
-			return fmt.Errorf("import scsi controller: %w", err)
-		}
-		c.scsiController = s
-	}
 
 	log.G(ctx).Debug("imported VM migration state")
 	return nil
@@ -178,11 +182,11 @@ func (c *Controller) Patch(ctx context.Context) error {
 	defer c.mu.Unlock()
 
 	if c.vmState != StateDestinationMigrationCreated {
-		return fmt.Errorf("cannot patch VM: VM is in state %s", c.vmState)
+		return fmt.Errorf("cannot patch VM: VM is in state %s: %w", c.vmState, errdefs.ErrFailedPrecondition)
 	}
 
 	if c.scsiController == nil {
-		return fmt.Errorf("cannot patch VM: SCSI controller is nil")
+		return fmt.Errorf("cannot patch VM: SCSI controller is nil: %w", errdefs.ErrInvalidArgument)
 	}
 
 	// Grant access only for disk types whose host paths the VM must reach.
@@ -207,26 +211,57 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Resume returns either migration side to the running state.
-	if c.vmState != StateMigrationFinalized {
-		return fmt.Errorf("cannot resume from migration: VM is in state %s", c.vmState)
+	// An already running VM will be a no-op on resume.
+	if c.vmState == StateRunning {
+		return nil
 	}
 
-	switch {
-	case rebuildBridge:
-		// Source rollback: re-arm the listener and swap the bridge transport
-		// onto the fresh hvsock so outstanding RPCs (e.g. WaitForProcess) survive.
+	// Resume returns either migration side to the running state.
+	if c.vmState != StateMigrationFinalized {
+		return fmt.Errorf("cannot resume from migration: VM is in state %s: %w", c.vmState, errdefs.ErrFailedPrecondition)
+	}
+
+	// On the destination, the log connection was never established.
+	// On source, the blackout dropped the source's GCS log connection, which tore
+	// down its listener and closed logOutputDone. Install a fresh signal and
+	// re-arm the listener so the resumed guest's reconnect-mode vsockexec can
+	// reconnect and host-side logs resume.
+	c.logOutputDone = make(chan struct{})
+	// We expect the reconnect to complete within the GCS connection timeout,
+	// otherwise we want to fail.
+	ctx, cancel := context.WithTimeout(ctx, timeout.GCSConnectionTimeout)
+	log.G(ctx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
+
+	g, gctx := errgroup.WithContext(ctx)
+	defer func() {
+		_ = g.Wait()
+	}()
+	defer cancel()
+
+	if err := c.setupLoggingListener(gctx, g); err != nil {
+		return fmt.Errorf("arm logging listener on resume: %w", err)
+	}
+
+	if rebuildBridge {
+		// Source rollback: arm the host GCS listener now, then accept the guest's
+		// post-blackout re-dial and swap it into the running bridge.
 		if err := c.guest.PrepareConnection(winio.VsockServiceID(prot.LinuxGcsVsockPort)); err != nil {
-			return fmt.Errorf("prepare guest connection on resume: %w", err)
+			return fmt.Errorf("prepare source resume listener: %w", err)
 		}
 		if err := c.guest.ResumeConnection(ctx); err != nil {
-			return fmt.Errorf("resume guest connection: %w", err)
+			return fmt.Errorf("resume source guest connection: %w", err)
 		}
-	default:
+	} else {
 		// Destination: reuse the connection already armed at start.
 		if err := c.guest.CreateConnection(ctx, false); err != nil {
-			return fmt.Errorf("resume guest connection: %w", err)
+			return fmt.Errorf("resume destination guest connection: %w", err)
 		}
+	}
+
+	// Collect any errors from establishing the log connection.
+	// If the connection is not established then we need to error out.
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	// Clear migrating flag only now that the new transport is in place.
@@ -251,18 +286,6 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 	}
 
 	c.vmState = StateRunning
-
-	if c.sandboxOptions != nil {
-		c.sandboxOptions.LiveMigrationSupportEnabled = true
-	}
-
-	// Destination never ran setupLoggingListener; close so [Controller.Wait]
-	// does not block. Already closed on source — receive falls through.
-	select {
-	case <-c.logOutputDone:
-	default:
-		close(c.logOutputDone)
-	}
 
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("resumed VM from migration")
 	return nil

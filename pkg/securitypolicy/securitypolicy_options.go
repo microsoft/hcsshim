@@ -15,14 +15,14 @@ import (
 	"github.com/Microsoft/cosesign1go/pkg/cosesign1"
 	didx509resolver "github.com/Microsoft/didx509go/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type SecurityOptions struct {
@@ -151,10 +151,10 @@ func asInt64(v interface{}) (int64, error) {
 // 3 - Check that this issuer/feed match the requirement of the user provided
 // security policy (done in the regoby LoadFragment)
 func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestresource.SecurityPolicyFragment) (err error) {
-	ctx, span := oc.StartSpan(ctx, "securitypolicy::InjectFragment")
+	ctx, span := ot.StartSpan(ctx, "securitypolicy::InjectFragment")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("fragment", fmt.Sprintf("%+v", fragment)))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("fragment", fmt.Sprintf("%+v", fragment)))
 
 	// An empty media type defaults to a Rego policy fragment, for backward
 	// compatibility with older hosts that do not set the field.

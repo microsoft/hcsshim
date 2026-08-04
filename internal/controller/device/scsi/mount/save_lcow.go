@@ -6,13 +6,14 @@ import (
 	"fmt"
 
 	scsisave "github.com/Microsoft/hcsshim/internal/controller/device/scsi/save"
+	"github.com/containerd/errdefs"
 )
 
 // Save returns a migration snapshot of the mount. It fails unless the mount
 // is mounted or reserved.
 func (m *Mount) Save() (*scsisave.MountState, error) {
 	if m.state != StateMounted && m.state != StateReserved {
-		return nil, fmt.Errorf("scsi mount controller=%d lun=%d partition=%d in state %s; want %s", m.controller, m.lun, m.config.Partition, m.state, StateMounted)
+		return nil, fmt.Errorf("scsi mount controller=%d lun=%d partition=%d in state %s; want %s: %w", m.controller, m.lun, m.config.Partition, m.state, StateMounted, errdefs.ErrFailedPrecondition)
 	}
 	return &scsisave.MountState{
 		Config: &scsisave.MountConfig{

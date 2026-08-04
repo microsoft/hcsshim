@@ -13,7 +13,6 @@ import (
 	procsave "github.com/Microsoft/hcsshim/internal/controller/process/save"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
-	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/api/runtime/task/v3"
 	containerdtypes "github.com/containerd/containerd/api/types"
 	"github.com/containerd/errdefs"
@@ -47,18 +46,6 @@ func importedInitProcess(t *testing.T) *process.Controller {
 	p, err := process.Import(t.Context(), buildProcessEnvelope(t, ""), testContainerID)
 	if err != nil {
 		t.Fatalf("import init process = %v", err)
-	}
-	return p
-}
-
-// patchedInitProcess returns a migrating init process whose IO has been opened,
-// mirroring an imported-and-patched-but-never-resumed process. Empty IO paths
-// avoid real named-pipe connections.
-func patchedInitProcess(t *testing.T) *process.Controller {
-	t.Helper()
-	p := importedInitProcess(t)
-	if err := p.Patch(t.Context(), testContainerID, &process.CreateOptions{}); err != nil {
-		t.Fatalf("patch init process = %v", err)
 	}
 	return p
 }
@@ -98,10 +85,10 @@ func containerEnvelope(t *testing.T, p *lcsave.Payload) *anypb.Any {
 
 // --- Save ---
 
-// TestSave_WrongState verifies that only a running container can be saved.
+// TestSave_WrongState verifies Save is refused for non-snapshottable container states.
 func TestSave_WrongState(t *testing.T) {
 	t.Parallel()
-	invalidStates := []State{StateNotCreated, StateCreated, StateStopped, StateInvalid, StateDestinationMigrating, StateSourceMigrating}
+	invalidStates := []State{StateNotCreated, StateCreated, StateStopped, StateInvalid, StateDestinationMigrating}
 
 	for _, state := range invalidStates {
 		t.Run(state.String(), func(t *testing.T) {
@@ -109,8 +96,9 @@ func TestSave_WrongState(t *testing.T) {
 			c, _, _, _, _ := newContainerTestController(t)
 			c.state = state
 
-			if _, err := c.Save(t.Context()); err == nil {
-				t.Errorf("Save() = nil; want error for state %s", state)
+			_, err := c.Save(t.Context())
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("Save() = %v; want ErrFailedPrecondition for state %s", err, state)
 			}
 		})
 	}
@@ -140,8 +128,9 @@ func TestSave_ProcessConstraints(t *testing.T) {
 			c.state = StateRunning
 			tc.seedProc(c)
 
-			if _, err := c.Save(t.Context()); err == nil {
-				t.Error("Save() = nil; want error for invalid process set")
+			_, err := c.Save(t.Context())
+			if !errors.Is(err, errdefs.ErrFailedPrecondition) {
+				t.Errorf("Save() = %v; want ErrFailedPrecondition for invalid process set", err)
 			}
 		})
 	}
@@ -170,20 +159,25 @@ func TestImport_InvalidEnvelope(t *testing.T) {
 	badVersion := containerEnvelope(t, &lcsave.Payload{SchemaVersion: lcsave.SchemaVersion + 1})
 
 	tests := []struct {
-		name string
-		env  *anypb.Any
+		name   string
+		env    *anypb.Any
+		wantIs error
 	}{
 		{name: "nil envelope", env: nil},
-		{name: "wrong type url", env: &anypb.Any{TypeUrl: "type.microsoft.com/other"}},
+		{name: "wrong type url", env: &anypb.Any{TypeUrl: "type.microsoft.com/other"}, wantIs: errdefs.ErrInvalidArgument},
 		{name: "undecodable value", env: &anypb.Any{TypeUrl: lcsave.TypeURL, Value: []byte{0x08, 0xff}}},
-		{name: "schema version mismatch", env: badVersion},
+		{name: "schema version mismatch", env: badVersion, wantIs: errdefs.ErrInvalidArgument},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := Import(t.Context(), tc.env); err == nil {
-				t.Error("Import() = nil; want error")
+			_, err := Import(t.Context(), tc.env)
+			if err == nil {
+				t.Fatal("Import() = nil; want error")
+			}
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Errorf("Import() = %v; want %v", err, tc.wantIs)
 			}
 		})
 	}
@@ -320,11 +314,13 @@ func TestPatch_LayerErrors(t *testing.T) {
 		layers   *scsiLayers
 		rootfs   []*containerdtypes.Mount
 		stubPath bool
+		wantIs   error
 	}{
 		{
 			name:    "nil scsi controller",
 			scsiNil: true,
 			layers:  &scsiLayers{scratch: scsiReservation{id: scratchGUID}},
+			wantIs:  errdefs.ErrInvalidArgument,
 		},
 		{
 			name:   "unparsable rootfs",
@@ -336,6 +332,7 @@ func TestPatch_LayerErrors(t *testing.T) {
 			layers:   &scsiLayers{roLayers: []scsiReservation{{id: roGUID}, {id: roGUID}}, scratch: scsiReservation{id: scratchGUID}},
 			rootfs:   []*containerdtypes.Mount{{Type: "lcow-layer", Source: `C:\scratch`, Options: []string{`parentLayerPaths=["C:\\layers\\base"]`}}},
 			stubPath: true,
+			wantIs:   errdefs.ErrInvalidArgument,
 		},
 	}
 
@@ -355,7 +352,10 @@ func TestPatch_LayerErrors(t *testing.T) {
 
 			err := c.Patch(t.Context(), sc, &task.CreateTaskRequest{ID: "dest", Rootfs: tc.rootfs})
 			if err == nil {
-				t.Error("Patch() = nil; want error")
+				t.Fatal("Patch() = nil; want error")
+			}
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Errorf("Patch() = %v; want %v", err, tc.wantIs)
 			}
 		})
 	}
@@ -416,12 +416,13 @@ func TestPatch_ProcessConstraints(t *testing.T) {
 	tests := []struct {
 		name     string
 		seedProc func(c *Controller)
+		wantIs   error
 	}{
 		{name: "no init process", seedProc: func(*Controller) {}},
 		{name: "extra exec process", seedProc: func(c *Controller) {
 			c.processes[""] = importedInitProcess(t)
 			c.processes["exec-1"] = process.New(testContainerID, "exec-1", nil, 0)
-		}},
+		}, wantIs: errdefs.ErrFailedPrecondition},
 	}
 
 	for _, tc := range tests {
@@ -433,7 +434,10 @@ func TestPatch_ProcessConstraints(t *testing.T) {
 
 			err := c.Patch(t.Context(), scsiCtrl, &task.CreateTaskRequest{ID: "dest"})
 			if err == nil {
-				t.Error("Patch() = nil; want error for invalid process set")
+				t.Fatal("Patch() = nil; want error for invalid process set")
+			}
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Errorf("Patch() = %v; want %v", err, tc.wantIs)
 			}
 		})
 	}
@@ -507,11 +511,11 @@ func TestResume_SourceRollback(t *testing.T) {
 	}
 }
 
-// TestResume_WrongState verifies that Resume is rejected unless the container is
-// migrating on the source or destination.
+// TestResume_WrongState verifies Resume is rejected for states that are neither
+// mid-migration nor already running.
 func TestResume_WrongState(t *testing.T) {
 	t.Parallel()
-	invalidStates := []State{StateNotCreated, StateCreated, StateRunning, StateStopped, StateInvalid}
+	invalidStates := []State{StateNotCreated, StateCreated, StateStopped, StateInvalid}
 
 	for _, state := range invalidStates {
 		t.Run(state.String(), func(t *testing.T) {
@@ -527,97 +531,18 @@ func TestResume_WrongState(t *testing.T) {
 	}
 }
 
-// --- AbortMigrated ---
-
-// TestAbortMigrated_NoOp verifies that AbortMigrated leaves a non-migrating
-// container untouched and publishes nothing.
-func TestAbortMigrated_NoOp(t *testing.T) {
+// TestResume_IdempotentWhenRunning verifies that resuming an already-resumed
+// container is a no-op, so a retry after a completed resume is safe.
+func TestResume_IdempotentWhenRunning(t *testing.T) {
 	t.Parallel()
-	otherStates := []State{StateNotCreated, StateCreated, StateRunning, StateStopped, StateInvalid, StateSourceMigrating}
+	c, scsiCtrl, plan9Ctrl, vpciCtrl, guestCtrl := newContainerTestController(t)
+	c.state = StateRunning
 
-	for _, state := range otherStates {
-		t.Run(state.String(), func(t *testing.T) {
-			t.Parallel()
-			c, _, _, _, _ := newContainerTestController(t)
-			c.state = state
-
-			events := make(chan interface{}, 1)
-			c.AbortMigrated(t.Context(), events)
-
-			if c.state != state {
-				t.Errorf("state = %s; want unchanged %s", c.state, state)
-			}
-			select {
-			case <-events:
-				t.Error("AbortMigrated published an event for a non-migrating container")
-			default:
-			}
-		})
+	if err := c.Resume(t.Context(), testVMID, testPodID, guestCtrl, scsiCtrl, plan9Ctrl, vpciCtrl, nil); err != nil {
+		t.Fatalf("Resume() = %v; want nil", err)
 	}
-}
-
-// TestAbortMigrated_Succeeds verifies that AbortMigrated drains the init
-// process, marks the container stopped, closes waiters, and publishes a
-// synthetic TaskExit when an events channel is supplied.
-func TestAbortMigrated_Succeeds(t *testing.T) {
-	t.Parallel()
-	c, _, _, _, _ := newContainerTestController(t)
-	c.state = StateDestinationMigrating
-	c.processes[""] = patchedInitProcess(t)
-
-	events := make(chan interface{}, 1)
-	c.AbortMigrated(t.Context(), events)
-
-	if c.state != StateStopped {
-		t.Errorf("state = %s; want StateStopped", c.state)
-	}
-	select {
-	case <-c.terminatedCh:
-	default:
-		t.Error("terminatedCh should be closed after AbortMigrated")
-	}
-	select {
-	case ev := <-events:
-		if _, ok := ev.(*eventstypes.TaskExit); !ok {
-			t.Errorf("event = %T; want *eventstypes.TaskExit", ev)
-		}
-	default:
-		t.Error("AbortMigrated should publish a TaskExit event")
-	}
-}
-
-// TestAbortMigrated_NoEventChannel verifies that AbortMigrated still tears the
-// container down when no events channel is provided.
-func TestAbortMigrated_NoEventChannel(t *testing.T) {
-	t.Parallel()
-	c, _, _, _, _ := newContainerTestController(t)
-	c.state = StateDestinationMigrating
-	c.processes[""] = importedInitProcess(t)
-
-	c.AbortMigrated(t.Context(), nil)
-
-	if c.state != StateStopped {
-		t.Errorf("state = %s; want StateStopped", c.state)
-	}
-}
-
-// TestAbortMigrated_NoInitProcess verifies that AbortMigrated tears the
-// container down but publishes nothing when there is no init process.
-func TestAbortMigrated_NoInitProcess(t *testing.T) {
-	t.Parallel()
-	c, _, _, _, _ := newContainerTestController(t)
-	c.state = StateDestinationMigrating
-
-	events := make(chan interface{}, 1)
-	c.AbortMigrated(t.Context(), events)
-
-	if c.state != StateStopped {
-		t.Errorf("state = %s; want StateStopped", c.state)
-	}
-	select {
-	case <-events:
-		t.Error("AbortMigrated should not publish an event without an init process")
-	default:
+	if c.state != StateRunning {
+		t.Errorf("state = %s; want unchanged StateRunning", c.state)
 	}
 }
 

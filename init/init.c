@@ -875,7 +875,7 @@ void start_services() {
     char* persistenced_name = "/bin/nvidia-persistenced";
     struct stat persistenced_stat;
     if (stat(persistenced_name, &persistenced_stat) == -1) {
-        dmesgWarn("nvidia-persistenced not present, skipping ");
+        dmesgWarn("nvidia-persistenced not present, skipping");
     } else {
         dmesgInfo("start nvidia-persistenced daemon");
         pid_t persistenced_pid = launch(1, &persistenced_name);
@@ -889,7 +889,7 @@ void start_services() {
     char* fm_name = "/bin/nv-fabricmanager";
     struct stat fabric_stat;
     if (stat(fm_name, &fabric_stat) == -1) {
-        dmesgWarn("nv-fabricmanager not present, skipping ");
+        dmesgWarn("nv-fabricmanager not present, skipping");
     } else {
         dmesgInfo("start nv-fabricmanager daemon");
         char* command[] = {fm_name, "-c", "/usr/share/nvidia/nvswitch/fabricmanager.cfg"};

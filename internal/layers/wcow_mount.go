@@ -12,14 +12,14 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/computestorage"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvm/scsi"
@@ -220,14 +220,14 @@ func mountProcessIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers) (_
 // mounting the scratch, attaching the filter and preparing the return values.
 // `volume` is the path to the volume at which read only layer CIMs are mounted.
 func mountProcessIsolatedCimLayersCommon(ctx context.Context, containerID string, volume string, s *scratchLayerData) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
-	ctx, span := oc.StartSpan(ctx, "mountProcessIsolatedCimLayersCommon")
+	ctx, span := ot.StartSpan(ctx, "mountProcessIsolatedCimLayersCommon")
 	defer func() {
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 		span.End()
 	}()
-	span.AddAttributes(
-		trace.StringAttribute("scratch path", s.scratchLayerPath),
-		trace.StringAttribute("mounted CIM volume", volume))
+	span.SetAttributes(
+		attribute.String("scratch path", s.scratchLayerPath),
+		attribute.String("mounted CIM volume", volume))
 
 	rcl := &resources.ResourceCloserList{}
 	defer func() {
@@ -290,9 +290,9 @@ func mountProcessIsolatedCimLayersCommon(ctx context.Context, containerID string
 }
 
 func mountProcessIsolatedForkedCimLayers(ctx context.Context, containerID string, l *wcowForkedCIMLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
-	ctx, span := oc.StartSpan(ctx, "mountProcessIsolatedForkedCimLayers")
+	ctx, span := ot.StartSpan(ctx, "mountProcessIsolatedForkedCimLayers")
 	defer func() {
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 		span.End()
 	}()
 
@@ -321,9 +321,9 @@ func mountProcessIsolatedForkedCimLayers(ctx context.Context, containerID string
 }
 
 func mountProcessIsolatedBlockCIMLayers(ctx context.Context, containerID string, l *wcowBlockCIMLayers) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
-	ctx, span := oc.StartSpan(ctx, "mountProcessIsolatedBlockCIMLayers")
+	ctx, span := ot.StartSpan(ctx, "mountProcessIsolatedBlockCIMLayers")
 	defer func() {
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 		span.End()
 	}()
 
@@ -494,9 +494,9 @@ func mountHypervIsolatedWCIFSLayers(ctx context.Context, l *wcowWCIFSLayers, vm 
 }
 
 func mountHypervIsolatedBlockCIMLayers(ctx context.Context, l *wcowBlockCIMLayers, vm *uvm.UtilityVM, containerID string) (_ *MountedWCOWLayers, _ resources.ResourceCloser, err error) {
-	ctx, span := oc.StartSpan(ctx, "mountHyperVIsolatedBlockCIMLayers")
+	ctx, span := ot.StartSpan(ctx, "mountHyperVIsolatedBlockCIMLayers")
 	defer func() {
-		oc.SetSpanStatus(span, err)
+		ot.SetSpanStatus(span, err)
 		span.End()
 	}()
 

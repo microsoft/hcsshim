@@ -12,10 +12,10 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
 )
 
@@ -63,9 +63,9 @@ func MountLayer(
 	upperdirPath, workdirPath, rootfsPath string,
 	readonly bool,
 ) (err error) {
-	_, span := oc.StartSpan(ctx, "overlay::MountLayer")
+	_, span := ot.StartSpan(ctx, "overlay::MountLayer")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	return Mount(ctx, layerPaths, upperdirPath, workdirPath, rootfsPath, readonly)
 }
@@ -81,17 +81,17 @@ func MountLayer(
 // Always creates `target`. On mount failure the created `target` will
 // be automatically cleaned up.
 func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, target string, readonly bool) (err error) {
-	_, span := oc.StartSpan(ctx, "overlay::Mount")
+	_, span := ot.StartSpan(ctx, "overlay::Mount")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	lowerdir := strings.Join(basePaths, ":")
-	span.AddAttributes(
-		trace.StringAttribute("lowerdir", lowerdir),
-		trace.StringAttribute("upperdirPath", upperdirPath),
-		trace.StringAttribute("workdirPath", workdirPath),
-		trace.StringAttribute("target", target),
-		trace.BoolAttribute("readonly", readonly))
+	span.SetAttributes(
+		attribute.String("lowerdir", lowerdir),
+		attribute.String("upperdirPath", upperdirPath),
+		attribute.String("workdirPath", workdirPath),
+		attribute.String("target", target),
+		attribute.Bool("readonly", readonly))
 
 	// If we got an ENOSPC error on creating any directories, log disk space and inode info for
 	//  the mount that the directory belongs to get a better view of the where the problem lies.

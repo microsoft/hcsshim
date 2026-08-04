@@ -19,16 +19,15 @@ type SandboxOptions struct {
 	// Architecture is the processor architecture (e.g., "amd64", "arm64").
 	Architecture string
 
-	// FullyPhysicallyBacked indicates all memory allocations are backed by physical memory.
+	// FullyPhysicallyBacked reports whether the VM's own memory is physically
+	// backed (equal to !AllowOvercommit). It does not cover additional devices
+	// added to the running VM (e.g. file shares or mounted layer disks), whose
+	// physical backing is determined directly by the FullyPhysicallyBacked annotation.
 	FullyPhysicallyBacked bool
 
 	// ConfidentialConfig carries confidential computing fields that are not
 	// part of the HCS document but are needed for confidential VM setup.
 	ConfidentialConfig *ConfidentialConfig
-
-	// LiveMigrationSupportEnabled indicates that the live migration feature set is
-	// enabled for the sandbox, constraining it to migration-compatible features.
-	LiveMigrationSupportEnabled bool
 }
 
 // ConfidentialConfig carries confidential computing configuration that is not

@@ -6,14 +6,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Microsoft/go-winio"
-
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 // compatibilityInfoProperty is the HCS property name used to retrieve the
@@ -30,6 +31,21 @@ func (c *Controller) InitializeLiveMigrationOnSource(ctx context.Context, option
 	// Only a running VM can begin a migration.
 	if c.vmState != StateRunning {
 		return fmt.Errorf("cannot initialize live migration on source: VM is in state %s", c.vmState)
+	}
+
+	// Live migration requires the guest log relay to run in reconnect mode so it can
+	// re-dial the destination host's log listener after the move.
+	var kernelCmdLine string
+	if c.hcsDocument != nil && c.hcsDocument.VirtualMachine != nil && c.hcsDocument.VirtualMachine.Chipset != nil {
+		switch chipset := c.hcsDocument.VirtualMachine.Chipset; {
+		case chipset.LinuxKernelDirect != nil:
+			kernelCmdLine = chipset.LinuxKernelDirect.KernelCmdLine
+		case chipset.Uefi != nil && chipset.Uefi.BootThis != nil:
+			kernelCmdLine = chipset.Uefi.BootThis.OptionalData
+		}
+	}
+	if !strings.Contains(kernelCmdLine, vmutils.LinuxLogForwarderCommand(true)) {
+		return fmt.Errorf("cannot initialize live migration on source: VM was not created with live-migration support enabled")
 	}
 
 	// Hand the initialize request to the HCS for the UVM.
@@ -127,6 +143,7 @@ func (c *Controller) StartWithMigrationOptions(ctx context.Context, config *hcs.
 
 	// Watch for VM exit in the background.
 	go c.waitForVMExit(ctx)
+
 	c.vmState = StateDestinationMigrationStarted
 
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("started destination VM with migration options")
@@ -186,8 +203,14 @@ func (c *Controller) FinalizeLiveMigration(ctx context.Context, options *hcssche
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Finalize is only valid once the memory transfer has completed.
-	if c.vmState != StateMigrationTransferCompleted {
+	// Finalize is valid only while the VM is still migrating. The migration
+	// controller reconciles the already-finalized and terminated states against
+	// the requested operation, so they are rejected here.
+	switch c.vmState {
+	case StateSourceMigrationInitialized, StateSourceMigrationStarted,
+		StateDestinationMigrationCreated, StateDestinationMigrationPatched,
+		StateDestinationMigrationStarted, StateMigrationTransferCompleted:
+	default:
 		return fmt.Errorf("cannot finalize live migration: VM is in state %s", c.vmState)
 	}
 
@@ -202,6 +225,8 @@ func (c *Controller) FinalizeLiveMigration(ctx context.Context, options *hcssche
 		// scratch-layer unmap on delete is no longer rejected.
 		if options.Origin == hcsschema.MigrationOriginSource && c.scsiController != nil {
 			if err := c.scsiController.Resume(ctx, c.uvm, c.guest); err != nil {
+				// An error here is unlikely: scsi Resume only fails when the controller
+				// is not in the migrating state, which should not be the case mid-finalize.
 				return fmt.Errorf("resume scsi controller: %w", err)
 			}
 		}
@@ -219,5 +244,24 @@ func (c *Controller) FinalizeLiveMigration(ctx context.Context, options *hcssche
 	c.vmState = StateMigrationFinalized
 
 	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("finalized live migration")
+	return nil
+}
+
+// CancelLiveMigration aborts an in-flight live migration. It intentionally takes
+// no lock: it must be able to interrupt an in-flight StartLiveMigrationTransfer,
+// which holds mu for the entire (synchronous) transfer. Reading uvm without mu is
+// safe because uvm is written once in CreateVM and the migration controller
+// serializes Cancel behind its own lock, so that write is already published here.
+// A nil uvm means the VM was never created.
+func (c *Controller) CancelLiveMigration(ctx context.Context, options *hcsschema.MigrationCancelOptions) error {
+	if c.uvm == nil {
+		return fmt.Errorf("cannot cancel live migration: VM not created")
+	}
+
+	if err := c.uvm.CancelLiveMigration(ctx, options); err != nil {
+		return fmt.Errorf("failed to cancel live migration: %w", err)
+	}
+
+	log.G(ctx).WithField(logfields.UVMID, c.vmID).Debug("cancelled live migration")
 	return nil
 }

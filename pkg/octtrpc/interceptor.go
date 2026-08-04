@@ -1,3 +1,4 @@
+// Deprecated: Use github.com/containerd/otelttrpc instead.
 package octtrpc
 
 import (
@@ -11,8 +12,45 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
 )
+
+// The following helpers are inlined from the (removed) internal/oc package so
+// that octtrpc remains self-contained while continuing to use OpenCensus. This
+// package is deprecated (see the package doc); new code should use
+// github.com/containerd/otelttrpc.
+
+// defaultSampler mirrors the previous oc.DefaultSampler.
+var defaultSampler = trace.AlwaysSample()
+
+var (
+	withClientSpanKind = trace.WithSpanKind(trace.SpanKindClient)
+	withServerSpanKind = trace.WithSpanKind(trace.SpanKindServer)
+)
+
+// startSpan wraps "go.opencensus.io/trace".StartSpan, but, if the span is
+// sampling, adds a log entry to the context that points to the newly created
+// span.
+func startSpan(ctx context.Context, name string, o ...trace.StartOption) (context.Context, *trace.Span) {
+	ctx, s := trace.StartSpan(ctx, name, o...)
+	return updateSpanContext(ctx, s)
+}
+
+// startSpanWithRemoteParent wraps
+// "go.opencensus.io/trace".StartSpanWithRemoteParent.
+//
+// See startSpan for more information.
+func startSpanWithRemoteParent(ctx context.Context, name string, parent trace.SpanContext, o ...trace.StartOption) (context.Context, *trace.Span) {
+	ctx, s := trace.StartSpanWithRemoteParent(ctx, name, parent, o...)
+	return updateSpanContext(ctx, s)
+}
+
+func updateSpanContext(ctx context.Context, s *trace.Span) (context.Context, *trace.Span) {
+	if s.IsRecordingEvents() {
+		ctx = log.UpdateContext(ctx)
+	}
+	return ctx, s
+}
 
 type options struct {
 	sampler trace.Sampler
@@ -65,17 +103,17 @@ func setSpanStatus(span *trace.Span, err error) {
 // metadata on the call.
 func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 	o := options{
-		sampler: oc.DefaultSampler,
+		sampler: defaultSampler,
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
 	return func(ctx context.Context, req *ttrpc.Request, resp *ttrpc.Response, info *ttrpc.UnaryClientInfo, inv ttrpc.Invoker) (err error) {
-		ctx, span := oc.StartSpan(
+		ctx, span := startSpan(
 			ctx,
 			convertMethodName(info.FullMethod),
 			trace.WithSampler(o.sampler),
-			oc.WithClientSpanKind)
+			withClientSpanKind)
 		defer span.End()
 		defer func() { setSpanStatus(span, err) }()
 
@@ -93,7 +131,7 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 // span context received via metadata, if it exists.
 func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 	o := options{
-		sampler: oc.DefaultSampler,
+		sampler: defaultSampler,
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -102,12 +140,12 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 		name := convertMethodName(info.FullMethod)
 
 		var span *trace.Span
-		opts := []trace.StartOption{trace.WithSampler(o.sampler), oc.WithServerSpanKind}
+		opts := []trace.StartOption{trace.WithSampler(o.sampler), withServerSpanKind}
 		parent, ok := getParentSpanFromContext(ctx)
 		if ok {
-			ctx, span = oc.StartSpanWithRemoteParent(ctx, name, parent, opts...)
+			ctx, span = startSpanWithRemoteParent(ctx, name, parent, opts...)
 		} else {
-			ctx, span = oc.StartSpan(ctx, name, opts...)
+			ctx, span = startSpan(ctx, name, opts...)
 		}
 		defer span.End()
 		defer func() { setSpanStatus(span, err) }()

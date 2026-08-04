@@ -530,15 +530,6 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 		return nil, fmt.Errorf("cannot get stats: VM is in incorrect state %s", c.vmState)
 	}
 
-	// Initialization of vmmemProcess to calculate stats properly for VA-backed UVMs.
-	if c.vmmemProcess == 0 {
-		vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
-		if err != nil {
-			return nil, fmt.Errorf("cannot get stats: %w", err)
-		}
-		c.vmmemProcess = vmmemHandle
-	}
-
 	s := &stats.VirtualMachineStatistics{}
 	props, err := c.uvm.PropertiesV2(ctx, hcsschema.PTStatistics, hcsschema.PTMemory)
 	if err != nil {
@@ -553,6 +544,13 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 		// working set size for a VA-backed UVM. To work around this, we instead
 		// locate the vmmem process for the VM, and query that process's working set
 		// instead, which will be the working set for the VM.
+		if c.vmmemProcess == 0 {
+			vmmemHandle, err := vmutils.LookupVMMEM(ctx, c.uvm.RuntimeID(), &iwin.WinAPI{})
+			if err != nil {
+				return nil, fmt.Errorf("cannot get stats: %w", err)
+			}
+			c.vmmemProcess = vmmemHandle
+		}
 		memCounters, err := process.GetProcessMemoryInfo(c.vmmemProcess)
 		if err != nil {
 			return nil, err
@@ -606,6 +604,10 @@ func (c *Controller) TerminateVM(ctx context.Context) (err error) {
 
 	// Best effort attempt to clean up the open vmmem handle.
 	_ = windows.Close(c.vmmemProcess)
+
+	// Explicitly set migrating to false so that we release
+	// the bridge prior to removing the VM.
+	c.guest.SetMigrating(false)
 
 	// Skip HCS Terminate for a never-started VM (cold-created, or a destination
 	// migration VM created/patched but not yet started). The HCS document sets

@@ -23,16 +23,16 @@ import (
 )
 
 // Save serializes a running container's current state into a portable
-// envelope that can be handed to a migration destination. It succeeds only
-// when the container is running, the single stable state a live migration
-// can be performed from. On success the source is frozen until it is resumed.
+// envelope that can be handed to a migration destination. It succeeds when the
+// container is running or already frozen by a prior save (retry-safe), and on
+// success the source stays frozen until it is resumed.
 func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Only a running container is in a stable, migratable state.
-	if c.state != StateRunning {
-		return nil, fmt.Errorf("container %q in state %s; want %s", c.containerID, c.state, StateRunning)
+	// A running container—or one already frozen by a prior save—can be saved.
+	if c.state != StateRunning && c.state != StateSourceMigrating {
+		return nil, fmt.Errorf("container %q in state %s; want %s: %w", c.containerID, c.state, StateRunning, errdefs.ErrFailedPrecondition)
 	}
 
 	// Capture the container's scalar bookkeeping into the snapshot.
@@ -69,7 +69,7 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 	// Live migration only supports a container whose sole process is the
 	// init process; reject a missing init process or any additional execs.
 	if _, ok := c.processes[""]; !ok || len(c.processes) > 1 {
-		return nil, fmt.Errorf("container %q must have only the init process for live migration; has %d processes", c.containerID, len(c.processes))
+		return nil, fmt.Errorf("container %q must have only the init process for live migration; has %d processes: %w", c.containerID, len(c.processes), errdefs.ErrFailedPrecondition)
 	}
 
 	// Snapshot the init process as an opaque payload the process controller
@@ -121,7 +121,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 	}
 
 	if env.GetTypeUrl() != lcsave.TypeURL {
-		return nil, fmt.Errorf("unsupported container saved-state type %q", env.GetTypeUrl())
+		return nil, fmt.Errorf("unsupported container saved-state type %q: %w", env.GetTypeUrl(), errdefs.ErrInvalidArgument)
 	}
 
 	// Decode and reject any payload this build cannot interpret.
@@ -131,7 +131,7 @@ func Import(ctx context.Context, env *anypb.Any) (*Controller, error) {
 	}
 
 	if v := state.GetSchemaVersion(); v != lcsave.SchemaVersion {
-		return nil, fmt.Errorf("unsupported container saved-state schema version %d (want %d)", v, lcsave.SchemaVersion)
+		return nil, fmt.Errorf("unsupported container saved-state schema version %d (want %d): %w", v, lcsave.SchemaVersion, errdefs.ErrInvalidArgument)
 	}
 
 	// Rehydrate into the destination-migrating state: state is restored but no
@@ -215,6 +215,11 @@ func (c *Controller) Resume(
 ) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Idempotent: a container resumed by a prior attempt is a no-op on retry.
+	if c.state == StateRunning {
+		return nil
+	}
 
 	// Resume is only valid mid-migration, on either the source or destination.
 	if c.state != StateSourceMigrating && c.state != StateDestinationMigrating {
@@ -341,7 +346,7 @@ func (c *Controller) Patch(ctx context.Context, scsiCtrl scsiController, request
 	// so future SCSI operations resolve to local disks.
 	if c.layers != nil {
 		if scsiCtrl == nil {
-			return fmt.Errorf("scsi controller is required to patch container %q layers", c.containerID)
+			return fmt.Errorf("scsi controller is required to patch container %q layers: %w", c.containerID, errdefs.ErrInvalidArgument)
 		}
 
 		lcowLayers, err := layers.ParseLCOWLayers(request.Rootfs, nil)
@@ -350,7 +355,7 @@ func (c *Controller) Patch(ctx context.Context, scsiCtrl scsiController, request
 		}
 
 		if got, want := len(lcowLayers.Layers), len(c.layers.roLayers); got != want {
-			return fmt.Errorf("ro layer count mismatch: got %d, want %d", got, want)
+			return fmt.Errorf("ro layer count mismatch: got %d, want %d: %w", got, want, errdefs.ErrInvalidArgument)
 		}
 
 		for i, ro := range c.layers.roLayers {
@@ -389,7 +394,7 @@ func (c *Controller) Patch(ctx context.Context, scsiCtrl scsiController, request
 	}
 
 	if len(c.processes) > 1 {
-		return fmt.Errorf("container %q has %d processes; live migration only supports the init process", c.containerID, len(c.processes))
+		return fmt.Errorf("container %q has %d processes; live migration only supports the init process: %w", c.containerID, len(c.processes), errdefs.ErrFailedPrecondition)
 	}
 
 	if err := initProc.Patch(ctx, request.ID, &process.CreateOptions{
@@ -412,43 +417,4 @@ func (c *Controller) Patch(ctx context.Context, scsiCtrl scsiController, request
 	c.containerID = request.ID
 
 	return nil
-}
-
-// AbortMigrated discards an imported-but-never-resumed container: it drains
-// each imported process, marks the container stopped, and publishes a
-// synthetic TaskExit so containerd will accept a Delete. It is a no-op once
-// the container has left the migrating state.
-func (c *Controller) AbortMigrated(ctx context.Context, events chan interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.state != StateDestinationMigrating {
-		return
-	}
-
-	log.G(ctx).WithField(logfields.DestinationContainerID, c.containerID).Debug("aborting migrated container")
-
-	// Tear down each imported process and the container handle before
-	// reporting the container as exited.
-	for _, proc := range c.processes {
-		proc.AbortMigrated(ctx)
-	}
-
-	c.state = StateStopped
-	c.closeContainer()
-
-	// Emit a synthetic exit for the init process so containerd unblocks Delete.
-	initProc := c.processes[""]
-	if events == nil || initProc == nil {
-		return
-	}
-
-	status := initProc.Status(true)
-	events <- &eventstypes.TaskExit{
-		ContainerID: c.containerID,
-		ID:          status.ExecID,
-		Pid:         status.Pid,
-		ExitStatus:  status.ExitStatus,
-		ExitedAt:    status.ExitedAt,
-	}
 }

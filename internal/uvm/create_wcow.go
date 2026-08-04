@@ -13,15 +13,11 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/go-winio/vhd"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -31,6 +27,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var (
@@ -613,9 +612,9 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW) (*
 // WCOW Notes:
 //   - The scratch is always attached to SCSI 0:0
 func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error) {
-	ctx, span := oc.StartSpan(ctx, "uvm::CreateWCOW")
+	ctx, span := ot.StartSpan(ctx, "uvm::CreateWCOW")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	if opts.ID == "" {
 		g, err := guid.NewV4()
@@ -625,7 +624,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		opts.ID = g.String()
 	}
 
-	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
+	span.SetAttributes(attribute.String(logfields.UVMID, opts.ID))
 	log.G(ctx).WithField("options", log.Format(ctx, opts)).Debug("uvm::CreateWCOW options")
 
 	uvm := &UtilityVM{

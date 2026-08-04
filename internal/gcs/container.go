@@ -15,9 +15,9 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/containerd/errdefs"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const hrComputeSystemDoesNotExist = 0xc037010e
@@ -41,10 +41,10 @@ var _ cow.Container = &Container{}
 // CreateContainer creates a container using ID `cid` and `cfg`. The request
 // will likely not be cancellable even if `ctx` becomes done.
 func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, config interface{}) (_ *Container, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::CreateContainer", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::GuestConnection::CreateContainer", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", cid))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", cid))
 
 	c := &Container{
 		gc:        gc,
@@ -102,9 +102,9 @@ func (c *Container) IsOCI() bool {
 // Close releases associated with the container.
 func (c *Container) Close() error {
 	c.closeOnce.Do(func() {
-		_, span := oc.StartSpan(context.Background(), "gcs::Container::Close")
+		_, span := ot.StartSpan(context.Background(), "gcs::Container::Close")
 		defer span.End()
-		span.AddAttributes(trace.StringAttribute("cid", c.id))
+		span.SetAttributes(attribute.String("cid", c.id))
 
 		close(c.closeCh)
 	})
@@ -113,10 +113,10 @@ func (c *Container) Close() error {
 
 // CreateProcess creates a process in the container.
 func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ cow.Process, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::CreateProcess", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::CreateProcess", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	return c.gc.exec(ctx, c.id, config)
 }
@@ -127,13 +127,13 @@ func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ co
 // pre-registers the source bridge's WaitForProcess id so the guest's
 // still-outstanding response is routed without arming a duplicate wait.
 func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort, stdoutPort, stderrPort uint32, waitCallID int64) (_ *Process, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::OpenProcessWithIO", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::OpenProcessWithIO", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", c.id),
-		trace.Int64Attribute("pid", int64(pid)),
-		trace.Int64Attribute("waitCallID", waitCallID))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("cid", c.id),
+		attribute.Int64("pid", int64(pid)),
+		attribute.Int64("waitCallID", waitCallID))
 
 	if waitCallID == 0 {
 		return nil, fmt.Errorf("open process pid %d in container %s: waitCallID is required", pid, c.id)
@@ -189,10 +189,10 @@ func (c *Container) ID() string {
 
 // Modify sends a modify request to the container.
 func (c *Container) Modify(ctx context.Context, config interface{}) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Modify", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::Modify", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	req := prot.ContainerModifySettings{
 		RequestBase: makeRequest(ctx, c.id),
@@ -211,10 +211,10 @@ func (c *Container) SetCPUGroupAffinities(_ context.Context, _ []jobobject.Group
 
 // Properties returns the requested container properties targeting a V1 schema prot.Container.
 func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Properties", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::Properties", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	req := prot.ContainerGetProperties{
 		RequestBase: makeRequest(ctx, c.id),
@@ -230,10 +230,10 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 
 // PropertiesV2 returns the requested container properties targeting a V2 schema container.
 func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::PropertiesV2", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::PropertiesV2", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	req := prot.ContainerGetPropertiesV2{
 		RequestBase: makeRequest(ctx, c.id),
@@ -249,10 +249,10 @@ func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.Propert
 
 // Start starts the container.
 func (c *Container) Start(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Start", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::Start", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	req := makeRequest(ctx, c.id)
 	var resp prot.ResponseBase
@@ -280,10 +280,10 @@ func (c *Container) shutdown(ctx context.Context, proc prot.RPCProc) error {
 // might not be terminated by the time the request completes (and might never
 // terminate).
 func (c *Container) Shutdown(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Shutdown", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::Shutdown", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -294,10 +294,10 @@ func (c *Container) Shutdown(ctx context.Context) (err error) {
 // might not be terminated by the time the request completes (and might never
 // terminate).
 func (c *Container) Terminate(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::Container::Terminate", oc.WithClientSpanKind)
+	ctx, span := ot.StartSpan(ctx, "gcs::Container::Terminate", ot.WithClientSpanKind)
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -320,9 +320,9 @@ func (c *Container) Wait() error {
 }
 
 func (c *Container) waitBackground() {
-	ctx, span := oc.StartSpan(context.Background(), "gcs::Container::waitBackground")
+	ctx, span := ot.StartSpan(context.Background(), "gcs::Container::waitBackground")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	span.SetAttributes(attribute.String("cid", c.id))
 
 	select {
 	case <-c.notifyCh:
@@ -332,5 +332,5 @@ func (c *Container) waitBackground() {
 	close(c.waitBlock)
 
 	log.G(ctx).Debug("container exited")
-	oc.SetSpanStatus(span, c.waitError)
+	ot.SetSpanStatus(span, c.waitError)
 }

@@ -22,7 +22,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
@@ -53,9 +53,9 @@ const (
 // messages are returned and responses are sent back to hcsshim from ListenAndServer().
 // TODO (kiashok): Verbose logging is for WIP and will be removed eventually.
 func (b *Bridge) createContainer(req *request) (err error) {
-	ctx, span := oc.StartSpan(req.ctx, "sidecar::createContainer")
+	ctx, span := ot.StartSpan(req.ctx, "sidecar::createContainer")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// Refuse to create containers once the UVM has been marked inconsistent by a
 	// failed forwarded mount/unmount (cf. LCOW Host.checkState).
@@ -718,9 +718,9 @@ func enforceStdioParams(allowStdio bool, params *hcsschema.ProcessParameters) (b
 }
 
 func (b *Bridge) startContainer(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::startContainer")
+	_, span := ot.StartSpan(req.ctx, "sidecar::startContainer")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// We don't need any enforcement here because the container has already been created and
 	// this request is just to start the container.
@@ -735,9 +735,9 @@ func (b *Bridge) startContainer(req *request) (err error) {
 }
 
 func (b *Bridge) shutdownGraceful(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::shutdownGraceful")
+	_, span := ot.StartSpan(req.ctx, "sidecar::shutdownGraceful")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -754,9 +754,9 @@ func (b *Bridge) shutdownGraceful(req *request) (err error) {
 }
 
 func (b *Bridge) shutdownForced(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::shutdownForced")
+	_, span := ot.StartSpan(req.ctx, "sidecar::shutdownForced")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -768,9 +768,9 @@ func (b *Bridge) shutdownForced(req *request) (err error) {
 }
 
 func (b *Bridge) executeProcess(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::executeProcess")
+	_, span := ot.StartSpan(req.ctx, "sidecar::executeProcess")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerExecuteProcess
 	var processParamSettings json.RawMessage
@@ -954,9 +954,9 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 }
 
 func (b *Bridge) waitForProcess(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::waitForProcess")
+	_, span := ot.StartSpan(req.ctx, "sidecar::waitForProcess")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -968,9 +968,9 @@ func (b *Bridge) waitForProcess(req *request) (err error) {
 }
 
 func (b *Bridge) signalProcess(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::signalProcess")
+	_, span := ot.StartSpan(req.ctx, "sidecar::signalProcess")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerSignalProcess
 	var rawOpts json.RawMessage
@@ -1014,9 +1014,9 @@ func (b *Bridge) signalProcess(req *request) (err error) {
 }
 
 func (b *Bridge) resizeConsole(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::resizeConsole")
+	_, span := ot.StartSpan(req.ctx, "sidecar::resizeConsole")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -1028,9 +1028,9 @@ func (b *Bridge) resizeConsole(req *request) (err error) {
 }
 
 func (b *Bridge) getProperties(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::getProperties")
+	_, span := ot.StartSpan(req.ctx, "sidecar::getProperties")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	if err := b.hostState.securityOptions.PolicyEnforcer.EnforceGetPropertiesPolicy(req.ctx); err != nil {
 		return errors.Wrapf(err, "get properties denied due to policy")
@@ -1047,9 +1047,9 @@ func (b *Bridge) getProperties(req *request) (err error) {
 }
 
 func (b *Bridge) negotiateProtocol(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::negotiateProtocol")
+	_, span := ot.StartSpan(req.ctx, "sidecar::negotiateProtocol")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.NegotiateProtocolRequest
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -1061,9 +1061,9 @@ func (b *Bridge) negotiateProtocol(req *request) (err error) {
 }
 
 func (b *Bridge) dumpStacks(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::dumpStacks")
+	_, span := ot.StartSpan(req.ctx, "sidecar::dumpStacks")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	var r prot.DumpStacksRequest
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -1075,9 +1075,9 @@ func (b *Bridge) dumpStacks(req *request) (err error) {
 }
 
 func (b *Bridge) deleteContainerState(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::deleteContainerState")
+	_, span := ot.StartSpan(req.ctx, "sidecar::deleteContainerState")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// Refuse to delete container state once the UVM has been marked inconsistent
 	// by a failed forwarded mount/unmount (cf. LCOW Host.checkState).
@@ -1115,9 +1115,9 @@ func (b *Bridge) deleteContainerState(req *request) (err error) {
 }
 
 func (b *Bridge) updateContainer(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::updateContainer")
+	_, span := ot.StartSpan(req.ctx, "sidecar::updateContainer")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// No callers in the code for rpcUpdateContainer
 	b.forwardRequestToGcs(req)
@@ -1125,9 +1125,9 @@ func (b *Bridge) updateContainer(req *request) (err error) {
 }
 
 func (b *Bridge) lifecycleNotification(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::lifecycleNotification")
+	_, span := ot.StartSpan(req.ctx, "sidecar::lifecycleNotification")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// No callers in the code for rpcLifecycleNotification
 	b.forwardRequestToGcs(req)
@@ -1135,9 +1135,9 @@ func (b *Bridge) lifecycleNotification(req *request) (err error) {
 }
 
 func (b *Bridge) modifyServiceSettings(req *request) (err error) {
-	_, span := oc.StartSpan(req.ctx, "sidecar::modifyServiceSettings")
+	_, span := ot.StartSpan(req.ctx, "sidecar::modifyServiceSettings")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	// Todo: Add policy enforcement for modifying service settings
 	modifyRequest, err := unmarshalModifyServiceSettings(req)
@@ -1208,9 +1208,9 @@ func volumeGUIDFromLayerPath(path string) (string, bool) {
 }
 
 func (b *Bridge) modifySettings(req *request) (err error) {
-	ctx, span := oc.StartSpan(req.ctx, "sidecar::modifySettings")
+	ctx, span := ot.StartSpan(req.ctx, "sidecar::modifySettings")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	defer func() { ot.SetSpanStatus(span, err) }()
 
 	log.G(ctx).Tracef("modifySettings: MsgType: %v, Payload: %v", req.header.Type, string(req.message))
 	modifyRequest, err := unmarshalContainerModifySettings(req)
