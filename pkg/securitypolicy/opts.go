@@ -129,6 +129,13 @@ func WithAllowRuntimeLogging(allow bool) PolicyConfigOpt {
 	}
 }
 
+func WithAllowHostNetwork(allow bool) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.AllowHostNetwork = allow
+		return nil
+	}
+}
+
 func WithExternalProcesses(processes []ExternalProcessConfig) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.ExternalProcesses = append(config.ExternalProcesses, processes...)

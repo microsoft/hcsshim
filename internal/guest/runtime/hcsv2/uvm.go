@@ -758,6 +758,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 		h.containersMutex.Unlock()
 	}
+	if hostNetwork {
+		if err := h.securityOptions.PolicyEnforcer.EnforceHostNetworkPolicy(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if hostNetwork && settings.OCISpecification.Linux != nil {
 		filtered := settings.OCISpecification.Linux.Namespaces[:0]
 		for _, ns := range settings.OCISpecification.Linux.Namespaces {

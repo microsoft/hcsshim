@@ -157,6 +157,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceGetPropertiesPolicy(ctx context.Context) error
 	EnforceDumpStacksPolicy(ctx context.Context) error
 	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
+	EnforceHostNetworkPolicy(ctx context.Context) error
 	LoadFragment(ctx context.Context, opts LoadFragmentOptions) error
 	LoadTransparencyTrustList(ctx context.Context, opts LoadTransparencyTrustListOptions) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
@@ -349,6 +350,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy(context.Contex
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceHostNetworkPolicy(context.Context) error {
+	return nil
+}
+
 func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return oe.encodedSecurityPolicy
 }
@@ -492,6 +497,10 @@ func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy(context.Context) error {
 	return errors.New("runtime logging is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceHostNetworkPolicy(context.Context) error {
+	return errors.New("host network is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
