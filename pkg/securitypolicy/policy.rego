@@ -29,4 +29,5 @@ load_fragment := data.framework.load_fragment
 scratch_mount := data.framework.scratch_mount
 scratch_unmount := data.framework.scratch_unmount
 load_transparency_trust_list := data.framework.load_transparency_trust_list
+log_provider := data.framework.log_provider
 reason := data.framework.reason

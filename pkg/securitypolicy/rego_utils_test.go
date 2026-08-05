@@ -25,7 +25,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	rpi "github.com/Microsoft/hcsshim/internal/regopolicyinterpreter"
 	"github.com/blang/semver/v4"
-	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -97,7 +96,6 @@ func init() {
 func Test_RegoTemplates(t *testing.T) {
 	query := rego.New(
 		rego.Query("data.api"),
-		rego.SetRegoVersion(ast.RegoV0),
 		rego.Module("api.rego", APICode))
 
 	ctx := context.Background()
@@ -127,7 +125,6 @@ func Test_RegoTemplates(t *testing.T) {
 func verifyPolicyRules(apiVersion string, enforcementPoints map[string]interface{}, policyCode string) error {
 	query := rego.New(
 		rego.Query("data.policy"),
-		rego.SetRegoVersion(ast.RegoV0),
 		rego.Module("policy.rego", policyCode),
 		rego.Module("framework.rego", FrameworkCode),
 	)
@@ -2028,6 +2025,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
+		AllowLogProviderDropping:         constraints.allowLogProviderDropping,
 	}
 }
 
@@ -2289,6 +2287,7 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 		namespace:                        generateFragmentNamespace(testRand),
 		svn:                              generateSVN(testRand),
 		allowCapabilityDropping:          false,
+		allowLogProviderDropping:         false,
 		ctx:                              context.Background(),
 	}
 }
@@ -2953,6 +2952,7 @@ type generatedConstraints struct {
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
+	allowLogProviderDropping         bool
 	ctx                              context.Context
 }
 
@@ -2968,6 +2968,7 @@ type generatedWindowsConstraints struct {
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
+	allowLogProviderDropping         bool
 	ctx                              context.Context
 }
 
@@ -2982,6 +2983,7 @@ func (constraints *generatedWindowsConstraints) toPolicy() *securityPolicyWindow
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
+		AllowLogProviderDropping:         constraints.allowLogProviderDropping,
 	}
 }
 
@@ -3026,6 +3028,7 @@ func generateWindowsConstraints(r *rand.Rand, maxContainers int32) *generatedWin
 		allowEnvironmentVariableDropping: false,
 		allowUnencryptedScratch:          false,
 		allowCapabilityDropping:          false,
+		allowLogProviderDropping:         false,
 		namespace:                        generateFragmentNamespace(r),
 		svn:                              generateSVN(r),
 		ctx:                              context.Background(),
