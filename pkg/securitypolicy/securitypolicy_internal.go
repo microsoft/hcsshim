@@ -392,11 +392,7 @@ func (r WindowsRegistryChanges) toInternal() registryChangesInternal {
 	}
 	deleteKeys := make([]registryKeyInternal, len(r.DeleteKeys))
 	for i, k := range r.DeleteKeys {
-		deleteKeys[i] = registryKeyInternal{
-			Hive:     k.Hive,
-			Name:     k.Name,
-			Volatile: k.Volatile,
-		}
+		deleteKeys[i] = registryKeyInternal(k)
 	}
 	return registryChangesInternal{AddValues: addValues, DeleteKeys: deleteKeys}
 }
