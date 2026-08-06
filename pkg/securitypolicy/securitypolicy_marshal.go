@@ -67,6 +67,7 @@ type OSAwareMarshalFunc func(
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
+	allowRegistryChangesDropping bool,
 ) (string, error)
 
 // osAwareMarshalRego handles both Linux and Windows containers
@@ -83,6 +84,7 @@ func osAwareMarshalRego(
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
+	allowRegistryChangesDropping bool,
 ) (string, error) {
 	if allowAll {
 		if len(linuxContainers) > 0 || len(windowsContainers) > 0 {
@@ -98,7 +100,8 @@ func osAwareMarshalRego(
 		}
 		return marshalRego(allowAll, linuxContainers, externalProcesses, fragments,
 			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
-			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping)
+			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping,
+			allowRegistryChangesDropping)
 
 	case "windows":
 		if len(linuxContainers) > 0 {
@@ -106,7 +109,8 @@ func osAwareMarshalRego(
 		}
 		return marshalWindowsRego(allowAll, windowsContainers, externalProcesses, fragments,
 			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
-			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping)
+			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping,
+			allowRegistryChangesDropping)
 
 	default:
 		return "", fmt.Errorf("unsupported OS type: %s", osType)
@@ -125,6 +129,7 @@ func marshalWindowsRego(
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
+	allowRegistryChangesDropping bool,
 ) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
@@ -149,6 +154,7 @@ func marshalWindowsRego(
 		AllowEnvironmentVariableDropping: allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowCapabilityDropping,
+		AllowRegistryChangesDropping:     allowRegistryChangesDropping,
 	}
 
 	return policy.marshalWindowsRego(), nil
@@ -161,6 +167,7 @@ func marshalJSON(
 	osType string,
 	_ []ExternalProcessConfig,
 	_ []FragmentConfig,
+	_ bool,
 	_ bool,
 	_ bool,
 	_ bool,
@@ -198,6 +205,7 @@ func marshalRego(
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
+	allowRegistryChangesDropping bool,
 ) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
@@ -217,6 +225,7 @@ func marshalRego(
 		allowEnvironmentVariableDropping,
 		allowUnencryptedScratch,
 		allowCapabilityDropping,
+		allowRegistryChangesDropping,
 	)
 	if err != nil {
 		return "", err
@@ -251,6 +260,7 @@ func MarshalPolicy(
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapbilitiesDropping bool,
+	allowRegistryChangesDropping bool,
 ) (string, error) {
 	if marshaller == "" {
 		marshaller = defaultMarshaller
@@ -272,6 +282,7 @@ func MarshalPolicy(
 			allowEnvironmentVariableDropping,
 			allowUnencryptedScratch,
 			allowCapbilitiesDropping,
+			allowRegistryChangesDropping,
 		)
 	}
 }
@@ -416,7 +427,17 @@ func writeCapabilities(builder *strings.Builder, capabilities *capabilitiesInter
 
 func (m mountInternal) marshalRego() string {
 	options := stringArray(m.Options).marshalRego()
-	return fmt.Sprintf(`{"destination": "%s", "options": %s, "source": "%s", "type": "%s"}`, m.Destination, options, m.Source, m.Type)
+	return fmt.Sprintf(`{"destination": "%s", "options": %s, "source": "%s", "type": "%s"}`,
+		escapeRegoString(m.Destination), options, escapeRegoString(m.Source), escapeRegoString(m.Type))
+}
+
+// escapeRegoString escapes a Go string so it is a valid double-quoted Rego
+// string literal. This matters for Windows mount paths, which contain
+// backslashes that would otherwise be interpreted as escape sequences.
+func escapeRegoString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
 }
 
 func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string) {
@@ -426,6 +447,51 @@ func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string
 	}
 
 	writeLine(builder, `%s"mounts": [%s],`, indent, strings.Join(values, ","))
+}
+
+func (k registryKeyInternal) marshalRego() string {
+	return fmt.Sprintf(`{"hive": "%s", "name": "%s", "volatile": %t}`,
+		escapeRegoString(k.Hive), escapeRegoString(k.Name), k.Volatile)
+}
+
+func (v registryValueInternal) marshalRego() string {
+	fields := []string{
+		fmt.Sprintf(`"key": %s`, v.Key.marshalRego()),
+		fmt.Sprintf(`"name": "%s"`, escapeRegoString(v.Name)),
+		fmt.Sprintf(`"type": "%s"`, escapeRegoString(v.Type)),
+	}
+	// Type selects which value field is significant; emit only that one so the
+	// policy value matches the shape registry_value_matches compares against.
+	switch v.Type {
+	case "String", "ExpandedString", "MultiString":
+		fields = append(fields, fmt.Sprintf(`"string_value": "%s"`, escapeRegoString(v.StringValue)))
+	case "DWord":
+		fields = append(fields, fmt.Sprintf(`"dword_value": %d`, v.DWordValue))
+	case "QWord":
+		fields = append(fields, fmt.Sprintf(`"qword_value": %d`, v.QWordValue))
+	case "Binary":
+		fields = append(fields, fmt.Sprintf(`"binary_value": "%s"`, escapeRegoString(v.BinaryValue)))
+	case "CustomType":
+		fields = append(fields, fmt.Sprintf(`"custom_type": %d`, v.CustomType))
+		fields = append(fields, fmt.Sprintf(`"binary_value": "%s"`, escapeRegoString(v.BinaryValue)))
+	case "None":
+		// No value to compare, just key, name and type.
+	}
+	return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
+}
+
+func writeRegistryChanges(builder *strings.Builder, registryChanges registryChangesInternal, indent string) {
+	addValues := make([]string, len(registryChanges.AddValues))
+	for i, value := range registryChanges.AddValues {
+		addValues[i] = value.marshalRego()
+	}
+	deleteKeys := make([]string, len(registryChanges.DeleteKeys))
+	for i, key := range registryChanges.DeleteKeys {
+		deleteKeys[i] = key.marshalRego()
+	}
+
+	writeLine(builder, `%s"registry_changes": {"add_values": [%s], "delete_keys": [%s]},`,
+		indent, strings.Join(addValues, ", "), strings.Join(deleteKeys, ", "))
 }
 
 // Windows-specific marshal functions
@@ -467,10 +533,14 @@ func writeWindowsContainer(builder *strings.Builder, container *securityPolicyWi
 	writeEnvRules(builder, container.EnvRules, indent+indentUsing)
 	writeLayers(builder, container.Layers, indent+indentUsing)
 	writeMountedCim(builder, container.MountedCim, indent+indentUsing)
+	writeMounts(builder, container.Mounts, indent+indentUsing)
+	if len(container.RegistryChanges.AddValues) > 0 || len(container.RegistryChanges.DeleteKeys) > 0 {
+		writeRegistryChanges(builder, container.RegistryChanges, indent+indentUsing)
+	}
 	writeWindowsExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeWindowsSignals(builder, container.Signals, indent+indentUsing)
 	writeWindowsUser(builder, container.User, indent+indentUsing)
-	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, container.WorkingDir)
+	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, escapeRegoString(container.WorkingDir))
 	writeLine(builder, `%s"allow_stdio_access": %t,`, indent+indentUsing, container.AllowStdioAccess)
 	writeLine(builder, "%s},", indent)
 }
@@ -599,6 +669,20 @@ func addFragments(builder *strings.Builder, fragments []*fragment) {
 	writeLine(builder, "]")
 }
 
+func addWindowsMappedDirectories(builder *strings.Builder, rules []WindowsMappedDirectoryRule) {
+	if len(rules) == 0 {
+		return
+	}
+
+	writeLine(builder, "mapped_directories := [")
+
+	for _, rule := range rules {
+		writeLine(builder, `%s{"container_path": %q, "read_only": %t},`, indentUsing, rule.ContainerPath, rule.ReadOnly)
+	}
+
+	writeLine(builder, "]")
+}
+
 func (p securityPolicyInternal) marshalRego() string {
 	builder := new(strings.Builder)
 	addFragments(builder, p.Fragments)
@@ -610,6 +694,7 @@ func (p securityPolicyInternal) marshalRego() string {
 	writeLine(builder, "allow_environment_variable_dropping := %t", p.AllowEnvironmentVariableDropping)
 	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
 	writeLine(builder, "allow_capability_dropping := %t", p.AllowCapabilityDropping)
+	writeLine(builder, "allow_registry_changes_dropping := %t", p.AllowRegistryChangesDropping)
 	result := strings.Replace(policyRegoTemplate, "@@OBJECTS@@", builder.String(), 1)
 	result = strings.Replace(result, "@@API_VERSION@@", apiVersion, 1)
 	result = strings.Replace(result, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)
@@ -629,12 +714,14 @@ func (p securityPolicyWindowsInternal) marshalWindowsRego() string {
 	addFragments(builder, p.Fragments)
 	addWindowsContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
+	addWindowsMappedDirectories(builder, p.MappedDirectories)
 	writeLine(builder, `allow_properties_access := %t`, p.AllowPropertiesAccess)
 	writeLine(builder, `allow_dump_stacks := %t`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %t`, p.AllowRuntimeLogging)
 	writeLine(builder, "allow_environment_variable_dropping := %t", p.AllowEnvironmentVariableDropping)
 	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
 	writeLine(builder, "allow_capability_dropping := %t", p.AllowCapabilityDropping)
+	writeLine(builder, "allow_registry_changes_dropping := %t", p.AllowRegistryChangesDropping)
 	result := strings.Replace(policyRegoTemplate, "@@OBJECTS@@", builder.String(), 1)
 	result = strings.Replace(result, "@@API_VERSION@@", apiVersion, 1)
 	result = strings.Replace(result, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)

@@ -35,6 +35,16 @@ type Bridge struct {
 	pendingMu sync.Mutex
 	pending   map[sequenceID]chan *prot.ContainerExecuteProcessResponse
 
+	// monitoredMu guards monitoredIDs.
+	monitoredMu sync.Mutex
+	// monitoredIDs holds request IDs of forwarded combined-layers /
+	// mapped-directory mount/unmount operations whose inbox GCS response must be
+	// watched. The sidecar forwards those operations rather than performing them,
+	// so it cannot revert the policy state it staged; if the inbox reports a
+	// failure the UVM is failed closed (see monitorInboxResponse and
+	// Host.setUVMInconsistent).
+	monitoredIDs map[sequenceID]struct{}
+
 	hostState *Host
 	// List of handlers for handling different rpc message requests.
 	rpcHandlerList map[prot.RPCProc]HandlerFunc
@@ -81,6 +91,7 @@ func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser, ini
 	hostState := NewHost(initialEnforcer, logWriter)
 	return &Bridge{
 		pending:        make(map[sequenceID]chan *prot.ContainerExecuteProcessResponse),
+		monitoredIDs:   make(map[sequenceID]struct{}),
 		rpcHandlerList: make(map[prot.RPCProc]HandlerFunc),
 		hostState:      hostState,
 		shimConn:       shimConn,
@@ -218,6 +229,36 @@ func isLocalDisconnectError(err error) bool {
 // Sends request to the inbox GCS channel
 func (b *Bridge) forwardRequestToGcs(req *request) {
 	b.sendToGCSCh <- *req
+}
+
+// monitorInboxResponse records that the inbox GCS response for the given
+// request ID must be watched. It is used for forwarded combined-layers and
+// mapped-directory mount/unmount operations, whose real work happens in the
+// inbox GCS: because the sidecar cannot revert the policy state it staged for
+// them, a failure response fails the UVM closed instead (see the receive loop
+// and Host.setUVMInconsistent).
+func (b *Bridge) monitorInboxResponse(id sequenceID) {
+	b.monitoredMu.Lock()
+	b.monitoredIDs[id] = struct{}{}
+	b.monitoredMu.Unlock()
+}
+
+// responseFailure returns a non-nil error if the inbox GCS response message
+// reports the operation failed (non-zero HResult). A response that cannot be
+// parsed is treated as success (nil) so a malformed message does not by itself
+// fail the UVM closed.
+func responseFailure(message []byte) error {
+	var base prot.ResponseBase
+	if err := json.Unmarshal(message, &base); err != nil {
+		return nil
+	}
+	if base.Result != 0 {
+		if base.ErrorMessage != "" {
+			return errors.New(base.ErrorMessage)
+		}
+		return fmt.Errorf("inbox GCS returned HResult 0x%x", uint32(base.Result))
+	}
+	return nil
 }
 
 func getContextAndSpan(baseSpanCtx prot.Otelspancontext) (context.Context, trace.Span) {
@@ -445,6 +486,43 @@ func (b *Bridge) ListenAndServeShimRequests() error {
 						ch <- &procResp
 					}
 					b.pendingMu.Unlock()
+				}
+
+				// If this is a container-exit notification, mark the container
+				// terminated so a later combined-layers unmount isn't blocked as
+				// in-use.
+				const MsgNotifyContainer prot.MsgType = prot.MsgTypeNotify | prot.ComputeSystem | prot.NotifyContainer
+
+				if header.Type == MsgNotifyContainer {
+					var ntf prot.ContainerNotification
+					ntf.ResultInfo.Value = &json.RawMessage{}
+					if uerr := json.Unmarshal(message, &ntf); uerr != nil {
+						log.G(ctx).WithError(uerr).Error("failed to unmarshal container notification")
+					} else if c, cerr := b.hostState.GetCreatedContainer(ctx, ntf.ContainerID); cerr == nil {
+						// A not-found error just means the notification is for
+						// something we don't track (the UVM itself, or a container
+						// already deleted).
+						c.terminated.Store(true)
+					}
+				}
+
+				// If this response correlates to a forwarded mount/unmount
+				// operation we are monitoring (combined-layers or mapped
+				// directory) and it reports a failure, the sidecar's policy state
+				// may now be out of sync with what is actually mounted. Since we
+				// forwarded rather than performed the operation, we cannot safely
+				// revert; fail the UVM closed instead so no further container or
+				// mount operations proceed on possibly-desynced state.
+				b.monitoredMu.Lock()
+				_, monitored := b.monitoredIDs[header.ID]
+				if monitored {
+					delete(b.monitoredIDs, header.ID)
+				}
+				b.monitoredMu.Unlock()
+				if monitored {
+					if respErr := responseFailure(message); respErr != nil {
+						b.hostState.setUVMInconsistent(fmt.Errorf("forwarded mount/unmount operation (request %d) failed in inbox GCS: %w", header.ID, respErr))
+					}
 				}
 
 				// Forward to shim
