@@ -738,10 +738,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Process.Capabilities = capsToKeep
 	}
 
-	// The security-context dir must always be written; it must not be gated by
-	// a host-controlled annotation.
-	if _, err := h.securityOptions.WriteSecurityContextDir(settings.OCISpecification); err != nil {
-		return nil, fmt.Errorf("failed to write security context dir: %w", err)
+	if h.HasSecurityPolicy() {
+		// The security-context dir must always be written for confidential containers;
+		// it must not be gated by a host-controlled annotation.
+		if _, err := h.securityOptions.WriteSecurityContextDir(settings.OCISpecification); err != nil {
+			return nil, fmt.Errorf("failed to write security context dir: %w", err)
+		}
 	}
 
 	// Create the BundlePath
