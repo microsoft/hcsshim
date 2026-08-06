@@ -27,4 +27,5 @@ enforcement_points := {
     "scratch_mount": {"introducedVersion": "0.10.0", "default_results": {"allowed": true}, "use_framework": false},
     "scratch_unmount": {"introducedVersion": "0.10.0", "default_results": {"allowed": true}, "use_framework": false},
     "load_transparency_trust_list": {"introducedVersion": "0.12.0", "default_results": {"allowed": false}, "use_framework": false},
+    "host_network": {"introducedVersion": "0.12.0", "default_results": {"allowed": false}, "use_framework": false},
 }

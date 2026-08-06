@@ -1124,6 +1124,12 @@ func (policy *regoEnforcer) EnforceRuntimeLoggingPolicy(ctx context.Context) err
 	return err
 }
 
+func (policy *regoEnforcer) EnforceHostNetworkPolicy(ctx context.Context) error {
+	input := make(inputData)
+	_, err := policy.enforce(ctx, "host_network", input)
+	return err
+}
+
 // Rego identifier is a letter or underscore, followed by any number of letters,
 // underscores, or digits.  See open-policy-agent/opa
 // ast/internal/scanner/scanner.go :: scanIdentifier, isLetter

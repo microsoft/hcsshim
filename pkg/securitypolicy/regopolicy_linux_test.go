@@ -79,6 +79,7 @@ func Test_MarshalRego_Policy(t *testing.T) {
 			p.allowGetProperties,
 			p.allowDumpStacks,
 			p.allowRuntimeLogging,
+			p.allowHostNetwork,
 			p.allowEnvironmentVariableDropping,
 			p.allowUnencryptedScratch,
 			p.allowCapabilityDropping,
@@ -4165,6 +4166,36 @@ func Test_EnforceRuntimeLogging_Not_Allowed(t *testing.T) {
 	}
 
 	err = tc.policy.EnforceRuntimeLoggingPolicy(gc.ctx)
+	if err == nil {
+		t.Fatalf("Policy enforcement unexpectedly was allowed")
+	}
+}
+
+func Test_EnforceHostNetwork_Allowed(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+	gc.allowHostNetwork = true
+
+	tc, err := setupRegoPolicyOnlyTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforceHostNetworkPolicy(gc.ctx)
+	if err != nil {
+		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
+	}
+}
+
+func Test_EnforceHostNetwork_Not_Allowed(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+	gc.allowHostNetwork = false
+
+	tc, err := setupRegoPolicyOnlyTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforceHostNetworkPolicy(gc.ctx)
 	if err == nil {
 		t.Fatalf("Policy enforcement unexpectedly was allowed")
 	}

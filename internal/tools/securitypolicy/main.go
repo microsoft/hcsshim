@@ -65,6 +65,7 @@ func main() {
 				config.AllowPropertiesAccess,
 				config.AllowDumpStacks,
 				config.AllowRuntimeLogging,
+				config.AllowHostNetwork,
 				config.AllowEnvironmentVariableDropping,
 				config.AllowUnencryptedScratch,
 				config.AllowCapabilityDropping,

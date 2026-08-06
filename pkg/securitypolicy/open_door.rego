@@ -26,3 +26,4 @@ load_fragment := {"allowed": true}
 scratch_mount := {"allowed": true}
 scratch_unmount := {"allowed": true}
 load_transparency_trust_list := {"allowed": true}
+host_network := {"allowed": true}
