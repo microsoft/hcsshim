@@ -90,7 +90,11 @@ The delete command will be executed in the container's bundle as its cwd.
 			} else {
 				ch := make(chan error, 1)
 				go func() { ch <- sys.Wait() }()
-				t := time.NewTimer(time.Second * 30)
+				// Same bound as the normal teardown path in [hcsTask.close]:
+				// this waits on the same host-side work, and it runs precisely
+				// when the shim died with a container still going down, so a
+				// filesystem-heavy container is if anything more likely here.
+				t := time.NewTimer(tearDownTimeout)
 				select {
 				case <-t.C:
 					sys.Close()

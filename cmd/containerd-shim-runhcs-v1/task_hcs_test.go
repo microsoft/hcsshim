@@ -550,3 +550,72 @@ func Test_hcsTask_updateWCOWContainerCPUAffinity_XenonNotImplemented(t *testing.
 		t.Fatalf("expected ErrNotImplemented for hypervisor-isolated container, got %v", err)
 	}
 }
+
+func Test_resolveTeardownTimeouts(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		tearDownRaw  string
+		taskCloseRaw string
+		tearDown     time.Duration
+		taskClose    time.Duration
+	}{
+		{
+			name:      "unset keeps the historical defaults",
+			tearDown:  30 * time.Second,
+			taskClose: 30 * time.Second,
+		},
+		{
+			name:        "raising teardown derives a task close that covers it",
+			tearDownRaw: "45m",
+			tearDown:    45 * time.Minute,
+			taskClose:   2*45*time.Minute + 30*time.Second,
+		},
+		{
+			name:         "explicit task close wins over the derived value",
+			tearDownRaw:  "45m",
+			taskCloseRaw: "100m",
+			tearDown:     45 * time.Minute,
+			taskClose:    100 * time.Minute,
+		},
+		{
+			name:         "task close alone is honoured",
+			taskCloseRaw: "5m",
+			tearDown:     30 * time.Second,
+			taskClose:    5 * time.Minute,
+		},
+		{
+			name:        "lowering teardown does not derive",
+			tearDownRaw: "10s",
+			tearDown:    10 * time.Second,
+			taskClose:   30 * time.Second,
+		},
+		{
+			name:         "malformed and negative values fall back",
+			tearDownRaw:  "soon",
+			taskCloseRaw: "-5m",
+			tearDown:     30 * time.Second,
+			taskClose:    30 * time.Second,
+		},
+		{
+			name:        "zero is not a positive duration",
+			tearDownRaw: "0s",
+			tearDown:    30 * time.Second,
+			taskClose:   30 * time.Second,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tearDown, taskClose := resolveTeardownTimeouts(tc.tearDownRaw, tc.taskCloseRaw)
+			if tearDown != tc.tearDown {
+				t.Errorf("tearDown: expected %v, got %v", tc.tearDown, tearDown)
+			}
+			if taskClose != tc.taskClose {
+				t.Errorf("taskClose: expected %v, got %v", tc.taskClose, taskClose)
+			}
+			// The invariant the derivation exists to protect: DeleteExec must
+			// not give up while close() may still be making progress.
+			if tc.taskCloseRaw == "" && taskClose <= 2*tearDown && tearDown > defaultTearDownTimeout {
+				t.Errorf("derived taskClose %v does not cover close()'s worst case of 2*%v", taskClose, tearDown)
+			}
+		})
+	}
+}
