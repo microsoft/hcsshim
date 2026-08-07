@@ -16,6 +16,7 @@ type securityPolicyInternal struct {
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
+	AllowHostNetwork                 bool
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
@@ -30,6 +31,7 @@ type securityPolicyWindowsInternal struct {
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
+	AllowHostNetwork                 bool
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
@@ -96,6 +98,7 @@ func newSecurityPolicyInternal(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowDropEnvironmentVariables bool,
 	allowUnencryptedScratch bool,
 	allowDropCapabilities bool,
@@ -113,6 +116,7 @@ func newSecurityPolicyInternal(
 		AllowPropertiesAccess:            allowPropertiesAccess,
 		AllowDumpStacks:                  allowDumpStacks,
 		AllowRuntimeLogging:              allowRuntimeLogging,
+		AllowHostNetwork:                 allowHostNetwork,
 		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowDropCapabilities,

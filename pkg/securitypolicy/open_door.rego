@@ -27,3 +27,4 @@ scratch_mount := {"allowed": true}
 scratch_unmount := {"allowed": true}
 log_provider := {"allowed": true}
 load_transparency_trust_list := {"allowed": true}
+host_network := {"allowed": true}

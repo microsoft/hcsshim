@@ -8,11 +8,16 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -20,6 +25,45 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/sirupsen/logrus"
 )
+
+func TestCreateSandboxMountSourceDirs(t *testing.T) {
+	testRoot := filepath.Join(guestpath.WCOWSandboxMountPath, filepath.Base(t.TempDir()))
+	if err := os.MkdirAll(testRoot, 0755); err != nil {
+		t.Fatalf("failed to create test root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(testRoot) })
+
+	existingFile := filepath.Join(testRoot, "existing-file")
+	if err := os.WriteFile(existingFile, nil, 0644); err != nil {
+		t.Fatalf("failed to create existing source file: %v", err)
+	}
+
+	createdDir := filepath.Join(strings.ToLower(testRoot), "created", "nested")
+	outsideDir := filepath.Join(t.TempDir(), "outside")
+	mappedDirectories := []hcsschema.MappedDirectory{
+		{HostPath: createdDir},
+		{HostPath: existingFile},
+		{HostPath: outsideDir},
+	}
+
+	if err := createSandboxMountSourceDirs(context.Background(), mappedDirectories); err != nil {
+		t.Fatalf("createSandboxMountSourceDirs returned error: %v", err)
+	}
+
+	if info, err := os.Stat(createdDir); err != nil {
+		t.Fatalf("failed to stat created sandbox directory: %v", err)
+	} else if !info.IsDir() {
+		t.Fatalf("sandbox source %q is not a directory", createdDir)
+	}
+	if info, err := os.Stat(existingFile); err != nil {
+		t.Fatalf("failed to stat existing sandbox source file: %v", err)
+	} else if info.IsDir() {
+		t.Fatalf("existing sandbox source file %q was replaced by a directory", existingFile)
+	}
+	if _, err := os.Stat(outsideDir); !os.IsNotExist(err) {
+		t.Fatalf("outside source %q was created or returned unexpected error: %v", outsideDir, err)
+	}
+}
 
 // buildModifySettingsRequest creates a serialized ModifySettings request message
 // for the given resource type and settings.

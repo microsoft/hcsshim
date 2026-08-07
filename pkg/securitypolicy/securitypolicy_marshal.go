@@ -64,6 +64,7 @@ type OSAwareMarshalFunc func(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
@@ -81,6 +82,7 @@ func osAwareMarshalRego(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
@@ -99,7 +101,7 @@ func osAwareMarshalRego(
 			return "", fmt.Errorf("cannot marshal Windows containers on Linux OS")
 		}
 		return marshalRego(allowAll, linuxContainers, externalProcesses, fragments,
-			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
+			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging, allowHostNetwork,
 			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping,
 			allowLogProviderDropping)
 
@@ -108,7 +110,7 @@ func osAwareMarshalRego(
 			return "", fmt.Errorf("cannot marshal Linux containers on Windows OS")
 		}
 		return marshalWindowsRego(allowAll, windowsContainers, externalProcesses, fragments,
-			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
+			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging, allowHostNetwork,
 			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping,
 			allowLogProviderDropping)
 
@@ -126,6 +128,7 @@ func marshalWindowsRego(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
@@ -151,6 +154,7 @@ func marshalWindowsRego(
 		AllowPropertiesAccess:            allowPropertiesAccess,
 		AllowDumpStacks:                  allowDumpStacks,
 		AllowRuntimeLogging:              allowRuntimeLogging,
+		AllowHostNetwork:                 allowHostNetwork,
 		AllowEnvironmentVariableDropping: allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowCapabilityDropping,
@@ -167,6 +171,7 @@ func marshalJSON(
 	osType string,
 	_ []ExternalProcessConfig,
 	_ []FragmentConfig,
+	_ bool,
 	_ bool,
 	_ bool,
 	_ bool,
@@ -202,6 +207,7 @@ func marshalRego(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
@@ -222,6 +228,7 @@ func marshalRego(
 		allowPropertiesAccess,
 		allowDumpStacks,
 		allowRuntimeLogging,
+		allowHostNetwork,
 		allowEnvironmentVariableDropping,
 		allowUnencryptedScratch,
 		allowCapabilityDropping,
@@ -257,6 +264,7 @@ func MarshalPolicy(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapbilitiesDropping bool,
@@ -279,6 +287,7 @@ func MarshalPolicy(
 			allowPropertiesAccess,
 			allowDumpStacks,
 			allowRuntimeLogging,
+			allowHostNetwork,
 			allowEnvironmentVariableDropping,
 			allowUnencryptedScratch,
 			allowCapbilitiesDropping,
@@ -618,6 +627,7 @@ func (p securityPolicyInternal) marshalRego() string {
 	writeLine(builder, `allow_properties_access := %t`, p.AllowPropertiesAccess)
 	writeLine(builder, `allow_dump_stacks := %t`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %t`, p.AllowRuntimeLogging)
+	writeLine(builder, `allow_host_network := %t`, p.AllowHostNetwork)
 	writeLine(builder, "allow_environment_variable_dropping := %t", p.AllowEnvironmentVariableDropping)
 	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
 	writeLine(builder, "allow_capability_dropping := %t", p.AllowCapabilityDropping)
@@ -644,6 +654,7 @@ func (p securityPolicyWindowsInternal) marshalWindowsRego() string {
 	writeLine(builder, `allow_properties_access := %t`, p.AllowPropertiesAccess)
 	writeLine(builder, `allow_dump_stacks := %t`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %t`, p.AllowRuntimeLogging)
+	writeLine(builder, `allow_host_network := %t`, p.AllowHostNetwork)
 	writeLine(builder, "allow_environment_variable_dropping := %t", p.AllowEnvironmentVariableDropping)
 	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
 	writeLine(builder, "allow_capability_dropping := %t", p.AllowCapabilityDropping)

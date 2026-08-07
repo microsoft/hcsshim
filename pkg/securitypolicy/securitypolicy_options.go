@@ -32,7 +32,13 @@ type SecurityOptions struct {
 	UvmReferenceInfo             string
 	UvmHashEnvelopeReferenceInfo string
 	policyMutex                  sync.Mutex
-	logWriter                    io.Writer
+
+	// Used for both tcbReferenceInfo and platformReferenceInfo
+	platformReferenceInfoMutex sync.RWMutex
+	tcbReferenceInfo           []byte
+	platformReferenceInfo      []byte
+
+	logWriter io.Writer
 }
 
 func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, uvmHashEnvelopeReferenceInfo string, logWriter io.Writer) *SecurityOptions {
@@ -114,6 +120,12 @@ const (
 	mediaTypeFragment = "application/cose-x509+rego"
 	// mediaTypeTransparencyTrustList is a signed Transparency Trust List (TTL).
 	mediaTypeTransparencyTrustList = "application/vnd.transparency-trust-list.v1+cose"
+	// mediaTypeTCBReferenceInfo is a TCB reference information COSE blob made
+	// available to subsequently created containers.
+	mediaTypeTCBReferenceInfo = "application/vnd.tcb-reference-info.v1+cose"
+	// mediaTypePlatformReferenceInfo is a platform reference information COSE
+	// blob made available to subsequently created containers.
+	mediaTypePlatformReferenceInfo = "application/vnd.platform-reference-info.v1+cose"
 )
 
 // asInt64 coerces a CBOR-decoded integer value (which may be returned as
@@ -163,7 +175,7 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		mediaType = mediaTypeFragment
 	}
 	switch mediaType {
-	case mediaTypeFragment, mediaTypeTransparencyTrustList:
+	case mediaTypeFragment, mediaTypeTransparencyTrustList, mediaTypeTCBReferenceInfo, mediaTypePlatformReferenceInfo:
 	default:
 		// The host (azcri) only ever injects blobs whose media type it knows
 		// we handle, so receiving an unrecognized one means either a host bug
@@ -189,6 +201,17 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 	unpacked, err := cosesign1.UnpackAndValidateCOSE1CertChain(raw)
 	if err != nil {
 		return fmt.Errorf("InjectFragment failed COSE validation: %w", err)
+	}
+	// We do not need to validate this.
+	if mediaType == mediaTypeTCBReferenceInfo || mediaType == mediaTypePlatformReferenceInfo {
+		s.platformReferenceInfoMutex.Lock()
+		if mediaType == mediaTypeTCBReferenceInfo {
+			s.tcbReferenceInfo = append(s.tcbReferenceInfo[:0], raw...)
+		} else {
+			s.platformReferenceInfo = append(s.platformReferenceInfo[:0], raw...)
+		}
+		s.platformReferenceInfoMutex.Unlock()
+		return nil
 	}
 
 	cwtClaimsRaw, hasCwtClaims := unpacked.Protected[cosesign1.COSE_Header_CWTClaims]
@@ -338,8 +361,17 @@ func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) 
 // because there was nothing to write.
 func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, error) {
 	encodedPolicy := s.PolicyEnforcer.EncodedSecurityPolicy()
+	s.platformReferenceInfoMutex.RLock()
+	var tcbReferenceInfoBase64, platformReferenceInfoBase64 string
+	if len(s.tcbReferenceInfo) > 0 {
+		tcbReferenceInfoBase64 = base64.StdEncoding.EncodeToString(s.tcbReferenceInfo)
+	}
+	if len(s.platformReferenceInfo) > 0 {
+		platformReferenceInfoBase64 = base64.StdEncoding.EncodeToString(s.platformReferenceInfo)
+	}
+	s.platformReferenceInfoMutex.RUnlock()
 	hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
-	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 {
+	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 || len(tcbReferenceInfoBase64) > 0 || len(platformReferenceInfoBase64) > 0 {
 		// Use os.MkdirTemp to make sure that the directory is unique.
 		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
 		if err != nil {
@@ -363,6 +395,16 @@ func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, err
 		if len(s.UvmHashEnvelopeReferenceInfo) > 0 {
 			if err := writeFileInDir(securityContextDir, HashEnvelopeReferenceInfoFilename, []byte(s.UvmHashEnvelopeReferenceInfo), 0777); err != nil {
 				return "", fmt.Errorf("failed to write UVM hash envelope reference info: %w", err)
+			}
+		}
+		if len(tcbReferenceInfoBase64) > 0 {
+			if err := writeFileInDir(securityContextDir, TCBReferenceInfoFilename, []byte(tcbReferenceInfoBase64), 0777); err != nil {
+				return "", fmt.Errorf("failed to write TCB reference info: %w", err)
+			}
+		}
+		if len(platformReferenceInfoBase64) > 0 {
+			if err := writeFileInDir(securityContextDir, PlatformReferenceInfoFilename, []byte(platformReferenceInfoBase64), 0777); err != nil {
+				return "", fmt.Errorf("failed to write platform reference info: %w", err)
 			}
 		}
 

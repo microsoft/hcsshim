@@ -1207,6 +1207,12 @@ runtime_logging := {"allowed": true} {
     allow_runtime_logging
 }
 
+default host_network := {"allowed": false}
+
+host_network := {"allowed": true} {
+    allow_host_network
+}
+
 # Helpers to get data from the fragment that is currently being loaded.  Since
 # input.namespace is the package name the fragment loaded as,
 # data[input.namespace] can be used to access the fragment.  This is only valid
@@ -2946,6 +2952,7 @@ allow_runtime_logging := data.policy.allow_runtime_logging
 allow_environment_variable_dropping := data.policy.allow_environment_variable_dropping
 allow_unencrypted_scratch := data.policy.allow_unencrypted_scratch
 allow_log_provider_dropping := data.policy.allow_log_provider_dropping
+allow_host_network := data.policy.allow_host_network
 
 # all flags not in the base set need to have default logic applied
 

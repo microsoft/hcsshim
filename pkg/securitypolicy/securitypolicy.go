@@ -52,6 +52,8 @@ const (
 	HostAMDCertFilename               = "host-amd-cert-base64"
 	ReferenceInfoFilename             = "reference-info-base64"
 	HashEnvelopeReferenceInfoFilename = "transparent-reference-info-base64"
+	TCBReferenceInfoFilename          = "tcb-reference-info-base64"
+	PlatformReferenceInfoFilename     = "platform-reference-info-base64"
 )
 
 // PolicyConfig contains toml or JSON config for security policy.
@@ -63,6 +65,7 @@ type PolicyConfig struct {
 	AllowPropertiesAccess            bool                    `json:"allow_properties_access" toml:"allow_properties_access"`
 	AllowDumpStacks                  bool                    `json:"allow_dump_stacks" toml:"allow_dump_stacks"`
 	AllowRuntimeLogging              bool                    `json:"allow_runtime_logging" toml:"allow_runtime_logging"`
+	AllowHostNetwork                 bool                    `json:"allow_hostnetwork" toml:"allow_hostnetwork"`
 	AllowEnvironmentVariableDropping bool                    `json:"allow_environment_variable_dropping" toml:"allow_environment_variable_dropping"`
 	// AllowUnencryptedScratch is a global policy configuration that allows
 	// all containers within a pod to be run without scratch encryption.

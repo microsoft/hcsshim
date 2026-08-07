@@ -2025,6 +2025,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 		AllowPropertiesAccess:            constraints.allowGetProperties,
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,
+		AllowHostNetwork:                 constraints.allowHostNetwork,
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
@@ -2285,6 +2286,7 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 		allowGetProperties:               randBool(r),
 		allowDumpStacks:                  randBool(r),
 		allowRuntimeLogging:              false,
+		allowHostNetwork:                 randBool(r),
 		allowEnvironmentVariableDropping: false,
 		allowUnencryptedScratch:          randBool(r),
 		namespace:                        generateFragmentNamespace(testRand),
@@ -2950,6 +2952,7 @@ type generatedConstraints struct {
 	allowGetProperties               bool
 	allowDumpStacks                  bool
 	allowRuntimeLogging              bool
+	allowHostNetwork                 bool
 	allowEnvironmentVariableDropping bool
 	allowUnencryptedScratch          bool
 	namespace                        string
@@ -2966,6 +2969,7 @@ type generatedWindowsConstraints struct {
 	allowGetProperties               bool
 	allowDumpStacks                  bool
 	allowRuntimeLogging              bool
+	allowHostNetwork                 bool
 	allowEnvironmentVariableDropping bool
 	allowUnencryptedScratch          bool
 	namespace                        string
@@ -2983,6 +2987,7 @@ func (constraints *generatedWindowsConstraints) toPolicy() *securityPolicyWindow
 		AllowPropertiesAccess:            constraints.allowGetProperties,
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,
+		AllowHostNetwork:                 constraints.allowHostNetwork,
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
@@ -3028,6 +3033,7 @@ func generateWindowsConstraints(r *rand.Rand, maxContainers int32) *generatedWin
 		allowGetProperties:               randBool(r),
 		allowDumpStacks:                  randBool(r),
 		allowRuntimeLogging:              false,
+		allowHostNetwork:                 randBool(r),
 		allowEnvironmentVariableDropping: false,
 		allowUnencryptedScratch:          false,
 		allowCapabilityDropping:          false,
