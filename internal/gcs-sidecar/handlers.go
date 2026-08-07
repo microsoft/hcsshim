@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/fsformatter"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	oci "github.com/Microsoft/hcsshim/internal/oci"
@@ -135,6 +136,15 @@ func (b *Bridge) createContainer(req *request) (err error) {
 
 		if err != nil {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
+
+		// Create the source directory for each mapped directory if it does not
+		// already exist. In non-confidential WCOW the host does this for
+		// sandbox:// mounts by exec'ing `cmd /c mkdir ... & dir ...` inside the
+		// UVM (see resources_wcow.go:setupMounts), but for confidential, we
+		// handle this here in the sidecar GCS.
+		if err := createSandboxMountSourceDirs(ctx, container.MappedDirectories); err != nil {
+			return fmt.Errorf("failed to create mapped directory source directories: %w", err)
 		}
 
 		commandLine := len(spec.Process.Args) > 0
@@ -260,6 +270,32 @@ func stageDLL(ctx context.Context, srcPath, dstDir string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// createSandboxMountSourceDirs creates source directories for sandbox
+// mounts if they do not already exist.
+func createSandboxMountSourceDirs(ctx context.Context, mappedDirectories []hcsschema.MappedDirectory) error {
+	for _, md := range mappedDirectories {
+		source := md.HostPath
+		if strings.EqualFold(source, guestpath.WCOWSandboxMountPath) ||
+			strings.HasPrefix(strings.ToLower(source), strings.ToLower(guestpath.WCOWSandboxMountPath+`\`)) {
+
+			// do this stat rather than call MkdirAll unconditionally,
+			// since the latter will fail with a source file (not dir)
+			if _, err := os.Stat(source); err == nil {
+				log.G(ctx).WithField("source", source).Debug("source of mapped directory mount exists, not creating directories")
+				continue
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to stat mapped directory source %q: %w", source, err)
+			}
+
+			if err := os.MkdirAll(source, 0755); err != nil {
+				return fmt.Errorf("failed to create mapped directory source %q: %w", source, err)
+			}
+			log.G(ctx).WithField("source", source).Debug("created mapped directory source directory")
+		}
+	}
+	return nil
 }
 
 // processParamEnvToOCIEnv converts an Environment field from ProcessParameters
