@@ -28,6 +28,7 @@ runtime_logging := data.framework.runtime_logging
 load_fragment := data.framework.load_fragment
 scratch_mount := data.framework.scratch_mount
 scratch_unmount := data.framework.scratch_unmount
+log_provider := data.framework.log_provider
 load_transparency_trust_list := data.framework.load_transparency_trust_list
 host_network := data.framework.host_network
 reason := data.framework.reason
