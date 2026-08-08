@@ -31,6 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
+	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ot"
@@ -477,6 +478,12 @@ func main() {
 		}
 
 		logrus.Info("bridge connected, serving")
+
+		// A reconnected control bridge invalidates each relay's independent stdio
+		// vsock connections; nothing on the host re-establishes those. Unguarded on
+		// the first connect: relays are only created by bridge RPCs, so none exist
+		// yet and the notification is a no-op.
+		stdio.NotifyBridgeReconnected()
 
 		serveErr := b.ListenAndServe(bridgeIn, bridgeOut)
 

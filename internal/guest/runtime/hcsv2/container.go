@@ -127,23 +127,35 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 		return -1, err
 	}
 
+	var (
+		ttyr *stdio.TtyRelay
+		pr   *stdio.PipeRelay
+	)
 	if c.initProcess.spec.Terminal {
-		ttyr := c.container.Tty()
+		ttyr = c.container.Tty()
 		ttyr.ReplaceConnectionSet(stdioSet)
-		ttyr.Start()
 	} else {
-		pr := c.container.PipeRelay()
+		pr = c.container.PipeRelay()
 		pr.ReplaceConnectionSet(stdioSet)
 		pr.CloseUnusedPipes()
-		pr.Start()
 	}
 	err = c.container.Start()
 	if err != nil {
-		stdioSet.Close()
-	} else {
-		c.setStatus(containerRunning)
+		// The relay was never started, so Wait tears it down synchronously.
+		if ttyr != nil {
+			ttyr.Wait()
+		} else {
+			pr.Wait()
+		}
+		return int(c.initProcess.pid), err
 	}
-	return int(c.initProcess.pid), err
+	if ttyr != nil {
+		ttyr.Start()
+	} else {
+		pr.Start()
+	}
+	c.setStatus(containerRunning)
+	return int(c.initProcess.pid), nil
 }
 
 func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {

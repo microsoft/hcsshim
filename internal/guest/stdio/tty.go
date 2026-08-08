@@ -47,21 +47,42 @@ func ResizeConsole(pty *os.File, height, width uint16) error {
 		y      uint16
 	}
 
-	return ioctl(pty.Fd(), uintptr(unix.TIOCSWINSZ), uintptr(unsafe.Pointer(&consoleSize{Height: height, Width: width})))
+	return ioctlFile(pty, uintptr(unix.TIOCSWINSZ), unsafe.Pointer(&consoleSize{Height: height, Width: width}))
 }
 
-func ioctl(fd uintptr, flag, data uintptr) error {
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, fd, flag, data); err != 0 {
+// ioctlFile issues an ioctl on f without calling f.Fd().
+//
+// Fd puts the file back into blocking mode and removes it from the runtime
+// poller for good, after which SetReadDeadline silently succeeds and does
+// nothing. TtyRelay relies on a read deadline to interrupt a copier parked on
+// the pty master when the host connections die during a live migration, so a
+// single Fd call anywhere on the master would leave that relay wedged.
+// SyscallConn keeps the registration intact.
+//
+// data stays an unsafe.Pointer up to the Syscall so the conversion happens in
+// the call expression itself, which is what keeps the referent alive for the
+// duration of the syscall.
+func ioctlFile(f *os.File, flag uintptr, data unsafe.Pointer) error {
+	rc, err := f.SyscallConn()
+	if err != nil {
 		return err
 	}
-	return nil
+	var ioerr error
+	if cerr := rc.Control(func(fd uintptr) {
+		if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, flag, uintptr(data)); errno != 0 {
+			ioerr = errno
+		}
+	}); cerr != nil {
+		return cerr
+	}
+	return ioerr
 }
 
 // ptsname is a Go wrapper around the ptsname system call. It returns the name
 // of the slave pseudoterminal device corresponding to the given master.
 func ptsname(f *os.File) (string, error) {
 	var n int32
-	if err := ioctl(f.Fd(), syscall.TIOCGPTN, uintptr(unsafe.Pointer(&n))); err != nil {
+	if err := ioctlFile(f, syscall.TIOCGPTN, unsafe.Pointer(&n)); err != nil {
 		return "", errors.Wrap(err, "ioctl TIOCGPTN failed for ptsname")
 	}
 	return fmt.Sprintf("/dev/pts/%d", n), nil
@@ -71,7 +92,7 @@ func ptsname(f *os.File) (string, error) {
 // slave pseudoterminal device corresponding to the given master.
 func unlockpt(f *os.File) error {
 	var u int32
-	if err := ioctl(f.Fd(), syscall.TIOCSPTLCK, uintptr(unsafe.Pointer(&u))); err != nil {
+	if err := ioctlFile(f, syscall.TIOCSPTLCK, unsafe.Pointer(&u)); err != nil {
 		return errors.Wrap(err, "ioctl TIOCSPTLCK failed for unlockpt")
 	}
 	return nil

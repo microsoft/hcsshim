@@ -19,7 +19,9 @@ type ConnectionSettings struct {
 
 // Connect returns new transport.Connection instances, one for each stdio pipe
 // to be used. If CreateStd*Pipe for a given pipe is false, the given Connection
-// is set to nil.
+// is set to nil. The returned set carries a redial closure so the stdio relays
+// can re-establish the connections over the same vsock ports and pause and
+// resume the process stdio across a live-migration bridge drop.
 func Connect(tport transport.Transport, settings ConnectionSettings) (_ *ConnectionSet, err error) {
 	connSet := &ConnectionSet{}
 	defer func() {
@@ -47,6 +49,12 @@ func Connect(tport transport.Transport, settings ConnectionSettings) (_ *Connect
 			return nil, errors.Wrap(err, "failed creating stderr Connection")
 		}
 		connSet.Err = transport.NewLogConnection(c, *settings.StdErr)
+	}
+	// redial re-establishes a fresh ConnectionSet over the same vsock ports
+	// after a bridge drop, so the stdio relays can pause and resume across a
+	// live migration instead of tearing the process stdio down.
+	connSet.redial = func() (*ConnectionSet, error) {
+		return Connect(tport, settings)
 	}
 	return connSet, nil
 }

@@ -89,6 +89,16 @@ func (*runcRuntime) getMasterFromSocket(listener *net.UnixListener) (master *os.
 	}
 	fd := uintptr(fds[0])
 
+	// The descriptor arrives from runc in blocking mode, which leaves os.NewFile
+	// unable to register it with the runtime poller; SetReadDeadline would then
+	// silently succeed and do nothing. TtyRelay needs a working read deadline to
+	// interrupt a copier parked on this pty when the host connections die during
+	// a live migration. os.NewFile reverts to blocking if registration fails, so
+	// this is safe for a pty that turns out not to be pollable.
+	if err := unix.SetNonblock(int(fd), true); err != nil {
+		return nil, errors.Wrap(err, "failed to set received pty master non-blocking")
+	}
+
 	return os.NewFile(fd, string(name)), nil
 }
 
