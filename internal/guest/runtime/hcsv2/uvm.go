@@ -95,9 +95,13 @@ type pod struct {
 // and processes.
 type Host struct {
 	// containersMutex guards both containers and pods maps.
-	containersMutex sync.Mutex
-	containers      map[string]*Container
-	pods            map[string]*pod
+	containersMutex           sync.Mutex
+	containers                map[string]*Container
+	pods                      map[string]*pod
+	cgroupMemoryMutex         sync.Mutex
+	podsCgroup                cgroupUpdater
+	rootMemReserveBytes       uint64
+	lastAppliedCgroupMemLimit int64
 
 	externalProcessesMutex sync.Mutex
 	externalProcesses      map[int]*externalProcess
@@ -129,6 +133,89 @@ type Host struct {
 	//
 	// Only consulted in confidential mode (see Host.checkState).
 	uvmError uvmConsistencyError
+}
+
+type cgroupUpdater interface {
+	Update(resources *specs.LinuxResources) error
+}
+
+func calculateCgroupMemoryLimit(totalMemoryBytes, rootMemReserveBytes uint64) (int64, error) {
+	if totalMemoryBytes <= rootMemReserveBytes {
+		return 0, errors.Errorf("total memory %d must be greater than root memory reserve %d", totalMemoryBytes, rootMemReserveBytes)
+	}
+
+	limit := totalMemoryBytes - rootMemReserveBytes
+	const maxInt64 = uint64(1<<63 - 1)
+	if limit > maxInt64 {
+		return 0, errors.Errorf("pods cgroup memory limit %d exceeds maximum supported value %d", limit, maxInt64)
+	}
+	return int64(limit), nil
+}
+
+func currentTotalMemoryBytes() (uint64, error) {
+	sinfo := syscall.Sysinfo_t{}
+	if err := syscall.Sysinfo(&sinfo); err != nil {
+		return 0, errors.Wrap(err, "failed to get sys info")
+	}
+
+	totalMemoryBytes := uint64(sinfo.Totalram)
+	unit := uint64(sinfo.Unit)
+	if unit != 0 {
+		const maxUint64 = ^uint64(0)
+		if totalMemoryBytes > maxUint64/unit {
+			return 0, errors.Errorf("total memory %d with unit %d exceeds maximum supported value", totalMemoryBytes, unit)
+		}
+		totalMemoryBytes *= unit
+	}
+	return totalMemoryBytes, nil
+}
+
+func setCgroupMemoryLimit(podsCgroup cgroupUpdater, totalMemoryBytes, rootMemReserveBytes uint64, lastAppliedLimit int64) (int64, bool, error) {
+	limit, err := calculateCgroupMemoryLimit(totalMemoryBytes, rootMemReserveBytes)
+	if err != nil {
+		return lastAppliedLimit, false, err
+	}
+	if limit == lastAppliedLimit {
+		return limit, false, nil
+	}
+
+	resources := &specs.LinuxResources{Memory: &specs.LinuxMemory{Limit: &limit}}
+	if err := podsCgroup.Update(resources); err != nil {
+		return lastAppliedLimit, false, errors.Wrap(err, "failed to update pods cgroup memory limit")
+	}
+	return limit, true, nil
+}
+
+// InitializeCgroupMemoryLimitUpdater configures the cgroup updated when the UVM memory changes.
+func (h *Host) InitializeCgroupMemoryLimitUpdater(podsCgroup cgroup.Manager, rootMemReserveBytes uint64, initialLimit int64) {
+	h.cgroupMemoryMutex.Lock()
+	defer h.cgroupMemoryMutex.Unlock()
+
+	h.podsCgroup = podsCgroup
+	h.rootMemReserveBytes = rootMemReserveBytes
+	h.lastAppliedCgroupMemLimit = initialLimit
+}
+
+// UpdateCgroupMemoryLimits refreshes the pods cgroup limit from the UVM's current memory size.
+func (h *Host) UpdateCgroupMemoryLimits() (int64, bool, error) {
+	h.cgroupMemoryMutex.Lock()
+	defer h.cgroupMemoryMutex.Unlock()
+
+	if h.podsCgroup == nil {
+		return h.lastAppliedCgroupMemLimit, false, errors.New("cgroup memory limit updater is not initialized")
+	}
+	totalMemoryBytes, err := currentTotalMemoryBytes()
+	if err != nil {
+		return h.lastAppliedCgroupMemLimit, false, err
+	}
+	limit, updated, err := setCgroupMemoryLimit(h.podsCgroup, totalMemoryBytes, h.rootMemReserveBytes, h.lastAppliedCgroupMemLimit)
+	if err != nil {
+		return h.lastAppliedCgroupMemLimit, false, err
+	}
+	if updated {
+		h.lastAppliedCgroupMemLimit = limit
+	}
+	return limit, updated, nil
 }
 
 type uvmConsistencyError struct {
@@ -966,6 +1053,14 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 			return errors.New("the request settings are not of type SecurityPolicyFragment")
 		}
 		return h.securityOptions.InjectFragment(ctx, r)
+	case guestresource.ResourceTypePodCgroupMemoryLimit:
+		switch req.RequestType {
+		case guestrequest.RequestTypeUpdate:
+			_, _, err := h.UpdateCgroupMemoryLimits()
+			return err
+		default:
+			return newInvalidRequestTypeError(req.RequestType)
+		}
 	default:
 		return errors.Errorf("the ResourceType %q is not supported for UVM", req.ResourceType)
 	}

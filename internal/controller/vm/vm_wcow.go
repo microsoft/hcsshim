@@ -23,6 +23,8 @@ import (
 // For WCOW, no additional controllers are needed as of now (VSMB will be added later).
 type platformControllers struct{} //nolint:unused // embedded in Controller for cross-platform compatibility with LCOW
 
+func (c *Controller) updateGuestMemoryLimits(context.Context) error { return nil }
+
 // buildHCSConfig builds the HCS document for a WCOW VM.
 func (c *Controller) buildHCSConfig(_ context.Context, _ *CreateOptions) (*hcsschema.ComputeSystem, error) {
 	return nil, fmt.Errorf("WCOW buildHCSConfig not yet implemented")

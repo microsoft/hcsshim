@@ -116,6 +116,58 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 	}
 }
 
+// Sanity checks the memory limit value
+func calculateContainersMemoryLimit(totalMemoryBytes, rootMemReserveBytes uint64) (int64, error) {
+	if totalMemoryBytes <= rootMemReserveBytes {
+		return 0, errors.Errorf("total memory %d must be greater than root memory reserve %d", totalMemoryBytes, rootMemReserveBytes)
+	}
+
+	limit := totalMemoryBytes - rootMemReserveBytes
+	const maxInt64 = uint64(1<<63 - 1)
+	if limit > maxInt64 {
+		return 0, errors.Errorf("containers cgroup memory limit %d exceeds maximum supported value %d", limit, maxInt64)
+	}
+	return int64(limit), nil
+}
+
+// Returns the total system memory in bytes.
+func currentTotalMemoryBytes() (uint64, error) {
+	sinfo := syscall.Sysinfo_t{}
+	if err := syscall.Sysinfo(&sinfo); err != nil {
+		return 0, errors.Wrap(err, "failed to get sys info")
+	}
+
+	totalMemoryBytes := uint64(sinfo.Totalram)
+	unit := uint64(sinfo.Unit)
+
+	// If the unit is non-zero, multiply the total memory by the unit to get the actual memory in bytes.
+	if unit != 0 {
+		const maxUint64 = ^uint64(0)
+		if totalMemoryBytes > maxUint64/unit {
+			return 0, errors.Errorf("total memory %d with unit %d exceeds maximum supported value", totalMemoryBytes, unit)
+		}
+		totalMemoryBytes *= unit
+	}
+	return totalMemoryBytes, nil
+}
+
+// Start a periodic goroutine to monitor and update the pods cgroup memory limit.
+func monitorCgroupMemoryLimits(h *hcsv2.Host, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		podLimit, updated, err := h.UpdateCgroupMemoryLimits()
+		if err != nil {
+			logrus.WithError(err).Error("failed to refresh cgroup memory limits")
+			continue
+		}
+		if !updated {
+			continue
+		}
+		logrus.WithField("memoryLimitBytes", podLimit).Debug("refreshed cgroup memory limits")
+	}
+}
+
 // runWithRestartMonitor starts a command with given args and waits for it to exit. If the
 // command exit code is non-zero the command is restarted with with some back off delay.
 // Any stdout or stderr of the command will be split into lines and written as a log with
@@ -378,11 +430,14 @@ func main() {
 	//
 	// The gcs cgroup is not limited but an event will get logged if memory
 	// usage exceeds 50 MB.
-	sinfo := syscall.Sysinfo_t{}
-	if err := syscall.Sysinfo(&sinfo); err != nil {
-		logrus.WithError(err).Fatal("failed to get sys info")
+	totalMemoryBytes, err := currentTotalMemoryBytes()
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to get total system memory")
 	}
-	podsLimit := int64(sinfo.Totalram - *rootMemReserveBytes)
+	podsLimit, err := calculateContainersMemoryLimit(totalMemoryBytes, *rootMemReserveBytes)
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to calculate pods cgroup memory limit")
+	}
 	podsControl, err := cgroup.NewManager("/pods", &oci.LinuxResources{
 		Memory: &oci.LinuxMemory{
 			Limit: &podsLimit,
@@ -409,6 +464,10 @@ func main() {
 	}
 
 	h := hcsv2.NewHost(rtime, tport, initialEnforcer, logWriter)
+	h.InitializeCgroupMemoryLimitUpdater(podsControl, *rootMemReserveBytes, podsLimit)
+
+	// Start periodic task to update the pods cgroup memory limit.
+	go monitorCgroupMemoryLimits(h, 60*time.Second)
 
 	// During live migration the VM is frozen and only wakes up when the host
 	// shim is ready, so the vsock port should be immediately available. We
