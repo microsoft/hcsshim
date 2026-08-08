@@ -287,7 +287,10 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 				logrus.ErrorKey:       err,
 				logfields.ContainerID: p.cid,
 				logfields.ProcessID:   p.id,
-			}).Warn("ignoring missing process")
+			}).Warn("process reported missing by guest; synthesizing exit to unblock wait")
+			// Guest reported the process gone but never delivered its exit;
+			// force-complete the wait so Wait()/Stop don't block forever.
+			p.gc.brdg.forceComplete(p.waitCall, nil)
 		}
 		return false, nil
 	}
