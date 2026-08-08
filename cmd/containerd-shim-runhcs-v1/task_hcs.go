@@ -51,6 +51,86 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Container teardown timeouts.
+//
+// Tearing a container down is host-side work: detaching the layer filter stack
+// and flushing the container's registry hives back into its scratch. For most
+// workloads that finishes in well under a second. For Windows Server (process
+// isolated) containers it scales with how much the container touched the
+// filesystem, and filesystem-heavy workloads such as source builds have been
+// measured needing minutes.
+//
+// Cutting that short is not free: terminating the container mid-flush can leave
+// its scratch in a state the platform subsequently refuses to export, and the
+// damage outlives the container, the snapshot and the host.
+//
+// The defaults below are unchanged. Hosts that run such workloads can raise
+// them by setting the environment variables on the containerd service; the
+// shim inherits its environment from containerd.
+const (
+	// tearDownTimeoutEnvVar overrides defaultTearDownTimeout. The value is a Go
+	// duration string, e.g. "45m".
+	tearDownTimeoutEnvVar = "CONTAINERD_SHIM_RUNHCS_V1_TEARDOWN_TIMEOUT"
+	// taskCloseTimeoutEnvVar overrides the task close timeout. The value is a Go
+	// duration string, e.g. "100m". When it is not set, the timeout is derived
+	// from tearDownTimeoutEnvVar; see [resolveTeardownTimeouts].
+	taskCloseTimeoutEnvVar = "CONTAINERD_SHIM_RUNHCS_V1_TASK_CLOSE_TIMEOUT"
+
+	defaultTearDownTimeout  = 30 * time.Second
+	defaultTaskCloseTimeout = 30 * time.Second
+)
+
+var tearDownTimeout, taskCloseTimeout = resolveTeardownTimeouts(
+	os.Getenv(tearDownTimeoutEnvVar),
+	os.Getenv(taskCloseTimeoutEnvVar),
+)
+
+// resolveTeardownTimeouts computes the effective teardown timeouts from the raw
+// environment values.
+//
+// tearDown bounds each of the two waits in [hcsTask.close]: first for a graceful
+// shutdown to complete, then for a terminate. taskClose bounds the wait for
+// container resource cleanup in [hcsTask.DeleteExec].
+//
+// The two are coupled: DeleteExec waits on the channel that [hcsTask.close]
+// closes, so a taskClose below close's worst case of 2*tearDown abandons a
+// teardown that is still making progress - exactly the outcome these knobs exist
+// to prevent. Raising only tearDown would therefore silently not help, so when
+// taskClose is not set explicitly and tearDown has been raised above the
+// default, taskClose is derived to cover close's worst case with room to spare.
+//
+// A raw value that is empty, unparseable or not positive is treated as unset.
+// This runs during package initialization, before the shim's logging exists, so
+// an invalid value must not keep the shim from starting; the effective values
+// are logged wherever they are used.
+func resolveTeardownTimeouts(tearDownRaw, taskCloseRaw string) (tearDown, taskClose time.Duration) {
+	tearDown = defaultTearDownTimeout
+	if d, ok := parsePositiveDuration(tearDownRaw); ok {
+		tearDown = d
+	}
+
+	if d, ok := parsePositiveDuration(taskCloseRaw); ok {
+		return tearDown, d
+	}
+	if tearDown <= defaultTearDownTimeout {
+		return tearDown, defaultTaskCloseTimeout
+	}
+	return tearDown, 2*tearDown + defaultTaskCloseTimeout
+}
+
+// parsePositiveDuration parses a Go duration string, reporting false when it is
+// empty, malformed or not positive.
+func parsePositiveDuration(s string) (time.Duration, bool) {
+	if s == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 0, false
+	}
+	return d, true
+}
+
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
 	log.G(ctx).WithField("tid", req.ID).Debug("newHcsStandaloneTask")
 
@@ -536,7 +616,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 		// If the shim exits before resources are cleaned up, those resources
 		// will remain locked and untracked, which leads to lingering sandboxes
 		// and container resources like base vhdx.
-		const timeout = 30 * time.Second
+		timeout := taskCloseTimeout
 		entry.WithField(logfields.Timeout, timeout).Trace("waiting for task to be closed")
 		select {
 		case <-time.After(timeout):
@@ -702,8 +782,6 @@ func (ht *hcsTask) close(ctx context.Context) {
 		// method or interface for ht.c operations that we can stub for
 		// testing.
 		if ht.c != nil {
-			const tearDownTimeout = 30 * time.Second
-
 			// Do our best attempt to tear down the container.
 			// TODO: unify timeout select statements and use [ht.c.WaitCtx] and [context.WithTimeout]
 			var werr error
@@ -717,11 +795,19 @@ func (ht *hcsTask) close(ctx context.Context) {
 			if err != nil {
 				entry.WithError(err).Error("failed to shutdown container")
 			} else {
+				shutdownStart := time.Now()
 				t := time.NewTimer(tearDownTimeout)
 				select {
 				case <-ch:
 					err = werr
 					t.Stop()
+					// How long teardown actually took is the number needed to
+					// size tearDownTimeout for a given workload, and it is not
+					// otherwise observable.
+					entry.WithFields(logrus.Fields{
+						logfields.Timeout: tearDownTimeout,
+						"duration":        time.Since(shutdownStart).String(),
+					}).Debug("container shutdown completed")
 					if err != nil {
 						entry.WithError(err).Error("failed to wait for container shutdown")
 					}
