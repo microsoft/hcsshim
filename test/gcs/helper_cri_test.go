@@ -128,7 +128,7 @@ func containerSpecOpts(_ context.Context, tb testing.TB,
 	hostname := name
 	env := append([]string{testoci.HostnameEnv + "=" + hostname}, img.Env...)
 	for _, e := range cfg.GetEnvs() {
-		env = append(env, e.GetKey()+"="+e.GetValue())
+		env = append(env, e.GetKey()+"="+string(e.GetValue()))
 	}
 	opts = append(opts, oci.WithEnv(env))
 
