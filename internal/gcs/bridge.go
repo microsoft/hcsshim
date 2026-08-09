@@ -572,8 +572,10 @@ func (brdg *bridge) PreregisterRPC(id int64, proc prot.RPCProc, resp responseMes
 	if brdg.rpcs == nil {
 		return nil, ErrBridgeClosed
 	}
-	if _, dup := brdg.rpcs[id]; dup {
-		return nil, fmt.Errorf("preregister rpc: id %d already in use", id)
+	if existing, dup := brdg.rpcs[id]; dup {
+		// A source rollback re-opens a process whose wait is still outstanding;
+		// hand back that call.
+		return existing, nil
 	}
 	brdg.rpcs[id] = call
 	return call, nil

@@ -70,12 +70,12 @@ type Controller struct {
 	// exitedCh is closed when the process has exited and all cleanup is done.
 	exitedCh chan struct{}
 
-	// vsock ports restored from a migrated process, used to reattach the
-	// stdio relay on resume.
+	// vsock ports for reattaching the stdio relay on resume, captured at Save on
+	// the source and on import on the destination.
 	stdinPort, stdoutPort, stderrPort uint32
 
-	// Wait request id carried over from a migrated process, reused on resume
-	// so no duplicate wait is issued. Zero if absent.
+	// Wait request id reused on resume so no duplicate wait is issued, captured
+	// at Save on the source and on import on the destination. Zero if absent.
 	waitCallID int64
 }
 
@@ -164,14 +164,17 @@ func (c *Controller) Start(ctx context.Context, events chan interface{}) (int, e
 	c.processID = c.process.Pid()
 	c.state = StateRunning
 
-	go c.handleProcessExit(ctx, execCmd, events)
+	go c.handleProcessExit(ctx, execCmd, events, true)
 
 	return c.processID, nil
 }
 
 // handleProcessExit blocks until the process exits, cleans up IO, and
 // publishes the exit event via events channel.
-func (c *Controller) handleProcessExit(ctx context.Context, execCmd *cmd.Cmd, events chan interface{}) {
+// In case of source rollback, there would be an existing instance of
+// handleProcessExit which would report the exit. Therefore, for the
+// duplicate call, we would exit early post cmd cleanup via cmd.Wait.
+func (c *Controller) handleProcessExit(ctx context.Context, execCmd *cmd.Cmd, events chan interface{}, reportExit bool) {
 	// Detach from the caller's context so upstream cancellation does
 	// not abort the background teardown.
 	ctx = context.WithoutCancel(ctx)
@@ -180,6 +183,12 @@ func (c *Controller) handleProcessExit(ctx context.Context, execCmd *cmd.Cmd, ev
 	// underlying process handle.
 	if err := execCmd.Wait(); err != nil {
 		log.G(ctx).WithError(err).Warn("process exit wait failed")
+	}
+
+	// A source rollback's re-attached relay only needs draining; the watcher
+	// started with the process reports the exit.
+	if !reportExit {
+		return
 	}
 
 	exitCode := execCmd.ExitState.ExitCode()

@@ -125,8 +125,10 @@ func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ co
 // [Container.CreateProcess]: it attaches to a process already running
 // in this container, re-listens on the supplied vsock ports, and
 // pre-registers the source bridge's WaitForProcess id so the guest's
-// still-outstanding response is routed without arming a duplicate wait.
-func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort, stdoutPort, stderrPort uint32, waitCallID int64) (_ *Process, err error) {
+// still-outstanding response is routed.
+// startWait launches the background exit wait; pass false when the caller
+// already has one outstanding (a source rollback reuses the live process's).
+func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort, stdoutPort, stderrPort uint32, waitCallID int64, startWait bool) (_ *Process, err error) {
 	ctx, span := ot.StartSpan(ctx, "gcs::Container::OpenProcessWithIO", ot.WithClientSpanKind)
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
@@ -177,7 +179,9 @@ func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort
 	if err != nil {
 		return nil, fmt.Errorf("preregister wait for pid %d in container %s (id %d): %w", pid, c.id, waitCallID, err)
 	}
-	go p.waitBackground()
+	if startWait {
+		go p.waitBackground()
+	}
 	log.G(ctx).WithField("pid", p.id).Debug("opened existing process with IO")
 	return p, nil
 }
