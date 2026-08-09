@@ -26,9 +26,9 @@ require (
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/grpc v1.83.0
-	google.golang.org/protobuf v1.36.11
-	k8s.io/cri-api v0.34.1
-	k8s.io/cri-client v0.34.1
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
+	k8s.io/cri-api v0.36.3
+	k8s.io/cri-client v0.36.3
 )
 
 require (
