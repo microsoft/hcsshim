@@ -22,6 +22,12 @@ import (
 
 const (
 	hrNotFound = 0x80070490
+
+	// exitProbeTimeoutMs bounds the wait used to detect a process that already
+	// exited when it is reopened (see startExitWatch). The finite timeout lets
+	// the guest-side waiter self-clean when the process is still running, so it
+	// never lingers if the process is reopened again later.
+	exitProbeTimeoutMs = 500
 )
 
 // Process represents a process in a container or container host.
@@ -30,7 +36,7 @@ type Process struct {
 	cid                   string
 	id                    uint32
 	waitCall              *rpc
-	waitResp              prot.ContainerWaitForProcessResponse
+	waitResp              *prot.ContainerWaitForProcessResponse
 	stdin, stdout, stderr *ioChannel
 	stdinCloseWriteOnce   sync.Once
 	stdinCloseWriteErr    error
@@ -120,7 +126,8 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		ProcessID:   p.id,
 		TimeoutInMs: 0xffffffff,
 	}
-	p.waitCall, err = gc.brdg.AsyncRPC(ctx, prot.RPCWaitForProcess, &waitReq, &p.waitResp)
+	p.waitResp = &prot.ContainerWaitForProcessResponse{}
+	p.waitCall, err = gc.brdg.AsyncRPC(ctx, prot.RPCWaitForProcess, &waitReq, p.waitResp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait on process, leaking process: %w", err)
 	}
@@ -321,4 +328,41 @@ func (p *Process) waitBackground() {
 	}
 	log.G(ctx).WithField("exitCode", ec).Debug("process exited")
 	ot.SetSpanStatus(span, err)
+}
+
+// startExitWatch arranges for a reopened process's exit to be reported.
+// OpenProcessWithIO has already pre-registered p.waitCall — the WaitForProcess
+// call the previous owner left outstanding in the guest — which completes when
+// the process exits. That suffices for a process still running at reopen, but
+// one that exited while no bridge was connected had its response dropped on the
+// severed connection and never resent, so waiting on p.waitCall alone would
+// hang.
+//
+// To cover that, startExitWatch issues its own bounded WaitForProcess. If the
+// process has already exited the guest returns the retained exit code at once,
+// and that completed call replaces p.waitCall so Wait and ExitCode report
+// through the normal path. Otherwise the probe times out and self-cleans (no
+// lingering guest-side waiter) and p.waitCall is watched in the background.
+func (p *Process) startExitWatch(ctx context.Context) {
+	req := prot.ContainerWaitForProcess{
+		RequestBase: makeRequest(ctx, p.cid),
+		ProcessID:   p.id,
+		TimeoutInMs: exitProbeTimeoutMs,
+	}
+	resp := &prot.ContainerWaitForProcessResponse{}
+	if probe, err := p.gc.brdg.AsyncRPC(ctx, prot.RPCWaitForProcess, &req, resp); err == nil {
+		probe.Wait()
+		// A clean response means the process already exited; a still-running one
+		// makes the guest return a timeout error.
+		if probe.Err() == nil {
+			// Make this completed probe the process's wait so its retained exit
+			// code flows through the normal Wait and ExitCode path.
+			p.waitCall = probe
+			p.waitResp = resp
+			return
+		}
+	}
+	// Still running (or the probe could not be issued): watch the pre-registered
+	// wait (p.waitCall) in the background.
+	go p.waitBackground()
 }
