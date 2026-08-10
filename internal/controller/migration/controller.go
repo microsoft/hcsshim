@@ -430,7 +430,7 @@ func (c *Controller) Cancel(ctx context.Context, sessionID string) error {
 	}
 	c.state = next
 
-	log.G(ctx).WithError(err).Info("migration session cancellation")
+	log.G(ctx).WithError(err).WithField("State", c.state).Info("migration session cancellation")
 	return err
 }
 
