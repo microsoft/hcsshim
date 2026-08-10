@@ -182,6 +182,11 @@ func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort
 	if err != nil {
 		return nil, fmt.Errorf("preregister wait for pid %d in container %s (id %d): %w", pid, c.id, waitCallID, err)
 	}
+	// A reused outstanding wait carries its own response; adopt it so the
+	// reported exit code reflects the guest's reply and not this unused one.
+	if resp, ok := p.waitCall.resp.(*prot.ContainerWaitForProcessResponse); ok {
+		p.waitResp = resp
+	}
 	// Establish exit reporting unless the caller already watches this process
 	// (a reuse that already has a wait outstanding, e.g. a rollback).
 	if watchExit {
