@@ -582,6 +582,8 @@ func UnmarshalContainerModifySettings(b []byte) (*containerModifySettings, error
 			return &request, errors.Wrap(err, "failed to unmarshal settings as SecurityPolicyFragment")
 		}
 		msr.Settings = fragment
+	case guestresource.ResourceTypePodCgroupMemoryLimit:
+		msr.Settings = nil
 	default:
 		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 	}
