@@ -18,11 +18,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/shim"
 	"github.com/Microsoft/hcsshim/osversion"
 
-	"github.com/containerd/errdefs"
+	bootapi "github.com/containerd/containerd/api/runtime/bootstrap/v1"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"google.golang.org/protobuf/proto"
 )
 
 // Add a manifest to get proper Windows version detection.
@@ -99,14 +100,23 @@ func setLogConfiguration() error {
 		// bypassing os.Stderr, so it will still go to panic.log.
 		os.Stderr = os.Stdout
 
-		opts, err := shim.ReadRuntimeOptions[*runhcsopts.Options](os.Stdin)
+		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			if !errors.Is(err, errdefs.ErrNotFound) {
-				return fmt.Errorf("failed to read runtime options from stdin: %w", err)
-			}
+			return fmt.Errorf("failed to read runtime options from stdin: %w", err)
 		}
+		_ = os.Stdin.Close()
 
-		if opts != nil {
+		// containerd 2.3+ delivers the options as an extension inside BootstrapParams.
+		var params bootapi.BootstrapParams
+		if err := proto.Unmarshal(data, &params); err != nil {
+			return fmt.Errorf("failed to unmarshal bootstrap params: %w", err)
+		}
+		var opts runhcsopts.Options
+		found, err := params.FindExtension(&opts)
+		if err != nil {
+			return fmt.Errorf("failed to extract runtime options from bootstrap params: %w", err)
+		}
+		if found {
 			if opts.LogLevel != "" {
 				// If log level is specified, set the corresponding logrus logging level.
 				lvl, err := logrus.ParseLevel(opts.LogLevel)
@@ -122,7 +132,6 @@ func setLogConfiguration() error {
 				log.SetScrubbing(false)
 			}
 		}
-		_ = os.Stdin.Close()
 	}
 	return nil
 }

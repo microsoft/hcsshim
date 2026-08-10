@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim
 
-go 1.26.0
+go 1.26.3
 
 // protobuf/gRPC/ttrpc generation
 tool (
@@ -28,8 +28,8 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/containerd/cgroups/v3 v3.1.3
 	github.com/containerd/console v1.0.5
-	github.com/containerd/containerd/api v1.10.0
-	github.com/containerd/containerd/v2 v2.2.5
+	github.com/containerd/containerd/api v1.11.1
+	github.com/containerd/containerd/v2 v2.3.1
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/errdefs/pkg v0.3.0
 	github.com/containerd/go-runc v1.1.0
@@ -67,7 +67,7 @@ require (
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/grpc v1.83.0
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (

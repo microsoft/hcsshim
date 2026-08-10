@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	bootapi "github.com/containerd/containerd/api/runtime/bootstrap/v1"
 	_ "github.com/containerd/containerd/api/runtime/sandbox/v1"
 	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/ttrpc"
@@ -200,7 +201,7 @@ var serveCommand = cli.Command{
 			return err
 		}
 		defer s.Close()
-		task.RegisterTaskService(s, svc)
+		task.RegisterTTRPCTaskService(s, svc)
 		shimdiag.RegisterShimDiagService(s, svc)
 		extendedtask.RegisterExtendedTaskService(s, svc)
 
@@ -272,22 +273,45 @@ func trapClosedConnErr(err error) error {
 }
 
 // readOptions reads in bytes from the reader and converts it to a shim options
-// struct. If no data is available from the reader, returns (nil, nil).
+// struct. If no options are available from the reader, returns (nil, nil).
+//
+// containerd 2.3+ passes the options as an extension inside a BootstrapParams
+// message, while older containerd passes them as a bare Any; both are accepted.
 func readOptions(r io.Reader) (*runhcsopts.Options, error) {
 	d, err := io.ReadAll(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read input")
 	}
-	if len(d) > 0 {
-		var a anypb.Any
-		if err := proto.Unmarshal(d, &a); err != nil {
-			return nil, errors.Wrap(err, "failed unmarshalling into Any")
+	if len(d) == 0 {
+		return nil, nil
+	}
+
+	// Legacy: options passed as a bare Any (older/special-cased containerd).
+	var a anypb.Any
+	if err := proto.Unmarshal(d, &a); err != nil {
+		return nil, errors.Wrap(err, "failed unmarshalling into Any")
+	}
+	if v, err := typeurl.UnmarshalAny(&a); err == nil {
+		opts, ok := v.(*runhcsopts.Options)
+		if !ok {
+			return nil, errors.Errorf("unexpected runtime options type %T", v)
 		}
-		v, err := typeurl.UnmarshalAny(&a)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed unmarshalling by typeurl")
-		}
-		return v.(*runhcsopts.Options), nil
+		return opts, nil
+	}
+
+	// containerd 2.3+ delivers the options as an extension inside BootstrapParams.
+	var params bootapi.BootstrapParams
+	if err = proto.Unmarshal(d, &params); err != nil {
+		return nil, errors.Wrap(err, "failed unmarshalling into BootstrapParams")
+	}
+	var opts runhcsopts.Options
+	found, err := params.FindExtension(&opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed extracting options from BootstrapParams")
+	}
+
+	if found {
+		return &opts, nil
 	}
 	return nil, nil
 }
