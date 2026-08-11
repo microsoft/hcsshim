@@ -1,10 +1,12 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -245,6 +247,88 @@ func PolicyContainersFromConfigs(containerConfigs []sp.ContainerConfig) ([]*sp.C
 			setDefaultUser(containerConfig.User, user, group),
 			setDefaultCapabilities(containerConfig.Capabilities),
 			setDefaultSeccomp(containerConfig.SeccompProfilePath),
+		)
+		if err != nil {
+			return nil, err
+		}
+		policyContainers = append(policyContainers, container)
+	}
+
+	return policyContainers, nil
+}
+
+// PolicyWindowsContainersFromConfigs returns Windows container policies built
+// from configs. The verified Block CIM layer digests and merged CIM digest are
+// computed from each config's image, which requires running on Windows.
+func PolicyWindowsContainersFromConfigs(ctx context.Context, containerConfigs []sp.WindowsContainerConfig) ([]*sp.WindowsContainer, error) {
+	policyContainers := make([]*sp.WindowsContainer, 0, len(containerConfigs))
+	for _, config := range containerConfigs {
+		if config.ImageName == "" {
+			return nil, fmt.Errorf("windows container config requires image_name")
+		}
+
+		var imageOptions []remote.Option
+		if config.Auth.Username != "" && config.Auth.Password != "" {
+			auth := authn.Basic{
+				Username: config.Auth.Username,
+				Password: config.Auth.Password,
+			}
+			c, _ := auth.Authorization()
+			imageOptions = append(imageOptions, remote.WithAuth(authn.FromConfig(*c)))
+		}
+		// Windows image indexes have no linux child; select the windows platform.
+		imageOptions = append(imageOptions, remote.WithPlatform(v1.Platform{OS: "windows", Architecture: runtime.GOARCH}))
+
+		img, err := RemoteImageFromImageName(config.ImageName, imageOptions...)
+		if err != nil {
+			return nil, fmt.Errorf("unable to fetch image: %w", err)
+		}
+
+		layers, mergedCim, err := computeWindowsImageDigests(ctx, img)
+		if err != nil {
+			return nil, err
+		}
+
+		command := config.Command
+		if len(command) == 0 {
+			if command, err = ParseCommandFromImage(img); err != nil {
+				return nil, err
+			}
+		}
+
+		imgConfig, err := img.ConfigFile()
+		if err != nil {
+			return nil, err
+		}
+		workingDir := config.WorkingDir
+		if workingDir == "" {
+			workingDir = imgConfig.Config.WorkingDir
+		}
+		user := config.User
+		if user == "" {
+			user = imgConfig.Config.User
+		}
+		// Environment variables baked into the image are required.
+		envRules := append(sp.NewEnvVarRules(imgConfig.Config.Env, true), config.EnvRules...)
+
+		// mergedCim is the digest of the CIM the runtime actually mounts: the
+		// merged CIM for multi-layer images, or the lone layer's own CIM for
+		// single-layer images. Either way it is the mounted CIM digest.
+		if mergedCim == "" {
+			return nil, fmt.Errorf("image %q produced an empty mounted CIM digest", config.ImageName)
+		}
+		mountedCims := []string{mergedCim}
+
+		container, err := sp.CreateWindowsContainerPolicy(
+			command,
+			layers,
+			mountedCims,
+			envRules,
+			workingDir,
+			config.ExecProcesses,
+			config.Signals,
+			config.AllowStdioAccess,
+			user,
 		)
 		if err != nil {
 			return nil, err
