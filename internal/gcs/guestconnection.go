@@ -244,6 +244,14 @@ func (gc *GuestConnection) SetMigrating(migrating bool) {
 	gc.brdg.SetMigrating(migrating)
 }
 
+// IsBridgeConnected reports whether a live bridge transport is currently installed.
+func (gc *GuestConnection) IsBridgeConnected() bool {
+	if gc.brdg == nil {
+		return false
+	}
+	return gc.brdg.connected.Load()
+}
+
 // ResumeOnConn resumes the bridge after swaping the bridge
 // transport without dropping outstanding RPCs.
 func (gc *GuestConnection) ResumeOnConn(ctx context.Context, conn io.ReadWriteCloser) error {
