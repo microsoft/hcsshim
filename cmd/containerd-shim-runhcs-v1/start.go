@@ -86,7 +86,7 @@ The start command can either start a new shim or return an address to an existin
 				return errors.Wrap(err, "failed to connect to hosting shim")
 			}
 			cl := ttrpc.NewClient(c, ttrpc.WithOnClose(func() { c.Close() }))
-			t := task.NewTaskClient(cl)
+			t := task.NewTTRPCTaskClient(cl)
 			ctx := gocontext.Background()
 			req := &task.ConnectRequest{ID: sbid}
 			cr, err := t.Connect(ctx, req)

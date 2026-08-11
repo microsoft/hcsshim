@@ -66,17 +66,19 @@ github.com/containerd/cgroups/v3/cgroup2/stats
 # github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
-# github.com/containerd/containerd/api v1.10.0
-## explicit; go 1.23.0
+# github.com/containerd/containerd/api v1.11.1
+## explicit; go 1.24.0
 github.com/containerd/containerd/api/events
+github.com/containerd/containerd/api/runtime/bootstrap/v1
 github.com/containerd/containerd/api/runtime/sandbox/v1
 github.com/containerd/containerd/api/runtime/task/v2
 github.com/containerd/containerd/api/runtime/task/v3
 github.com/containerd/containerd/api/services/ttrpc/events/v1
 github.com/containerd/containerd/api/types
+github.com/containerd/containerd/api/types/runc/options
 github.com/containerd/containerd/api/types/task
-# github.com/containerd/containerd/v2 v2.2.5
-## explicit; go 1.25.0
+# github.com/containerd/containerd/v2 v2.3.1
+## explicit; go 1.26.3
 github.com/containerd/containerd/v2/core/events
 github.com/containerd/containerd/v2/core/mount
 github.com/containerd/containerd/v2/core/runtime
@@ -785,7 +787,7 @@ google.golang.org/grpc/tap
 # google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.2
 ## explicit; go 1.25.0
 google.golang.org/grpc/cmd/protoc-gen-go-grpc
-# google.golang.org/protobuf v1.36.11
+# google.golang.org/protobuf v1.36.12
 ## explicit; go 1.23
 google.golang.org/protobuf/cmd/protoc-gen-go
 google.golang.org/protobuf/cmd/protoc-gen-go/internal_gengo

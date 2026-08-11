@@ -106,7 +106,7 @@ func verifyStartCommandSuccess(t *testing.T, expectedNamespace, expectedID strin
 		t.Fatalf("failed to connect to hosting shim at: %s, with: %v", sout, err)
 	}
 	cl := ttrpc.NewClient(c, ttrpc.WithOnClose(func() { c.Close() }))
-	tc := task.NewTaskClient(cl)
+	tc := task.NewTTRPCTaskClient(cl)
 	ctx := context.Background()
 	req := &task.ShutdownRequest{ID: expectedID, Now: true}
 	_, err = tc.Shutdown(ctx, req)
