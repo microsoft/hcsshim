@@ -16,10 +16,12 @@ type securityPolicyInternal struct {
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
+	AllowHostNetwork                 bool
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
 	AllowRegistryChangesDropping     bool
+	AllowLogProviderDropping         bool
 }
 
 // Internal version of Windows SecurityPolicy
@@ -31,10 +33,12 @@ type securityPolicyWindowsInternal struct {
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
+	AllowHostNetwork                 bool
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
 	AllowRegistryChangesDropping     bool
+	AllowLogProviderDropping         bool
 }
 
 type securityPolicyFragment struct {
@@ -97,10 +101,12 @@ func newSecurityPolicyInternal(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowDropEnvironmentVariables bool,
 	allowUnencryptedScratch bool,
 	allowDropCapabilities bool,
 	allowRegistryChangesDropping bool,
+	allowLogProviderDropping bool,
 ) (*securityPolicyInternal, error) {
 	containersInternal, err := containersToInternal(containers)
 	if err != nil {
@@ -114,10 +120,12 @@ func newSecurityPolicyInternal(
 		AllowPropertiesAccess:            allowPropertiesAccess,
 		AllowDumpStacks:                  allowDumpStacks,
 		AllowRuntimeLogging:              allowRuntimeLogging,
+		AllowHostNetwork:                 allowHostNetwork,
 		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowDropCapabilities,
 		AllowRegistryChangesDropping:     allowRegistryChangesDropping,
+		AllowLogProviderDropping:         allowLogProviderDropping,
 	}, nil
 }
 

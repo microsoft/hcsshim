@@ -52,6 +52,8 @@ const (
 	HostAMDCertFilename               = "host-amd-cert-base64"
 	ReferenceInfoFilename             = "reference-info-base64"
 	HashEnvelopeReferenceInfoFilename = "transparent-reference-info-base64"
+	TCBReferenceInfoFilename          = "tcb-reference-info-base64"
+	PlatformReferenceInfoFilename     = "platform-reference-info-base64"
 )
 
 // PolicyConfig contains toml or JSON config for security policy.
@@ -63,12 +65,19 @@ type PolicyConfig struct {
 	AllowPropertiesAccess            bool                    `json:"allow_properties_access" toml:"allow_properties_access"`
 	AllowDumpStacks                  bool                    `json:"allow_dump_stacks" toml:"allow_dump_stacks"`
 	AllowRuntimeLogging              bool                    `json:"allow_runtime_logging" toml:"allow_runtime_logging"`
+	AllowHostNetwork                 bool                    `json:"allow_hostnetwork" toml:"allow_hostnetwork"`
 	AllowEnvironmentVariableDropping bool                    `json:"allow_environment_variable_dropping" toml:"allow_environment_variable_dropping"`
 	// AllowUnencryptedScratch is a global policy configuration that allows
 	// all containers within a pod to be run without scratch encryption.
 	AllowUnencryptedScratch      bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
 	AllowCapabilityDropping      bool `json:"allow_capability_dropping" toml:"allow_capability_dropping"`
 	AllowRegistryChangesDropping bool `json:"allow_registry_changes_dropping" toml:"allow_registry_changes_dropping"`
+	// AllowLogProviderDropping controls how EnforceLogProviderPolicy handles
+	// requested ETW providers that are not on the allow-list. When false
+	// (default, fail-close) any disallowed provider causes the entire
+	// modifyServiceSettings call to be denied. When true, disallowed providers
+	// are silently dropped and the call continues with the kept subset.
+	AllowLogProviderDropping bool `json:"allow_log_provider_dropping" toml:"allow_log_provider_dropping"`
 }
 
 func NewPolicyConfig(opts ...PolicyConfigOpt) (*PolicyConfig, error) {

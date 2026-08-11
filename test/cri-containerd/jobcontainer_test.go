@@ -542,7 +542,7 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 			containerImage: imageWindowsNanoserver,
 			env: []*runtime.KeyValue{
 				{
-					Key: "PATH", Value: "C:\\Windows\\system32;C:\\Windows",
+					Key: "PATH", Value: []byte("C:\\Windows\\system32;C:\\Windows"),
 				},
 			},
 			exec:               []string{"cmd", "/c", "echo %PATH%"},
@@ -555,7 +555,7 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 			containerImage: imageWindowsNanoserver,
 			env: []*runtime.KeyValue{
 				{
-					Key: "PATH", Value: "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows",
+					Key: "PATH", Value: []byte("%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows"),
 				},
 			},
 			exec:               []string{"cmd", "/c", "echo %PATH%"},

@@ -393,6 +393,9 @@ func (c *Controller) UpdateMemory(ctx context.Context, requestedSizeInMB uint64)
 	if err := c.uvm.UpdateMemory(ctx, actual); err != nil {
 		return fmt.Errorf("failed to update vm memory: %w", err)
 	}
+	if err := c.updateGuestMemoryLimits(ctx); err != nil {
+		return fmt.Errorf("failed to update guest memory limits: %w", err)
+	}
 
 	return nil
 }

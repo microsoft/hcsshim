@@ -115,6 +115,13 @@ func WithAllowEnvVarDropping(allow bool) PolicyConfigOpt {
 	}
 }
 
+func WithAllowLogProviderDropping(allow bool) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.AllowLogProviderDropping = allow
+		return nil
+	}
+}
+
 func WithAllowCapabilityDropping(allow bool) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.AllowCapabilityDropping = allow
@@ -132,6 +139,13 @@ func WithAllowRegistryChangesDropping(allow bool) PolicyConfigOpt {
 func WithAllowRuntimeLogging(allow bool) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.AllowRuntimeLogging = allow
+		return nil
+	}
+}
+
+func WithAllowHostNetwork(allow bool) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.AllowHostNetwork = allow
 		return nil
 	}
 }

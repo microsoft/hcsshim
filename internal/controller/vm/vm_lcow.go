@@ -46,6 +46,10 @@ func (c *Controller) SandboxOptions() *lcow.SandboxOptions {
 	return c.sandboxOptions
 }
 
+func (c *Controller) updateGuestMemoryLimits(ctx context.Context) error {
+	return c.guest.UpdateCgroupMemoryLimits(ctx)
+}
+
 // buildConfig builds the HCS document for an LCOW VM by calling lcow.BuildSandboxConfig.
 // It also stores the sandbox options within the controller.
 func (c *Controller) buildHCSConfig(ctx context.Context, opts *CreateOptions) (*hcsschema.ComputeSystem, error) {

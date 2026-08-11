@@ -29,5 +29,7 @@ enforcement_points := {
     "mapped_directory_mount": {"introducedVersion": "0.11.0", "default_results": {"allowed": true}, "use_framework": false},
     "mapped_directory_unmount": {"introducedVersion": "0.11.0", "default_results": {"allowed": true}, "use_framework": false},
     "unmount_cims": {"introducedVersion": "0.11.0", "default_results": {"allowed": true}, "use_framework": false},
+    "log_provider": {"introducedVersion": "0.11.0", "default_results": {"allowed": true, "providers_to_keep": null}, "use_framework": false},
     "load_transparency_trust_list": {"introducedVersion": "0.12.0", "default_results": {"allowed": false}, "use_framework": false},
+    "host_network": {"introducedVersion": "0.12.0", "default_results": {"allowed": false}, "use_framework": false},
 }

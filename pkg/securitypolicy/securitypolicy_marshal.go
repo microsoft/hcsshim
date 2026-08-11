@@ -64,10 +64,12 @@ type OSAwareMarshalFunc func(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
 	allowRegistryChangesDropping bool,
+	allowLogProviderDropping bool,
 ) (string, error)
 
 // osAwareMarshalRego handles both Linux and Windows containers
@@ -81,10 +83,12 @@ func osAwareMarshalRego(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
 	allowRegistryChangesDropping bool,
+	allowLogProviderDropping bool,
 ) (string, error) {
 	if allowAll {
 		if len(linuxContainers) > 0 || len(windowsContainers) > 0 {
@@ -99,18 +103,18 @@ func osAwareMarshalRego(
 			return "", fmt.Errorf("cannot marshal Windows containers on Linux OS")
 		}
 		return marshalRego(allowAll, linuxContainers, externalProcesses, fragments,
-			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
+			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging, allowHostNetwork,
 			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping,
-			allowRegistryChangesDropping)
+			allowRegistryChangesDropping, allowLogProviderDropping)
 
 	case "windows":
 		if len(linuxContainers) > 0 {
 			return "", fmt.Errorf("cannot marshal Linux containers on Windows OS")
 		}
 		return marshalWindowsRego(allowAll, windowsContainers, externalProcesses, fragments,
-			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging,
+			allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging, allowHostNetwork,
 			allowEnvironmentVariableDropping, allowUnencryptedScratch, allowCapabilityDropping,
-			allowRegistryChangesDropping)
+			allowRegistryChangesDropping, allowLogProviderDropping)
 
 	default:
 		return "", fmt.Errorf("unsupported OS type: %s", osType)
@@ -126,10 +130,12 @@ func marshalWindowsRego(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
 	allowRegistryChangesDropping bool,
+	allowLogProviderDropping bool,
 ) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
@@ -151,10 +157,12 @@ func marshalWindowsRego(
 		AllowPropertiesAccess:            allowPropertiesAccess,
 		AllowDumpStacks:                  allowDumpStacks,
 		AllowRuntimeLogging:              allowRuntimeLogging,
+		AllowHostNetwork:                 allowHostNetwork,
 		AllowEnvironmentVariableDropping: allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowCapabilityDropping,
 		AllowRegistryChangesDropping:     allowRegistryChangesDropping,
+		AllowLogProviderDropping:         allowLogProviderDropping,
 	}
 
 	return policy.marshalWindowsRego(), nil
@@ -167,6 +175,8 @@ func marshalJSON(
 	osType string,
 	_ []ExternalProcessConfig,
 	_ []FragmentConfig,
+	_ bool,
+	_ bool,
 	_ bool,
 	_ bool,
 	_ bool,
@@ -202,10 +212,12 @@ func marshalRego(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapabilityDropping bool,
 	allowRegistryChangesDropping bool,
+	allowLogProviderDropping bool,
 ) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
@@ -222,10 +234,12 @@ func marshalRego(
 		allowPropertiesAccess,
 		allowDumpStacks,
 		allowRuntimeLogging,
+		allowHostNetwork,
 		allowEnvironmentVariableDropping,
 		allowUnencryptedScratch,
 		allowCapabilityDropping,
 		allowRegistryChangesDropping,
+		allowLogProviderDropping,
 	)
 	if err != nil {
 		return "", err
@@ -257,10 +271,12 @@ func MarshalPolicy(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowEnvironmentVariableDropping bool,
 	allowUnencryptedScratch bool,
 	allowCapbilitiesDropping bool,
 	allowRegistryChangesDropping bool,
+	allowLogProviderDropping bool,
 ) (string, error) {
 	if marshaller == "" {
 		marshaller = defaultMarshaller
@@ -279,10 +295,12 @@ func MarshalPolicy(
 			allowPropertiesAccess,
 			allowDumpStacks,
 			allowRuntimeLogging,
+			allowHostNetwork,
 			allowEnvironmentVariableDropping,
 			allowUnencryptedScratch,
 			allowCapbilitiesDropping,
 			allowRegistryChangesDropping,
+			allowLogProviderDropping,
 		)
 	}
 }
@@ -691,10 +709,12 @@ func (p securityPolicyInternal) marshalRego() string {
 	writeLine(builder, `allow_properties_access := %t`, p.AllowPropertiesAccess)
 	writeLine(builder, `allow_dump_stacks := %t`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %t`, p.AllowRuntimeLogging)
+	writeLine(builder, `allow_host_network := %t`, p.AllowHostNetwork)
 	writeLine(builder, "allow_environment_variable_dropping := %t", p.AllowEnvironmentVariableDropping)
 	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
 	writeLine(builder, "allow_capability_dropping := %t", p.AllowCapabilityDropping)
 	writeLine(builder, "allow_registry_changes_dropping := %t", p.AllowRegistryChangesDropping)
+	writeLine(builder, "allow_log_provider_dropping := %t", p.AllowLogProviderDropping)
 	result := strings.Replace(policyRegoTemplate, "@@OBJECTS@@", builder.String(), 1)
 	result = strings.Replace(result, "@@API_VERSION@@", apiVersion, 1)
 	result = strings.Replace(result, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)
@@ -718,10 +738,12 @@ func (p securityPolicyWindowsInternal) marshalWindowsRego() string {
 	writeLine(builder, `allow_properties_access := %t`, p.AllowPropertiesAccess)
 	writeLine(builder, `allow_dump_stacks := %t`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %t`, p.AllowRuntimeLogging)
+	writeLine(builder, `allow_host_network := %t`, p.AllowHostNetwork)
 	writeLine(builder, "allow_environment_variable_dropping := %t", p.AllowEnvironmentVariableDropping)
 	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
 	writeLine(builder, "allow_capability_dropping := %t", p.AllowCapabilityDropping)
 	writeLine(builder, "allow_registry_changes_dropping := %t", p.AllowRegistryChangesDropping)
+	writeLine(builder, "allow_log_provider_dropping := %t", p.AllowLogProviderDropping)
 	result := strings.Replace(policyRegoTemplate, "@@OBJECTS@@", builder.String(), 1)
 	result = strings.Replace(result, "@@API_VERSION@@", apiVersion, 1)
 	result = strings.Replace(result, "@@FRAMEWORK_VERSION@@", frameworkVersion, 1)

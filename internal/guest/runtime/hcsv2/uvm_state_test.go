@@ -4,8 +4,98 @@
 package hcsv2
 
 import (
+	"context"
+	"io"
+	"strings"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
+
+func TestCalculateCgroupMemoryLimit(t *testing.T) {
+	tests := []struct {
+		name        string
+		total       uint64
+		reserve     uint64
+		want        int64
+		wantErrText string
+	}{
+		{name: "subtracts reserve", total: 4096, reserve: 1024, want: 3072},
+		{name: "rejects equal reserve", total: 1024, reserve: 1024, wantErrText: "must be greater"},
+		{name: "rejects below reserve", total: 512, reserve: 1024, wantErrText: "must be greater"},
+		{name: "rejects int64 overflow", total: uint64(1 << 63), wantErrText: "exceeds maximum"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := calculateCgroupMemoryLimit(test.total, test.reserve)
+			if test.wantErrText != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErrText) {
+					t.Fatalf("expected error containing %q, got %v", test.wantErrText, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("calculateCgroupMemoryLimit returned error: %v", err)
+			}
+			if got != test.want {
+				t.Fatalf("calculateCgroupMemoryLimit returned %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSetCgroupMemoryLimit(t *testing.T) {
+	podsControl := &testCgroupUpdater{}
+	limit, updated, err := setCgroupMemoryLimit(podsControl, 4096, 1024, 2048)
+	if err != nil {
+		t.Fatalf("setCgroupMemoryLimit returned error: %v", err)
+	}
+	if !updated || limit != 3072 || podsControl.limit != 3072 {
+		t.Fatalf("setCgroupMemoryLimit returned limit=%d, updated=%t, applied=%d; want 3072, true, 3072", limit, updated, podsControl.limit)
+	}
+
+	limit, updated, err = setCgroupMemoryLimit(podsControl, 4096, 1024, 3072)
+	if err != nil {
+		t.Fatalf("setCgroupMemoryLimit returned error: %v", err)
+	}
+	if updated || limit != 3072 || podsControl.updates != 1 {
+		t.Fatalf("unchanged set returned limit=%d, updated=%t, updates=%d; want 3072, false, 1", limit, updated, podsControl.updates)
+	}
+}
+
+func TestModifyHostSettingsRejectsInvalidPodCgroupMemoryLimitRequestType(t *testing.T) {
+	for _, requestType := range []guestrequest.RequestType{
+		guestrequest.RequestTypeAdd,
+		guestrequest.RequestTypeRemove,
+		guestrequest.RequestTypePreAdd,
+	} {
+		t.Run(string(requestType), func(t *testing.T) {
+			host := NewHost(nil, nil, &securitypolicy.OpenDoorSecurityPolicyEnforcer{}, io.Discard)
+			err := host.modifyHostSettings(context.Background(), UVMContainerID, &guestrequest.ModificationRequest{
+				ResourceType: guestresource.ResourceTypePodCgroupMemoryLimit,
+				RequestType:  requestType,
+			})
+			if err == nil || !strings.Contains(err.Error(), "RequestType") {
+				t.Fatalf("modifyHostSettings returned %v, want invalid RequestType error", err)
+			}
+		})
+	}
+}
+
+type testCgroupUpdater struct {
+	limit   int64
+	updates int
+}
+
+func (cgroup *testCgroupUpdater) Update(resources *oci.LinuxResources) error {
+	cgroup.updates++
+	cgroup.limit = *resources.Memory.Limit
+	return nil
+}
 
 func Test_Add_Remove_RWDevice(t *testing.T) {
 	hm := newHostMounts()

@@ -2053,10 +2053,12 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 		AllowPropertiesAccess:            constraints.allowGetProperties,
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,
+		AllowHostNetwork:                 constraints.allowHostNetwork,
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
 		AllowRegistryChangesDropping:     constraints.allowRegistryChangesDropping,
+		AllowLogProviderDropping:         constraints.allowLogProviderDropping,
 	}
 }
 
@@ -2317,12 +2319,14 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 		allowGetProperties:               randBool(r),
 		allowDumpStacks:                  randBool(r),
 		allowRuntimeLogging:              false,
+		allowHostNetwork:                 randBool(r),
 		allowEnvironmentVariableDropping: false,
 		allowUnencryptedScratch:          randBool(r),
 		namespace:                        generateFragmentNamespace(testRand),
 		svn:                              generateSVN(testRand),
 		allowCapabilityDropping:          false,
 		allowRegistryChangesDropping:     false,
+		allowLogProviderDropping:         false,
 		ctx:                              context.Background(),
 	}
 }
@@ -3004,12 +3008,14 @@ type generatedConstraints struct {
 	allowGetProperties               bool
 	allowDumpStacks                  bool
 	allowRuntimeLogging              bool
+	allowHostNetwork                 bool
 	allowEnvironmentVariableDropping bool
 	allowUnencryptedScratch          bool
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
 	allowRegistryChangesDropping     bool
+	allowLogProviderDropping         bool
 	ctx                              context.Context
 }
 
@@ -3021,12 +3027,14 @@ type generatedWindowsConstraints struct {
 	allowGetProperties               bool
 	allowDumpStacks                  bool
 	allowRuntimeLogging              bool
+	allowHostNetwork                 bool
 	allowEnvironmentVariableDropping bool
 	allowUnencryptedScratch          bool
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
 	allowRegistryChangesDropping     bool
+	allowLogProviderDropping         bool
 	ctx                              context.Context
 }
 
@@ -3039,10 +3047,12 @@ func (constraints *generatedWindowsConstraints) toPolicy() *securityPolicyWindow
 		AllowPropertiesAccess:            constraints.allowGetProperties,
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,
+		AllowHostNetwork:                 constraints.allowHostNetwork,
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
 		AllowRegistryChangesDropping:     constraints.allowRegistryChangesDropping,
+		AllowLogProviderDropping:         constraints.allowLogProviderDropping,
 	}
 }
 
@@ -3084,10 +3094,12 @@ func generateWindowsConstraints(r *rand.Rand, maxContainers int32) *generatedWin
 		allowGetProperties:               randBool(r),
 		allowDumpStacks:                  randBool(r),
 		allowRuntimeLogging:              false,
+		allowHostNetwork:                 randBool(r),
 		allowEnvironmentVariableDropping: false,
 		allowUnencryptedScratch:          false,
 		allowCapabilityDropping:          false,
 		allowRegistryChangesDropping:     false,
+		allowLogProviderDropping:         false,
 		namespace:                        generateFragmentNamespace(r),
 		svn:                              generateSVN(r),
 		ctx:                              context.Background(),
