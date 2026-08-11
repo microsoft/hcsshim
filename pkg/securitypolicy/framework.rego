@@ -1209,7 +1209,7 @@ runtime_logging := {"allowed": true} if {
 
 default host_network := {"allowed": false}
 
-host_network := {"allowed": true} {
+host_network := {"allowed": true} if {
     allow_host_network
 }
 
