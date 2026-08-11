@@ -2,21 +2,21 @@ package test
 
 default is_greater_than := {"result": false}
 
-is_greater_than := {"result": true} {
+is_greater_than := {"result": true} if {
     input.a >= input.b
 }
 
-add := {"result": result} {
+add := {"result": result} if {
     result := input.a + input.b
 }
 
-add := {"result": result} {
+add := {"result": result} if {
     result := concat("+", [input.a, input.b])
 }
 
 default create := {"success": false}
 
-create := {"success": true, "metadata": [addGreater, addLesser]} {
+create := {"success": true, "metadata": [addGreater, addLesser]} if {
     input.a >= input.b
     addGreater := {
         "name": input.name,
@@ -32,7 +32,7 @@ create := {"success": true, "metadata": [addGreater, addLesser]} {
     }
 }
 
-create := {"success": true, "metadata": [addGreater, addLesser]} {
+create := {"success": true, "metadata": [addGreater, addLesser]} if {
     input.a < input.b
     addGreater := {
         "name": input.name,
@@ -52,16 +52,16 @@ default append := {"success": false}
 
 default lists_exist := false
 
-lists_exist {
+lists_exist if {
     data.metadata[input.name]
 }
 
-append := result {
+append := result if {
     not lists_exist
     result := create
 }
 
-append := {"success": true, "metadata": [updateGreater, updateLesser]} {
+append := {"success": true, "metadata": [updateGreater, updateLesser]} if {
     input.a >= input.b
     updateGreater := {
         "name": input.name,
@@ -77,7 +77,7 @@ append := {"success": true, "metadata": [updateGreater, updateLesser]} {
     }
 }
 
-append := {"success": true, "metadata": [updateGreater, updateLesser]} {
+append := {"success": true, "metadata": [updateGreater, updateLesser]} if {
     input.a < input.b
     updateGreater := {
         "name": input.name,
@@ -93,7 +93,7 @@ append := {"success": true, "metadata": [updateGreater, updateLesser]} {
     }
 }
 
-compute_gap := {"result": result, "metadata": [removeGreater, removeLesser]} {
+compute_gap := {"result": result, "metadata": [removeGreater, removeLesser]} if {
     diffs := [diff | some i
                       g := data.metadata[input.name].greater[i]
                       l := data.metadata[input.name].lesser[i]
@@ -114,7 +114,7 @@ compute_gap := {"result": result, "metadata": [removeGreater, removeLesser]} {
 
 subtract := data.module.subtract
 
-setAdd := {"success": true, "metadata": [addSet]} {
+setAdd := {"success": true, "metadata": [addSet]} if {
     addSet := {
         "name": input.name,
         "type": "set",
@@ -125,7 +125,7 @@ setAdd := {"success": true, "metadata": [addSet]} {
     }
 }
 
-setRemove := {"success": true, "metadata": [removeSet]} {
+setRemove := {"success": true, "metadata": [removeSet]} if {
     removeSet := {
         "name": input.name,
         "type": "set",
@@ -137,12 +137,12 @@ setRemove := {"success": true, "metadata": [removeSet]} {
 }
 
 default setContains := {"result": false}
-setContains := {"result": true} {
+setContains := {"result": true} if {
     data.metadata[input.name][_].value == input.value
 }
 
 default getSet := {"result": []}
-getSet := {"result": result} {
+getSet := {"result": result} if {
     s := data.metadata[input.name]
     result := [item.value | item := s[_]]
 }

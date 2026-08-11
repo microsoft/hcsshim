@@ -554,9 +554,6 @@ func (r *RegoPolicyInterpreter) compile() error {
 
 	options := ast.CompileOpts{
 		EnablePrintStatements: r.logLevel != LogNone,
-		ParserOptions: ast.ParserOptions{
-			RegoVersion: ast.RegoV0,
-		},
 	}
 
 	if compiled, err := ast.CompileModulesWithOpt(modules, options); err == nil {
@@ -732,7 +729,6 @@ func (r *RegoPolicyInterpreter) query(rule string, input map[string]interface{})
 		rego.Query(rule),
 		rego.Input(input),
 		rego.Store(store),
-		rego.SetRegoVersion(ast.RegoV0),
 		rego.EnablePrintStatements(r.logLevel != LogNone),
 		rego.PrintHook(topdown.NewPrintHook(&buf)),
 		rego.Compiler(r.compiledModules))

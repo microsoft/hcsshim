@@ -10,33 +10,33 @@ version := "@@FRAMEWORK_VERSION@@"
 # Policies should include .* explicitly at the beginning or end if partial
 # matches are to be allowed.
 
-anchor_pattern(p) := p {
+anchor_pattern(p) := p if {
     startswith(p, "^")
     endswith(p, "$")
-} else := concat("", ["^", p]) {
+} else := concat("", ["^", p]) if {
     endswith(p, "$")
-} else := concat("", [p, "$"]) {
+} else := concat("", [p, "$"]) if {
     startswith(p, "^")
 } else := concat("", ["^", p, "$"])
 
-device_mounted(target) {
+device_mounted(target) if {
     data.metadata.devices[target]
 }
 
-device_mounted(target) {
+device_mounted(target) if {
     data.metadata.rw_devices[target]
 }
 
 default deviceHash_ok := false
 
 # test if a device hash exists as a layer in a policy container
-deviceHash_ok {
+deviceHash_ok if {
     layer := data.policy.containers[_].layers[_]
     input.deviceHash == layer
 }
 
 # test if a device hash exists as a layer in a fragment container
-deviceHash_ok {
+deviceHash_ok if {
     feed := data.metadata.issuers[_].feeds[_]
     some fragment in feed
     layer := fragment.containers[_].layers[_]
@@ -45,11 +45,11 @@ deviceHash_ok {
 
 default mount_device := {"allowed": false}
 
-mount_target_ok {
+mount_target_ok if {
     regex.match(anchor_pattern(input.mountPathRegex), input.target)
 }
 
-mount_device := {"metadata": [addDevice], "allowed": true} {
+mount_device := {"metadata": [addDevice], "allowed": true} if {
     not device_mounted(input.target)
     deviceHash_ok
     mount_target_ok
@@ -64,17 +64,17 @@ mount_device := {"metadata": [addDevice], "allowed": true} {
 allowed_scratch_fs("ext4")
 allowed_scratch_fs("xfs")
 
-rwmount_device_encrypt_ok {
+rwmount_device_encrypt_ok if {
     input.encrypted
 }
 
-rwmount_device_encrypt_ok {
+rwmount_device_encrypt_ok if {
     allow_unencrypted_scratch
 }
 
 default rw_mount_device := {"allowed": false}
 
-rw_mount_device := {"metadata": [addDevice], "allowed": true} {
+rw_mount_device := {"metadata": [addDevice], "allowed": true} if {
     not device_mounted(input.target)
     rwmount_device_encrypt_ok
     input.ensureFilesystem
@@ -90,7 +90,7 @@ rw_mount_device := {"metadata": [addDevice], "allowed": true} {
 
 default unmount_device := {"allowed": false}
 
-unmount_device := {"metadata": [removeDevice], "allowed": true} {
+unmount_device := {"metadata": [removeDevice], "allowed": true} if {
     data.metadata.devices[input.unmountTarget]
 
     removeDevice := {
@@ -102,7 +102,7 @@ unmount_device := {"metadata": [removeDevice], "allowed": true} {
 
 default rw_unmount_device := {"allowed": false}
 
-rw_unmount_device := {"metadata": [removeRWDevice], "allowed": true} {
+rw_unmount_device := {"metadata": [removeRWDevice], "allowed": true} if {
     data.metadata.rw_devices[input.unmountTarget]
 
     removeRWDevice := {
@@ -120,7 +120,7 @@ default mount_blockdev := {"allowed": false}
 
 default unmount_blockdev := {"allowed": false}
 
-layerPaths_ok(layers) {
+layerPaths_ok(layers) if {
     length := count(layers)
     count(input.layerPaths) == length
     every i, path in input.layerPaths {
@@ -128,7 +128,7 @@ layerPaths_ok(layers) {
     }
 }
 
-layerHashes_ok(layers) {
+layerHashes_ok(layers) if {
     length := count(layers)
     count(input.layerHashes) == length
     every i, hash in input.layerHashes {
@@ -138,11 +138,11 @@ layerHashes_ok(layers) {
 
 default overlay_exists := false
 
-overlay_exists {
+overlay_exists if {
     data.metadata.matches[input.containerID]
 }
 
-overlay_mounted(target) {
+overlay_mounted(target) if {
     data.metadata.overlayTargets[target]
 }
 
@@ -151,17 +151,17 @@ overlay_mounted(target) {
 # breaking other rules in this case.
 default policy_containers := []
 
-policy_containers := pc {
+policy_containers := pc if {
     semver.compare(policy_framework_version, version) == 0
     pc := data.policy.containers
 }
 
-policy_containers := pc {
+policy_containers := pc if {
     semver.compare(policy_framework_version, version) < 0
     pc := apply_defaults("container", data.policy.containers, policy_framework_version)
 }
 
-candidate_containers := containers {
+candidate_containers := containers if {
     fragment_containers := [c |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
@@ -184,7 +184,7 @@ candidate_containers := containers {
 
 default mount_cims := {"allowed": false}
 
-mount_cims := {"metadata": [addMatches], "allowed": true} {
+mount_cims := {"metadata": [addMatches], "allowed": true} if {
     not overlay_exists
 
     containers := [container |
@@ -204,7 +204,7 @@ mount_cims := {"metadata": [addMatches], "allowed": true} {
 
 default mount_overlay := {"allowed": false}
 
-mount_overlay := {"metadata": [addMatches, addOverlayTarget], "allowed": true} {
+mount_overlay := {"metadata": [addMatches, addOverlayTarget], "allowed": true} if {
     not overlay_exists
 
     # sanity check, but due to checks in the Go code, this should always pass if
@@ -234,7 +234,7 @@ mount_overlay := {"metadata": [addMatches, addOverlayTarget], "allowed": true} {
 
 default unmount_overlay := {"allowed": false}
 
-unmount_overlay := {"metadata": [removeOverlayTarget], "allowed": true} {
+unmount_overlay := {"metadata": [removeOverlayTarget], "allowed": true} if {
     overlay_mounted(input.unmountTarget)
     removeOverlayTarget := {
         "name": "overlayTargets",
@@ -243,7 +243,7 @@ unmount_overlay := {"metadata": [removeOverlayTarget], "allowed": true} {
     }
 }
 
-command_ok(command) {
+command_ok(command) if {
     count(input.argList) == count(command)
     every i, arg in input.argList {
         command[i] == arg
@@ -266,18 +266,18 @@ command_ok(command) {
 # env_pattern_ok(pattern, strategy, value) tests whether the given string
 # pattern matches the input value.
 
-env_pattern_ok(pattern, "string", value) {
+env_pattern_ok(pattern, "string", value) if {
     pattern == value
 }
 
-env_pattern_ok(pattern, "re2", value) {
+env_pattern_ok(pattern, "re2", value) if {
     regex.match(anchor_pattern(pattern), value)
 }
 
 # env_rule_ok accepts both forms of env rules described above, and matches it
 # against the given env string (of form name=value).
 
-env_rule_ok(rule, env) {
+env_rule_ok(rule, env) if {
     pattern := object.get(rule, "pattern", null)
     strategy := object.get(rule, "strategy", null)
     pattern != null
@@ -285,7 +285,7 @@ env_rule_ok(rule, env) {
     env_pattern_ok(pattern, strategy, env)
 }
 
-env_rule_ok(rule, env) {
+env_rule_ok(rule, env) if {
     rule_name := object.get(rule, "name", null)
     name_strategy := object.get(rule, "name_strategy", null)
     rule_value := object.get(rule, "value", null)
@@ -307,18 +307,18 @@ env_rule_ok(rule, env) {
 
 # For a required env rule, check that envList contains a matching env var for
 # it.
-env_required_rule_ok(rule, envList) {
+env_required_rule_ok(rule, envList) if {
     rule.required
     some env in envList
     env_rule_ok(rule, env)
 }
 
 # If it's not required, skip the check
-env_required_rule_ok(rule, envList) {
+env_required_rule_ok(rule, envList) if {
     not rule.required
 }
 
-envList_ok(env_rules, envList) {
+envList_ok(env_rules, envList) if {
     # Check that all required rules are satisfied
     every rule in env_rules {
         env_required_rule_ok(rule, envList)
@@ -331,7 +331,7 @@ envList_ok(env_rules, envList) {
     }
 }
 
-valid_envs_subset(env_rules) := envs {
+valid_envs_subset(env_rules) := envs if {
     envs := {env |
         some env in input.envList
         some rule in env_rules
@@ -339,7 +339,7 @@ valid_envs_subset(env_rules) := envs {
     }
 }
 
-valid_envs_for_all(items) := envs {
+valid_envs_for_all(items) := envs if {
     allow_environment_variable_dropping
 
     # for each item, find a subset of the environment rules
@@ -374,65 +374,65 @@ valid_envs_for_all(items) := envs {
     envs := envs_i
 }
 
-valid_envs_for_all(items) := envs {
+valid_envs_for_all(items) := envs if {
     not allow_environment_variable_dropping
 
     # no dropping allowed, so we just return the input
     envs := input.envList
 }
 
-workingDirectory_ok(working_dir) {
+workingDirectory_ok(working_dir) if {
     input.workingDir == working_dir
 }
 
-privileged_ok(elevation_allowed) {
+privileged_ok(elevation_allowed) if {
     is_linux
     not input.privileged
 }
 
-privileged_ok(elevation_allowed) {
+privileged_ok(elevation_allowed) if {
     is_linux
     input.privileged
     input.privileged == elevation_allowed
 }
 
-privileged_ok(no_new_privileges) {
+privileged_ok(no_new_privileges) if {
     # no-op for windows
     is_windows
 }
 
-noNewPrivileges_ok(no_new_privileges) {
+noNewPrivileges_ok(no_new_privileges) if {
     is_linux
     no_new_privileges
     input.noNewPrivileges
 }
 
-noNewPrivileges_ok(no_new_privileges) {
+noNewPrivileges_ok(no_new_privileges) if {
     is_linux
     not no_new_privileges
 }
 
-noNewPrivileges_ok(obj) {
+noNewPrivileges_ok(obj) if {
     is_windows
 }
 
-idName_ok(pattern, "any", value) {
+idName_ok(pattern, "any", value) if {
     true
 }
 
-idName_ok(pattern, "id", value) {
+idName_ok(pattern, "id", value) if {
     pattern == value.id
 }
 
-idName_ok(pattern, "name", value) {
+idName_ok(pattern, "name", value) if {
     pattern == value.name
 }
 
-idName_ok(pattern, "re2", value) {
+idName_ok(pattern, "re2", value) if {
     regex.match(anchor_pattern(pattern), value.name)
 }
 
-user_ok(user) {
+user_ok(user) if {
     is_linux
     user.umask == input.umask
     idName_ok(user.user_idname.pattern, user.user_idname.strategy, input.user)
@@ -442,21 +442,21 @@ user_ok(user) {
     }
 }
 
-user_ok(user) {
+user_ok(user) if {
     is_windows
     input.user == user
 }
 
-seccomp_ok(seccomp_profile_sha256) {
+seccomp_ok(seccomp_profile_sha256) if {
     is_linux
     input.seccompProfileSHA256 == seccomp_profile_sha256
 }
 
-seccomp_ok(seccomp_profile_sha256) {
+seccomp_ok(seccomp_profile_sha256) if {
     is_windows
 }
 
-devices_ok(expected_devices, actual_devices) {
+devices_ok(expected_devices, actual_devices) if {
     # Allow out of order but not duplicates
     set_expected := {dev | dev := expected_devices[_]}
     set_actual := {dev | dev := actual_devices[_]}
@@ -466,18 +466,18 @@ devices_ok(expected_devices, actual_devices) {
 
 default container_started := false
 
-container_started {
+container_started if {
     data.metadata.started[input.containerID]
 }
 
 default container_privileged := false
 
-container_privileged {
+container_privileged if {
     is_linux
     data.metadata.started[input.containerID].privileged
 }
 
-capsList_ok(allowed_caps_list, requested_caps_list) {
+capsList_ok(allowed_caps_list, requested_caps_list) if {
     count(allowed_caps_list) == count(requested_caps_list)
 
     every cap in requested_caps_list {
@@ -491,7 +491,7 @@ capsList_ok(allowed_caps_list, requested_caps_list) {
     }
 }
 
-filter_capsList_by_allowed(allowed_caps_list, requested_caps_list) := caps {
+filter_capsList_by_allowed(allowed_caps_list, requested_caps_list) := caps if {
     # find a subset of the capabilities that are valid
     caps := {cap |
         some cap in requested_caps_list
@@ -500,7 +500,7 @@ filter_capsList_by_allowed(allowed_caps_list, requested_caps_list) := caps {
     }
 }
 
-filter_capsList_for_single_container(allowed_caps) := caps {
+filter_capsList_for_single_container(allowed_caps) := caps if {
     bounding := filter_capsList_by_allowed(allowed_caps.bounding, input.capabilities.bounding)
     effective := filter_capsList_by_allowed(allowed_caps.effective, input.capabilities.effective)
     inheritable := filter_capsList_by_allowed(allowed_caps.inheritable, input.capabilities.inheritable)
@@ -516,7 +516,7 @@ filter_capsList_for_single_container(allowed_caps) := caps {
     }
 }
 
-largest_caps_sets_for_all(containers, privileged) := largest_caps_sets {
+largest_caps_sets_for_all(containers, privileged) := largest_caps_sets if {
     filtered := [caps |
         container := containers[_]
         capabilities := get_capabilities(container, privileged)
@@ -541,7 +541,7 @@ largest_caps_sets_for_all(containers, privileged) := largest_caps_sets {
     ]
 }
 
-all_caps_sets_are_equal(sets) := caps {
+all_caps_sets_are_equal(sets) := caps if {
     # if there is more than one set with the same size, we
     # can only proceed if they are all the same, so we verify
     # that the intersection is equal to the union. For a single
@@ -573,7 +573,7 @@ all_caps_sets_are_equal(sets) := caps {
     }
 }
 
-valid_caps_for_all(containers, privileged) := caps {
+valid_caps_for_all(containers, privileged) := caps if {
     is_linux
     allow_capability_dropping
 
@@ -585,7 +585,7 @@ valid_caps_for_all(containers, privileged) := caps {
     caps := all_caps_sets_are_equal(largest_caps_sets)
 }
 
-valid_caps_for_all(containers, privileged) := caps {
+valid_caps_for_all(containers, privileged) := caps if {
     is_linux
     not allow_capability_dropping
 
@@ -593,7 +593,7 @@ valid_caps_for_all(containers, privileged) := caps {
     caps := input.capabilities
 }
 
-caps_ok(allowed_caps, requested_caps) {
+caps_ok(allowed_caps, requested_caps) if {
     is_linux
     capsList_ok(allowed_caps.bounding, requested_caps.bounding)
     capsList_ok(allowed_caps.effective, requested_caps.effective)
@@ -602,16 +602,16 @@ caps_ok(allowed_caps, requested_caps) {
     capsList_ok(allowed_caps.ambient, requested_caps.ambient)
 }
 
-caps_ok(allowed_caps, requested_caps) {
+caps_ok(allowed_caps, requested_caps) if {
     is_windows
 }
 
-get_capabilities(container, privileged) := capabilities {
+get_capabilities(container, privileged) := capabilities if {
     container.capabilities != null
     capabilities := container.capabilities
 }
 
-default_privileged_capabilities := capabilities {
+default_privileged_capabilities := capabilities if {
     caps := {cap | cap := data.defaultPrivilegedCapabilities[_]}
     capabilities := {
         "bounding": caps,
@@ -622,13 +622,13 @@ default_privileged_capabilities := capabilities {
     }
 }
 
-get_capabilities(container, true) := capabilities {
+get_capabilities(container, true) := capabilities if {
     container.capabilities == null
     container.allow_elevated
     capabilities := default_privileged_capabilities
 }
 
-default_unprivileged_capabilities := capabilities {
+default_unprivileged_capabilities := capabilities if {
     caps := {cap | cap := data.defaultUnprivilegedCapabilities[_]}
     capabilities := {
         "bounding": caps,
@@ -639,13 +639,13 @@ default_unprivileged_capabilities := capabilities {
     }
 }
 
-get_capabilities(container, false) := capabilities {
+get_capabilities(container, false) := capabilities if {
     container.capabilities == null
     container.allow_elevated
     capabilities := default_unprivileged_capabilities
 }
 
-get_capabilities(container, privileged) := capabilities {
+get_capabilities(container, privileged) := capabilities if {
     container.capabilities == null
     not container.allow_elevated
     capabilities := default_unprivileged_capabilities
@@ -657,7 +657,7 @@ create_container := {"metadata": [updateMatches, addStarted],
                      "env_list": env_list,
                      "caps_list": caps_list,
                      "allow_stdio_access": allow_stdio_access,
-                     "allowed": true} {
+                     "allowed": true} if {
     is_linux
     not container_started
 
@@ -733,7 +733,7 @@ create_container := {"metadata": [updateMatches, addStarted],
 create_container := {"metadata": [updateMatches, addStarted],
                      "env_list": env_list,
                      "allow_stdio_access": allow_stdio_access,
-                     "allowed": true} {
+                     "allowed": true} if {
     is_windows
     not container_started
 
@@ -790,7 +790,7 @@ create_container := {"metadata": [updateMatches, addStarted],
     }
 }
 
-security_ok(current_container) {
+security_ok(current_container) if {
     is_linux
     noNewPrivileges_ok(current_container.no_new_privileges)
     privileged_ok(current_container.allow_elevated)
@@ -798,34 +798,34 @@ security_ok(current_container) {
     mountList_ok(current_container.mounts, current_container.allow_elevated)
 }
 
-security_ok(current_container) {
+security_ok(current_container) if {
     is_windows
 }
 
-mountSource_ok(constraint, source) {
+mountSource_ok(constraint, source) if {
     startswith(constraint, data.sandboxPrefix)
     newConstraint := replace(constraint, data.sandboxPrefix, input.sandboxDir)
     regex.match(anchor_pattern(newConstraint), source)
 }
 
-mountSource_ok(constraint, source) {
+mountSource_ok(constraint, source) if {
     startswith(constraint, data.hugePagesPrefix)
     newConstraint := replace(constraint, data.hugePagesPrefix, input.hugePagesDir)
     regex.match(anchor_pattern(newConstraint), source)
 }
 
-mountSource_ok(constraint, source) {
+mountSource_ok(constraint, source) if {
     startswith(constraint, data.plan9Prefix)
     some target, containerID in data.metadata.p9mounts
     source == target
     input.containerID == containerID
 }
 
-mountSource_ok(constraint, source) {
+mountSource_ok(constraint, source) if {
     constraint == source
 }
 
-mountConstraint_ok(constraint, mount) {
+mountConstraint_ok(constraint, mount) if {
     mount.type == constraint.type
     mountSource_ok(constraint.source, mount.source)
     mount.destination != ""
@@ -846,17 +846,17 @@ mountConstraint_ok(constraint, mount) {
     }
 }
 
-mount_ok(mounts, allow_elevated, mount) {
+mount_ok(mounts, allow_elevated, mount) if {
     some constraint in mounts
     mountConstraint_ok(constraint, mount)
 }
 
-mount_ok(mounts, allow_elevated, mount) {
+mount_ok(mounts, allow_elevated, mount) if {
     some constraint in data.defaultMounts
     mountConstraint_ok(constraint, mount)
 }
 
-mount_ok(mounts, allow_elevated, mount) {
+mount_ok(mounts, allow_elevated, mount) if {
     allow_elevated
     some constraint in data.privilegedMounts
     mountConstraint_ok(constraint, mount)
@@ -879,7 +879,7 @@ mount_ok(mounts, allow_elevated, mount) {
 # We have to allow this special case whether or not this policy currently allows
 # any privileged containers at all, since a fragment that is loaded in the
 # future may allow privileged containers.
-mount_ok(mounts, allow_elevated, mount) {
+mount_ok(mounts, allow_elevated, mount) if {
     input.isSandboxContainer
 
     # we allow allow_elevated to be false since this is what existing policies
@@ -896,22 +896,22 @@ mount_ok(mounts, allow_elevated, mount) {
     "rw" in mount.options
 }
 
-mountList_ok(mounts, allow_elevated) {
+mountList_ok(mounts, allow_elevated) if {
     is_linux
     every mount in input.mounts {
         mount_ok(mounts, allow_elevated, mount)
     }
 }
-mountList_ok(mounts, allow_elevated) {
+mountList_ok(mounts, allow_elevated) if {
     # no-op for windows
     is_windows
 }
 
-is_linux {
+is_linux if {
     data.metadata.operatingsystem[ostype] == "linux"
 }
 
-is_windows {
+is_windows if {
     data.metadata.operatingsystem[ostype] == "windows"
 }
 
@@ -920,7 +920,7 @@ default exec_in_container := {"allowed": false}
 exec_in_container := {"metadata": [updateMatches],
                       "env_list": env_list,
                       "caps_list": caps_list,
-                      "allowed": true} {
+                      "allowed": true} if {
     is_linux
     container_started
 
@@ -972,7 +972,7 @@ exec_in_container := {"metadata": [updateMatches],
 
 exec_in_container := {"metadata": [updateMatches],
                       "env_list": env_list,
-                      "allowed": true} {
+                      "allowed": true} if {
 
     is_windows
     container_started
@@ -1014,7 +1014,7 @@ exec_in_container := {"metadata": [updateMatches],
 
 default shutdown_container := {"allowed": false}
 
-shutdown_container := {"metadata": [remove], "allowed": true} {
+shutdown_container := {"metadata": [remove], "allowed": true} if {
     container_started
     remove := {
         "name": "matches",
@@ -1025,7 +1025,7 @@ shutdown_container := {"metadata": [remove], "allowed": true} {
 
 default signal_container_process := {"allowed": false}
 
-signal_container_process := {"metadata": [updateMatches], "allowed": true} {
+signal_container_process := {"metadata": [updateMatches], "allowed": true} if {
     container_started
     input.isInitProcess
     containers := [container |
@@ -1042,7 +1042,7 @@ signal_container_process := {"metadata": [updateMatches], "allowed": true} {
     }
 }
 
-signal_container_process := {"metadata": [updateMatches], "allowed": true} {
+signal_container_process := {"metadata": [updateMatches], "allowed": true} if {
     container_started
     not input.isInitProcess
     containers := [container |
@@ -1061,18 +1061,18 @@ signal_container_process := {"metadata": [updateMatches], "allowed": true} {
     }
 }
 
-signal_ok(signals) {
+signal_ok(signals) if {
     some signal in signals
     input.signal == signal
 }
 
-plan9_mounted(target) {
+plan9_mounted(target) if {
     data.metadata.p9mounts[target]
 }
 
 default plan9_mount := {"allowed": false}
 
-plan9_mount := {"metadata": [addPlan9Target], "allowed": true} {
+plan9_mount := {"metadata": [addPlan9Target], "allowed": true} if {
     not plan9_mounted(input.target)
     some containerID, _ in data.metadata.matches
     pattern := concat("", ["^", input.rootPrefix, "/", containerID, input.mountPathPrefix, "$"])
@@ -1087,7 +1087,7 @@ plan9_mount := {"metadata": [addPlan9Target], "allowed": true} {
 
 default plan9_unmount := {"allowed": false}
 
-plan9_unmount := {"metadata": [removePlan9Target], "allowed": true} {
+plan9_unmount := {"metadata": [removePlan9Target], "allowed": true} if {
     plan9_mounted(input.unmountTarget)
     removePlan9Target := {
         "name": "p9mounts",
@@ -1106,11 +1106,11 @@ default enforcement_point_info := {
     "use_framework": false
 }
 
-enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": false, "version_missing": true, "use_framework": false} {
+enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": false, "version_missing": true, "use_framework": false} if {
     policy_api_version == null
 }
 
-enforcement_point_info := {"available": available, "default_results": default_results, "unknown": false, "invalid": false, "version_missing": false, "use_framework": use_framework} {
+enforcement_point_info := {"available": available, "default_results": default_results, "unknown": false, "invalid": false, "version_missing": false, "use_framework": use_framework} if {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.version, enforcement_point.introducedVersion) >= 0
     available := semver.compare(policy_api_version, enforcement_point.introducedVersion) >= 0
@@ -1118,14 +1118,14 @@ enforcement_point_info := {"available": available, "default_results": default_re
     use_framework := enforcement_point.use_framework
 }
 
-enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": true, "version_missing": false, "use_framework": false} {
+enforcement_point_info := {"available": false, "default_results": {"allow": false}, "unknown": false, "invalid": true, "version_missing": false, "use_framework": false} if {
     enforcement_point := data.api.enforcement_points[input.name]
     semver.compare(data.api.version, enforcement_point.introducedVersion) < 0
 }
 
 default candidate_external_processes := []
 
-candidate_external_processes := external_processes {
+candidate_external_processes := external_processes if {
     semver.compare(policy_framework_version, version) == 0
 
     policy_external_processes := [e | e := data.policy.external_processes[_]]
@@ -1138,7 +1138,7 @@ candidate_external_processes := external_processes {
     external_processes := array.concat(policy_external_processes, fragment_external_processes)
 }
 
-candidate_external_processes := external_processes {
+candidate_external_processes := external_processes if {
     semver.compare(policy_framework_version, version) < 0
 
     policy_external_processes := apply_defaults("external_process", data.policy.external_processes, policy_framework_version)
@@ -1151,7 +1151,7 @@ candidate_external_processes := external_processes {
     external_processes := array.concat(policy_external_processes, fragment_external_processes)
 }
 
-external_process_ok(process) {
+external_process_ok(process) if {
     command_ok(process.command)
     envList_ok(process.env_rules, input.envList)
     workingDirectory_ok(process.working_dir)
@@ -1161,7 +1161,7 @@ default exec_external := {"allowed": false}
 
 exec_external := {"allowed": true,
                   "allow_stdio_access": allow_stdio_access,
-                  "env_list": env_list} {
+                  "env_list": env_list} if {
     possible_processes := [process |
         process := candidate_external_processes[_]
         # NB any change to these narrowing conditions should be reflected in
@@ -1191,25 +1191,25 @@ exec_external := {"allowed": true,
 
 default get_properties := {"allowed": false}
 
-get_properties := {"allowed": true} {
+get_properties := {"allowed": true} if {
     allow_properties_access
 }
 
 default dump_stacks := {"allowed": false}
 
-dump_stacks := {"allowed": true} {
+dump_stacks := {"allowed": true} if {
     allow_dump_stacks
 }
 
 default runtime_logging := {"allowed": false}
 
-runtime_logging := {"allowed": true} {
+runtime_logging := {"allowed": true} if {
     allow_runtime_logging
 }
 
 default host_network := {"allowed": false}
 
-host_network := {"allowed": true} {
+host_network := {"allowed": true} if {
     allow_host_network
 }
 
@@ -1235,12 +1235,12 @@ fragment_transparency_trust_lists := data[input.namespace].transparency_trust_li
 default fragment_platform_rules := []
 fragment_platform_rules := data[input.namespace].platform_rules
 
-apply_defaults(name, raw_values, framework_version) := values {
+apply_defaults(name, raw_values, framework_version) := values if {
     semver.compare(framework_version, version) == 0
     values := raw_values
 }
 
-apply_defaults("container", raw_values, framework_version) := values {
+apply_defaults("container", raw_values, framework_version) := values if {
     semver.compare(framework_version, version) < 0
     values := [checked |
         raw := raw_values[_]
@@ -1248,7 +1248,7 @@ apply_defaults("container", raw_values, framework_version) := values {
     ]
 }
 
-apply_defaults("external_process", raw_values, framework_version) := values {
+apply_defaults("external_process", raw_values, framework_version) := values if {
     semver.compare(framework_version, version) < 0
     values := [checked |
         raw := raw_values[_]
@@ -1256,7 +1256,7 @@ apply_defaults("external_process", raw_values, framework_version) := values {
     ]
 }
 
-apply_defaults("fragment", raw_values, framework_version) := values {
+apply_defaults("fragment", raw_values, framework_version) := values if {
     semver.compare(framework_version, version) < 0
     values := [checked |
         raw := raw_values[_]
@@ -1268,13 +1268,13 @@ apply_defaults("fragment", raw_values, framework_version) := values {
 # policy has it, silently ignore as it might be using the name for something
 # else.
 
-apply_defaults("transparency_trust_lists", raw_values, framework_version) := values {
+apply_defaults("transparency_trust_lists", raw_values, framework_version) := values if {
     semver.compare(framework_version, version) < 0
     semver.compare(framework_version, "0.5.0") >= 0
     values := raw_values
 }
 
-apply_defaults("transparency_trust_lists", raw_values, framework_version) := values {
+apply_defaults("transparency_trust_lists", raw_values, framework_version) := values if {
     semver.compare(framework_version, "0.5.0") < 0
     values := []
 }
@@ -1282,7 +1282,7 @@ apply_defaults("transparency_trust_lists", raw_values, framework_version) := val
 # platform_rules is introduced in framework version 0.5.0.  If an old policy has it,
 # silently ignore as it might be using the name for something else.
 
-apply_defaults("platform_rules", raw_values, framework_version) := values {
+apply_defaults("platform_rules", raw_values, framework_version) := values if {
     semver.compare(framework_version, version) < 0
     semver.compare(framework_version, "0.5.0") >= 0
     # This is currently unreachable, otherwise we would call something like
@@ -1290,7 +1290,7 @@ apply_defaults("platform_rules", raw_values, framework_version) := values {
     values := raw_values
 }
 
-apply_defaults("platform_rules", raw_values, framework_version) := values {
+apply_defaults("platform_rules", raw_values, framework_version) := values if {
     semver.compare(framework_version, "0.5.0") < 0
     values := []
 }
@@ -1298,7 +1298,7 @@ apply_defaults("platform_rules", raw_values, framework_version) := values {
 default fragment_framework_version := null
 fragment_framework_version := data[input.namespace].framework_version
 
-extract_fragment_includes(includes) := fragment {
+extract_fragment_includes(includes) := fragment if {
     framework_version := fragment_framework_version
     objects := {
         "containers": apply_defaults("container", fragment_containers, framework_version),
@@ -1335,15 +1335,15 @@ extract_fragment_includes(includes) := fragment {
 # This map does not contain any containers / fragments allowed by the top-level
 # policy itself.  The candidate_* rules need to combine both sources.
 
-issuer_exists(iss) {
+issuer_exists(iss) if {
     data.metadata.issuers[iss]
 }
 
-feed_exists(iss, feed) {
+feed_exists(iss, feed) if {
     data.metadata.issuers[iss].feeds[feed]
 }
 
-update_issuer(includes) := issuer {
+update_issuer(includes) := issuer if {
     feed_exists(input.issuer, input.feed)
     old_issuer := data.metadata.issuers[input.issuer]
     old_fragments := old_issuer.feeds[input.feed]
@@ -1352,7 +1352,7 @@ update_issuer(includes) := issuer {
     issuer := object.union(old_issuer, new_issuer)
 }
 
-update_issuer(includes) := issuer {
+update_issuer(includes) := issuer if {
     not feed_exists(input.issuer, input.feed)
     old_issuer := data.metadata.issuers[input.issuer]
     new_issuer := {"feeds": {input.feed: [extract_fragment_includes(includes)]}}
@@ -1360,7 +1360,7 @@ update_issuer(includes) := issuer {
     issuer := object.union(old_issuer, new_issuer)
 }
 
-update_issuer(includes) := issuer {
+update_issuer(includes) := issuer if {
     not issuer_exists(input.issuer)
     issuer := {"feeds": {input.feed: [extract_fragment_includes(includes)]}}
 }
@@ -1369,12 +1369,12 @@ update_issuer(includes) := issuer {
 # to [] to prevent breaking other rules.
 default policy_fragments := []
 
-policy_fragments := pf {
+policy_fragments := pf if {
     semver.compare(policy_framework_version, version) == 0
     pf := data.policy.fragments
 }
 
-policy_fragments := pf {
+policy_fragments := pf if {
     semver.compare(policy_framework_version, version) < 0
     pf := apply_defaults("fragment", data.policy.fragments, policy_framework_version)
 }
@@ -1421,7 +1421,7 @@ policy_fragments := pf {
 
 default fragment_parameters_for(_, _) := []
 
-fragment_parameters_for(iss, feed) := params {
+fragment_parameters_for(iss, feed) := params if {
     params_nested := [
         p.parameters
         | p := data.metadata.fragment_parameters[_]
@@ -1438,7 +1438,7 @@ fragment_parameters_for(iss, feed) := params {
     params := array.concat(params_nested, params_policy)
 }
 
-candidate_fragments := fragments {
+candidate_fragments := fragments if {
     fragment_fragments := [f |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
@@ -1448,18 +1448,18 @@ candidate_fragments := fragments {
     fragments := array.concat(policy_fragments, fragment_fragments)
 }
 
-svn_ok(svn, minimum_svn) {
+svn_ok(svn, minimum_svn) if {
     # deprecated
     semver.is_valid(svn)
     semver.is_valid(minimum_svn)
     semver.compare(svn, minimum_svn) >= 0
 }
 
-svn_ok(svn, minimum_svn) {
+svn_ok(svn, minimum_svn) if {
     to_number(svn) >= to_number(minimum_svn)
 }
 
-fragment_issuer_feed_ok(fragment) {
+fragment_issuer_feed_ok(fragment) if {
     input.issuer == fragment.issuer
     input.feed == fragment.feed
 }
@@ -1471,22 +1471,22 @@ fragment_issuer_feed_ok(fragment) {
 # neither the header nor the fragment Rego declares an SVN is tested in
 # Test_Rego_LoadFragment_MissingSVN.
 
-header_svn_ok(fragment) {
+header_svn_ok(fragment) if {
     not input.has_header_svn
 }
 
-header_svn_ok(fragment) {
+header_svn_ok(fragment) if {
     input.has_header_svn
     svn_ok(input.header_svn, fragment.minimum_svn)
 }
 
-svn_ok_if_defined(minimum_svn) {
+svn_ok_if_defined(minimum_svn) if {
     data[input.namespace].svn # This also works if the svn is 0
     not input.has_header_svn
     svn_ok(data[input.namespace].svn, minimum_svn)
 }
 
-svn_ok_if_defined(minimum_svn) {
+svn_ok_if_defined(minimum_svn) if {
     data[input.namespace].svn
     input.has_header_svn
     # Use to_number as fragment may define svn as a string
@@ -1495,7 +1495,7 @@ svn_ok_if_defined(minimum_svn) {
 }
 
 # If not defined in fragment, require SVN to present in the header
-svn_ok_if_defined(minimum_svn) {
+svn_ok_if_defined(minimum_svn) if {
     not data[input.namespace].svn
     input.has_header_svn
     svn_ok(input.header_svn, minimum_svn)
@@ -1513,7 +1513,7 @@ svn_ok_if_defined(minimum_svn) {
 # feeds of the TTLs containing the key for the receipt.  If not set, no receipts
 # are required.  The list is an AND: every required entry must be satisfied.
 # One receipt can satisfy multiple such requirement entries.
-fragment_receipts_ok(fragment) {
+fragment_receipts_ok(fragment) if {
     required := object.get(fragment, "required_receipts", [])
     every required_issuer in required {
         receipt_requirement_satisfied(required_issuer)
@@ -1528,19 +1528,19 @@ fragment_receipts_ok(fragment) {
 # - "TTL:<subject>": satisfied by a validated receipt that was signed by a key
 #   contributed by a TTL with the given subject.
 # - a literal ledger name: satisfied by a validated receipt with that issuer.
-receipt_requirement_satisfied(required_issuer) {
+receipt_requirement_satisfied(required_issuer) if {
     required_issuer == "*"
     count(input.receipts) > 0
 }
 
-receipt_requirement_satisfied(required_issuer) {
+receipt_requirement_satisfied(required_issuer) if {
     startswith(required_issuer, "TTL:")
     subject := substring(required_issuer, count("TTL:"), -1)
     some receipt in input.receipts
     subject in receipt.ttl_subjects
 }
 
-receipt_requirement_satisfied(required_issuer) {
+receipt_requirement_satisfied(required_issuer) if {
     required_issuer != "*"
     not startswith(required_issuer, "TTL:")
     some receipt in input.receipts
@@ -1558,7 +1558,7 @@ default load_fragment := {"allowed": false}
 # in the header, and thus we could not have checked earlier), and if successful,
 # add the fragment to the metadata.
 
-load_fragment := {"allowed": true, "parameters": possibleParams} {
+load_fragment := {"allowed": true, "parameters": possibleParams} if {
     not input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
@@ -1568,7 +1568,7 @@ load_fragment := {"allowed": true, "parameters": possibleParams} {
     possibleParams := fragment_parameters_for(fragment.issuer, fragment.feed)
 }
 
-load_fragment := {"metadata": array.concat([updateIssuer], updateParameters), "add_module": add_module, "allowed": true} {
+load_fragment := {"metadata": array.concat([updateIssuer], updateParameters), "add_module": add_module, "allowed": true} if {
     input.fragment_loaded
     some fragment in candidate_fragments
     fragment_issuer_feed_ok(fragment)
@@ -1611,7 +1611,7 @@ load_fragment := {"metadata": array.concat([updateIssuer], updateParameters), "a
 default policy_transparency_trust_lists := []
 policy_transparency_trust_lists := data.policy.transparency_trust_lists
 
-candidate_transparency_trust_lists := ttls {
+candidate_transparency_trust_lists := ttls if {
     fragment_ttls := [r |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
@@ -1623,7 +1623,7 @@ candidate_transparency_trust_lists := ttls {
 
 # The set of ledger names a matching TTL authorizes for the given (issuer,
 # subject, svn).  "*" is a wildcard meaning "any ledger".
-ttl_allowed_ledgers_for_issuer_subject_svn(issuer, subject, svn) := allowed_ledgers {
+ttl_allowed_ledgers_for_issuer_subject_svn(issuer, subject, svn) := allowed_ledgers if {
     allowed_ledgers := {l |
         ttl := candidate_transparency_trust_lists[_]
         ttl.issuer == issuer
@@ -1633,19 +1633,19 @@ ttl_allowed_ledgers_for_issuer_subject_svn(issuer, subject, svn) := allowed_ledg
     }
 }
 
-ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
+ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result if {
     not "*" in allowed_ledgers
     result := {l | l := input_ledgers[_]; l in allowed_ledgers}
 }
 
-ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result {
+ttl_intersect_or_allow_all_if_wildcard(allowed_ledgers, input_ledgers) := result if {
     "*" in allowed_ledgers
     result := {l | l := input_ledgers[_]}
 }
 
 default load_transparency_trust_list := {"allowed": false}
 
-load_transparency_trust_list := {"allowed": true, "allowed_ledgers": allowed_ledgers} {
+load_transparency_trust_list := {"allowed": true, "allowed_ledgers": allowed_ledgers} if {
     ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
     allowed_ledgers := ttl_intersect_or_allow_all_if_wildcard(ttl_ledgers, input.ledgers)
     count(allowed_ledgers) > 0
@@ -1653,11 +1653,11 @@ load_transparency_trust_list := {"allowed": true, "allowed_ledgers": allowed_led
 
 default scratch_mount := {"allowed": false}
 
-scratch_mounted(target) {
+scratch_mounted(target) if {
     data.metadata.scratch_mounts[target]
 }
 
-scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} {
+scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} if {
     not scratch_mounted(input.target)
     allow_unencrypted_scratch
     add_scratch_mount := {
@@ -1668,7 +1668,7 @@ scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} {
     }
 }
 
-scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} {
+scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} if {
     not scratch_mounted(input.target)
     not allow_unencrypted_scratch
     input.encrypted
@@ -1682,7 +1682,7 @@ scratch_mount := {"metadata": [add_scratch_mount], "allowed": true} {
 
 default scratch_unmount := {"allowed": false}
 
-scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
+scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} if {
     scratch_mounted(input.unmountTarget)
     remove_scratch_mount := {
         "name": "scratch_mounts",
@@ -1705,7 +1705,7 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} {
 # Output: {"allowed": bool, "providers_to_keep": [name, ...]}
 default log_provider := {"allowed": false, "providers_to_keep": []}
 
-valid_log_providers := providers {
+valid_log_providers := providers if {
     allow_log_provider_dropping
 
     providers := [name |
@@ -1715,19 +1715,19 @@ valid_log_providers := providers {
     ]
 }
 
-valid_log_providers := providers {
+valid_log_providers := providers if {
     not allow_log_provider_dropping
     providers := input.providers
 }
 
-log_providers_ok(providers) {
+log_providers_ok(providers) if {
     every name in providers {
         some allowed_provider in data.policy.allowed_log_providers
         lower(name) == lower(allowed_provider)
     }
 }
 
-log_provider := {"allowed": true, "providers_to_keep": providers} {
+log_provider := {"allowed": true, "providers_to_keep": providers} if {
     providers := valid_log_providers
     log_providers_ok(providers)
 }
@@ -1736,7 +1736,7 @@ log_provider := {"allowed": true, "providers_to_keep": providers} {
 default registry_changes := {"allowed": false}
 
 # Helper function to compare registry keys
-registry_keys_match(policy_key, input_key) {
+registry_keys_match(policy_key, input_key) if {
     policy_key.hive == input_key.Hive
     policy_key.name == input_key.Name
     # Volatile field comparison (default to false if not specified)
@@ -1747,7 +1747,7 @@ registry_keys_match(policy_key, input_key) {
 
 # Helper function to compare registry values
 # STRING type
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1756,7 +1756,7 @@ registry_value_matches(policy_value, input_value) {
 }
 
 # EXPANDED_STRING type (uses StringValue field)
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1765,7 +1765,7 @@ registry_value_matches(policy_value, input_value) {
 }
 
 # MULTI_STRING type (uses StringValue field)
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1774,7 +1774,7 @@ registry_value_matches(policy_value, input_value) {
 }
 
 # D_WORD type
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1783,7 +1783,7 @@ registry_value_matches(policy_value, input_value) {
 }
 
 # Q_WORD type
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1792,7 +1792,7 @@ registry_value_matches(policy_value, input_value) {
 }
 
 # BINARY type
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1801,7 +1801,7 @@ registry_value_matches(policy_value, input_value) {
 }
 
 # CUSTOM_TYPE - both CustomType field and BinaryValue must match
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1811,7 +1811,7 @@ registry_value_matches(policy_value, input_value) {
 }
 
 # NONE type - no value to compare, just key and name
-registry_value_matches(policy_value, input_value) {
+registry_value_matches(policy_value, input_value) if {
     registry_keys_match(policy_value.key, input_value.Key)
     policy_value.name == input_value.Name
     policy_value.type == input_value.Type
@@ -1825,7 +1825,7 @@ filtered_registry_values(input_values, policy_values) := [input_val |
     registry_value_matches(policy_val, input_val)
 ]
 
-registry_changes := {"allowed": true} {
+registry_changes := {"allowed": true} if {
     containers := data.metadata.matches[input.containerID]
     container := containers[_]
 
@@ -1846,15 +1846,15 @@ registry_changes := {"allowed": true} {
 # injected into fragments, and is not otherwise intended to be called by user
 # directly.
 
-extract_parameter(name, fragment_parameters_obj, parameters_metadata) := fragment_parameters_obj[name] {
+extract_parameter(name, fragment_parameters_obj, parameters_metadata) := fragment_parameters_obj[name] if {
 	name in object.keys(fragment_parameters_obj)
-} else := parameters_metadata[name]["default"] {
+} else := parameters_metadata[name]["default"] if {
 	"default" in object.keys(parameters_metadata[name])
 }
 
 default policy_platform_rules := []
 
-policy_platform_rules := platform_rules {
+policy_platform_rules := platform_rules if {
     semver.compare(policy_framework_version, version) == 0
     platform_rules := data.policy.platform_rules
 }
@@ -1862,14 +1862,14 @@ policy_platform_rules := platform_rules {
 # For policy with framework_version < 0.5.0, apply_defaults will ignore
 # platform_rules and return [].
 
-policy_platform_rules := platform_rules {
+policy_platform_rules := platform_rules if {
     semver.compare(policy_framework_version, version) < 0
     platform_rules := apply_defaults("platform_rules", data.policy.platform_rules, policy_framework_version)
 }
 
 default candidate_platform_rules := []
 
-candidate_platform_rules := platform_rules {
+candidate_platform_rules := platform_rules if {
     fragment_platform_rules := [r |
         feed := data.metadata.issuers[_].feeds[_]
         fragment := feed[_]
@@ -1885,12 +1885,12 @@ candidate_platform_rules := platform_rules {
 # if multiple platform rules are defined.
 
 # No platform rules - return as-is.
-apply_platform_rules("container", container) := updated_containers {
+apply_platform_rules("container", container) := updated_containers if {
     count(candidate_platform_rules) == 0
     updated_containers := [container]
 }
 
-apply_platform_rules("container", container) := updated_containers {
+apply_platform_rules("container", container) := updated_containers if {
     count(candidate_platform_rules) > 0
     updated_containers := [updated_container |
         platform_rule := candidate_platform_rules[_]
@@ -1898,7 +1898,7 @@ apply_platform_rules("container", container) := updated_containers {
     ]
 }
 
-apply_single_platform_rule("container", container, platform_rule) := updated_container {
+apply_single_platform_rule("container", container, platform_rule) := updated_container if {
     container_env_rules := object.get(container, "env_rules", [])
     updated_env_rules := array.concat(container_env_rules, object.get(platform_rule, "env_rules", []))
 
@@ -1920,107 +1920,107 @@ reason := {
 # Error messages
 ################################################################
 
-errors["blockdev mounts are not supported"] {
+errors contains "blockdev mounts are not supported" if {
     input.rule in ["mount_blockdev", "unmount_blockdev"]
 }
 
-errors["deviceHash not found"] {
+errors contains "deviceHash not found" if {
     input.rule == "mount_device"
     not deviceHash_ok
 }
 
-errors["device already mounted at path"] {
+errors contains "device already mounted at path" if {
     input.rule in ["mount_device", "rw_mount_device"]
     device_mounted(input.target)
 }
 
-errors["mountpoint invalid"] {
+errors contains "mountpoint invalid" if {
     input.rule in ["mount_device", "rw_mount_device"]
     not mount_target_ok
 }
 
-errors["no device at path to unmount"] {
+errors contains "no device at path to unmount" if {
     input.rule == "unmount_device"
     not data.metadata.devices[input.unmountTarget]
     not data.metadata.rw_devices[input.unmountTarget]
 }
 
-errors["received read-only unmount request, but device provided is read-write"] {
+errors contains "received read-only unmount request, but device provided is read-write" if {
     input.rule == "unmount_device"
     not data.metadata.devices[input.unmountTarget]
     data.metadata.rw_devices[input.unmountTarget]
 }
 
-errors["no device at path to unmount"] {
+errors contains "no device at path to unmount" if {
     input.rule == "rw_unmount_device"
     not data.metadata.devices[input.unmountTarget]
     not data.metadata.rw_devices[input.unmountTarget]
 }
 
-errors["received read-write unmount request, but device provided is read-only"] {
+errors contains "received read-write unmount request, but device provided is read-only" if {
     input.rule == "rw_unmount_device"
     not data.metadata.rw_devices[input.unmountTarget]
     data.metadata.devices[input.unmountTarget]
 }
 
 # Error string tested in azcri-containerd Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy
-errors["unencrypted scratch not allowed, non-readonly mount request for SCSI disk must request encryption"] {
+errors contains "unencrypted scratch not allowed, non-readonly mount request for SCSI disk must request encryption" if {
     input.rule == "rw_mount_device"
     not allow_unencrypted_scratch
     not input.encrypted
 }
 
-errors["ensureFilesystem must be set on rw device mounts"] {
+errors contains "ensureFilesystem must be set on rw device mounts" if {
     input.rule == "rw_mount_device"
     not input.ensureFilesystem
 }
 
-errors["rw device mounts uses a filesystem that is not allowed"] {
+errors contains "rw device mounts uses a filesystem that is not allowed" if {
     input.rule == "rw_mount_device"
     not allowed_scratch_fs(input.filesystem)
 }
 
-errors["container already started"] {
+errors contains "container already started" if {
     input.rule == "create_container"
     container_started
 }
 
-errors["container not started"] {
+errors contains "container not started" if {
     input.rule in ["exec_in_container", "shutdown_container", "signal_container_process"]
     not container_started
 }
 
-errors["overlay has already been mounted"] {
+errors contains "overlay has already been mounted" if {
     input.rule == "mount_overlay"
     overlay_exists
 }
 
 default overlay_matches := false
 
-overlay_matches {
+overlay_matches if {
     some container in candidate_containers
     layerPaths_ok(container.layers)
 }
 
-errors["no overlay at path to unmount"] {
+errors contains "no overlay at path to unmount" if {
     input.rule == "unmount_overlay"
     not overlay_mounted(input.unmountTarget)
 }
 
-errors["no matching containers for overlay"] {
+errors contains "no matching containers for overlay" if {
     input.rule == "mount_overlay"
     not overlay_matches
 }
 
 default privileged_matches := false
 
-privileged_matches {
+privileged_matches if {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
     privileged_ok(container.allow_elevated)
 }
 
-errors["privileged escalation not allowed"] {
+errors contains "privileged escalation not allowed" if {
     is_linux
     input.rule in ["create_container"]
     not privileged_matches
@@ -2028,45 +2028,45 @@ errors["privileged escalation not allowed"] {
 
 default command_matches := false
 
-command_matches {
+command_matches if {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
     command_ok(container.command)
 }
 
-command_matches {
+command_matches if {
     input.rule == "exec_in_container"
     some container in data.metadata.matches[input.containerID]
     some process in container.exec_processes
     command_ok(process.command)
 }
 
-command_matches {
+command_matches if {
     input.rule == "exec_external"
     some process in candidate_external_processes
     command_ok(process.command)
 }
 
-errors["invalid command"] {
+errors contains "invalid command" if {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
     not command_matches
 }
 
-env_matches(env) {
+env_matches(env) if {
     input.rule in ["create_container", "exec_in_container"]
     some container in data.metadata.matches[input.containerID]
     some rule in container.env_rules
     env_rule_ok(rule, env)
 }
 
-env_matches(env) {
+env_matches(env) if {
     input.rule in ["exec_external"]
     some process in candidate_external_processes
     some rule in process.env_rules
     env_rule_ok(rule, env)
 }
 
-errors[envError] {
+errors contains envError if {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
     bad_envs := [invalid |
         env := input.envList[_]
@@ -2079,12 +2079,12 @@ errors[envError] {
     envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])
 }
 
-env_rule_matches(rule) {
+env_rule_matches(rule) if {
     some env in input.envList
     env_rule_ok(rule, env)
 }
 
-errors["missing required environment variable"] {
+errors contains "missing required environment variable" if {
     is_linux
     input.rule == "create_container"
 
@@ -2117,7 +2117,7 @@ errors["missing required environment variable"] {
     count(containers) > 0
 }
 
-errors["missing required environment variable"] {
+errors contains "missing required environment variable" if {
     input.rule == "exec_in_container"
 
     container_started
@@ -2148,7 +2148,7 @@ errors["missing required environment variable"] {
     count(containers) > 0
 }
 
-errors["missing required environment variable"] {
+errors contains "missing required environment variable" if {
     input.rule == "exec_external"
 
     possible_processes := [process |
@@ -2178,7 +2178,7 @@ errors["missing required environment variable"] {
 # All environment variables matches some rule in some container, but there are
 # no containers with exactly the given combination of rules (i.e. for every
 # container, there is at least one mismatching rule).
-errors["invalid env list"] {
+errors contains "invalid env list" if {
     input.rule in ["create_container"]
 
     every container in data.metadata.matches[input.containerID] {
@@ -2198,29 +2198,29 @@ errors["invalid env list"] {
 
 default workingDirectory_matches := false
 
-workingDirectory_matches {
+workingDirectory_matches if {
     input.rule in ["create_container", "exec_in_container"]
     some container in data.metadata.matches[input.containerID]
     workingDirectory_ok(container.working_dir)
 }
 
-workingDirectory_matches {
+workingDirectory_matches if {
     input.rule == "exec_external"
     some process in candidate_external_processes
     workingDirectory_ok(process.working_dir)
 }
 
-errors["invalid working directory"] {
+errors contains "invalid working directory" if {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
     not workingDirectory_matches
 }
 
-mount_matches(mount) {
+mount_matches(mount) if {
     some container in data.metadata.matches[input.containerID]
     mount_ok(container.mounts, container.allow_elevated, mount)
 }
 
-errors[mountError] {
+errors contains mountError if {
     is_linux
     input.rule == "create_container"
     bad_mounts := [mount.destination |
@@ -2234,13 +2234,13 @@ errors[mountError] {
 
 default signal_allowed := false
 
-signal_allowed {
+signal_allowed if {
     input.isInitProcess
     some container in data.metadata.matches[input.containerID]
     signal_ok(container.signals)
 }
 
-signal_allowed {
+signal_allowed if {
     not input.isInitProcess
     some container in data.metadata.matches[input.containerID]
     some process in container.exec_processes
@@ -2248,46 +2248,46 @@ signal_allowed {
     signal_ok(process.signals)
 }
 
-errors["target isn't allowed to receive the signal"] {
+errors contains "target isn't allowed to receive the signal" if {
     input.rule == "signal_container_process"
     not signal_allowed
 }
 
-errors["device already mounted at path"] {
+errors contains "device already mounted at path" if {
     input.rule == "plan9_mount"
     plan9_mounted(input.target)
 }
 
-errors["no device at path to unmount"] {
+errors contains "no device at path to unmount" if {
     input.rule == "plan9_unmount"
     not plan9_mounted(input.unmountTarget)
 }
 
 default fragment_issuer_matches := false
 
-fragment_issuer_matches {
+fragment_issuer_matches if {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
 }
 
-errors["invalid fragment issuer"] {
+errors contains "invalid fragment issuer" if {
     input.rule == "load_fragment"
     not fragment_issuer_matches
 }
 
 default fragment_feed_matches := false
 
-fragment_feed_matches {
+fragment_feed_matches if {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
     fragment.feed == input.feed
 }
 
-fragment_feed_matches {
+fragment_feed_matches if {
     input.feed in data.metadata.issuers[input.issuer]
 }
 
-errors["invalid fragment feed"] {
+errors contains "invalid fragment feed" if {
     input.rule == "load_fragment"
     fragment_issuer_matches
     not fragment_feed_matches
@@ -2295,7 +2295,7 @@ errors["invalid fragment feed"] {
 
 default fragment_version_is_valid := false
 
-fragment_version_is_valid {
+fragment_version_is_valid if {
     some fragment in candidate_fragments
     input.fragment_loaded
     fragment.issuer == input.issuer
@@ -2303,7 +2303,7 @@ fragment_version_is_valid {
     svn_ok(data[input.namespace].svn, fragment.minimum_svn)
 }
 
-fragment_version_is_valid {
+fragment_version_is_valid if {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
     fragment.feed == input.feed
@@ -2313,7 +2313,7 @@ fragment_version_is_valid {
 
 default svn_mismatch := false
 
-svn_mismatch {
+svn_mismatch if {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
     fragment.feed == input.feed
@@ -2322,7 +2322,7 @@ svn_mismatch {
     semver.is_valid(fragment.minimum_svn)
 }
 
-svn_mismatch {
+svn_mismatch if {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
     fragment.feed == input.feed
@@ -2332,7 +2332,7 @@ svn_mismatch {
 }
 
 # Header SVN is always a number, not semver
-svn_mismatch {
+svn_mismatch if {
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
     fragment.feed == input.feed
@@ -2343,7 +2343,7 @@ svn_mismatch {
 
 default header_svn_not_match_fragment := false
 
-header_svn_not_match_fragment {
+header_svn_not_match_fragment if {
     input.has_header_svn
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
@@ -2355,7 +2355,7 @@ header_svn_not_match_fragment {
 
 default missing_svn := false
 
-missing_svn {
+missing_svn if {
     not input.has_header_svn
     some fragment in candidate_fragments
     fragment.issuer == input.issuer
@@ -2364,7 +2364,7 @@ missing_svn {
     not data[input.namespace].svn
 }
 
-errors["fragment svn is below the specified minimum"] {
+errors contains "fragment svn is below the specified minimum" if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
@@ -2372,14 +2372,14 @@ errors["fragment svn is below the specified minimum"] {
     not fragment_version_is_valid
 }
 
-errors["fragment svn and the specified minimum are different types"] {
+errors contains "fragment svn and the specified minimum are different types" if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
     svn_mismatch
 }
 
-errors[svnMismatchError] {
+errors contains svnMismatchError if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
@@ -2388,7 +2388,7 @@ errors[svnMismatchError] {
     svnMismatchError := sprintf("svn in header %v does not match svn in fragment rego %v", [input.header_svn, data[input.namespace].svn])
 }
 
-errors["missing fragment svn in either header or rego payload"] {
+errors contains "missing fragment svn in either header or rego payload" if {
     input.rule == "load_fragment"
     fragment_feed_matches
     input.fragment_loaded
@@ -2396,7 +2396,7 @@ errors["missing fragment svn in either header or rego payload"] {
 }
 
 # This will result in one error per missing receipt requirement
-errors[receipt_error] {
+errors contains receipt_error if {
     input.rule == "load_fragment"
     not input.fragment_loaded
     some fragment in candidate_fragments
@@ -2409,19 +2409,19 @@ errors[receipt_error] {
 
 default ttl_matches := false
 
-ttl_matches {
+ttl_matches if {
     some ttl in candidate_transparency_trust_lists
     ttl.issuer == input.issuer
     ttl.subject == input.subject
     svn_ok(input.svn, ttl.minimum_svn)
 }
 
-errors["no TTL candidate matches the provided TTL's issuer, subject and svn"] {
+errors contains "no TTL candidate matches the provided TTL's issuer, subject and svn" if {
     input.rule == "load_transparency_trust_list"
     not ttl_matches
 }
 
-errors["The provided TTL does not contain any ledgers it is allowed to load"] {
+errors contains "The provided TTL does not contain any ledgers it is allowed to load" if {
     input.rule == "load_transparency_trust_list"
     ttl_matches
     ttl_ledgers := ttl_allowed_ledgers_for_issuer_subject_svn(input.issuer, input.subject, input.svn)
@@ -2429,38 +2429,38 @@ errors["The provided TTL does not contain any ledgers it is allowed to load"] {
     count(allowed_ledgers) == 0
 }
 
-errors["scratch already mounted at path"] {
+errors contains "scratch already mounted at path" if {
     input.rule == "scratch_mount"
     scratch_mounted(input.target)
 }
 
-errors["unencrypted scratch not allowed"] {
+errors contains "unencrypted scratch not allowed" if {
     input.rule == "scratch_mount"
     not allow_unencrypted_scratch
     not input.encrypted
 }
 
-errors["no scratch at path to unmount"] {
+errors contains "no scratch at path to unmount" if {
     input.rule == "scratch_unmount"
     not scratch_mounted(input.unmountTarget)
 }
 
-errors["log provider not allowed by policy"] {
+errors contains "log provider not allowed by policy" if {
     input.rule == "log_provider"
     not log_provider.allowed
 }
 
-errors[framework_version_error] {
+errors contains framework_version_error if {
     policy_framework_version == null
     framework_version_error := concat(" ", ["framework_version is missing. Current version:", version])
 }
 
-errors[framework_version_error] {
+errors contains framework_version_error if {
     semver.compare(policy_framework_version, version) > 0
     framework_version_error := concat(" ", ["framework_version is ahead of the current version:", policy_framework_version, "is greater than", version])
 }
 
-errors[fragment_framework_version_error] {
+errors contains fragment_framework_version_error if {
     input.rule == "load_fragment"
     input.fragment_loaded
     input.namespace
@@ -2468,7 +2468,7 @@ errors[fragment_framework_version_error] {
     fragment_framework_version_error := concat(" ", ["fragment framework_version is missing. Current version:", version])
 }
 
-errors[fragment_framework_version_error] {
+errors contains fragment_framework_version_error if {
     input.rule == "load_fragment"
     input.fragment_loaded
     input.namespace
@@ -2476,7 +2476,7 @@ errors[fragment_framework_version_error] {
     fragment_framework_version_error := concat(" ", ["fragment framework_version is ahead of the current version:", fragment_framework_version, "is greater than", version])
 }
 
-errors["containers only distinguishable by allow_stdio_access"] {
+errors contains "containers only distinguishable by allow_stdio_access" if {
     is_linux
     input.rule == "create_container"
 
@@ -2525,7 +2525,7 @@ errors["containers only distinguishable by allow_stdio_access"] {
     c.allow_stdio_access != allow_stdio_access
 }
 
-errors["containers only distinguishable by allow_stdio_access"] {
+errors contains "containers only distinguishable by allow_stdio_access" if {
     is_windows
     input.rule == "create_container"
 
@@ -2563,7 +2563,7 @@ errors["containers only distinguishable by allow_stdio_access"] {
     c.allow_stdio_access != allow_stdio_access
 }
 
-errors["external processes only distinguishable by allow_stdio_access"] {
+errors contains "external processes only distinguishable by allow_stdio_access" if {
     input.rule == "exec_external"
 
     possible_processes := [process |
@@ -2592,13 +2592,13 @@ errors["external processes only distinguishable by allow_stdio_access"] {
 
 default noNewPrivileges_matches := false
 
-noNewPrivileges_matches {
+noNewPrivileges_matches if {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
     noNewPrivileges_ok(container.no_new_privileges)
 }
 
-noNewPrivileges_matches {
+noNewPrivileges_matches if {
     input.rule == "exec_in_container"
     some container in data.metadata.matches[input.containerID]
     some process in container.exec_processes
@@ -2607,7 +2607,7 @@ noNewPrivileges_matches {
     noNewPrivileges_ok(process.no_new_privileges)
 }
 
-errors["invalid noNewPrivileges"] {
+errors contains "invalid noNewPrivileges" if {
     is_linux
     input.rule in ["create_container", "exec_in_container"]
     not noNewPrivileges_matches
@@ -2615,13 +2615,13 @@ errors["invalid noNewPrivileges"] {
 
 default user_matches := false
 
-user_matches {
+user_matches if {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
     user_ok(container.user)
 }
 
-user_matches {
+user_matches if {
     input.rule == "exec_in_container"
     some container in data.metadata.matches[input.containerID]
     some process in container.exec_processes
@@ -2630,12 +2630,12 @@ user_matches {
     user_ok(process.user)
 }
 
-errors["invalid user"] {
+errors contains "invalid user" if {
     input.rule in ["create_container", "exec_in_container"]
     not user_matches
 }
 
-errors["capabilities don't match"] {
+errors contains "capabilities don't match" if {
     is_linux
     input.rule == "create_container"
 
@@ -2675,7 +2675,7 @@ errors["capabilities don't match"] {
     count(possible_after_caps_containers) == 0
 }
 
-errors["capabilities don't match"] {
+errors contains "capabilities don't match" if {
     is_linux
     input.rule == "exec_in_container"
 
@@ -2713,7 +2713,7 @@ errors["capabilities don't match"] {
     count(possible_after_caps_containers) == 0
 }
 
-errors["devices not supported"] {
+errors contains "devices not supported" if {
     is_linux
     input.rule == "create_container"
     not devices_ok([], input.devices)
@@ -2721,7 +2721,7 @@ errors["devices not supported"] {
 
 # covers exec_in_container as well. it shouldn't be possible to ever get
 # an exec_in_container as it "inherits" capabilities rules from create_container
-errors["containers only distinguishable by capabilties"] {
+errors contains "containers only distinguishable by capabilties" if {
     is_linux
     input.rule == "create_container"
 
@@ -2761,13 +2761,13 @@ errors["containers only distinguishable by capabilties"] {
 
 default seccomp_matches := false
 
-seccomp_matches {
+seccomp_matches if {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
     seccomp_ok(container.seccomp_profile_sha256)
 }
 
-errors["invalid seccomp"] {
+errors contains "invalid seccomp" if {
     is_linux
     input.rule == "create_container"
     not seccomp_matches
@@ -2775,12 +2775,12 @@ errors["invalid seccomp"] {
 
 default error_objects := null
 
-error_objects := containers {
+error_objects := containers if {
     input.rule == "create_container"
     containers := data.metadata.matches[input.containerID]
 }
 
-error_objects := processes {
+error_objects := processes if {
     input.rule == "exec_in_container"
     processes := [process |
         container := data.metadata.matches[input.containerID][_]
@@ -2788,12 +2788,12 @@ error_objects := processes {
     ]
 }
 
-error_objects := processes {
+error_objects := processes if {
     input.rule == "exec_external"
     processes := candidate_external_processes
 }
 
-error_objects := fragments {
+error_objects := fragments if {
     input.rule == "load_fragment"
     fragments := candidate_fragments
 }
@@ -2804,12 +2804,12 @@ error_objects := fragments {
 ################################################################################
 
 
-check_container(raw_container, framework_version) := container {
+check_container(raw_container, framework_version) := container if {
     semver.compare(framework_version, version) == 0
     container := raw_container
 }
 
-check_container(raw_container, framework_version) := container {
+check_container(raw_container, framework_version) := container if {
     semver.compare(framework_version, version) < 0
     container := {
         # Base fields
@@ -2830,22 +2830,22 @@ check_container(raw_container, framework_version) := container {
     }
 }
 
-check_no_new_privileges(raw_container, framework_version) := no_new_privileges {
+check_no_new_privileges(raw_container, framework_version) := no_new_privileges if {
     semver.compare(framework_version, "0.2.0") >= 0
     no_new_privileges := raw_container.no_new_privileges
 }
 
-check_no_new_privileges(raw_container, framework_version) := no_new_privileges {
+check_no_new_privileges(raw_container, framework_version) := no_new_privileges if {
     semver.compare(framework_version, "0.2.0") < 0
     no_new_privileges := false
 }
 
-check_user(raw_container, framework_version) := user {
+check_user(raw_container, framework_version) := user if {
     semver.compare(framework_version, "0.2.1") >= 0
     user := raw_container.user
 }
 
-check_user(raw_container, framework_version) := user {
+check_user(raw_container, framework_version) := user if {
     semver.compare(framework_version, "0.2.1") < 0
     user := {
         "umask": "0022",
@@ -2862,12 +2862,12 @@ check_user(raw_container, framework_version) := user {
     }
 }
 
-check_capabilities(raw_container, framework_version) := capabilities {
+check_capabilities(raw_container, framework_version) := capabilities if {
     semver.compare(framework_version, "0.2.2") >= 0
     capabilities := raw_container.capabilities
 }
 
-check_capabilities(raw_container, framework_version) := capabilities {
+check_capabilities(raw_container, framework_version) := capabilities if {
     semver.compare(framework_version, "0.2.2") < 0
     # we cannot determine a reasonable default at the time this is called,
     # which is either during `mount_overlay` or `load_fragment`, and so
@@ -2876,32 +2876,32 @@ check_capabilities(raw_container, framework_version) := capabilities {
     capabilities := null
 }
 
-check_seccomp_profile_sha256(raw_container, framework_version) := seccomp_profile_sha256 {
+check_seccomp_profile_sha256(raw_container, framework_version) := seccomp_profile_sha256 if {
     semver.compare(framework_version, "0.2.3") >= 0
     seccomp_profile_sha256 := raw_container.seccomp_profile_sha256
 }
 
-check_seccomp_profile_sha256(raw_container, framework_version) := seccomp_profile_sha256 {
+check_seccomp_profile_sha256(raw_container, framework_version) := seccomp_profile_sha256 if {
     semver.compare(framework_version, "0.2.3") < 0
     seccomp_profile_sha256 := ""
 }
 
-check_signals(raw_container, framework_version) := signals {
+check_signals(raw_container, framework_version) := signals if {
     semver.compare(framework_version, "0.4.1") >= 0
     signals := raw_container.signals
 }
 
-check_signals(raw_container, framework_version) := signals {
+check_signals(raw_container, framework_version) := signals if {
     semver.compare(framework_version, "0.4.1") < 0
     signals := array.concat(raw_container.signals, [9, 15])
 }
 
-check_external_process(raw_process, framework_version) := process {
+check_external_process(raw_process, framework_version) := process if {
     semver.compare(framework_version, version) == 0
     process := raw_process
 }
 
-check_external_process(raw_process, framework_version) := process {
+check_external_process(raw_process, framework_version) := process if {
     semver.compare(framework_version, version) < 0
     process := {
         # Base fields
@@ -2913,12 +2913,12 @@ check_external_process(raw_process, framework_version) := process {
     }
 }
 
-check_fragment(raw_fragment, framework_version) := fragment {
+check_fragment(raw_fragment, framework_version) := fragment if {
     semver.compare(framework_version, version) == 0
     fragment := raw_fragment
 }
 
-check_fragment(raw_fragment, framework_version) := fragment {
+check_fragment(raw_fragment, framework_version) := fragment if {
     semver.compare(framework_version, version) < 0
     fragment := {
         # Base fields
@@ -2958,7 +2958,7 @@ allow_host_network := data.policy.allow_host_network
 
 default allow_capability_dropping := false
 
-allow_capability_dropping := flag {
+allow_capability_dropping := flag if {
     semver.compare(policy_framework_version, "0.2.2") >= 0
     flag := data.policy.allow_capability_dropping
 }
