@@ -256,3 +256,55 @@ func TestRPCErrorUnwrapHCSCode(t *testing.T) {
 		t.Fatalf("hcs.IsNotExist(wrapped) = false; want true (err=%v)", wrapped)
 	}
 }
+
+func TestBridgeForceComplete(t *testing.T) {
+	s, _ := pipeConn()
+	b := newBridge(s, nil, logrus.NewEntry(logrus.StandardLogger()))
+
+	call := &rpc{ch: make(chan struct{}), id: 42}
+	b.rpcs[call.id] = call
+
+	sentinel := errors.New("forced")
+	if !b.forceComplete(call, sentinel) {
+		t.Fatal("forceComplete should report true for a tracked rpc")
+	}
+	if !call.Done() {
+		t.Fatal("rpc should be completed after forceComplete")
+	}
+	if !errors.Is(call.Err(), sentinel) {
+		t.Fatalf("expected err %v, got %v", sentinel, call.Err())
+	}
+	if _, ok := b.rpcs[call.id]; ok {
+		t.Fatal("rpc should be removed from the tracking map")
+	}
+
+	// A second call is a no-op: the rpc is no longer tracked.
+	if b.forceComplete(call, nil) {
+		t.Fatal("forceComplete on an untracked rpc should report false")
+	}
+}
+
+func TestBridgeRecvUnknownRPCResponseIsNonFatal(t *testing.T) {
+	s, c := pipeConn()
+	b := newBridge(s, nil, logrus.NewEntry(logrus.StandardLogger()))
+	b.Start()
+	defer b.Close()
+
+	go func() {
+		// Response for an id that was never requested (as when a call was
+		// force-completed and the guest's real response arrives late).
+		sendMessage(t, c, prot.MsgType(prot.RPCCreate)|prot.MsgTypeResponse, 99999, []byte("{}"))
+		// Reflect so a subsequent real RPC can still complete.
+		reflector(t, c, 0)
+	}()
+
+	// The bridge must still be usable after the unknown-id response.
+	req := testReq{X: 7}
+	var resp testResp
+	if err := b.RPC(context.Background(), prot.RPCCreate, &req, &resp, false); err != nil {
+		t.Fatalf("bridge should survive an unknown-id response, got: %v", err)
+	}
+	if resp.X != req.X {
+		t.Fatalf("expected echoed X=%d, got %d", req.X, resp.X)
+	}
+}
