@@ -225,6 +225,17 @@ func (gm *Guest) SetMigrating(migrating bool) {
 	gm.gc.SetMigrating(migrating)
 }
 
+// IsBridgeConnected reports whether a live bridge transport is currently installed.
+func (gm *Guest) IsBridgeConnected() bool {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	if gm.gc == nil {
+		return false
+	}
+	return gm.gc.IsBridgeConnected()
+}
+
 // ResumeConnection accepts a fresh hvsock on the prepared listener and
 // swaps it into the existing GCS bridge, preserving in-flight RPCs.
 func (gm *Guest) ResumeConnection(ctx context.Context) error {

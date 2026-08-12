@@ -221,47 +221,46 @@ func (c *Controller) Resume(ctx context.Context, rebuildBridge bool) error {
 		return fmt.Errorf("cannot resume from migration: VM is in state %s: %w", c.vmState, errdefs.ErrFailedPrecondition)
 	}
 
-	// On the destination, the log connection was never established.
-	// On source, the blackout dropped the source's GCS log connection, which tore
-	// down its listener and closed logOutputDone. Install a fresh signal and
-	// re-arm the listener so the resumed guest's reconnect-mode vsockexec can
-	// reconnect and host-side logs resume.
-	c.logOutputDone = make(chan struct{})
-	// We expect the reconnect to complete within the GCS connection timeout,
-	// otherwise we want to fail.
-	ctx, cancel := context.WithTimeout(ctx, timeout.GCSConnectionTimeout)
-	log.G(ctx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
+	// A source rollback before blackout never dropped the guest connection, so the
+	// live bridge and its log stream are reused instead of re-accepted.
+	reuseLiveConn := rebuildBridge && c.guest.IsBridgeConnected()
 
-	g, gctx := errgroup.WithContext(ctx)
-	defer func() {
-		_ = g.Wait()
-	}()
-	defer cancel()
+	// Reuse skips the work below. Otherwise re-arm host logging and (re)establish the
+	// bridge, bounded by the GCS connection timeout; the shared tail keeps the caller ctx.
+	if !reuseLiveConn {
+		timeoutCtx, cancel := context.WithTimeout(ctx, timeout.GCSConnectionTimeout)
+		log.G(timeoutCtx).Debugf("using gcs connection timeout: %s\n", timeout.GCSConnectionTimeout)
+		g, gctx := errgroup.WithContext(timeoutCtx)
+		defer func() {
+			_ = g.Wait()
+		}()
+		defer cancel()
 
-	if err := c.setupLoggingListener(gctx, g); err != nil {
-		return fmt.Errorf("arm logging listener on resume: %w", err)
-	}
-
-	if rebuildBridge {
-		// Source rollback: arm the host GCS listener now, then accept the guest's
-		// post-blackout re-dial and swap it into the running bridge.
-		if err := c.guest.PrepareConnection(winio.VsockServiceID(prot.LinuxGcsVsockPort)); err != nil {
-			return fmt.Errorf("prepare source resume listener: %w", err)
+		// Logs were dropped by the source blackout and never established back.
+		c.logOutputDone = make(chan struct{})
+		if err := c.setupLoggingListener(gctx, g); err != nil {
+			return fmt.Errorf("arm logging listener on resume: %w", err)
 		}
-		if err := c.guest.ResumeConnection(ctx); err != nil {
-			return fmt.Errorf("resume source guest connection: %w", err)
-		}
-	} else {
-		// Destination: reuse the connection already armed at start.
-		if err := c.guest.CreateConnection(ctx, false); err != nil {
-			return fmt.Errorf("resume destination guest connection: %w", err)
-		}
-	}
 
-	// Collect any errors from establishing the log connection.
-	// If the connection is not established then we need to error out.
-	if err := g.Wait(); err != nil {
-		return err
+		if rebuildBridge {
+			// Source rollback after blackout: accept the guest's re-dial into the bridge.
+			if err := c.guest.PrepareConnection(winio.VsockServiceID(prot.LinuxGcsVsockPort)); err != nil {
+				return fmt.Errorf("prepare source resume listener: %w", err)
+			}
+			if err := c.guest.ResumeConnection(timeoutCtx); err != nil {
+				return fmt.Errorf("resume source guest connection: %w", err)
+			}
+		} else {
+			// Destination: reuse the connection already armed at start.
+			if err := c.guest.CreateConnection(timeoutCtx, false); err != nil {
+				return fmt.Errorf("resume destination guest connection: %w", err)
+			}
+		}
+
+		// Fail if the log connection could not be established.
+		if err := g.Wait(); err != nil {
+			return err
+		}
 	}
 
 	// Clear migrating flag only now that the new transport is in place.
