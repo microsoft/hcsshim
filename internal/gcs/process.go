@@ -27,7 +27,7 @@ const (
 	// exited when it is reopened (see startExitWatch). The finite timeout lets
 	// the guest-side waiter self-clean when the process is still running, so it
 	// never lingers if the process is reopened again later.
-	exitProbeTimeoutMs = 500
+	exitProbeTimeoutMs = 50
 )
 
 // Process represents a process in a container or container host.
