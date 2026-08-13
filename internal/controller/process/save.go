@@ -48,6 +48,10 @@ func (c *Controller) Save(ctx context.Context) (*anypb.Any, error) {
 		ms := c.process.MigrationState()
 		state.StdinPort, state.StdoutPort, state.StderrPort = ms.StdinPort, ms.StdoutPort, ms.StderrPort
 		state.WaitCallID = ms.WaitCallID
+
+		// Retain them so a source rollback resume re-opens IO like the destination.
+		c.stdinPort, c.stdoutPort, c.stderrPort = ms.StdinPort, ms.StdoutPort, ms.StderrPort
+		c.waitCallID = ms.WaitCallID
 	}
 
 	// Exec processes carry their OCI spec; init processes leave it unset.
@@ -179,8 +183,9 @@ func (c *Controller) Patch(ctx context.Context, containerID string, opts *Create
 
 // Resume returns a migrating process to the running state. On the destination
 // it reattaches the patched process to its live guest counterpart, wires up the
-// stdio relay, and begins watching for exit. On the source it simply lifts the
-// freeze that Save applied, since the live process and IO are still intact.
+// stdio relay, and begins watching for exit. On the source it re-opens the IO
+// the blackout dropped and resumes the relay, since the live process is intact
+// but its IO connections are not.
 // Pass events=nil for an init process, whose exit is reported by its owning
 // container instead.
 func (c *Controller) Resume(ctx context.Context, gcsContainer *gcs.Container, events chan interface{}) error {
@@ -192,19 +197,16 @@ func (c *Controller) Resume(ctx context.Context, gcsContainer *gcs.Container, ev
 		return nil
 	}
 
-	// Source rollback: the live process and IO are intact, so just lift the
-	// freeze that Save applied.
-	if c.state == StateSourceMigrating {
-		c.state = StateRunning
-		return nil
-	}
-
-	if c.state != StateDestinationMigrating {
+	if c.state != StateDestinationMigrating && c.state != StateSourceMigrating {
 		return fmt.Errorf("process %q in container %q is in state %s; cannot resume: %w", c.execID, c.containerID, c.state, errdefs.ErrFailedPrecondition)
 	}
 
-	// Reopen the live process on its preserved IO ports and wait id.
-	gcsProc, err := gcsContainer.OpenProcessWithIO(ctx, uint32(c.processID), c.stdinPort, c.stdoutPort, c.stderrPort, c.waitCallID)
+	// Flag to determine if the resume is happening on destination.
+	isDestination := c.state == StateDestinationMigrating
+
+	// Reopen the process on its preserved IO ports and wait id. A source rollback
+	// reuses the still-outstanding wait, so it does not start a second one.
+	gcsProc, err := gcsContainer.OpenProcessWithIO(ctx, uint32(c.processID), c.stdinPort, c.stdoutPort, c.stderrPort, c.waitCallID, isDestination)
 	if err != nil {
 		return fmt.Errorf("open gcs process pid %d in container %q: %w", c.processID, c.containerID, err)
 	}
@@ -223,9 +225,10 @@ func (c *Controller) Resume(ctx context.Context, gcsContainer *gcs.Container, ev
 	// Ports are single-use; clear them now that IO is reattached.
 	c.stdinPort, c.stdoutPort, c.stderrPort = 0, 0, 0
 
-	// Watch for exit in the background, mirroring a freshly started process.
-	go c.handleProcessExit(ctx, execCmd, events)
+	// The destination owns exit reporting; a source rollback leaves that to the
+	// watcher from Start, so this handler only drains the re-attached relay.
+	go c.handleProcessExit(ctx, execCmd, events, isDestination)
 
-	log.G(ctx).WithField(logfields.ProcessID, c.processID).Debug("resumed migrated process on destination")
+	log.G(ctx).WithField(logfields.ProcessID, c.processID).Debug("resumed migrated process")
 	return nil
 }

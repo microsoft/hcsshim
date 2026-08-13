@@ -125,8 +125,12 @@ func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ co
 // [Container.CreateProcess]: it attaches to a process already running
 // in this container, re-listens on the supplied vsock ports, and
 // pre-registers the source bridge's WaitForProcess id so the guest's
-// still-outstanding response is routed without arming a duplicate wait.
-func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort, stdoutPort, stderrPort uint32, waitCallID int64) (_ *Process, err error) {
+// still-outstanding response is routed.
+// watchExit launches the background exit wait, first probing for an already-
+// exited process whose adopted response the guest never redelivers; pass false
+// when the caller already has one outstanding (a source rollback reuses the
+// live process's).
+func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort, stdoutPort, stderrPort uint32, waitCallID int64, watchExit bool) (_ *Process, err error) {
 	ctx, span := ot.StartSpan(ctx, "gcs::Container::OpenProcessWithIO", ot.WithClientSpanKind)
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
@@ -173,11 +177,21 @@ func (c *Container) OpenProcessWithIO(ctx context.Context, pid uint32, stdinPort
 		return nil, err
 	}
 
-	p.waitCall, err = c.gc.brdg.PreregisterRPC(waitCallID, prot.RPCWaitForProcess, &p.waitResp)
+	p.waitResp = &prot.ContainerWaitForProcessResponse{}
+	p.waitCall, err = c.gc.brdg.PreregisterRPC(waitCallID, prot.RPCWaitForProcess, p.waitResp)
 	if err != nil {
 		return nil, fmt.Errorf("preregister wait for pid %d in container %s (id %d): %w", pid, c.id, waitCallID, err)
 	}
-	go p.waitBackground()
+	// A reused outstanding wait carries its own response; adopt it so the
+	// reported exit code reflects the guest's reply and not this unused one.
+	if resp, ok := p.waitCall.resp.(*prot.ContainerWaitForProcessResponse); ok {
+		p.waitResp = resp
+	}
+	// Establish exit reporting unless the caller already watches this process
+	// (a reuse that already has a wait outstanding, e.g. a rollback).
+	if watchExit {
+		p.startExitWatch(ctx)
+	}
 	log.G(ctx).WithField("pid", p.id).Debug("opened existing process with IO")
 	return p, nil
 }

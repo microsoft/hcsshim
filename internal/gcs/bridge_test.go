@@ -256,3 +256,24 @@ func TestRPCErrorUnwrapHCSCode(t *testing.T) {
 		t.Fatalf("hcs.IsNotExist(wrapped) = false; want true (err=%v)", wrapped)
 	}
 }
+
+// TestPreregisterRPCReusesOutstanding verifies that pre-registering an id that
+// is already outstanding hands back the existing call (a source rollback
+// re-opens a process whose wait is still pending) rather than failing.
+func TestPreregisterRPCReusesOutstanding(t *testing.T) {
+	s, _ := pipeConn()
+	b := newBridge(s, nil, logrus.NewEntry(logrus.StandardLogger()))
+
+	first, err := b.PreregisterRPC(7, prot.RPCWaitForProcess, &testResp{})
+	if err != nil {
+		t.Fatalf("first PreregisterRPC = %v; want nil", err)
+	}
+
+	again, err := b.PreregisterRPC(7, prot.RPCWaitForProcess, &testResp{})
+	if err != nil {
+		t.Fatalf("duplicate PreregisterRPC = %v; want nil", err)
+	}
+	if again != first {
+		t.Errorf("duplicate PreregisterRPC returned a new call; want the outstanding one")
+	}
+}
