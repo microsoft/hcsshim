@@ -26,9 +26,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Add a manifest to get proper Windows version detection.
-//go:generate pwsh -Command "../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'containerd-shim-lcow-v2' -UseVersionFile -Architecture 'all'"
-
 func initOtelTracer() (func(context.Context) error, error) {
 	exporter := &ot.LogrusExporter{}
 	traceProvider := sdktrace.NewTracerProvider(

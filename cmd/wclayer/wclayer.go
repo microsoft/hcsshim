@@ -12,9 +12,6 @@ import (
 	"github.com/urfave/cli"
 )
 
-// Add a manifest to get proper Windows version detection.
-//go:generate pwsh -Command "../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'wclayer' -UseVersionFile -Architecture 'all'"
-
 var usage = `Windows Container layer utility
 
 wclayer is a command line tool for manipulating Windows Container

@@ -19,9 +19,6 @@ import (
 	hcsversion "github.com/Microsoft/hcsshim/internal/version"
 )
 
-// Add a manifest to get proper Windows version detection.
-//go:generate pwsh -Command "../../scripts/New-ResourceObjectFile.ps1 -ErrorAction 'Stop' -Destination '.' -Name 'runhcs' -UseVersionFile -Architecture 'all'"
-
 // `-ldflags '-X ...'` only works if the variable is uninitialized or set to a constant value.
 // keep empty and override with data from [internal/version] only if empty to allow
 // workflows currently setting these values to work.
