@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 
 	"github.com/opencontainers/cgroups"
 	"github.com/opencontainers/cgroups/fs2"
+	"github.com/opencontainers/runc/internal/cmsg"
 	"github.com/opencontainers/runc/internal/linux"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
@@ -689,6 +689,8 @@ func (p *initProcess) goCreateMountSources(ctx context.Context) (mountSourceRequ
 	responseCh := make(chan response)
 
 	ctx, cancelFn := context.WithTimeout(ctx, 1*time.Minute)
+	context.AfterFunc(ctx, func() { close(requestCh) })
+
 	go func() {
 		// We lock this thread because we need to setns(2) here. There is no
 		// UnlockOSThread() here, to ensure that the Go runtime will kill this
@@ -751,8 +753,6 @@ func (p *initProcess) goCreateMountSources(ctx context.Context) (mountSourceRequ
 		return nil, nil, err
 	}
 
-	// TODO: Switch to context.AfterFunc when we switch to Go 1.21.
-	var requestChCloseOnce sync.Once
 	requestFn := func(m *configs.Mount) (*mountSource, error) {
 		var err error
 		select {
@@ -762,13 +762,13 @@ func (p *initProcess) goCreateMountSources(ctx context.Context) (mountSourceRequ
 				if ok {
 					return resp.src, resp.err
 				}
+				err = fmt.Errorf("response channel closed unexpectedly")
 			case <-ctx.Done():
 				err = fmt.Errorf("receive mount source context cancelled: %w", ctx.Err())
 			}
 		case <-ctx.Done():
 			err = fmt.Errorf("send mount request cancelled: %w", ctx.Err())
 		}
-		requestChCloseOnce.Do(func() { close(requestCh) })
 		return nil, err
 	}
 	return requestFn, cancelFn, nil
@@ -1133,7 +1133,7 @@ func sendContainerProcessState(listenerPath string, state *specs.ContainerProces
 		return fmt.Errorf("cannot marshall seccomp state: %w", err)
 	}
 
-	if err := utils.SendRawFd(socket, string(b), file.Fd()); err != nil {
+	if err := cmsg.SendRawFd(socket, string(b), file.Fd()); err != nil {
 		return fmt.Errorf("cannot send seccomp fd to %s: %w", listenerPath, err)
 	}
 	runtime.KeepAlive(file)
