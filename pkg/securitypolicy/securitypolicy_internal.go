@@ -45,6 +45,7 @@ type securityPolicyFragment struct {
 	Namespace         string
 	SVN               string
 	Containers        []*securityPolicyContainer
+	WindowsContainers []*securityPolicyWindowsContainer
 	ExternalProcesses []*externalProcess
 	Fragments         []*fragment
 }
@@ -145,6 +146,27 @@ func newSecurityPolicyFragment(
 		Namespace:         namespace,
 		SVN:               svn,
 		Containers:        containersInternal,
+		ExternalProcesses: externalProcessToInternal(externalProcesses),
+		Fragments:         fragmentsToInternal(fragments),
+	}, nil
+}
+
+func newWindowsSecurityPolicyFragment(
+	namespace string,
+	svn string,
+	containers []*WindowsContainer,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
+) (*securityPolicyFragment, error) {
+	containersInternal, err := windowsContainersToInternal(containers)
+	if err != nil {
+		return nil, err
+	}
+
+	return &securityPolicyFragment{
+		Namespace:         namespace,
+		SVN:               svn,
+		WindowsContainers: containersInternal,
 		ExternalProcesses: externalProcessToInternal(externalProcesses),
 		Fragments:         fragmentsToInternal(fragments),
 	}, nil
@@ -370,6 +392,7 @@ func (c *WindowsContainer) toInternal() (*securityPolicyWindowsContainer, error)
 		Command:          command,
 		EnvRules:         envRules,
 		Layers:           layers,
+		MountedCim:       c.MountedCim,
 		WorkingDir:       c.WorkingDir,
 		Mounts:           mounts,
 		RegistryChanges:  c.RegistryChanges.toInternal(),

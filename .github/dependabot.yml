@@ -42,3 +42,36 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 5
+
+  # Keep the Windows base images (nanoserver/servercore) on their latest digest: scans
+  # every Dockerfile (except vendored), bumps the digest only (tag kept), one grouped PR.
+  - package-ecosystem: "docker"
+    directories:
+      - "/**/*"
+    exclude-paths:
+      - "vendor/**"
+    allow:
+      # Dependabot's docker dependency name strips the registry host, so these are the
+      # image names exactly as they appear in the PR (e.g. "Updates windows/nanoserver ...").
+      - dependency-name: "windows/nanoserver"
+      - dependency-name: "windows/servercore"
+    ignore:
+      # keep the tag stable and only bump the digest / patch level.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+    schedule:
+      # run every 3 days at 08:00 UTC (note: `*/3` day-of-month resets on the 1st of each month)
+      interval: "cron"
+      cronjob: "0 8 */3 * *"
+      timezone: "Etc/UTC"
+    groups:
+      microsoft_docker_images:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+      - docker
+      - tests
+    open-pull-requests-limit: 5

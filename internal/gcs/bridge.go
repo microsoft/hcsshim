@@ -54,15 +54,21 @@ type bridge struct {
 	rpcs   map[int64]*rpc
 	// conn is the transport carrying messages to and from the guest.
 	// Held atomically because the send path reads it while a migration swaps it.
-	conn      atomic.Value
-	rpcCh     chan *rpc
-	notify    notifyFunc
-	closed    bool
-	log       *logrus.Entry
-	brdgErr   error
-	waitCh    chan struct{}
+	conn    atomic.Value
+	rpcCh   chan *rpc
+	notify  notifyFunc
+	closed  bool
+	log     *logrus.Entry
+	brdgErr error
+	waitCh  chan struct{}
+
+	// Migration related fields
+	// migrating tolerates transport drops during a live-migration window.
 	migrating atomic.Bool
-	resumeCh  chan struct{}
+	// resumeCh wakes the parked recv loop when a new transport is swapped in.
+	resumeCh chan struct{}
+	// connected is true while a live transport is present and being read.
+	connected atomic.Bool
 }
 
 var ErrBridgeClosed = fmt.Errorf("bridge closed: %w", net.ErrClosed)
@@ -305,7 +311,9 @@ func (brdg *bridge) RPC(ctx context.Context, proc prot.RPCProc, req requestMessa
 
 func (brdg *bridge) recvLoopRoutine() {
 	for {
+		brdg.connected.Store(true)
 		err := brdg.recvLoop()
+		brdg.connected.Store(false)
 
 		if !brdg.migrating.Load() {
 			brdg.kill(err)
@@ -572,8 +580,10 @@ func (brdg *bridge) PreregisterRPC(id int64, proc prot.RPCProc, resp responseMes
 	if brdg.rpcs == nil {
 		return nil, ErrBridgeClosed
 	}
-	if _, dup := brdg.rpcs[id]; dup {
-		return nil, fmt.Errorf("preregister rpc: id %d already in use", id)
+	if existing, dup := brdg.rpcs[id]; dup {
+		// A source rollback re-opens a process whose wait is still outstanding;
+		// hand back that call.
+		return existing, nil
 	}
 	brdg.rpcs[id] = call
 	return call, nil

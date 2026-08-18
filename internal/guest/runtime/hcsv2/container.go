@@ -89,6 +89,10 @@ type Container struct {
 	// sandboxRoot is the root directory of the pod within the guest.
 	// Used during cleanup to unmount sandbox-specific paths.
 	sandboxRoot string
+
+	// stdioReconnectStopped, when set, stops the init process stdout/stderr
+	// relay reconnect loop; set on teardown.
+	stdioReconnectStopped atomic.Bool
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (_ int, err error) {
@@ -125,6 +129,15 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 	stdioSet, err := stdio.Connect(t, conSettings)
 	if err != nil {
 		return -1, err
+	}
+
+	// Keep the init process's stdout/stderr flowing across a host disconnect by
+	// re-dialing the same vsock port; cancelled on container teardown.
+	if stdioSet.Out != nil && conSettings.StdOut != nil {
+		stdioSet.Out = transport.NewReconnectConnection(t, *conSettings.StdOut, stdioSet.Out, &c.stdioReconnectStopped)
+	}
+	if stdioSet.Err != nil && conSettings.StdErr != nil {
+		stdioSet.Err = transport.NewReconnectConnection(t, *conSettings.StdErr, stdioSet.Err, &c.stdioReconnectStopped)
 	}
 
 	if c.initProcess.spec.Terminal {
@@ -237,12 +250,14 @@ func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
 		return err
 	}
 	c.setExitType(signal)
+	c.stdioReconnectStopped.Store(true)
 	return nil
 }
 
 func (c *Container) Delete(ctx context.Context) error {
 	entity := log.G(ctx).WithField(logfields.ContainerID, c.id)
 	entity.Info("opengcs::Container::Delete")
+	c.stdioReconnectStopped.Store(true)
 	if c.isSandbox && c.sandboxRoot != "" {
 		// remove user mounts in sandbox container
 		if err := storage.UnmountAllInPath(ctx, specGuest.SandboxMountsDirFromRoot(c.sandboxRoot), true); err != nil {

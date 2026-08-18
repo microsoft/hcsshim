@@ -9,10 +9,43 @@ It is not intended to be used by "end users" but could be used as a basis for
 such a tool.
 
 A Base64 encoded version of policy is sent as an annotation to GCS for processing.
-The `securitypolicy` tool will, by default, output Base64 encoded JSON.
+The `securitypolicy` tool outputs a Base64 encoded Rego policy.
 
 Running the tool can take a long time as each layer for each container must
 be downloaded, turned into an ext4, and finally a dm-verity root hash calculated.
+
+For C-WCOW policies, use `-os windows`. Like C-LCOW, the input is image-based:
+give an `image_name` and the tool computes the verified Block CIM layer digests
+and the merged CIM digest for you (via `ImportBlockCIMLayerWithOpts` +
+`MergeBlockCIMLayersWithOpts`). This computation uses the Windows CIM APIs, so
+`-os windows` must run on Windows (and typically elevated). Windows policies
+support Rego output only.
+
+A single config file can hold both `[[container]]` (C-LCOW) and
+`[[windows_container]]` (C-WCOW) sections. The `-os` flag selects which section
+is used; the other OS's container entries are ignored.
+
+## C-WCOW example
+
+```toml
+[[windows_container]]
+image_name = "mcr.microsoft.com/windows/nanoserver:ltsc2022"
+command = ["cmd.exe", "/c", "echo hello"]
+working_dir = "C:\\"
+user = "ContainerUser"
+allow_stdio_access = true
+
+[[windows_container.env_rule]]
+strategy = "string"
+rule = "PATH=C:\\Windows\\system32;C:\\Windows"
+required = true
+```
+
+Generate a raw and Base64-encoded Rego policy (on Windows):
+
+  securitypolicytool -c windows.toml -os windows -t rego -r
+
+`-t fragment` also works with `-os windows` to emit a Windows policy fragment.
 
 ## Example TOML configuration file
 
@@ -63,149 +96,6 @@ issuer = "did:web:contoso.com"
 feed = "contoso.azurecr.io/infra"
 minimum_svn = "1"
 include = ["containers"]
-```
-
-### Converted to JSON
-
-The result of the command:
-
-    securitypolicytool -c sample.toml -t json -r
-
-The above TOML configuration gets translated into the appropriate policy that is
-represented in JSON.
-
-```json
-{
-  "allow_all": false,
-  "containers": {
-    "length": 2,
-    "elements": {
-      "0": {
-        "command": {
-          "length": 2,
-          "elements": {
-            "0": "rustc",
-            "1": "--help"
-          }
-        },
-        "env_rules": {
-          "length": 6,
-          "elements": {
-            "0": {
-              "strategy": "string",
-              "rule": "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-              "required": false
-            },
-            "1": {
-              "strategy": "string",
-              "rule": "RUSTUP_HOME=/usr/local/rustup",
-              "required": false
-            },
-            "2": {
-              "strategy": "string",
-              "rule": "CARGO_HOME=/usr/local/cargo",
-              "required": false
-            },
-            "3": {
-              "strategy": "string",
-              "rule": "RUST_VERSION=1.52.1",
-              "required": false
-            },
-            "4": {
-              "strategy": "string",
-              "rule": "TERM=xterm",
-              "required": false
-            },
-            "5": {
-              "strategy": "re2",
-              "rule": "PREFIX_.+=.+",
-              "required": false
-            }
-          }
-        },
-        "layers": {
-          "length": 6,
-          "elements": {
-            "0": "fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a",
-            "1": "4dedae42847c704da891a28c25d32201a1ae440bce2aecccfa8e6f03b97a6a6c",
-            "2": "41d64cdeb347bf236b4c13b7403b633ff11f1cf94dbc7cf881a44d6da88c5156",
-            "3": "eb36921e1f82af46dfe248ef8f1b3afb6a5230a64181d960d10237a08cd73c79",
-            "4": "e769d7487cc314d3ee748a4440805317c19262c7acd2fdbdb0d47d2e4613a15c",
-            "5": "1b80f120dbd88e4355d6241b519c3e25290215c469516b49dece9cf07175a766"
-          }
-        },
-        "working_dir": "/home/user",
-        "mounts": {
-          "length": 2,
-          "elements": {
-            "0": {
-              "source": "sandbox:///host/path/one",
-              "destination": "/container/path/one",
-              "type": "bind",
-              "options": {
-                "length": 3,
-                "elements": {
-                  "0": "rbind",
-                  "1": "rshared",
-                  "2": "rw"
-                }
-              }
-            },
-            "1": {
-              "source": "sandbox:///host/path/two",
-              "destination": "/container/path/two",
-              "type": "bind",
-              "options": {
-                "length": 3,
-                "elements": {
-                  "0": "rbind",
-                  "1": "rshared",
-                  "2": "ro"
-                }
-              }
-            }
-          }
-        },
-        "allow_elevated": true
-      },
-      "1": {
-        "command": {
-          "length": 1,
-          "elements": {
-            "0": "/pause"
-          }
-        },
-        "env_rules": {
-          "length": 2,
-          "elements": {
-            "0": {
-              "strategy": "string",
-              "rule": "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-              "required": false
-            },
-            "1": {
-              "strategy": "string",
-              "rule": "TERM=xterm",
-              "required": false
-            }
-          }
-        },
-        "layers": {
-          "length": 1,
-          "elements": {
-            "0": "16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"
-          }
-        },
-        "working_dir": "/",
-        "mounts": {
-          "length": 0,
-          "elements": {}
-        },
-        "allow_elevated": false
-      }
-    }
-  }
-}
 ```
 
 ## Converted to Rego Policy
@@ -387,7 +277,6 @@ output raw marshaled policy in addition to the base64
 
 one of:
 - `rego`: outputs a Rego policy
-- `json`: outputs a legacy JSON policy (NOTE: some TOML elements are not supported in the legacy format)
 - `fragment`: outputs a Rego fragment. The `-n` and `-v` are required for this option.
 
 ### `-n`

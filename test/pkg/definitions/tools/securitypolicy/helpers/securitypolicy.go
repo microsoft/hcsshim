@@ -5,6 +5,7 @@ import (
 )
 
 var (
-	DefaultContainerConfigs     = internalhelpers.DefaultContainerConfigs
-	PolicyContainersFromConfigs = internalhelpers.PolicyContainersFromConfigs
+	DefaultContainerConfigs            = internalhelpers.DefaultContainerConfigs
+	PolicyContainersFromConfigs        = internalhelpers.PolicyContainersFromConfigs
+	PolicyWindowsContainersFromConfigs = internalhelpers.PolicyWindowsContainersFromConfigs
 )

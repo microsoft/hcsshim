@@ -16,18 +16,43 @@ import (
 )
 
 const (
-	jsonMarshaller = "json"
 	regoMarshaller = "rego"
+	// jsonMarshaller is retained only so callers that still request it get an
+	// actionable error: JSON policy output has been removed in favor of rego.
+	jsonMarshaller = "json"
 )
 
 var (
 	registeredMarshallers = map[string]OSAwareMarshalFunc{}
-	defaultMarshaller     = jsonMarshaller
+	defaultMarshaller     = regoMarshaller
 )
 
 func init() {
-	registeredMarshallers[jsonMarshaller] = marshalJSON
 	registeredMarshallers[regoMarshaller] = osAwareMarshalRego
+	registeredMarshallers[jsonMarshaller] = rejectJSONMarshaller
+}
+
+// rejectJSONMarshaller keeps "json" a recognized marshaller so callers that
+// still request it get a clear message pointing at rego instead of a generic
+// "unknown marshaller" error.
+func rejectJSONMarshaller(
+	_ bool,
+	_ []*Container,
+	_ []*WindowsContainer,
+	_ string,
+	_ []ExternalProcessConfig,
+	_ []FragmentConfig,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ bool,
+) (string, error) {
+	return "", fmt.Errorf("JSON policy output is no longer supported; use the %q marshaller", regoMarshaller)
 }
 
 //go:embed policy.rego
@@ -168,42 +193,6 @@ func marshalWindowsRego(
 	return policy.marshalWindowsRego(), nil
 }
 
-func marshalJSON(
-	allowAll bool,
-	containers []*Container,
-	windowsContainers []*WindowsContainer,
-	osType string,
-	_ []ExternalProcessConfig,
-	_ []FragmentConfig,
-	_ bool,
-	_ bool,
-	_ bool,
-	_ bool,
-	_ bool,
-	_ bool,
-	_ bool,
-	_ bool,
-	_ bool,
-) (string, error) {
-	var policy *SecurityPolicy
-	if allowAll {
-		if len(containers) > 0 {
-			return "", ErrInvalidOpenDoorPolicy
-		}
-
-		policy = NewOpenDoorPolicy()
-	} else {
-		policy = NewSecurityPolicy(allowAll, containers)
-	}
-
-	policyCode, err := json.Marshal(policy)
-	if err != nil {
-		return "", err
-	}
-
-	return string(policyCode), nil
-}
-
 func marshalRego(
 	allowAll bool,
 	containers []*Container,
@@ -262,6 +251,21 @@ func MarshalFragment(
 	return fragment.marshalRego(), nil
 }
 
+// MarshalWindowsFragment encodes a Rego policy fragment for Windows containers.
+func MarshalWindowsFragment(
+	namespace string,
+	svn string,
+	containers []*WindowsContainer,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig) (string, error) {
+	fragment, err := newWindowsSecurityPolicyFragment(namespace, svn, containers, externalProcesses, fragments)
+	if err != nil {
+		return "", err
+	}
+
+	return fragment.marshalRego(), nil
+}
+
 func MarshalPolicy(
 	marshaller string,
 	allowAll bool,
@@ -303,6 +307,54 @@ func MarshalPolicy(
 			allowLogProviderDropping,
 		)
 	}
+}
+
+// MarshalWindowsPolicy encodes a security policy for Windows containers.
+func MarshalWindowsPolicy(
+	marshaller string,
+	allowAll bool,
+	containers []*WindowsContainer,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
+	allowPropertiesAccess bool,
+	allowDumpStacks bool,
+	allowRuntimeLogging bool,
+	allowHostNetwork bool,
+	allowEnvironmentVariableDropping bool,
+	allowUnencryptedScratch bool,
+	allowCapabilitiesDropping bool,
+	allowRegistryChangesDropping bool,
+	allowLogProviderDropping bool,
+) (string, error) {
+	if marshaller == "" {
+		marshaller = regoMarshaller
+	}
+	if marshaller != regoMarshaller {
+		return "", fmt.Errorf("marshaller %q is not supported for Windows policies", marshaller)
+	}
+
+	marshal, ok := registeredMarshallers[marshaller]
+	if !ok {
+		return "", fmt.Errorf("unknown marshaller: %q", marshaller)
+	}
+
+	return marshal(
+		allowAll,
+		nil,
+		containers,
+		"windows",
+		externalProcesses,
+		fragments,
+		allowPropertiesAccess,
+		allowDumpStacks,
+		allowRuntimeLogging,
+		allowHostNetwork,
+		allowEnvironmentVariableDropping,
+		allowUnencryptedScratch,
+		allowCapabilitiesDropping,
+		allowRegistryChangesDropping,
+		allowLogProviderDropping,
+	)
 }
 
 // Custom JSON marshalling to add `length` field that matches the number of
@@ -371,10 +423,28 @@ var indentUsing string = "    "
 type stringArray []string
 type signalArray []syscall.Signal
 
+// regoString returns s as a JSON-compatible Rego double-quoted string literal,
+// escaping backslashes and quotes (required for Windows paths and commands).
+func regoString(s string) string {
+	// json.Marshal of a string never returns an error.
+	encoded, _ := json.Marshal(s)
+	return string(encoded)
+}
+
+// mustMarshalJSON encodes v as JSON for embedding in a Rego policy. Encoding via
+// the JSON marshaller guarantees every string value is safely quoted/escaped.
+func mustMarshalJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(fmt.Errorf("failed to marshal Rego object to JSON: %w", err))
+	}
+	return string(b)
+}
+
 func (array stringArray) marshalRego() string {
 	values := make([]string, len(array))
 	for i, value := range array {
-		values[i] = fmt.Sprintf(`"%s"`, value)
+		values[i] = regoString(value)
 	}
 
 	return fmt.Sprintf("[%s]", strings.Join(values, ","))
@@ -399,11 +469,23 @@ func writeCommand(builder *strings.Builder, command []string, indent string) {
 }
 
 func (e EnvRuleConfig) marshalRego() string {
+	var v any
 	if e.UseNameValue {
-		return fmt.Sprintf("{\"name\": `%s`, \"name_strategy\": \"%s\", \"value\": `%s`, \"value_strategy\": \"%s\", \"required\": %v}", e.Name, e.NameStrategy, e.Value, e.ValueStrategy, e.Required)
+		v = struct {
+			Name          string `json:"name"`
+			NameStrategy  string `json:"name_strategy"`
+			Value         string `json:"value"`
+			ValueStrategy string `json:"value_strategy"`
+			Required      bool   `json:"required"`
+		}{e.Name, string(e.NameStrategy), e.Value, string(e.ValueStrategy), e.Required}
 	} else {
-		return fmt.Sprintf("{\"pattern\": `%s`, \"strategy\": \"%s\", \"required\": %v}", e.Rule, e.Strategy, e.Required)
+		v = struct {
+			Pattern  string `json:"pattern"`
+			Strategy string `json:"strategy"`
+			Required bool   `json:"required"`
+		}{e.Rule, string(e.Strategy), e.Required}
 	}
+	return mustMarshalJSON(v)
 }
 
 type envRuleArray []EnvRuleConfig
@@ -445,13 +527,17 @@ func writeCapabilities(builder *strings.Builder, capabilities *capabilitiesInter
 
 func (m mountInternal) marshalRego() string {
 	options := stringArray(m.Options).marshalRego()
-	return fmt.Sprintf(`{"destination": "%s", "options": %s, "source": "%s", "type": "%s"}`,
-		escapeRegoString(m.Destination), options, escapeRegoString(m.Source), escapeRegoString(m.Type))
+	return mustMarshalJSON(struct {
+		Destination string          `json:"destination"`
+		Options     json.RawMessage `json:"options"`
+		Source      string          `json:"source"`
+		Type        string          `json:"type"`
+	}{m.Destination, json.RawMessage(options), m.Source, m.Type})
 }
 
 // escapeRegoString escapes a Go string so it is a valid double-quoted Rego
-// string literal. This matters for Windows mount paths, which contain
-// backslashes that would otherwise be interpreted as escape sequences.
+// string literal. This matters for Windows registry keys and values, which
+// contain backslashes that would otherwise be interpreted as escape sequences.
 func escapeRegoString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
@@ -523,7 +609,7 @@ func writeWindowsSignals(builder *strings.Builder, signals []guestrequest.Signal
 }
 
 func writeWindowsUser(builder *strings.Builder, user string, indent string) {
-	writeLine(builder, `%s"user": "%s",`, indent, user)
+	writeLine(builder, `%s"user": %s,`, indent, regoString(user))
 }
 
 func (p windowsContainerExecProcess) marshalRego() string {
@@ -534,7 +620,10 @@ func (p windowsContainerExecProcess) marshalRego() string {
 		signalsArray[i] = string(s)
 	}
 	signals := stringArray(signalsArray).marshalRego()
-	return fmt.Sprintf(`{"command": %s, "signals": %s}`, command, signals)
+	return mustMarshalJSON(struct {
+		Command json.RawMessage `json:"command"`
+		Signals json.RawMessage `json:"signals"`
+	}{json.RawMessage(command), json.RawMessage(signals)})
 }
 
 func writeWindowsExecProcesses(builder *strings.Builder, execProcesses []windowsContainerExecProcess, indent string) {
@@ -558,7 +647,7 @@ func writeWindowsContainer(builder *strings.Builder, container *securityPolicyWi
 	writeWindowsExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeWindowsSignals(builder, container.Signals, indent+indentUsing)
 	writeWindowsUser(builder, container.User, indent+indentUsing)
-	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, escapeRegoString(container.WorkingDir))
+	writeLine(builder, `%s"working_dir": %s,`, indent+indentUsing, regoString(container.WorkingDir))
 	writeLine(builder, `%s"allow_stdio_access": %t,`, indent+indentUsing, container.AllowStdioAccess)
 	writeLine(builder, "%s},", indent)
 }
@@ -567,7 +656,10 @@ func (p containerExecProcess) marshalRego() string {
 	command := stringArray(p.Command).marshalRego()
 	signals := signalArray(p.Signals).marshalRego()
 
-	return fmt.Sprintf(`{"command": %s, "signals": %s}`, command, signals)
+	return mustMarshalJSON(struct {
+		Command json.RawMessage `json:"command"`
+		Signals json.RawMessage `json:"signals"`
+	}{json.RawMessage(command), json.RawMessage(signals)})
 }
 
 func writeExecProcesses(builder *strings.Builder, execProcesses []containerExecProcess, indent string) {
@@ -584,7 +676,10 @@ func writeSignals(builder *strings.Builder, signals []syscall.Signal, indent str
 }
 
 func (n IDNameConfig) marshalRego() string {
-	return fmt.Sprintf("{\"pattern\": `%s`, \"strategy\": \"%s\"}", n.Rule, n.Strategy)
+	return mustMarshalJSON(struct {
+		Pattern  string `json:"pattern"`
+		Strategy string `json:"strategy"`
+	}{n.Rule, string(n.Strategy)})
 }
 
 type idConfigArray []IDNameConfig
@@ -603,7 +698,7 @@ func writeUser(builder *strings.Builder, user UserConfig, indent string) {
 	writeLine(builder, `%s"user": {`, indent)
 	writeLine(builder, `%s"user_idname": %s,`, indent+indentUsing, user.UserIDName.marshalRego())
 	writeLine(builder, `%s"group_idnames": %s,`, indent+indentUsing, groupIDNames)
-	writeLine(builder, `%s"umask": "%s"`, indent+indentUsing, user.Umask)
+	writeLine(builder, `%s"umask": %s`, indent+indentUsing, regoString(user.Umask))
 	writeLine(builder, `%s},`, indent)
 }
 
@@ -617,9 +712,9 @@ func writeContainer(builder *strings.Builder, container *securityPolicyContainer
 	writeSignals(builder, container.Signals, indent+indentUsing)
 	writeUser(builder, container.User, indent+indentUsing)
 	writeCapabilities(builder, container.Capabilities, indent+indentUsing)
-	writeLine(builder, `%s"seccomp_profile_sha256": "%s",`, indent+indentUsing, container.SeccompProfileSHA256)
+	writeLine(builder, `%s"seccomp_profile_sha256": %s,`, indent+indentUsing, regoString(container.SeccompProfileSHA256))
 	writeLine(builder, `%s"allow_elevated": %t,`, indent+indentUsing, container.AllowElevated)
-	writeLine(builder, `%s"working_dir": "%s",`, indent+indentUsing, container.WorkingDir)
+	writeLine(builder, `%s"working_dir": %s,`, indent+indentUsing, regoString(container.WorkingDir))
 	writeLine(builder, `%s"allow_stdio_access": %t,`, indent+indentUsing, container.AllowStdioAccess)
 	writeLine(builder, `%s"no_new_privileges": %t,`, indent+indentUsing, container.NoNewPrivileges)
 	writeLine(builder, "%s},", indent)
@@ -640,7 +735,12 @@ func addContainers(builder *strings.Builder, containers []*securityPolicyContain
 func (p externalProcess) marshalRego() string {
 	command := stringArray(p.command).marshalRego()
 	envRules := envRuleArray(p.envRules).marshalRego()
-	return fmt.Sprintf(`{"command": %s, "env_rules": %s, "working_dir": "%s", "allow_stdio_access": %t}`, command, envRules, p.workingDir, p.allowStdioAccess)
+	return mustMarshalJSON(struct {
+		Command          json.RawMessage `json:"command"`
+		EnvRules         json.RawMessage `json:"env_rules"`
+		WorkingDir       string          `json:"working_dir"`
+		AllowStdioAccess bool            `json:"allow_stdio_access"`
+	}{json.RawMessage(command), json.RawMessage(envRules), p.workingDir, p.allowStdioAccess})
 }
 
 func addExternalProcesses(builder *strings.Builder, processes []*externalProcess) {
@@ -659,18 +759,26 @@ func addExternalProcesses(builder *strings.Builder, processes []*externalProcess
 
 func (f fragment) marshalRego() string {
 	includes := stringArray(f.includes).marshalRego()
-
-	if len(f.parameters) == 0 {
-		return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s}`,
-			f.issuer, f.feed, f.minimumSVN, includes)
+	obj := struct {
+		Issuer     string          `json:"issuer"`
+		Feed       string          `json:"feed"`
+		MinimumSVN string          `json:"minimum_svn"`
+		Includes   json.RawMessage `json:"includes"`
+		Parameters json.RawMessage `json:"parameters,omitempty"`
+	}{
+		Issuer:     f.issuer,
+		Feed:       f.feed,
+		MinimumSVN: f.minimumSVN,
+		Includes:   json.RawMessage(includes),
 	}
-
-	paramsJSON, err := json.Marshal(f.parameters)
-	if err != nil {
-		panic(fmt.Errorf("failed to marshal fragment parameters object to JSON: %w", err))
+	if len(f.parameters) > 0 {
+		paramsJSON, err := json.Marshal(f.parameters)
+		if err != nil {
+			panic(fmt.Errorf("failed to marshal fragment parameters object to JSON: %w", err))
+		}
+		obj.Parameters = json.RawMessage(paramsJSON)
 	}
-	return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s, "parameters": %s}`,
-		f.issuer, f.feed, f.minimumSVN, includes, string(paramsJSON))
+	return mustMarshalJSON(obj)
 }
 
 func addFragments(builder *strings.Builder, fragments []*fragment) {
@@ -725,6 +833,7 @@ func (p securityPolicyFragment) marshalRego() string {
 	builder := new(strings.Builder)
 	addFragments(builder, p.Fragments)
 	addContainers(builder, p.Containers)
+	addWindowsContainers(builder, p.WindowsContainers)
 	addExternalProcesses(builder, p.ExternalProcesses)
 	return fmt.Sprintf("package %s\n\nsvn := \"%s\"\nframework_version := \"%s\"\n\n%s", p.Namespace, p.SVN, frameworkVersion, builder.String())
 }

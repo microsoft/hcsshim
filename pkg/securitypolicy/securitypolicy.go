@@ -58,15 +58,16 @@ const (
 
 // PolicyConfig contains toml or JSON config for security policy.
 type PolicyConfig struct {
-	AllowAll                         bool                    `json:"allow_all" toml:"allow_all"`
-	Containers                       []ContainerConfig       `json:"containers" toml:"container"`
-	ExternalProcesses                []ExternalProcessConfig `json:"external_processes" toml:"external_process"`
-	Fragments                        []FragmentConfig        `json:"fragments" toml:"fragment"`
-	AllowPropertiesAccess            bool                    `json:"allow_properties_access" toml:"allow_properties_access"`
-	AllowDumpStacks                  bool                    `json:"allow_dump_stacks" toml:"allow_dump_stacks"`
-	AllowRuntimeLogging              bool                    `json:"allow_runtime_logging" toml:"allow_runtime_logging"`
-	AllowHostNetwork                 bool                    `json:"allow_hostnetwork" toml:"allow_hostnetwork"`
-	AllowEnvironmentVariableDropping bool                    `json:"allow_environment_variable_dropping" toml:"allow_environment_variable_dropping"`
+	AllowAll                         bool                     `json:"allow_all" toml:"allow_all"`
+	Containers                       []ContainerConfig        `json:"containers" toml:"container"`
+	WindowsContainers                []WindowsContainerConfig `json:"windows_containers" toml:"windows_container"`
+	ExternalProcesses                []ExternalProcessConfig  `json:"external_processes" toml:"external_process"`
+	Fragments                        []FragmentConfig         `json:"fragments" toml:"fragment"`
+	AllowPropertiesAccess            bool                     `json:"allow_properties_access" toml:"allow_properties_access"`
+	AllowDumpStacks                  bool                     `json:"allow_dump_stacks" toml:"allow_dump_stacks"`
+	AllowRuntimeLogging              bool                     `json:"allow_runtime_logging" toml:"allow_runtime_logging"`
+	AllowHostNetwork                 bool                     `json:"allow_hostnetwork" toml:"allow_hostnetwork"`
+	AllowEnvironmentVariableDropping bool                     `json:"allow_environment_variable_dropping" toml:"allow_environment_variable_dropping"`
 	// AllowUnencryptedScratch is a global policy configuration that allows
 	// all containers within a pod to be run without scratch encryption.
 	AllowUnencryptedScratch      bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
@@ -202,6 +203,22 @@ type ContainerConfig struct {
 	SeccompProfilePath       string              `json:"seccomp_profile_path" toml:"seccomp_profile_path"`
 }
 
+// WindowsContainerConfig contains TOML or JSON configuration for a Windows
+// container described in a security policy. Like ContainerConfig, ImageName is
+// the input; the tooling computes the verified Block CIM layer digests and the
+// merged CIM digest from the image.
+type WindowsContainerConfig struct {
+	ImageName        string                         `json:"image_name" toml:"image_name"`
+	Auth             AuthConfig                     `json:"auth" toml:"auth"`
+	Command          []string                       `json:"command" toml:"command"`
+	EnvRules         []EnvRuleConfig                `json:"env_rules" toml:"env_rule"`
+	WorkingDir       string                         `json:"working_dir" toml:"working_dir"`
+	ExecProcesses    []WindowsExecProcessConfig     `json:"exec_processes" toml:"exec_process"`
+	Signals          []guestrequest.SignalValueWCOW `json:"signals" toml:"signals"`
+	AllowStdioAccess bool                           `json:"allow_stdio_access" toml:"allow_stdio_access"`
+	User             string                         `json:"user" toml:"user"`
+}
+
 // MountConfig contains toml or JSON config for mount security policy
 // constraint description.
 type MountConfig struct {
@@ -258,13 +275,6 @@ func NewEnvVarRules(envVars []string, required bool) []EnvRuleConfig {
 		rules = append(rules, r)
 	}
 	return rules
-}
-
-// NewOpenDoorPolicy creates a new SecurityPolicy with AllowAll set to `true`
-func NewOpenDoorPolicy() *SecurityPolicy {
-	return &SecurityPolicy{
-		AllowAll: true,
-	}
 }
 
 // NewSecurityPolicyDigest decodes base64 encoded policy string, computes
@@ -447,18 +457,32 @@ func CreateContainerPolicy(
 	}, nil
 }
 
-// NewSecurityPolicy creates a new SecurityPolicy from the provided values.
-func NewSecurityPolicy(allowAll bool, containers []*Container) *SecurityPolicy {
-	containersMap := map[string]Container{}
-	for i, c := range containers {
-		containersMap[strconv.Itoa(i)] = *c
+// CreateWindowsContainerPolicy creates a Windows container policy instance from
+// the provided constraints or returns an error if validation fails.
+func CreateWindowsContainerPolicy(
+	command, layers, mountedCim []string,
+	envRules []EnvRuleConfig,
+	workingDir string,
+	execProcesses []WindowsExecProcessConfig,
+	signals []guestrequest.SignalValueWCOW,
+	allowStdioAccess bool,
+	user string,
+) (*WindowsContainer, error) {
+	if err := validateEnvRules(envRules); err != nil {
+		return nil, err
 	}
-	return &SecurityPolicy{
-		AllowAll: allowAll,
-		Containers: Containers{
-			Elements: containersMap,
-		},
-	}
+
+	return &WindowsContainer{
+		Command:          newCommandArgs(command),
+		Layers:           newLayers(layers),
+		MountedCim:       mountedCim,
+		EnvRules:         newEnvRules(envRules),
+		WorkingDir:       workingDir,
+		ExecProcesses:    execProcesses,
+		Signals:          signals,
+		AllowStdioAccess: allowStdioAccess,
+		User:             user,
+	}, nil
 }
 
 func validateEnvRules(rules []EnvRuleConfig) error {
