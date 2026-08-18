@@ -45,6 +45,8 @@ updates:
 
   # Keep the Windows base images (nanoserver/servercore) on their latest digest: scans
   # every Dockerfile (except vendored), bumps the digest only (tag kept), one grouped PR.
+    cooldown:
+      default-days: 7
   - package-ecosystem: "docker"
     directories:
       - "/**/*"

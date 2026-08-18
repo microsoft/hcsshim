@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           show-progress: false
 
@@ -43,7 +43,7 @@ jobs:
           cache: false
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.11
           args: >-
@@ -69,7 +69,7 @@ jobs:
       # protobuild requires the code to be in $GOPATH to translate from github.com/Microsoft/hcsshim
       # to the correct path on disk
       - name: Checkout hcsshim
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ github.workspace }}/go/src/github.com/Microsoft/hcsshim"
           show-progress: false
@@ -127,7 +127,7 @@ jobs:
       GOPROXY: "https://proxy.golang.org,direct"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           show-progress: false
 
@@ -192,7 +192,7 @@ jobs:
     runs-on: "windows-2022"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           show-progress: false
 
@@ -247,7 +247,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           show-progress: false
 
@@ -285,7 +285,7 @@ jobs:
             runner: [self-hosted, 1ES.Pool=containerplat-github-runner-pool-east-us-2, 1ES.ImageOverride=github-mms-ws2022-containers-enabled]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           show-progress: false
 
@@ -420,7 +420,7 @@ jobs:
         run: ${{ env.GO_BUILD_CMD }} -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
         working-directory: test
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: test_binaries_${{ matrix.name }}
@@ -441,7 +441,7 @@ jobs:
 
     steps:
       - name: Checkout hcsshim
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: src/github.com/Microsoft/hcsshim
           show-progress: false
@@ -473,7 +473,7 @@ jobs:
         working-directory: src/github.com/Microsoft/hcsshim
 
       - name: Checkout containerd
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: src/github.com/containerd/containerd
           repository: "containerd/containerd"
@@ -649,7 +649,7 @@ jobs:
     runs-on: "windows-2022"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           show-progress: false
 
@@ -723,7 +723,7 @@ jobs:
       - run: ${{ env.GO_BUILD_CMD }} ./internal/tools/zapdir
         name: Build zapdir.exe
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ github.event_name == 'pull_request' }}
         with:
           name: binaries
@@ -748,7 +748,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           show-progress: false
 
