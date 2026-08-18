@@ -11,6 +11,9 @@ const (
 	// WCOWRootPrefixInUVM is the path inside UVM where WCOW container's root
 	// file system will be mounted
 	WCOWRootPrefixInUVM = `C:\c`
+	// WCOWSandboxMountPath is the path inside the UVM where WCOW sandbox mounts
+	// are created.
+	WCOWSandboxMountPath = `C:\SandboxMounts`
 	// SandboxMountPrefix is mount prefix used in container spec to mark a
 	// sandbox-mount
 	SandboxMountPrefix = "sandbox://"

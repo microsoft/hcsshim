@@ -264,6 +264,50 @@ type nicInNamespace struct {
 	assignedPid int
 }
 
+// ConfigureInInitNS configures all adapters in the current (init) network
+// namespace without moving them. This is used for host-network containers
+// where all containers share the init netns and the NIC must remain there.
+func (n *namespace) ConfigureInInitNS(ctx context.Context) (err error) {
+	ctx, span := ot.StartSpan(ctx, "namespace::ConfigureInInitNS")
+	defer span.End()
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(attribute.String("namespace", n.id))
+
+	n.m.Lock()
+	defer n.m.Unlock()
+
+	// Mirror Sync()'s multi-NIC handling so host-network and non-host-network
+	// pods behave identically with respect to policy-based routing.
+	for i, a := range n.nics {
+		if a.adapter.PolicyBasedRouting {
+			a.adapter.EnableLowMetric = (i > 0)
+		}
+		if err = a.configureInPlace(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// configureInPlace configures the adapter in the current network namespace
+// (no move). It applies IP addresses, routes, and gateway settings just like
+// assignToPid but without calling MoveInterfaceToNS or switching netns.
+func (nin *nicInNamespace) configureInPlace(ctx context.Context) (err error) {
+	ctx, span := ot.StartSpan(ctx, "nicInNamespace::configureInPlace")
+	defer span.End()
+	defer func() { ot.SetSpanStatus(span, err) }()
+	span.SetAttributes(
+		attribute.String("adapterID", nin.adapter.ID),
+		attribute.String("ifname", nin.ifname))
+
+	// Configure directly in the current (init) namespace — no move needed.
+	// Use PID 1 as the "nsPid" parameter for NetNSConfig logging context.
+	if err := network.NetNSConfig(ctx, nin.ifname, 1, nin.adapter); err != nil {
+		return errors.Wrapf(err, "failed to configure adapter aid: %s, if id: %s in init netns", nin.adapter.ID, nin.ifname)
+	}
+	return nil
+}
+
 // assignToPid assigns `nin.adapter`, represented by `nin.ifname` to `pid`.
 func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error) {
 	ctx, span := ot.StartSpan(ctx, "nicInNamespace::assignToPid")

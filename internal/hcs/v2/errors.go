@@ -65,6 +65,11 @@ var (
 	// ErrVmcomputeOperationInvalidState is an error encountered when the compute system is not in a valid state for the requested operation
 	ErrVmcomputeOperationInvalidState = syscall.Errno(0xc0370105)
 
+	// ErrInvalidState is HCS_E_INVALID_STATE, the CoError HRESULT the HCS v2 APIs
+	// return when an operation is not valid in the current state (distinct from the
+	// ERROR_VMCOMPUTE_INVALID_STATE Win32 form above).
+	ErrInvalidState = syscall.Errno(0x80370105)
+
 	// ErrProcNotFound is an error encountered when a procedure look up fails.
 	ErrProcNotFound = syscall.Errno(0x7f)
 

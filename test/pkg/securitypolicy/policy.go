@@ -1,6 +1,7 @@
 package securitypolicy
 
 import (
+	"context"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -61,15 +62,73 @@ func PolicyWithOpts(tb testing.TB, policyType string, pOpts ...securitypolicy.Po
 		config.AllowPropertiesAccess,
 		config.AllowDumpStacks,
 		config.AllowRuntimeLogging,
+		config.AllowHostNetwork,
 		config.AllowEnvironmentVariableDropping,
 		config.AllowUnencryptedScratch,
 		config.AllowCapabilityDropping,
+		config.AllowLogProviderDropping,
 	)
 	if err != nil {
 		tb.Fatal(err)
 	}
 	return base64.StdEncoding.EncodeToString([]byte(policyString))
 
+}
+
+func PolicyFromWindowsContainerWithOpts(
+	tb testing.TB,
+	policyType string,
+	cOpts []securitypolicy.WindowsContainerConfigOpt,
+	pOpts []securitypolicy.PolicyConfigOpt,
+) string {
+	tb.Helper()
+	containerConfig := securitypolicy.WindowsContainerConfig{}
+	for _, option := range cOpts {
+		if err := option(&containerConfig); err != nil {
+			tb.Fatal(err)
+		}
+	}
+
+	policyOpts := []securitypolicy.PolicyConfigOpt{
+		securitypolicy.WithWindowsContainers([]securitypolicy.WindowsContainerConfig{
+			containerConfig,
+		}),
+	}
+	policyOpts = append(policyOpts, pOpts...)
+
+	return WindowsPolicyWithOpts(tb, policyType, policyOpts...)
+}
+
+func WindowsPolicyWithOpts(tb testing.TB, policyType string, pOpts ...securitypolicy.PolicyConfigOpt) string {
+	tb.Helper()
+	config, err := securitypolicy.NewPolicyConfig(pOpts...)
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	policyContainers, err := helpers.PolicyWindowsContainersFromConfigs(context.Background(), config.WindowsContainers)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	policyString, err := securitypolicy.MarshalWindowsPolicy(
+		policyType,
+		config.AllowAll,
+		policyContainers,
+		config.ExternalProcesses,
+		config.Fragments,
+		config.AllowPropertiesAccess,
+		config.AllowDumpStacks,
+		config.AllowRuntimeLogging,
+		config.AllowHostNetwork,
+		config.AllowEnvironmentVariableDropping,
+		config.AllowUnencryptedScratch,
+		config.AllowCapabilityDropping,
+		config.AllowLogProviderDropping,
+	)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString([]byte(policyString))
 }
 
 func AssertErrorContains(t *testing.T, err error, expected string) bool {

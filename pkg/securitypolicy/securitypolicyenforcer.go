@@ -157,6 +157,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceGetPropertiesPolicy(ctx context.Context) error
 	EnforceDumpStacksPolicy(ctx context.Context) error
 	EnforceRuntimeLoggingPolicy(ctx context.Context) (err error)
+	EnforceHostNetworkPolicy(ctx context.Context) error
 	LoadFragment(ctx context.Context, opts LoadFragmentOptions) error
 	LoadTransparencyTrustList(ctx context.Context, opts LoadTransparencyTrustListOptions) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
@@ -164,6 +165,14 @@ type SecurityPolicyEnforcer interface {
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
 	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) (err error)
 	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error
+	// EnforceLogProviderPolicy validates a batch of requested ETW provider
+	// names against the policy's allowed_log_providers list. It returns the
+	// subset of provider names that the caller should forward to the inbox
+	// GCS, plus any policy error. When the policy has
+	// allow_log_provider_dropping := true, providers not on the allow-list are
+	// silently dropped from the returned slice; otherwise the whole call is
+	// denied (returning a non-nil error) if any provider is not allowed.
+	EnforceLogProviderPolicy(ctx context.Context, providerNames []string) ([]string, error)
 	WithMetadataRollback(fn func() error) error
 }
 
@@ -349,6 +358,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy(context.Contex
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceHostNetworkPolicy(context.Context) error {
+	return nil
+}
+
 func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return oe.encodedSecurityPolicy
 }
@@ -371,6 +384,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Cont
 
 func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
 	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceLogProviderPolicy(_ context.Context, providerNames []string) ([]string, error) {
+	return providerNames, nil
 }
 
 func (OpenDoorSecurityPolicyEnforcer) WithMetadataRollback(fn func() error) error {
@@ -494,6 +511,10 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy(context.Cont
 	return errors.New("runtime logging is denied by policy")
 }
 
+func (ClosedDoorSecurityPolicyEnforcer) EnforceHostNetworkPolicy(context.Context) error {
+	return errors.New("host network is denied by policy")
+}
+
 func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return ""
 }
@@ -516,6 +537,10 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Co
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
 	return errors.New("registry changes are denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceLogProviderPolicy(context.Context, []string) ([]string, error) {
+	return nil, errors.New("log provider is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) WithMetadataRollback(fn func() error) error {

@@ -113,8 +113,9 @@
 //	{StateTransferCompleted | StateFailed | StateCancelled}
 //	    ── Finalize ──▶ StateFinalized ── Cleanup ──▶ StateIdle
 //
-// A cancelled destination is the exception: its [Controller.Finalize] is a no-op,
-// so it cleans up directly from [StateCancelled].
+// A cancelled destination is the exception: unless it is resumed—which brings the
+// sandbox back up on this host—its [Controller.Finalize] is a no-op, so it cleans
+// up directly from [StateCancelled].
 //
 // # Notifications
 //

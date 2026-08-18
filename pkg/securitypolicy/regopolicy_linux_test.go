@@ -79,9 +79,11 @@ func Test_MarshalRego_Policy(t *testing.T) {
 			p.allowGetProperties,
 			p.allowDumpStacks,
 			p.allowRuntimeLogging,
+			p.allowHostNetwork,
 			p.allowEnvironmentVariableDropping,
 			p.allowUnencryptedScratch,
 			p.allowCapabilityDropping,
+			p.allowLogProviderDropping,
 		)
 		if err != nil {
 			t.Error(err)
@@ -4170,6 +4172,36 @@ func Test_EnforceRuntimeLogging_Not_Allowed(t *testing.T) {
 	}
 }
 
+func Test_EnforceHostNetwork_Allowed(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+	gc.allowHostNetwork = true
+
+	tc, err := setupRegoPolicyOnlyTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforceHostNetworkPolicy(gc.ctx)
+	if err != nil {
+		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
+	}
+}
+
+func Test_EnforceHostNetwork_Not_Allowed(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+	gc.allowHostNetwork = false
+
+	tc, err := setupRegoPolicyOnlyTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforceHostNetworkPolicy(gc.ctx)
+	if err == nil {
+		t.Fatalf("Policy enforcement unexpectedly was allowed")
+	}
+}
+
 func Test_Rego_LoadFragment_Container(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
@@ -5403,7 +5435,7 @@ framework_version := "%s"
 
 layer := "%s"
 
-mount_device := {"allowed": allowed, "metadata": [addCustom]} {
+mount_device := {"allowed": allowed, "metadata": [addCustom]} if {
 	allowed := input.deviceHash == layer
 	addCustom := {
 		"name": "custom",
@@ -5422,13 +5454,13 @@ framework_version := "%s"
 
 default load_fragment := {"allowed": false}
 
-check_svn_if_loaded {
+check_svn_if_loaded if {
 	not input.fragment_loaded
-} else {
+} else if {
 	data[input.namespace].svn >= 1
 }
 
-load_fragment := {"allowed": true, "add_module": true} {
+load_fragment := {"allowed": true, "add_module": true} if {
 	input.issuer == "%s"
 	input.feed == "%s"
 	check_svn_if_loaded
@@ -6415,9 +6447,10 @@ enforcement_point_info := {
     "default_results": {"allowed": true},
     "use_framework": true
 }
-data.framework.load_fragment := load_fragment
-default extract_parameter(_, _, _) := ""
-data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
+# this no longer works in Rego v1, commenting out
+# data.framework.load_fragment := load_fragment
+# default extract_parameter(_, _, _) := ""
+# data.framework.extract_parameter(a, b, c) := extract_parameter(a, b, c)
 `, fragment.constraints.svn, frameworkVersion)
 
 		err = tc.policy.LoadFragment(p.ctx, LoadFragmentOptions{Issuer: fragment.info.issuer, Feed: fragment.info.feed, Rego: code})

@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -53,6 +55,14 @@ func (uvm *UtilityVM) Update(ctx context.Context, data interface{}, annots map[s
 	if memoryLimitInBytes != nil {
 		if err := uvm.UpdateMemory(ctx, *memoryLimitInBytes); err != nil {
 			return err
+		}
+		if uvm.operatingSystem == "linux" {
+			if err := uvm.GuestRequest(ctx, guestrequest.ModificationRequest{
+				ResourceType: guestresource.ResourceTypePodCgroupMemoryLimit,
+				RequestType:  guestrequest.RequestTypeUpdate,
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	if processorLimits != nil {

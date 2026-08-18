@@ -81,7 +81,7 @@ type service struct {
 	gracefulShutdown bool
 }
 
-var _ task.TaskService = &service{}
+var _ task.TTRPCTaskService = &service{}
 
 func NewService(o ...ServiceOption) (svc *service, err error) {
 	var opts ServiceOptions

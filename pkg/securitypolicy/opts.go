@@ -1,6 +1,10 @@
 package securitypolicy
 
+import "github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+
 type ContainerConfigOpt func(config *ContainerConfig) error
+
+type WindowsContainerConfigOpt func(config *WindowsContainerConfig) error
 
 type PolicyConfigOpt func(config *PolicyConfig) error
 
@@ -101,6 +105,79 @@ func WithContainers(containers []ContainerConfig) PolicyConfigOpt {
 	}
 }
 
+// WithWindowsImageName sets the image whose verified Block CIM digests the
+// tooling computes for a Windows container policy config.
+func WithWindowsImageName(imageName string) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.ImageName = imageName
+		return nil
+	}
+}
+
+// WithWindowsCommand sets the command in a Windows container policy config.
+func WithWindowsCommand(command []string) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.Command = command
+		return nil
+	}
+}
+
+// WithWindowsEnvVarRules adds environment variable constraints to a Windows container policy config.
+func WithWindowsEnvVarRules(envs []EnvRuleConfig) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.EnvRules = append(config.EnvRules, envs...)
+		return nil
+	}
+}
+
+// WithWindowsWorkingDir sets the Windows container working directory.
+func WithWindowsWorkingDir(workingDir string) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.WorkingDir = workingDir
+		return nil
+	}
+}
+
+// WithWindowsExecProcesses adds allowed exec processes to a Windows container policy config.
+func WithWindowsExecProcesses(processes []WindowsExecProcessConfig) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.ExecProcesses = append(config.ExecProcesses, processes...)
+		return nil
+	}
+}
+
+// WithWindowsSignals sets the signals allowed for the Windows container init process.
+func WithWindowsSignals(signals []guestrequest.SignalValueWCOW) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.Signals = signals
+		return nil
+	}
+}
+
+// WithWindowsAllowStdioAccess enables or disables Windows container init process stdio.
+func WithWindowsAllowStdioAccess(allow bool) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.AllowStdioAccess = allow
+		return nil
+	}
+}
+
+// WithWindowsUser sets the Windows container user.
+func WithWindowsUser(user string) WindowsContainerConfigOpt {
+	return func(config *WindowsContainerConfig) error {
+		config.User = user
+		return nil
+	}
+}
+
+// WithWindowsContainers adds Windows containers to a security policy config.
+func WithWindowsContainers(containers []WindowsContainerConfig) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.WindowsContainers = append(config.WindowsContainers, containers...)
+		return nil
+	}
+}
+
 func WithAllowUnencryptedScratch(allow bool) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.AllowUnencryptedScratch = allow
@@ -115,6 +192,13 @@ func WithAllowEnvVarDropping(allow bool) PolicyConfigOpt {
 	}
 }
 
+func WithAllowLogProviderDropping(allow bool) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.AllowLogProviderDropping = allow
+		return nil
+	}
+}
+
 func WithAllowCapabilityDropping(allow bool) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.AllowCapabilityDropping = allow
@@ -125,6 +209,13 @@ func WithAllowCapabilityDropping(allow bool) PolicyConfigOpt {
 func WithAllowRuntimeLogging(allow bool) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.AllowRuntimeLogging = allow
+		return nil
+	}
+}
+
+func WithAllowHostNetwork(allow bool) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.AllowHostNetwork = allow
 		return nil
 	}
 }

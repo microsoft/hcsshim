@@ -16,9 +16,11 @@ type securityPolicyInternal struct {
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
+	AllowHostNetwork                 bool
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
+	AllowLogProviderDropping         bool
 }
 
 // Internal version of Windows SecurityPolicy
@@ -29,15 +31,18 @@ type securityPolicyWindowsInternal struct {
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
+	AllowHostNetwork                 bool
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
+	AllowLogProviderDropping         bool
 }
 
 type securityPolicyFragment struct {
 	Namespace         string
 	SVN               string
 	Containers        []*securityPolicyContainer
+	WindowsContainers []*securityPolicyWindowsContainer
 	ExternalProcesses []*externalProcess
 	Fragments         []*fragment
 }
@@ -94,9 +99,11 @@ func newSecurityPolicyInternal(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
+	allowHostNetwork bool,
 	allowDropEnvironmentVariables bool,
 	allowUnencryptedScratch bool,
 	allowDropCapabilities bool,
+	allowLogProviderDropping bool,
 ) (*securityPolicyInternal, error) {
 	containersInternal, err := containersToInternal(containers)
 	if err != nil {
@@ -110,9 +117,11 @@ func newSecurityPolicyInternal(
 		AllowPropertiesAccess:            allowPropertiesAccess,
 		AllowDumpStacks:                  allowDumpStacks,
 		AllowRuntimeLogging:              allowRuntimeLogging,
+		AllowHostNetwork:                 allowHostNetwork,
 		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowDropCapabilities,
+		AllowLogProviderDropping:         allowLogProviderDropping,
 	}, nil
 }
 
@@ -132,6 +141,27 @@ func newSecurityPolicyFragment(
 		Namespace:         namespace,
 		SVN:               svn,
 		Containers:        containersInternal,
+		ExternalProcesses: externalProcessToInternal(externalProcesses),
+		Fragments:         fragmentsToInternal(fragments),
+	}, nil
+}
+
+func newWindowsSecurityPolicyFragment(
+	namespace string,
+	svn string,
+	containers []*WindowsContainer,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
+) (*securityPolicyFragment, error) {
+	containersInternal, err := windowsContainersToInternal(containers)
+	if err != nil {
+		return nil, err
+	}
+
+	return &securityPolicyFragment{
+		Namespace:         namespace,
+		SVN:               svn,
+		WindowsContainers: containersInternal,
 		ExternalProcesses: externalProcessToInternal(externalProcesses),
 		Fragments:         fragmentsToInternal(fragments),
 	}, nil
@@ -321,6 +351,7 @@ func (c *WindowsContainer) toInternal() (*securityPolicyWindowsContainer, error)
 		Command:          command,
 		EnvRules:         envRules,
 		Layers:           layers,
+		MountedCim:       c.MountedCim,
 		WorkingDir:       c.WorkingDir,
 		ExecProcesses:    execProcesses,
 		Signals:          c.Signals,

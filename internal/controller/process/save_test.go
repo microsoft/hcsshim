@@ -116,6 +116,14 @@ func TestSave_Succeeds(t *testing.T) {
 			if controller.state != StateSourceMigrating {
 				t.Errorf("state = %s; want StateSourceMigrating", controller.state)
 			}
+			// The ports and wait id are retained on the controller so a source
+			// rollback resume re-opens IO the same way the destination does.
+			if controller.stdinPort != testStdinPort || controller.stdoutPort != testStdoutPort || controller.stderrPort != testStderrPort {
+				t.Errorf("controller ports = (%d,%d,%d); want (%d,%d,%d)", controller.stdinPort, controller.stdoutPort, controller.stderrPort, testStdinPort, testStdoutPort, testStderrPort)
+			}
+			if controller.waitCallID != testWaitCallID {
+				t.Errorf("controller waitCallID = %d; want %d", controller.waitCallID, testWaitCallID)
+			}
 		})
 	}
 }
@@ -331,22 +339,6 @@ func TestResume_WrongState(t *testing.T) {
 				t.Errorf("Resume() = %v; want ErrFailedPrecondition", err)
 			}
 		})
-	}
-}
-
-// TestResume_SourceRollback verifies that resuming a source-migrating process
-// lifts the freeze and returns it to running without touching the host.
-func TestResume_SourceRollback(t *testing.T) {
-	t.Parallel()
-	_, _, _, controller := newSetup(t)
-	controller.state = StateSourceMigrating
-
-	// nil host/events are unused: the live process and IO stay intact.
-	if err := controller.Resume(t.Context(), nil, nil); err != nil {
-		t.Fatalf("Resume() = %v; want nil", err)
-	}
-	if controller.state != StateRunning {
-		t.Errorf("state = %s; want StateRunning", controller.state)
 	}
 }
 

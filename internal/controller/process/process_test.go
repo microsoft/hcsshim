@@ -13,6 +13,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"go.uber.org/mock/gomock"
 
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/controller/process/mocks"
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
 )
@@ -253,6 +254,49 @@ func TestStart_HostCreateProcessFails(t *testing.T) {
 	}
 	if controller.State() != StateTerminated {
 		t.Errorf("state = %s; want StateTerminated", controller.State())
+	}
+}
+
+// TestHandleProcessExit_DrainOnly verifies that with reportExit=false — a source
+// rollback's re-attached relay — handleProcessExit drains its command but leaves
+// exit reporting (state transition, upstream IO close, and the exit event) to the
+// watcher started with the process.
+func TestHandleProcessExit_DrainOnly(t *testing.T) {
+	t.Parallel()
+	mockCtrl, _, mockIO, controller := newSetup(t)
+	controller.upstreamIO = mockIO
+	controller.state = StateRunning
+	mockProc := mocks.NewMockProcess(mockCtrl)
+
+	// cmd.Attach reads Pid (for logging) and Stdio; nil IO means no relay goroutines.
+	mockProc.EXPECT().Pid().Return(testPID)
+	mockProc.EXPECT().Stdio().Return(nil, nil, nil)
+	// execCmd.Wait drives Process.Wait, ExitCode, and Close exactly once.
+	mockProc.EXPECT().Wait().Return(nil)
+	mockProc.EXPECT().ExitCode().Return(0, nil)
+	mockProc.EXPECT().Close().Return(nil)
+
+	execCmd, err := cmd.Attach(context.WithoutCancel(t.Context()), mockProc, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Attach() = %v; want nil", err)
+	}
+
+	// No upstreamIO.Close is expected: the unset mock would fail if it were called.
+	events := make(chan interface{}, 1)
+	controller.handleProcessExit(t.Context(), execCmd, events, false)
+
+	if controller.State() != StateRunning {
+		t.Errorf("state = %s; want unchanged StateRunning", controller.State())
+	}
+	select {
+	case <-controller.exitedCh:
+		t.Error("exitedCh was closed; want left to the original watcher")
+	default:
+	}
+	select {
+	case ev := <-events:
+		t.Errorf("published event %v; want none", ev)
+	default:
 	}
 }
 
