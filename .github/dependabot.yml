@@ -42,11 +42,11 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 5
-
-  # Keep the Windows base images (nanoserver/servercore) on their latest digest: scans
-  # every Dockerfile (except vendored), bumps the digest only (tag kept), one grouped PR.
     cooldown:
       default-days: 7
+      
+  # Keep the Windows base images (nanoserver/servercore) on their latest digest: scans
+  # every Dockerfile (except vendored), bumps the digest only (tag kept), one grouped PR.
   - package-ecosystem: "docker"
     directories:
       - "/**/*"
