@@ -47,8 +47,8 @@ func ComputeLayerHashes(img v1.Image) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		hashString, err := tar2ext4.ConvertAndComputeRootDigest(r)
+		_ = r.Close() // release the go-containerregistry pullLimiter
 		if err != nil {
 			return nil, err
 		}
