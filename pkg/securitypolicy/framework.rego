@@ -184,7 +184,7 @@ candidate_containers := containers if {
 
 default mount_cims := {"allowed": false}
 
-mount_cims := {"metadata": [addMatches], "allowed": true} if {
+mount_cims := {"metadata": [addMatches, addCimVolume], "allowed": true} if {
     not overlay_exists
 
     containers := [container |
@@ -199,6 +199,36 @@ mount_cims := {"metadata": [addMatches], "allowed": true} if {
         "action": "add",
         "key": input.containerID,
         "value": containers,
+    }
+
+    # Record the host-minted volume GUID (a runtime handle, not a policy-authored
+    # value) so unmount_cims can require it later. A single block CIM volume is
+    # shared by every container from the same image and is mounted/unmounted once
+    # for its whole lifetime: the host physically mounts it once, then re-drives
+    # this rule per container that reuses it, and unmounts it once when the last
+    # reference is gone (per-container teardown does not touch the CIM). "update"
+    # keeps those repeated mounts of the same volume idempotent (one record), so
+    # the matching single unmount stays symmetric.
+    addCimVolume := {
+        "name": "mountedCimVolumes",
+        "action": "update",
+        "key": input.volumeGUID,
+        "value": true,
+    }
+}
+
+cim_volume_mounted(volumeGUID) if {
+    data.metadata.mountedCimVolumes[volumeGUID]
+}
+
+default unmount_cims := {"allowed": false}
+
+unmount_cims := {"metadata": [removeCimVolume], "allowed": true} if {
+    cim_volume_mounted(input.volumeGUID)
+    removeCimVolume := {
+        "name": "mountedCimVolumes",
+        "action": "remove",
+        "key": input.volumeGUID,
     }
 }
 
@@ -747,6 +777,7 @@ create_container := {"metadata": [updateMatches, addStarted],
         user_ok(container.user)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
+        mountList_ok(container.mounts, false)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -825,15 +856,11 @@ mountSource_ok(constraint, source) if {
     constraint == source
 }
 
-mountConstraint_ok(constraint, mount) if {
-    mount.type == constraint.type
-    mountSource_ok(constraint.source, mount.source)
-    mount.destination != ""
-    mount.destination == constraint.destination
-
-    # the following check is not required (as the following tests will prove this
-    # condition as well), however it will check whether those more expensive
-    # tests need to be performed.
+# mountOptions_ok holds when a mount's options are exactly the constraint's
+# option set: every requested option is allowed and every allowed option is
+# present (no missing, no extras). The count check is a cheap pre-filter for the
+# two set-containment checks that follow.
+mountOptions_ok(constraint, mount) if {
     count(mount.options) == count(constraint.options)
     every option in mount.options {
         some constraintOption in constraint.options
@@ -844,6 +871,82 @@ mountConstraint_ok(constraint, mount) if {
         some mountOption in mount.options
         option == mountOption
     }
+}
+
+# is_named_pipe reports whether an OCI mount destination refers to a Windows
+# named pipe. This matches how the host decides to turn a mount into a
+# MappedPipe rather than a MappedDirectory (see internal/gcs-sidecar handlers'
+# isPipeDestination and internal/hcsoci/hcsdoc_wcow.go).
+is_named_pipe(path) if {
+    startswith(path, `\\.\pipe\`)
+}
+
+# windows_mount_type_ok gates which OCI mount `type` values are acceptable on
+# Windows. We only handle "plain" mounts - mapped directories and named pipes -
+# which carry an empty type or an explicit
+# "bind". Disk/device mount types (virtual-disk / physical-disk /
+# extensible-virtual-disk) are not supported and rejected.
+windows_mount_type_ok(mount) if {
+    mount.type == ""
+}
+
+windows_mount_type_ok(mount) if {
+    mount.type == "bind"
+}
+
+mountConstraint_ok(constraint, mount) if {
+    is_linux
+    mount.type == constraint.type
+    mountSource_ok(constraint.source, mount.source)
+    mount.destination != ""
+    mount.destination == constraint.destination
+    mountOptions_ok(constraint, mount)
+}
+
+# Windows named pipe: the source is a stable "\\.\pipe\<name>" path that the
+# policy author can predict, so we require it to match the constraint exactly.
+# This stops the host from wiring a container's expected pipe destination up to a
+# different host pipe. We don't match mount.type against a policy value (it's
+# empty/"bind" for real mounts), but we do reject non-plain types via
+# windows_mount_type_ok so a disk/device mount can't pass as a pipe.
+mountConstraint_ok(constraint, mount) if {
+    is_windows
+    windows_mount_type_ok(mount)
+    is_named_pipe(mount.destination)
+    mount.destination != ""
+    mount.destination == constraint.destination
+    constraint.source == mount.source
+    mountOptions_ok(constraint, mount)
+}
+
+# Windows mapped directory (anything that is not a named pipe): by the time the
+# request reaches the UVM the host has rewritten the user's host_path (e.g.
+# "C:\share-host") into a host-generated volume path such as
+# "\\?\Volume{<random-guid>}\share-host". That GUID is picked by the host and
+# cannot be predicted by the policy author, so we do not enforce the source and
+# rely on the destination + options (mirroring the top-level mapped_directories
+# rule, which matches on container_path + read_only). windows_mount_type_ok
+# rejects disk/device mount types so they can't pass as a directory.
+#
+# Note on state: this create-time match (reached via mountList_ok in the Windows
+# create_container) records NO per-container mount state - unlike LCOW, where a
+# container's mounts are established by separate, independently-unmountable
+# modifySettings ops (plan9_mount / scsi / overlay) whose metadata
+# create_container then reads via mountSource_ok. We deliberately track nothing
+# here, resting on the assumption that there is no operation to "remove mount X
+# from container Y" independently of the container: a Windows container's
+# create-time mounts live and die with the container (torn down wholesale when
+# its combined layers are removed), so no independent unmount could ever consume
+# such state - hence there is nothing to track. (The UVM-level mapped directory
+# added/removed via mapped_directory_mount / mapped_directory_unmount has a
+# separate mechanism that keeps its own state.)
+mountConstraint_ok(constraint, mount) if {
+    is_windows
+    windows_mount_type_ok(mount)
+    not is_named_pipe(mount.destination)
+    mount.destination != ""
+    mount.destination == constraint.destination
+    mountOptions_ok(constraint, mount)
 }
 
 mount_ok(mounts, allow_elevated, mount) if {
@@ -896,15 +999,12 @@ mount_ok(mounts, allow_elevated, mount) if {
     "rw" in mount.options
 }
 
+# mountList_ok is OS-agnostic here: the per-mount OS differences are handled by
+# the is_linux/is_windows bodies of mountConstraint_ok.
 mountList_ok(mounts, allow_elevated) if {
-    is_linux
     every mount in input.mounts {
         mount_ok(mounts, allow_elevated, mount)
     }
-}
-mountList_ok(mounts, allow_elevated) if {
-    # no-op for windows
-    is_windows
 }
 
 is_linux if {
@@ -1691,6 +1791,62 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} if {
     }
 }
 
+# Mapped directory (VSMB share) validation for Windows containers
+default mapped_directory_mount := {"allowed": false}
+
+mapped_directory_mounted(target) if {
+    data.metadata.mapped_directories[target]
+}
+
+default mapped_directory_ok := false
+
+# A mapped directory is matched on container_path + read_only only; we do not
+# enforce its host-side source. This mirrors the reasoning in
+# windows_mountSource_ok for directory (non-pipe) mounts: by the time the
+# request reaches the UVM the host has already rewritten the user's host_path
+# (e.g. "C:\share-host") into a host-generated volume path such as
+# "\\?\Volume{<random-guid>}\share-host". That GUID is picked by the host and
+# cannot be predicted by the policy author, so matching on it carries no
+# security value.
+
+# allowed by an entry in the base policy
+mapped_directory_ok if {
+    mapped_directory := data.policy.mapped_directories[_]
+    input.containerPath == mapped_directory.container_path
+    input.readOnly == mapped_directory.read_only
+}
+
+# allowed by an entry loaded from a fragment
+mapped_directory_ok if {
+    feed := data.metadata.issuers[_].feeds[_]
+    some fragment in feed
+    mapped_directory := fragment.mapped_directories[_]
+    input.containerPath == mapped_directory.container_path
+    input.readOnly == mapped_directory.read_only
+}
+
+mapped_directory_mount := {"metadata": [add_mapped_dir], "allowed": true} if {
+    not mapped_directory_mounted(input.containerPath)
+    mapped_directory_ok
+    add_mapped_dir := {
+        "name": "mapped_directories",
+        "action": "add",
+        "key": input.containerPath,
+        "value": {"readOnly": input.readOnly},
+    }
+}
+
+default mapped_directory_unmount := {"allowed": false}
+
+mapped_directory_unmount := {"metadata": [remove_mapped_dir], "allowed": true} if {
+    mapped_directory_mounted(input.unmountTarget)
+    remove_mapped_dir := {
+        "name": "mapped_directories",
+        "action": "remove",
+        "key": input.unmountTarget,
+    }
+}
+
 # Log provider validation for Windows containers.
 #
 # Two modes (mirrors allow_environment_variable_dropping):
@@ -1818,27 +1974,123 @@ registry_value_matches(policy_value, input_value) if {
     policy_value.type == "None"
 }
 
-# Filter input registry values to only include those that match policy
-filtered_registry_values(input_values, policy_values) := [input_val |
-    input_val := input_values[_]
-    some policy_val in policy_values
-    registry_value_matches(policy_val, input_val)
-]
+# requested_registry_changes is the tagged set of all requested registry
+# changes: each requested add value and each requested delete key, tagged by
+# kind so the add and delete cases share the same dropping/narrowing machinery.
+requested_registry_changes := changes if {
+    adds := {{"kind": "add", "value": input_value} |
+        some input_value in input.registryChanges.AddValues
+    }
+    deletes := {{"kind": "delete", "key": input_key} |
+        some input_key in input.registryChanges.DeleteKeys
+    }
+    changes := adds | deletes
+}
 
-registry_changes := {"allowed": true} if {
-    containers := data.metadata.matches[input.containerID]
-    container := containers[_]
+# registry_change_authorized holds when the container's registry_changes policy
+# authorizes the requested change (an add value or a delete key).
+registry_change_authorized(container, change) if {
+    change.kind == "add"
+    some policy_value in container.registry_changes.add_values
+    registry_value_matches(policy_value, change.value)
+}
 
-    # Check if container has registry_changes defined in policy
-    container.registry_changes
+registry_change_authorized(container, change) if {
+    change.kind == "delete"
+    some policy_key in container.registry_changes.delete_keys
+    registry_keys_match(policy_key, change.key)
+}
 
-    # If input has registry changes, filter to only matching ones
-    input.registryChanges.AddValues
-    matched_values := filtered_registry_values(input.registryChanges.AddValues, container.registry_changes.add_values)
+# valid_registry_subset is the set of requested registry changes that the
+# container's policy authorizes.
+valid_registry_subset(container) := changes if {
+    changes := {change |
+        some change in requested_registry_changes
+        registry_change_authorized(container, change)
+    }
+}
 
-    # Build result with filtered AddValues
-    result := {
-        "AddValues": matched_values
+# valid_registry_for_all selects the registry changes to keep across the
+# candidate containers, mirroring valid_envs_for_all. With
+# allow_registry_changes_dropping it keeps the most specific (largest)
+# authorized subset, dropping the rest; if several containers tie for the
+# largest subset they must authorize the same set (intersection == union) for
+# the result to be decidable. Without dropping it keeps every requested change,
+# so a container must authorize all of them for the request to be allowed.
+valid_registry_for_all(containers) := changes if {
+    allow_registry_changes_dropping
+
+    valid := [subset |
+        some container in containers
+        subset := valid_registry_subset(container)
+    ]
+
+    counts := [count(subset) | subset := valid[_]]
+    max_count := max(counts)
+
+    largest_change_sets := {subset |
+        some i
+        counts[i] == max_count
+        subset := valid[i]
+    }
+
+    changes_i := intersection(largest_change_sets)
+    changes_u := union(largest_change_sets)
+    changes_i == changes_u
+    changes := changes_i
+}
+
+valid_registry_for_all(containers) := changes if {
+    not allow_registry_changes_dropping
+
+    # no dropping: keep every requested change, so a container must authorize all
+    changes := requested_registry_changes
+}
+
+# registryChanges_ok holds when the container authorizes every change in
+# `changes`.
+registryChanges_ok(container, changes) if {
+    every change in changes {
+        registry_change_authorized(container, change)
+    }
+}
+
+# registry_changes decides whether the requested registry changes are allowed,
+# returning the add values and delete keys to keep (add_values_to_keep /
+# delete_keys_to_keep). It also narrows the matched containers so the decision
+# stays consistent with create_container whichever order the two run in.
+registry_changes := {
+    "metadata": [updateMatches],
+    "add_values_to_keep": add_values,
+    "delete_keys_to_keep": delete_keys,
+    "allowed": true,
+} if {
+    matches := data.metadata.matches[input.containerID]
+
+    # honors allow_registry_changes_dropping
+    kept := valid_registry_for_all(matches)
+
+    containers := [container |
+        container := matches[_]
+        registryChanges_ok(container, kept)
+    ]
+
+    count(containers) > 0
+
+    add_values := [change.value |
+        some change in kept
+        change.kind == "add"
+    ]
+    delete_keys := [change.key |
+        some change in kept
+        change.kind == "delete"
+    ]
+
+    updateMatches := {
+        "name": "matches",
+        "action": "update",
+        "key": input.containerID,
+        "value": containers,
     }
 }
 
@@ -2010,6 +2262,37 @@ errors contains "no overlay at path to unmount" if {
 errors contains "no matching containers for overlay" if {
     input.rule == "mount_overlay"
     not overlay_matches
+}
+
+default cim_matches := false
+
+cim_matches if {
+    some container in candidate_containers
+    layerHashes_ok(container.layers)
+    input.mountedCim == container.mounted_cim
+}
+
+errors contains "the container image layers have already been matched by a prior mount_cims" if {
+    input.rule == "mount_cims"
+    overlay_exists
+}
+
+errors contains "no matching containers for CIM mount" if {
+    input.rule == "mount_cims"
+    not overlay_exists
+    not cim_matches
+}
+
+# Actionable hint for the common misconfiguration: a policy that uses CIM
+# mounts (mounted_cim) but declares a framework_version older than when CIM
+# support was added. In that case check_container reconstructs the container
+# without mounted_cim, so cim_matches can never be true and the mount is denied.
+errors contains cimVersionError if {
+    input.rule == "mount_cims"
+    not overlay_exists
+    not cim_matches
+    semver.compare(policy_framework_version, "0.5.0") < 0
+    cimVersionError := concat(" ", ["policy framework_version", policy_framework_version, "predates CIM mount support (mounted_cim added in 0.5.0); set it to the UVM framework version:", version])
 }
 
 default privileged_matches := false
@@ -2216,12 +2499,18 @@ errors contains "invalid working directory" if {
 }
 
 mount_matches(mount) if {
+    is_linux
     some container in data.metadata.matches[input.containerID]
     mount_ok(container.mounts, container.allow_elevated, mount)
 }
 
+mount_matches(mount) if {
+    is_windows
+    some container in data.metadata.matches[input.containerID]
+    mount_ok(container.mounts, false, mount)
+}
+
 errors contains mountError if {
-    is_linux
     input.rule == "create_container"
     bad_mounts := [mount.destination |
         mount := input.mounts[_]
@@ -2445,6 +2734,31 @@ errors contains "no scratch at path to unmount" if {
     not scratch_mounted(input.unmountTarget)
 }
 
+errors contains "no CIM volume at GUID to unmount" if {
+    input.rule == "unmount_cims"
+    not cim_volume_mounted(input.volumeGUID)
+}
+
+errors contains "mapped directory already mounted at path" if {
+    input.rule == "mapped_directory_mount"
+    mapped_directory_mounted(input.containerPath)
+}
+
+errors contains "no matching mapped directory in policy" if {
+    input.rule == "mapped_directory_mount"
+    not mapped_directory_ok
+}
+
+errors contains "no mapped directory at path to unmount" if {
+    input.rule == "mapped_directory_unmount"
+    not mapped_directory_mounted(input.unmountTarget)
+}
+
+errors contains "invalid registry changes" if {
+    input.rule == "registry_changes"
+    not registry_changes.allowed
+}
+
 errors contains "log provider not allowed by policy" if {
     input.rule == "log_provider"
     not log_provider.allowed
@@ -2541,6 +2855,7 @@ errors contains "containers only distinguishable by allow_stdio_access" if {
         user_ok(container.user)
         workingDirectory_ok(container.working_dir)
         command_ok(container.command)
+        mountList_ok(container.mounts, false)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -2827,6 +3142,7 @@ check_container(raw_container, framework_version) := container if {
         "user": check_user(raw_container, framework_version),
         "capabilities": check_capabilities(raw_container, framework_version),
         "seccomp_profile_sha256": check_seccomp_profile_sha256(raw_container, framework_version),
+        "mounted_cim": check_mounted_cim(raw_container, framework_version),
     }
 }
 
@@ -2896,6 +3212,16 @@ check_signals(raw_container, framework_version) := signals if {
     signals := array.concat(raw_container.signals, [9, 15])
 }
 
+check_mounted_cim(raw_container, framework_version) := mounted_cim if {
+    semver.compare(framework_version, "0.5.0") >= 0
+    mounted_cim := object.get(raw_container, "mounted_cim", [])
+}
+
+check_mounted_cim(raw_container, framework_version) := mounted_cim if {
+    semver.compare(framework_version, "0.5.0") < 0
+    mounted_cim := []
+}
+
 check_external_process(raw_process, framework_version) := process if {
     semver.compare(framework_version, version) == 0
     process := raw_process
@@ -2962,6 +3288,10 @@ allow_capability_dropping := flag if {
     semver.compare(policy_framework_version, "0.2.2") >= 0
     flag := data.policy.allow_capability_dropping
 }
+
+default allow_registry_changes_dropping := false
+
+allow_registry_changes_dropping := data.policy.allow_registry_changes_dropping
 
 default policy_framework_version := null
 default policy_api_version := null

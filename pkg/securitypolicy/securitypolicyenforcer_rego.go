@@ -846,6 +846,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicyV2(
 		}
 
 		input = inputData{
+			"mounts":      appendMountData([]interface{}{}, mounts),
 			"containerID": containerID,
 			"argList":     argList,
 			"envList":     envList,
@@ -1524,26 +1525,54 @@ func (policy *regoEnforcer) EnforceScratchUnmountPolicy(ctx context.Context, scr
 	return nil
 }
 
-func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) error {
+func (policy *regoEnforcer) EnforceMappedDirectoryMountPolicy(ctx context.Context, containerPath string, readOnly bool) error {
+	input := inputData{
+		"containerPath": containerPath,
+		"readOnly":      readOnly,
+	}
+	_, err := policy.enforce(ctx, "mapped_directory_mount", input)
+	return err
+}
+
+func (policy *regoEnforcer) EnforceMappedDirectoryUnmountPolicy(ctx context.Context, containerPath string) error {
+	input := inputData{
+		"unmountTarget": containerPath,
+	}
+	_, err := policy.enforce(ctx, "mapped_directory_unmount", input)
+	return err
+}
+
+func (policy *regoEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string, volumeGUID string) error {
 	log.G(ctx).Tracef("Enforcing verified cims in securitypolicy pkg %+v", layerHashes)
 	input := inputData{
 		"containerID": containerID,
 		"layerHashes": layerHashes,
 		"mountedCim":  mountedCim,
+		"volumeGUID":  volumeGUID,
 	}
 
 	_, err := policy.enforce(ctx, "mount_cims", input)
 	return err
 }
 
-func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
+func (policy *regoEnforcer) EnforceCIMUnmountPolicy(ctx context.Context, volumeGUID string) error {
+	log.G(ctx).Trace("Enforcing CIM unmount policy")
+	input := inputData{
+		"volumeGUID": volumeGUID,
+	}
+
+	_, err := policy.enforce(ctx, "unmount_cims", input)
+	return err
+}
+
+func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryChanges interface{}) (interface{}, error) {
 	log.G(ctx).Trace("Enforcing registry changes policy")
 
 	// Import the schema type for proper conversion
-	regChanges, ok := registryValues.(*hcsschema.RegistryChanges)
+	regChanges, ok := registryChanges.(*hcsschema.RegistryChanges)
 	if !ok {
 		log.G(ctx).Warn("Input registry values are not of expected type")
-		return errors.New("invalid registry values type")
+		return nil, errors.New("invalid registry values type")
 	}
 
 	input := inputData{
@@ -1551,8 +1580,36 @@ func (policy *regoEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, co
 		"registryChanges": regChanges,
 	}
 
-	_, err := policy.enforce(ctx, "registry_changes", input)
-	return err
+	result, err := policy.enforce(ctx, "registry_changes", input)
+	if err != nil {
+		return nil, err
+	}
+
+	// The policy uses dropping semantics: it authorizes a subset of the
+	// requested changes and returns the kept add values and delete keys in
+	// "add_values_to_keep" / "delete_keys_to_keep". Round-trip them back into
+	// the schema type so the caller applies only the kept changes.
+	kept := &hcsschema.RegistryChanges{}
+	if raw, verr := result.Value("add_values_to_keep"); verr == nil && raw != nil {
+		buf, merr := json.Marshal(raw)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to marshal kept registry values: %w", merr)
+		}
+		if uerr := json.Unmarshal(buf, &kept.AddValues); uerr != nil {
+			return nil, fmt.Errorf("failed to unmarshal kept registry values: %w", uerr)
+		}
+	}
+	if raw, verr := result.Value("delete_keys_to_keep"); verr == nil && raw != nil {
+		buf, merr := json.Marshal(raw)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to marshal kept registry delete keys: %w", merr)
+		}
+		if uerr := json.Unmarshal(buf, &kept.DeleteKeys); uerr != nil {
+			return nil, fmt.Errorf("failed to unmarshal kept registry delete keys: %w", uerr)
+		}
+	}
+
+	return kept, nil
 }
 
 func (policy *regoEnforcer) EnforceLogProviderPolicy(ctx context.Context, providerNames []string) ([]string, error) {

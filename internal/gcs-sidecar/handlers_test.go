@@ -7,9 +7,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -96,10 +99,137 @@ func newTestBridge(enforcer securitypolicy.SecurityPolicyEnforcer) *Bridge {
 	host := NewHost(enforcer, io.Discard)
 	return &Bridge{
 		pending:        make(map[sequenceID]chan *prot.ContainerExecuteProcessResponse),
+		monitoredIDs:   make(map[sequenceID]struct{}),
 		rpcHandlerList: make(map[prot.RPCProc]HandlerFunc),
 		hostState:      host,
 		sendToGCSCh:    make(chan request, 10),
 		sendToShimCh:   make(chan bridgeResponse, 10),
+	}
+}
+
+// TestResponseFailure verifies responseFailure classifies inbox GCS responses:
+// a zero Result is success, a non-zero Result is a failure, and an unparseable
+// message is treated as success so a malformed message cannot by itself fail
+// the UVM closed.
+func TestResponseFailure(t *testing.T) {
+	mustMarshal := func(v interface{}) []byte {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		return b
+	}
+
+	tests := []struct {
+		name    string
+		message []byte
+		wantErr bool
+	}{
+		{name: "success", message: mustMarshal(prot.ResponseBase{Result: 0}), wantErr: false},
+		{name: "failure with message", message: mustMarshal(prot.ResponseBase{Result: 1, ErrorMessage: "boom"}), wantErr: true},
+		{name: "failure without message", message: mustMarshal(prot.ResponseBase{Result: 1}), wantErr: true},
+		{name: "unparseable", message: []byte("not json"), wantErr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := responseFailure(tt.message)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("responseFailure() err = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestCheckState_BlocksHandlers verifies that once the UVM is marked
+// inconsistent, container creation/deletion and settings changes are refused
+// (fail-closed), matching the LCOW behavior.
+func TestCheckState_BlocksHandlers(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	// Before failing closed, checkState is clear.
+	if err := b.hostState.checkState(); err != nil {
+		t.Fatalf("checkState should be nil before setUVMInconsistent, got %v", err)
+	}
+
+	b.hostState.setUVMInconsistent(errors.New("inbox mount failed"))
+
+	if err := b.hostState.checkState(); err == nil {
+		t.Fatal("checkState should be non-nil after setUVMInconsistent")
+	}
+
+	// createContainer refuses before it even parses the request (gate is at the top).
+	createReq := &request{
+		ctx:    context.Background(),
+		header: messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCCreate), ID: 1},
+	}
+	if err := b.createContainer(createReq); err == nil {
+		t.Error("createContainer should be denied when UVM is inconsistent")
+	}
+
+	// deleteContainerState refuses similarly.
+	deleteReq := &request{
+		ctx:    context.Background(),
+		header: messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCDeleteContainerState), ID: 2},
+	}
+	if err := b.deleteContainerState(deleteReq); err == nil {
+		t.Error("deleteContainerState should be denied when UVM is inconsistent")
+	}
+
+	// modifySettings refuses too (checkState runs after unmarshalling a valid request).
+	msg := buildModifySettingsRequest(t,
+		guestresource.ResourceTypeSecurityPolicy,
+		guestrequest.RequestTypeAdd,
+		guestresource.ConfidentialOptions{EnforcerType: "rego"},
+	)
+	modifyReq := &request{
+		ctx:     context.Background(),
+		header:  messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifySettings), Size: uint32(len(msg)) + prot.HdrSize, ID: 3},
+		message: msg,
+	}
+	if err := b.modifySettings(modifyReq); err == nil {
+		t.Error("modifySettings should be denied when UVM is inconsistent")
+	}
+}
+
+// TestModifySettings_MappedDirectory_TagsInboxResponse verifies that a forwarded
+// mapped-directory operation registers its request ID for inbox-response
+// monitoring and is forwarded to the inbox GCS, so a later failure response can
+// fail the UVM closed.
+func TestModifySettings_MappedDirectory_TagsInboxResponse(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	msg := buildModifySettingsRequest(t,
+		guestresource.ResourceTypeMappedDirectory,
+		guestrequest.RequestTypeAdd,
+		hcsschema.MappedDirectory{ContainerPath: `C:\mnt\ro`, ReadOnly: true},
+	)
+	const id sequenceID = 77
+	req := &request{
+		ctx:     context.Background(),
+		header:  messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifySettings), Size: uint32(len(msg)) + prot.HdrSize, ID: id},
+		message: msg,
+	}
+
+	if err := b.modifySettings(req); err != nil {
+		t.Fatalf("modifySettings returned error: %v", err)
+	}
+
+	// The request ID must be registered for monitoring.
+	b.monitoredMu.Lock()
+	_, monitored := b.monitoredIDs[id]
+	b.monitoredMu.Unlock()
+	if !monitored {
+		t.Errorf("mapped-directory request ID %d was not registered for inbox-response monitoring", id)
+	}
+
+	// And the request must have been forwarded to the inbox GCS.
+	select {
+	case got := <-b.sendToGCSCh:
+		if got.header.ID != id {
+			t.Errorf("forwarded request ID = %d, want %d", got.header.ID, id)
+		}
+	default:
+		t.Error("mapped-directory request was not forwarded to inbox GCS")
 	}
 }
 
@@ -373,6 +503,782 @@ func TestModifySettings_PolicyFragment_TypeAssertionFailure(t *testing.T) {
 	err := b.modifySettings(req)
 	if err == nil {
 		t.Fatal("expected error for empty fragment, got nil")
+	}
+}
+
+// Tests for environment variable filtering helpers (envlist persistence)
+
+func TestOciEnvToProcessParamEnv_Basic(t *testing.T) {
+	input := []string{"FOO=bar", `PATH=C:\Windows\System32`, "EMPTY="}
+	result := ociEnvToProcessParamEnv(input)
+
+	if result["FOO"] != "bar" {
+		t.Errorf("FOO = %q, want %q", result["FOO"], "bar")
+	}
+	if result["PATH"] != `C:\Windows\System32` {
+		t.Errorf("PATH = %q, want %q", result["PATH"], `C:\Windows\System32`)
+	}
+	if result["EMPTY"] != "" {
+		t.Errorf("EMPTY = %q, want %q", result["EMPTY"], "")
+	}
+	if len(result) != 3 {
+		t.Errorf("len = %d, want 3", len(result))
+	}
+}
+
+func TestOciEnvToProcessParamEnv_ValueWithEquals(t *testing.T) {
+	input := []string{"CONN=host=db;port=5432"}
+	result := ociEnvToProcessParamEnv(input)
+
+	if result["CONN"] != "host=db;port=5432" {
+		t.Errorf("CONN = %q, want %q", result["CONN"], "host=db;port=5432")
+	}
+}
+
+func TestOciEnvToProcessParamEnv_MalformedSkipped(t *testing.T) {
+	input := []string{"GOOD=value", "NOEQUALS", "ALSO_GOOD=yes"}
+	result := ociEnvToProcessParamEnv(input)
+
+	if len(result) != 2 {
+		t.Errorf("len = %d, want 2 (malformed entry should be skipped)", len(result))
+	}
+	if result["GOOD"] != "value" {
+		t.Errorf("GOOD = %q, want %q", result["GOOD"], "value")
+	}
+	if result["ALSO_GOOD"] != "yes" {
+		t.Errorf("ALSO_GOOD = %q, want %q", result["ALSO_GOOD"], "yes")
+	}
+}
+
+func TestOciEnvToProcessParamEnv_Empty(t *testing.T) {
+	result := ociEnvToProcessParamEnv([]string{})
+	if len(result) != 0 {
+		t.Errorf("len = %d, want 0", len(result))
+	}
+}
+
+func TestOciEnvToProcessParamEnv_Nil(t *testing.T) {
+	result := ociEnvToProcessParamEnv(nil)
+	if result == nil {
+		t.Error("result should be non-nil empty map, got nil")
+	}
+	if len(result) != 0 {
+		t.Errorf("len = %d, want 0", len(result))
+	}
+}
+
+func TestProcessParamEnvToOCIEnv_Roundtrip(t *testing.T) {
+	original := map[string]string{
+		"FOO":  "bar",
+		"PATH": `C:\Windows\System32`,
+	}
+
+	ociEnv := processParamEnvToOCIEnv(original)
+	roundtripped := ociEnvToProcessParamEnv(ociEnv)
+
+	if len(roundtripped) != len(original) {
+		t.Fatalf("roundtrip len = %d, want %d", len(roundtripped), len(original))
+	}
+	for k, v := range original {
+		if roundtripped[k] != v {
+			t.Errorf("roundtrip[%q] = %q, want %q", k, roundtripped[k], v)
+		}
+	}
+}
+
+// envFilterEnforcer wraps OpenDoorSecurityPolicyEnforcer and overrides the
+// external-exec env-filtering hook to return a caller-specified subset.
+// Embedding OpenDoor satisfies the rest of the SecurityPolicyEnforcer
+// interface (all return-allow / no-op behaviour), so a single overridden
+// method is enough to drive the env-filter code path in executeProcess.
+type envFilterEnforcer struct {
+	securitypolicy.OpenDoorSecurityPolicyEnforcer
+	keep []string
+}
+
+func (e *envFilterEnforcer) EnforceExecExternalProcessPolicy(
+	_ context.Context, _ []string, _ []string, _ string,
+) (securitypolicy.EnvList, bool, error) {
+	return securitypolicy.EnvList(e.keep), true, nil
+}
+
+// TestExecuteProcess_External_AppliesFilteredEnv exercises the env-filter
+// rewrite path of the external-exec (UVMContainerID) branch of
+// executeProcess. The fake enforcer returns a strict subset of the input
+// env; the test asserts the request forwarded to GCS carries exactly that
+// subset in ProcessParameters.Environment.
+func TestExecuteProcess_External_AppliesFilteredEnv(t *testing.T) {
+	enf := &envFilterEnforcer{
+		keep: []string{`PATH=C:\Windows\System32`, "KEEP=1"},
+	}
+	b := newTestBridge(enf)
+
+	params := hcsschema.ProcessParameters{
+		CommandLine: "cmd.exe /c exit",
+		Environment: map[string]string{
+			"PATH": `C:\Windows\System32`,
+			"KEEP": "1",
+			"DROP": "secret",
+		},
+	}
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{
+			ContainerID: UVMContainerID,
+			ActivityID:  guid.GUID{},
+		},
+		Settings: prot.ExecuteProcessSettings{
+			ProcessParameters: prot.AnyInString{Value: &params},
+		},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   1,
+		},
+		message: msg,
+	}
+
+	if err := b.executeProcess(req); err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	// Unwrap the re-marshalled request and pull the inner ProcessParameters
+	// JSON back out via the same *json.RawMessage trick that the handler
+	// uses, then decode it as hcsschema.ProcessParameters.
+	var outer prot.ContainerExecuteProcess
+	var paramsRaw json.RawMessage
+	outer.Settings.ProcessParameters.Value = &paramsRaw
+	if err := json.Unmarshal(got.message, &outer); err != nil {
+		t.Fatalf("unmarshal forwarded outer: %v", err)
+	}
+	var gotParams hcsschema.ProcessParameters
+	if err := json.Unmarshal(paramsRaw, &gotParams); err != nil {
+		t.Fatalf("unmarshal forwarded ProcessParameters: %v", err)
+	}
+
+	want := map[string]string{
+		"PATH": `C:\Windows\System32`,
+		"KEEP": "1",
+	}
+	if !reflect.DeepEqual(gotParams.Environment, want) {
+		t.Errorf("forwarded Environment = %v, want %v", gotParams.Environment, want)
+	}
+}
+
+// addInitContainer registers a container in the "init process not yet exec'd"
+// state (commandLine=true, commandLineExec=false) with the given enforced
+// process spec, so executeProcess takes the create-exec cross-check branch.
+func addInitContainer(t *testing.T, b *Bridge, id string, proc *oci.Process) {
+	t.Helper()
+	c := &Container{
+		id:              id,
+		spec:            oci.Spec{Process: proc},
+		processes:       make(map[uint32]*containerProcess),
+		commandLine:     true,
+		commandLineExec: false,
+	}
+	if err := b.hostState.AddContainer(context.Background(), id, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+}
+
+// buildExecRequest serializes an executeProcess request for the given container
+// and process parameters.
+func buildExecRequest(t *testing.T, containerID string, params hcsschema.ProcessParameters) *request {
+	t.Helper()
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{
+			ContainerID: containerID,
+			ActivityID:  guid.GUID{},
+		},
+		Settings: prot.ExecuteProcessSettings{
+			ProcessParameters: prot.AnyInString{Value: &params},
+		},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	return &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   7,
+		},
+		message: msg,
+	}
+}
+
+// unwrapExecParams pulls the inner ProcessParameters back out of a forwarded
+// executeProcess request message.
+func unwrapExecParams(t *testing.T, message []byte) hcsschema.ProcessParameters {
+	t.Helper()
+	var outer prot.ContainerExecuteProcess
+	var paramsRaw json.RawMessage
+	outer.Settings.ProcessParameters.Value = &paramsRaw
+	if err := json.Unmarshal(message, &outer); err != nil {
+		t.Fatalf("unmarshal forwarded outer: %v", err)
+	}
+	var params hcsschema.ProcessParameters
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		t.Fatalf("unmarshal forwarded ProcessParameters: %v", err)
+	}
+	return params
+}
+
+func assertNothingForwarded(t *testing.T, b *Bridge) {
+	t.Helper()
+	select {
+	case got := <-b.sendToGCSCh:
+		t.Fatalf("unexpected request forwarded to GCS: %+v", got)
+	default:
+	}
+}
+
+// enforcedInitProcess is the process spec used by the create-exec tests: the
+// command line, working directory, user and environment that createContainer
+// enforcement would have produced.
+func enforcedInitProcess() *oci.Process {
+	return &oci.Process{
+		Args: []string{"python", "hello.py"},
+		Cwd:  `C:\app`,
+		User: oci.User{Username: "ContainerUser"},
+		Env:  []string{"APP_FOO=BAR"},
+	}
+}
+
+// TestExecuteProcess_InitExec_DeniesCommandLineMismatch verifies that an init
+// exec whose command line does not match the enforced spec (the
+// "cmd.exe /c <evil>" tamper) is denied before anything is forwarded to GCS.
+func TestExecuteProcess_InitExec_DeniesCommandLineMismatch(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "cmd.exe /c whoami",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+	})
+
+	err := b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "command line") {
+		t.Fatalf("expected command-line denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_DeniesWorkingDirMismatch verifies a tampered
+// working directory is denied.
+func TestExecuteProcess_InitExec_DeniesWorkingDirMismatch(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\Windows`,
+		User:             "ContainerUser",
+	})
+
+	err := b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "working directory") {
+		t.Fatalf("expected working-directory denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_DeniesUserMismatch verifies a tampered user is
+// denied.
+func TestExecuteProcess_InitExec_DeniesUserMismatch(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerAdministrator",
+	})
+
+	err := b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "user") {
+		t.Fatalf("expected user denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_AllowsAndAppliesEnv verifies that an init exec
+// matching the enforced command line/cwd/user is allowed, and that the
+// environment forwarded to GCS is reduced to exactly the enforced set (extra
+// host-supplied variables are dropped).
+func TestExecuteProcess_InitExec_AllowsAndAppliesEnv(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	addInitContainer(t, b, cid, enforcedInitProcess())
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+		Environment: map[string]string{
+			"APP_FOO": "BAR",
+			"DROP":    "secret",
+		},
+	})
+
+	// The container path forwards to GCS and then blocks waiting for the exec
+	// response keyed by header ID, so run the handler in a goroutine and feed
+	// it a response once we've captured the forwarded request.
+	done := make(chan error, 1)
+	go func() { done <- b.executeProcess(req) }()
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	// Stand in for GCS: deliver an exec response on the channel the handler
+	// registered under this request's header ID, which unblocks its select.
+	b.pendingMu.Lock()
+	ch := b.pending[got.header.ID]
+	b.pendingMu.Unlock()
+	if ch == nil {
+		t.Fatal("no pending response channel registered for forwarded request")
+	}
+	ch <- &prot.ContainerExecuteProcessResponse{ProcessID: 42}
+
+	if err := <-done; err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	want := map[string]string{"APP_FOO": "BAR"}
+	if !reflect.DeepEqual(gotParams.Environment, want) {
+		t.Errorf("forwarded Environment = %v, want %v", gotParams.Environment, want)
+	}
+}
+
+// TestEnforceStdioParams covers the stdio-access decision helper: allowed
+// leaves params untouched, denied clears the stdio pipe flags, denied with no
+// pipes reports no change, and denied for a console process is rejected.
+func TestEnforceStdioParams(t *testing.T) {
+	tests := []struct {
+		name        string
+		allowStdio  bool
+		params      hcsschema.ProcessParameters
+		wantErr     bool
+		wantChanged bool
+		wantPipes   bool
+	}{
+		{
+			name:        "allowed leaves params untouched",
+			allowStdio:  true,
+			params:      hcsschema.ProcessParameters{CreateStdInPipe: true, CreateStdOutPipe: true, CreateStdErrPipe: true},
+			wantChanged: false,
+			wantPipes:   true,
+		},
+		{
+			name:       "denied with console is rejected",
+			allowStdio: false,
+			params:     hcsschema.ProcessParameters{EmulateConsole: true},
+			wantErr:    true,
+		},
+		{
+			name:        "denied clears stdio pipes",
+			allowStdio:  false,
+			params:      hcsschema.ProcessParameters{CreateStdInPipe: true, CreateStdOutPipe: true, CreateStdErrPipe: true},
+			wantChanged: true,
+			wantPipes:   false,
+		},
+		{
+			name:        "denied with no pipes reports no change",
+			allowStdio:  false,
+			params:      hcsschema.ProcessParameters{},
+			wantChanged: false,
+			wantPipes:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := tt.params
+			changed, err := enforceStdioParams(tt.allowStdio, &params)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+			if params.CreateStdInPipe != tt.wantPipes ||
+				params.CreateStdOutPipe != tt.wantPipes ||
+				params.CreateStdErrPipe != tt.wantPipes {
+				t.Errorf("pipe flags = (%v,%v,%v), want all %v",
+					params.CreateStdInPipe, params.CreateStdOutPipe, params.CreateStdErrPipe, tt.wantPipes)
+			}
+		})
+	}
+}
+
+// stdioDenyExternalEnforcer denies stdio access on the external-exec path while
+// allowing everything else via the embedded open-door enforcer.
+type stdioDenyExternalEnforcer struct {
+	securitypolicy.OpenDoorSecurityPolicyEnforcer
+}
+
+func (stdioDenyExternalEnforcer) EnforceExecExternalProcessPolicy(
+	_ context.Context, _ []string, _ []string, _ string,
+) (securitypolicy.EnvList, bool, error) {
+	return nil, false, nil
+}
+
+// TestExecuteProcess_External_DeniedStdioClearsPipes verifies the external-exec
+// branch clears the stdio pipe flags before forwarding when policy denies stdio.
+func TestExecuteProcess_External_DeniedStdioClearsPipes(t *testing.T) {
+	b := newTestBridge(&stdioDenyExternalEnforcer{})
+
+	params := hcsschema.ProcessParameters{
+		CommandLine:      "cmd.exe /c exit",
+		CreateStdInPipe:  true,
+		CreateStdOutPipe: true,
+		CreateStdErrPipe: true,
+	}
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{ContainerID: UVMContainerID, ActivityID: guid.GUID{}},
+		Settings:    prot.ExecuteProcessSettings{ProcessParameters: prot.AnyInString{Value: &params}},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   1,
+		},
+		message: msg,
+	}
+
+	if err := b.executeProcess(req); err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	if gotParams.CreateStdInPipe || gotParams.CreateStdOutPipe || gotParams.CreateStdErrPipe {
+		t.Errorf("stdio pipes not cleared: %+v", gotParams)
+	}
+}
+
+// TestExecuteProcess_External_DeniedStdioWithConsoleRejected verifies that a
+// console-requesting external process is rejected (not forwarded) when policy
+// denies stdio.
+func TestExecuteProcess_External_DeniedStdioWithConsoleRejected(t *testing.T) {
+	b := newTestBridge(&stdioDenyExternalEnforcer{})
+
+	params := hcsschema.ProcessParameters{CommandLine: "cmd.exe", EmulateConsole: true}
+	r := prot.ContainerExecuteProcess{
+		RequestBase: prot.RequestBase{ContainerID: UVMContainerID, ActivityID: guid.GUID{}},
+		Settings:    prot.ExecuteProcessSettings{ProcessParameters: prot.AnyInString{Value: &params}},
+	}
+	msg, err := json.Marshal(&r)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := &request{
+		ctx: context.Background(),
+		header: messageHeader{
+			Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCExecuteProcess),
+			Size: uint32(len(msg)) + prot.HdrSize,
+			ID:   1,
+		},
+		message: msg,
+	}
+
+	err = b.executeProcess(req)
+	if err == nil || !strings.Contains(err.Error(), "console") {
+		t.Fatalf("expected console denial, got %v", err)
+	}
+	assertNothingForwarded(t, b)
+}
+
+// TestExecuteProcess_InitExec_DeniedStdioClearsPipes verifies the init-process
+// branch applies the create-time stdio decision (c.allowStdio=false) by
+// clearing the stdio pipe flags before forwarding.
+func TestExecuteProcess_InitExec_DeniedStdioClearsPipes(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	c := &Container{
+		id:              cid,
+		spec:            oci.Spec{Process: enforcedInitProcess()},
+		processes:       make(map[uint32]*containerProcess),
+		commandLine:     true,
+		commandLineExec: false,
+		allowStdio:      false,
+	}
+	if err := b.hostState.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+		CreateStdInPipe:  true,
+		CreateStdOutPipe: true,
+		CreateStdErrPipe: true,
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- b.executeProcess(req) }()
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	b.pendingMu.Lock()
+	ch := b.pending[got.header.ID]
+	b.pendingMu.Unlock()
+	if ch == nil {
+		t.Fatal("no pending response channel registered for forwarded request")
+	}
+	ch <- &prot.ContainerExecuteProcessResponse{ProcessID: 42}
+
+	if err := <-done; err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	if gotParams.CreateStdInPipe || gotParams.CreateStdOutPipe || gotParams.CreateStdErrPipe {
+		t.Errorf("stdio pipes not cleared: %+v", gotParams)
+	}
+}
+
+// TestExecuteProcess_InitExec_AllowsStdioKeepsPipes verifies the init-process
+// branch leaves the stdio pipe flags intact when the create-time decision
+// allows stdio (c.allowStdio=true).
+func TestExecuteProcess_InitExec_AllowsStdioKeepsPipes(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	const cid = "container-1"
+	c := &Container{
+		id:              cid,
+		spec:            oci.Spec{Process: enforcedInitProcess()},
+		processes:       make(map[uint32]*containerProcess),
+		commandLine:     true,
+		commandLineExec: false,
+		allowStdio:      true,
+	}
+	if err := b.hostState.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+
+	req := buildExecRequest(t, cid, hcsschema.ProcessParameters{
+		CommandLine:      "python hello.py",
+		WorkingDirectory: `C:\app`,
+		User:             "ContainerUser",
+		CreateStdInPipe:  true,
+		CreateStdOutPipe: true,
+		CreateStdErrPipe: true,
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- b.executeProcess(req) }()
+
+	var got request
+	select {
+	case got = <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("nothing forwarded to GCS")
+	}
+
+	b.pendingMu.Lock()
+	ch := b.pending[got.header.ID]
+	b.pendingMu.Unlock()
+	if ch == nil {
+		t.Fatal("no pending response channel registered for forwarded request")
+	}
+	ch <- &prot.ContainerExecuteProcessResponse{ProcessID: 42}
+
+	if err := <-done; err != nil {
+		t.Fatalf("executeProcess: %v", err)
+	}
+
+	gotParams := unwrapExecParams(t, got.message)
+	if !gotParams.CreateStdInPipe || !gotParams.CreateStdOutPipe || !gotParams.CreateStdErrPipe {
+		t.Errorf("stdio pipes should be preserved when allowed: %+v", gotParams)
+	}
+}
+
+// TestIsContainerRootInUse verifies that a container's combined-layers root is
+// treated as in-use only while the container is running (not terminated), and
+// only for the matching root path (case-insensitive).
+func TestIsContainerRootInUse(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	host := b.hostState
+
+	const cid = "container-1"
+	const rootPath = `C:\mounts\scsi\m0`
+
+	c := &Container{id: cid, processes: make(map[uint32]*containerProcess)}
+	if err := host.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+	host.containerRootPaths[cid] = rootPath
+
+	// Running container: its root is in use.
+	if !host.IsContainerRootInUse(rootPath) {
+		t.Errorf("expected root %q to be in use for a running container", rootPath)
+	}
+	// Paths compare with EqualFold, so a differently-cased path still matches.
+	if !host.IsContainerRootInUse(`c:\mounts\scsi\m0`) {
+		t.Errorf("expected case-insensitive match for %q", rootPath)
+	}
+	// An unrelated path is not in use.
+	if host.IsContainerRootInUse(`C:\mounts\scsi\m1`) {
+		t.Errorf("did not expect unrelated path to be in use")
+	}
+
+	// Once the container has exited, its root is no longer in use.
+	c.terminated.Store(true)
+	if host.IsContainerRootInUse(rootPath) {
+		t.Errorf("expected root %q to be free after container terminated", rootPath)
+	}
+}
+
+// TestModifySettings_CombinedLayers_RejectsDuplicateAdd verifies that a second
+// CWCOWCombinedLayers Add for a container that already has combined layers set
+// up is rejected, so a repeated Add can't overwrite the recorded root path or
+// leak the previous root's mounted-root entry.
+func TestModifySettings_CombinedLayers_RejectsDuplicateAdd(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	const cid = "container-1"
+	const rootPath = `C:\mounts\scsi\m0`
+
+	// Pretend combined layers were already set up for this container.
+	b.hostState.containerRootPaths[cid] = rootPath
+	b.hostState.SetContainerRootMounted(rootPath, true)
+
+	msg := buildModifySettingsRequest(t,
+		guestresource.ResourceTypeCWCOWCombinedLayers,
+		guestrequest.RequestTypeAdd,
+		guestresource.CWCOWCombinedLayers{
+			ContainerID: cid,
+			CombinedLayers: guestresource.WCOWCombinedLayers{
+				ContainerRootPath: `C:\mounts\scsi\m1`,
+				Layers:            []hcsschema.Layer{{Path: rootPath}},
+			},
+		},
+	)
+	req := &request{
+		ctx:     context.Background(),
+		header:  messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifySettings), Size: uint32(len(msg)) + prot.HdrSize, ID: 1},
+		message: msg,
+	}
+
+	err := b.modifySettings(req)
+	if err == nil || !strings.Contains(err.Error(), "already set up") {
+		t.Fatalf("expected duplicate-add denial, got %v", err)
+	}
+
+	// The recorded root path must be unchanged and nothing forwarded to GCS.
+	if got := b.hostState.containerRootPaths[cid]; got != rootPath {
+		t.Errorf("containerRootPaths[%q] = %q, want %q (unchanged)", cid, got, rootPath)
+	}
+	select {
+	case <-b.sendToGCSCh:
+		t.Error("duplicate CombinedLayers Add must not be forwarded to inbox GCS")
+	default:
+	}
+}
+
+// TestDeleteContainerState_DeniesRunningOrMounted verifies deleteContainerState
+// refuses to delete the state of a container that is still running or whose
+// combined-layers root is still mounted, and allows it once terminated and
+// unmounted.
+func TestDeleteContainerState_DeniesRunningOrMounted(t *testing.T) {
+	const cid = "container-1"
+	const rootPath = `C:\mounts\scsi\m0`
+
+	newReq := func() *request {
+		msg, err := json.Marshal(prot.DeleteContainerStateRequest{
+			RequestBase: prot.RequestBase{ContainerID: cid},
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		return &request{
+			ctx: context.Background(),
+			header: messageHeader{
+				Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCDeleteContainerState),
+				Size: uint32(len(msg)) + prot.HdrSize,
+				ID:   1,
+			},
+			message: msg,
+		}
+	}
+
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	c := &Container{id: cid, processes: make(map[uint32]*containerProcess)}
+	if err := b.hostState.AddContainer(context.Background(), cid, c); err != nil {
+		t.Fatalf("AddContainer: %v", err)
+	}
+	b.hostState.containerRootPaths[cid] = rootPath
+	b.hostState.SetContainerRootMounted(rootPath, true)
+
+	// Still running -> denied.
+	if err := b.deleteContainerState(newReq()); err == nil || !strings.Contains(err.Error(), "still running") {
+		t.Fatalf("expected running denial, got %v", err)
+	}
+
+	// Terminated but root still mounted -> denied.
+	c.terminated.Store(true)
+	if err := b.deleteContainerState(newReq()); err == nil || !strings.Contains(err.Error(), "still mounted") {
+		t.Fatalf("expected mounted denial, got %v", err)
+	}
+
+	// Terminated and unmounted -> allowed and forwarded to GCS.
+	b.hostState.SetContainerRootMounted(rootPath, false)
+	if err := b.deleteContainerState(newReq()); err != nil {
+		t.Fatalf("expected allow, got %v", err)
+	}
+	select {
+	case <-b.sendToGCSCh:
+	case <-time.After(time.Second):
+		t.Fatal("expected request forwarded to GCS")
 	}
 }
 

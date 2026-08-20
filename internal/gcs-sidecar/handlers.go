@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,15 +23,14 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	oci "github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/internal/windevice"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/cimfs"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
@@ -58,6 +58,12 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
 
+	// Refuse to create containers once the UVM has been marked inconsistent by a
+	// failed forwarded mount/unmount (cf. LCOW Host.checkState).
+	if err := b.hostState.checkState(); err != nil {
+		return fmt.Errorf("CreateContainer denied: %w", err)
+	}
+
 	var createContainerRequest prot.ContainerCreate
 	var containerConfig json.RawMessage
 	createContainerRequest.ContainerConfig.Value = &containerConfig
@@ -82,54 +88,158 @@ func (b *Bridge) createContainer(req *request) (err error) {
 		container := cwcowHostedSystem.Container
 		spec := cwcowHostedSystemConfig.Spec
 		containerID := createContainerRequest.ContainerID
-		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %v}}", string(req.message), schemaVersion, container)
+		if err := validateContainerID(containerID); err != nil {
+			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
+		containerJSON, _ := json.Marshal(container)
+		log.G(ctx).Tracef("rpcCreate: CWCOWHostedSystemConfig {spec: %v, schemaVersion: %v, container: %s}}", string(req.message), schemaVersion, containerJSON)
 
-		// Enforce registry changes policy
-		if container != nil && container.RegistryChanges != nil {
-			log.G(ctx).Trace("Container has registry changes, validating against policy")
+		// The block below is a reference example (not executed): a sample CRI
+		// container.json and the HostedSystem.Container the host derives from it.
+		// It documents the shapes this handler enforces and forwards.
+		/*
+			Test container.json:
 
-			// First, separate default values from non-default values
-			var defaultValues []hcsschema.RegistryValue
-			var nonDefaultValues []hcsschema.RegistryValue
-
-			if container.RegistryChanges.AddValues != nil {
-				for _, value := range container.RegistryChanges.AddValues {
-					if isDefaultRegistryValue(value) {
-						defaultValues = append(defaultValues, value)
-						log.G(ctx).WithField("name", value.Name).Trace("Registry value matches default, accepting without policy check")
-					} else {
-						nonDefaultValues = append(nonDefaultValues, value)
+			{
+				"metadata": {
+					"name": "wcow-test"
+				},
+				"image": {
+					"image": "takurosatodevacr.azurecr.io/payload-demo:250929"
+				},
+				"command": [
+					"python",
+					"hello.py"
+				],
+				"envs": [
+					{
+					"key": "APP_FOO",
+					"value": "BAR"
+					}
+				],
+				"mounts": [
+					{
+					"host_path": "C:\\share-ro",
+					"container_path": "C:\\mnt\\ro",
+					"readonly": true
+					},
+					{
+					"host_path": "\\\\.\\pipe\\hostedsystem-demo",
+					"container_path": "\\\\.\\pipe\\hostedsystem-demo"
+					}
+				],
+				"windows": {
+					"security_context": {
+						"credential_spec": "{\"CmsPlugins\":[\"ActiveDirectory\"],\"DomainJoinConfig\":{\"Sid\":\"S-1-5-21-1111111111-2222222222-3333333333\",\"MachineAccountName\":\"WebApp01\",\"Guid\":\"244818ae-87ac-4fcd-92ec-e79e5252348a\",\"DnsTreeName\":\"contoso.com\",\"DnsName\":\"contoso.com\",\"NetBiosName\":\"CONTOSO\"},\"ActiveDirectoryConfig\":{\"GroupManagedServiceAccounts\":[{\"Name\":\"WebApp01\",\"Scope\":\"contoso.com\"},{\"Name\":\"WebApp01\",\"Scope\":\"CONTOSO\"}]}}"
+					},
+					"resources": {
+						"rootfs_size_in_bytes": 42949672960
 					}
 				}
 			}
 
-			// If there are non-default values, validate them against policy
-			if len(nonDefaultValues) > 0 {
-				log.G(ctx).Tracef("Validating %d registry values against policy", len(nonDefaultValues))
-
-				nonDefaultChanges := &hcsschema.RegistryChanges{
-					AddValues: nonDefaultValues,
+			HostedSystem.Container:
+			{
+				"Storage": {
+				"Layers": [
+					{
+					"Id": "6e2349b7-8215-4325-a88a-38a8e1f67e18",
+					"Path": "\\\\?\\Volume{6e2349b7-8215-4325-a88a-38a8e1f67e18}\\"
+					}
+				],
+				"Path": "c:\\mounts\\scsi\\m0"
+				},
+				"MappedDirectories": [
+				{
+					"HostPath": "\\\\?\\VMSMB\\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\\s1",
+					"ContainerPath": "C:\\mnt\\ro",
+					"ReadOnly": true
 				}
+				],
+				"MappedPipes": [
+				{
+					"ContainerPipeName": "hostedsystem-demo",
+					"HostPath": "\\\\?\\VMSMB\\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\\IPC$\\hostedsystem-demo"
+				}
+				],
+				"Processor": {},
+				"Networking": {
+				"Namespace": "644da769-7f9a-41c7-820b-8ef9e66d747b"
+				},
+				"ContainerCredentialGuard": {
+				"Cookie": "01000000740069000CEBF50D32C0CF80BE559BE206B4EAF9",
+				"RpcEndpoint": "91571621-3782-9EC0-3C5C-C0EC10E6E763",
+				"Transport": "HvSocket",
+				"CredentialSpec": "{\"CmsPlugins\":[\"ActiveDirectory\"],\"DomainJoinConfig\":{\"Sid\":\"S-1-5-21-1111111111-2222222222-3333333333\",\"MachineAccountName\":\"WebApp01\",\"Guid\":\"244818ae-87ac-4fcd-92ec-e79e5252348a\",\"DnsTreeName\":\"contoso.com\",\"DnsName\":\"contoso.com\",\"NetBiosName\":\"CONTOSO\"},\"ActiveDirectoryConfig\":{\"GroupManagedServiceAccounts\":[{\"Name\":\"WebApp01\",\"Scope\":\"contoso.com\"},{\"Name\":\"WebApp01\",\"Scope\":\"CONTOSO\"}]}}"
+				},
+				"RegistryChanges": {
+				"AddValues": [
+					{
+					"Key": {
+						"Hive": "System",
+						"Name": "ControlSet001\\Control"
+					},
+					"Name": "WaitToKillServiceTimeout",
+					"Type": "String",
+					"StringValue": "2147483647"
+					}
+				]
+				}
+			}
+		*/
 
-				err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
+		// Reject HostedSystem Container fields we don't yet support.
+		if err := denyUnsupportedContainerFields(container); err != nil {
+			return fmt.Errorf("CreateContainer operation rejected: %w", err)
+		}
+
+		// Enforce registry changes policy. This may drop unauthorized
+		// non-default registry values from the container before forwarding.
+		if container != nil && container.RegistryChanges != nil {
+			log.G(ctx).Trace("Container has registry changes, validating against policy")
+
+			// Separate the pre-approved defaults from the changes that must be
+			// validated against policy (non-default add values plus all delete
+			// keys).
+			defaultValues, nonDefaultChanges := splitRegistryChanges(container.RegistryChanges)
+
+			// If there are non-default values or any delete keys, validate them
+			// against policy.
+			if len(nonDefaultChanges.AddValues) > 0 || len(nonDefaultChanges.DeleteKeys) > 0 {
+				log.G(ctx).Tracef("Validating %d registry values and %d delete keys against policy", len(nonDefaultChanges.AddValues), len(nonDefaultChanges.DeleteKeys))
+
+				keptRaw, err := b.hostState.securityOptions.PolicyEnforcer.EnforceRegistryChangesPolicy(ctx, containerID, nonDefaultChanges)
 				if err != nil {
 					log.G(ctx).WithError(err).Warn("Registry changes validation failed - rejecting")
 					return fmt.Errorf("registry entry operation is denied by policy: %w", err)
 				}
-				log.G(ctx).Tracef("All container registry values validated successfully")
+
+				// The policy uses dropping semantics: it may authorize only a
+				// subset of the requested non-default values and delete keys.
+				// Rebuild the container's registry changes as the pre-approved
+				// defaults plus the policy-kept non-default values, and the
+				// policy-kept delete keys, so the guest only applies what policy
+				// sanctioned.
+				container.RegistryChanges.AddValues, container.RegistryChanges.DeleteKeys = mergeKeptRegistryChanges(defaultValues, keptRaw)
 			}
 
-			log.G(ctx).Infof("Registry validation complete: %d total values (%d defaults + %d validated)",
-				len(container.RegistryChanges.AddValues), len(defaultValues), len(nonDefaultValues))
+			log.G(ctx).Infof("Registry validation complete: %d total values now applied (%d defaults), %d delete keys",
+				len(container.RegistryChanges.AddValues), len(defaultValues), len(container.RegistryChanges.DeleteKeys))
 		}
 
+		// We enforce `spec`, which is not passed to inbox gcs within this createContainer.
+		// The result of enforcement is stored in memory and used for executeProcess.
 		user := securitypolicy.IDName{
 			Name: spec.Process.User.Username,
 		}
-		_, _, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
+		envToKeep, _, allowStdio, err := b.hostState.securityOptions.PolicyEnforcer.EnforceCreateContainerPolicyV2(req.ctx, containerID, spec.Process.Args, spec.Process.Env, spec.Process.Cwd, spec.Mounts, user, nil)
 
 		if err != nil {
 			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
+
+		if envToKeep != nil {
+			spec.Process.Env = []string(envToKeep)
 		}
 
 		// Create the source directory for each mapped directory if it does not
@@ -148,11 +258,12 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			processes:       make(map[uint32]*containerProcess),
 			commandLine:     commandLine,
 			commandLineExec: false,
+			allowStdio:      allowStdio,
 		}
 
 		log.G(ctx).Tracef("Adding ContainerID: %v", containerID)
 		if err := b.hostState.AddContainer(req.ctx, containerID, c); err != nil {
-			log.G(ctx).Tracef("Container exists in the map.")
+			log.G(ctx).Tracef("Container exists in the map. containerID: %v", containerID)
 			return err
 		}
 		defer func() {
@@ -163,25 +274,43 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			}
 		}()
 
-		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-			securityContextDir, err := b.hostState.securityOptions.WriteSecurityContextDir(&spec)
-			if err != nil {
-				return fmt.Errorf("failed to write security context dir: %w", err)
-			}
-
-			// Stage the AMD SNP PSP API DLL into the container's security-context
-			// directory so the workload can fetch SNP attestation reports. This
-			// happens after security policy enforcement, consistent with the
-			// UVM_SECURITY_CONTEXT_DIR env injection done by WriteSecurityContextDir.
-			if securityContextDir != "" {
-				if err := stageSnpPspDLL(ctx, securityContextDir); err != nil {
-					return fmt.Errorf("failed to stage %s: %w", amdSnpPspDLLName, err)
-				}
-			}
-			cwcowHostedSystemConfig.Spec = spec
+		// The security-context dir must always be written; it must not be gated
+		// by a host-controlled annotation.
+		securityContextDir, err := b.hostState.securityOptions.WriteSecurityContextDir(&spec)
+		if err != nil {
+			return fmt.Errorf("failed to write security context dir: %w", err)
 		}
 
-		// Strip the spec field
+		// Stage the AMD SNP PSP API DLL into the container's security-context
+		// directory so the workload can fetch SNP attestation reports. This
+		// happens after security policy enforcement, consistent with the
+		// UVM_SECURITY_CONTEXT_DIR env injection done by WriteSecurityContextDir.
+		if securityContextDir != "" {
+			if err := stageSnpPspDLL(ctx, securityContextDir); err != nil {
+				return fmt.Errorf("failed to stage %s: %w", amdSnpPspDLLName, err)
+			}
+		}
+		cwcowHostedSystemConfig.Spec = spec
+
+		// Reconcile the host-provided HostedSystem mounts against the enforced
+		// spec. spec.Mounts has already been validated against policy by
+		// EnforceCreateContainerPolicyV2 above. Here we make sure the host is
+		// not forwarding any MappedDirectories or MappedPipes that don't map to
+		// an enforced spec mount, so the host can't smuggle in a mount the
+		// policy never saw.
+		if err := reconcileHostedSystemMounts(spec.Mounts, container); err != nil {
+			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
+
+		// Cross-check the forwarded Container.Storage against the root path and
+		// block-CIM volume the sidecar recorded for this container during layer setup.
+		if err := reconcileHostedSystemStorage(b.hostState, containerID, container); err != nil {
+			return fmt.Errorf("CreateContainer operation is denied by policy: %w", err)
+		}
+
+		// Marshal the original cwcowHostedSystem from the request. That's safe
+		// because we've enforced `spec` above and reconciled the forwarded
+		// MappedDirectories/MappedPipes against it.
 		hostedSystemBytes, err := json.Marshal(cwcowHostedSystem)
 
 		if err != nil {
@@ -223,6 +352,204 @@ func (b *Bridge) createContainer(req *request) (err error) {
 	return nil
 }
 
+// splitRegistryChanges separates a container's requested registry changes into
+// the pre-approved default add values (which bypass policy) and the changes
+// that must be validated against policy: the non-default add values plus all
+// delete keys, which have no default allowance.
+func splitRegistryChanges(changes *hcsschema.RegistryChanges) (defaultValues []hcsschema.RegistryValue, nonDefaultChanges *hcsschema.RegistryChanges) {
+	var nonDefaultValues []hcsschema.RegistryValue
+	for _, value := range changes.AddValues {
+		if isDefaultRegistryValue(value) {
+			defaultValues = append(defaultValues, value)
+		} else {
+			nonDefaultValues = append(nonDefaultValues, value)
+		}
+	}
+	return defaultValues, &hcsschema.RegistryChanges{
+		AddValues:  nonDefaultValues,
+		DeleteKeys: changes.DeleteKeys,
+	}
+}
+
+// mergeKeptRegistryChanges combines the pre-approved default registry values
+// with the policy-kept subset returned by EnforceRegistryChangesPolicy. Because
+// the policy uses dropping semantics, it may authorize only a subset of the
+// requested non-default values and delete keys; the returned slices are what
+// the guest should apply (defaults plus the kept non-default values, and the
+// kept delete keys).
+func mergeKeptRegistryChanges(defaultValues []hcsschema.RegistryValue, kept interface{}) ([]hcsschema.RegistryValue, []hcsschema.RegistryKey) {
+	var keptNonDefault []hcsschema.RegistryValue
+	var keptDeleteKeys []hcsschema.RegistryKey
+	if k, ok := kept.(*hcsschema.RegistryChanges); ok && k != nil {
+		keptNonDefault = k.AddValues
+		keptDeleteKeys = k.DeleteKeys
+	}
+
+	newValues := make([]hcsschema.RegistryValue, 0, len(defaultValues)+len(keptNonDefault))
+	newValues = append(newValues, defaultValues...)
+	newValues = append(newValues, keptNonDefault...)
+	return newValues, keptDeleteKeys
+}
+
+// namedPipePrefix is the prefix used for Windows named pipe paths. A mount
+// whose OCI destination starts with this prefix becomes a MappedPipe in the
+// HostedSystem, with ContainerPipeName set to the destination minus this
+// prefix (see internal/uvm.ParseNamedPipe and internal/hcsoci/hcsdoc_wcow.go).
+const namedPipePrefix = `\\.\pipe\`
+
+// isPipeDestination reports whether an OCI mount destination refers to a named
+// pipe (and would therefore become a MappedPipe rather than a MappedDirectory).
+func isPipeDestination(dest string) bool {
+	return strings.HasPrefix(dest, namedPipePrefix)
+}
+
+// pipeNameFromDestination derives the ContainerPipeName that the host sets for
+// a pipe mount from its OCI destination, mirroring ParseNamedPipe.
+func pipeNameFromDestination(dest string) string {
+	return strings.TrimPrefix(dest, namedPipePrefix)
+}
+
+// mountReadOnly reports whether an OCI mount's options request a read-only
+// mount, mirroring how the host derives MappedDirectory.ReadOnly in
+// internal/hcsoci/hcsdoc_wcow.go (an "ro" option, case-insensitive).
+func mountReadOnly(options []string) bool {
+	for _, o := range options {
+		if strings.EqualFold(o, "ro") {
+			return true
+		}
+	}
+	return false
+}
+
+// reconcileHostedSystemMounts verifies that every MappedDirectory and
+// MappedPipe the host forwards in the HostedSystem corresponds to an enforced
+// spec mount. The spec mounts have already been validated against policy, so
+// this binds the forwarded HostedSystem to that enforced view and rejects any
+// host-added mount the policy never saw. Note that HostPath is intentionally
+// not compared: the spec source is a host-side path while the HostedSystem
+// HostPath is the path the host resolved the mount to for the UVM.
+// So it legitimately differs from the spec source,
+// and the host controls both regardless.
+func reconcileHostedSystemMounts(mounts []oci.Mount, container *hcsschema.Container) error {
+	if container == nil {
+		return nil
+	}
+
+	// Every MappedDirectory must correspond to a (non-pipe) spec mount that
+	// targets the same container path with the same read-only flag.
+	for _, md := range container.MappedDirectories {
+		matched := false
+		for _, m := range mounts {
+			// Pipe mounts are reconciled against MappedPipes below, not here.
+			if isPipeDestination(m.Destination) {
+				continue
+			}
+			// Bind on container path (spec destination) + read-only.
+			if m.Destination == md.ContainerPath && mountReadOnly(m.Options) == md.ReadOnly {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("mapped directory %q (readOnly=%v) does not match any enforced spec mount", md.ContainerPath, md.ReadOnly)
+		}
+	}
+
+	// Every MappedPipe must correspond to a pipe spec mount that yields the same
+	// pipe name. We match on the pipe name (derived from the spec destination),
+	// not the source.
+	//
+	// NB: for a pipe, the spec mount and the HostedSystem entry hold *different*
+	// values for the "same" pipe, which is easy to trip over:
+	//   - spec mount source:      "\\.\pipe\<name>"                         (pure name, NO guid)
+	//   - MappedPipe.HostPath:    "\\?\VMSMB\VSMB-{guid}\IPC$\<name>"       (host VSMB transport, has guid)
+	// The spec source stays the clean "\\.\pipe\<name>"; only the host-side
+	// transport path (HostPath) carries the VSMB guid. HostPath is host-controlled
+	// and not comparable to the spec source, so we don't compare it here; instead
+	// we bind on the pipe name. The clean spec source is enforced separately by
+	// policy (windows_mountConstraint_ok in framework.rego).
+	for _, mp := range container.MappedPipes {
+		matched := false
+		for _, m := range mounts {
+			// Non-pipe mounts are reconciled against MappedDirectories above.
+			if !isPipeDestination(m.Destination) {
+				continue
+			}
+			// Bind on the pipe name (destination minus the \\.\pipe\ prefix).
+			if pipeNameFromDestination(m.Destination) == mp.ContainerPipeName {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("mapped pipe %q does not match any enforced spec mount", mp.ContainerPipeName)
+		}
+	}
+
+	return nil
+}
+
+// volumeGUIDFromStoragePath extracts the volume GUID from a Container.Storage
+// layer path of the form `\\?\Volume{<guid>}\` (the volume root, as the host
+// writes it in the createContainer document). This differs from
+// volumeGUIDFromLayerPath, which parses the `...}\Files` form used in the
+// CWCOWCombinedLayers modify request.
+func volumeGUIDFromStoragePath(path string) (string, bool) {
+	if p, ok := strings.CutPrefix(path, `\\?\Volume{`); ok {
+		if q, ok := strings.CutSuffix(p, `}\`); ok {
+			return q, true
+		}
+	}
+	return "", false
+}
+
+// reconcileHostedSystemStorage checks that the host-forwarded Container.Storage
+// matches the verified handles the sidecar recorded for this container during
+// layer setup:
+//   - Storage.Path must equal the combined-layers root that CWCOWCombinedLayers
+//     mounted for this container (the scratch that becomes the container root).
+//   - Storage.Layers must be the single block-CIM volume whose hashes mount_cims
+//     verified for this container.
+//
+// The bytes at that volume are already verity-verified, so this does not re-check
+// content. It closes a cross-wiring gap: without it a host could forward a create
+// document that points the container root at a different (even if separately
+// verified) volume than the one enforced for this container.
+func reconcileHostedSystemStorage(host *Host, containerID string, container *hcsschema.Container) error {
+	if container == nil || container.Storage == nil {
+		return fmt.Errorf("container storage is missing")
+	}
+	storage := container.Storage
+
+	wantRootPath, ok := host.containerRootPaths[containerID]
+	if !ok {
+		return fmt.Errorf("no container root path recorded for container %s", containerID)
+	}
+	if !strings.EqualFold(storage.Path, wantRootPath) {
+		return fmt.Errorf("storage path %q does not match the enforced container root path %q", storage.Path, wantRootPath)
+	}
+
+	if len(storage.Layers) != 1 {
+		return fmt.Errorf("expected exactly one storage layer, got %d", len(storage.Layers))
+	}
+	guidStr, ok := volumeGUIDFromStoragePath(storage.Layers[0].Path)
+	if !ok {
+		return fmt.Errorf("storage layer path %q is not a volume path", storage.Layers[0].Path)
+	}
+	volGUID, err := guid.FromString(guidStr)
+	if err != nil {
+		return fmt.Errorf("invalid storage layer volume GUID %q: %w", guidStr, err)
+	}
+	containers, ok := host.blockCIMVolumeContainers[volGUID]
+	if !ok {
+		return fmt.Errorf("storage layer volume %s was not verified", volGUID)
+	}
+	if _, ok := containers[containerID]; !ok {
+		return fmt.Errorf("storage layer volume %s was not verified for container %s", volGUID, containerID)
+	}
+	return nil
+}
+
 // stageSnpPspDLL copies the AMD SNP PSP API DLL from the UVM's System32 into the
 // container's security-context directory so the workload can fetch SNP
 // attestation reports. The directory is exposed to the container via the
@@ -243,6 +570,57 @@ func stageSnpPspDLL(ctx context.Context, securityContextDir string) error {
 		log.G(ctx).Debugf("staged %s into %s", amdSnpPspDLLName, securityContextDir)
 	} else {
 		log.G(ctx).Debugf("%s not found in %s; skipping staging", amdSnpPspDLLName, sysDir)
+	}
+	return nil
+}
+
+// containerIDRegex matches the identifier format used for container IDs: one
+// or more alphanumeric segments joined by single '.', '_' or '-' separators
+// (the same shape containerd enforces for identifiers). GUIDs and hex digests
+// both satisfy it. It rejects empty strings, path separators, ".." and
+// absolute paths, so a host-supplied container ID cannot be used to escape an
+// intended directory if it is later joined into a filesystem path.
+var containerIDRegex = regexp.MustCompile(`^[a-zA-Z0-9]+(?:[._-][a-zA-Z0-9]+)*$`)
+
+func validateContainerID(id string) error {
+	if !containerIDRegex.MatchString(id) {
+		return fmt.Errorf("invalid container ID %q", id)
+	}
+	return nil
+}
+
+// denyUnsupportedContainerFields rejects HostedSystem Container fields that the
+// sidecar does not yet enforce a policy over. They may be needed in the future,
+// but until we have enforcement for them we block them rather than forward
+// host-controlled values unchecked.
+//
+// Memory, Processor and Networking are deliberately not checked: the host
+// controls the UVM's resources and networking regardless, so there is nothing
+// we can meaningfully enforce over them here.
+// GuestOs is not checked as it just sets hostname string.
+func denyUnsupportedContainerFields(container *hcsschema.Container) error {
+	if container == nil {
+		return nil
+	}
+
+	// In case we get any error here, we include entire container JSON
+	// in the error message for debugging so that we know all the fields
+	// that need to be enforced by policy.
+
+	// Error is ignored as it's a best-effort debug string.
+	containerJSON, _ := json.Marshal(container)
+
+	if container.HvSocket != nil {
+		return fmt.Errorf("HvSocket is not supported. Container: %s", containerJSON)
+	}
+	if container.ContainerCredentialGuard != nil {
+		return fmt.Errorf("ContainerCredentialGuard is not supported. Container: %s", containerJSON)
+	}
+	if len(container.AssignedDevices) > 0 {
+		return fmt.Errorf("AssignedDevices is not supported. Container: %s", containerJSON)
+	}
+	if container.AdditionalDeviceNamespace != nil {
+		return fmt.Errorf("AdditionalDeviceNamespace is not supported. Container: %s", containerJSON)
 	}
 	return nil
 }
@@ -306,10 +684,82 @@ func processParamEnvToOCIEnv(environment map[string]string) []string {
 	return environmentList
 }
 
+// ociEnvToProcessParamEnv is the inverse of processParamEnvToOCIEnv. It converts
+// an OCI-style env list (["KEY=VALUE", ...]) back to a ProcessParameters
+// Environment map.
+func ociEnvToProcessParamEnv(envs []string) map[string]string {
+	paramEnv := make(map[string]string, len(envs))
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			paramEnv[parts[0]] = parts[1]
+		}
+	}
+	return paramEnv
+}
+
+// escapeArgs builds a Windows-style escaped command line from a set of OCI
+// process args. This mirrors how the host shim constructs the init process'
+// ProcessParameters.CommandLine (internal/cmd.escapeArgs), so the sidecar can
+// reconstruct the expected command line from the enforced spec and compare it
+// against what the host actually sends in executeProcess.
+func escapeArgs(args []string) string {
+	escaped := make([]string, len(args))
+	for i, a := range args {
+		escaped[i] = windows.EscapeArg(a)
+	}
+	return strings.Join(escaped, " ")
+}
+
+// rewriteExecRequest re-marshals an execute process request with updated
+// ProcessParameters (e.g., after env filtering by policy).
+func rewriteExecRequest(req *request, r prot.ContainerExecuteProcess, params hcsschema.ProcessParameters) (*request, error) {
+	r.Settings.ProcessParameters.Value = &params
+
+	buf, err := json.Marshal(&r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal updated exec request: %w", err)
+	}
+
+	newReq := &request{
+		ctx:     req.ctx,
+		header:  req.header,
+		message: buf,
+	}
+	newReq.header.Size = uint32(len(buf)) + prot.HdrSize
+	return newReq, nil
+}
+
+// enforceStdioParams applies a stdio-access policy decision. When denied, a
+// process that requires a console is rejected (there is no console without
+// stdio); otherwise the stdio pipe flags are cleared. Returns whether params
+// changed so callers can skip an unnecessary rewrite.
+func enforceStdioParams(allowStdio bool, params *hcsschema.ProcessParameters) (bool, error) {
+	if allowStdio {
+		return false, nil
+	}
+
+	// A console can't be honored without stdio, so reject rather than silently
+	// dropping EmulateConsole and running a non-interactive process the caller
+	// didn't ask for.
+	if params.EmulateConsole {
+		return false, errors.New("process that requires console access denied due to policy not allowing stdio access")
+	}
+
+	changed := params.CreateStdInPipe || params.CreateStdOutPipe || params.CreateStdErrPipe
+	params.CreateStdInPipe = false
+	params.CreateStdOutPipe = false
+	params.CreateStdErrPipe = false
+	return changed, nil
+}
+
 func (b *Bridge) startContainer(req *request) (err error) {
 	_, span := ot.StartSpan(req.ctx, "sidecar::startContainer")
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
+
+	// We don't need any enforcement here because the container has already been created and
+	// this request is just to start the container.
 
 	var r prot.RequestBase
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
@@ -374,7 +824,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 
 	if containerID == UVMContainerID {
 		log.G(req.ctx).Tracef("Enforcing policy on external exec process")
-		_, _, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
+		envToKeep, stdioAllowed, err := b.hostState.securityOptions.PolicyEnforcer.EnforceExecExternalProcessPolicy(
 			req.ctx,
 			commandLine,
 			processParamEnvToOCIEnv(processParams.Environment),
@@ -382,6 +832,22 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		)
 		if err != nil {
 			return errors.Wrapf(err, "exec is denied due to policy")
+		}
+		needsRewrite := false
+		if envToKeep != nil {
+			processParams.Environment = ociEnvToProcessParamEnv(envToKeep)
+			needsRewrite = true
+		}
+		stdioChanged, err := enforceStdioParams(stdioAllowed, &processParams)
+		if err != nil {
+			return errors.Wrapf(err, "exec is denied due to policy")
+		}
+		needsRewrite = needsRewrite || stdioChanged
+		if needsRewrite {
+			req, err = rewriteExecRequest(req, r, processParams)
+			if err != nil {
+				return fmt.Errorf("failed to rewrite exec request: %w", err)
+			}
 		}
 		b.forwardRequestToGcs(req)
 	} else {
@@ -396,7 +862,10 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 		isCreateExec := c.commandLine && !c.commandLineExec
 		if isCreateExec {
 			// if this is an exec of Container command line, then it's already enforced
-			// during container creation, hence skip it here
+			// during container creation.
+			// We use the result of enforcement from container creation to
+			// validate the exec command line and drop environment variable if necessary.
+
 			c.commandLineExec = true
 
 		}
@@ -406,7 +875,7 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				Name: processParams.User,
 			}
 			log.G(req.ctx).Tracef("Enforcing policy on exec in container")
-			_, _, _, err = b.hostState.securityOptions.PolicyEnforcer.
+			envToKeep, _, stdioAllowed, err := b.hostState.securityOptions.PolicyEnforcer.
 				EnforceExecInContainerPolicyV2(
 					req.ctx,
 					containerID,
@@ -418,6 +887,64 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 				)
 			if err != nil {
 				return errors.Wrapf(err, "exec in container denied due to policy")
+			}
+			needsRewrite := false
+			if envToKeep != nil {
+				processParams.Environment = ociEnvToProcessParamEnv(envToKeep)
+				needsRewrite = true
+			}
+			stdioChanged, err := enforceStdioParams(stdioAllowed, &processParams)
+			if err != nil {
+				return errors.Wrapf(err, "exec in container denied due to policy")
+			}
+			needsRewrite = needsRewrite || stdioChanged
+			if needsRewrite {
+				req, err = rewriteExecRequest(req, r, processParams)
+				if err != nil {
+					return fmt.Errorf("failed to rewrite exec request: %w", err)
+				}
+			}
+		} else {
+			// This is the container's init process. Its command line, working
+			// directory, user and environment were already validated against
+			// policy in createContainer, and the result is stored in c.spec.
+			// The host fully controls this executeProcess request though, so we
+			// cross-check it against the enforced spec instead of trusting it:
+			// otherwise a host could pass policy with a benign spec at create
+			// time and then launch a different init command (e.g.
+			// "cmd.exe /c <evil>") or smuggle back environment variables that
+			// create-time enforcement dropped.
+			if c.spec.Process == nil {
+				return errors.New("exec in container denied due to policy: enforced spec has no process")
+			}
+			enforced := c.spec.Process
+
+			expectedCmdLine := enforced.CommandLine
+			if expectedCmdLine == "" {
+				expectedCmdLine = escapeArgs(enforced.Args)
+			}
+			if processParams.CommandLine != expectedCmdLine {
+				return fmt.Errorf("exec in container denied due to policy: init command line %q does not match enforced %q", processParams.CommandLine, expectedCmdLine)
+			}
+			if enforced.Cwd != "" && processParams.WorkingDirectory != enforced.Cwd {
+				return fmt.Errorf("exec in container denied due to policy: init working directory %q does not match enforced %q", processParams.WorkingDirectory, enforced.Cwd)
+			}
+			if enforced.User.Username != "" && processParams.User != enforced.User.Username {
+				return fmt.Errorf("exec in container denied due to policy: init user %q does not match enforced %q", processParams.User, enforced.User.Username)
+			}
+
+			// Re-apply the environment that createContainer enforcement
+			// produced (dropped variables removed, nothing injected) so the
+			// init process runs with exactly the enforced environment.
+			processParams.Environment = ociEnvToProcessParamEnv(enforced.Env)
+
+			if _, err = enforceStdioParams(c.allowStdio, &processParams); err != nil {
+				return errors.Wrapf(err, "exec in container denied due to policy")
+			}
+
+			req, err = rewriteExecRequest(req, r, processParams)
+			if err != nil {
+				return fmt.Errorf("failed to rewrite init exec request: %w", err)
 			}
 		}
 		headerID := req.header.ID
@@ -588,12 +1115,33 @@ func (b *Bridge) deleteContainerState(req *request) (err error) {
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
 
+	// Refuse to delete container state once the UVM has been marked inconsistent
+	// by a failed forwarded mount/unmount (cf. LCOW Host.checkState).
+	if err := b.hostState.checkState(); err != nil {
+		return fmt.Errorf("deleteContainerState denied: %w", err)
+	}
+
 	var r prot.DeleteContainerStateRequest
 	if err := commonutils.UnmarshalJSONWithHresult(req.message, &r); err != nil {
 		return fmt.Errorf("failed to unmarshal deleteContainerState: %w", err)
 	}
-	err = b.hostState.RemoveContainer(req.ctx, r.ContainerID)
+
+	// Refuse to delete the state of a container that is still running, or whose
+	// combined-layers root is still mounted, so the host can't wipe a live
+	// container's rootfs (cf. LCOW Host.DeleteContainerState).
+	c, err := b.hostState.GetCreatedContainer(req.ctx, r.ContainerID)
 	if err != nil {
+		log.G(req.ctx).Tracef("Container not found during deleteContainerState: %v", r.ContainerID)
+		return fmt.Errorf("container not found: %w", err)
+	}
+	if !c.terminated.Load() {
+		return fmt.Errorf("deleteContainerState denied: container %s is still running", r.ContainerID)
+	}
+	if b.hostState.IsContainerRootMountedForContainer(r.ContainerID) {
+		return fmt.Errorf("deleteContainerState denied: container %s combined-layers root is still mounted", r.ContainerID)
+	}
+
+	if err = b.hostState.RemoveContainer(req.ctx, r.ContainerID); err != nil {
 		log.G(req.ctx).Tracef("Container not found during deleteContainerState: %v", r.ContainerID)
 		return fmt.Errorf("container not found: %w", err)
 	}
@@ -832,31 +1380,94 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		return fmt.Errorf("invald guestRequestType %v", guestRequestType)
 	}
 
+	// If a previously forwarded mount/unmount operation failed in the inbox GCS,
+	// the sidecar's policy state may be out of sync with what is actually mounted
+	// and cannot be safely recovered, so refuse all further settings changes
+	// (cf. LCOW checkState gating in internal/guest/runtime/hcsv2/uvm.go).
+	if err := b.hostState.checkState(); err != nil {
+		return fmt.Errorf("modifySettings denied: %w", err)
+	}
+
+	// monitorResponse is set for forwarded combined-layers / mapped-directory
+	// operations whose real work happens in the inbox GCS. Their inbox response
+	// is watched (see monitorInboxResponse) so a failure fails the UVM closed,
+	// since the sidecar cannot revert the policy state it staged for them.
+	monitorResponse := false
+
+	// Question: should we enforce policy for each type? Maybe just reject if we don't implement policy?
 	if guestResourceType != "" {
 		switch guestResourceType {
 		case guestresource.ResourceTypeCombinedLayers:
+			// This is for non-confidential WCOW.
+			// Ideally gcs-sidecar supports it with policy enforcement,
+			// but for now we just reject it because
+			// we don't have a policy enforcer for it.
 			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWCombinedLayers)
 			log.G(ctx).Tracef("WCOWCombinedLayers: {%v}", settings)
+			return fmt.Errorf("WCOWCombinedLayers is not supported")
 
 		case guestresource.ResourceTypeNetworkNamespace:
+			// Forwarded to inbox GCS without enforcement, by design: the host
+			// controls the UVM's networking regardless of what is configured here,
+			// so there is nothing meaningful for the guest to enforce.
+			// LCOW does the same (see modifyNetwork in internal\guest\runtime\hcsv2\uvm.go).
 			settings := modifyGuestSettingsRequest.Settings.(*hcn.HostComputeNamespace)
 			log.G(ctx).Tracef("HostComputeNamespaces { %v}", settings)
 
 		case guestresource.ResourceTypeNetwork:
+			// Forwarded without enforcement for the same reason as
+			// ResourceTypeNetworkNamespace above: networking is host-controlled.
 			settings := modifyGuestSettingsRequest.Settings.(*guestrequest.NetworkModifyRequest)
 			log.G(ctx).Tracef("NetworkModifyRequest { %v}", settings)
 
 		case guestresource.ResourceTypeMappedVirtualDisk:
-			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
-			log.G(ctx).Tracef("wcowMappedVirtualDisk { %v}", wcowMappedVirtualDisk)
+			settings := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
+			log.G(ctx).Tracef("WCOWMappedVirtualDisk: {%v}", settings)
+			// The container scratch disk is *added* via
+			// ResourceTypeMappedVirtualDiskForContainerScratch (which formats it
+			// and rewrites the request to MappedVirtualDisk before forwarding),
+			// but it is *removed* as a plain MappedVirtualDisk. So a Remove here
+			// is the scratch (or other disk) detach on teardown and must be
+			// forwarded to the inbox GCS: rejecting it leaves the scratch
+			// attached, which breaks a later re-mount of the same container root.
+			// Detaching a disk grants no access, so forwarding Remove is safe. A
+			// raw Add, on the other hand, is the host trying to attach an
+			// arbitrary disk we don't enforce over, so it stays rejected.
+			if modifyGuestSettingsRequest.RequestType != guestrequest.RequestTypeRemove {
+				// Error is ignored as it's a best-effort debug string.
+				settingsJSON, _ := json.Marshal(settings)
+				return fmt.Errorf("MappedVirtualDisk Add is not supported. Settings: %s", settingsJSON)
+			}
+			// Remove falls through to forwardRequestToGcs below.
 
 		case guestresource.ResourceTypeHvSocket:
-			hvSocketAddress := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
-			log.G(ctx).Tracef("hvSocketAddress { %v }", hvSocketAddress)
+			// Forwarded without enforcement: this is just for configuration
+			// to help guest to resolve hvsocket targets.
+			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.HvSocketAddress)
+			log.G(ctx).Tracef("HvSocketAddress { %v }", settings)
 
 		case guestresource.ResourceTypeMappedDirectory:
+			// We don't have hostpath enforcement because anyway contents of the dir can be changed by the host.
 			settings := modifyGuestSettingsRequest.Settings.(*hcsschema.MappedDirectory)
 			log.G(ctx).Tracef("hcsschema.MappedDirectory { %v }", settings)
+			switch modifyGuestSettingsRequest.RequestType {
+			case guestrequest.RequestTypeAdd:
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceMappedDirectoryMountPolicy(
+					ctx, settings.ContainerPath, settings.ReadOnly); err != nil {
+					return fmt.Errorf("mapped directory mount is denied by policy: %w", err)
+				}
+			case guestrequest.RequestTypeRemove:
+				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceMappedDirectoryUnmountPolicy(
+					ctx, settings.ContainerPath); err != nil {
+					return fmt.Errorf("mapped directory unmount is denied by policy: %w", err)
+				}
+			default:
+				return fmt.Errorf("unsupported request type %v for MappedDirectory", modifyGuestSettingsRequest.RequestType)
+			}
+			// The sidecar enforced policy here but the actual VSMB mount/unmount
+			// happens in the inbox GCS, so watch its response and fail closed on
+			// failure (the staged policy metadata cannot be reverted).
+			monitorResponse = true
 
 		case guestresource.ResourceTypeSecurityPolicy:
 			securityPolicyRequest := modifyGuestSettingsRequest.Settings.(*guestresource.ConfidentialOptions)
@@ -960,46 +1571,69 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 					hashesToVerify = layerHashes[1:]
 				}
 
-				err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify, mountedCim)
-				if err != nil {
-					return errors.Wrap(err, "CIM mount is denied by policy")
-				}
-
-				// Volume GUID from request
+				// Volume GUID from request.
 				volGUID := wcowBlockCimMounts.VolumeGUID
 
-				// Cache hashes along with volGUID
-				b.hostState.blockCIMVolumeHashes[volGUID] = layerHashes
-
-				// Store the containerID (associated with volGUID) to mark that hashes are verified for this container
-				if _, ok := b.hostState.blockCIMVolumeContainers[volGUID]; !ok {
-					b.hostState.blockCIMVolumeContainers[volGUID] = make(map[string]struct{})
-				}
-				b.hostState.blockCIMVolumeContainers[volGUID][containerID] = struct{}{}
-
-				log.G(ctx).Tracef("Cached %d verified CIM layer hashes for volume %s (container %s)", len(hashesToVerify), volGUID, containerID)
-
-				if len(layerCIMs) > 1 {
-					_, err = cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
-					if err != nil {
-						return fmt.Errorf("error mounting multilayer block cims: %w", err)
+				// Enforce policy, mount, then record the verified state as a single
+				// transaction: if the real mount fails after the policy check,
+				// WithMetadataRollback reverts the policy metadata and we skip the
+				// sidecar caches, so policy state can't desync from what is mounted.
+				if rberr := b.hostState.securityOptions.PolicyEnforcer.WithMetadataRollback(func() error {
+					if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(req.ctx, containerID, hashesToVerify, mountedCim, volGUID.String()); err != nil {
+						return errors.Wrap(err, "CIM mount is denied by policy")
 					}
-				} else {
-					_, err = cimfs.MountVerifiedBlockCIM(layerCIMs[0], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0])
-					if err != nil {
-						return fmt.Errorf("error mounting verified block cim: %w", err)
+
+					if len(layerCIMs) > 1 {
+						if _, merr := cimfs.MountMergedVerifiedBlockCIMs(layerCIMs[0], layerCIMs[1:], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0]); merr != nil {
+							return fmt.Errorf("error mounting multilayer block cims: %w", merr)
+						}
+					} else {
+						if _, merr := cimfs.MountVerifiedBlockCIM(layerCIMs[0], wcowBlockCimMounts.MountFlags, wcowBlockCimMounts.VolumeGUID, layerDigests[0]); merr != nil {
+							return fmt.Errorf("error mounting verified block cim: %w", merr)
+						}
 					}
+
+					// Real mount succeeded: record the verified state.
+					b.hostState.blockCIMVolumeHashes[volGUID] = layerHashes
+					if _, ok := b.hostState.blockCIMVolumeContainers[volGUID]; !ok {
+						b.hostState.blockCIMVolumeContainers[volGUID] = make(map[string]struct{})
+					}
+					b.hostState.blockCIMVolumeContainers[volGUID][containerID] = struct{}{}
+					log.G(ctx).Tracef("Cached %d verified CIM layer hashes for volume %s (container %s)", len(hashesToVerify), volGUID, containerID)
+					return nil
+				}); rberr != nil {
+					return rberr
 				}
 
 			case guestrequest.RequestTypeRemove:
 				log.G(ctx).Tracef("WCOWBlockCIMMounts: Remove")
 				wcowBlockCimMounts := modifyGuestSettingsRequest.Settings.(*guestresource.CWCOWBlockCIMMounts)
-				volumePath := fmt.Sprintf(cimfs.VolumePathFormat, wcowBlockCimMounts.VolumeGUID.String())
-				err := cimfs.Unmount(volumePath)
+				volGUID := wcowBlockCimMounts.VolumeGUID
 
-				if err != nil {
-					return fmt.Errorf("error unmounting block cim: %w", err)
+				// Enforce policy, unmount, then drop the cached state as a single
+				// transaction: unmount_cims removes the mountedCimVolumes record,
+				// so if the real unmount fails after the policy check,
+				// WithMetadataRollback restores that record and we skip the cache
+				// deletes, keeping policy state in sync with what is mounted.
+				if rberr := b.hostState.securityOptions.PolicyEnforcer.WithMetadataRollback(func() error {
+					if err := b.hostState.securityOptions.PolicyEnforcer.EnforceCIMUnmountPolicy(req.ctx, volGUID.String()); err != nil {
+						return fmt.Errorf("CIM unmount is denied by policy: %w", err)
+					}
+
+					volumePath := fmt.Sprintf(cimfs.VolumePathFormat, volGUID.String())
+					if err := cimfs.Unmount(volumePath); err != nil {
+						return fmt.Errorf("error unmounting block cim: %w", err)
+					}
+
+					// Real unmount succeeded: drop the cached mount state.
+					delete(b.hostState.blockCIMVolumeHashes, volGUID)
+					delete(b.hostState.blockCIMVolumeContainers, volGUID)
+					return nil
+				}); rberr != nil {
+					return rberr
 				}
+			default:
+				return fmt.Errorf("unsupported request type %v for WCOWBlockCims", modifyGuestSettingsRequest.RequestType)
 			}
 			// Send response back to shim
 			resp := &prot.ResponseBase{
@@ -1013,8 +1647,19 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 			return nil
 
 		case guestresource.ResourceTypeMappedVirtualDiskForContainerScratch:
+			// It doesn't have an enforcement point within this case block, but it has EnforceScratchMountPolicy
+			// in ResourceTypeCWCOWCombinedLayers.
 			wcowMappedVirtualDisk := modifyGuestSettingsRequest.Settings.(*guestresource.WCOWMappedVirtualDisk)
 			log.G(ctx).Tracef("ResourceTypeMappedVirtualDiskForContainerScratch: { %v }", wcowMappedVirtualDisk)
+
+			// Validate the scratch disk mount path matches the expected pattern
+			if wcowMappedVirtualDisk.ContainerPath != "" {
+				matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, wcowMappedVirtualDisk.ContainerPath)
+				if merr != nil || !matched {
+					return fmt.Errorf("scratch disk mount path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
+						wcowMappedVirtualDisk.ContainerPath)
+				}
+			}
 
 			// This will return the volume path of the mounted scratch.
 			// Scratch disk should be >= 30 GB for refs formatter to work.
@@ -1072,6 +1717,19 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				log.G(ctx).Tracef("CWCOWCombinedLayers:: ContainerID: %v, ContainerRootPath: %v, Layers: %v, ScratchPath: %v",
 					containerID, settings.CombinedLayers.ContainerRootPath, settings.CombinedLayers.Layers, settings.CombinedLayers.ScratchPath)
 
+				// Combined layers are set up once per container. Reject a repeated
+				// Add for the same container: otherwise a second Add with a
+				// different root would overwrite containerRootPaths[containerID]
+				// and leak the previous root's mounted-root entry.
+				if b.hostState.HasContainerRoot(containerID) {
+					return fmt.Errorf("combined layers already set up for container %q", containerID)
+				}
+
+				if matched, merr := regexp.MatchString(`(?i)^[Cc]:\\mounts\\scsi\\m[0-9]+$`, settings.CombinedLayers.ContainerRootPath); merr != nil || !matched {
+					return fmt.Errorf("combined-layers container root path %q does not match expected pattern c:\\mounts\\scsi\\m<N>",
+						settings.CombinedLayers.ContainerRootPath)
+				}
+
 				// The layers size is only one, as this is the volume path
 				if len(settings.CombinedLayers.Layers) != 1 {
 					return fmt.Errorf("expected exactly one layer in CWCOWCombinedLayers, got %d", len(settings.CombinedLayers.Layers))
@@ -1085,51 +1743,81 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 				if err != nil {
 					return fmt.Errorf("failed to parse volume GUID %s: %w", guidStr, err)
 				}
-				hashes, haveHashes := b.hostState.blockCIMVolumeHashes[volGUID]
-				if haveHashes {
-					// Only do this if the ContainerID is not already seen for this volume
-					containers := b.hostState.blockCIMVolumeContainers[volGUID]
-					if _, seen := containers[containerID]; !seen {
-						// This is a container with similar layers as an existing container, hence already mounted.
-						// Call EnforceVerifiedCIMsPolicy on this new container.
-						hashesToVerify := hashes
-						mountedCim := []string{hashes[0]}
-						if len(hashes) > 1 {
-							hashesToVerify = hashes[1:]
+
+				// Enforce policy and set up the scratch as a single transaction: if a
+				// later step (e.g. mkdir) fails, WithMetadataRollback reverts the
+				// policy metadata and we skip the sidecar caches, so policy state
+				// can't desync from reality.
+				if rberr := b.hostState.securityOptions.PolicyEnforcer.WithMetadataRollback(func() error {
+					hashes, haveHashes := b.hostState.blockCIMVolumeHashes[volGUID]
+					markVolumeContainer := false
+					if haveHashes {
+						// Only re-verify if this container hasn't been seen for this volume.
+						containers := b.hostState.blockCIMVolumeContainers[volGUID]
+						if _, seen := containers[containerID]; !seen {
+							hashesToVerify := hashes
+							mountedCim := []string{hashes[0]}
+							if len(hashes) > 1 {
+								hashesToVerify = hashes[1:]
+							}
+							if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim, volGUID.String()); err != nil {
+								return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
+							}
+							log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
+							markVolumeContainer = true
 						}
-						if err := b.hostState.securityOptions.PolicyEnforcer.EnforceVerifiedCIMsPolicy(ctx, containerID, hashesToVerify, mountedCim); err != nil {
-							return fmt.Errorf("CIM mount is denied by policy for this container: %w", err)
-						}
-						log.G(ctx).Tracef("Verified CIM hashes for reused mount volume %s (container %s)", volGUID.String(), containerID)
-						containers[containerID] = struct{}{}
 					}
-				}
 
-				//Since unencrypted scratch is not an option, always pass true
-				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
-					return fmt.Errorf("scratch mounting denied by policy: %w", err)
-				}
-				// The following two folders are expected to be present in the scratch.
-				// But since we have just formatted the scratch we would need to
-				// create them manually.
-				sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
-				err = os.Mkdir(sandboxStateDirectory, 0777)
-				if err != nil {
-					return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
-				}
+					if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchMountPolicy(ctx, settings.CombinedLayers.ContainerRootPath, true); err != nil {
+						return fmt.Errorf("scratch mounting denied by policy: %w", err)
+					}
 
-				hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
-				err = os.Mkdir(hivesDirectory, 0777)
-				if err != nil {
-					return fmt.Errorf("failed to create hivesDirectory: %w", err)
+					// The following two folders are expected to be present in the
+					// scratch. Since we just formatted it, create them manually.
+					sandboxStateDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, sandboxStateDirName)
+					if err := os.Mkdir(sandboxStateDirectory, 0777); err != nil {
+						return fmt.Errorf("failed to create sandboxStateDirectory: %w", err)
+					}
+					hivesDirectory := filepath.Join(settings.CombinedLayers.ContainerRootPath, hivesDirName)
+					if err := os.Mkdir(hivesDirectory, 0777); err != nil {
+						return fmt.Errorf("failed to create hivesDirectory: %w", err)
+					}
+
+					// Everything succeeded: record the sidecar state. containerRootPaths
+					// lets createContainer cross-check the forwarded Storage.Path, and
+					// the mounted-root flag lets deleteContainerState refuse deletion
+					// until the root is unmounted.
+					if markVolumeContainer {
+						b.hostState.blockCIMVolumeContainers[volGUID][containerID] = struct{}{}
+					}
+					b.hostState.containerRootPaths[containerID] = settings.CombinedLayers.ContainerRootPath
+					b.hostState.SetContainerRootMounted(settings.CombinedLayers.ContainerRootPath, true)
+					return nil
+				}); rberr != nil {
+					return rberr
 				}
 
 			case guestrequest.RequestTypeRemove:
 				log.G(ctx).Tracef("CWCOWCombinedLayers: Remove")
+				// Refuse to unmount the combined-layers root while a running
+				// container still uses it as its rootfs, so the host can't swap a
+				// live container's rootfs (cf. LCOW Host.IsOverlayInUse).
+				if b.hostState.IsContainerRootInUse(settings.CombinedLayers.ContainerRootPath) {
+					return fmt.Errorf("combined-layers unmount denied: container root %q is in use by a running container", settings.CombinedLayers.ContainerRootPath)
+				}
 				if err := b.hostState.securityOptions.PolicyEnforcer.EnforceScratchUnmountPolicy(ctx, settings.CombinedLayers.ContainerRootPath); err != nil {
 					return fmt.Errorf("scratch unmounting denied by policy: %w", err)
 				}
+				b.hostState.SetContainerRootMounted(settings.CombinedLayers.ContainerRootPath, false)
+			default:
+				return fmt.Errorf("unsupported request type %v for CWCOWCombinedLayers", modifyGuestSettingsRequest.RequestType)
 			}
+
+			// The sidecar enforced policy and staged the scratch here, but the
+			// actual union mount/unmount happens in the inbox GCS, so watch its
+			// response and fail closed on failure (the staged policy metadata and
+			// sidecar caches cannot be reverted).
+			monitorResponse = true
 
 			// Reconstruct WCOWCombinedLayers{} req before forwarding to GCS
 			// as GCS does not understand ResourceTypeCWCOWCombinedLayers
@@ -1153,6 +1841,9 @@ func (b *Bridge) modifySettings(req *request) (err error) {
 		}
 	}
 
+	if monitorResponse {
+		b.monitorInboxResponse(req.header.ID)
+	}
 	b.forwardRequestToGcs(req)
 	return nil
 }
