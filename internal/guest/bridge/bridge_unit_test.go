@@ -4,6 +4,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
+	"github.com/Microsoft/hcsshim/internal/gcscompat"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/pkg/errors"
@@ -664,5 +666,70 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 	}
 	if headerSecond.ID != prot.SequenceID(0) {
 		t.Error("Incorrect response order for 1st request")
+	}
+}
+
+// Test_negotiateProtocolV2_ContractMismatch verifies that the guest rejects a
+// host whose advertised contract range cannot overlap the guest's, so a
+// mispaired host/GCS pair is refused at negotiation.
+func Test_negotiateProtocolV2_ContractMismatch(t *testing.T) {
+	b := &Bridge{}
+	badMin := gcscompat.GuestHostContractVersion + 100
+	msg, err := json.Marshal(prot.NegotiateProtocol{
+		MinimumVersion:     uint32(prot.PvV4),
+		MaximumVersion:     uint32(prot.PvMax),
+		MinContractVersion: badMin,
+		MaxContractVersion: badMin + 1,
+		HostCommit:         "deadbeefcafe",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &Request{
+		Context: context.Background(),
+		Header: &prot.MessageHeader{
+			Type: prot.ComputeSystemNegotiateProtocolV1,
+			ID:   prot.SequenceID(1),
+		},
+		Message: msg,
+	}
+	if _, err := b.negotiateProtocolV2(req); err == nil {
+		t.Fatal("expected an incompatible-contract error, got nil")
+	}
+}
+
+// Test_negotiateProtocolV2_ContractCompatible verifies that a host advertising a
+// compatible contract range negotiates successfully and that the guest
+// advertises its own contract range back.
+func Test_negotiateProtocolV2_ContractCompatible(t *testing.T) {
+	b := &Bridge{}
+	msg, err := json.Marshal(prot.NegotiateProtocol{
+		MinimumVersion:     uint32(prot.PvV4),
+		MaximumVersion:     uint32(prot.PvMax),
+		MinContractVersion: gcscompat.MinCompatibleContractVersion,
+		MaxContractVersion: gcscompat.GuestHostContractVersion,
+		HostCommit:         "abc123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &Request{
+		Context: context.Background(),
+		Header: &prot.MessageHeader{
+			Type: prot.ComputeSystemNegotiateProtocolV1,
+			ID:   prot.SequenceID(1),
+		},
+		Message: msg,
+	}
+	resp, err := b.negotiateProtocolV2(req)
+	if err != nil {
+		t.Fatalf("compatible contract should negotiate, got: %v", err)
+	}
+	npr, ok := resp.(*prot.NegotiateProtocolResponse)
+	if !ok {
+		t.Fatalf("unexpected response type %T", resp)
+	}
+	if npr.Capabilities.MaxContractVersion != gcscompat.GuestHostContractVersion {
+		t.Fatalf("guest did not advertise its contract range: %+v", npr.Capabilities)
 	}
 }

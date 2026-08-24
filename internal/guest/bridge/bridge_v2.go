@@ -14,12 +14,14 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/commonutils"
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
+	"github.com/Microsoft/hcsshim/internal/gcscompat"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/version"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -42,6 +44,11 @@ var capabilities = prot.GcsCapabilities{
 		DumpStacksSupported:           true,
 		DeleteContainerStateSupported: true,
 	},
+	// Advertise this GCS's guest/host contract range so the host can reject a
+	// mispaired host/GCS pair at negotiation. See internal/gcscompat.
+	MinContractVersion: gcscompat.MinCompatibleContractVersion,
+	MaxContractVersion: gcscompat.GuestHostContractVersion,
+	GcsCommit:          version.Commit,
 }
 
 // negotiateProtocolV2 was introduced in v4 so will not be called with a minimum
@@ -58,6 +65,19 @@ func (b *Bridge) negotiateProtocolV2(r *Request) (_ RequestResponse, err error) 
 	}
 
 	if request.MaximumVersion < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion {
+		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion)
+	}
+
+	// Enforce guest/host contract compatibility. A host that predates the
+	// contract advertises no range (MaxContractVersion == 0); skip enforcement
+	// for it during rollout. Otherwise require the host and guest contract
+	// ranges to overlap so a mispaired pair is rejected here rather than failing
+	// confusingly later.
+	if hostMax := request.MaxContractVersion; hostMax != 0 &&
+		!gcscompat.Compatible(
+			gcscompat.MinCompatibleContractVersion, gcscompat.GuestHostContractVersion,
+			request.MinContractVersion, hostMax,
+		) {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion)
 	}
 
