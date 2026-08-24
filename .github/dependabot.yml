@@ -45,8 +45,8 @@ updates:
     cooldown:
       default-days: 7
       
-  # Keep the Windows base images (nanoserver/servercore) on their latest digest: scans
-  # every Dockerfile (except vendored), bumps the digest only (tag kept), one grouped PR.
+  # Keep the test base images (nanoserver/servercore + golang) current: scans every
+  # Dockerfile (except vendored), digest/patch bumps only (major/minor ignored), one grouped PR.
   - package-ecosystem: "docker"
     directories:
       - "/**/*"
@@ -57,6 +57,8 @@ updates:
       # image names exactly as they appear in the PR (e.g. "Updates windows/nanoserver ...").
       - dependency-name: "windows/nanoserver"
       - dependency-name: "windows/servercore"
+      # golang toolchain base image used by the test images (Docker Hub official image)
+      - dependency-name: "golang"
     ignore:
       # keep the tag stable and only bump the digest / patch level.
       - dependency-name: "*"
