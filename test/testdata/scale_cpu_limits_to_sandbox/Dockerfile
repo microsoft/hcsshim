@@ -4,7 +4,7 @@
 # accordingly.
 
 # Base image
-FROM golang:1.16.2-nanoserver-1809
+FROM golang:1.16-nanoserver-1809
 
 # Get administrator privileges
 USER ContainerAdministrator
