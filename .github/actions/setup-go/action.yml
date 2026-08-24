@@ -9,6 +9,9 @@ inputs:
   go-version:
     description: The Go version to download.
     default: stable
+  go-version-file:
+    description: go.mod/go.work file to read the Go version from (takes precedence over go-version when set).
+    default: ""
   cache:
     description: Enable caching Go modules and build outputs,
     default: "true"
@@ -35,6 +38,7 @@ runs:
       uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
       with:
         go-version: ${{ inputs.go-version }}
+        go-version-file: ${{ inputs.go-version-file }}
         check-latest: true
         cache: ${{ inputs.cache }}
         cache-dependency-path: |
