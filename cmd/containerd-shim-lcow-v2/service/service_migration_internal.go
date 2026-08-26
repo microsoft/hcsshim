@@ -178,7 +178,6 @@ func (s *Service) notificationsInternal(ctx context.Context, request *migration.
 		return fmt.Errorf("subscribe to migration notifications: %w", err)
 	}
 
-	logger := log.G(ctx).WithField(logfields.SessionID, request.SessionID)
 	for {
 		select {
 		case <-ctx.Done():
@@ -190,8 +189,9 @@ func (s *Service) notificationsInternal(ctx context.Context, request *migration.
 			}
 
 			// Forward each notification to the client stream.
+			log.G(ctx).WithField(logfields.JSON, log.Format(ctx, resp)).Info("forwarding notification")
 			if err := server.Send(resp); err != nil {
-				logger.WithError(err).Warn("send migration notification failed")
+				log.G(ctx).WithError(err).Warn("send migration notification failed")
 				return fmt.Errorf("send migration notification: %w", err)
 			}
 		}
