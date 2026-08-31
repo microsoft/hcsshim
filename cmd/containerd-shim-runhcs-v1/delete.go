@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -30,18 +31,19 @@ func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
 		return nil, errors.Wrapf(err, "limited read failed to open file: %s", filePath)
 	}
 	defer f.Close()
-	if fi, err := f.Stat(); err == nil {
-		if fi.Size() < readLimitBytes {
-			readLimitBytes = fi.Size()
-		}
-		buf := make([]byte, readLimitBytes)
-		_, err := f.Read(buf)
-		if err != nil {
-			return []byte{}, errors.Wrapf(err, "limited read failed during file read: %s", filePath)
-		}
-		return buf, nil
+	fi, err := f.Stat()
+	if err != nil {
+		return []byte{}, errors.Wrapf(err, "limited read failed during file stat: %s", filePath)
 	}
-	return []byte{}, errors.Wrapf(err, "limited read failed during file stat: %s", filePath)
+	if fi.Size() < readLimitBytes {
+		readLimitBytes = fi.Size()
+	}
+	buf := make([]byte, readLimitBytes)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return []byte{}, errors.Wrapf(err, "limited read failed during file read: %s", filePath)
+	}
+	return buf[:n], nil
 }
 
 var deleteCommand = cli.Command{

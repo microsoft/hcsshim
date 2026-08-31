@@ -260,11 +260,11 @@ func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
 		readLimitBytes = fi.Size()
 	}
 	buf := make([]byte, readLimitBytes)
-	_, err = f.Read(buf)
-	if err != nil {
+	n, err := io.ReadFull(f, buf)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return []byte{}, fmt.Errorf("read file %s: %w", filePath, err)
 	}
-	return buf, nil
+	return buf[:n], nil
 }
 
 // Info returns runtime information about this shim including its name, version,
