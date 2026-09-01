@@ -201,8 +201,10 @@ func BuildSandboxConfig(
 			)
 		// Register cleanup method prior to checking for error.
 		defer func() {
-			for _, file := range filesToCleanOnError {
-				_ = os.Remove(file)
+			if err != nil {
+				for _, file := range filesToCleanOnError {
+					_ = os.Remove(file)
+				}
 			}
 		}()
 
