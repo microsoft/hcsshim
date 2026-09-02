@@ -44,7 +44,17 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
-      
+    groups:
+      # codeql.yml pins `init`, `analyze`, and `upload-sarif` individually, but the CodeQL
+      # action requires every step in a run to be on the same version: `init` stamps its
+      # version into the config that `analyze` later loads, so a mismatch fails the job with
+      # "Loaded a configuration file for version X, but running version Y".
+      # Dependabot treats each sub-action as a separate dependency, so ungrouped they arrive
+      # as separate PRs and CodeQL stays broken until the last one merges. Bump them together.
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
+
   # Keep the test base images (nanoserver/servercore + golang) current: scans every
   # Dockerfile (except vendored), digest/patch bumps only (major/minor ignored), one grouped PR.
   - package-ecosystem: "docker"
