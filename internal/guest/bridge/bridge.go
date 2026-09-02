@@ -340,6 +340,11 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					recverr = errors.Wrap(err, "bridge: failed reading message header")
 					break
 				}
+				// Validate header.Size to prevent uint32 underflow
+				if header.Size < prot.MessageHeaderSize {
+					recverr = errors.Errorf("bridge: invalid message header size %d, minimum required size is %d", header.Size, prot.MessageHeaderSize)
+					break
+				}
 				message := make([]byte, header.Size-prot.MessageHeaderSize)
 				if _, err := io.ReadFull(bridgeIn, message); err != nil {
 					if err == io.ErrUnexpectedEOF || err == os.ErrClosed { //nolint:errorlint

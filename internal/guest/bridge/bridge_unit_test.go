@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/bridgeutils/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
@@ -453,6 +454,31 @@ func newLoopbackConnection() *loopbackConnection {
 	l.pipes[0], l.pipes[1], _ = os.Pipe()
 	l.pipes[2], l.pipes[3], _ = os.Pipe()
 	return l
+}
+
+func Test_Bridge_ListenAndServe_InvalidMessageHeaderSize(t *testing.T) {
+	lc := newLoopbackConnection()
+	defer lc.close()
+
+	b := &Bridge{Handler: UnknownMessageHandler()}
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- b.ListenAndServe(lc.SRead(), lc.SWrite())
+	}()
+
+	header := prot.MessageHeader{Size: prot.MessageHeaderSize - 1}
+	if err := binary.Write(lc.CWrite(), binary.LittleEndian, header); err != nil {
+		t.Fatalf("failed to write message header: %v", err)
+	}
+
+	select {
+	case err := <-errChan:
+		if err == nil || !strings.Contains(err.Error(), "invalid message header size") {
+			t.Fatalf("expected invalid message header size error, got: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ListenAndServe did not reject invalid message header size")
+	}
 }
 
 func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
