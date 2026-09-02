@@ -83,6 +83,25 @@ func TestNotVeritySuperBlock(t *testing.T) {
 	}
 }
 
+func TestReadDMVerityInfoReader_InvalidSaltSize(t *testing.T) {
+	superblock := NewDMVeritySuperblock(blockSize)
+	superblock.SaltSize = uint16(len(superblock.Salt) + 1)
+
+	input := bytes.NewBuffer(make([]byte, 0, 2*blockSize))
+	if err := binary.Write(input, binary.LittleEndian, superblock); err != nil {
+		t.Fatalf("failed to write dm-verity super-block: %v", err)
+	}
+	input.Write(make([]byte, 2*blockSize-input.Len()))
+
+	_, err := ReadDMVerityInfoReader(input)
+	if err == nil {
+		t.Fatal("expected invalid salt size error")
+	}
+	if !errors.Is(err, ErrSuperBlockParseFailure) || !strings.Contains(err.Error(), "salt size") {
+		t.Fatalf("expected salt size parse error, got: %v", err)
+	}
+}
+
 func TestNoMerkleTree(t *testing.T) {
 	tmpFile := tempFileWithContentLength(t, blockSize)
 	targetFile, err := writeDMVeritySuperBlock(tmpFile.Name())
