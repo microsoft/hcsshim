@@ -67,7 +67,7 @@ func (s *SecurityOptions) EnsureFragmentDiagnosticsDir() error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "README"), fragmentsInfoREADME, 0644)
+	return writeFileIfNotExists(filepath.Join(dir, "README"), fragmentsInfoREADME, 0644)
 }
 
 func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, uvmHashEnvelopeReferenceInfo string, logWriter io.Writer) *SecurityOptions {
