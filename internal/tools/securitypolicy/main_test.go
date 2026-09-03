@@ -47,6 +47,7 @@ func marshalOpenDoor(containers []*securitypolicy.Container) (string, error) {
 		false,
 		false,
 		false,
+		false,
 	)
 }
 
