@@ -25,6 +25,51 @@ import (
 const nvidiaDebugFilePath = "nvidia-container.log"
 const nvidiaToolBinary = "nvidia-container-cli"
 
+var nvidiaCapabilities = map[string]struct{}{
+	"all":      {},
+	"compat32": {},
+	"compute":  {},
+	"display":  {},
+	"graphics": {},
+	"ngx":      {},
+	"utility":  {},
+	"video":    {},
+}
+
+func nvidiaCapabilityArgs(capabilities string) ([]string, error) {
+	caps := strings.Split(capabilities, ",")
+	args := make([]string, 0, len(caps))
+	for _, capability := range caps {
+		if _, ok := nvidiaCapabilities[capability]; !ok {
+			return nil, fmt.Errorf("unsupported NVIDIA GPU capability %q", capability)
+		}
+		args = append(args, "--"+capability)
+	}
+	return args, nil
+}
+
+// nvidiaConfigureArgs builds the fixed nvidia-container-cli configure arguments and
+// appends the validated GPU capabilities. The fixed --ldconfig must never be
+// overridable by the untrusted capabilities annotation.
+func nvidiaConfigureArgs(genericHookPath, debugOption string, spec *oci.Spec) ([]string, error) {
+	args := []string{
+		genericHookPath,
+		nvidiaToolBinary,
+		debugOption,
+		"--no-pivot",
+		"configure",
+		"--ldconfig=@/sbin/ldconfig",
+	}
+	if capabilities, ok := spec.Annotations[annotations.ContainerGPUCapabilities]; ok {
+		capabilityArgs, err := nvidiaCapabilityArgs(capabilities)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s annotation: %w", annotations.ContainerGPUCapabilities, err)
+		}
+		args = append(args, capabilityArgs...)
+	}
+	return args, nil
+}
+
 // addNvidiaDeviceHook builds the arguments for nvidia-container-cli and creates the createRuntime [OCI hooks].
 //
 // [OCI hooks]: https://github.com/opencontainers/runtime-spec/blob/39c287c415bf86fb5b7506528d471db5405f8ca8/config.md#posix-platform-hooks
@@ -37,19 +82,9 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec, ociBundlePath stri
 
 	toolDebugPath := filepath.Join(ociBundlePath, nvidiaDebugFilePath)
 	debugOption := fmt.Sprintf("--debug=%s", toolDebugPath)
-	args := []string{
-		genericHookPath,
-		nvidiaToolBinary,
-		debugOption,
-		"--no-pivot",
-		"configure",
-		"--ldconfig=@/sbin/ldconfig",
-	}
-	if capabilities, ok := spec.Annotations[annotations.ContainerGPUCapabilities]; ok {
-		caps := strings.Split(capabilities, ",")
-		for _, c := range caps {
-			args = append(args, fmt.Sprintf("--%s", c))
-		}
+	args, err := nvidiaConfigureArgs(genericHookPath, debugOption, spec)
+	if err != nil {
+		return err
 	}
 
 	for _, d := range spec.Windows.Devices {
