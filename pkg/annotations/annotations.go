@@ -553,7 +553,8 @@ const (
 	// Deprecated: GPU VHDs are no longer supported.
 	GPUVHDPath = "io.microsoft.lcow.gpuvhdpath"
 
-	// ContainerGPUCapabilities is used to find the gpu capabilities on the container spec.
+	// ContainerGPUCapabilities specifies a comma-separated list of NVIDIA GPU capabilities.
+	// Supported values are all, compat32, compute, display, graphics, ngx, utility, and video.
 	ContainerGPUCapabilities = "io.microsoft.container.gpu.capabilities"
 )
 
