@@ -48,7 +48,7 @@ type SecurityOptions struct {
 // Global counter for fragment injection requests, used to create unique
 // deny / success marker files even when the same fragment is injected
 // multiple times.
-var FragmentRequestID atomic.Uint64
+var fragmentRequestID atomic.Uint64
 
 //go:embed fragments_info_README
 var fragmentsInfoREADME []byte
@@ -240,7 +240,7 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
 	span.SetAttributes(attribute.String("fragment", fmt.Sprintf("%+v", fragment)))
-	currReqID := FragmentRequestID.Add(1)
+	currReqID := fragmentRequestID.Add(1)
 
 	// An empty media type defaults to a Rego policy fragment, for backward
 	// compatibility with older hosts that do not set the field.
