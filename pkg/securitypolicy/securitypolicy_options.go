@@ -48,7 +48,7 @@ type SecurityOptions struct {
 // Global counter for fragment injection requests, used to create unique
 // deny / success marker files even when the same fragment is injected
 // multiple times.
-var FragmentRequestId atomic.Uint64
+var FragmentRequestID atomic.Uint64
 
 //go:embed fragments_info_README
 var fragmentsInfoREADME []byte
@@ -240,7 +240,7 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 	defer span.End()
 	defer func() { ot.SetSpanStatus(span, err) }()
 	span.SetAttributes(attribute.String("fragment", fmt.Sprintf("%+v", fragment)))
-	currReqId := FragmentRequestId.Add(1)
+	currReqID := FragmentRequestID.Add(1)
 
 	// An empty media type defaults to a Rego policy fragment, for backward
 	// compatibility with older hosts that do not set the field.
@@ -257,10 +257,10 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 	shaHex := hex.EncodeToString(sha[:])
 	thisFragmentDir := filepath.Join(fragmentsPath(), shaHex)
 	defer func() {
-		markerName := fmt.Sprintf("%d.succeed", currReqId)
+		markerName := fmt.Sprintf("%d.succeed", currReqID)
 		var markerContents []byte
 		if err != nil {
-			markerName = fmt.Sprintf("%d.deny", currReqId)
+			markerName = fmt.Sprintf("%d.deny", currReqID)
 			markerContents = []byte(err.Error())
 		}
 		if markerErr := os.WriteFile(filepath.Join(thisFragmentDir, markerName), markerContents, 0644); markerErr != nil {
