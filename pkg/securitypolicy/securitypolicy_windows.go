@@ -7,7 +7,6 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-//nolint:unused
 const osType = "windows"
 
 // SandboxMountsDir returns sandbox mounts directory inside UVM/host.

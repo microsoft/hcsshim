@@ -22,6 +22,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	oci "github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
@@ -163,8 +164,10 @@ func (b *Bridge) createContainer(req *request) (err error) {
 			}
 		}()
 
+		var securityContextDir string
+
 		if oci.ParseAnnotationsBool(ctx, spec.Annotations, annotations.WCOWSecurityPolicyEnv, true) {
-			securityContextDir, err := b.hostState.securityOptions.WriteSecurityContextDir(&spec)
+			securityContextDir, err = b.hostState.securityOptions.WriteSecurityContextDir(&spec)
 			if err != nil {
 				return fmt.Errorf("failed to write security context dir: %w", err)
 			}
@@ -179,6 +182,21 @@ func (b *Bridge) createContainer(req *request) (err error) {
 				}
 			}
 			cwcowHostedSystemConfig.Spec = spec
+		}
+
+		// Add this fragments.info mount after policy enforcement and
+		// reconcile checks so the policy does not have to explicitly
+		// allow it.
+		if securityContextDir != "" {
+			if err := b.hostState.securityOptions.EnsureFragmentDiagnosticsDir(); err != nil {
+				log.G(ctx).WithError(err).WithField(logfields.Path, guestpath.WCOWFragmentsPath).Warn("failed to prepare fragments.info mount path in uVM")
+			} else {
+				container.MappedDirectories = append(container.MappedDirectories, hcsschema.MappedDirectory{
+					HostPath:      guestpath.WCOWFragmentsPath,
+					ContainerPath: filepath.Join(`C:\`, filepath.Base(securityContextDir), "fragments.info"),
+					ReadOnly:      true,
+				})
+			}
 		}
 
 		// Strip the spec field
