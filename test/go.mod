@@ -86,7 +86,7 @@ require (
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/mrunalp/fileutils v0.5.1 // indirect
-	github.com/open-policy-agent/opa v1.19.0 // indirect
+	github.com/open-policy-agent/opa v1.20.1 // indirect
 	github.com/opencontainers/cgroups v0.1.0 // indirect
 	github.com/opencontainers/runc v1.4.3 // indirect
 	github.com/opencontainers/selinux v1.13.1 // indirect
