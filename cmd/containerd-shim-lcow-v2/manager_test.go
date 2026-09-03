@@ -3,10 +3,28 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/shim"
 )
+
+func TestStopPreservesShimOptionsContext(t *testing.T) {
+	ctx := context.WithValue(t.Context(), shim.OptsKey{}, shim.Opts{BundlePath: t.TempDir()})
+
+	status, err := newShimManager("test").Stop(ctx, "nonexistent-stop-context-test")
+	if err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if status.ExitStatus != 255 {
+		t.Fatalf("ExitStatus = %d, want 255", status.ExitStatus)
+	}
+	if status.ExitedAt.IsZero() {
+		t.Fatal("ExitedAt is zero")
+	}
+}
 
 // TestLimitedRead verifies that limitedRead correctly enforces the byte limit
 // when the file is larger than the limit, and reads the full content when the
