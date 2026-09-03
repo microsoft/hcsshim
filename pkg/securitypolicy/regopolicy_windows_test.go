@@ -229,6 +229,235 @@ func Test_Rego_EnforceCreateContainer_Windows(t *testing.T) {
 	}
 }
 
+func Test_Rego_MountPolicy_Matches_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		mnt := mountInternal{
+			Source:      "C:\\host\\share",
+			Destination: "C:\\container\\share",
+			Options:     []string{"ro"},
+		}
+		c.Mounts = append(c.Mounts, mnt)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		requestMounts := []oci.Mount{
+			{
+				Source:      mnt.Source,
+				Destination: mnt.Destination,
+				Options:     mnt.Options,
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a mount matching the policy was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_Matches_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_DiskTypeRejected_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		mnt := mountInternal{
+			Source:      "C:\\host\\share",
+			Destination: "C:\\container\\share",
+			Options:     []string{"ro"},
+		}
+		c.Mounts = append(c.Mounts, mnt)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// Same destination + options the policy allows, but tagged as a disk
+		// mount type. A disk/device type must be rejected regardless of the
+		// destination match, so it can't ride in on a directory allowance.
+		requestMounts := []oci.Mount{
+			{
+				Source:      mnt.Source,
+				Destination: mnt.Destination,
+				Options:     mnt.Options,
+				Type:        "virtual-disk",
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err == nil {
+			t.Error("a disk-type mount was allowed by policy")
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "invalid mount list")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_DiskTypeRejected_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_BindTypeAllowed_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		mnt := mountInternal{
+			Source:      "C:\\host\\share",
+			Destination: "C:\\container\\share",
+			Options:     []string{"ro"},
+		}
+		c.Mounts = append(c.Mounts, mnt)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// An explicit "bind" type is a plain mount and must still be allowed.
+		requestMounts := []oci.Mount{
+			{
+				Source:      mnt.Source,
+				Destination: mnt.Destination,
+				Options:     mnt.Options,
+				Type:        "bind",
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a bind-type mount matching the policy was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_BindTypeAllowed_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_NoMatches_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// The container declares no matching mount constraint, so any
+		// requested mount must be rejected.
+		requestMounts := []oci.Mount{
+			{
+				Source:      "C:\\host\\not-in-policy",
+				Destination: "C:\\container\\not-in-policy",
+				Options:     []string{"rw"},
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err == nil {
+			t.Error("a mount not present in the policy did not result in an error")
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "invalid mount list")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_NoMatches_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_Pipe_Matches_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		pipe := mountInternal{
+			Source:      "\\\\.\\pipe\\host-pipe",
+			Destination: "\\\\.\\pipe\\container-pipe",
+			Options:     []string{},
+		}
+		c.Mounts = append(c.Mounts, pipe)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		requestMounts := []oci.Mount{
+			{
+				Source:      pipe.Source,
+				Destination: pipe.Destination,
+				Options:     pipe.Options,
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a pipe mount matching the policy was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_Pipe_Matches_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_Pipe_BadSource_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		pipe := mountInternal{
+			Source:      "\\\\.\\pipe\\host-pipe",
+			Destination: "\\\\.\\pipe\\container-pipe",
+			Options:     []string{},
+		}
+		c.Mounts = append(c.Mounts, pipe)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// Same (policy-matching) pipe destination, but a different host pipe
+		// source. Unlike a mapped directory, a pipe source is enforced, so this
+		// must be rejected.
+		requestMounts := []oci.Mount{
+			{
+				Source:      "\\\\.\\pipe\\attacker-pipe",
+				Destination: pipe.Destination,
+				Options:     pipe.Options,
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err == nil {
+			t.Error("a pipe mount with a non-matching source did not result in an error")
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "invalid mount list")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_Pipe_BadSource_Windows: %v", err)
+	}
+}
+
 func Test_Rego_EnforceCreateContainer_Start_All_Containers(t *testing.T) {
 	f := func(p *generatedWindowsConstraints) bool {
 		securityPolicy := p.toPolicy()
@@ -353,11 +582,104 @@ func Test_Rego_EnforceVerifiedCIMSPolicy_Multiple_Instances_Same_Container(t *te
 			// The runtime sends individual layers as hashesToVerify
 			// and the merged CIM hash separately
 			id := testDataGenerator.uniqueContainerID()
-			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes, container.MountedCim)
+			err = policy.EnforceVerifiedCIMsPolicy(constraints.ctx, id, layerHashes, container.MountedCim, testCIMVolumeGUID)
 			if err != nil {
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}
 		}
+	}
+}
+
+// setupMountedCIMVolume builds a generated Windows policy, mounts container[0]'s
+// CIM under the given volume GUID (so mount_cims records it), and returns the
+// enforcer ready for an unmount_cims call.
+func setupMountedCIMVolume(t *testing.T, p *generatedWindowsConstraints, volumeGUID string) *regoEnforcer {
+	t.Helper()
+	securityPolicy := p.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalWindowsRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	container := p.containers[0]
+	layerHashes := make([]string, len(container.Layers))
+	for i, layer := range container.Layers {
+		layerHashes[len(container.Layers)-1-i] = layer
+	}
+
+	id := testDataGenerator.uniqueContainerID()
+	if err := policy.EnforceVerifiedCIMsPolicy(context.Background(), id, layerHashes, container.MountedCim, volumeGUID); err != nil {
+		t.Fatalf("mount should succeed: %v", err)
+	}
+	return policy
+}
+
+// Unmounting a CIM volume that was recorded at mount time is allowed.
+func Test_Rego_EnforceCIMUnmountPolicy_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		if len(p.containers) == 0 {
+			return true
+		}
+		volumeGUID := "12345678-1234-1234-1234-123456789abc"
+		policy := setupMountedCIMVolume(t, p, volumeGUID)
+
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), volumeGUID); err != nil {
+			t.Errorf("unmount of a mounted CIM volume should succeed: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCIMUnmountPolicy_Windows: %v", err)
+	}
+}
+
+// Unmounting a CIM volume GUID that was never mounted is denied (no symmetry).
+func Test_Rego_EnforceCIMUnmountPolicy_NotMounted_Denied_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		securityPolicy := p.toPolicy()
+		policy, err := newRegoPolicy(securityPolicy.marshalWindowsRego(), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Errorf("failed to create policy: %v", err)
+			return false
+		}
+
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), "never-mounted-guid"); err == nil {
+			t.Error("unmount of a never-mounted CIM volume should be denied")
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCIMUnmountPolicy_NotMounted_Denied_Windows: %v", err)
+	}
+}
+
+// Unmounting the same CIM volume twice is denied: the first unmount removes the
+// record, so the second has nothing to match.
+func Test_Rego_EnforceCIMUnmountPolicy_DoubleUnmount_Denied_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		if len(p.containers) == 0 {
+			return true
+		}
+		volumeGUID := "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+		policy := setupMountedCIMVolume(t, p, volumeGUID)
+
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), volumeGUID); err != nil {
+			t.Errorf("first unmount should succeed: %v", err)
+			return false
+		}
+		if err := policy.EnforceCIMUnmountPolicy(context.Background(), volumeGUID); err == nil {
+			t.Error("second unmount of the same CIM volume should be denied")
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 5, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceCIMUnmountPolicy_DoubleUnmount_Denied_Windows: %v", err)
 	}
 }
 
@@ -1398,7 +1720,7 @@ func Test_Rego_EnforceRegistryChangesPolicy_Matches_Windows(t *testing.T) {
 			},
 		}
 
-		err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, container.containerID, registryChanges)
+		_, err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, container.containerID, registryChanges)
 		// With default values, this should be allowed
 		if err != nil {
 			t.Logf("Registry enforcement returned: %v", err)
@@ -1438,7 +1760,7 @@ func Test_Rego_EnforceRegistryChangesPolicy_Invalid_ContainerID_Windows(t *testi
 			},
 		}
 
-		err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, invalidContainerID, registryChanges)
+		_, err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, invalidContainerID, registryChanges)
 		if err == nil {
 			t.Error("Expected registry changes to be denied with invalid container ID")
 			return false
@@ -1487,7 +1809,7 @@ func Test_Rego_EnforceRegistryChangesPolicy_Default_Values_Allowed_Windows(t *te
 			},
 		}
 
-		err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, container.containerID, registryChanges)
+		_, err = tc.policy.EnforceRegistryChangesPolicy(p.ctx, container.containerID, registryChanges)
 		// Default values should be allowed
 		if err != nil {
 			t.Logf("Default registry values enforcement returned: %v", err)
@@ -1501,6 +1823,306 @@ func Test_Rego_EnforceRegistryChangesPolicy_Default_Values_Allowed_Windows(t *te
 	}
 }
 
+func twoContainersSharedLayersRegistryRego(dropping bool) string {
+	constraints := &generatedWindowsConstraints{
+		allowRegistryChangesDropping: dropping,
+		containers: []*securityPolicyWindowsContainer{
+			{
+				Command:          []string{"cmd"},
+				Layers:           []string{"layerA", "layerB"},
+				MountedCim:       []string{"merged"},
+				WorkingDir:       `C:\app`,
+				User:             "ContainerUser",
+				AllowStdioAccess: true,
+			},
+			{
+				Command:          []string{"ping"},
+				Layers:           []string{"layerA", "layerB"},
+				MountedCim:       []string{"merged"},
+				WorkingDir:       `C:\app`,
+				User:             "ContainerUser",
+				AllowStdioAccess: true,
+				RegistryChanges: registryChangesInternal{
+					AddValues: []registryValueInternal{
+						{
+							Key:         registryKeyInternal{Hive: "System", Name: "TestControl"},
+							Name:        "Danger",
+							Type:        "String",
+							StringValue: "danger",
+						},
+					},
+					DeleteKeys: []registryKeyInternal{
+						{Hive: "System", Name: "TestControl\\Obsolete"},
+					},
+				},
+			},
+		},
+	}
+	return constraints.toPolicy().marshalWindowsRego()
+}
+
+// Test_Rego_RegistryChanges_NarrowsMatches_Windows verifies that the registry
+// enforcement point narrows data.metadata.matches so it composes with
+// create_container in either order, under both allow_registry_changes_dropping
+// settings. Containers A (command "cmd", no registry rule) and B (command
+// "ping", authorizes a dangerous registry value) share layers, so both survive
+// mount_cims; the danger is that a request could pass the dangerous value while
+// running A's command. With dropping on, "cmd" never runs with the dangerous
+// value (either create(cmd) is denied when registry narrows to B first, or the
+// value is dropped when create(cmd) narrows to A first). With dropping off, a
+// request is only allowed if a matched container authorizes every requested
+// value, so registry(dangerous) against A is denied outright.
+// TODO: maybe delete it if it's too much.
+func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
+	dangerous := &hcsschema.RegistryChanges{
+		AddValues: []hcsschema.RegistryValue{
+			{
+				Key:         &hcsschema.RegistryKey{Hive: "System", Name: "TestControl"},
+				Name:        "Danger",
+				Type_:       hcsschema.RegistryValueType_STRING,
+				StringValue: "danger",
+			},
+		},
+	}
+
+	keptCount := func(t *testing.T, keptRaw interface{}) int {
+		t.Helper()
+		kept, ok := keptRaw.(*hcsschema.RegistryChanges)
+		if !ok || kept == nil {
+			t.Fatalf("expected *hcsschema.RegistryChanges, got %T", keptRaw)
+		}
+		return len(kept.AddValues)
+	}
+
+	// mount_cims reverses the layer order, so pass layers reversed.
+	layerHashes := []string{"layerB", "layerA"}
+	mountedCim := []string{"merged"}
+	ctx := context.Background()
+	user := IDName{Name: "ContainerUser"}
+
+	newPolicy := func(dropping bool) *regoEnforcer {
+		policy, err := newRegoPolicy(twoContainersSharedLayersRegistryRego(dropping), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("failed to create policy: %v", err)
+		}
+		return policy
+	}
+
+	// Order 1: registry (kept via B) then create with A's command. Registry
+	// narrows matches to [B], so create with "cmd" must be denied.
+	t.Run("registry_then_create_denied", func(t *testing.T) {
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous)
+		if err != nil {
+			t.Fatalf("registry should be allowed (kept via B): %v", err)
+		}
+		if n := keptCount(t, kept); n != 1 {
+			t.Errorf("expected the dangerous value kept via B, got %d kept values", n)
+		}
+		_, _, _, err = policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil)
+		if err == nil {
+			t.Error("create(cmd) after registry(dangerous) should be denied: registry narrowed matches to B (command ping)")
+		}
+	})
+
+	// Order 2: create with A's command (narrows to [A]) then registry. A has no
+	// registry rule, so the dangerous value must be dropped (kept empty), but
+	// the request is still allowed since dropping is permissive.
+	t.Run("create_then_registry_drops", func(t *testing.T) {
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(cmd) should be allowed as A: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous)
+		if err != nil {
+			t.Fatalf("registry(dangerous) after create(cmd) should be allowed with dropping: %v", err)
+		}
+		if n := keptCount(t, kept); n != 0 {
+			t.Errorf("dangerous value should be dropped for A, got %d kept values", n)
+		}
+	})
+
+	// Legit path: B's command with B's registry value keeps the value.
+	t.Run("create_ping_then_registry_keeps", func(t *testing.T) {
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(ping) should be allowed as B: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous)
+		if err != nil {
+			t.Fatalf("registry(dangerous) after create(ping) should be allowed via B: %v", err)
+		}
+		if n := keptCount(t, kept); n != 1 {
+			t.Errorf("dangerous value should be kept for B, got %d kept values", n)
+		}
+	})
+
+	// With dropping disabled, a request is only allowed if a matched container
+	// authorizes every requested value. After create(cmd) narrows to A (no
+	// registry rule), registry(dangerous) must be denied rather than dropped.
+	t.Run("no_dropping_create_then_registry_denied", func(t *testing.T) {
+		policy := newPolicy(false)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(cmd) should be allowed as A: %v", err)
+		}
+		if _, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous); err == nil {
+			t.Error("registry(dangerous) after create(cmd) should be denied without dropping (A authorizes nothing)")
+		}
+	})
+
+	// With dropping disabled, the legit path (B authorizes the value) is still
+	// allowed and keeps the value.
+	t.Run("no_dropping_create_ping_then_registry_keeps", func(t *testing.T) {
+		policy := newPolicy(false)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(ping) should be allowed as B: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, dangerous)
+		if err != nil {
+			t.Fatalf("registry(dangerous) after create(ping) should be allowed via B: %v", err)
+		}
+		if n := keptCount(t, kept); n != 1 {
+			t.Errorf("dangerous value should be kept for B, got %d kept values", n)
+		}
+	})
+}
+
+// Test_Rego_RegistryChanges_DeleteKeys_Windows verifies that delete keys flow
+// through the same narrowing/dropping machinery as add values. Container B
+// authorizes deleting a specific key; container A authorizes nothing. With
+// dropping on, deleting B's authorized key narrows matches to B (so create(cmd)
+// is then denied) or, if create(cmd) narrows to A first, the delete is dropped.
+// With dropping off, the delete is only allowed against a container (B) that
+// authorizes it.
+// TODO: maybe delete it if it's too much.
+func Test_Rego_RegistryChanges_DeleteKeys_Windows(t *testing.T) {
+	deleteRequest := &hcsschema.RegistryChanges{
+		DeleteKeys: []hcsschema.RegistryKey{
+			{Hive: "System", Name: "TestControl\\Obsolete"},
+		},
+	}
+
+	keptDeleteCount := func(t *testing.T, keptRaw interface{}) int {
+		t.Helper()
+		kept, ok := keptRaw.(*hcsschema.RegistryChanges)
+		if !ok || kept == nil {
+			t.Fatalf("expected *hcsschema.RegistryChanges, got %T", keptRaw)
+		}
+		return len(kept.DeleteKeys)
+	}
+
+	// mount_cims reverses the layer order, so pass layers reversed.
+	layerHashes := []string{"layerB", "layerA"}
+	mountedCim := []string{"merged"}
+	ctx := context.Background()
+	user := IDName{Name: "ContainerUser"}
+
+	newPolicy := func(dropping bool) *regoEnforcer {
+		policy, err := newRegoPolicy(twoContainersSharedLayersRegistryRego(dropping), []oci.Mount{}, []oci.Mount{}, testOSType)
+		if err != nil {
+			t.Fatalf("failed to create policy: %v", err)
+		}
+		return policy
+	}
+
+	// Order 1: delete (kept via B) then create with A's command. The delete
+	// narrows matches to [B], so create with "cmd" must be denied.
+	t.Run("registry_delete_then_create_denied", func(t *testing.T) {
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest)
+		if err != nil {
+			t.Fatalf("registry delete should be allowed (kept via B): %v", err)
+		}
+		if n := keptDeleteCount(t, kept); n != 1 {
+			t.Errorf("expected the delete key kept via B, got %d kept keys", n)
+		}
+		_, _, _, err = policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil)
+		if err == nil {
+			t.Error("create(cmd) after registry(delete) should be denied: registry narrowed matches to B (command ping)")
+		}
+	})
+
+	// Order 2: create with A's command (narrows to [A]) then delete. A has no
+	// registry rule, so the delete must be dropped (kept empty), but the request
+	// is still allowed since dropping is permissive.
+	t.Run("create_then_registry_delete_drops", func(t *testing.T) {
+		policy := newPolicy(true)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(cmd) should be allowed as A: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest)
+		if err != nil {
+			t.Fatalf("registry delete after create(cmd) should be allowed with dropping: %v", err)
+		}
+		if n := keptDeleteCount(t, kept); n != 0 {
+			t.Errorf("delete key should be dropped for A, got %d kept keys", n)
+		}
+	})
+
+	// With dropping disabled, the delete is only allowed against a container
+	// that authorizes it. After create(cmd) narrows to A, the delete is denied;
+	// the legit path via B keeps it.
+	t.Run("no_dropping_create_then_delete_denied", func(t *testing.T) {
+		policy := newPolicy(false)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"cmd"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(cmd) should be allowed as A: %v", err)
+		}
+		if _, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest); err == nil {
+			t.Error("registry(delete) after create(cmd) should be denied without dropping (A authorizes nothing)")
+		}
+	})
+
+	t.Run("no_dropping_create_ping_then_delete_keeps", func(t *testing.T) {
+		policy := newPolicy(false)
+		cid := testDataGenerator.uniqueContainerID()
+		if err := policy.EnforceVerifiedCIMsPolicy(ctx, cid, layerHashes, mountedCim, testCIMVolumeGUID); err != nil {
+			t.Fatalf("mount_cims: %v", err)
+		}
+		if _, _, _, err := policy.EnforceCreateContainerPolicyV2(ctx, cid, []string{"ping"}, []string{}, `C:\app`, []oci.Mount{}, user, nil); err != nil {
+			t.Fatalf("create(ping) should be allowed as B: %v", err)
+		}
+		kept, err := policy.EnforceRegistryChangesPolicy(ctx, cid, deleteRequest)
+		if err != nil {
+			t.Fatalf("registry(delete) after create(ping) should be allowed via B: %v", err)
+		}
+		if n := keptDeleteCount(t, kept); n != 1 {
+			t.Errorf("delete key should be kept for B, got %d kept keys", n)
+		}
+	})
+}
+
 // This is a no-op for windows.
 // substituteUVMPath substitutes mount prefix to an appropriate path inside
 // UVM. At policy generation time, it's impossible to tell what the sandboxID
@@ -1509,6 +2131,210 @@ func substituteUVMPath(sandboxID string, m mountInternal) mountInternal {
 	//no-op for windows
 	_ = sandboxID
 	return m
+}
+
+// Tests for MappedDirectory enforcement
+
+func Test_Rego_EnforceMappedDirectoryPolicy_OpenDoor_AllowsAll_Windows(t *testing.T) {
+	policy, err := newRegoPolicy(
+		openDoorRego,
+		[]oci.Mount{},
+		[]oci.Mount{},
+		testOSType,
+	)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Open door should allow both readonly and writable mounts, regardless of
+	// path, and an unmount of a never-mounted path.
+	if err := policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\readonly`, true); err != nil {
+		t.Errorf("open door should allow readonly mount: %v", err)
+	}
+	if err := policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\writable`, false); err != nil {
+		t.Errorf("open door should allow writable mount: %v", err)
+	}
+	if err := policy.EnforceMappedDirectoryUnmountPolicy(ctx, `C:\never_mounted`); err != nil {
+		t.Errorf("open door should allow unmount of any path: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryPolicy_ClosedDoor_DeniesAll_Windows(t *testing.T) {
+	// Mirror of the open-door case: a hand-rolled policy that explicitly
+	// returns {"allowed": false} for both mapped-directory rules. This
+	// verifies the Go-side enforcer surfaces the deny decision regardless
+	// of input.
+	closedDoorRego := fmt.Sprintf(`package policy
+api_version := "%s"
+
+mapped_directory_mount := {"allowed": false}
+mapped_directory_unmount := {"allowed": false}
+`, apiVersion)
+
+	policy, err := newRegoPolicy(
+		closedDoorRego,
+		[]oci.Mount{},
+		[]oci.Mount{},
+		testOSType,
+	)
+	if err != nil {
+		t.Fatalf("failed to create policy: %v", err)
+	}
+
+	ctx := context.Background()
+
+	if err := policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\readonly`, true); err == nil {
+		t.Error("closed door should deny readonly mount")
+	}
+	if err := policy.EnforceMappedDirectoryMountPolicy(ctx, `C:\writable`, false); err == nil {
+		t.Error("closed door should deny writable mount")
+	}
+	if err := policy.EnforceMappedDirectoryUnmountPolicy(ctx, `C:\any_path`); err == nil {
+		t.Error("closed door should deny unmount of any path")
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_Matches_Windows(t *testing.T) {
+	f := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupWindowsMappedDirectoriesTest(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		rule := selectMappedDirectoryFromConstraints(gc, testRand)
+
+		err = tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, rule.ContainerPath, rule.ReadOnly)
+
+		// getting an error means something is broken
+		return err == nil
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryMountPolicy_Matches_Windows failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_No_Matches_Windows(t *testing.T) {
+	f := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupWindowsMappedDirectoriesTest(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fresh := generateMappedDirectory(testRand)
+
+		err = tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, fresh.ContainerPath, fresh.ReadOnly)
+
+		return assertDecisionJSONContains(t, err, "no matching mapped directory in policy")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryMountPolicy_No_Matches_Windows failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_Wrong_ReadOnly_Windows(t *testing.T) {
+	f := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupWindowsMappedDirectoriesTest(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		rule := selectMappedDirectoryFromConstraints(gc, testRand)
+
+		err = tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, rule.ContainerPath, !rule.ReadOnly)
+
+		return assertDecisionJSONContains(t, err, "no matching mapped directory in policy")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryMountPolicy_Wrong_ReadOnly_Windows failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryMountPolicy_Duplicate_Container_Path_Windows(t *testing.T) {
+	f := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupWindowsMappedDirectoriesTest(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		rule := selectMappedDirectoryFromConstraints(gc, testRand)
+
+		if err := tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, rule.ContainerPath, rule.ReadOnly); err != nil {
+			t.Error("Valid mapped directory mount failed. It shouldn't have.")
+			return false
+		}
+
+		err = tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, rule.ContainerPath, rule.ReadOnly)
+		if err == nil {
+			t.Error("Duplicate mapped directory mount target was allowed. It shouldn't have been.")
+			return false
+		}
+
+		return assertDecisionJSONContains(t, err, "mapped directory already mounted at path")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryMountPolicy_Duplicate_Container_Path_Windows failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryUnmountPolicy_Removes_Mapped_Directory_Entries_Windows(t *testing.T) {
+	f := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupWindowsMappedDirectoriesTest(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		rule := selectMappedDirectoryFromConstraints(gc, testRand)
+
+		if err := tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, rule.ContainerPath, rule.ReadOnly); err != nil {
+			t.Errorf("unable to mount mapped directory: %v", err)
+			return false
+		}
+		if err := tc.policy.EnforceMappedDirectoryUnmountPolicy(gc.ctx, rule.ContainerPath); err != nil {
+			t.Errorf("unable to unmount mapped directory: %v", err)
+			return false
+		}
+		if err := tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, rule.ContainerPath, rule.ReadOnly); err != nil {
+			t.Errorf("unable to re-mount mapped directory: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryUnmountPolicy_Removes_Mapped_Directory_Entries_Windows failed: %v", err)
+	}
+}
+
+func Test_Rego_EnforceMappedDirectoryUnmountPolicy_No_Matches_Windows(t *testing.T) {
+	f := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupWindowsMappedDirectoriesTest(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fresh := generateMappedDirectory(testRand)
+
+		err = tc.policy.EnforceMappedDirectoryUnmountPolicy(gc.ctx, fresh.ContainerPath)
+
+		return assertDecisionJSONContains(t, err, "no mapped directory at path to unmount")
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryUnmountPolicy_No_Matches_Windows failed: %v", err)
+	}
 }
 
 // Tests for log provider enforcement
