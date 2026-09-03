@@ -369,8 +369,8 @@ github.com/moby/sys/userns
 # github.com/mrunalp/fileutils v0.5.1
 ## explicit; go 1.13
 github.com/mrunalp/fileutils
-# github.com/open-policy-agent/opa v1.19.0
-## explicit; go 1.25.0
+# github.com/open-policy-agent/opa v1.20.1
+## explicit; go 1.26.0
 github.com/open-policy-agent/opa/capabilities
 github.com/open-policy-agent/opa/internal/bundle
 github.com/open-policy-agent/opa/internal/cidr/merge
