@@ -369,6 +369,9 @@ func (b *Bridge) executeProcess(req *request) (err error) {
 	if err := commonutils.UnmarshalJSONWithHresult(processParamSettings, &processParams); err != nil {
 		return fmt.Errorf("executeProcess: invalid params type for request: %w", err)
 	}
+	if processParams.ApplicationName != "" {
+		return fmt.Errorf("executeProcess: application name is not supported by security policy")
+	}
 
 	commandLine := []string{processParams.CommandLine}
 

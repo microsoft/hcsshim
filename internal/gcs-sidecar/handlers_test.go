@@ -103,6 +103,41 @@ func newTestBridge(enforcer securitypolicy.SecurityPolicyEnforcer) *Bridge {
 	}
 }
 
+func TestExecuteProcess_ApplicationNameDenied(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	processParams := hcsschema.ProcessParameters{
+		ApplicationName: `C:\\Windows\\System32\\not-allowed.exe`,
+		CommandLine:     `C:\\Windows\\System32\\allowed.exe`,
+	}
+	processParamsJSON, err := json.Marshal(processParams)
+	if err != nil {
+		t.Fatalf("failed to marshal process parameters: %v", err)
+	}
+	message, err := json.Marshal(map[string]interface{}{
+		"ContainerId": UVMContainerID,
+		"Settings": map[string]string{
+			"ProcessParameters": string(processParamsJSON),
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal execute process request: %v", err)
+	}
+
+	err = b.executeProcess(&request{
+		ctx:     context.Background(),
+		message: message,
+	})
+	if err == nil || !strings.Contains(err.Error(), "application name is not supported") {
+		t.Fatalf("expected application name rejection, got: %v", err)
+	}
+
+	select {
+	case forwarded := <-b.sendToGCSCh:
+		t.Fatalf("rejected request must not be forwarded to GCS: %+v", forwarded)
+	default:
+	}
+}
+
 // TestModifySettings_PolicyFragment_InvalidFragment tests that a PolicyFragment
 // request with an invalid (non-base64, non-COSE) fragment value returns an error
 // from the handler. The bridge's main loop converts handler errors into error
