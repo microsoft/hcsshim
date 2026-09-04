@@ -213,11 +213,13 @@ func (m *shimManager) Stop(ctx context.Context, id string) (resp shim.StopStatus
 		logrus.WithError(err).Warn("failed to open shim panic log")
 	}
 
+	// The sandbox service creates the HCS system as <sandboxID>@vm.
+	vmID := fmt.Sprintf("%s@vm", id)
 	// Attempt to find the hcssystem for this bundle and terminate it.
-	if sys, _ := hcs.OpenComputeSystem(ctx, id); sys != nil {
+	if sys, _ := hcs.OpenComputeSystem(ctx, vmID); sys != nil {
 		defer sys.Close()
 		if err := sys.Terminate(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to terminate %q: %v", id, err)
+			fmt.Fprintf(os.Stderr, "failed to terminate %q: %v", vmID, err)
 		} else {
 			ch := make(chan error, 1)
 			go func() { ch <- sys.Wait() }()
@@ -225,11 +227,11 @@ func (m *shimManager) Stop(ctx context.Context, id string) (resp shim.StopStatus
 			select {
 			case <-t.C:
 				sys.Close()
-				return resp, fmt.Errorf("timed out waiting for %q to terminate", id)
+				return resp, fmt.Errorf("timed out waiting for %q to terminate", vmID)
 			case err := <-ch:
 				t.Stop()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to wait for %q to terminate: %v", id, err)
+					fmt.Fprintf(os.Stderr, "failed to wait for %q to terminate: %v", vmID, err)
 				}
 			}
 		}

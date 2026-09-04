@@ -611,10 +611,27 @@ func TestBuildSandboxConfig(t *testing.T) {
 				// GuestState should be set in confidential mode
 				if doc.VirtualMachine.GuestState == nil || doc.VirtualMachine.GuestState.GuestStateFilePath == "" {
 					t.Error("expected GuestState file path to be set in confidential mode")
+				} else if _, err := os.Stat(doc.VirtualMachine.GuestState.GuestStateFilePath); err != nil {
+					t.Errorf("expected copied GuestState file to remain after successful build: %v", err)
 				}
 				// DM-Verity rootfs should be attached via SCSI
 				if len(doc.VirtualMachine.Devices.Scsi) == 0 {
 					t.Error("expected SCSI controllers to be configured in confidential mode")
+				} else {
+					foundRootfs := false
+					for _, controller := range doc.VirtualMachine.Devices.Scsi {
+						for _, attachment := range controller.Attachments {
+							if attachment.Path != "" {
+								foundRootfs = true
+								if _, err := os.Stat(attachment.Path); err != nil {
+									t.Errorf("expected copied rootfs file to remain after successful build: %v", err)
+								}
+							}
+						}
+					}
+					if !foundRootfs {
+						t.Error("expected a rootfs SCSI attachment")
+					}
 				}
 			},
 		},

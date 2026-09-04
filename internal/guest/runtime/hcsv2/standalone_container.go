@@ -44,6 +44,10 @@ func setupStandaloneContainerSpec(ctx context.Context, id, rootDir string, spec 
 		}
 	}()
 
+	if err = updateUVMMounts(spec); err != nil {
+		return errors.Wrapf(err, "failed to update uVM mounts for standalone container %v", id)
+	}
+
 	hostname := spec.Hostname
 	if err = network.ValidateHostname(hostname); err != nil {
 		return err
