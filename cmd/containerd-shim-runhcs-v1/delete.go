@@ -90,7 +90,8 @@ The delete command will be executed in the container's bundle as its cwd.
 			} else {
 				ch := make(chan error, 1)
 				go func() { ch <- sys.Wait() }()
-				t := time.NewTimer(time.Second * 30)
+				// Same host-side work as [hcsTask.close], so the same bound.
+				t := time.NewTimer(tearDownTimeout)
 				select {
 				case <-t.C:
 					sys.Close()
