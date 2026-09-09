@@ -535,15 +535,6 @@ func (m mountInternal) marshalRego() string {
 	}{m.Destination, json.RawMessage(options), m.Source, m.Type})
 }
 
-// escapeRegoString escapes a Go string so it is a valid double-quoted Rego
-// string literal. This matters for Windows registry keys and values, which
-// contain backslashes that would otherwise be interpreted as escape sequences.
-func escapeRegoString(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	return s
-}
-
 func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string) {
 	values := make([]string, len(mounts))
 	for i, mount := range mounts {
@@ -554,30 +545,33 @@ func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string
 }
 
 func (k registryKeyInternal) marshalRego() string {
-	return fmt.Sprintf(`{"hive": "%s", "name": "%s", "volatile": %t}`,
-		escapeRegoString(k.Hive), escapeRegoString(k.Name), k.Volatile)
+	return mustMarshalJSON(struct {
+		Hive     string `json:"hive"`
+		Name     string `json:"name"`
+		Volatile bool   `json:"volatile"`
+	}{k.Hive, k.Name, k.Volatile})
 }
 
 func (v registryValueInternal) marshalRego() string {
 	fields := []string{
 		fmt.Sprintf(`"key": %s`, v.Key.marshalRego()),
-		fmt.Sprintf(`"name": "%s"`, escapeRegoString(v.Name)),
-		fmt.Sprintf(`"type": "%s"`, escapeRegoString(v.Type)),
+		fmt.Sprintf(`"name": %s`, regoString(v.Name)),
+		fmt.Sprintf(`"type": %s`, regoString(v.Type)),
 	}
 	// Type selects which value field is significant; emit only that one so the
 	// policy value matches the shape registry_value_matches compares against.
 	switch v.Type {
 	case "String", "ExpandedString", "MultiString":
-		fields = append(fields, fmt.Sprintf(`"string_value": "%s"`, escapeRegoString(v.StringValue)))
+		fields = append(fields, fmt.Sprintf(`"string_value": %s`, regoString(v.StringValue)))
 	case "DWord":
 		fields = append(fields, fmt.Sprintf(`"dword_value": %d`, v.DWordValue))
 	case "QWord":
 		fields = append(fields, fmt.Sprintf(`"qword_value": %d`, v.QWordValue))
 	case "Binary":
-		fields = append(fields, fmt.Sprintf(`"binary_value": "%s"`, escapeRegoString(v.BinaryValue)))
+		fields = append(fields, fmt.Sprintf(`"binary_value": %s`, regoString(v.BinaryValue)))
 	case "CustomType":
 		fields = append(fields, fmt.Sprintf(`"custom_type": %d`, v.CustomType))
-		fields = append(fields, fmt.Sprintf(`"binary_value": "%s"`, escapeRegoString(v.BinaryValue)))
+		fields = append(fields, fmt.Sprintf(`"binary_value": %s`, regoString(v.BinaryValue)))
 	case "None":
 		// No value to compare, just key, name and type.
 	}

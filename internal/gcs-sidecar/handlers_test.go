@@ -107,6 +107,22 @@ func newTestBridge(enforcer securitypolicy.SecurityPolicyEnforcer) *Bridge {
 	}
 }
 
+type encodedPolicyEnforcer struct {
+	securitypolicy.SecurityPolicyEnforcer
+	encodedPolicy string
+}
+
+func (e *encodedPolicyEnforcer) EncodedSecurityPolicy() string {
+	return e.encodedPolicy
+}
+
+func newPolicyTestBridge() *Bridge {
+	return newTestBridge(&encodedPolicyEnforcer{
+		SecurityPolicyEnforcer: &securitypolicy.OpenDoorSecurityPolicyEnforcer{},
+		encodedPolicy:          "policy",
+	})
+}
+
 func TestExecuteProcess_ApplicationNameDenied(t *testing.T) {
 	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
 	processParams := hcsschema.ProcessParameters{
@@ -179,7 +195,7 @@ func TestResponseFailure(t *testing.T) {
 // inconsistent, container creation/deletion and settings changes are refused
 // (fail-closed), matching the LCOW behavior.
 func TestCheckState_BlocksHandlers(t *testing.T) {
-	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	b := newPolicyTestBridge()
 
 	// Before failing closed, checkState is clear.
 	if err := b.hostState.checkState(); err != nil {
@@ -226,12 +242,113 @@ func TestCheckState_BlocksHandlers(t *testing.T) {
 	}
 }
 
+func TestCheckState_IgnoredWithoutPolicy(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	b.hostState.setUVMInconsistent(errors.New("inbox mount failed"))
+
+	if err := b.hostState.checkState(); err != nil {
+		t.Fatalf("checkState should ignore the consistency latch without a policy, got %v", err)
+	}
+}
+
+func TestPrepareSecurityContext_PolicyGate(t *testing.T) {
+	newSpec := func(root string) *oci.Spec {
+		return &oci.Spec{
+			Root:    &oci.Root{Path: root},
+			Process: &oci.Process{},
+		}
+	}
+
+	t.Run("reference material without policy", func(t *testing.T) {
+		b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+		b.hostState.securityOptions.UvmReferenceInfo = "reference"
+		spec := newSpec(t.TempDir())
+		stageCalled := false
+
+		err := b.hostState.prepareSecurityContext(context.Background(), spec, func(context.Context, string) error {
+			stageCalled = true
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("prepareSecurityContext returned error: %v", err)
+		}
+		if stageCalled {
+			t.Fatal("PSP DLL staging should not run without a policy")
+		}
+		if len(spec.Process.Env) != 0 {
+			t.Fatalf("security-context environment was added without a policy: %v", spec.Process.Env)
+		}
+	})
+
+	t.Run("policy", func(t *testing.T) {
+		b := newPolicyTestBridge()
+		spec := newSpec(t.TempDir())
+		var stagedDir string
+
+		err := b.hostState.prepareSecurityContext(context.Background(), spec, func(_ context.Context, dir string) error {
+			stagedDir = dir
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("prepareSecurityContext returned error: %v", err)
+		}
+		if stagedDir == "" {
+			t.Fatal("PSP DLL staging was not invoked with a policy")
+		}
+		if _, err := os.Stat(filepath.Join(stagedDir, securitypolicy.PolicyFilename)); err != nil {
+			t.Fatalf("security policy file was not written: %v", err)
+		}
+		if len(spec.Process.Env) != 1 ||
+			!strings.HasPrefix(spec.Process.Env[0], "UVM_SECURITY_CONTEXT_DIR=") {
+			t.Fatalf("security-context environment was not added: %v", spec.Process.Env)
+		}
+	})
+}
+
+func TestStageDLL(t *testing.T) {
+	t.Run("missing source", func(t *testing.T) {
+		staged, err := stageDLL(context.Background(), filepath.Join(t.TempDir(), "missing.dll"), t.TempDir())
+		if err != nil {
+			t.Fatalf("stageDLL returned error for missing source: %v", err)
+		}
+		if staged {
+			t.Fatal("stageDLL reported staging a missing source")
+		}
+	})
+
+	t.Run("copy", func(t *testing.T) {
+		srcDir := t.TempDir()
+		dstDir := t.TempDir()
+		src := filepath.Join(srcDir, "test.dll")
+		want := []byte("test dll")
+		if err := os.WriteFile(src, want, 0644); err != nil {
+			t.Fatalf("failed to write source DLL: %v", err)
+		}
+
+		staged, err := stageDLL(context.Background(), src, dstDir)
+		if err != nil {
+			t.Fatalf("stageDLL returned error: %v", err)
+		}
+		if !staged {
+			t.Fatal("stageDLL did not report a successful copy")
+		}
+		got, err := os.ReadFile(filepath.Join(dstDir, filepath.Base(src)))
+		if err != nil {
+			t.Fatalf("failed to read staged DLL: %v", err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("staged DLL content = %q, want %q", got, want)
+		}
+	})
+}
+
 // TestModifySettings_MappedDirectory_TagsInboxResponse verifies that a forwarded
 // mapped-directory operation registers its request ID for inbox-response
 // monitoring and is forwarded to the inbox GCS, so a later failure response can
 // fail the UVM closed.
 func TestModifySettings_MappedDirectory_TagsInboxResponse(t *testing.T) {
-	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	b := newPolicyTestBridge()
 
 	msg := buildModifySettingsRequest(t,
 		guestresource.ResourceTypeMappedDirectory,
@@ -258,6 +375,42 @@ func TestModifySettings_MappedDirectory_TagsInboxResponse(t *testing.T) {
 	}
 
 	// And the request must have been forwarded to the inbox GCS.
+	select {
+	case got := <-b.sendToGCSCh:
+		if got.header.ID != id {
+			t.Errorf("forwarded request ID = %d, want %d", got.header.ID, id)
+		}
+	default:
+		t.Error("mapped-directory request was not forwarded to inbox GCS")
+	}
+}
+
+func TestModifySettings_MappedDirectory_DoesNotTagInboxResponseWithoutPolicy(t *testing.T) {
+	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+
+	msg := buildModifySettingsRequest(t,
+		guestresource.ResourceTypeMappedDirectory,
+		guestrequest.RequestTypeAdd,
+		hcsschema.MappedDirectory{ContainerPath: `C:\mnt\ro`, ReadOnly: true},
+	)
+	const id sequenceID = 78
+	req := &request{
+		ctx:     context.Background(),
+		header:  messageHeader{Type: prot.MsgTypeRequest | prot.MsgType(prot.RPCModifySettings), Size: uint32(len(msg)) + prot.HdrSize, ID: id},
+		message: msg,
+	}
+
+	if err := b.modifySettings(req); err != nil {
+		t.Fatalf("modifySettings returned error: %v", err)
+	}
+
+	b.monitoredMu.Lock()
+	_, monitored := b.monitoredIDs[id]
+	b.monitoredMu.Unlock()
+	if monitored {
+		t.Errorf("mapped-directory request ID %d was registered without a policy", id)
+	}
+
 	select {
 	case got := <-b.sendToGCSCh:
 		if got.header.ID != id {
@@ -1286,7 +1439,7 @@ func TestDeleteContainerState_DeniesRunningOrMounted(t *testing.T) {
 		}
 	}
 
-	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	b := newPolicyTestBridge()
 	c := &Container{id: cid, processes: make(map[uint32]*containerProcess)}
 	if err := b.hostState.AddContainer(context.Background(), cid, c); err != nil {
 		t.Fatalf("AddContainer: %v", err)
@@ -1683,7 +1836,7 @@ func buildLogForwardServiceRequestWithProviders(t *testing.T, providers []etw.Et
 // entry has nothing for the enforcer to evaluate; accepting it would let the
 // host smuggle a disallowed GUID past name-based policy.
 func TestModifyServiceSettings_LogForward_GUIDOnly_Denied(t *testing.T) {
-	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	b := newPolicyTestBridge()
 
 	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
 		{ProviderName: "", ProviderGUID: "80ce50de-d264-4581-950d-abadeee0d340"},
@@ -1708,7 +1861,7 @@ func TestModifyServiceSettings_LogForward_GUIDOnly_Denied(t *testing.T) {
 // could pair an allowed Name with a disallowed GUID and bypass name-based
 // policy because inbox GCS subscribes by GUID.
 func TestModifyServiceSettings_LogForward_NameGUIDMismatch_Denied(t *testing.T) {
-	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	b := newPolicyTestBridge()
 
 	// Name resolves to 80ce50de-d264-4581-950d-abadeee0d340 in the
 	// well-known map; deliberately supply an unrelated valid GUID.
@@ -1737,7 +1890,7 @@ func TestModifyServiceSettings_LogForward_NameGUIDMismatch_Denied(t *testing.T) 
 // is rejected when paired with a ProviderGUID: the sidecar has no ground
 // truth to verify the host's claim against.
 func TestModifyServiceSettings_LogForward_UnknownNameWithGUID_Denied(t *testing.T) {
-	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	b := newPolicyTestBridge()
 
 	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
 		{
@@ -1764,7 +1917,7 @@ func TestModifyServiceSettings_LogForward_UnknownNameWithGUID_Denied(t *testing.
 // ProviderGUID matches the well-known lookup for ProviderName passes
 // validation and is forwarded to inbox GCS.
 func TestModifyServiceSettings_LogForward_NameMatchingGUID_Allowed(t *testing.T) {
-	b := newTestBridge(&securitypolicy.OpenDoorSecurityPolicyEnforcer{})
+	b := newPolicyTestBridge()
 
 	payload := buildLogForwardServiceRequestWithProviders(t, []etw.EtwProvider{
 		{

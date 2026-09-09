@@ -122,18 +122,42 @@ func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io
 	}
 }
 
+func (h *Host) WCOWContainerPolicyState(containerID string) securitypolicy.WCOWContainerPolicyState {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	state := securitypolicy.WCOWContainerPolicyState{
+		ContainerRootPath: h.containerRootPaths[containerID],
+	}
+	for volumeGUID, containers := range h.blockCIMVolumeContainers {
+		if _, ok := containers[containerID]; ok {
+			state.VerifiedLayerVolumeGUIDs = append(state.VerifiedLayerVolumeGUIDs, volumeGUID.String())
+		}
+	}
+	return state
+}
+
+// HasSecurityPolicy reports whether the host has an encoded workload policy.
+func (h *Host) HasSecurityPolicy() bool {
+	return securitypolicy.HasSecurityPolicy(h.securityOptions.PolicyEnforcer)
+}
+
 // checkState returns an error if the UVM has entered an inconsistent state from
-// which the sidecar cannot safely recover, in which case further mount/unmount,
-// container creation and deletion must be refused.
+// which the sidecar cannot safely recover. As in LCOW, the consistency latch is
+// only consulted when a workload policy is configured.
 func (h *Host) checkState() error {
+	if !h.HasSecurityPolicy() {
+		return nil
+	}
 	return h.uvmError.Check()
 }
 
 // setUVMInconsistent records that the UVM has entered an inconsistent state and
-// logs the cause. After this, checkState refuses further operations. The caller
-// passes the specific cause; see its call sites for the conditions that trigger
-// it.
+// logs the cause. As in LCOW, this is a no-op without a workload policy.
 func (h *Host) setUVMInconsistent(cause error) {
+	if !h.HasSecurityPolicy() {
+		return
+	}
 	h.uvmError.Set(cause)
 	log.G(context.Background()).WithError(cause).Error("Host marked inconsistent. All further mounts/unmounts, container creation and deletion will fail.")
 }

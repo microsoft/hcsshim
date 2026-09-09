@@ -6,6 +6,7 @@ package securitypolicy
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -1872,7 +1873,6 @@ func twoContainersSharedLayersRegistryRego(dropping bool) string {
 // value is dropped when create(cmd) narrows to A first). With dropping off, a
 // request is only allowed if a matched container authorizes every requested
 // value, so registry(dangerous) against A is denied outright.
-// TODO: maybe delete it if it's too much.
 func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	dangerous := &hcsschema.RegistryChanges{
 		AddValues: []hcsschema.RegistryValue{
@@ -2007,6 +2007,35 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 	})
 }
 
+func Test_RegistryChanges_MarshalRego_EscapesControlCharacters_Windows(t *testing.T) {
+	key := registryKeyInternal{
+		Hive:     "System\tHive",
+		Name:     "Control\nSet\\\"Quoted\"",
+		Volatile: true,
+	}
+	var decodedKey registryKeyInternal
+	if err := json.Unmarshal([]byte(key.marshalRego()), &decodedKey); err != nil {
+		t.Fatalf("registry key is not valid JSON-compatible Rego: %v", err)
+	}
+	if decodedKey != key {
+		t.Fatalf("registry key did not round trip: got %#v, want %#v", decodedKey, key)
+	}
+
+	value := registryValueInternal{
+		Key:         key,
+		Name:        "Value\r\nName",
+		Type:        "String",
+		StringValue: "line1\nline2\t\\\"quoted\"",
+	}
+	var decodedValue registryValueInternal
+	if err := json.Unmarshal([]byte(value.marshalRego()), &decodedValue); err != nil {
+		t.Fatalf("registry value is not valid JSON-compatible Rego: %v", err)
+	}
+	if decodedValue != value {
+		t.Fatalf("registry value did not round trip: got %#v, want %#v", decodedValue, value)
+	}
+}
+
 // Test_Rego_RegistryChanges_DeleteKeys_Windows verifies that delete keys flow
 // through the same narrowing/dropping machinery as add values. Container B
 // authorizes deleting a specific key; container A authorizes nothing. With
@@ -2014,7 +2043,6 @@ func Test_Rego_RegistryChanges_NarrowsMatches_Windows(t *testing.T) {
 // is then denied) or, if create(cmd) narrows to A first, the delete is dropped.
 // With dropping off, the delete is only allowed against a container (B) that
 // authorizes it.
-// TODO: maybe delete it if it's too much.
 func Test_Rego_RegistryChanges_DeleteKeys_Windows(t *testing.T) {
 	deleteRequest := &hcsschema.RegistryChanges{
 		DeleteKeys: []hcsschema.RegistryKey{
