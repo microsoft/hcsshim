@@ -469,11 +469,11 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 			return true
 		})
 	}
-	if signal == 0x9 && eid == "" && ht.host != nil {
-		// If this is a SIGKILL against the init process we start a background
-		// timer and wait on either the timer expiring or the process exiting
-		// cleanly. If the timer expires first we forcibly close the UVM as we
-		// assume the guest is misbehaving for some reason.
+	if signal == 0x9 && eid == "" && ht.host != nil && ht.ownsHost {
+		// SIGKILL to a UVM-owning task's init process: watchdog the guest and
+		// force-close the UVM if it doesn't exit in time. Gated on ownsHost so a
+		// workload container sharing the pod UVM can't tear down the sandbox and
+		// break in-place container restarts on Hyper-V pods.
 		go func() {
 			t := time.NewTimer(30 * time.Second)
 			execExited := make(chan struct{})
@@ -485,9 +485,10 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 			case <-execExited:
 				t.Stop()
 			case <-t.C:
-				// Safe to call multiple times if called previously on
-				// successful shutdown.
-				ht.host.Close()
+				log.G(ctx).WithField("tid", ht.id).Warn(
+					"hcsTask::KillExec watchdog expired; force-closing owned UVM")
+				// closeHost honors the ownsHost guard and emits TaskExit.
+				ht.closeHost(ctx)
 			}
 		}()
 	}
