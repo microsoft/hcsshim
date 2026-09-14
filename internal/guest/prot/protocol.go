@@ -270,6 +270,14 @@ type GcsCapabilities struct {
 	// passed to a client of the HCS. This can be useful to pass runtime
 	// specific capabilities not tied to the platform itself.
 	GuestDefinedCapabilities GcsGuestCapabilities `json:",omitempty"`
+	// MinContractVersion and MaxContractVersion advertise this GCS's supported
+	// guest/host contract range (see internal/gcscompat). A zero
+	// MaxContractVersion means the guest predates the contract.
+	MinContractVersion uint32 `json:",omitempty"`
+	MaxContractVersion uint32 `json:",omitempty"`
+	// GcsCommit is the hcsshim source commit this GCS was built from,
+	// diagnostic only.
+	GcsCommit string `json:",omitempty"`
 }
 
 // GcsGuestCapabilities represents the customized guest capabilities supported
@@ -307,6 +315,14 @@ type NegotiateProtocol struct {
 	MessageBase
 	MinimumVersion uint32
 	MaximumVersion uint32
+	// MinContractVersion and MaxContractVersion advertise the host's supported
+	// guest/host contract range (see internal/gcscompat). They are additive and
+	// optional: a zero MaxContractVersion means the host predates the contract.
+	MinContractVersion uint32 `json:",omitempty"`
+	MaxContractVersion uint32 `json:",omitempty"`
+	// HostCommit is the hcsshim source commit the host was built from,
+	// diagnostic only.
+	HostCommit string `json:",omitempty"`
 }
 
 // ContainerCreate is the message from the HCS specifying to create a container
