@@ -14,26 +14,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func Test_isStrictSubPath(t *testing.T) {
-	for _, tc := range []struct {
-		base   string
-		target string
-		want   bool
-	}{
-		{"/mnt/data", "/mnt/data/subdir", true},
-		{"/mnt/data", "/mnt/data", false},
-		{"/mnt/data", "/mnt/database", false},
-		{"/mnt/data", "/mnt", false},
-		{"/mnt/data/", "/mnt/data/subdir/", true},
-		{"/", "/etc", true},
-		{"/mnt/data", "/other", false},
-	} {
-		if got := isStrictSubPath(tc.base, tc.target); got != tc.want {
-			t.Errorf("isStrictSubPath(%q, %q) = %v, want %v", tc.base, tc.target, got, tc.want)
-		}
-	}
-}
-
 func Test_mountIsReadonly(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -76,10 +56,10 @@ func Test_mountIsBind(t *testing.T) {
 }
 
 func Test_deepestParentMount(t *testing.T) {
-	mounts := []oci.Mount{
-		{Destination: "/mnt/data"},
-		{Destination: "/mnt/data/a"},
-		{Destination: "/other"},
+	seen := map[string]oci.Mount{
+		"/mnt/data":   {Destination: "/mnt/data"},
+		"/mnt/data/a": {Destination: "/mnt/data/a"},
+		"/other":      {Destination: "/other"},
 	}
 	for _, tc := range []struct {
 		name     string
@@ -90,10 +70,11 @@ func Test_deepestParentMount(t *testing.T) {
 		{"direct_child", "/mnt/data/x", "/mnt/data", true},
 		{"deepest_wins", "/mnt/data/a/b", "/mnt/data/a", true},
 		{"self_excluded", "/mnt/data", "", false},
+		{"prefix_not_matched", "/mnt/database", "", false},
 		{"no_parent", "/nope", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := deepestParentMount(tc.dest, mounts)
+			got, ok := deepestParentMount(tc.dest, seen)
 			if ok != tc.wantOK {
 				t.Fatalf("deepestParentMount(%q) ok = %v, want %v", tc.dest, ok, tc.wantOK)
 			}
@@ -102,6 +83,56 @@ func Test_deepestParentMount(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test_createMountTarget covers the target-type rules: bind children take the
+// source's file/dir type, a missing bind source is an error, and non-bind
+// children always get a directory.
+func Test_createMountTarget(t *testing.T) {
+	dirSrc := t.TempDir()
+	fileSrc := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(fileSrc, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("bind_dir_source_makes_dir", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "t")
+		if err := createMountTarget(target, oci.Mount{Type: "bind", Source: dirSrc, Options: []string{"bind"}}); err != nil {
+			t.Fatal(err)
+		}
+		if info, err := os.Stat(target); err != nil || !info.IsDir() {
+			t.Fatalf("want directory, err=%v", err)
+		}
+	})
+
+	t.Run("bind_file_source_makes_file", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "t")
+		if err := createMountTarget(target, oci.Mount{Type: "bind", Source: fileSrc, Options: []string{"bind"}}); err != nil {
+			t.Fatal(err)
+		}
+		if info, err := os.Stat(target); err != nil || info.IsDir() {
+			t.Fatalf("want file, err=%v", err)
+		}
+	})
+
+	t.Run("bind_missing_source_errors", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "t")
+		if err := createMountTarget(target, oci.Mount{Type: "bind", Source: filepath.Join(dirSrc, "nope"), Options: []string{"bind"}}); err == nil {
+			t.Fatal("expected an error for a missing bind source")
+		}
+	})
+
+	t.Run("non_bind_child_makes_dir", func(t *testing.T) {
+		// A tmpfs child needs a directory mountpoint even though its source
+		// label here points at a file; only bind mounts inspect the source.
+		target := filepath.Join(t.TempDir(), "t")
+		if err := createMountTarget(target, oci.Mount{Type: "tmpfs", Source: fileSrc}); err != nil {
+			t.Fatal(err)
+		}
+		if info, err := os.Stat(target); err != nil || !info.IsDir() {
+			t.Fatalf("want directory, err=%v", err)
+		}
+	})
 }
 
 // Test_ensureNestedMountTargets_ReadonlyParent verifies the reported bug is

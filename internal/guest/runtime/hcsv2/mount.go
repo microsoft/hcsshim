@@ -7,7 +7,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -36,10 +35,18 @@ import (
 // surfaces and unaffected containers are unchanged.
 func ensureNestedMountTargets(ctx context.Context, spec *oci.Spec) {
 	// runc applies mounts in spec order, so when it creates a mount point only
-	// the mounts before this one are active. The parent the mount point is
-	// created under is therefore the deepest ancestor among the preceding mounts.
-	for i, child := range spec.Mounts {
-		parent, ok := deepestParentMount(child.Destination, spec.Mounts[:i])
+	// the mounts before this one are active. seen holds those preceding mounts
+	// keyed by cleaned destination, so a child's deepest ancestor is found in
+	// O(path depth) instead of rescanning every prior mount.
+	seen := make(map[string]oci.Mount, len(spec.Mounts))
+	for _, child := range spec.Mounts {
+		cleanDest := filepath.Clean(child.Destination)
+		parent, ok := deepestParentMount(cleanDest, seen)
+		// Register this child before any skip below, since a skipped mount can
+		// still be the parent of a later one.
+		if _, exists := seen[cleanDest]; !exists {
+			seen[cleanDest] = child
+		}
 		if !ok || !mountIsReadonly(parent) || !mountIsBind(parent) {
 			// runc only fails when it must create the mount point under a
 			// read-only bind mount; otherwise it creates the target itself.
@@ -71,47 +78,31 @@ func ensureNestedMountTargets(ctx context.Context, spec *oci.Spec) {
 				Warn("failed to resolve nested mount point under read-only mount")
 			continue
 		}
-		if err := createMountTarget(target, child.Source); err != nil {
+		if err := createMountTarget(target, child); err != nil {
 			log.G(ctx).WithError(err).WithField("target", target).
 				Warn("failed to pre-create mount point under read-only mount")
 		}
 	}
 }
 
-// deepestParentMount returns the mount in mounts whose destination is the
-// closest strict path ancestor of dest. When several are ancestors (stacked
-// mounts) the one with the longest destination wins, which is where dest
-// resolves to once those mounts are applied. Callers pass the mounts preceding
-// dest in spec order, since those are the ones runc has already applied.
-func deepestParentMount(dest string, mounts []oci.Mount) (oci.Mount, bool) {
-	cleanDest := filepath.Clean(dest)
-	var best oci.Mount
-	found := false
-	for _, m := range mounts {
-		p := filepath.Clean(m.Destination)
-		if !isStrictSubPath(p, cleanDest) {
-			continue
+// deepestParentMount returns the mount in seen whose destination is the closest
+// ancestor of dest. It walks up the path one component at a time, so the first
+// match is the deepest (closest) ancestor. seen must hold only the mounts that
+// precede dest in spec order (the ones runc has already applied), keyed by
+// cleaned destination.
+func deepestParentMount(dest string, seen map[string]oci.Mount) (oci.Mount, bool) {
+	dest = filepath.Clean(dest)
+	for {
+		parent := filepath.Dir(dest)
+		if parent == dest {
+			// Reached the root without finding an ancestor mount.
+			return oci.Mount{}, false
 		}
-		if !found || len(p) > len(filepath.Clean(best.Destination)) {
-			best = m
-			found = true
+		if m, ok := seen[parent]; ok {
+			return m, true
 		}
+		dest = parent
 	}
-	return best, found
-}
-
-// isStrictSubPath reports whether target is strictly nested underneath base.
-func isStrictSubPath(base, target string) bool {
-	base = filepath.Clean(base)
-	target = filepath.Clean(target)
-	if base == target {
-		return false
-	}
-	rel, err := filepath.Rel(base, target)
-	if err != nil {
-		return false
-	}
-	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 // mountIsReadonly reports whether the mount will be mounted read-only, honoring
@@ -142,30 +133,35 @@ func mountIsBind(m oci.Mount) bool {
 	return false
 }
 
-// createMountTarget creates the mountpoint at target. It mirrors runc's own
-// behavior: if source is a non-directory the target is created as an empty file,
-// otherwise it is created as a directory. Intermediate directories are created
-// as needed, and an already-existing target is left untouched.
-func createMountTarget(target, source string) error {
+// createMountTarget creates the mountpoint at target. Only a bind mount uses its
+// source's type to decide the target type: a non-directory source needs a file
+// mountpoint, anything else a directory. Every other mount type (e.g. tmpfs)
+// needs a directory regardless of any source label. Intermediate directories are
+// created as needed, and an already-existing target is left untouched.
+func createMountTarget(target string, child oci.Mount) error {
 	if _, err := os.Lstat(target); err == nil {
 		// Something already exists at the mountpoint (e.g. shipped in the image
 		// or the volume). Leave it as-is and let runc validate compatibility.
 		return nil
 	}
 
-	sourceIsDir := true
-	if info, err := os.Stat(source); err == nil {
-		sourceIsDir = info.IsDir()
+	if mountIsBind(child) {
+		info, err := os.Stat(child.Source)
+		if err != nil {
+			// Surface the failure (e.g. a missing bind source) to the caller,
+			// which logs it, instead of silently assuming a directory.
+			return err
+		}
+		if !info.IsDir() {
+			if err := mkdirAllModePerm(filepath.Dir(target)); err != nil {
+				return err
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				return err
+			}
+			return f.Close()
+		}
 	}
-	if sourceIsDir {
-		return mkdirAllModePerm(target)
-	}
-	if err := mkdirAllModePerm(filepath.Dir(target)); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	return f.Close()
+	return mkdirAllModePerm(target)
 }
