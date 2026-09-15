@@ -39,6 +39,7 @@ require (
 	github.com/containerd/plugin v1.1.0
 	github.com/containerd/ttrpc v1.2.8
 	github.com/containerd/typeurl/v2 v2.3.0
+	github.com/cyphar/filepath-securejoin v0.6.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.22.0
 	github.com/linuxkit/virtsock v0.0.0-20241009230534-cb6a20cc0422
@@ -80,7 +81,6 @@ require (
 	github.com/containerd/protobuild v0.3.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
-	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/docker/cli v29.7.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect

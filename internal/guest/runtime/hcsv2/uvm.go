@@ -861,6 +861,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		log.G(ctx).WithField("cid", id).Info("Host network namespace enabled: removed network namespace from OCI spec")
 	}
 
+	// Pre-create mountpoints for mounts nested under a read-only mount so that
+	// runc does not have to create them under an already read-only parent
+	// (which fails with EROFS). Runs on the final mount set for all container
+	// types, just before the spec is handed to the runtime.
+	ensureNestedMountTargets(ctx, settings.OCISpecification)
+
 	// Create the BundlePath
 	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)
