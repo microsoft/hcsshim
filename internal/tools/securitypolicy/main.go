@@ -22,6 +22,24 @@ var (
 	outputRaw         = flag.Bool("r", false, "whether to print the raw output")
 )
 
+// linuxPolicyContainerConfigs returns the container configs to enumerate in a
+// non-fragment linux policy.
+//
+// An open-door policy allows every container, so it must not enumerate any:
+// MarshalPolicy rejects allow_all combined with a non-empty container list.
+// Adding the default pause container would also force a pointless registry
+// pull to compute its dm-verity root hash.
+//
+// This applies only to whole policies. Fragments always include the default
+// containers, since MarshalFragment takes no allowAll argument and a fragment
+// cannot be open-door.
+func linuxPolicyContainerConfigs(config *securitypolicy.PolicyConfig) []securitypolicy.ContainerConfig {
+	if config.AllowAll {
+		return config.Containers
+	}
+	return append(config.Containers, helpers.DefaultContainerConfigs()...)
+}
+
 func main() {
 	flag.Parse()
 	if flag.NArg() != 0 || len(*configFile) == 0 {
@@ -77,7 +95,7 @@ func main() {
 			switch *guestOS {
 			case "linux":
 				// windows_container entries are ignored when targeting linux.
-				config.Containers = append(config.Containers, helpers.DefaultContainerConfigs()...)
+				config.Containers = linuxPolicyContainerConfigs(config)
 				policyContainers, cerr := helpers.PolicyContainersFromConfigs(config.Containers)
 				if cerr != nil {
 					return cerr
