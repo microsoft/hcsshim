@@ -2476,7 +2476,7 @@ func Test_Rego_EnforceLogProviderPolicy_EmptyAllowList_DeniesAll_Windows(t *test
 
 // Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows pins
 // the non-regression behaviour for policies authored before log_provider was
-// introduced (api.rego entry: introducedVersion=0.11.0, default_results.allowed=true).
+// introduced (api.rego entry: introducedVersion=0.12.0, default_results.allowed=true).
 // Such policies omit allowed_log_providers entirely; EnforceLogProviderPolicy
 // must return the input list unchanged with no error so existing CWCOW/WCOW
 // policies do not break when the framework gains the new enforcement point.
@@ -2488,7 +2488,7 @@ func Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows(t *t
 	// here would shadow the default and route through the framework rule,
 	// which defaults to deny.
 	rego := fmt.Sprintf(`package policy
-	api_version := "0.10.0"
+	api_version := "0.11.0"
 	framework_version := "%s"
 	`, frameworkVersion)
 
@@ -2501,7 +2501,7 @@ func Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows(t *t
 	kept, err := policy.EnforceLogProviderPolicy(ctx,
 		[]string{"any-provider-not-in-any-list"})
 	if err != nil {
-		t.Errorf("expected pre-0.11.0 policy to allow any provider via default_results: %v", err)
+		t.Errorf("expected pre-0.12.0 policy to allow any provider via default_results: %v", err)
 	}
 	// default_results.providers_to_keep is null, so getProvidersToKeep
 	// returns the input list unchanged.
