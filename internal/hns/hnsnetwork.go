@@ -43,9 +43,10 @@ type HNSNetwork struct {
 }
 
 type hnsResponse struct {
-	Success bool
-	Error   string
-	Output  json.RawMessage
+	Success   bool
+	Error     string
+	ErrorCode int32 `json:"ErrorCode,omitempty"`
+	Output    json.RawMessage
 }
 
 // HNSNetworkRequest makes a call into HNS to update/query a single network
