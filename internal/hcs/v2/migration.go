@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/computecore"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/ot"
+	"github.com/Microsoft/hcsshim/pkg/computecore"
 
 	"go.opentelemetry.io/otel/attribute"
 )

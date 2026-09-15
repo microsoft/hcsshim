@@ -6,8 +6,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/computecore"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/pkg/computecore"
 )
 
 // GetServiceProperties returns properties of the host compute service.
