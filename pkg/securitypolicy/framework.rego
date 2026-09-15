@@ -423,7 +423,7 @@ valid_envs_for_all(items) := envs if {
 }
 
 workingDirectory_ok(working_dir) if {
-    input.workingDir == working_dir
+    normalized_path(input.workingDir) == normalized_path(working_dir)
 }
 
 privileged_ok(elevation_allowed) if {
@@ -925,8 +925,8 @@ mountConstraint_ok(constraint, mount) if {
     windows_mount_type_ok(mount)
     is_named_pipe(mount.destination)
     mount.destination != ""
-    mount.destination == constraint.destination
-    constraint.source == mount.source
+    normalized_path(mount.destination) == normalized_path(constraint.destination)
+    normalized_path(constraint.source) == normalized_path(mount.source)
     mountOptions_ok(constraint, mount)
 }
 
@@ -956,7 +956,7 @@ mountConstraint_ok(constraint, mount) if {
     windows_mount_type_ok(mount)
     not is_named_pipe(mount.destination)
     mount.destination != ""
-    mount.destination == constraint.destination
+    normalized_path(mount.destination) == normalized_path(constraint.destination)
     mountOptions_ok(constraint, mount)
 }
 
@@ -1024,6 +1024,16 @@ is_linux if {
 
 is_windows if {
     data.metadata.operatingsystem[ostype] == "windows"
+}
+
+# normalized_path canonicalizes a path for comparison: case-insensitive on
+# Windows, unchanged on Linux. Use it on both sides of any path compare.
+normalized_path(path) := lower(path) if {
+    is_windows
+}
+
+normalized_path(path) := path if {
+    is_linux
 }
 
 default exec_in_container := {"allowed": false}
@@ -1802,7 +1812,7 @@ scratch_unmount := {"metadata": [remove_scratch_mount], "allowed": true} if {
 default mapped_directory_mount := {"allowed": false}
 
 mapped_directory_mounted(target) if {
-    data.metadata.mapped_directories[target]
+    data.metadata.mapped_directories[normalized_path(target)]
 }
 
 default mapped_directory_ok := false
@@ -1819,7 +1829,7 @@ default mapped_directory_ok := false
 # allowed by an entry in the base policy
 mapped_directory_ok if {
     mapped_directory := data.policy.mapped_directories[_]
-    input.containerPath == mapped_directory.container_path
+    normalized_path(input.containerPath) == normalized_path(mapped_directory.container_path)
     input.readOnly == mapped_directory.read_only
 }
 
@@ -1828,7 +1838,7 @@ mapped_directory_ok if {
     feed := data.metadata.issuers[_].feeds[_]
     some fragment in feed
     mapped_directory := fragment.mapped_directories[_]
-    input.containerPath == mapped_directory.container_path
+    normalized_path(input.containerPath) == normalized_path(mapped_directory.container_path)
     input.readOnly == mapped_directory.read_only
 }
 
@@ -1838,7 +1848,7 @@ mapped_directory_mount := {"metadata": [add_mapped_dir], "allowed": true} if {
     add_mapped_dir := {
         "name": "mapped_directories",
         "action": "add",
-        "key": input.containerPath,
+        "key": normalized_path(input.containerPath),
         "value": {"readOnly": input.readOnly},
     }
 }
@@ -1850,7 +1860,7 @@ mapped_directory_unmount := {"metadata": [remove_mapped_dir], "allowed": true} i
     remove_mapped_dir := {
         "name": "mapped_directories",
         "action": "remove",
-        "key": input.unmountTarget,
+        "key": normalized_path(input.unmountTarget),
     }
 }
 

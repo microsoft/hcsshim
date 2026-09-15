@@ -208,6 +208,30 @@ func Test_Rego_WorkingDirectoryPolicy_NoMatches_Windows(t *testing.T) {
 		t.Errorf("Test_Rego_WorkingDirectoryPolicy_NoMatches: %v", err)
 	}
 }
+func Test_Rego_WorkingDirectoryPolicy_CaseInsensitive_Windows(t *testing.T) {
+	testFunc := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupSimpleRegoCreateContainerTestWindows(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// Windows paths are case-insensitive, so a working directory that differs
+		// only in case from the policy must still be allowed.
+		workingDir := strings.ToUpper(tc.workingDir)
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(tc.ctx, tc.containerID, tc.argList, tc.envList, workingDir, tc.mounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a working directory matching the policy except for casing was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_WorkingDirectoryPolicy_CaseInsensitive_Windows: %v", err)
+	}
+}
+
 func Test_Rego_EnforceCreateContainer_Windows(t *testing.T) {
 	f := func(p *generatedWindowsConstraints) bool {
 		tc, err := setupSimpleRegoCreateContainerTestWindows(p)
@@ -345,6 +369,45 @@ func Test_Rego_MountPolicy_BindTypeAllowed_Windows(t *testing.T) {
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_BindTypeAllowed_Windows: %v", err)
+	}
+}
+
+func Test_Rego_MountPolicy_CaseInsensitiveDestination_Windows(t *testing.T) {
+	f := func(p *generatedWindowsConstraints) bool {
+		c := selectWindowsContainerFromContainerList(p.containers, testRand)
+		mnt := mountInternal{
+			Source:      "C:\\host\\share",
+			Destination: "C:\\Container\\Share",
+			Options:     []string{"ro"},
+		}
+		c.Mounts = append(c.Mounts, mnt)
+
+		tc, err := setupRegoCreateContainerTestWindows(p, c, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		// Windows paths are case-insensitive, so a destination that differs only
+		// in case from the policy constraint must still be allowed.
+		requestMounts := []oci.Mount{
+			{
+				Source:      mnt.Source,
+				Destination: "c:\\container\\share",
+				Options:     mnt.Options,
+			},
+		}
+
+		_, _, _, err = tc.policy.EnforceCreateContainerPolicyV2(p.ctx, tc.containerID, tc.argList, tc.envList, tc.workingDir, requestMounts, tc.user, nil)
+		if err != nil {
+			t.Errorf("a mount matching the policy except for destination casing was denied: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 10, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MountPolicy_CaseInsensitiveDestination_Windows: %v", err)
 	}
 }
 
@@ -2390,6 +2453,40 @@ func Test_Rego_EnforceMappedDirectoryMountPolicy_Duplicate_Container_Path_Window
 	}
 }
 
+func Test_Rego_EnforceMappedDirectoryMountPolicy_CaseInsensitive_Windows(t *testing.T) {
+	f := func(gc *generatedWindowsConstraints) bool {
+		tc, err := setupWindowsMappedDirectoriesTest(gc)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		rule := selectMappedDirectoryFromConstraints(gc, testRand)
+
+		// Windows paths are case-insensitive: a container path that differs only
+		// in case from the policy must match, and the mounted-state key must be
+		// normalized so a differently-cased unmount resolves to the same entry.
+		if err := tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, strings.ToUpper(rule.ContainerPath), rule.ReadOnly); err != nil {
+			t.Errorf("a mapped directory matching the policy except for casing was denied: %v", err)
+			return false
+		}
+		if err := tc.policy.EnforceMappedDirectoryUnmountPolicy(gc.ctx, strings.ToLower(rule.ContainerPath)); err != nil {
+			t.Errorf("a differently-cased mapped directory unmount was denied: %v", err)
+			return false
+		}
+		if err := tc.policy.EnforceMappedDirectoryMountPolicy(gc.ctx, rule.ContainerPath, rule.ReadOnly); err != nil {
+			t.Errorf("unable to re-mount mapped directory after unmount: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_EnforceMappedDirectoryMountPolicy_CaseInsensitive_Windows failed: %v", err)
+	}
+}
+
 func Test_Rego_EnforceMappedDirectoryUnmountPolicy_Removes_Mapped_Directory_Entries_Windows(t *testing.T) {
 	f := func(gc *generatedWindowsConstraints) bool {
 		tc, err := setupWindowsMappedDirectoriesTest(gc)
@@ -2552,7 +2649,7 @@ func Test_Rego_EnforceLogProviderPolicy_EmptyAllowList_DeniesAll_Windows(t *test
 
 // Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows pins
 // the non-regression behaviour for policies authored before log_provider was
-// introduced (api.rego entry: introducedVersion=0.11.0, default_results.allowed=true).
+// introduced (api.rego entry: introducedVersion=0.12.0, default_results.allowed=true).
 // Such policies omit allowed_log_providers entirely; EnforceLogProviderPolicy
 // must return the input list unchanged with no error so existing CWCOW/WCOW
 // policies do not break when the framework gains the new enforcement point.
@@ -2564,7 +2661,7 @@ func Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows(t *t
 	// here would shadow the default and route through the framework rule,
 	// which defaults to deny.
 	rego := fmt.Sprintf(`package policy
-	api_version := "0.10.0"
+	api_version := "0.11.0"
 	framework_version := "%s"
 	`, frameworkVersion)
 
@@ -2577,7 +2674,7 @@ func Test_Rego_EnforceLogProviderPolicy_PreFeatureAPIVersion_Allows_Windows(t *t
 	kept, err := policy.EnforceLogProviderPolicy(ctx,
 		[]string{"any-provider-not-in-any-list"})
 	if err != nil {
-		t.Errorf("expected pre-0.11.0 policy to allow any provider via default_results: %v", err)
+		t.Errorf("expected pre-0.12.0 policy to allow any provider via default_results: %v", err)
 	}
 	// default_results.providers_to_keep is null, so getProvidersToKeep
 	// returns the input list unchanged.
