@@ -162,9 +162,12 @@ type SecurityPolicyEnforcer interface {
 	LoadTransparencyTrustList(ctx context.Context, opts LoadTransparencyTrustListOptions) error
 	EnforceScratchMountPolicy(ctx context.Context, scratchPath string, encrypted bool) (err error)
 	EnforceScratchUnmountPolicy(ctx context.Context, scratchPath string) (err error)
+	EnforceMappedDirectoryMountPolicy(ctx context.Context, containerPath string, readOnly bool) (err error)
+	EnforceMappedDirectoryUnmountPolicy(ctx context.Context, containerPath string) (err error)
 	GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error)
-	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) (err error)
-	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error
+	EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string, volumeGUID string) (err error)
+	EnforceCIMUnmountPolicy(ctx context.Context, volumeGUID string) (err error)
+	EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryChanges interface{}) (interface{}, error)
 	// EnforceLogProviderPolicy validates a batch of requested ETW provider
 	// names against the policy's allowed_log_providers list. It returns the
 	// subset of provider names that the caller should forward to the inbox
@@ -374,16 +377,28 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Contex
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceMappedDirectoryMountPolicy(context.Context, string, bool) error {
+	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceMappedDirectoryUnmountPolicy(context.Context, string) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string, volumeGUID string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceCIMUnmountPolicy(ctx context.Context, volumeGUID string) error {
 	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryChanges interface{}) (interface{}, error) {
+	return registryChanges, nil
 }
 
 func (OpenDoorSecurityPolicyEnforcer) EnforceLogProviderPolicy(_ context.Context, providerNames []string) ([]string, error) {
@@ -527,16 +542,28 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(context.Cont
 	return errors.New("unmounting scratch is denied by the policy")
 }
 
+func (ClosedDoorSecurityPolicyEnforcer) EnforceMappedDirectoryMountPolicy(context.Context, string, bool) error {
+	return errors.New("mounting mapped directory is denied by the policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceMappedDirectoryUnmountPolicy(context.Context, string) error {
+	return errors.New("unmounting mapped directory is denied by the policy")
+}
+
 func (ClosedDoorSecurityPolicyEnforcer) GetUserInfo(spec *oci.Process, rootPath string) (IDName, []IDName, string, error) {
 	return IDName{}, nil, "", nil
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceVerifiedCIMsPolicy(ctx context.Context, containerID string, layerHashes []string, mountedCim []string, volumeGUID string) error {
 	return nil
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryValues interface{}) error {
-	return errors.New("registry changes are denied by policy")
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCIMUnmountPolicy(ctx context.Context, volumeGUID string) error {
+	return errors.New("CIM unmounting is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceRegistryChangesPolicy(ctx context.Context, containerID string, registryChanges interface{}) (interface{}, error) {
+	return nil, errors.New("registry changes are denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceLogProviderPolicy(context.Context, []string) ([]string, error) {

@@ -70,8 +70,9 @@ type PolicyConfig struct {
 	AllowEnvironmentVariableDropping bool                     `json:"allow_environment_variable_dropping" toml:"allow_environment_variable_dropping"`
 	// AllowUnencryptedScratch is a global policy configuration that allows
 	// all containers within a pod to be run without scratch encryption.
-	AllowUnencryptedScratch bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
-	AllowCapabilityDropping bool `json:"allow_capability_dropping" toml:"allow_capability_dropping"`
+	AllowUnencryptedScratch      bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
+	AllowCapabilityDropping      bool `json:"allow_capability_dropping" toml:"allow_capability_dropping"`
+	AllowRegistryChangesDropping bool `json:"allow_registry_changes_dropping" toml:"allow_registry_changes_dropping"`
 	// AllowLogProviderDropping controls how EnforceLogProviderPolicy handles
 	// requested ETW providers that are not on the allow-list. When false
 	// (default, fail-close) any disallowed provider causes the entire
@@ -103,6 +104,15 @@ type FragmentConfig struct {
 	Feed       string   `json:"feed" toml:"feed"`
 	MinimumSVN string   `json:"minimum_svn" toml:"minimum_svn"`
 	Includes   []string `json:"includes" toml:"include"`
+}
+
+// WindowsMappedDirectoryRule describes a single whitelisted VSMB mapped
+// directory share for a Windows UVM. Mapped directories are mounted at the
+// UVM level (before any container is started), so the rule is keyed only on
+// the container-visible path and the read-only flag.
+type WindowsMappedDirectoryRule struct {
+	ContainerPath string `json:"container_path" toml:"container_path"`
+	ReadOnly      bool   `json:"read_only" toml:"read_only"`
 }
 
 // AuthConfig contains toml or JSON config for registry authentication.
@@ -341,10 +351,42 @@ type WindowsContainer struct {
 	Layers           Layers                         `json:"layers"`
 	MountedCim       []string                       `json:"mounted_cim"`
 	WorkingDir       string                         `json:"working_dir"`
+	Mounts           Mounts                         `json:"mounts"`
+	RegistryChanges  WindowsRegistryChanges         `json:"registry_changes"`
 	ExecProcesses    []WindowsExecProcessConfig     `json:"-"`
 	Signals          []guestrequest.SignalValueWCOW `json:"-"`
 	AllowStdioAccess bool                           `json:"-"`
 	User             string                         `json:"-"`
+}
+
+// WindowsRegistryChanges is the set of registry changes a Windows container is
+// allowed to make. Registry changes are a Windows-only concept.
+type WindowsRegistryChanges struct {
+	AddValues  []WindowsRegistryValue `json:"add_values"`
+	DeleteKeys []WindowsRegistryKey   `json:"delete_keys"`
+}
+
+// WindowsRegistryKey identifies the registry key that a registry value applies
+// to.
+type WindowsRegistryKey struct {
+	Hive     string `json:"hive"`
+	Name     string `json:"name"`
+	Volatile bool   `json:"volatile"`
+}
+
+// WindowsRegistryValue is a single registry value a container is allowed to
+// write. Type selects which of the value fields is significant, mirroring the
+// registry value types understood by the runtime ("String", "ExpandedString",
+// "MultiString", "DWord", "QWord", "Binary", "CustomType", "None").
+type WindowsRegistryValue struct {
+	Key         WindowsRegistryKey `json:"key"`
+	Name        string             `json:"name"`
+	Type        string             `json:"type"`
+	StringValue string             `json:"string_value,omitempty"`
+	DWordValue  int32              `json:"dword_value,omitempty"`
+	QWordValue  int32              `json:"qword_value,omitempty"`
+	BinaryValue string             `json:"binary_value,omitempty"`
+	CustomType  int32              `json:"custom_type,omitempty"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
