@@ -9,6 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	winio "github.com/Microsoft/go-winio"
+	"golang.org/x/sys/windows"
 )
 
 // errWriter always fails writes, used to simulate a full disk (ENOSPC) when the
@@ -159,5 +162,120 @@ func Test_legacyLayerWriter_reset_ClosesFileOnSuccess(t *testing.T) {
 
 	if err := os.Remove(fpath); err != nil {
 		t.Errorf("expected temp file to be removable after reset (handle closed), got: %v", err)
+	}
+}
+
+func setSparse(t *testing.T, f *os.File) {
+	t.Helper()
+	if err := windows.DeviceIoControl(windows.Handle(f.Fd()), windows.FSCTL_SET_SPARSE, nil, 0, nil, 0, nil, nil); err != nil {
+		t.Fatalf("set sparse: %v", err)
+	}
+}
+
+func TestFindBackupStreamSizeSparse(t *testing.T) {
+	//nolint:gosec // G306: test files do not need restrictive permissions
+	for name, setup := range map[string]func(*testing.T) string{
+		"normalFile": func(t *testing.T) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "foo")
+			if err := os.WriteFile(path, []byte("testing 1 2 3\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			return path
+		},
+		"normalFileEmpty": func(t *testing.T) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "foo")
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.Close()
+			return path
+		},
+		"sparseEmpty": func(t *testing.T) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "foo")
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			setSparse(t, f)
+			return path
+		},
+		"sparseAllHoles": func(t *testing.T) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "foo")
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			setSparse(t, f)
+			if err := f.Truncate(1048576); err != nil {
+				t.Fatal(err)
+			}
+			return path
+		},
+		"sparseOneRange": func(t *testing.T) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "foo")
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			setSparse(t, f)
+			if _, err := f.WriteString("test sparse data"); err != nil {
+				t.Fatal(err)
+			}
+			return path
+		},
+		"sparseMultipleRanges": func(t *testing.T) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "foo")
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			setSparse(t, f)
+			if _, err = f.Write([]byte("leading data\n")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = f.Seek(1048576, 0); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = f.Write([]byte("trailing data\n")); err != nil {
+				t.Fatal(err)
+			}
+			return path
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := setup(t)
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+
+			fi, err := f.Stat()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			br := winio.NewBackupFileReader(f, true)
+			defer br.Close()
+
+			size, err := findBackupStreamSize(br)
+			if err != nil {
+				t.Fatalf("findBackupStreamSize: %v", err)
+			}
+			if size != fi.Size() {
+				t.Errorf("findBackupStreamSize = %d, want logical size %d", size, fi.Size())
+			}
+		})
 	}
 }
