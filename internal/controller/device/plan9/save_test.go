@@ -15,7 +15,7 @@ import (
 func TestSave_EmptyOK(t *testing.T) {
 	c := &Controller{
 		reservations:     map[guid.GUID]*reservation{},
-		sharesByHostPath: map[string]*share.Share{},
+		sharesByHostPath: map[string]map[*share.Share]struct{}{},
 	}
 
 	if err := c.Save(); err != nil {
@@ -25,8 +25,8 @@ func TestSave_EmptyOK(t *testing.T) {
 
 func TestSave_NonEmptyErrors(t *testing.T) {
 	c := &Controller{
-		reservations:     map[guid.GUID]*reservation{{}: {hostPath: "/h"}},
-		sharesByHostPath: map[string]*share.Share{},
+		reservations:     map[guid.GUID]*reservation{{}: {}},
+		sharesByHostPath: map[string]map[*share.Share]struct{}{},
 	}
 
 	// Save is unsupported here, so it must report a failed precondition

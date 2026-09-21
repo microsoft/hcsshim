@@ -5,8 +5,11 @@ package plan9
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9/mount"
@@ -15,6 +18,7 @@ import (
 	sharemocks "github.com/Microsoft/hcsshim/internal/controller/device/plan9/share/mocks"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
 var (
@@ -148,19 +152,116 @@ func TestReserve_DifferentHostPaths_CreatesSeparateShares(t *testing.T) {
 	}
 }
 
-// TestReserve_DifferentConfig_SameHostPath_Errors verifies that attempting to
-// reserve a host path with a different config (e.g., ReadOnly differs) when a
-// share already exists for that path returns an error.
-func TestReserve_DifferentConfig_SameHostPath_Errors(t *testing.T) {
+// TestFullLifecycle_ShareAndMountConfigs verifies configuration-based reuse and
+// independent cleanup of shares and guest mounts for the same host path.
+func TestFullLifecycle_ShareAndMountConfigs(t *testing.T) {
 	t.Parallel()
-	tc := newTestController(t, false)
-
-	_, _ = tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
-
-	// Same host path but read-only flag differs.
-	_, err := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path", ReadOnly: true}, mount.Config{})
-	if err == nil {
-		t.Fatal("expected error when re-reserving same host path with different config")
+	tests := []struct {
+		name       string
+		shares     [2]share.Config
+		mounts     [2]mount.Config
+		wantShares int
+		wantMounts int
+	}{
+		{name: "identical", wantShares: 1, wantMounts: 1},
+		{
+			name: "host-access", wantShares: 2, wantMounts: 2,
+			shares: [2]share.Config{{}, {ReadOnly: true}},
+			mounts: [2]mount.Config{{}, {ReadOnly: true}},
+		},
+		{
+			name: "guest-access", wantShares: 1, wantMounts: 2,
+			mounts: [2]mount.Config{{}, {ReadOnly: true}},
+		},
+		{
+			name: "guest-readonly-first", wantShares: 1, wantMounts: 2,
+			mounts: [2]mount.Config{{ReadOnly: true}, {}},
+		},
+		{
+			name: "allowed-files", wantShares: 2, wantMounts: 2,
+			shares: [2]share.Config{
+				{Restrict: true, AllowedNames: []string{"first"}},
+				{Restrict: true, AllowedNames: []string{"second"}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tc := newTestController(t, false)
+			var ids [2]guid.GUID
+			var guestSettings [2]guestresource.LCOWMappedDirectory
+			var removals [2]hcsschema.Plan9Share
+			// Create separate host shares and guest mounts only when their settings differ.
+			for i := range ids {
+				tt.shares[i].HostPath = "/host/path"
+				id, err := tc.c.Reserve(tc.ctx, tt.shares[i], tt.mounts[i])
+				if err != nil {
+					t.Fatalf("reserve %d: %v", i, err)
+				}
+				ids[i] = id
+				name := "0"
+				if tt.wantShares == 2 {
+					name = fmt.Sprint(i)
+				}
+				flags := hcsschema.Plan9ShareFlagsLinuxMetadata
+				if tt.shares[i].ReadOnly {
+					flags |= hcsschema.Plan9ShareFlagsReadOnly
+				}
+				if tt.shares[i].Restrict {
+					flags |= hcsschema.Plan9ShareFlagsRestrictFileAccess
+				}
+				if i == 0 || tt.wantShares == 2 {
+					tc.vmAdd.EXPECT().AddPlan9(gomock.Any(), hcsschema.Plan9Share{
+						Name: name, AccessName: name, Path: "/host/path", Port: vmutils.Plan9Port,
+						Flags: flags, AllowedFiles: tt.shares[i].AllowedNames,
+					}).Return(nil)
+				}
+				guestSettings[i] = guestresource.LCOWMappedDirectory{
+					MountPath: fmt.Sprintf(mount.GuestPathFmt, name, tt.mounts[i].Key()),
+					ShareName: name, Port: vmutils.Plan9Port, ReadOnly: tt.mounts[i].ReadOnly,
+				}
+				removals[i] = hcsschema.Plan9Share{Name: name, AccessName: name, Port: vmutils.Plan9Port}
+				if i == 0 || tt.wantMounts == 2 {
+					tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), guestSettings[i]).Return(nil)
+				}
+				if got, err := tc.c.MapToGuest(tc.ctx, id); err != nil || got != guestSettings[i].MountPath {
+					t.Fatalf("map %d = (%q, %v), want %q", i, got, err, guestSettings[i].MountPath)
+				}
+			}
+			// Count share variants, rather than host paths, when checking reuse.
+			if ids[0] == ids[1] || len(tc.c.sharesByHostPath["/host/path"]) != tt.wantShares {
+				t.Fatal("unexpected reservation identity or host-share count")
+			}
+			if err := tc.c.Save(); err == nil || !strings.Contains(err.Error(), "1 host paths, 2 reservations") {
+				t.Fatalf("unexpected save result: %v", err)
+			}
+			// Release the first caller without disrupting the remaining share or mount.
+			if tt.wantMounts == 2 {
+				tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), guestSettings[0]).Return(nil)
+			}
+			if tt.wantShares == 2 {
+				tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), removals[0]).Return(nil)
+			}
+			if err := tc.c.UnmapFromGuest(tc.ctx, ids[0]); err != nil {
+				t.Fatal(err)
+			}
+			if len(tc.c.sharesByHostPath["/host/path"]) != 1 {
+				t.Fatal("release removed the surviving share")
+			}
+			if got, err := tc.c.MapToGuest(tc.ctx, ids[1]); err != nil || got != guestSettings[1].MountPath {
+				t.Fatalf("surviving mount = (%q, %v)", got, err)
+			}
+			// The last caller releases the remaining guest mount and host share.
+			tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), guestSettings[1]).Return(nil)
+			tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), removals[1]).Return(nil)
+			if err := tc.c.UnmapFromGuest(tc.ctx, ids[1]); err != nil {
+				t.Fatal(err)
+			}
+			if len(tc.c.reservations) != 0 || len(tc.c.sharesByHostPath) != 0 {
+				t.Fatal("resources remain after both callers release their mounts")
+			}
+		})
 	}
 }
 
@@ -403,10 +504,8 @@ func TestUnmapFromGuest_GuestUnmountFails_Retryable(t *testing.T) {
 	}
 }
 
-// TestUnmapFromGuest_VMRemoveFails_Retryable verifies that when the guest
-// unmount succeeds but VM removal fails, the reservation is preserved for
-// retry. On retry only VM removal is re-attempted — the guest unmount is not
-// re-issued.
+// TestUnmapFromGuest_VMRemoveFails_Retryable verifies that teardown retries
+// preserve a guest mount acquired by a later caller.
 func TestUnmapFromGuest_VMRemoveFails_Retryable(t *testing.T) {
 	t.Parallel()
 	tc := newTestController(t, false)
@@ -427,10 +526,22 @@ func TestUnmapFromGuest_VMRemoveFails_Retryable(t *testing.T) {
 		t.Error("reservation should remain for retry after failed VM remove")
 	}
 
-	// Retry succeeds.
-	tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), gomock.Any()).Return(nil)
+	// A new caller reuses the host share while the old removal is pending.
+	next, err := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	if _, err := tc.c.MapToGuest(tc.ctx, next); err != nil {
+		t.Fatal(err)
+	}
 	if err := tc.c.UnmapFromGuest(tc.ctx, id); err != nil {
 		t.Fatalf("retry UnmapFromGuest failed: %v", err)
+	}
+	tc.guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
+	tc.vmRemove.EXPECT().RemovePlan9(gomock.Any(), gomock.Any()).Return(nil)
+	if err := tc.c.UnmapFromGuest(tc.ctx, next); err != nil {
+		t.Fatalf("release new caller: %v", err)
 	}
 }
 
@@ -478,9 +589,20 @@ func TestUnmapFromGuest_WithoutMapToGuest_CleansUp(t *testing.T) {
 
 	// Reserve but never MapToGuest — no VM or guest calls expected.
 	id, _ := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{})
+	// Keep a second guest configuration reserved while releasing the first.
+	other, err := tc.c.Reserve(tc.ctx, share.Config{HostPath: "/host/path"}, mount.Config{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := tc.c.UnmapFromGuest(tc.ctx, id); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tc.c.sharesByHostPath["/host/path"]) != 1 {
+		t.Fatal("share removed while another guest mount is still reserved")
+	}
+	if err := tc.c.UnmapFromGuest(tc.ctx, other); err != nil {
+		t.Fatal(err)
 	}
 	if len(tc.c.reservations) != 0 {
 		t.Errorf("expected 0 reservations, got %d", len(tc.c.reservations))

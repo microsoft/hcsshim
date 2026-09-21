@@ -15,7 +15,7 @@ func (c *Controller) Save() error {
 	defer c.mu.Unlock()
 
 	if len(c.sharesByHostPath) > 0 || len(c.reservations) > 0 {
-		return fmt.Errorf("plan9 controller save not supported: %d shares, %d reservations: %w", len(c.sharesByHostPath), len(c.reservations), errdefs.ErrFailedPrecondition)
+		return fmt.Errorf("plan9 controller save not supported: %d host paths, %d reservations: %w", len(c.sharesByHostPath), len(c.reservations), errdefs.ErrFailedPrecondition)
 	}
 
 	return nil

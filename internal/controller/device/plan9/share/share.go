@@ -30,9 +30,8 @@ type Share struct {
 	// state tracks the current lifecycle position of this share.
 	state State
 
-	// mount is the guest-side mount for this share.
-	// nil until ReserveMount is called. "mount != nil" serves as the ref indicator.
-	mount *mount.Mount
+	// mounts holds one reference-counted guest mount per configuration.
+	mounts map[mount.Config]*mount.Mount
 }
 
 // NewReserved creates a new [Share] in the [StateReserved] state with the
@@ -42,6 +41,7 @@ func NewReserved(name string, config Config) *Share {
 		name:   name,
 		config: config,
 		state:  StateReserved,
+		mounts: make(map[mount.Config]*mount.Mount),
 	}
 }
 
@@ -134,13 +134,12 @@ func (s *Share) RemoveFromVM(ctx context.Context, vm VMPlan9Remover) error {
 	ctx, _ = log.WithContext(ctx, logrus.WithField("shareName", s.name))
 
 	switch s.state {
-	case StateReserved:
-		// Share was never added — move directly to removed.
-		s.state = StateRemoved
-
-	case StateAdded, StateInvalid:
-		// If the mount is still active, skip removal.
-		if s.mount != nil {
+	case StateReserved, StateAdded, StateInvalid:
+		// Each state may still have guest mount reservations. Keep the share until
+		// all are drained so releasing one caller cannot invalidate another.
+		// Reserved and Invalid were never added to the VM; Added continues below
+		// to remove the VM resource after the final mount is released.
+		if len(s.mounts) != 0 {
 			return nil
 		}
 
@@ -169,9 +168,9 @@ func (s *Share) RemoveFromVM(ctx context.Context, vm VMPlan9Remover) error {
 	return nil
 }
 
-// ReserveMount reserves a slot for a guest mount on this share. If a mount
-// already exists, it increments the reference count after verifying the config
-// matches.
+// ReserveMount reserves a guest mount on this share. If a mount with the same
+// config already exists, it increments the reference count; otherwise, it
+// creates a new mount for the requested config.
 func (s *Share) ReserveMount(ctx context.Context, config mount.Config) (*mount.Mount, error) {
 	if s.state != StateReserved && s.state != StateAdded {
 		return nil, fmt.Errorf("cannot reserve mount on share in state %s", s.state)
@@ -179,56 +178,61 @@ func (s *Share) ReserveMount(ctx context.Context, config mount.Config) (*mount.M
 
 	ctx, _ = log.WithContext(ctx, logrus.WithField("shareName", s.name))
 
-	// If a mount already exists for this share, bump its ref count.
-	if s.mount != nil {
-		if err := s.mount.Reserve(config); err != nil {
+	// Reuse an existing mount only when the guest configuration matches.
+	if existing := s.mounts[config]; existing != nil {
+		if err := existing.Reserve(config); err != nil {
 			return nil, fmt.Errorf("reserve mount on share %s: %w", s.name, err)
 		}
 
 		log.G(ctx).Trace("existing mount found for share, incrementing ref count")
-		return s.mount, nil
+		return existing, nil
 	}
 
-	// No existing mount — create one in the reserved state.
+	// No matching mount exists, so create one for this guest configuration.
 	newMount := mount.NewReserved(s.name, config)
-	s.mount = newMount
+	s.mounts[config] = newMount
 
 	log.G(ctx).Trace("reserved new mount for share")
 	return newMount, nil
 }
 
-// MountToGuest mounts the share inside the guest, returning the guest path.
+// MountToGuest mounts the selected guest mount, returning its guest path.
 // The mount must first be reserved via [Share.ReserveMount].
-func (s *Share) MountToGuest(ctx context.Context, guest mount.GuestPlan9Mounter) (string, error) {
+func (s *Share) MountToGuest(ctx context.Context, guest mount.GuestPlan9Mounter, m *mount.Mount) (string, error) {
 	if s.state != StateAdded {
 		return "", fmt.Errorf("cannot mount share in state %s, expected added", s.state)
 	}
 
-	// Look up the pre-reserved mount for this share.
-	if s.mount == nil {
+	// Verify that the selected mount is still registered with this share.
+	if m == nil || s.mounts[m.Config()] != m {
 		return "", fmt.Errorf("mount not reserved on share %s", s.name)
 	}
-	return s.mount.MountToGuest(ctx, guest)
+	return m.MountToGuest(ctx, guest)
 }
 
-// UnmountFromGuest unmounts the share from the guest. When the mount's
-// reference count reaches zero and it transitions to the unmounted state,
-// the mount entry is removed from the share so a subsequent
-// [Share.RemoveFromVM] call sees no active mount.
-func (s *Share) UnmountFromGuest(ctx context.Context, guest mount.GuestPlan9Unmounter) error {
-	if s.mount == nil {
-		// No mount found — treat as a no-op to support retry by callers.
+// UnmountFromGuest releases the selected guest mount. When its reference count
+// reaches zero and it transitions to the unmounted state, that mount entry is
+// removed from the share. Other configured mounts remain active, and
+// [Share.RemoveFromVM] sees no active mounts only after all entries are removed.
+func (s *Share) UnmountFromGuest(ctx context.Context, guest mount.GuestPlan9Unmounter, m *mount.Mount) error {
+	if m == nil || m.State() == mount.StateUnmounted {
+		// Already released; keep teardown retryable.
 		return nil
 	}
 
-	if err := s.mount.UnmountFromGuest(ctx, guest); err != nil {
+	// Verify ownership before changing the mount's reference count.
+	if s.mounts[m.Config()] != m {
+		return fmt.Errorf("mount not reserved on share %s", s.name)
+	}
+
+	// Release this mount's reference without affecting other guest configurations.
+	if err := m.UnmountFromGuest(ctx, guest); err != nil {
 		return fmt.Errorf("unmount share %s from guest: %w", s.name, err)
 	}
 
-	// If the mount reached the terminal unmounted state, remove it from the share
-	// so that RemoveFromVM correctly sees no active mount.
-	if s.mount.State() == mount.StateUnmounted {
-		s.mount = nil
+	// Drop only this mount; other configurations keep the share alive.
+	if m.State() == mount.StateUnmounted {
+		delete(s.mounts, m.Config())
 	}
 	return nil
 }

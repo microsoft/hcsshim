@@ -7,14 +7,13 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/device/plan9/share"
 )
 
-// reservation links a caller-supplied reservation ID to a Plan9 share host
-// path. Access must be guarded by Controller.mu.
+// reservation identifies a caller's share and guest mount, guarded by Controller.mu.
 type reservation struct {
-	// hostPath is the key into Controller.sharesByHostPath for the share.
-	hostPath string
+	// share is the exact host-share variant selected for this reservation.
+	share *share.Share
 
-	// name is the share name corresponding to the hostPath.
-	name string
+	// mount is the selected guest mount; nil after its reference is released.
+	mount *mount.Mount
 }
 
 // vmPlan9 combines the VM-side Plan9 add and remove operations.
