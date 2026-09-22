@@ -9,8 +9,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Microsoft/hcsshim/internal/computecore"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/pkg/computecore"
 	"golang.org/x/sys/windows"
 )
 

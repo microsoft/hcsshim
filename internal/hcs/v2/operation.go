@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/computecore"
+	"github.com/Microsoft/hcsshim/pkg/computecore"
 )
 
 // infiniteTimeout is the milliseconds value passed to
