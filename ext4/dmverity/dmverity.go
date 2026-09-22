@@ -206,6 +206,7 @@ func ReadDMVerityInfoReader(r io.Reader) (*VerityInfo, error) {
 		return nil, fmt.Errorf("%w: salt size %d exceeds salt capacity %d", ErrSuperBlockParseFailure, dmvSB.SaltSize, len(dmvSB.Salt))
 	}
 
+	// Read the next block which contains the first block of the Merkle tree
 	if s, err := io.ReadFull(r, block); err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
 			return nil, fmt.Errorf("unexpected bytes read expected=%d, actual=%d: %w", blockSize, s, ErrRootHashReadFailure)
@@ -213,6 +214,7 @@ func ReadDMVerityInfoReader(r io.Reader) (*VerityInfo, error) {
 		return nil, fmt.Errorf("%w: %w", ErrRootHashReadFailure, err)
 	}
 
+	// Hash the first block of the Merkle tree (which contains the root)
 	rootHash := hash2(dmvSB.Salt[:dmvSB.SaltSize], block)
 	return &VerityInfo{
 		RootDigest:         fmt.Sprintf("%x", rootHash),
