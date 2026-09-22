@@ -581,6 +581,32 @@ func (c *Controller) Stats(ctx context.Context) (*stats.VirtualMachineStatistics
 	return s, nil
 }
 
+// ProcessorRequirements returns the UVM's processor feature and compatibility
+// set (processor features, xsave features, synthetic features, cache line flush
+// size, etc.) as the raw JSON emitted by HCS. The VM must be in [StateRunning].
+func (c *Controller) ProcessorRequirements(ctx context.Context) (json.RawMessage, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.vmState != StateRunning {
+		return nil, fmt.Errorf("cannot query processor requirements: VM is in state %s", c.vmState)
+	}
+
+	props, err := c.uvm.PropertiesV3(ctx, &hcsschema.PropertyQuery{
+		Queries: map[string]interface{}{hcsschema.VMProcessorRequirementsProperty: nil},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query processor requirements: %w", err)
+	}
+
+	resp, ok := props.PropertyResponses[hcsschema.VMProcessorRequirementsProperty]
+	if !ok || len(resp.Response) == 0 {
+		return nil, fmt.Errorf("processor requirements not present in property response")
+	}
+
+	return resp.Response, nil
+}
+
 // TerminateVM forcefully terminates a running VM, closes the guest connection,
 // and releases HCS resources.
 //

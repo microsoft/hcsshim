@@ -17,10 +17,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/vm/vmutils"
 )
 
-// compatibilityInfoProperty is the HCS property name used to retrieve the
-// VM's opaque migration-compatibility blob via PropertiesV3.
-const compatibilityInfoProperty = "CompatibilityInfo"
-
 // InitializeLiveMigrationOnSource prepares the running source VM for an
 // outgoing live migration. Once it succeeds the VM accepts only live-migration
 // calls until the migration completes or is rolled back.
@@ -76,14 +72,14 @@ func (c *Controller) CompatibilityInfo(ctx context.Context) ([]byte, error) {
 
 	// Ask the HCS for the compatibility property.
 	props, err := c.uvm.PropertiesV3(ctx, &hcsschema.PropertyQuery{
-		Queries: map[string]interface{}{compatibilityInfoProperty: nil},
+		Queries: map[string]interface{}{hcsschema.CompatibilityInfoProperty: nil},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("query compatibility info: %w", err)
 	}
 
 	// Pull the raw blob out of the property response.
-	resp, ok := props.PropertyResponses[compatibilityInfoProperty]
+	resp, ok := props.PropertyResponses[hcsschema.CompatibilityInfoProperty]
 	if !ok || len(resp.Response) == 0 {
 		return nil, fmt.Errorf("compatibility info not present in property response")
 	}
