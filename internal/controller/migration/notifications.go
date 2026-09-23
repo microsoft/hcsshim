@@ -77,7 +77,7 @@ func newNotifications(vmController vmController, origin hcsschema.MigrationOrigi
 				}
 
 				// broadcast returns false once the notifier is closed.
-				if !notif.broadcast(info) {
+				if !notif.broadcast(migration.ToMigrationNotification(info, notif.origin)) {
 					return
 				}
 			}
@@ -113,6 +113,25 @@ func (c *Controller) Subscribe(ctx context.Context, sessionID string) (<-chan *m
 
 	log.G(ctx).Debug("migration notification subscriber attached")
 	return c.notifier.subscribe(ctx)
+}
+
+// PublishTaskEvents forwards supported containerd task events to migration notification subscribers.
+func (c *Controller) PublishTaskEvents(event interface{}) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// Task events cannot be delivered before the notifier is initialized.
+	// After finalization, task exits are expected during source teardown and
+	// must not be surfaced as migration notifications.
+	if c.notifier == nil || c.state == StateFinalized {
+		return
+	}
+
+	notification, ok := migration.ToTaskEventNotification(event, c.origin)
+	if !ok {
+		return
+	}
+	c.notifier.broadcast(notification)
 }
 
 // subscribe returns a channel that first replays the latest notification, then
@@ -159,9 +178,9 @@ func (n *notifications) subscribe(ctx context.Context) (<-chan *migration.Notifi
 	return subscriber, nil
 }
 
-// broadcast delivers info to every subscriber and caches it for replay,
+// broadcast delivers notification to every subscriber and caches it for replay,
 // returning false once the notifier has been closed.
-func (n *notifications) broadcast(info hcsschema.OperationSystemMigrationNotificationInfo) bool {
+func (n *notifications) broadcast(notification *migration.Notification) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -176,7 +195,7 @@ func (n *notifications) broadcast(info hcsschema.OperationSystemMigrationNotific
 	n.messageID++
 	n.lastResponse = &migration.NotificationsResponse{
 		MessageID:    n.messageID,
-		Notification: migration.ToNotification(info, n.origin),
+		Notification: notification,
 		StartTime:    timestamppb.New(n.startTime),
 		UpdateTime:   timestamppb.Now(),
 	}

@@ -222,11 +222,11 @@ func (c *Controller) failTransfer(ctx context.Context, err error) {
 	}
 
 	// Broadcast the failure to subscribers as a migration-failed event.
-	c.notifier.broadcast(hcsschema.OperationSystemMigrationNotificationInfo{
+	c.notifier.broadcast(migration.ToMigrationNotification(hcsschema.OperationSystemMigrationNotificationInfo{
 		Origin: c.origin,
 		Event:  hcsschema.MigrationEventMigrationFailed,
 		Result: result,
-	})
+	}, c.origin))
 }
 
 // sessionIDToUint32 derives a stable uint32 from a session ID. SHA-256 is

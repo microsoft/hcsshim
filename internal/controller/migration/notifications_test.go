@@ -13,6 +13,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/controller/migration/mocks"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/pkg/migration"
+	eventstypes "github.com/containerd/containerd/api/events"
 )
 
 // newTestNotifications builds a notifier without the source-forwarding
@@ -28,6 +29,10 @@ func newTestNotifications(origin hcsschema.MigrationOrigin) *notifications {
 
 func setupDoneInfo() hcsschema.OperationSystemMigrationNotificationInfo {
 	return hcsschema.OperationSystemMigrationNotificationInfo{Event: hcsschema.MigrationEventSetupDone}
+}
+
+func setupDoneNotification(origin hcsschema.MigrationOrigin) *migration.Notification {
+	return migration.ToMigrationNotification(setupDoneInfo(), origin)
 }
 
 // recvWithin returns the next notification or fails if none arrives in time.
@@ -70,7 +75,7 @@ func TestNotificationsBroadcastDeliversToSubscriber(t *testing.T) {
 		t.Fatalf("subscribe: %v", err)
 	}
 
-	if ok := n.broadcast(setupDoneInfo()); !ok {
+	if ok := n.broadcast(setupDoneNotification(n.origin)); !ok {
 		t.Fatal("broadcast returned false on an open notifier")
 	}
 
@@ -86,6 +91,48 @@ func TestNotificationsBroadcastDeliversToSubscriber(t *testing.T) {
 	}
 	if got.StartTime == nil || got.UpdateTime == nil {
 		t.Fatal("expected StartTime and UpdateTime to be set")
+	}
+}
+
+// TestControllerPublishTaskEvents verifies supported task events are delivered
+// through the migration notification stream and unsupported events are ignored.
+func TestControllerPublishTaskEvents(t *testing.T) {
+	n := newTestNotifications(hcsschema.MigrationOriginSource)
+	c := &Controller{notifier: n}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := n.subscribe(ctx)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	c.PublishTaskEvents(&eventstypes.TaskOOM{ContainerID: "container"})
+	select {
+	case got := <-sub:
+		t.Fatalf("unexpected notification for unsupported task event: %+v", got)
+	default:
+	}
+
+	c.PublishTaskEvents(&eventstypes.TaskExit{
+		ContainerID: "container",
+		ID:          "exec",
+		Pid:         42,
+		ExitStatus:  137,
+	})
+
+	got := recvWithin(t, sub, time.Second)
+	if got.Notification == nil ||
+		got.Notification.Phase != migration.Phase_PHASE_TASK_EVENT ||
+		got.Notification.State != migration.PhaseState_PHASE_STATE_TASK_EXIT {
+		t.Fatalf("unexpected notification: %+v", got.Notification)
+	}
+	if details := got.Notification.GetTaskExit(); details == nil ||
+		details.ContainerID != "container" ||
+		details.ID != "exec" ||
+		details.Pid != 42 ||
+		details.ExitStatus != 137 {
+		t.Fatalf("unexpected task exit details: %+v", details)
 	}
 }
 
@@ -105,7 +152,7 @@ func TestNotificationsBroadcastFansOutToAllSubscribers(t *testing.T) {
 		t.Fatalf("subscribe sub2: %v", err)
 	}
 
-	n.broadcast(setupDoneInfo())
+	n.broadcast(setupDoneNotification(n.origin))
 
 	if r := recvWithin(t, sub1, time.Second); r.MessageID != 1 {
 		t.Fatalf("sub1 messageID: got %d want 1", r.MessageID)
@@ -127,8 +174,8 @@ func TestNotificationsBroadcastIncrementsMessageID(t *testing.T) {
 		t.Fatalf("subscribe: %v", err)
 	}
 
-	n.broadcast(setupDoneInfo())
-	n.broadcast(setupDoneInfo())
+	n.broadcast(setupDoneNotification(n.origin))
+	n.broadcast(setupDoneNotification(n.origin))
 
 	if r := recvWithin(t, sub, time.Second); r.MessageID != 1 {
 		t.Fatalf("first messageID: got %d want 1", r.MessageID)
@@ -146,7 +193,7 @@ func TestNotificationsSubscribeReplaysLatest(t *testing.T) {
 	defer cancel()
 
 	// Broadcast before anyone subscribes.
-	n.broadcast(setupDoneInfo())
+	n.broadcast(setupDoneNotification(n.origin))
 
 	sub, err := n.subscribe(ctx)
 	if err != nil {
@@ -174,7 +221,7 @@ func TestNotificationsBroadcastAfterCloseReturnsFalse(t *testing.T) {
 	n := newTestNotifications(hcsschema.MigrationOriginSource)
 	n.close()
 
-	if n.broadcast(setupDoneInfo()) {
+	if n.broadcast(setupDoneNotification(n.origin)) {
 		t.Fatal("broadcast should return false after close")
 	}
 }
@@ -218,7 +265,7 @@ func TestNotificationsSubscribeContextCancelDropsSubscriber(t *testing.T) {
 
 	// The notifier is still open and broadcasting must not panic on the
 	// dropped subscriber.
-	if ok := n.broadcast(setupDoneInfo()); !ok {
+	if ok := n.broadcast(setupDoneNotification(n.origin)); !ok {
 		t.Fatal("broadcast on an open notifier returned false")
 	}
 }
@@ -239,7 +286,7 @@ func TestNotificationsBroadcastDoesNotBlockOnSlowSubscriber(t *testing.T) {
 	go func() {
 		// Broadcasting well past the buffer must not block; extras are dropped.
 		for i := 0; i < subscriberBuffer*2; i++ {
-			n.broadcast(setupDoneInfo())
+			n.broadcast(setupDoneNotification(n.origin))
 		}
 		close(done)
 	}()
@@ -282,7 +329,7 @@ func TestControllerSubscribeReusesExistingNotifier(t *testing.T) {
 		t.Fatalf("subscribe: %v", err)
 	}
 
-	n.broadcast(setupDoneInfo())
+	n.broadcast(setupDoneNotification(n.origin))
 	if r := recvWithin(t, sub, time.Second); r.MessageID != 1 {
 		t.Fatalf("messageID: got %d want 1", r.MessageID)
 	}
