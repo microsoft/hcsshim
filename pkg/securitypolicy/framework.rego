@@ -250,6 +250,17 @@ command_ok(command) if {
     }
 }
 
+exec_process_matches(container) if {
+    some process in container.exec_processes
+    command_ok(process.command)
+}
+
+exec_process_signal_matches(container) if {
+    some process in container.exec_processes
+    command_ok(process.command)
+    signal_ok(process.signals)
+}
+
 # An env rule can be of two forms:
 # {
 #   "pattern": "name=value",
@@ -933,8 +944,7 @@ exec_in_container := {"metadata": [updateMatches],
         workingDirectory_ok(container.working_dir)
         noNewPrivileges_ok(container.no_new_privileges)
         user_ok(container.user)
-        some process in container.exec_processes
-        command_ok(process.command)
+        exec_process_matches(container)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -985,8 +995,7 @@ exec_in_container := {"metadata": [updateMatches],
         # the narrowing process.
         workingDirectory_ok(container.working_dir)
         user_ok(container.user)
-        some process in container.exec_processes
-        command_ok(process.command)
+        exec_process_matches(container)
     ]
 
     count(possible_after_initial_containers) > 0
@@ -1047,9 +1056,7 @@ signal_container_process := {"metadata": [updateMatches], "allowed": true} if {
     not input.isInitProcess
     containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        some process in container.exec_processes
-        command_ok(process.command)
-        signal_ok(process.signals)
+        exec_process_signal_matches(container)
     ]
 
     count(containers) > 0
@@ -2037,8 +2044,7 @@ command_matches if {
 command_matches if {
     input.rule == "exec_in_container"
     some container in data.metadata.matches[input.containerID]
-    some process in container.exec_processes
-    command_ok(process.command)
+    exec_process_matches(container)
 }
 
 command_matches if {
@@ -2126,8 +2132,7 @@ errors contains "missing required environment variable" if {
         noNewPrivileges_ok(container.no_new_privileges)
         user_ok(container.user)
         workingDirectory_ok(container.working_dir)
-        some process in container.exec_processes
-        command_ok(process.command)
+        exec_process_matches(container)
     ]
 
     count(possible_containers) > 0
@@ -2243,9 +2248,7 @@ signal_allowed if {
 signal_allowed if {
     not input.isInitProcess
     some container in data.metadata.matches[input.containerID]
-    some process in container.exec_processes
-    command_ok(process.command)
-    signal_ok(process.signals)
+    exec_process_signal_matches(container)
 }
 
 errors contains "target isn't allowed to receive the signal" if {
@@ -2686,8 +2689,7 @@ errors contains "capabilities don't match" if {
         workingDirectory_ok(container.working_dir)
         noNewPrivileges_ok(container.no_new_privileges)
         user_ok(container.user)
-        some process in container.exec_processes
-        command_ok(process.command)
+        exec_process_matches(container)
     ]
 
     count(possible_after_initial_containers) > 0
