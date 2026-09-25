@@ -1,13 +1,13 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.26.3
+go 1.26.8
 
 require (
 	github.com/Microsoft/go-winio v0.6.3-0.20260917205003-526e22f39a0a
 	github.com/Microsoft/hcsshim v0.15.0-rc.1
 	github.com/containerd/cgroups/v3 v3.1.3
 	github.com/containerd/containerd/api v1.11.1
-	github.com/containerd/containerd/v2 v2.3.5
+	github.com/containerd/containerd/v2 v2.3.6
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/platforms v1.0.0-rc.5
