@@ -11,18 +11,18 @@ import "github.com/Microsoft/hcsshim/pkg/migration/migration_options.proto";
 // migration (LM) of a sandbox (utility VM and its containers) from a SOURCE
 // host to a DESTINATION host.
 //
-// High-level success flow (in order):
+// One supported high-level success flow:
 //
 //   SOURCE                                  DESTINATION
 //   ------                                  -----------
-//   1. PrepareAndExportSandbox  ─────────►  2. ImportSandbox
+//   1. Notifications (stream)               1. Notifications (stream)
+//   2. PrepareAndExportSandbox  ─────────►  2. ImportSandbox
 //                                           3. NewTask (per container, repeated)
 //                                           4. PrepareSandbox
 //   5. CreateDuplicateSocket                5. CreateDuplicateSocket
-//   6. Notifications (stream)               6. Notifications (stream)
-//   7. TransferSandbox          ◄────────►  7. TransferSandbox
-//   8. FinalizeSandbox                      8. FinalizeSandbox
-//   9. Cleanup                              9. Cleanup
+//   6. TransferSandbox          ◄────────►  6. TransferSandbox
+//   7. FinalizeSandbox                      7. FinalizeSandbox
+//   8. Cleanup                              8. Cleanup
 //
 // Cancel is invoked on BOTH sides whenever a migration is aborted, to stop
 // the in-flight transfer. Cleanup is the terminal call on BOTH sides and is
@@ -34,8 +34,7 @@ import "github.com/Microsoft/hcsshim/pkg/migration/migration_options.proto";
 // the destination uses to attach updated resource paths to the rehydrated
 // shim state produced by ImportSandbox.
 service Migration {
-    // PrepareAndExportSandbox is the FIRST call of a live migration and is
-    // invoked on the SOURCE shim.
+    // PrepareAndExportSandbox is the first source-side setup operation.
     //
     // It performs two things:
     //   1. Calls into HCS to initialize live migration on the underlying
@@ -49,7 +48,7 @@ service Migration {
     // to ImportSandbox on the destination.
     rpc PrepareAndExportSandbox(PrepareAndExportSandboxRequest) returns (PrepareAndExportSandboxResponse);
 
-    // ImportSandbox is the FIRST call made on the DESTINATION shim.
+    // ImportSandbox is the first destination-side setup operation.
     //
     // It consumes the opaque config produced by PrepareAndExportSandbox on
     // the source and rehydrates the destination shim with that state so that
@@ -64,9 +63,9 @@ service Migration {
     // into the rehydrated state.
     rpc ImportSandbox(ImportSandboxRequest) returns (ImportSandboxResponse);
 
-    // PrepareSandbox is the SECOND call made on the DESTINATION shim, after
-    // ImportSandbox and after a NewTask has been issued for every container
-    // in the sandbox.
+    // PrepareSandbox is the second destination-side migration operation,
+    // called after ImportSandbox and after a NewTask has been issued for
+    // every container in the sandbox.
     //
     // At this point the shim has a complete, destination-correct view of the
     // sandbox. PrepareSandbox uses that view to create the HCS compute
@@ -81,7 +80,7 @@ service Migration {
     //
     // Progress and status updates produced during the transfer are NOT
     // returned by this RPC. Callers that wish to observe those updates must
-    // separately subscribe via Notifications.
+    // use the stream available via Notifications.
     rpc TransferSandbox(TransferSandboxRequest) returns (TransferSandboxResponse);
 
     // FinalizeSandbox terminates a live migration session. It is called on
@@ -106,9 +105,12 @@ service Migration {
     // destination shims and will emit NotificationsResponse messages as
     // the underlying compute system reports state changes (progress,
     // error, timeout, completion) for the duration of the migration.
+    // It also reports the Task Exit events as reported by guest while
+    // the migration is in progress.
     //
-    // Callers typically open this stream prior to invoking TransferSandbox
-    // so that no notifications are missed while the transfer is in flight.
+    // Callers typically open this stream at the start of migration to avoid
+    // missing task exits after PrepareAndExportSandbox captures the source state
+    // or migration events emitted by the underlying compute system.
     rpc Notifications(NotificationsRequest) returns (stream NotificationsResponse);
 
     // CreateDuplicateSocket is called on BOTH the source and destination
@@ -246,8 +248,8 @@ enum FinalizeAction {
 message FinalizeSandboxResponse {}
 
 message NotificationsRequest {
-    // Identifier for the migration session. Must match the session_id used
-    // for the rest of this LM on this side.
+    // Identifier for the migration session. This reserves the ID if the
+    // session is not yet established; otherwise, it must match the active ID.
     string session_id = 1;
 }
 
@@ -293,4 +295,3 @@ message CleanupRequest {
 }
 
 message CleanupResponse {}
-

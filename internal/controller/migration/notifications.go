@@ -43,22 +43,50 @@ type notifications struct {
 
 	// origin identifies this host's role (source or destination) in the migration.
 	origin hcsschema.MigrationOrigin
+
+	// vmNotificationsStarted indicates that VM migration events are being forwarded.
+	vmNotificationsStarted bool
 }
 
-// newNotifications begins forwarding the VM's migration events to subscribers.
+// newNotifications creates a notifier and starts VM event forwarding when the
+// VM controller is available.
 func newNotifications(vmController vmController, origin hcsschema.MigrationOrigin) (*notifications, error) {
-	// Subscribe to the VM's migration events before any subscriber attaches.
-	src, err := vmController.MigrationNotifications()
-	if err != nil {
-		return nil, fmt.Errorf("get migration notifications channel: %w", err)
-	}
-
 	notif := &notifications{
 		subscribers: map[chan *migration.NotificationsResponse]struct{}{},
 		startTime:   time.Now(),
 		done:        make(chan struct{}),
-		origin:      origin,
 	}
+
+	// Before migration setup, the notifier carries task events only. If the VM
+	// is already available, begin forwarding its migration events immediately.
+	if vmController != nil {
+		if err := notif.forwardVMNotifications(vmController, origin); err != nil {
+			return nil, err
+		}
+	}
+
+	return notif, nil
+}
+
+// forwardVMNotifications begins forwarding the VM's migration events to subscribers.
+func (n *notifications) forwardVMNotifications(vmController vmController, origin hcsschema.MigrationOrigin) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// Repeated forwarding attempts are no-ops once it has started.
+	if n.vmNotificationsStarted {
+		return nil
+	}
+
+	// Obtain the VM event stream from the VM controller.
+	src, err := vmController.MigrationNotifications()
+	if err != nil {
+		return fmt.Errorf("get migration notifications channel: %w", err)
+	}
+
+	// Record the stream origin and prevent another forwarding goroutine.
+	n.origin = origin
+	n.vmNotificationsStarted = true
 
 	// Forward each VM migration event to subscribers until the session is torn down or
 	// the source stops producing.
@@ -66,7 +94,7 @@ func newNotifications(vmController vmController, origin hcsschema.MigrationOrigi
 		for {
 			select {
 			// Session torn down: stop forwarding.
-			case <-notif.done:
+			case <-n.done:
 				return
 
 			// Next VM migration event, or the source channel was closed.
@@ -77,14 +105,14 @@ func newNotifications(vmController vmController, origin hcsschema.MigrationOrigi
 				}
 
 				// broadcast returns false once the notifier is closed.
-				if !notif.broadcast(migration.ToMigrationNotification(info, notif.origin)) {
+				if !n.broadcast(migration.ToMigrationNotification(info, origin)) {
 					return
 				}
 			}
 		}
 	}()
 
-	return notif, nil
+	return nil
 }
 
 // Subscribe returns a stream of migration notifications for the session,
@@ -94,14 +122,21 @@ func (c *Controller) Subscribe(ctx context.Context, sessionID string) (<-chan *m
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Reject callers without an active session or whose sessionID does not
-	// match the active one.
-	if c.sessionID != sessionID {
-		return nil, fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
+	// User must supply a valid session while Subscribing for notifications.
+	if sessionID == "" {
+		return nil, fmt.Errorf("session id is required: %w", errdefs.ErrInvalidArgument)
 	}
 
-	// Create the notifier on first use; it begins forwarding VM events as
-	// soon as it exists, independent of whether any subscriber attaches.
+	// The first migration call reserves the session ID. Every later call must
+	// use the same value, regardless of whether Subscribe or setup ran first.
+	if c.sessionID != "" && c.sessionID != sessionID {
+		return nil, fmt.Errorf("session id %q does not match current session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
+	}
+
+	c.sessionID = sessionID
+
+	// Create the notifier on first use. Before migration setup it carries task
+	// events only; once the VM is available it also forwards VM events.
 	if c.notifier == nil {
 		notifier, err := newNotifications(c.vmController, c.origin)
 		if err != nil {

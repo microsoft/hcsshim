@@ -602,6 +602,26 @@ func TestCleanup_NoopWhenIdle(t *testing.T) {
 	}
 }
 
+// TestCleanup_IdleSubscribedSession verifies cleanup releases a notification
+// stream reserved before migration setup.
+func TestCleanup_IdleSubscribedSession(t *testing.T) {
+	c := New()
+	c.sessionID = "sess-1"
+	c.notifier = newTestNotifications(hcsschema.MigrationOrigin(""))
+	sub, err := c.notifier.subscribe(t.Context())
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	if err := c.Cleanup(t.Context(), "sess-1", nil); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	waitChannelClosed(t, sub, time.Second)
+	if c.sessionID != "" || c.notifier != nil {
+		t.Fatalf("pending notification state not cleared: %+v", c)
+	}
+}
+
 // TestCleanup_RejectsSessionMismatch verifies cleanup for a different session is
 // rejected.
 func TestCleanup_RejectsSessionMismatch(t *testing.T) {

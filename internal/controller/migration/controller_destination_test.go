@@ -142,6 +142,19 @@ func TestImportState_RejectsInvalidArgs(t *testing.T) {
 	}
 }
 
+// TestImportState_RejectsReservedSessionMismatch verifies destination import
+// cannot replace a session ID reserved by an earlier subscription.
+func TestImportState_RejectsReservedSessionMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	c := New()
+	c.sessionID = "other"
+
+	err := c.ImportState(t.Context(), importOptions(importVM(ctrl), importEnvelope(t, validImportPayload())))
+	if !errors.Is(err, errdefs.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument, got %v", err)
+	}
+}
+
 // TestImportState_RejectsUndecodableState verifies a payload this build cannot
 // decode is rejected before any controller state is rehydrated.
 func TestImportState_RejectsUndecodableState(t *testing.T) {

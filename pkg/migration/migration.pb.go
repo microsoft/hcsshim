@@ -577,8 +577,8 @@ func (*FinalizeSandboxResponse) Descriptor() ([]byte, []int) {
 
 type NotificationsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Identifier for the migration session. Must match the session_id used
-	// for the rest of this LM on this side.
+	// Identifier for the migration session. This reserves the ID if the
+	// session is not yet established; otherwise, it must match the active ID.
 	SessionID     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

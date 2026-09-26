@@ -14,6 +14,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/pkg/migration"
 	eventstypes "github.com/containerd/containerd/api/events"
+	"github.com/containerd/errdefs"
 )
 
 // newTestNotifications builds a notifier without the source-forwarding
@@ -298,12 +299,117 @@ func TestNotificationsBroadcastDoesNotBlockOnSlowSubscriber(t *testing.T) {
 	}
 }
 
-// TestControllerSubscribeNoActiveSession verifies Subscribe is rejected when
-// no session is active.
-func TestControllerSubscribeNoActiveSession(t *testing.T) {
-	c := &Controller{}
-	if _, err := c.Subscribe(context.Background(), "any"); err == nil {
-		t.Fatal("expected error when no session is active")
+// TestNotificationsForwardVMNotificationsIsIdempotent verifies repeated calls
+// start only one VM notification forwarder.
+func TestNotificationsForwardVMNotificationsIsIdempotent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().MigrationNotifications().Return(make(chan hcsschema.OperationSystemMigrationNotificationInfo), nil).Times(1)
+
+	n := newTestNotifications(hcsschema.MigrationOriginSource)
+	defer n.close()
+
+	if err := n.forwardVMNotifications(vm, hcsschema.MigrationOriginSource); err != nil {
+		t.Fatalf("first forward: %v", err)
+	}
+	if err := n.forwardVMNotifications(vm, hcsschema.MigrationOriginSource); err != nil {
+		t.Fatalf("second forward: %v", err)
+	}
+}
+
+// TestNotificationsForwardVMNotificationsRetriesAfterError verifies a failed
+// attachment does not prevent a later attempt from starting the forwarder.
+func TestNotificationsForwardVMNotificationsRetriesAfterError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	gomock.InOrder(
+		vm.EXPECT().MigrationNotifications().Return(nil, errors.New("boom")),
+		vm.EXPECT().MigrationNotifications().Return(make(chan hcsschema.OperationSystemMigrationNotificationInfo), nil),
+	)
+
+	n := newTestNotifications(hcsschema.MigrationOriginSource)
+	defer n.close()
+
+	if err := n.forwardVMNotifications(vm, hcsschema.MigrationOriginSource); err == nil {
+		t.Fatal("expected first forward to fail")
+	}
+	if err := n.forwardVMNotifications(vm, hcsschema.MigrationOriginSource); err != nil {
+		t.Fatalf("retry forward: %v", err)
+	}
+}
+
+// TestControllerSubscribeBeforeSourceSetup verifies an early subscription
+// receives task events immediately and VM events after source setup.
+func TestControllerSubscribeBeforeSourceSetup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := mocks.NewMockvmController(ctrl)
+	vm.EXPECT().InitializeLiveMigrationOnSource(gomock.Any(), gomock.Any()).Return(nil)
+	src := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
+	vm.EXPECT().MigrationNotifications().Return(src, nil)
+
+	c := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := c.Subscribe(ctx, "sess-1")
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	c.PublishTaskEvents(&eventstypes.TaskExit{ContainerID: "container"})
+	if got := recvWithin(t, sub, time.Second); got.Notification.GetTaskExit().GetContainerID() != "container" {
+		t.Fatalf("unexpected task notification: %+v", got.Notification)
+	}
+
+	if err := c.PrepareSource(ctx, sourceOptions(vm)); err != nil {
+		t.Fatalf("prepare source: %v", err)
+	}
+	defer c.notifier.close()
+
+	src <- setupDoneInfo()
+	if got := recvWithin(t, sub, time.Second); got.Notification.GetPhase() != migration.Phase_PHASE_SETUP_DONE {
+		t.Fatalf("unexpected migration notification: %+v", got.Notification)
+	}
+}
+
+// TestControllerSubscribeBeforeDestinationSetup verifies an early subscription
+// begins forwarding VM events once the destination VM is prepared.
+func TestControllerSubscribeBeforeDestinationSetup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vm := importVM(ctrl)
+	vm.EXPECT().Import(gomock.Any(), gomock.Any()).Return(nil)
+	vm.EXPECT().CreateVM(gomock.Any(), gomock.Any()).Return(nil)
+	src := make(chan hcsschema.OperationSystemMigrationNotificationInfo, 1)
+	vm.EXPECT().MigrationNotifications().Return(src, nil)
+	vm.EXPECT().Patch(gomock.Any()).Return(nil)
+
+	c := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := c.Subscribe(ctx, "sess-1")
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := c.ImportState(ctx, importOptions(vm, importEnvelope(t, validImportPayload()))); err != nil {
+		t.Fatalf("import state: %v", err)
+	}
+	if err := c.PrepareDestination(ctx, "sess-1", nil); err != nil {
+		t.Fatalf("prepare destination: %v", err)
+	}
+	defer c.notifier.close()
+
+	src <- setupDoneInfo()
+	if got := recvWithin(t, sub, time.Second); got.Notification.GetPhase() != migration.Phase_PHASE_SETUP_DONE {
+		t.Fatalf("unexpected migration notification: %+v", got.Notification)
+	}
+}
+
+// TestControllerSubscribeEmptySessionID verifies a session ID is required.
+func TestControllerSubscribeEmptySessionID(t *testing.T) {
+	c := New()
+	if _, err := c.Subscribe(context.Background(), ""); !errors.Is(err, errdefs.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument, got %v", err)
 	}
 }
 
