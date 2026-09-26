@@ -37,7 +37,7 @@ type Controller struct {
 	// state is the session's current lifecycle state.
 	state State
 
-	// sessionID identifies the active migration session.
+	// sessionID identifies the pending or active migration session.
 	sessionID string
 
 	// sandboxID is the sandbox this session migrates; set on the destination.
@@ -222,11 +222,11 @@ func (c *Controller) failTransfer(ctx context.Context, err error) {
 	}
 
 	// Broadcast the failure to subscribers as a migration-failed event.
-	c.notifier.broadcast(hcsschema.OperationSystemMigrationNotificationInfo{
+	c.notifier.broadcast(migration.ToMigrationNotification(hcsschema.OperationSystemMigrationNotificationInfo{
 		Origin: c.origin,
 		Event:  hcsschema.MigrationEventMigrationFailed,
 		Result: result,
-	})
+	}, c.origin))
 }
 
 // sessionIDToUint32 derives a stable uint32 from a session ID. SHA-256 is
@@ -456,21 +456,21 @@ func (c *Controller) Cleanup(ctx context.Context, sessionID string, events chan 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Already cleaned up / no active session.
-	if c.state == StateIdle {
-		return nil
-	}
-
-	if c.sessionID != sessionID {
-		return fmt.Errorf("session id %q does not match active session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
+	// The session ID is empty only for an idle controller with no subscription.
+	// An early subscription reserves it while the controller remains idle, and
+	// every non-idle controller has an active session, so validate it when set.
+	if c.sessionID != "" && c.sessionID != sessionID {
+		return fmt.Errorf("session id %q does not match current session %q: %w", sessionID, c.sessionID, errdefs.ErrInvalidArgument)
 	}
 
 	// Cleanup is valid only from a settled state:
+	//   - StateIdle: Either side if notification channel was created.
 	//   - StateFinalized: either side after a successful Finalize. The normal
 	//     path finalizes both ends; a cancel or error still finalizes the source.
 	//   - StateCancelled: the destination only, whose Finalize is a no-op, so it
 	//     cleans up directly from the canceled state.
-	canCleanup := c.state == StateFinalized ||
+	canCleanup := c.state == StateIdle ||
+		c.state == StateFinalized ||
 		(c.origin == hcsschema.MigrationOriginDestination && c.state == StateCancelled)
 	if !canCleanup {
 		return fmt.Errorf("cleanup not valid for %s in state %s: %w", c.origin, c.state, errdefs.ErrFailedPrecondition)
@@ -478,6 +478,7 @@ func (c *Controller) Cleanup(ctx context.Context, sessionID string, events chan 
 
 	// The transport socket is unused past this point and the notifier is
 	// scoped to the session, so release both before resetting state.
+	// For idle state, this would be no-op.
 	if c.dupSocket != 0 {
 		if err := windows.Closesocket(c.dupSocket); err != nil {
 			log.G(ctx).WithError(err).Warn("close duplicate migration socket")
@@ -492,6 +493,7 @@ func (c *Controller) Cleanup(ctx context.Context, sessionID string, events chan 
 	}
 
 	// Reset all session-scoped state so the controller can host a new session.
+	// For idle state, this would be no-op.
 	c.sessionID, c.sandboxID, c.origin = "", "", ""
 	c.vmController = nil
 	c.podControllers = nil
