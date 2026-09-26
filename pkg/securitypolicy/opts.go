@@ -206,6 +206,13 @@ func WithAllowCapabilityDropping(allow bool) PolicyConfigOpt {
 	}
 }
 
+func WithAllowRegistryChangesDropping(allow bool) PolicyConfigOpt {
+	return func(config *PolicyConfig) error {
+		config.AllowRegistryChangesDropping = allow
+		return nil
+	}
+}
+
 func WithAllowRuntimeLogging(allow bool) PolicyConfigOpt {
 	return func(config *PolicyConfig) error {
 		config.AllowRuntimeLogging = allow

@@ -113,6 +113,7 @@ func main() {
 					config.AllowEnvironmentVariableDropping,
 					config.AllowUnencryptedScratch,
 					config.AllowCapabilityDropping,
+					config.AllowRegistryChangesDropping,
 					config.AllowLogProviderDropping,
 				)
 			case "windows":
@@ -134,6 +135,7 @@ func main() {
 					config.AllowEnvironmentVariableDropping,
 					config.AllowUnencryptedScratch,
 					config.AllowCapabilityDropping,
+					config.AllowRegistryChangesDropping,
 					config.AllowLogProviderDropping,
 				)
 			default:
