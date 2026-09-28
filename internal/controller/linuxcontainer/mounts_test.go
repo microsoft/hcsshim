@@ -480,8 +480,8 @@ func TestAllocateMounts_Plan9BindSingleFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if spec.Mounts[0].Source != "/mnt/plan9/file0" {
-		t.Errorf("mount source = %q, want %q", spec.Mounts[0].Source, "/mnt/plan9/file0")
+	if spec.Mounts[0].Source != "/mnt/plan9/file0/config.json" {
+		t.Errorf("mount source = %q, want %q", spec.Mounts[0].Source, "/mnt/plan9/file0/config.json")
 	}
 }
 

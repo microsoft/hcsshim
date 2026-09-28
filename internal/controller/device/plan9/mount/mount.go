@@ -18,8 +18,8 @@ import (
 // The path encodes the share name so that each share gets a unique,
 // stable mount point. Example:
 //
-//	/run/mounts/plan9/<shareName>
-const GuestPathFmt = "/run/mounts/plan9/%s"
+//	/run/mounts/plan9/<shareName>-<ConfigKey>
+const GuestPathFmt = "/run/mounts/plan9/%s-%s"
 
 // Mount represents a single Plan9 share mount inside a Hyper-V guest VM. It
 // tracks the mount lifecycle and supports reference counting so multiple
@@ -54,13 +54,18 @@ func NewReserved(shareName string, config Config) *Mount {
 		config:    config,
 		state:     StateReserved,
 		refCount:  1,
-		guestPath: fmt.Sprintf(GuestPathFmt, shareName),
+		guestPath: fmt.Sprintf(GuestPathFmt, shareName, config.Key()),
 	}
 }
 
 // State returns the current lifecycle state of the mount.
 func (m *Mount) State() State {
 	return m.state
+}
+
+// Config returns the immutable guest mount configuration.
+func (m *Mount) Config() Config {
+	return m.config
 }
 
 // GuestPath returns the path inside the guest where the share is mounted.

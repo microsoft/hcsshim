@@ -19,6 +19,15 @@ func (c Config) Equals(other Config) bool {
 	return c.ReadOnly == other.ReadOnly
 }
 
+// Key returns a stable string that identifies this configuration.
+// It must distinguish configurations that are not equal.
+func (c Config) Key() string {
+	if c.ReadOnly {
+		return "ro"
+	}
+	return "rw"
+}
+
 // GuestPlan9Mounter mounts a Plan9 share inside an LCOW guest.
 type GuestPlan9Mounter interface {
 	// AddMappedDirectory maps a Plan9 share into the LCOW guest.
