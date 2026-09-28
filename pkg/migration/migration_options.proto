@@ -65,8 +65,8 @@ enum Origin {
     ORIGIN_DESTINATION = 2;
 }
 
-// Phase describes a live migration phase reported by HCS during the
-// transfer phase of a live migration.
+// Phase describes the category of a live migration notification. Most phases
+// report HCS migration progress; shim-generated task events use PHASE_TASK_EVENT.
 enum Phase {
     PHASE_UNSPECIFIED = 0;
     // The live migration setup has completed on the HCS side. Reported
@@ -106,11 +106,12 @@ enum Phase {
     // PHASE_STATE_SOURCE_FAILED, PHASE_STATE_DESTINATION_FAILED,
     // PHASE_STATE_CANCELLED, or PHASE_STATE_GUEST_INITIATED_CANCELLATION.
     PHASE_FAILED = 8;
+    // A containerd task lifecycle event occurred while migration is active.
+    // The accompanying PhaseState identifies the event.
+    PHASE_TASK_EVENT = 9;
 }
 
-// PhaseState describes the possible state of a migration phase,
-// typically populated for terminal phases such as PHASE_DONE
-// or PHASE_FAILED.
+// PhaseState describes the state or event accompanying a notification phase.
 enum PhaseState {
     // No state reported. Used as the default zero value and for
     // non-terminal phases that do not carry an outcome.
@@ -165,6 +166,9 @@ enum PhaseState {
     // after a failed or cancelled migration did not succeed (the source
     // could not be returned to its pre-migration running state).
     PHASE_STATE_RECOVERY_FAILED = 6;
+    // A task exited while migration was active. Reported with
+    // Phase = PHASE_TASK_EVENT.
+    PHASE_STATE_TASK_EXIT = 7;
 }
 
 // BlackoutExitedEventDetails carries additional details reported alongside
@@ -177,22 +181,32 @@ message BlackoutExitedEventDetails {
     google.protobuf.Timestamp blackout_stop_timestamp = 2;
 }
 
-// Notification is a notification payload describing the current
-// state of an in-progress live migration operation. It mirrors the HCS
-// OperationSystemMigrationNotificationInfo schema.
+// TaskExitEventDetails carries the task exit information published to
+// containerd. It mirrors the containerd.events.TaskExit schema.
+message TaskExitEventDetails {
+    string container_id = 1;
+    string id = 2;
+    uint32 pid = 3;
+    uint32 exit_status = 4;
+    google.protobuf.Timestamp exited_at = 5;
+}
+
+// Notification describes an HCS migration update or a shim-generated event
+// observed while a live migration is in progress.
 message Notification {
     // Origin indicates which side of the live migration this notification
     // pertains to.
     Origin origin = 1;
-    // Phase is the live migration phase being reported.
+    // Phase identifies the notification category.
     Phase phase = 2;
-    // State is an optional outcome accompanying the phase. Typically
-    // populated for terminal phases.
+    // State is an optional outcome or event accompanying the phase.
     PhaseState state = 3;
     // PhaseDetails carries extra phase-specific information whose concrete
     // type depends on the phase being reported.
     oneof phase_details {
         // Details reported with PHASE_BLACKOUT_EXITED.
         BlackoutExitedEventDetails blackout_exited = 4;
+        // Details reported with PHASE_TASK_EVENT and PHASE_STATE_TASK_EXIT.
+        TaskExitEventDetails task_exit = 5;
     }
 }

@@ -10,6 +10,7 @@ import (
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 
+	eventstypes "github.com/containerd/containerd/api/events"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -202,10 +203,10 @@ func TestToPhaseState(t *testing.T) {
 	}
 }
 
-// TestToNotification verifies an HCS notification is converted to its wire form:
+// TestToMigrationNotification verifies an HCS notification is converted to its wire form:
 // origin/phase/state are mapped (with fallback origin), and blackout-exited
 // details are attached only on a valid payload and dropped otherwise.
-func TestToNotification(t *testing.T) {
+func TestToMigrationNotification(t *testing.T) {
 	stopTime := time.Unix(1700000000, 0).UTC()
 	blackoutDetails, err := json.Marshal(hcsschema.BlackoutExitedEventDetails{
 		BlackoutDurationMilliseconds: 1234,
@@ -301,10 +302,49 @@ func TestToNotification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ToNotification(tt.info, tt.fallback)
+			got := ToMigrationNotification(tt.info, tt.fallback)
 			if !proto.Equal(got, tt.want) {
 				t.Fatalf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestToTaskEventNotification verifies a containerd TaskExit maps to the task
+// event phase/state and preserves the complete event payload.
+func TestToTaskEventNotification(t *testing.T) {
+	exitedAt := timestamppb.New(time.Unix(1700000000, 0).UTC())
+	event := &eventstypes.TaskExit{
+		ContainerID: "container",
+		ID:          "exec",
+		Pid:         42,
+		ExitStatus:  137,
+		ExitedAt:    exitedAt,
+	}
+	want := &Notification{
+		Origin: Origin_ORIGIN_SOURCE,
+		Phase:  Phase_PHASE_TASK_EVENT,
+		State:  PhaseState_PHASE_STATE_TASK_EXIT,
+		PhaseDetails: &Notification_TaskExit{
+			TaskExit: &TaskExitEventDetails{
+				ContainerID: event.ContainerID,
+				ID:          event.ID,
+				Pid:         event.Pid,
+				ExitStatus:  event.ExitStatus,
+				ExitedAt:    event.ExitedAt,
+			},
+		},
+	}
+
+	got, ok := ToTaskEventNotification(event, hcsschema.MigrationOriginSource)
+	if !ok {
+		t.Fatal("TaskExit reported as unsupported")
+	}
+	if !proto.Equal(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+
+	if got, ok := ToTaskEventNotification(&eventstypes.TaskOOM{}, hcsschema.MigrationOriginSource); ok || got != nil {
+		t.Fatalf("unsupported event returned notification: %+v", got)
 	}
 }
