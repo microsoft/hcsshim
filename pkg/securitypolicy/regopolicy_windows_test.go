@@ -394,6 +394,82 @@ func Test_Rego_ExecInContainerPolicy_Windows(t *testing.T) {
 	}
 }
 
+func Test_Rego_ExecInContainerPolicy_DuplicatedCommand_Windows(t *testing.T) {
+	const execCount = 1000
+
+	constraints := generateWindowsConstraints(testRand, 1)
+	container := constraints.containers[0]
+	process := generateWindowsContainerExecProcess(testRand)
+	container.ExecProcesses = []windowsContainerExecProcess{process, process}
+
+	tc, err := setupRegoRunningWindowsContainerTest(constraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	running := tc.runningContainers[0]
+	user := IDName{Name: container.User}
+	commandLine := []string{process.Command}
+
+	for i := 0; i < execCount; i++ {
+		_, _, _, err := tc.policy.EnforceExecInContainerPolicyV2(constraints.ctx, running.containerID, commandLine, running.envList, container.WorkingDir, user, nil)
+		if err != nil {
+			t.Fatalf("exec %d failed: %v", i+1, err)
+		}
+
+		rawMatches, err := tc.policy.rego.GetMetadataMapValue("matches", running.containerID)
+		if err != nil {
+			t.Fatalf("get matches metadata after exec %d: %v", i+1, err)
+		}
+		matches, ok := rawMatches.([]interface{})
+		if !ok {
+			t.Fatalf("matches metadata has type %T, want []interface{}", rawMatches)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("matches metadata has %d entries after exec %d, want 1", len(matches), i+1)
+		}
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_DuplicatedCommand_Windows(t *testing.T) {
+	const signalCount = 100
+
+	constraints := generateWindowsConstraints(testRand, 1)
+	container := constraints.containers[0]
+	process := generateWindowsContainerExecProcess(testRand)
+	container.ExecProcesses = []windowsContainerExecProcess{process, process}
+
+	tc, err := setupRegoRunningWindowsContainerTest(constraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	running := tc.runningContainers[0]
+	signal := selectSignalFromWindowsSignals(testRand, process.Signals)
+	opts := &SignalContainerOptions{
+		WindowsSignal:  signal,
+		WindowsCommand: []string{process.Command},
+	}
+
+	for i := 0; i < signalCount; i++ {
+		if err := tc.policy.EnforceSignalContainerProcessPolicyV2(constraints.ctx, running.containerID, opts); err != nil {
+			t.Fatalf("signal %d failed: %v", i+1, err)
+		}
+
+		rawMatches, err := tc.policy.rego.GetMetadataMapValue("matches", running.containerID)
+		if err != nil {
+			t.Fatalf("get matches metadata after signal %d: %v", i+1, err)
+		}
+		matches, ok := rawMatches.([]interface{})
+		if !ok {
+			t.Fatalf("matches metadata has type %T, want []interface{}", rawMatches)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("matches metadata has %d entries after signal %d, want 1", len(matches), i+1)
+		}
+	}
+}
+
 func Test_Rego_ExecInContainerPolicy_No_Matches_Windows(t *testing.T) {
 	f := func(p *generatedWindowsConstraints) bool {
 		tc, err := setupRegoRunningWindowsContainerTest(p)

@@ -2656,6 +2656,80 @@ func Test_Rego_ExecInContainerPolicy(t *testing.T) {
 	}
 }
 
+func Test_Rego_ExecInContainerPolicy_DuplicatedCommand(t *testing.T) {
+	const execCount = 1000
+
+	constraints := generateConstraints(testRand, 1)
+	container := constraints.containers[0]
+	process := generateContainerExecProcess(testRand)
+	container.ExecProcesses = []containerExecProcess{process.clone(), process.clone()}
+
+	tc, err := setupRegoRunningContainerTest(constraints, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	running := tc.runningContainers[0]
+	capabilities := container.Capabilities.toExternal()
+	user := buildIDNameFromConfig(container.User.UserIDName, testRand)
+	groups := buildGroupIDNamesFromUser(container.User, testRand)
+
+	for i := 0; i < execCount; i++ {
+		_, _, _, err := tc.policy.EnforceExecInContainerPolicy(constraints.ctx, running.containerID, process.Command, running.envList, container.WorkingDir, container.NoNewPrivileges, user, groups, container.User.Umask, &capabilities)
+		if err != nil {
+			t.Fatalf("exec %d failed: %v", i+1, err)
+		}
+
+		rawMatches, err := tc.policy.rego.GetMetadataMapValue("matches", running.containerID)
+		if err != nil {
+			t.Fatalf("get matches metadata after exec %d: %v", i+1, err)
+		}
+		matches, ok := rawMatches.([]interface{})
+		if !ok {
+			t.Fatalf("matches metadata has type %T, want []interface{}", rawMatches)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("matches metadata has %d entries after exec %d, want 1", len(matches), i+1)
+		}
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_DuplicatedCommand(t *testing.T) {
+	const signalCount = 100
+
+	constraints := generateConstraints(testRand, 1)
+	container := constraints.containers[0]
+	process := generateContainerExecProcess(testRand)
+	process.Signals = generateListOfSignals(testRand, 1, 4)
+	container.ExecProcesses = []containerExecProcess{process.clone(), process.clone()}
+
+	tc, err := setupRegoRunningContainerTest(constraints, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	running := tc.runningContainers[0]
+	signal := selectSignalFromSignals(testRand, process.Signals)
+
+	for i := 0; i < signalCount; i++ {
+		if err := tc.policy.EnforceSignalContainerProcessPolicy(constraints.ctx, running.containerID, signal, false, process.Command); err != nil {
+			t.Fatalf("signal %d failed: %v", i+1, err)
+		}
+
+		rawMatches, err := tc.policy.rego.GetMetadataMapValue("matches", running.containerID)
+		if err != nil {
+			t.Fatalf("get matches metadata after signal %d: %v", i+1, err)
+		}
+		matches, ok := rawMatches.([]interface{})
+		if !ok {
+			t.Fatalf("matches metadata has type %T, want []interface{}", rawMatches)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("matches metadata has %d entries after signal %d, want 1", len(matches), i+1)
+		}
+	}
+}
+
 func Test_Rego_ExecInContainerPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
 		tc, err := setupRegoRunningContainerTest(p, false)
