@@ -64,6 +64,8 @@ const (
 	maxGeneratedMountOptionLength              = 32
 	maxGeneratedExecProcesses                  = 4
 	maxGeneratedWorkingDirLength               = 128
+	maxGeneratedMappedDirectories              = 8
+	maxGeneratedMappedDirectoryPathLength      = 64
 	maxSignalNumber                            = 64
 	maxGeneratedNameLength                     = 8
 	maxGeneratedGroupNames                     = 4
@@ -717,6 +719,27 @@ func setupWindowsExternalProcessTest(gc *generatedWindowsConstraints) (tc *regoE
 }
 
 type regoExternalPolicyTestConfig struct {
+	policy *regoEnforcer
+}
+
+func setupWindowsMappedDirectoriesTest(gc *generatedWindowsConstraints) (tc *regoMappedDirectoriesTestConfig, err error) {
+	gc.mappedDirectories = generateMappedDirectories(testRand)
+	securityPolicy := gc.toPolicy()
+
+	policy, err := newRegoPolicy(securityPolicy.marshalWindowsRego(),
+		[]oci.Mount{},
+		[]oci.Mount{},
+		testOSType)
+	if err != nil {
+		return nil, err
+	}
+
+	return &regoMappedDirectoriesTestConfig{
+		policy: policy,
+	}, nil
+}
+
+type regoMappedDirectoriesTestConfig struct {
 	policy *regoEnforcer
 }
 
@@ -1875,6 +1898,7 @@ func (c *securityPolicyWindowsContainer) toWindowsContainer() *WindowsContainer 
 		Layers:        Layers(stringArrayToStringMap(c.Layers)),
 		MountedCim:    c.MountedCim,
 		WorkingDir:    c.WorkingDir,
+		Mounts:        mountArrayToMounts(c.Mounts),
 		ExecProcesses: execProcesses,
 		Signals:       c.Signals,
 		User:          c.User,
@@ -2014,6 +2038,10 @@ func selectWindowsExternalProcessFromConstraints(constraints *generatedWindowsCo
 	return constraints.externalProcesses[r.Intn(numberOfProcessesInConstraints)]
 }
 
+func selectMappedDirectoryFromConstraints(constraints *generatedWindowsConstraints, r *rand.Rand) WindowsMappedDirectoryRule {
+	return constraints.mappedDirectories[r.Intn(len(constraints.mappedDirectories))]
+}
+
 func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 	return &securityPolicyInternal{
 		Containers:                       constraints.containers,
@@ -2026,6 +2054,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
+		AllowRegistryChangesDropping:     constraints.allowRegistryChangesDropping,
 		AllowLogProviderDropping:         constraints.allowLogProviderDropping,
 	}
 }
@@ -2168,6 +2197,10 @@ func setupRegoCreateContainerTestWindows(gc *generatedWindowsConstraints, testCo
 	}, nil
 }
 
+// testCIMVolumeGUID is a placeholder volume GUID for tests that mount a CIM but
+// don't exercise unmount; the unmount tests use their own GUIDs.
+const testCIMVolumeGUID = "test-cim-volume-guid"
+
 //nolint:unused
 func mountImageForWindowsContainer(policy *regoEnforcer, container *securityPolicyWindowsContainer) (string, error) {
 	ctx := context.Background()
@@ -2183,7 +2216,7 @@ func mountImageForWindowsContainer(policy *regoEnforcer, container *securityPoli
 
 	// Mount the CIMFS for the Windows container
 	// layerHashes are the individual layer hashes, mountedCim is the merged CIM from the policy
-	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, layerHashes, container.MountedCim)
+	err := policy.EnforceVerifiedCIMsPolicy(ctx, containerID, layerHashes, container.MountedCim, testCIMVolumeGUID)
 	if err != nil {
 		return "", fmt.Errorf("error mounting CIMFS: %w", err)
 	}
@@ -2289,6 +2322,7 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 		namespace:                        generateFragmentNamespace(testRand),
 		svn:                              generateSVN(testRand),
 		allowCapabilityDropping:          false,
+		allowRegistryChangesDropping:     false,
 		allowLogProviderDropping:         false,
 		ctx:                              context.Background(),
 	}
@@ -2402,6 +2436,28 @@ func generateRootHash(r *rand.Rand) string {
 
 func generateWorkingDir(r *rand.Rand) string {
 	return randVariableString(r, maxGeneratedWorkingDirLength)
+}
+
+func generateMappedDirectory(r *rand.Rand) WindowsMappedDirectoryRule {
+	return WindowsMappedDirectoryRule{
+		ContainerPath: `C:\` + randVariableString(r, maxGeneratedMappedDirectoryPathLength),
+		ReadOnly:      randBool(r),
+	}
+}
+
+func generateMappedDirectories(r *rand.Rand) []WindowsMappedDirectoryRule {
+	numRules := atLeastOneAtMost(r, maxGeneratedMappedDirectories)
+	rules := make([]WindowsMappedDirectoryRule, 0, numRules)
+	seen := make(map[string]struct{}, numRules)
+	for int32(len(rules)) < numRules {
+		rule := generateMappedDirectory(r)
+		if _, dup := seen[rule.ContainerPath]; dup {
+			continue
+		}
+		seen[rule.ContainerPath] = struct{}{}
+		rules = append(rules, rule)
+	}
+	return rules
 }
 
 func generateWindowsUser(r *rand.Rand) string {
@@ -2955,6 +3011,7 @@ type generatedConstraints struct {
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
+	allowRegistryChangesDropping     bool
 	allowLogProviderDropping         bool
 	ctx                              context.Context
 }
@@ -2963,6 +3020,7 @@ type generatedWindowsConstraints struct {
 	containers                       []*securityPolicyWindowsContainer
 	externalProcesses                []*externalProcess
 	fragments                        []*fragment
+	mappedDirectories                []WindowsMappedDirectoryRule
 	allowGetProperties               bool
 	allowDumpStacks                  bool
 	allowRuntimeLogging              bool
@@ -2972,6 +3030,7 @@ type generatedWindowsConstraints struct {
 	namespace                        string
 	svn                              string
 	allowCapabilityDropping          bool
+	allowRegistryChangesDropping     bool
 	allowLogProviderDropping         bool
 	ctx                              context.Context
 }
@@ -2981,6 +3040,7 @@ func (constraints *generatedWindowsConstraints) toPolicy() *securityPolicyWindow
 		Containers:                       constraints.containers,
 		ExternalProcesses:                constraints.externalProcesses,
 		Fragments:                        constraints.fragments,
+		MappedDirectories:                constraints.mappedDirectories,
 		AllowPropertiesAccess:            constraints.allowGetProperties,
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,
@@ -2988,6 +3048,7 @@ func (constraints *generatedWindowsConstraints) toPolicy() *securityPolicyWindow
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
 		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 		AllowCapabilityDropping:          constraints.allowCapabilityDropping,
+		AllowRegistryChangesDropping:     constraints.allowRegistryChangesDropping,
 		AllowLogProviderDropping:         constraints.allowLogProviderDropping,
 	}
 }
@@ -3034,6 +3095,7 @@ func generateWindowsConstraints(r *rand.Rand, maxContainers int32) *generatedWin
 		allowEnvironmentVariableDropping: false,
 		allowUnencryptedScratch:          false,
 		allowCapabilityDropping:          false,
+		allowRegistryChangesDropping:     false,
 		allowLogProviderDropping:         false,
 		namespace:                        generateFragmentNamespace(r),
 		svn:                              generateSVN(r),
