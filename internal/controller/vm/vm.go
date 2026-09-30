@@ -184,6 +184,7 @@ func (c *Controller) CreateVM(ctx context.Context, opts *CreateOptions) error {
 	default:
 		return fmt.Errorf("cannot create VM: VM is in incorrect state %s", c.vmState)
 	}
+	log.G(ctx).WithField("hcs-document", log.Format(ctx, hcsDocument)).Debug("creating utility VM")
 
 	// Create the VM via vmmanager.
 	uvm, err := vmmanager.Create(ctx, opts.ID, hcsDocument)
