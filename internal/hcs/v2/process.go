@@ -14,12 +14,12 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/Microsoft/hcsshim/internal/computecore"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/pkg/computecore"
 )
 
 type Process struct {
