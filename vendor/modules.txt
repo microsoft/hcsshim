@@ -195,16 +195,11 @@ github.com/go-logr/logr/funcr
 # github.com/go-logr/stdr v1.2.2
 ## explicit; go 1.16
 github.com/go-logr/stdr
-# github.com/gobwas/glob v0.2.3
-## explicit
+# github.com/gobwas/glob v1.0.0
+## explicit; go 1.22.0
 github.com/gobwas/glob
-github.com/gobwas/glob/compiler
-github.com/gobwas/glob/match
+github.com/gobwas/glob/internal/debug
 github.com/gobwas/glob/syntax
-github.com/gobwas/glob/syntax/ast
-github.com/gobwas/glob/syntax/lexer
-github.com/gobwas/glob/util/runes
-github.com/gobwas/glob/util/strings
 # github.com/goccy/go-json v0.10.6
 ## explicit; go 1.19
 github.com/goccy/go-json
@@ -260,8 +255,8 @@ github.com/google/go-containerregistry/pkg/v1/types
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
-# github.com/klauspost/compress v1.19.2
-## explicit; go 1.24
+# github.com/klauspost/compress v1.20.0
+## explicit; go 1.25
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -276,8 +271,8 @@ github.com/lestrrat-go/backoff/v2
 # github.com/lestrrat-go/blackmagic v1.0.4
 ## explicit; go 1.23
 github.com/lestrrat-go/blackmagic
-# github.com/lestrrat-go/dsig v1.2.1
-## explicit; go 1.23.0
+# github.com/lestrrat-go/dsig v1.4.0
+## explicit; go 1.25.0
 github.com/lestrrat-go/dsig
 github.com/lestrrat-go/dsig/internal/ecutil
 # github.com/lestrrat-go/dsig-secp256k1 v1.0.0
@@ -286,7 +281,7 @@ github.com/lestrrat-go/dsig-secp256k1
 # github.com/lestrrat-go/httpcc v1.0.1
 ## explicit; go 1.16
 github.com/lestrrat-go/httpcc
-# github.com/lestrrat-go/httprc/v3 v3.0.5
+# github.com/lestrrat-go/httprc/v3 v3.0.6
 ## explicit; go 1.23.0
 github.com/lestrrat-go/httprc/v3
 github.com/lestrrat-go/httprc/v3/errsink
@@ -306,7 +301,7 @@ github.com/lestrrat-go/jwx/internal/pool
 github.com/lestrrat-go/jwx/jwa
 github.com/lestrrat-go/jwx/jwk
 github.com/lestrrat-go/jwx/x25519
-# github.com/lestrrat-go/jwx/v3 v3.1.1
+# github.com/lestrrat-go/jwx/v3 v3.3.0
 ## explicit; go 1.25.0
 github.com/lestrrat-go/jwx/v3
 github.com/lestrrat-go/jwx/v3/cert
@@ -329,6 +324,8 @@ github.com/lestrrat-go/jwx/v3/jwk/ecdsa
 github.com/lestrrat-go/jwx/v3/jwk/internal/registry
 github.com/lestrrat-go/jwx/v3/jwk/jwkbb
 github.com/lestrrat-go/jwx/v3/jws
+github.com/lestrrat-go/jwx/v3/jws/internal/jwsbb
+github.com/lestrrat-go/jwx/v3/jws/internal/keyalg
 github.com/lestrrat-go/jwx/v3/jws/internal/keytype
 github.com/lestrrat-go/jwx/v3/jws/jwsbb
 github.com/lestrrat-go/jwx/v3/jws/legacy
@@ -369,7 +366,7 @@ github.com/moby/sys/userns
 # github.com/mrunalp/fileutils v0.5.1
 ## explicit; go 1.13
 github.com/mrunalp/fileutils
-# github.com/open-policy-agent/opa v1.20.1
+# github.com/open-policy-agent/opa v1.21.1
 ## explicit; go 1.26.0
 github.com/open-policy-agent/opa/capabilities
 github.com/open-policy-agent/opa/internal/bundle
@@ -409,6 +406,7 @@ github.com/open-policy-agent/opa/internal/wasm/opcode
 github.com/open-policy-agent/opa/internal/wasm/sdk/opa/capabilities
 github.com/open-policy-agent/opa/internal/wasm/types
 github.com/open-policy-agent/opa/internal/wasm/util
+github.com/open-policy-agent/opa/internal/yaml
 github.com/open-policy-agent/opa/v1/ast
 github.com/open-policy-agent/opa/v1/ast/internal/scanner
 github.com/open-policy-agent/opa/v1/ast/internal/tokens
@@ -523,7 +521,7 @@ github.com/segmentio/asm/cpu/arm64
 github.com/segmentio/asm/cpu/cpuid
 github.com/segmentio/asm/cpu/x86
 github.com/segmentio/asm/internal/unsafebytes
-# github.com/sirupsen/logrus v1.10.0
+# github.com/sirupsen/logrus v1.10.2
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 # github.com/tchap/go-patricia/v2 v2.3.3
@@ -539,7 +537,7 @@ github.com/urfave/cli/v2
 ## explicit; go 1.24
 github.com/valyala/fastjson
 github.com/valyala/fastjson/fastfloat
-# github.com/vektah/gqlparser/v2 v2.5.36
+# github.com/vektah/gqlparser/v2 v2.5.37
 ## explicit; go 1.22
 github.com/vektah/gqlparser/v2/ast
 github.com/vektah/gqlparser/v2/gqlerror
@@ -632,9 +630,6 @@ go.opentelemetry.io/otel/trace/noop
 go.uber.org/mock/gomock
 go.uber.org/mock/mockgen
 go.uber.org/mock/mockgen/model
-# go.yaml.in/yaml/v2 v2.4.4
-## explicit; go 1.15
-go.yaml.in/yaml/v2
 # go.yaml.in/yaml/v3 v3.0.5
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
@@ -831,7 +826,4 @@ google.golang.org/protobuf/types/known/fieldmaskpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/pluginpb
-# sigs.k8s.io/yaml v1.6.0
-## explicit; go 1.22
-sigs.k8s.io/yaml
 # google.golang.org/genproto => google.golang.org/genproto v0.0.0-20250428153025-10db94c68c34
