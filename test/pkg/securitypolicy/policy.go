@@ -66,6 +66,7 @@ func PolicyWithOpts(tb testing.TB, policyType string, pOpts ...securitypolicy.Po
 		config.AllowEnvironmentVariableDropping,
 		config.AllowUnencryptedScratch,
 		config.AllowCapabilityDropping,
+		config.AllowRegistryChangesDropping,
 		config.AllowLogProviderDropping,
 	)
 	if err != nil {
@@ -123,6 +124,7 @@ func WindowsPolicyWithOpts(tb testing.TB, policyType string, pOpts ...securitypo
 		config.AllowEnvironmentVariableDropping,
 		config.AllowUnencryptedScratch,
 		config.AllowCapabilityDropping,
+		config.AllowRegistryChangesDropping,
 		config.AllowLogProviderDropping,
 	)
 	if err != nil {
