@@ -25,3 +25,13 @@ const (
 	PTCPUGroup                    PropertyType = "CpuGroup"
 	PTSystemGUID                  PropertyType = "SystemGUID"
 )
+
+const (
+	// CompatibilityInfoProperty is the HCS property name used to retrieve the
+	// VM's opaque migration-compatibility blob via PropertiesV3.
+	CompatibilityInfoProperty = "CompatibilityInfo"
+
+	// VMProcessorRequirementsProperty is the HCS property name used to retrieve the
+	// VM's processor feature/compatibility.
+	VMProcessorRequirementsProperty = "VmProcessorRequirements"
+)

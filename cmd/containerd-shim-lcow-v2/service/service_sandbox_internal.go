@@ -33,6 +33,10 @@ const (
 	SandboxStateReady = "SANDBOX_READY"
 	// SandboxStateNotReady indicates the sandbox is not ready.
 	SandboxStateNotReady = "SANDBOX_NOTREADY"
+
+	// vmProcessorRequirementsInfoKey is the verbose SandboxStatus info key under
+	// which the UVM's processor feature/compatibility set (raw HCS JSON) is reported.
+	vmProcessorRequirementsInfoKey = "vmProcessorRequirements"
 )
 
 // createSandboxInternal is the implementation for CreateSandbox.
@@ -194,7 +198,7 @@ func (s *Service) waitSandboxInternal(ctx context.Context, request *sandbox.Wait
 // It synthesizes a status response from the current vmController state.
 // When verbose is true, the response may be extended with additional
 // diagnostic information.
-func (s *Service) sandboxStatusInternal(_ context.Context, request *sandbox.SandboxStatusRequest) (*sandbox.SandboxStatusResponse, error) {
+func (s *Service) sandboxStatusInternal(ctx context.Context, request *sandbox.SandboxStatusRequest) (*sandbox.SandboxStatusResponse, error) {
 	if s.sandboxID != request.SandboxID {
 		return nil, fmt.Errorf("sandbox ID mismatch, expected %s, got %s", s.sandboxID, request.SandboxID)
 	}
@@ -223,8 +227,21 @@ func (s *Service) sandboxStatusInternal(_ context.Context, request *sandbox.Sand
 		resp.ExitedAt = timestamppb.New(stoppedStatus.StoppedTime)
 	}
 
-	if request.Verbose { //nolint:staticcheck
-		// TODO: Add compat info and any other details.
+	if request.Verbose {
+		// Surface the UVM's processor feature/compatibility set for diagnostics.
+		// Best-effort: a status query must not fail because this optional property
+		// could not be read.
+		procReqs, err := s.vmController.ProcessorRequirements(ctx)
+		if err != nil {
+			log.G(ctx).WithError(err).Debug("failed to query VM processor requirements for verbose sandbox status")
+		}
+
+		if len(procReqs) > 0 {
+			if resp.Info == nil {
+				resp.Info = make(map[string]string)
+			}
+			resp.Info[vmProcessorRequirementsInfoKey] = string(procReqs)
+		}
 	}
 
 	return resp, nil
