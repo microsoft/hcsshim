@@ -16,7 +16,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-//nolint:deadcode,varcheck // keep unused constants for potential future use
 const (
 	cISUID  = 0004000 // Set uid
 	cISGID  = 0002000 // Set gid
@@ -211,7 +210,7 @@ func WriteTarFileFromBackupStream(t *tar.Writer, r io.Reader, name string, size 
 		if err != nil {
 			return err
 		}
-		switch bhdr.Id {
+		switch bhdr.Id { //nolint:revive // ignore "switch" with identical branches.
 		case winio.BackupData:
 			hdr.Mode |= cISREG
 			if !readTwice {
@@ -339,7 +338,7 @@ func WriteTarFileFromBackupStream(t *tar.Writer, r io.Reader, name string, size 
 		if err != nil {
 			return err
 		}
-		switch bhdr.Id {
+		switch bhdr.Id { //nolint:revive // ignore "switch" with identical branches.
 		case winio.BackupAlternateData:
 			if (bhdr.Attributes & winio.StreamSparseAttributes) != 0 {
 				// Unsupported for now, since the size of the alternate stream is not present
