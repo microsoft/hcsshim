@@ -44,7 +44,7 @@ require (
 	github.com/google/go-containerregistry v0.22.0
 	github.com/linuxkit/virtsock v0.0.0-20241009230534-cb6a20cc0422
 	github.com/mattn/go-shellwords v1.0.13
-	github.com/moby/sys/user v0.4.0
+	github.com/moby/sys/user v0.4.1
 	github.com/open-policy-agent/opa v1.20.1
 	github.com/opencontainers/cgroups v0.1.0
 	github.com/opencontainers/runc v1.4.3
