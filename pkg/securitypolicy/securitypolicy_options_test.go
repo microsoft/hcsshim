@@ -26,7 +26,7 @@ func TestWriteSecurityContextDirAMDCertificate(t *testing.T) {
 		},
 		{
 			name:        "deprecated generic alias",
-			annotations: map[string]string{annotations.HostAMDCertificate: lcowCert},
+			annotations: map[string]string{annotations.HostAMDCertificate: lcowCert}, //nolint:staticcheck // SA1019: intentionally test compatibility with the deprecated alias.
 			wantCert:    lcowCert,
 		},
 		{
