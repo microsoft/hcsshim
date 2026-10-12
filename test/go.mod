@@ -22,7 +22,7 @@ require (
 	github.com/sirupsen/logrus v1.10.0
 	github.com/urfave/cli/v2 v2.27.7
 	go.opentelemetry.io/otel v1.47.0
-	go.opentelemetry.io/otel/sdk v1.46.0
+	go.opentelemetry.io/otel/sdk v1.47.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.49.0
 	google.golang.org/grpc v1.84.0
