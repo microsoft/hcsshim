@@ -7,6 +7,18 @@ package osversion
 // https://learn.microsoft.com/en-us/windows/release-health/windows-server-release-info
 // https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information
 const (
+	// Unmanifested is the build number that is returned if the binary
+	// is unmanifested. Unmanifested binaries do not return their actual version
+	// number, so the OSVersion does not contain correct versions, and should
+	// not be used.
+	//
+	// Note that 9200 was also the build number for Windows Server 2012,
+	// Windows RT, Windows RT 8.1, and Windows 8. These versions are obsolete,
+	// so should no longer be expected (but if you do, don't use this const).
+	//
+	// This const can be used to check if a binary is manifested.
+	Unmanifested = 9200
+
 	// RS1 (version 1607, codename "Redstone 1") corresponds to Windows Server
 	// 2016 (ltsc2016) and Windows 10 (Anniversary Update).
 	RS1 = 14393
