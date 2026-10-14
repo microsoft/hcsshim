@@ -88,6 +88,19 @@ func TestPrepareSource_RejectsAlreadyPrepared(t *testing.T) {
 	}
 }
 
+// TestPrepareSource_RejectsReservedSessionMismatch verifies source setup cannot
+// replace a session ID reserved by an earlier subscription.
+func TestPrepareSource_RejectsReservedSessionMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	c := New()
+	c.sessionID = "other"
+
+	err := c.PrepareSource(t.Context(), sourceOptions(mocks.NewMockvmController(ctrl)))
+	if !errors.Is(err, errdefs.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument, got %v", err)
+	}
+}
+
 // TestPrepareSource_InitializeError verifies a failure arming the VM leaves the
 // controller idle so the session can be retried.
 func TestPrepareSource_InitializeError(t *testing.T) {

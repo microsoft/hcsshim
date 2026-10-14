@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -179,9 +180,9 @@ func (c *Controller) allocatePlan9Mount(ctx context.Context, mount *specs.Mount,
 
 	// For single-file mounts, share the containing directory but restrict
 	// access to the specific file.
+	var fileName string
 	if !fileInfo.IsDir() {
-		hostDir, fileName := filepath.Split(mount.Source)
-		shareConfig.HostPath = hostDir
+		shareConfig.HostPath, fileName = filepath.Split(mount.Source)
 		shareConfig.Restrict = true
 		shareConfig.AllowedNames = []string{fileName}
 	}
@@ -201,6 +202,10 @@ func (c *Controller) allocatePlan9Mount(ctx context.Context, mount *specs.Mount,
 		return fmt.Errorf("map plan9 share %s to guest: %w", mount.Source, err)
 	}
 
+	// Generate the specific file path inside the guest.
+	if fileName != "" {
+		guestPath = path.Join(guestPath, fileName)
+	}
 	mount.Source = guestPath
 	return nil
 }

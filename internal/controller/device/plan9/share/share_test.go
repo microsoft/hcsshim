@@ -244,7 +244,7 @@ func TestRemoveFromVM_WithActiveMountSkipsRemove(t *testing.T) {
 	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.AddToVM(context.Background(), vmAdd)
 
-	// Reserve a mount to simulate an active mount (mount != nil).
+	// Reserve a mount to keep the share active.
 	_, _ = s.ReserveMount(context.Background(), mount.Config{})
 
 	// RemovePlan9 must NOT be called while a mount is active.
@@ -295,15 +295,15 @@ func TestRemoveFromVM_OnInvalid_NoMount_TransitionsToRemoved(t *testing.T) {
 	guestUnmount := mountmocks.NewMockGuestPlan9Unmounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
-	// Reserve a mount, then drain it so mount becomes nil.
-	_, _ = s.ReserveMount(context.Background(), mount.Config{})
+	// Reserve a mount, then drain its references.
+	m, _ := s.ReserveMount(context.Background(), mount.Config{})
 
 	// AddToVM fails → StateInvalid.
 	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(errVMAdd)
 	_ = s.AddToVM(context.Background(), vmAdd)
 
 	// Drain the mount via UnmountFromGuest.
-	if err := s.UnmountFromGuest(context.Background(), guestUnmount); err != nil {
+	if err := s.UnmountFromGuest(context.Background(), guestUnmount, m); err != nil {
 		t.Fatalf("unexpected error during unmount: %v", err)
 	}
 
@@ -353,15 +353,20 @@ func TestReserveMount_SameConfig_ReturnsSameMount(t *testing.T) {
 	}
 }
 
-// TestReserveMount_DifferentConfig_Errors verifies that reserving a mount with
-// a different config than the existing mount returns an error.
-func TestReserveMount_DifferentConfig_Errors(t *testing.T) {
+// TestReserveMount_DifferentConfig_CreatesNewMount verifies that different guest
+// configurations have distinct mounts and guest paths under one host share.
+func TestReserveMount_DifferentConfig_CreatesNewMount(t *testing.T) {
 	s := NewReserved("share0", newTestConfig())
-	_, _ = s.ReserveMount(context.Background(), mount.Config{ReadOnly: false})
-
-	_, err := s.ReserveMount(context.Background(), mount.Config{ReadOnly: true})
-	if err == nil {
-		t.Fatal("expected error when reserving mount with different config")
+	rw, err := s.ReserveMount(context.Background(), mount.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ro, err := s.ReserveMount(context.Background(), mount.Config{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rw == ro || rw.GuestPath() == ro.GuestPath() || len(s.mounts) != 2 {
+		t.Fatal("different configurations must have independent guest mounts")
 	}
 }
 
@@ -392,10 +397,10 @@ func TestMountToGuest_RequiresStateAdded(t *testing.T) {
 	guestMount := mountmocks.NewMockGuestPlan9Mounter(ctrl)
 
 	s := NewReserved("share0", newTestConfig())
-	_, _ = s.ReserveMount(context.Background(), mount.Config{})
+	m, _ := s.ReserveMount(context.Background(), mount.Config{})
 
 	// Share is in StateReserved — mount must fail.
-	_, err := s.MountToGuest(context.Background(), guestMount)
+	_, err := s.MountToGuest(context.Background(), guestMount, m)
 	if err == nil {
 		t.Fatal("expected error when mounting share not yet added to VM")
 	}
@@ -413,7 +418,7 @@ func TestMountToGuest_RequiresReservedMount(t *testing.T) {
 	_ = s.AddToVM(context.Background(), vmAdd)
 
 	// No mount reserved — must return error.
-	_, err := s.MountToGuest(context.Background(), guestMount)
+	_, err := s.MountToGuest(context.Background(), guestMount, nil)
 	if err == nil {
 		t.Fatal("expected error when no mount is reserved")
 	}
@@ -430,10 +435,10 @@ func TestMountToGuest_HappyPath(t *testing.T) {
 	s := NewReserved("share0", newTestConfig())
 	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.AddToVM(context.Background(), vmAdd)
-	_, _ = s.ReserveMount(context.Background(), mount.Config{})
+	m, _ := s.ReserveMount(context.Background(), mount.Config{})
 
 	guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
-	guestPath, err := s.MountToGuest(context.Background(), guestMount)
+	guestPath, err := s.MountToGuest(context.Background(), guestMount, m)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -458,14 +463,17 @@ func TestUnmountFromGuest_HappyPath(t *testing.T) {
 	s := NewReserved("share0", newTestConfig())
 	vmAdd.EXPECT().AddPlan9(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.AddToVM(context.Background(), vmAdd)
-	_, _ = s.ReserveMount(context.Background(), mount.Config{})
+	m, _ := s.ReserveMount(context.Background(), mount.Config{})
 
 	guestMount.EXPECT().AddMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
-	_, _ = s.MountToGuest(context.Background(), guestMount)
+	_, _ = s.MountToGuest(context.Background(), guestMount, m)
 
 	guestUnmount.EXPECT().RemoveMappedDirectory(gomock.Any(), gomock.Any()).Return(nil)
-	if err := s.UnmountFromGuest(context.Background(), guestUnmount); err != nil {
+	if err := s.UnmountFromGuest(context.Background(), guestUnmount, m); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.mounts) != 0 {
+		t.Fatal("released mount remains registered")
 	}
 }
 
@@ -478,7 +486,7 @@ func TestUnmountFromGuest_NoMount_IsNoOp(t *testing.T) {
 	s := NewReserved("share0", newTestConfig())
 
 	// No mount reserved — must be a no-op.
-	if err := s.UnmountFromGuest(context.Background(), guestUnmount); err != nil {
+	if err := s.UnmountFromGuest(context.Background(), guestUnmount, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

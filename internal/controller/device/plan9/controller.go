@@ -49,13 +49,15 @@ type Controller struct {
 	// Immutable after construction.
 	noWritableFileShares bool
 
-	// reservations maps a reservation ID to its share host path.
+	// reservations maps a reservation ID to its share and guest mount.
 	// Guarded by mu.
 	reservations map[guid.GUID]*reservation
 
-	// sharesByHostPath maps a host path to its share for fast deduplication
-	// of share additions. Guarded by mu.
-	sharesByHostPath map[string]*share.Share
+	// sharesByHostPath groups shares by host path. Different share configurations
+	// create separate shares. The same share configuration reuses an existing share,
+	// where identical guest mount configurations share a reference-counted mount.
+	// Guarded by mu.
+	sharesByHostPath map[string]map[*share.Share]struct{}
 
 	// nameCounter is the monotonically increasing index used to generate
 	// unique share names. Guarded by mu.
@@ -69,7 +71,7 @@ func New(vm vmPlan9, guest guestPlan9, noWritableFileShares bool) *Controller {
 		guest:                guest,
 		noWritableFileShares: noWritableFileShares,
 		reservations:         make(map[guid.GUID]*reservation),
-		sharesByHostPath:     make(map[string]*share.Share),
+		sharesByHostPath:     make(map[string]map[*share.Share]struct{}),
 	}
 }
 
@@ -103,51 +105,40 @@ func (c *Controller) Reserve(ctx context.Context, shareConfig share.Config, moun
 		return guid.GUID{}, fmt.Errorf("reservation ID already exists: %s", id)
 	}
 
-	// Create the reservation entry.
-	res := &reservation{
-		hostPath: shareConfig.HostPath,
-	}
-
-	// Check whether this host path already has an allocated share.
-	existingShare, ok := c.sharesByHostPath[shareConfig.HostPath]
-
-	// We have an existing share for this host path — reserve a mount on it for this caller.
-	if ok {
-		// Verify the caller is requesting the same share configuration.
-		if !existingShare.Config().Equals(shareConfig) {
-			return guid.GUID{}, fmt.Errorf("cannot reserve ref on share with different config")
-		}
-
-		// Set the share name.
-		res.name = existingShare.Name()
-
-		// We have a share, now reserve a mount on it.
-		if _, err = existingShare.ReserveMount(ctx, mountConfig); err != nil {
-			return guid.GUID{}, fmt.Errorf("reserve mount on share %s: %w", existingShare.Name(), err)
+	// Look for a matching configuration among shares registered for this host path.
+	shares := c.sharesByHostPath[shareConfig.HostPath]
+	var selected *share.Share
+	for existing := range shares {
+		if existing.Config().Equals(shareConfig) {
+			selected = existing
+			break
 		}
 	}
 
-	// If we don't have an existing share, we need to create one and reserve a mount on it.
-	if !ok {
-		// No existing share for this path — allocate a new one.
+	// Allocate a new share when this host path has no matching configuration.
+	if selected == nil {
 		name := strconv.FormatUint(c.nameCounter, 10)
 		c.nameCounter++
-
-		// Create the Share and Mount in the reserved states.
-		newShare := share.NewReserved(name, shareConfig)
-		if _, err = newShare.ReserveMount(ctx, mountConfig); err != nil {
-			return guid.GUID{}, fmt.Errorf("reserve mount on share %s: %w", name, err)
-		}
-
-		c.sharesByHostPath[shareConfig.HostPath] = newShare
-		res.name = newShare.Name()
+		selected = share.NewReserved(name, shareConfig)
 	}
 
-	// Ensure our reservation is saved for all future operations.
-	c.reservations[id] = res
+	// Reserve the requested guest mount before registering any new share.
+	guestMount, err := selected.ReserveMount(ctx, mountConfig)
+	if err != nil {
+		return guid.GUID{}, fmt.Errorf("reserve mount on share %s: %w", selected.Name(), err)
+	}
+
+	// Register the share under its real host path after reservation succeeds.
+	if shares == nil {
+		shares = make(map[*share.Share]struct{})
+		c.sharesByHostPath[shareConfig.HostPath] = shares
+	}
+	shares[selected] = struct{}{}
+
+	// Record the exact share and mount for subsequent mapping and cleanup.
+	c.reservations[id] = &reservation{share: selected, mount: guestMount}
 	log.G(ctx).WithField("reservation", id).Debug("Plan9 share reserved")
 
-	// Return the reserved guest path in addition to the reservation ID for caller convenience.
 	return id, nil
 }
 
@@ -164,12 +155,11 @@ func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, erro
 		return "", fmt.Errorf("reservation %s not found", id)
 	}
 
-	// Validate if the host path has an associated share.
-	// This should be reserved by the Reserve() call.
-	existingShare, ok := c.sharesByHostPath[res.hostPath]
-	if !ok {
-		return "", fmt.Errorf("share for host path %s not found", res.hostPath)
+	// Reject remapping a reservation whose guest-mount reference was already released.
+	if res.mount == nil {
+		return "", fmt.Errorf("reservation %s is being released", id)
 	}
+	existingShare := res.share
 
 	log.G(ctx).WithField(logfields.HostPath, existingShare.HostPath()).Debug("mapping Plan9 share to guest")
 
@@ -178,8 +168,8 @@ func (c *Controller) MapToGuest(ctx context.Context, id guid.GUID) (string, erro
 		return "", fmt.Errorf("add share to VM: %w", err)
 	}
 
-	// Mount the share inside the guest.
-	guestPath, err := existingShare.MountToGuest(ctx, c.guest)
+	// Mount the guest configuration selected by this reservation.
+	guestPath, err := existingShare.MountToGuest(ctx, c.guest, res.mount)
 	if err != nil {
 		return "", fmt.Errorf("mount share to guest: %w", err)
 	}
@@ -203,19 +193,17 @@ func (c *Controller) UnmapFromGuest(ctx context.Context, id guid.GUID) error {
 		return fmt.Errorf("reservation %s not found", id)
 	}
 
-	// Validate that the share exists before proceeding with teardown.
-	// This should be reserved by the Reserve() call.
-	existingShare, ok := c.sharesByHostPath[res.hostPath]
-	if !ok {
-		return fmt.Errorf("share for host path %s not found", res.hostPath)
-	}
-
+	// Use the reserved share, not another configuration registered for the same host path.
+	existingShare := res.share
 	log.G(ctx).WithField(logfields.HostPath, existingShare.HostPath()).Debug("unmapping Plan9 share from guest")
 
-	// Unmount the share from the guest (ref-counted; only issues the guest
-	// call when this is the last res on the share).
-	if err := existingShare.UnmountFromGuest(ctx, c.guest); err != nil {
-		return fmt.Errorf("unmount share from guest: %w", err)
+	// Release only this caller's guest-mount reference; other mounts keep the share alive.
+	if res.mount != nil {
+		if err := existingShare.UnmountFromGuest(ctx, c.guest, res.mount); err != nil {
+			return fmt.Errorf("unmount share from guest: %w", err)
+		}
+		// A host-removal retry must not release another mount reference.
+		res.mount = nil
 	}
 
 	// Remove the share from the VM when no mounts remain active.
@@ -223,10 +211,13 @@ func (c *Controller) UnmapFromGuest(ctx context.Context, id guid.GUID) error {
 		return fmt.Errorf("remove share from VM: %w", err)
 	}
 
-	// If the share is now fully removed, free its entry for reuse.
-	// If it's used in other reservations, it will remain until the last one is released.
+	// Remove only this share; retain the host-path entry while other variants remain.
 	if existingShare.State() == share.StateRemoved {
-		delete(c.sharesByHostPath, existingShare.HostPath())
+		shares := c.sharesByHostPath[existingShare.HostPath()]
+		delete(shares, existingShare)
+		if len(shares) == 0 {
+			delete(c.sharesByHostPath, existingShare.HostPath())
+		}
 		log.G(ctx).Debug("Plan9 share freed")
 	}
 

@@ -144,6 +144,8 @@ func (s *Service) forward(ctx context.Context, publisher shim.Publisher) {
 		if err != nil {
 			log.G(ctx).WithError(err).Error("post event")
 		}
+
+		s.migrationController.PublishTaskEvents(e)
 	}
 	_ = publisher.Close()
 }

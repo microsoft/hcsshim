@@ -22,16 +22,15 @@ var (
 // NewReserved
 // ─────────────────────────────────────────────────────────────────────────────
 
-// TestNewReserved_InitialState verifies that a freshly created mount starts
-// in StateReserved with refCount=1 and the correct guest path derived from
-// the share name.
+// TestNewReserved_InitialState verifies the initial state and guest path derived
+// from both the share name and the guest access mode.
 func TestNewReserved_InitialState(t *testing.T) {
 	m := NewReserved("share0", Config{ReadOnly: false})
 	if m.State() != StateReserved {
 		t.Errorf("expected StateReserved, got %v", m.State())
 	}
 
-	expected := fmt.Sprintf(GuestPathFmt, "share0")
+	expected := fmt.Sprintf(GuestPathFmt, "share0", "rw")
 	if m.GuestPath() != expected {
 		t.Errorf("expected guest path %q, got %q", expected, m.GuestPath())
 	}
@@ -109,7 +108,7 @@ func TestMountToGuest_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	expected := fmt.Sprintf(GuestPathFmt, "share0")
+	expected := fmt.Sprintf(GuestPathFmt, "share0", "ro")
 	if guestPath != expected {
 		t.Errorf("expected guest path %q, got %q", expected, guestPath)
 	}
@@ -159,7 +158,7 @@ func TestMountToGuest_AlreadyMounted_Idempotent(t *testing.T) {
 	if m.State() != StateMounted {
 		t.Errorf("expected StateMounted, got %v", m.State())
 	}
-	expected := fmt.Sprintf(GuestPathFmt, "share0")
+	expected := fmt.Sprintf(GuestPathFmt, "share0", "rw")
 	if guestPath != expected {
 		t.Errorf("expected %q, got %q", expected, guestPath)
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-//nolint:unused
 const osType = "linux"
 
 func ExtendPolicyWithNetworkingMounts(sandboxRoot string, enforcer SecurityPolicyEnforcer, spec *oci.Spec) error {

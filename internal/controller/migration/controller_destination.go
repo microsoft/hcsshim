@@ -68,6 +68,11 @@ func (c *Controller) ImportState(ctx context.Context, opts *ImportStateOptions) 
 		return fmt.Errorf("controller is in state %s for session %q: %w", c.state, c.sessionID, errdefs.ErrFailedPrecondition)
 	}
 
+	// A Subscribe call on an idle session might have reserved the session.
+	if c.sessionID != "" && c.sessionID != opts.SessionID {
+		return fmt.Errorf("session id %q does not match current session %q: %w", opts.SessionID, c.sessionID, errdefs.ErrInvalidArgument)
+	}
+
 	// Rehydrate each pod and index its containers so PatchResourcePaths
 	// can look up the owning pod. Build into local maps and commit them to the
 	// caller's borrowed maps only on success, so a mid-loop failure leaves the
@@ -262,6 +267,14 @@ func (c *Controller) PrepareDestination(ctx context.Context, sessionID string, m
 			MigrationOptions: migrationOpts,
 		}); err != nil {
 		return fmt.Errorf("create destination vm: %w", err)
+	}
+
+	// Start forwarding the VM migration notifications.
+	if c.notifier != nil {
+		if err := c.notifier.forwardVMNotifications(c.vmController, c.origin); err != nil {
+			c.state = StateFailed
+			return fmt.Errorf("forward VM migration notifications: %w", err)
+		}
 	}
 
 	// Re-ACL the patched (destination-host) VHDs against the freshly

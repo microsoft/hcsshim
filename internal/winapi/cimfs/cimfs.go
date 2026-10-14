@@ -33,7 +33,7 @@ type HashAlgorithm = types.CimHashAlgorithm
 //sys CimCommitImage(cimFSHandle FsHandle) (hr error) = cimfs.CimCommitImage?
 
 //sys CimCreateFile(cimFSHandle FsHandle, path string, file *FileMetadata, cimStreamHandle *StreamHandle) (hr error) = cimfs.CimCreateFile?
-//sys CimCloseStream(cimStreamHandle StreamHandle) (hr error) = cimfs.CimCloseStream?
+//sys CimCloseStream(cimStreamHandle StreamHandle) = cimfs.CimCloseStream?
 //sys CimWriteStream(cimStreamHandle StreamHandle, buffer uintptr, bufferSize uint32) (hr error) = cimfs.CimWriteStream?
 //sys CimDeletePath(cimFSHandle FsHandle, path string) (hr error) = cimfs.CimDeletePath?
 //sys CimCreateHardLink(cimFSHandle FsHandle, newPath string, oldPath string) (hr error) = cimfs.CimCreateHardLink?

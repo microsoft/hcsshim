@@ -346,6 +346,45 @@ func TestBlockCIMEmpty(t *testing.T) {
 	}
 }
 
+func TestBlockCIMCloseStream(t *testing.T) {
+	if !IsBlockCimWriteSupported() {
+		t.Skip("blockCIM not supported on this OS version")
+	}
+
+	root := t.TempDir()
+	writer, err := CreateBlockCIM(
+		filepath.Join(root, "layer.bcim"),
+		"layer.cim",
+		BlockCIMTypeSingleFile,
+	)
+	if err != nil {
+		t.Fatalf("create block CIM: %s", err)
+	}
+	t.Cleanup(func() {
+		if writer.handle != 0 {
+			_ = writer.Close()
+		}
+		time.Sleep(3 * time.Second)
+	})
+
+	for i := range 32 {
+		file := tuple{
+			filepath:     fmt.Sprintf("file-%d.txt", i),
+			fileContents: []byte("test data"),
+		}
+		if err := createCimFileUtil(writer, file); err != nil {
+			t.Fatalf("create file %d: %s", i, err)
+		}
+		if err := writer.closeStream(); err != nil {
+			t.Fatalf("close stream %d: %s", i, err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close block CIM: %s", err)
+	}
+}
+
 func TestBlockCIMSingleFileReadWrite(t *testing.T) {
 	if !IsBlockCimMountSupported() {
 		t.Skip("blockCIM not supported on this OS version")

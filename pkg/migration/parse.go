@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	eventstypes "github.com/containerd/containerd/api/events"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -148,8 +149,8 @@ func ToPhaseState(result hcsschema.MigrationResult, phase Phase) PhaseState {
 	return PhaseState_PHASE_STATE_UNSPECIFIED
 }
 
-// ToNotification converts an HCS migration event into its wire-form notification.
-func ToNotification(info hcsschema.OperationSystemMigrationNotificationInfo, fallbackOrigin hcsschema.MigrationOrigin) *Notification {
+// ToMigrationNotification converts an HCS migration event into its wire-form notification.
+func ToMigrationNotification(info hcsschema.OperationSystemMigrationNotificationInfo, fallbackOrigin hcsschema.MigrationOrigin) *Notification {
 	phase := ToPhase(info.Event)
 	notification := &Notification{
 		Origin: ToOrigin(info.Origin, fallbackOrigin),
@@ -172,4 +173,28 @@ func ToNotification(info hcsschema.OperationSystemMigrationNotificationInfo, fal
 	}
 
 	return notification
+}
+
+// ToTaskEventNotification converts a supported containerd task event into its
+// wire-form notification, returning false for unsupported events.
+func ToTaskEventNotification(event interface{}, origin hcsschema.MigrationOrigin) (*Notification, bool) {
+	switch event := event.(type) {
+	case *eventstypes.TaskExit:
+		return &Notification{
+			Origin: ToOrigin("", origin),
+			Phase:  Phase_PHASE_TASK_EVENT,
+			State:  PhaseState_PHASE_STATE_TASK_EXIT,
+			PhaseDetails: &Notification_TaskExit{
+				TaskExit: &TaskExitEventDetails{
+					ContainerID: event.ContainerID,
+					ID:          event.ID,
+					Pid:         event.Pid,
+					ExitStatus:  event.ExitStatus,
+					ExitedAt:    event.ExitedAt,
+				},
+			},
+		}, true
+	default:
+		return nil, false
+	}
 }

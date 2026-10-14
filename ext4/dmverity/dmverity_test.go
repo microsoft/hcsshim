@@ -72,6 +72,47 @@ func TestInvalidReadNotEnoughBytes(t *testing.T) {
 	}
 }
 
+// shortReader returns at most n bytes per Read, which io.Reader explicitly
+// permits. A reader like this still delivers the whole hash device.
+type shortReader struct {
+	r io.Reader
+	n int
+}
+
+func (s *shortReader) Read(p []byte) (int, error) {
+	if len(p) > s.n {
+		p = p[:s.n]
+	}
+	return s.r.Read(p)
+}
+
+func TestReadDMVerityInfoReaderShortReads(t *testing.T) {
+	tmpFile := tempFileWithContentLength(t, blockSize)
+	targetFile, err := writeDMVeritySuperBlock(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to write dm-verity super-block: %s", err)
+	}
+	content, err := os.ReadFile(targetFile.Name())
+	if err != nil {
+		t.Fatalf("failed to read temp file: %s", err)
+	}
+	// super block plus one block of root hash data
+	content = append(content[blockSize:], bytes.Repeat([]byte{1}, blockSize)...)
+
+	want, err := ReadDMVerityInfoReader(bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("failed to read verity info from a whole-block reader: %s", err)
+	}
+
+	got, err := ReadDMVerityInfoReader(&shortReader{r: bytes.NewReader(content), n: 1})
+	if err != nil {
+		t.Fatalf("failed to read verity info from a short reader: %s", err)
+	}
+	if got.RootDigest != want.RootDigest {
+		t.Fatalf("root digest mismatch: short reader got %q, want %q", got.RootDigest, want.RootDigest)
+	}
+}
+
 func TestNotVeritySuperBlock(t *testing.T) {
 	tmpFile := tempFileWithContentLength(t, 2*blockSize)
 	_, err := ReadDMVerityInfo(tmpFile.Name(), blockSize)
