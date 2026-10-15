@@ -461,7 +461,12 @@ func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, err
 		platformReferenceInfoBase64 = base64.StdEncoding.EncodeToString(s.platformReferenceInfo)
 	}
 	s.platformReferenceInfoMutex.RUnlock()
-	hostAMDCert := spec.Annotations[annotations.WCOWHostAMDCertificate]
+	// HostAMDCertificate is a deprecated alias of the LCOW key. Prefer that
+	// key, but preserve support for callers that supply the WCOW key.
+	hostAMDCert := spec.Annotations[annotations.LCOWHostAMDCertificate]
+	if hostAMDCert == "" {
+		hostAMDCert = spec.Annotations[annotations.WCOWHostAMDCertificate]
+	}
 	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 || len(tcbReferenceInfoBase64) > 0 || len(platformReferenceInfoBase64) > 0 {
 		// Use os.MkdirTemp to make sure that the directory is unique.
 		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
