@@ -277,3 +277,75 @@ func TestPreregisterRPCReusesOutstanding(t *testing.T) {
 		t.Errorf("duplicate PreregisterRPC returned a new call; want the outstanding one")
 	}
 }
+
+func TestBridgeForceComplete(t *testing.T) {
+	s, _ := pipeConn()
+	b := newBridge(s, nil, logrus.NewEntry(logrus.StandardLogger()))
+
+	call := &rpc{ch: make(chan struct{}), id: 42}
+	b.rpcs[call.id] = call
+
+	sentinel := errors.New("forced")
+	if !b.forceComplete(call, sentinel) {
+		t.Fatal("forceComplete should report true for a tracked rpc")
+	}
+	if !call.Done() {
+		t.Fatal("rpc should be completed after forceComplete")
+	}
+	if !errors.Is(call.Err(), sentinel) {
+		t.Fatalf("expected err %v, got %v", sentinel, call.Err())
+	}
+	if _, ok := b.rpcs[call.id]; ok {
+		t.Fatal("rpc should be removed from the tracking map")
+	}
+
+	// A second call is a no-op: the rpc is no longer tracked.
+	if b.forceComplete(call, nil) {
+		t.Fatal("forceComplete on an untracked rpc should report false")
+	}
+}
+
+func TestBridgeRecvUnmatchedWaitForProcessResponseIsNonFatal(t *testing.T) {
+	s, c := pipeConn()
+	b := newBridge(s, nil, logrus.NewEntry(logrus.StandardLogger()))
+	b.Start()
+	defer b.Close()
+
+	go func() {
+		sendMessage(t, c, prot.MsgType(prot.RPCWaitForProcess)|prot.MsgTypeResponse, 42, []byte("{}"))
+		// Reflect so a subsequent real RPC can still complete.
+		reflector(t, c, 0)
+	}()
+
+	// The bridge must still be usable after the expected late response.
+	req := testReq{X: 7}
+	var resp testResp
+	if err := b.RPC(context.Background(), prot.RPCCreate, &req, &resp, false); err != nil {
+		t.Fatalf("bridge should survive a late force-completed response, got: %v", err)
+	}
+	if resp.X != req.X {
+		t.Fatalf("expected echoed X=%d, got %d", req.X, resp.X)
+	}
+}
+
+func TestBridgeRecvUnknownRPCResponseIsFatal(t *testing.T) {
+	s, c := pipeConn()
+	b := newBridge(s, nil, logrus.NewEntry(logrus.StandardLogger()))
+	b.Start()
+	defer b.Close()
+
+	go sendMessage(t, c, prot.MsgType(prot.RPCCreate)|prot.MsgTypeResponse, 99999, []byte("{}"))
+
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- b.Wait()
+	}()
+	select {
+	case err := <-waitCh:
+		if err == nil || !strings.Contains(err.Error(), "unknown rpc response") {
+			t.Fatalf("expected unknown response to terminate the bridge, got: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("bridge did not terminate after receiving an unknown rpc response")
+	}
+}
