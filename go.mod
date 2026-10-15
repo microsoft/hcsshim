@@ -141,4 +141,11 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
+// Envoy is not used by hcsshim's packages; generation-tool dependencies
+// pull this version into the module graph.
+// This version was retagged and fails checksum verification with GOPROXY=direct.
+// Other versions remain available if Envoy packages are needed later.
+// See https://github.com/envoyproxy/go-control-plane/issues/1083.
+exclude github.com/envoyproxy/go-control-plane/envoy v1.32.3
+
 replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20250428153025-10db94c68c34
