@@ -180,7 +180,7 @@ func (c *Cmd) Start() error {
 			User:             c.Spec.User.Username,
 			WorkingDirectory: c.Spec.Cwd,
 			EmulateConsole:   c.Spec.Terminal,
-			CreateStdInPipe:  c.Stdin != nil,
+			CreateStdInPipe:  c.Stdin != nil || c.Spec.Terminal,
 			CreateStdOutPipe: c.Stdout != nil,
 			CreateStdErrPipe: c.Stderr != nil,
 		}
