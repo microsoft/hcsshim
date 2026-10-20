@@ -20,6 +20,7 @@ type securityPolicyInternal struct {
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
+	AllowRegistryChangesDropping     bool
 	AllowLogProviderDropping         bool
 }
 
@@ -28,6 +29,7 @@ type securityPolicyWindowsInternal struct {
 	Containers                       []*securityPolicyWindowsContainer
 	ExternalProcesses                []*externalProcess
 	Fragments                        []*fragment
+	MappedDirectories                []WindowsMappedDirectoryRule
 	AllowPropertiesAccess            bool
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
@@ -35,6 +37,7 @@ type securityPolicyWindowsInternal struct {
 	AllowEnvironmentVariableDropping bool
 	AllowUnencryptedScratch          bool
 	AllowCapabilityDropping          bool
+	AllowRegistryChangesDropping     bool
 	AllowLogProviderDropping         bool
 }
 
@@ -103,6 +106,7 @@ func newSecurityPolicyInternal(
 	allowDropEnvironmentVariables bool,
 	allowUnencryptedScratch bool,
 	allowDropCapabilities bool,
+	allowRegistryChangesDropping bool,
 	allowLogProviderDropping bool,
 ) (*securityPolicyInternal, error) {
 	containersInternal, err := containersToInternal(containers)
@@ -121,6 +125,7 @@ func newSecurityPolicyInternal(
 		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
 		AllowUnencryptedScratch:          allowUnencryptedScratch,
 		AllowCapabilityDropping:          allowDropCapabilities,
+		AllowRegistryChangesDropping:     allowRegistryChangesDropping,
 		AllowLogProviderDropping:         allowLogProviderDropping,
 	}, nil
 }
@@ -219,6 +224,12 @@ type securityPolicyWindowsContainer struct {
 	// WorkingDir is a path to container's working directory, which all the processes
 	// will default to.
 	WorkingDir string `json:"working_dir"`
+	// The set of mount constraints that the container is allowed to be created
+	// with. Matched against the OCI spec mounts at container creation time.
+	Mounts []mountInternal `json:"mounts"`
+	// The set of registry changes the container is allowed to make. Matched
+	// against the registry changes requested at container creation time.
+	RegistryChanges registryChangesInternal `json:"registry_changes,omitempty"`
 	// A list of lists of commands that can be used to execute additional
 	// processes within the container
 	ExecProcesses []windowsContainerExecProcess `json:"exec_processes"`
@@ -256,6 +267,31 @@ type mountInternal struct {
 	Destination string   `json:"destination"`
 	Type        string   `json:"type"`
 	Options     []string `json:"options"`
+}
+
+// Internal version of WindowsRegistryChanges
+type registryChangesInternal struct {
+	AddValues  []registryValueInternal `json:"add_values"`
+	DeleteKeys []registryKeyInternal   `json:"delete_keys"`
+}
+
+// Internal version of WindowsRegistryKey
+type registryKeyInternal struct {
+	Hive     string `json:"hive"`
+	Name     string `json:"name"`
+	Volatile bool   `json:"volatile"`
+}
+
+// Internal version of WindowsRegistryValue
+type registryValueInternal struct {
+	Key         registryKeyInternal `json:"key"`
+	Name        string              `json:"name"`
+	Type        string              `json:"type"`
+	StringValue string              `json:"string_value,omitempty"`
+	DWordValue  int32               `json:"dword_value,omitempty"`
+	QWordValue  int32               `json:"qword_value,omitempty"`
+	BinaryValue string              `json:"binary_value,omitempty"`
+	CustomType  int32               `json:"custom_type,omitempty"`
 }
 
 // Internal version of Capabilities
@@ -347,17 +383,49 @@ func (c *WindowsContainer) toInternal() (*securityPolicyWindowsContainer, error)
 		execProcesses[i] = windowsContainerExecProcess(ep)
 	}
 
+	mounts, err := c.Mounts.toInternal()
+	if err != nil {
+		return nil, err
+	}
+
 	return &securityPolicyWindowsContainer{
 		Command:          command,
 		EnvRules:         envRules,
 		Layers:           layers,
 		MountedCim:       c.MountedCim,
 		WorkingDir:       c.WorkingDir,
+		Mounts:           mounts,
+		RegistryChanges:  c.RegistryChanges.toInternal(),
 		ExecProcesses:    execProcesses,
 		Signals:          c.Signals,
 		AllowStdioAccess: c.AllowStdioAccess,
 		User:             c.User,
 	}, nil
+}
+
+func (r WindowsRegistryChanges) toInternal() registryChangesInternal {
+	addValues := make([]registryValueInternal, len(r.AddValues))
+	for i, v := range r.AddValues {
+		addValues[i] = registryValueInternal{
+			Key: registryKeyInternal{
+				Hive:     v.Key.Hive,
+				Name:     v.Key.Name,
+				Volatile: v.Key.Volatile,
+			},
+			Name:        v.Name,
+			Type:        v.Type,
+			StringValue: v.StringValue,
+			DWordValue:  v.DWordValue,
+			QWordValue:  v.QWordValue,
+			BinaryValue: v.BinaryValue,
+			CustomType:  v.CustomType,
+		}
+	}
+	deleteKeys := make([]registryKeyInternal, len(r.DeleteKeys))
+	for i, k := range r.DeleteKeys {
+		deleteKeys[i] = registryKeyInternal(k)
+	}
+	return registryChangesInternal{AddValues: addValues, DeleteKeys: deleteKeys}
 }
 
 func (c CommandArgs) toInternal() ([]string, error) {

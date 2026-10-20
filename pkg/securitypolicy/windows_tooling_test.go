@@ -61,7 +61,7 @@ func TestMarshalWindowsPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	policy, err := MarshalWindowsPolicy("rego", false, []*WindowsContainer{container}, nil, nil, false, false, false, false, false, false, false, false)
+	policy, err := MarshalWindowsPolicy("rego", false, []*WindowsContainer{container}, nil, nil, false, false, false, false, false, false, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,14 +73,14 @@ func TestMarshalWindowsPolicy(t *testing.T) {
 }
 
 func TestMarshalWindowsPolicyRejectsJSON(t *testing.T) {
-	_, err := MarshalWindowsPolicy("json", false, nil, nil, nil, false, false, false, false, false, false, false, false)
+	_, err := MarshalWindowsPolicy("json", false, nil, nil, nil, false, false, false, false, false, false, false, false, false)
 	if err == nil {
 		t.Fatal("expected JSON marshalling to be rejected for Windows policies")
 	}
 }
 
 func TestMarshalPolicyRejectsJSON(t *testing.T) {
-	_, err := MarshalPolicy("json", false, nil, nil, nil, false, false, false, false, false, false, false, false)
+	_, err := MarshalPolicy("json", false, nil, nil, nil, false, false, false, false, false, false, false, false, false)
 	if err == nil {
 		t.Fatal("expected JSON marshalling to be rejected")
 	}
@@ -102,7 +102,7 @@ func TestMarshalWindowsPolicyEscapesBackslashes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	policy, err := MarshalWindowsPolicy("rego", false, []*WindowsContainer{container}, nil, nil, false, false, false, false, false, false, false, false)
+	policy, err := MarshalWindowsPolicy("rego", false, []*WindowsContainer{container}, nil, nil, false, false, false, false, false, false, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
