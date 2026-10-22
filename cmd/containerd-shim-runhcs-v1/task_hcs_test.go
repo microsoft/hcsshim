@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/containerd/errdefs"
@@ -548,5 +550,52 @@ func Test_hcsTask_updateWCOWContainerCPUAffinity_XenonNotImplemented(t *testing.
 	err := ht.updateWCOWContainerCPUAffinity(context.Background(), []specs.WindowsCPUGroupAffinity{{Group: 0, Mask: 0x1}})
 	if !errors.Is(err, errdefs.ErrNotImplemented) {
 		t.Fatalf("expected ErrNotImplemented for hypervisor-isolated container, got %v", err)
+	}
+}
+
+// mockContainer is a minimal mock for cow.Container
+type mockContainer struct {
+	cow.Container
+	properties *schema1.ContainerProperties
+}
+
+func (m *mockContainer) Properties(ctx context.Context, types ...schema1.PropertyType) (*schema1.ContainerProperties, error) {
+	return m.properties, nil
+}
+
+func Test_hcsTask_Pids_UserTime(t *testing.T) {
+	ht := &hcsTask{
+		id: "test-task",
+		c: &mockContainer{
+			properties: &schema1.ContainerProperties{
+				ProcessList: []schema1.ProcessListItem{
+					{
+						ProcessId:       123,
+						ImageName:       "test.exe",
+						KernelTime100ns: 1000,
+						UserTime100ns:   2000,
+					},
+				},
+			},
+		},
+	}
+
+	ht.init = newTestShimExec("test-task", "test-task", 123)
+
+	pids, err := ht.Pids(context.Background())
+	if err != nil {
+		t.Fatalf("Pids() failed: %v", err)
+	}
+
+	if len(pids) != 1 {
+		t.Fatalf("Expected 1 pid, got %d", len(pids))
+	}
+
+	p := pids[0]
+	if p.UserTime_100Ns == p.KernelTime_100Ns {
+		t.Errorf("UserTime_100Ns (%d) incorrectly equals KernelTime_100Ns (%d)", p.UserTime_100Ns, p.KernelTime_100Ns)
+	}
+	if p.UserTime_100Ns != 2000 {
+		t.Errorf("Expected UserTime_100Ns=2000, got %d", p.UserTime_100Ns)
 	}
 }
