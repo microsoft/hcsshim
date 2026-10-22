@@ -14,9 +14,12 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/etw"
+	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	shimlog "github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ot"
+	logsources "github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/sirupsen/logrus"
@@ -191,6 +194,22 @@ func main() {
 	}
 	os.Stderr = logFileHandle
 
+	var loggingOptions []func(*securitypolicy.SecurityOptions)
+	// Keep the provider registered until process exit, as in the host shim.
+	provider, err := etw.NewProvider(logsources.SidecarProviderName, nil)
+	if err != nil {
+		logrus.WithError(err).Error("failed to register sidecar ETW provider")
+	} else if hook, err := etwlogrus.NewHookFromProvider(provider); err != nil {
+		logrus.WithError(err).Error("failed to initialize sidecar ETW hook")
+		if err := provider.Close(); err != nil {
+			logrus.WithError(err).Error("failed to close sidecar ETW provider")
+		}
+	} else {
+		gatedHook := sidecar.NewRuntimeLoggingHook(hook)
+		logrus.AddHook(gatedHook)
+		loggingOptions = append(loggingOptions, securitypolicy.WithRuntimeLoggingChanged(gatedHook.SetAllowed))
+	}
+
 	chsrv := make(chan error)
 	go func() {
 		defer close(chsrv)
@@ -278,7 +297,7 @@ func main() {
 	initialEnforcer := &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}
 
 	// 3. Create bridge and initializa
-	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer, logFileHandle)
+	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer, logFileHandle, loggingOptions...)
 	brdg.AssignHandlers()
 
 	// 3. Listen and serve for hcsshim requests.
