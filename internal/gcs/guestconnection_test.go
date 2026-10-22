@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/gcscompat"
 	"github.com/Microsoft/hcsshim/internal/ot"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -190,6 +191,91 @@ func connectGcs(ctx context.Context, t *testing.T) *GuestConnection {
 func TestGcsConnect(t *testing.T) {
 	gc := connectGcs(context.Background(), t)
 	defer gc.Close()
+}
+
+// answerNegotiateOnce serves exactly one NegotiateProtocol handshake on rw,
+// replying with the supplied capabilities, then returns. It lets a test drive
+// the host-side contract compatibility check in connect() with a chosen guest
+// contract range.
+func answerNegotiateOnce(t *testing.T, rw io.ReadWriteCloser, caps prot.GcsCapabilities) {
+	t.Helper()
+	defer rw.Close()
+	id, typ, _, err := readMessage(rw)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if proc := prot.RPCProc(typ &^ prot.MsgTypeRequest); proc != prot.RPCNegotiateProtocol {
+		t.Errorf("first RPC = %v, want NegotiateProtocol", proc)
+		return
+	}
+	if err := sendJSON(t, rw, prot.MsgTypeResponse|prot.MsgType(prot.RPCNegotiateProtocol), id, &prot.NegotiateProtocolResponse{
+		Version:      protocolVersion,
+		Capabilities: caps,
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestGcsConnectContractMismatch verifies that connect() fails fast with an
+// actionable error when the guest advertises a contract range that cannot
+// overlap the host's. This is how a mispaired GCS surfaces at the first
+// connection instead of as a confusing downstream failure.
+func TestGcsConnectContractMismatch(t *testing.T) {
+	s, c := pipeConn()
+	badMin := gcscompat.GuestHostContractVersion + 100
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		answerNegotiateOnce(t, c, prot.GcsCapabilities{
+			RuntimeOsType:      "linux",
+			MinContractVersion: badMin,
+			MaxContractVersion: badMin + 1,
+			GcsCommit:          "deadbeefcafe",
+		})
+	}()
+	t.Cleanup(func() { <-done })
+
+	gcc := &GuestConnectionConfig{
+		Conn:     s,
+		Log:      logrus.NewEntry(logrus.StandardLogger()),
+		IoListen: npipeIoListen,
+	}
+	_, err := gcc.Connect(context.Background(), true)
+	if err == nil {
+		t.Fatal("expected a contract mismatch error, got nil")
+	}
+	if !strings.Contains(err.Error(), "contract mismatch") {
+		t.Fatalf("error should mention contract mismatch, got: %v", err)
+	}
+}
+
+// TestGcsConnectContractCompatible verifies that a guest advertising a
+// compatible contract range connects normally.
+func TestGcsConnectContractCompatible(t *testing.T) {
+	s, c := pipeConn()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		answerNegotiateOnce(t, c, prot.GcsCapabilities{
+			RuntimeOsType:      "linux",
+			MinContractVersion: gcscompat.MinCompatibleContractVersion,
+			MaxContractVersion: gcscompat.GuestHostContractVersion,
+			GcsCommit:          "abc123",
+		})
+	}()
+	t.Cleanup(func() { <-done })
+
+	gcc := &GuestConnectionConfig{
+		Conn:     s,
+		Log:      logrus.NewEntry(logrus.StandardLogger()),
+		IoListen: npipeIoListen,
+	}
+	gc, err := gcc.Connect(context.Background(), true)
+	if err != nil {
+		t.Fatalf("compatible contract should connect, got: %v", err)
+	}
+	gc.Close()
 }
 
 // TestGcsResumeOnConnRenegotiates verifies that ResumeOnConn re-runs the
