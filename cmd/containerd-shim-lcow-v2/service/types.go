@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
@@ -57,6 +58,10 @@ type vmController interface {
 
 	// Stats returns runtime statistics for the VM.
 	Stats(ctx context.Context) (*stats.VirtualMachineStatistics, error)
+
+	// ProcessorRequirements returns the UVM's processor feature/compatibility
+	// set as raw JSON.
+	ProcessorRequirements(ctx context.Context) (json.RawMessage, error)
 
 	// UpdatePolicyFragment injects a security policy fragment into the running guest.
 	UpdatePolicyFragment(ctx context.Context, fragment guestresource.SecurityPolicyFragment) error
