@@ -13,6 +13,7 @@ package mocks
 
 import (
 	context "context"
+	json "encoding/json"
 	reflect "reflect"
 	time "time"
 
@@ -246,6 +247,21 @@ func (m *MockvmController) Plan9Controller() *plan9.Controller {
 func (mr *MockvmControllerMockRecorder) Plan9Controller() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Plan9Controller", reflect.TypeOf((*MockvmController)(nil).Plan9Controller))
+}
+
+// ProcessorRequirements mocks base method.
+func (m *MockvmController) ProcessorRequirements(ctx context.Context) (json.RawMessage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProcessorRequirements", ctx)
+	ret0, _ := ret[0].(json.RawMessage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProcessorRequirements indicates an expected call of ProcessorRequirements.
+func (mr *MockvmControllerMockRecorder) ProcessorRequirements(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessorRequirements", reflect.TypeOf((*MockvmController)(nil).ProcessorRequirements), ctx)
 }
 
 // Resume mocks base method.
