@@ -221,6 +221,73 @@ func TestBasic(t *testing.T) {
 	runTestsOnFiles(t, testFiles)
 }
 
+// TestInodeBitmapPadding verifies that inode bitmap bits beyond
+// inodesPerGroup are set in every group. e2fsck (1.47.x and later) reports
+// "Padding at end of inode bitmap is not set" otherwise, and allocators
+// could treat nonexistent inodes as free.
+func TestInodeBitmapPadding(t *testing.T) {
+	image := "testfs.img"
+	imagef, err := os.Create(image)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(image)
+	defer imagef.Close()
+
+	w := NewWriter(imagef)
+	testFiles := []testFile{
+		{Path: "dir", File: &File{Mode: format.S_IFDIR | 0755}},
+		{Path: "dir/file", File: &File{Mode: 0644}, Data: data[:40]},
+	}
+	for _, tf := range testFiles {
+		createTestFile(t, w, tf)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var sb format.SuperBlock
+	if _, err := imagef.Seek(1024, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Read(imagef, binary.LittleEndian, &sb); err != nil {
+		t.Fatal(err)
+	}
+	if sb.Magic != format.SuperBlockMagic {
+		t.Fatalf("bad superblock magic %#x", sb.Magic)
+	}
+	if sb.InodesPerGroup >= BlockSize*8 {
+		t.Fatalf("test image has no inode bitmap padding (inodesPerGroup=%d)", sb.InodesPerGroup)
+	}
+	groups := sb.InodesCount / sb.InodesPerGroup
+
+	gds := make([]format.GroupDescriptor, groups)
+	if _, err := imagef.Seek(BlockSize, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Read(imagef, binary.LittleEndian, gds); err != nil {
+		t.Fatal(err)
+	}
+
+	var bitmap [BlockSize]byte
+	for g, gd := range gds {
+		if _, err := imagef.ReadAt(bitmap[:], int64(gd.InodeBitmapLow)*BlockSize); err != nil {
+			t.Fatal(err)
+		}
+		for j := sb.InodesPerGroup; j < BlockSize*8; j++ {
+			if bitmap[j/8]&(1<<(j%8)) == 0 {
+				t.Fatalf("group %d: inode bitmap padding bit %d is not set", g, j)
+			}
+		}
+		// Padding bits must not be counted as used inodes.
+		if uint32(gd.FreeInodesCountLow) > sb.InodesPerGroup {
+			t.Errorf("group %d: free inode count %d exceeds inodesPerGroup %d", g, gd.FreeInodesCountLow, sb.InodesPerGroup)
+		}
+	}
+
+	fsck(t, image)
+}
+
 func TestLargeDirectory(t *testing.T) {
 	testFiles := []testFile{
 		{Path: "bigdir", File: &File{Mode: format.S_IFDIR | 0755}},
