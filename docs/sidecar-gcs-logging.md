@@ -54,7 +54,7 @@ set `io.microsoft.virtualmachine.forwardlogs.sources` to the base64 encoding of:
 }
 ```
 
-Use the same canonical provider name when overriding its default level.
+Provider names are matched case-insensitively when overriding default levels.
 The sidecar Logrus level also filters events; debug and trace map to ETW
 Verbose. Existing guest-local file output is retained when runtime logging is
 allowed. No events suppressed before policy installation are replayed.
@@ -64,3 +64,8 @@ lost; direct stderr writes and Go panic dumps are not forwarded by the hook.
 Provider initialization failures are reported locally without terminating the
 sidecar. Stopping Log Forward Service stops forwarding, not authorized local
 ETW emission.
+
+On non-confidential WCOW guests, an absent sidecar provider does not require
+installing the sidecar. Guests without log-forwarding capability retain the
+existing unsupported-feature behavior; supported collectors can subscribe to
+the provider GUID even when no process has registered it.
