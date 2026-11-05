@@ -87,8 +87,8 @@ type request struct {
 	message []byte
 }
 
-func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Bridge {
-	hostState := NewHost(initialEnforcer, logWriter)
+func NewBridge(shimConn io.ReadWriteCloser, inboxGCSConn io.ReadWriteCloser, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer, options ...func(*securitypolicy.SecurityOptions)) *Bridge {
+	hostState := NewHost(initialEnforcer, logWriter, options...)
 	return &Bridge{
 		pending:        make(map[sequenceID]chan *prot.ContainerExecuteProcessResponse),
 		monitoredIDs:   make(map[sequenceID]struct{}),

@@ -1,7 +1,10 @@
 package etw
 
+const SidecarProviderName = "Microsoft.Virtualization.GCSSidecar"
+
 // LOWERCASE ONLY keys for easier lookups and case-insensitive matching.
 var etwNameToGUIDMap = map[string]string{
+	"microsoft.virtualization.gcssidecar":                                        "5400e7dc-0f0f-553d-19b5-3672635b5f7b",
 	"microsoft.windows.containers.setup":                                         "22267b1c-b979-5c81-9e24-0db386a62dd1",
 	"microsoft.windows.containers.storage":                                       "2551390d-5927-5c84-6f0a-027a7e78d38d",
 	"microsoft.windows.containers.library":                                       "67eb0417-9297-42ae-a1d9-98bfeb359059",

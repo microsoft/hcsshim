@@ -104,13 +104,14 @@ type containerProcess struct {
 	pid uint32
 }
 
-func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
+func NewHost(initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer, options ...func(*securitypolicy.SecurityOptions)) *Host {
 	securityPolicyOptions := securitypolicy.NewSecurityOptions(
 		initialEnforcer,
 		false,
 		"",
 		"",
 		logWriter,
+		options...,
 	)
 	return &Host{
 		containers:               make(map[string]*Container),

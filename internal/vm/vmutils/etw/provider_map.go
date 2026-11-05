@@ -44,15 +44,16 @@ func GetProviderGUIDFromName(providerName string) string {
 }
 
 // providerKey returns a unique key for an EtwProvider, used for deduplication during merge.
-// If both Name and GUID are present, key is "Name|GUID". If only GUID, key is GUID. Otherwise, key is Name.
+// Names and GUIDs are case-insensitive. If both are present, key is
+// "Name|GUID". If only GUID, key is GUID. Otherwise, key is Name.
 func providerKey(provider EtwProvider) string {
 	if provider.ProviderGUID != "" {
 		if provider.ProviderName != "" {
-			return provider.ProviderName + "|" + provider.ProviderGUID
+			return strings.ToLower(provider.ProviderName + "|" + provider.ProviderGUID)
 		}
-		return provider.ProviderGUID
+		return strings.ToLower(provider.ProviderGUID)
 	}
-	return provider.ProviderName
+	return strings.ToLower(provider.ProviderName)
 }
 
 // mergeProviders merges two slices of EtwProvider, with userProviders taking precedence over defaultProviders

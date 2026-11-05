@@ -8,6 +8,10 @@ var defaultLogSourcesInfo = LogSourcesInfo{
 				Type: "ETW",
 				Providers: []EtwProvider{
 					{
+						ProviderName: SidecarProviderName,
+						Level:        "Information",
+					},
+					{
 						ProviderName: "microsoft.windows.hyperv.compute",
 						Level:        "Information",
 					},
