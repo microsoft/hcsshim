@@ -195,7 +195,6 @@ func main() {
 	os.Stderr = logFileHandle
 
 	var loggingOptions []func(*securitypolicy.SecurityOptions)
-	// Keep the provider registered until process exit, as in the host shim.
 	provider, err := etw.NewProvider(logsources.SidecarProviderName, nil)
 	if err != nil {
 		logrus.WithError(err).Error("failed to register sidecar ETW provider")
@@ -206,6 +205,12 @@ func main() {
 		}
 	} else {
 		gatedHook := sidecar.NewRuntimeLoggingHook(hook)
+		defer func() {
+			gatedHook.SetAllowed(false)
+			if err := provider.Close(); err != nil {
+				logrus.WithError(err).Error("failed to close sidecar ETW provider")
+			}
+		}()
 		logrus.AddHook(gatedHook)
 		loggingOptions = append(loggingOptions, securitypolicy.WithRuntimeLoggingChanged(gatedHook.SetAllowed))
 	}
