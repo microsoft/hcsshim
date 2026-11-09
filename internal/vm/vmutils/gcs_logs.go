@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	hcs "github.com/Microsoft/hcsshim/internal/hcs/v2"
@@ -126,14 +127,37 @@ func (e *GCSLogEntry) UnmarshalJSON(b []byte) error {
 	// Default the log level to info.
 	e.Level = logrus.InfoLevel
 
-	// Unmarshal standard fields first
-	if err := json.Unmarshal(b, &e.GCSLogEntryStandard); err != nil {
+	// Identify ETW records before decoding their timestamps.
+	if err := json.Unmarshal(b, &e.Fields); err != nil {
 		return err
 	}
 
-	// Unmarshal all fields including custom ones
-	if err := json.Unmarshal(b, &e.Fields); err != nil {
+	entry := struct {
+		*GCSLogEntryStandard
+		Time json.RawMessage `json:"time"`
+	}{GCSLogEntryStandard: &e.GCSLogEntryStandard}
+	if err := json.Unmarshal(b, &entry); err != nil {
 		return err
+	}
+	if len(entry.Time) != 0 {
+		if e.Fields["Source"] == "ETW" {
+			var timestamp string
+			if err := json.Unmarshal(entry.Time, &timestamp); err != nil {
+				return err
+			}
+			// Log Forward Service can insert U+000E formatting markers when
+			// rendering ETW FILETIME fields. Do not alter other event data.
+			if strings.ContainsRune(timestamp, '\u000e') {
+				normalized, err := json.Marshal(strings.ReplaceAll(timestamp, "\u000e", ""))
+				if err != nil {
+					return err
+				}
+				entry.Time = normalized
+			}
+		}
+		if err := json.Unmarshal(entry.Time, &e.Time); err != nil {
+			return err
+		}
 	}
 
 	// Do not allow fatal or panic level errors to propagate.

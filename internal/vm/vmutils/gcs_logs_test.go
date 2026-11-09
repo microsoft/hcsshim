@@ -183,6 +183,48 @@ func TestGCSLogEntryStandard(t *testing.T) {
 	}
 }
 
+func TestGCSLogEntryForwardedETWTime(t *testing.T) {
+	const timestamp = "2026-11-05T14:32:55.464727700Z"
+	const marked = `"\u000e2026\u000e-\u000e11\u000e-\u000e05T14:32:55.464727700Z"`
+	want, err := time.Parse(time.RFC3339Nano, timestamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"ETW marked time", `{"Source":"ETW","Time":` + marked + `}`, false},
+		{"ETW uppercase escape", `{"Source":"ETW","Time":` + strings.ReplaceAll(marked, "000e", "000E") + `}`, false},
+		{"ETW lowercase time", `{"Source":"ETW","time":` + marked + `}`, false},
+		{"ETW valid time", `{"Source":"ETW","Time":"` + timestamp + `"}`, false},
+		{"ordinary valid time", `{"time":"` + timestamp + `"}`, false},
+		{"ordinary marked time", `{"time":` + marked + `}`, true},
+		{"other source marked time", `{"Source":"other","Time":` + marked + `}`, true},
+		{"ETW invalid time", `{"Source":"ETW","Time":"\u000enot-a-timestamp"}`, true},
+		{"ETW other control character", `{"Source":"ETW","Time":"\u000f2026-11-05T14:32:55.464727700Z"}`, true},
+		{"ETW numeric time", `{"Source":"ETW","Time":123}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var entry GCSLogEntry
+			err := json.Unmarshal([]byte(tc.input), &entry)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected invalid timestamp to be rejected")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !entry.Time.Equal(want) {
+				t.Fatalf("time = %v, want %v", entry.Time, want)
+			}
+		})
+	}
+}
+
 func TestParseGCSLogrus(t *testing.T) {
 	// Create a hook to capture log entries
 	hook := &testLogHook{}
@@ -202,6 +244,28 @@ func TestParseGCSLogrus(t *testing.T) {
 		expectedCount int
 		validate      func(t *testing.T, entries []*logrus.Entry)
 	}{
+		{
+			name: "ETW FILETIME markers do not terminate stream",
+			vmID: "test-vm-etw",
+			input: `{"Source":"ETW","ProviderName":"Microsoft.Virtualization.GCSSidecar","Time":"\u000e2026\u000e-\u000e11\u000e-\u000e05T14:32:55.464727700Z","Level":"Info","Message":"Span\u000e","spanID":"707ab0753972cb10"}` +
+				`{"time":"2026-11-05T14:32:56Z","level":"info","msg":"following event"}`,
+			expectedCount: 2,
+			validate: func(t *testing.T, entries []*logrus.Entry) {
+				t.Helper()
+				first := entries[0]
+				if first.Message != "Span\u000e" || first.Data["spanID"] != "707ab0753972cb10" ||
+					first.Data["ProviderName"] != "Microsoft.Virtualization.GCSSidecar" || first.Data["uvm-id"] != "test-vm-etw" {
+					t.Fatalf("event metadata changed: %+v", first)
+				}
+				want := time.Date(2026, 11, 5, 14, 32, 55, 464727700, time.UTC)
+				if got, ok := first.Data["vm.time"].(time.Time); !ok || !got.Equal(want) {
+					t.Fatalf("vm.time = %v, want %v", first.Data["vm.time"], want)
+				}
+				if entries[1].Message != "following event" {
+					t.Fatalf("following event not decoded: %+v", entries[1])
+				}
+			},
+		},
 		{
 			name:          "single log entry",
 			vmID:          "test-vm-1",
