@@ -8,10 +8,12 @@ through the existing Windows logging socket, not the GCS control bridge.
 
 ## Policy
 
-The ETW hook starts disabled. After the guest validates and installs the
-confidential policy, `allow_runtime_logging` controls both ordinary runtime
-output and ETW emission. The existing Log Forward Service provider policy
-separately controls collection. There is no additional forwarding permission.
+The ETW hook buffers a bounded number of pre-policy startup events. It forwards
+them only after the guest validates and installs a policy allowing
+`allow_runtime_logging` and an ETW collection session is enabled. If policy
+denies runtime logging, buffered events are discarded. The existing Log
+Forward Service provider policy separately controls collection. There is no
+additional forwarding permission.
 
 Example policy excerpt (not a complete policy):
 
@@ -57,7 +59,9 @@ set `io.microsoft.virtualmachine.forwardlogs.sources` to the base64 encoding of:
 Provider names are matched case-insensitively when overriding default levels.
 The sidecar Logrus level also filters events; debug and trace map to ETW
 Verbose. Existing guest-local file output is retained when runtime logging is
-allowed. No events suppressed before policy installation are replayed.
+allowed. Startup buffering is capped at 128 events and 256 KiB; individual
+events larger than 16 KiB are dropped. Once streaming starts, events produced
+while collection is disabled are not buffered for later replay.
 
 Delivery is best effort. ETW events emitted before collection starts may be
 lost; direct stderr writes and Go panic dumps are not forwarded by the hook.

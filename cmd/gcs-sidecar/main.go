@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	shimlog "github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ot"
@@ -195,7 +197,27 @@ func main() {
 	os.Stderr = logFileHandle
 
 	var loggingOptions []func(*securitypolicy.SecurityOptions)
-	provider, err := etw.NewProvider(logsources.SidecarProviderName, nil)
+	var runtimeLogHook atomic.Pointer[sidecar.RuntimeLoggingHook]
+	var collectionEnabled atomic.Bool
+	provider, err := etw.NewProvider(logsources.SidecarProviderName, func(
+		_ guid.GUID,
+		state etw.ProviderState,
+		_ etw.Level,
+		_, _ uint64,
+		_ uintptr,
+	) {
+		switch state {
+		case etw.ProviderStateEnable:
+			collectionEnabled.Store(true)
+		case etw.ProviderStateDisable:
+			collectionEnabled.Store(false)
+		default:
+			return
+		}
+		if hook := runtimeLogHook.Load(); hook != nil {
+			hook.SetCollectionEnabled(collectionEnabled.Load())
+		}
+	})
 	if err != nil {
 		logrus.WithError(err).Error("failed to register sidecar ETW provider")
 	} else if hook, err := etwlogrus.NewHookFromProvider(provider); err != nil {
@@ -204,15 +226,17 @@ func main() {
 			logrus.WithError(err).Error("failed to close sidecar ETW provider")
 		}
 	} else {
-		gatedHook := sidecar.NewRuntimeLoggingHook(hook)
+		runtimeHook := sidecar.NewRuntimeLoggingHook(hook)
 		defer func() {
-			gatedHook.SetAllowed(false)
+			runtimeHook.Close()
 			if err := provider.Close(); err != nil {
 				logrus.WithError(err).Error("failed to close sidecar ETW provider")
 			}
 		}()
-		logrus.AddHook(gatedHook)
-		loggingOptions = append(loggingOptions, securitypolicy.WithRuntimeLoggingChanged(gatedHook.SetAllowed))
+		runtimeLogHook.Store(runtimeHook)
+		runtimeHook.SetCollectionEnabled(collectionEnabled.Load())
+		logrus.AddHook(runtimeHook)
+		loggingOptions = append(loggingOptions, securitypolicy.WithRuntimeLoggingChanged(runtimeHook.SetAllowed))
 	}
 
 	chsrv := make(chan error)
