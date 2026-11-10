@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -197,8 +196,7 @@ func main() {
 	os.Stderr = logFileHandle
 
 	var loggingOptions []func(*securitypolicy.SecurityOptions)
-	var runtimeLogHook atomic.Pointer[sidecar.RuntimeLoggingHook]
-	var collectionEnabled atomic.Bool
+	runtimeLogging := sidecar.NewRuntimeLoggingController()
 	provider, err := etw.NewProvider(logsources.SidecarProviderName, func(
 		_ guid.GUID,
 		state etw.ProviderState,
@@ -208,14 +206,11 @@ func main() {
 	) {
 		switch state {
 		case etw.ProviderStateEnable:
-			collectionEnabled.Store(true)
+			runtimeLogging.SetCollectionEnabled(true)
 		case etw.ProviderStateDisable:
-			collectionEnabled.Store(false)
+			runtimeLogging.SetCollectionEnabled(false)
 		default:
 			return
-		}
-		if hook := runtimeLogHook.Load(); hook != nil {
-			hook.SetCollectionEnabled(collectionEnabled.Load())
 		}
 	})
 	if err != nil {
@@ -233,8 +228,7 @@ func main() {
 				logrus.WithError(err).Error("failed to close sidecar ETW provider")
 			}
 		}()
-		runtimeLogHook.Store(runtimeHook)
-		runtimeHook.SetCollectionEnabled(collectionEnabled.Load())
+		runtimeLogging.Attach(runtimeHook)
 		logrus.AddHook(runtimeHook)
 		loggingOptions = append(loggingOptions, securitypolicy.WithRuntimeLoggingChanged(runtimeHook.SetAllowed))
 	}

@@ -3,6 +3,8 @@
 package bridge
 
 import (
+	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -26,6 +28,8 @@ type RuntimeLoggingHook struct {
 	allowed           bool
 	policyResolved    bool
 	collectionEnabled bool
+	streaming         bool
+	started           bool
 	closed            bool
 	pending           []*logrus.Entry
 	pendingBytes      int
@@ -34,6 +38,34 @@ type RuntimeLoggingHook struct {
 	stop      chan struct{}
 	done      chan struct{}
 	closeOnce sync.Once
+}
+
+// RuntimeLoggingController coordinates ETW collector notifications with hook
+// publication so an enable notification cannot be overwritten by stale state.
+type RuntimeLoggingController struct {
+	mu      sync.Mutex
+	hook    *RuntimeLoggingHook
+	enabled bool
+}
+
+func NewRuntimeLoggingController() *RuntimeLoggingController {
+	return &RuntimeLoggingController{}
+}
+
+func (c *RuntimeLoggingController) Attach(hook *RuntimeLoggingHook) {
+	c.mu.Lock()
+	c.hook = hook
+	hook.SetCollectionEnabled(c.enabled)
+	c.mu.Unlock()
+}
+
+func (c *RuntimeLoggingController) SetCollectionEnabled(enabled bool) {
+	c.mu.Lock()
+	c.enabled = enabled
+	if c.hook != nil {
+		c.hook.SetCollectionEnabled(enabled)
+	}
+	c.mu.Unlock()
 }
 
 func NewRuntimeLoggingHook(next logrus.Hook) *RuntimeLoggingHook {
@@ -61,6 +93,15 @@ func (h *RuntimeLoggingHook) SetAllowed(allowed bool) {
 		h.pending = nil
 		h.pendingBytes = 0
 	}
+	h.streaming = false
+	if h.readyLocked() {
+		if len(h.pending) == 0 {
+			h.streaming = true
+			h.started = true
+		} else {
+			h.streaming = false
+		}
+	}
 	h.mu.Unlock()
 	h.signal()
 }
@@ -73,8 +114,22 @@ func (h *RuntimeLoggingHook) SetCollectionEnabled(enabled bool) {
 		return
 	}
 	h.collectionEnabled = enabled
+	if h.readyLocked() {
+		if len(h.pending) == 0 {
+			h.streaming = true
+			h.started = true
+		} else {
+			h.streaming = false
+		}
+	} else {
+		h.streaming = false
+	}
 	h.mu.Unlock()
 	h.signal()
+}
+
+func (h *RuntimeLoggingHook) readyLocked() bool {
+	return !h.closed && h.policyResolved && h.allowed && h.collectionEnabled
 }
 
 func (h *RuntimeLoggingHook) Levels() []logrus.Level {
@@ -83,20 +138,22 @@ func (h *RuntimeLoggingHook) Levels() []logrus.Level {
 
 func (h *RuntimeLoggingHook) Fire(entry *logrus.Entry) error {
 	h.mu.Lock()
-	if h.closed || (h.policyResolved && (!h.allowed || !h.collectionEnabled)) {
-		h.mu.Unlock()
+	defer h.mu.Unlock()
+
+	if h.closed || (h.policyResolved && !h.allowed) || (h.started && !h.collectionEnabled) {
 		return nil
+	}
+	if h.readyLocked() && h.streaming {
+		return h.next.Fire(entry)
 	}
 
 	buffered, size, ok := copyStartupEntry(entry)
 	if !ok || len(h.pending) >= maxBufferedStartupEvents ||
 		size > maxBufferedStartupBytes-h.pendingBytes {
-		h.mu.Unlock()
 		return nil
 	}
 	h.pending = append(h.pending, buffered)
 	h.pendingBytes += size
-	h.mu.Unlock()
 	h.signal()
 	return nil
 }
@@ -116,24 +173,25 @@ func (h *RuntimeLoggingHook) forward() {
 			return
 		case <-h.wake:
 			h.mu.Lock()
-			if h.closed || !h.policyResolved || !h.allowed || !h.collectionEnabled {
+			if !h.readyLocked() {
 				h.mu.Unlock()
 				continue
 			}
 			entries := h.pending
 			h.pending = nil
 			h.pendingBytes = 0
-			h.mu.Unlock()
-
+			h.started = true
 			for _, entry := range entries {
-				h.mu.Lock()
-				allowed := !h.closed && h.policyResolved && h.allowed && h.collectionEnabled
-				h.mu.Unlock()
-				if !allowed {
+				if !h.readyLocked() {
 					break
 				}
 				_ = h.next.Fire(entry)
 			}
+			if h.readyLocked() {
+				h.streaming = true
+				h.started = true
+			}
+			h.mu.Unlock()
 		}
 	}
 }
@@ -244,6 +302,106 @@ func copyStartupField(value interface{}, maxBytes int) (interface{}, int, bool) 
 		}
 		copied := append([]string(nil), v...)
 		return copied, size, true
+	case map[string]interface{}, map[interface{}]interface{}, []interface{}:
+		return copyStartupValue(v, maxBytes, 0)
+	default:
+		serialized := fmt.Sprintf("(Unsupported: %T) %v", value, value)
+		return serialized, len(serialized), len(serialized) <= maxBytes
+	}
+}
+
+func copyStartupValue(value interface{}, maxBytes, depth int) (interface{}, int, bool) {
+	if depth >= 8 {
+		return nil, 0, false
+	}
+	switch v := value.(type) {
+	case nil:
+		return nil, 1, true
+	case string:
+		return v, len(v), len(v) <= maxBytes
+	case []byte:
+		if len(v) > maxBytes {
+			return nil, 0, false
+		}
+		return append([]byte(nil), v...), len(v), true
+	case bool:
+		return v, 1, true
+	case int:
+		return v, 8, true
+	case int8:
+		return v, 1, true
+	case int16:
+		return v, 2, true
+	case int32:
+		return v, 4, true
+	case int64:
+		return v, 8, true
+	case uint:
+		return v, 8, true
+	case uint8:
+		return v, 1, true
+	case uint16:
+		return v, 2, true
+	case uint32:
+		return v, 4, true
+	case uint64:
+		return v, 8, true
+	case float32:
+		return v, 4, true
+	case float64:
+		return v, 8, true
+	case map[string]interface{}:
+		if len(v) > maxStartupArrayElements {
+			return nil, 0, false
+		}
+		cloned := make(map[string]interface{}, len(v))
+		size := len(v) * 32
+		for key, item := range v {
+			if len(key) > maxBytes-size {
+				return nil, 0, false
+			}
+			copied, itemSize, ok := copyStartupValue(item, maxBytes-size-len(key), depth+1)
+			if !ok || size+len(key)+itemSize > maxBytes {
+				return nil, 0, false
+			}
+			cloned[key] = copied
+			size += len(key) + itemSize
+		}
+		return cloned, size, size <= maxBytes
+	case map[interface{}]interface{}:
+		if len(v) > maxStartupArrayElements {
+			return nil, 0, false
+		}
+		cloned := make(map[interface{}]interface{}, len(v))
+		size := len(v) * 32
+		for key, item := range v {
+			copiedKey, keySize, ok := copyStartupValue(key, maxBytes-size, depth+1)
+			if !ok || copiedKey == nil || !reflect.TypeOf(copiedKey).Comparable() {
+				return nil, 0, false
+			}
+			copiedValue, valueSize, ok := copyStartupValue(item, maxBytes-size-keySize, depth+1)
+			if !ok || size+keySize+valueSize > maxBytes {
+				return nil, 0, false
+			}
+			cloned[copiedKey] = copiedValue
+			size += keySize + valueSize
+		}
+		return cloned, size, size <= maxBytes
+	case []interface{}:
+		if len(v) > maxStartupArrayElements || len(v)*16 > maxBytes {
+			return nil, 0, false
+		}
+		cloned := make([]interface{}, len(v))
+		size := len(v) * 16
+		for i, item := range v {
+			copied, itemSize, ok := copyStartupValue(item, maxBytes-size, depth+1)
+			if !ok || size+itemSize > maxBytes {
+				return nil, 0, false
+			}
+			cloned[i] = copied
+			size += itemSize
+		}
+		return cloned, size, size <= maxBytes
 	default:
 		return nil, 0, false
 	}

@@ -63,22 +63,34 @@ func TestRuntimeLoggingHookFlushesAfterPolicyAndCollector(t *testing.T) {
 
 	hook.SetCollectionEnabled(true)
 	logger.WithField("containerID", "ready").Info("forwarding active")
+	claims := map[interface{}]interface{}{"svn": uint64(7)}
+	logger.WithField("cwtClaims", claims).Info("structured live field")
 
 	first := receiveLogEntry(t, capture.entries)
 	second := receiveLogEntry(t, capture.entries)
-	if got := []string{first.Message, second.Message}; !reflect.DeepEqual(got, []string{
-		"sidecar initialized", "forwarding active",
+	third := receiveLogEntry(t, capture.entries)
+	fourth := receiveLogEntry(t, capture.entries)
+	if got := []string{first.Message, second.Message, third.Message, fourth.Message}; !reflect.DeepEqual(got, []string{
+		"sidecar initialized", "policy installed", "forwarding active", "structured live field",
 	}) {
 		t.Fatalf("forwarded messages = %v", got)
 	}
-	if first.Data["containerID"] != "startup" || second.Data["containerID"] != "ready" {
+	if first.Data["containerID"] != "startup" || third.Data["containerID"] != "ready" {
 		t.Fatal("structured startup or live fields were not preserved")
+	}
+	if got, ok := fourth.Data["cwtClaims"].(map[interface{}]interface{}); !ok || got["svn"] != uint64(7) {
+		t.Fatalf("live structured field was not passed through: %#v", fourth.Data["cwtClaims"])
 	}
 
 	hook.SetCollectionEnabled(false)
 	logger.Info("collector stopped")
-	if capture.count.Load() != 2 {
+	if capture.count.Load() != 4 {
 		t.Fatal("event emitted while ETW collection was disabled")
+	}
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+	if len(hook.pending) != 0 {
+		t.Fatal("live event was buffered after collection stopped")
 	}
 }
 
@@ -88,16 +100,50 @@ func TestRuntimeLoggingHookCollectorCanPrecedePolicy(t *testing.T) {
 	t.Cleanup(hook.Close)
 	entry := logrus.NewEntry(logrus.New())
 	entry.Message = "captured before policy"
+	claims := map[interface{}]interface{}{"svn": uint64(7)}
+	entry.Data["cwtClaims"] = claims
 	if err := hook.Fire(entry); err != nil {
 		t.Fatal(err)
 	}
+	claims["svn"] = uint64(8)
 	hook.SetCollectionEnabled(true)
 	if capture.count.Load() != 0 {
 		t.Fatal("event emitted before policy validation")
 	}
 	hook.SetAllowed(true)
-	if got := receiveLogEntry(t, capture.entries); got.Message != entry.Message {
+	got := receiveLogEntry(t, capture.entries)
+	if got.Message != entry.Message {
 		t.Fatalf("forwarded %q, want %q", got.Message, entry.Message)
+	}
+	if value, ok := got.Data["cwtClaims"].(map[interface{}]interface{}); !ok || value["svn"] != uint64(7) {
+		t.Fatalf("startup structured field was not safely copied: %#v", got.Data["cwtClaims"])
+	}
+}
+
+func TestRuntimeLoggingControllerDoesNotLoseEnableNotification(t *testing.T) {
+	for _, collectorFirst := range []bool{false, true} {
+		capture := &runtimeLogCapture{entries: make(chan *logrus.Entry, 1)}
+		hook := newTestRuntimeLoggingHook(capture)
+		t.Cleanup(hook.Close)
+		controller := NewRuntimeLoggingController()
+		if collectorFirst {
+			controller.SetCollectionEnabled(true)
+		}
+		controller.Attach(hook)
+
+		entry := logrus.NewEntry(logrus.New())
+		entry.Message = "startup event"
+		if err := hook.Fire(entry); err != nil {
+			t.Fatal(err)
+		}
+		hook.SetAllowed(true)
+		if !collectorFirst {
+			controller.SetCollectionEnabled(true)
+		}
+
+		if got := receiveLogEntry(t, capture.entries); got.Message != entry.Message {
+			t.Fatalf("collectorFirst=%v: got %q, want %q", collectorFirst, got.Message, entry.Message)
+		}
 	}
 }
 
