@@ -14,9 +14,13 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/etw"
+	"github.com/Microsoft/go-winio/pkg/etwlogrus"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
 	shimlog "github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ot"
+	logsources "github.com/Microsoft/hcsshim/internal/vm/vmutils/etw"
 	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/sirupsen/logrus"
@@ -191,6 +195,44 @@ func main() {
 	}
 	os.Stderr = logFileHandle
 
+	var loggingOptions []func(*securitypolicy.SecurityOptions)
+	runtimeLogging := sidecar.NewRuntimeLoggingController()
+	provider, err := etw.NewProvider(logsources.SidecarProviderName, func(
+		_ guid.GUID,
+		state etw.ProviderState,
+		_ etw.Level,
+		_, _ uint64,
+		_ uintptr,
+	) {
+		switch state {
+		case etw.ProviderStateEnable:
+			runtimeLogging.SetCollectionEnabled(true)
+		case etw.ProviderStateDisable:
+			runtimeLogging.SetCollectionEnabled(false)
+		default:
+			return
+		}
+	})
+	if err != nil {
+		logrus.WithError(err).Error("failed to register sidecar ETW provider")
+	} else if hook, err := etwlogrus.NewHookFromProvider(provider); err != nil {
+		logrus.WithError(err).Error("failed to initialize sidecar ETW hook")
+		if err := provider.Close(); err != nil {
+			logrus.WithError(err).Error("failed to close sidecar ETW provider")
+		}
+	} else {
+		runtimeHook := sidecar.NewRuntimeLoggingHook(hook)
+		defer func() {
+			runtimeHook.Close()
+			if err := provider.Close(); err != nil {
+				logrus.WithError(err).Error("failed to close sidecar ETW provider")
+			}
+		}()
+		runtimeLogging.Attach(runtimeHook)
+		logrus.AddHook(runtimeHook)
+		loggingOptions = append(loggingOptions, securitypolicy.WithRuntimeLoggingChanged(runtimeHook.SetAllowed))
+	}
+
 	chsrv := make(chan error)
 	go func() {
 		defer close(chsrv)
@@ -278,7 +320,7 @@ func main() {
 	initialEnforcer := &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}
 
 	// 3. Create bridge and initializa
-	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer, logFileHandle)
+	brdg := sidecar.NewBridge(shimCon, gcsCon, initialEnforcer, logFileHandle, loggingOptions...)
 	brdg.AssignHandlers()
 
 	// 3. Listen and serve for hcsshim requests.

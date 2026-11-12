@@ -42,7 +42,8 @@ type SecurityOptions struct {
 	tcbReferenceInfo           []byte
 	platformReferenceInfo      []byte
 
-	logWriter io.Writer
+	logWriter             io.Writer
+	runtimeLoggingChanged func(bool)
 }
 
 // Global counter for fragment injection requests, used to create unique
@@ -70,14 +71,26 @@ func (s *SecurityOptions) EnsureFragmentDiagnosticsDir() error {
 	return writeFileIfNotExists(filepath.Join(dir, "README"), fragmentsInfoREADME, 0644)
 }
 
-func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, uvmHashEnvelopeReferenceInfo string, logWriter io.Writer) *SecurityOptions {
-	return &SecurityOptions{
+// WithRuntimeLoggingChanged observes the validated policy's runtime logging
+// decision. The callback must not block or reenter SecurityOptions.
+func WithRuntimeLoggingChanged(callback func(bool)) func(*SecurityOptions) {
+	return func(s *SecurityOptions) {
+		s.runtimeLoggingChanged = callback
+	}
+}
+
+func NewSecurityOptions(enforcer SecurityPolicyEnforcer, enforcerSet bool, uvmReferenceInfo string, uvmHashEnvelopeReferenceInfo string, logWriter io.Writer, options ...func(*SecurityOptions)) *SecurityOptions {
+	s := &SecurityOptions{
 		PolicyEnforcer:               enforcer,
 		PolicyEnforcerSet:            enforcerSet,
 		UvmReferenceInfo:             uvmReferenceInfo,
 		UvmHashEnvelopeReferenceInfo: uvmHashEnvelopeReferenceInfo,
 		logWriter:                    logWriter,
 	}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 // SetConfidentialOptions takes guestresource.ConfidentialOptions
@@ -128,24 +141,25 @@ func (s *SecurityOptions) SetConfidentialOptions(ctx context.Context, enforcerTy
 		return fmt.Errorf("error creating security policy enforcer: %w", err)
 	}
 
-	// This is one of two points at which we might change our logging.
-	// At this time, we now have a policy and can determine what the policy
-	// author put as policy around runtime logging.
-	// The other point is on startup where we take a flag to set the default
-	// policy enforcer to use before a policy arrives. After that flag is set,
-	// we use the enforcer in question to set up logging as well.
-	if err = p.EnforceRuntimeLoggingPolicy(ctx); err == nil {
-		logrus.SetOutput(s.logWriter)
-	} else {
-		logrus.SetOutput(io.Discard)
-	}
-
 	s.PolicyEnforcer = p
 	s.PolicyEnforcerSet = true
 	s.UvmReferenceInfo = encodedUVMReference
 	s.UvmHashEnvelopeReferenceInfo = encodedUVMHashEnvelopeReference
+	s.configureRuntimeLogging(ctx)
 
 	return nil
+}
+
+func (s *SecurityOptions) configureRuntimeLogging(ctx context.Context) {
+	allowed := s.PolicyEnforcer.EnforceRuntimeLoggingPolicy(ctx) == nil
+	if allowed {
+		logrus.SetOutput(s.logWriter)
+	} else {
+		logrus.SetOutput(io.Discard)
+	}
+	if s.runtimeLoggingChanged != nil {
+		s.runtimeLoggingChanged(allowed)
+	}
 }
 
 // Media types carried by the fragment-injection delivery mechanism. The host

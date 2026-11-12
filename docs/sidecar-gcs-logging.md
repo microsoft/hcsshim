@@ -1,0 +1,75 @@
+# Sidecar GCS ETW logging
+
+Sidecar GCS emits runtime diagnostics through the
+`Microsoft.Virtualization.GCSSidecar` ETW provider
+(`5400e7dc-0f0f-553d-19b5-3672635b5f7b`), using the same Logrus ETW hook as
+the host shim. Log Forward Service collects these events and forwards them
+through the existing Windows logging socket, not the GCS control bridge.
+
+## Policy
+
+The ETW hook buffers a bounded number of pre-policy startup events. It forwards
+them only after the guest validates and installs a policy allowing
+`allow_runtime_logging` and an ETW collection session is enabled. If policy
+denies runtime logging, buffered events are discarded. The existing Log
+Forward Service provider policy separately controls collection. There is no
+additional forwarding permission.
+
+Example policy excerpt (not a complete policy):
+
+```rego
+allow_runtime_logging := true
+allowed_log_providers := [
+    "Microsoft.Virtualization.GCSSidecar",
+]
+allow_log_provider_dropping := false
+log_provider := data.framework.log_provider
+```
+
+Existing versioned policy compatibility defaults still apply. Older policies
+can allow collection without an explicit provider list.
+
+## Collection
+
+The provider is included in the default sources at Information level. Enable
+forwarding with `io.microsoft.virtualmachine.forwardlogs.enable = true`.
+C-WCOW forwarding remains disabled by default. Every requested default provider
+must satisfy provider policy: a disallowed provider is dropped if dropping is
+enabled, or the request fails otherwise. Under the existing confidential startup
+behavior, that failure aborts UVM startup, even if runtime logging is disabled.
+
+To collect only sidecar logs at Verbose level, set
+`io.microsoft.virtualmachine.forwardlogs.defaultsources.enable = false` and
+set `io.microsoft.virtualmachine.forwardlogs.sources` to the base64 encoding of:
+
+```json
+{
+  "LogConfig": {
+    "sources": [{
+      "type": "ETW",
+      "providers": [{
+        "providerName": "Microsoft.Virtualization.GCSSidecar",
+        "level": "Verbose"
+      }]
+    }]
+  }
+}
+```
+
+Provider names are matched case-insensitively when overriding default levels.
+The sidecar Logrus level also filters events; debug and trace map to ETW
+Verbose. Existing guest-local file output is retained when runtime logging is
+allowed. Startup buffering is capped at 128 events and 256 KiB; individual
+events larger than 16 KiB are dropped. Once streaming starts, events produced
+while collection is disabled are not buffered for later replay.
+
+Delivery is best effort. ETW events emitted before collection starts may be
+lost; direct stderr writes and Go panic dumps are not forwarded by the hook.
+Provider initialization failures are reported locally without terminating the
+sidecar. Stopping Log Forward Service stops forwarding, not authorized local
+ETW emission.
+
+On non-confidential WCOW guests, an absent sidecar provider does not require
+installing the sidecar. Guests without log-forwarding capability retain the
+existing unsupported-feature behavior; supported collectors can subscribe to
+the provider GUID even when no process has registered it.
