@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -35,6 +36,7 @@ var (
 	errVMWait      = errors.New("vm wait failed")
 	errVMExitStat  = errors.New("vm exit status unavailable")
 	errVMStats     = errors.New("vm stats unavailable")
+	errVMProcReqs  = errors.New("vm processor requirements unavailable")
 )
 
 // newTestService builds a [Service] wired to a mock vm controller.
@@ -596,6 +598,59 @@ func TestSandboxStatus_TerminatedExitStatusFailure(t *testing.T) {
 	}
 	if !errors.Is(err, errVMExitStat) {
 		t.Errorf("expected error to wrap errVMExitStat, got %v", err)
+	}
+}
+
+// TestSandboxStatus_VerboseIncludesProcessorRequirements verifies that a verbose
+// status request on a running VM surfaces the processor requirements JSON under
+// the vmProcessorRequirementsInfoKey info key.
+func TestSandboxStatus_VerboseIncludesProcessorRequirements(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	procReqs := json.RawMessage(`{"ProcessorFeatures":["Sse3"],"CacheLineFlushSize":8}`)
+
+	svc, mockCtrl := newTestService(t)
+	svc.sandboxID = "test-sandbox"
+
+	mockCtrl.EXPECT().State().Return(vm.StateRunning)
+	mockCtrl.EXPECT().StartTime().Return(startedAt)
+	mockCtrl.EXPECT().ProcessorRequirements(gomock.Any()).Return(procReqs, nil)
+
+	resp, err := svc.sandboxStatusInternal(context.Background(), &sandboxsvc.SandboxStatusRequest{
+		SandboxID: "test-sandbox",
+		Verbose:   true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := resp.Info[vmProcessorRequirementsInfoKey]; got != string(procReqs) {
+		t.Errorf("Info[%q] = %q, want %q", vmProcessorRequirementsInfoKey, got, string(procReqs))
+	}
+}
+
+// TestSandboxStatus_VerboseProcessorRequirementsBestEffort verifies that a
+// failure to query processor requirements does not fail the status call; the
+// info key is simply omitted.
+func TestSandboxStatus_VerboseProcessorRequirementsBestEffort(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	svc, mockCtrl := newTestService(t)
+	svc.sandboxID = "test-sandbox"
+
+	mockCtrl.EXPECT().State().Return(vm.StateRunning)
+	mockCtrl.EXPECT().StartTime().Return(startedAt)
+	mockCtrl.EXPECT().ProcessorRequirements(gomock.Any()).Return(nil, errVMProcReqs)
+
+	resp, err := svc.sandboxStatusInternal(context.Background(), &sandboxsvc.SandboxStatusRequest{
+		SandboxID: "test-sandbox",
+		Verbose:   true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := resp.Info[vmProcessorRequirementsInfoKey]; ok {
+		t.Errorf("expected %q to be absent from Info on query failure", vmProcessorRequirementsInfoKey)
 	}
 }
 
