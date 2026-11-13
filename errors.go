@@ -12,6 +12,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 )
 
+// HNSError is a typed error for HNS failures that preserves the HRESULT (ErrorCode)
+// It is re-exported from internal/hns to allow downstream consumers to use errors.As()
+type HNSError = hns.HNSError
+
 var (
 	// ErrComputeSystemDoesNotExist is an error encountered when the container being operated on no longer exists = hcs.exist
 	ErrComputeSystemDoesNotExist = hcs.ErrComputeSystemDoesNotExist
