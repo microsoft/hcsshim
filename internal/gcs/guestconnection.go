@@ -19,9 +19,11 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/gcscompat"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/ot"
+	"github.com/Microsoft/hcsshim/internal/version"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -121,8 +123,11 @@ func (gc *GuestConnection) Protocol() uint32 {
 // It should be false for subsequent connections (e.g. if reconnecting to an existing UVM).
 func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGuestState *InitialGuestState) (err error) {
 	req := prot.NegotiateProtocolRequest{
-		MinimumVersion: protocolVersion,
-		MaximumVersion: protocolVersion,
+		MinimumVersion:     protocolVersion,
+		MaximumVersion:     protocolVersion,
+		MinContractVersion: gcscompat.MinCompatibleContractVersion,
+		MaxContractVersion: gcscompat.GuestHostContractVersion,
+		HostCommit:         version.Commit,
 	}
 	var resp prot.NegotiateProtocolResponse
 	err = gc.brdg.RPC(ctx, prot.RPCNegotiateProtocol, &req, &resp, true)
@@ -131,6 +136,24 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 	}
 	if resp.Version != protocolVersion {
 		return fmt.Errorf("unexpected version %d returned", resp.Version)
+	}
+
+	// Enforce guest/host contract compatibility. A guest that predates the
+	// contract advertises no range (MaxContractVersion == 0); skip enforcement
+	// for it so already-deployed UVM images keep working. Otherwise require the
+	// host and guest contract ranges to overlap, and fail fast with an
+	// actionable message naming both sides if they do not.
+	if guestMax := resp.Capabilities.MaxContractVersion; guestMax != 0 {
+		if !gcscompat.Compatible(
+			gcscompat.MinCompatibleContractVersion, gcscompat.GuestHostContractVersion,
+			resp.Capabilities.MinContractVersion, guestMax,
+		) {
+			return fmt.Errorf(
+				"GCS/hcsshim contract mismatch: host contract [%d..%d] (commit %s) cannot interoperate with guest contract [%d..%d] (commit %s); the GCS in this UVM was built from an incompatible hcsshim revision",
+				gcscompat.MinCompatibleContractVersion, gcscompat.GuestHostContractVersion, version.Commit,
+				resp.Capabilities.MinContractVersion, guestMax, resp.Capabilities.GcsCommit,
+			)
+		}
 	}
 
 	gc.os = strings.ToLower(resp.Capabilities.RuntimeOsType)
