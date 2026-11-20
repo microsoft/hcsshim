@@ -125,8 +125,16 @@ func Test_RegoTemplates(t *testing.T) {
 }
 
 func verifyPolicyRules(apiVersion string, enforcementPoints map[string]interface{}, policyCode string) error {
+	// Some policy rules in the allow all policy, like
+	// load_transparency_trust_list, depends on input data. We create some
+	// fake input here so that these rules don't disappear.
+	input := map[string]interface{}{
+		"ledgers": []string{},
+	}
+
 	query := rego.New(
 		rego.Query("data.policy"),
+		rego.Input(input),
 		rego.Module("policy.rego", policyCode),
 		rego.Module("framework.rego", FrameworkCode),
 	)

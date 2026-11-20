@@ -29,5 +29,5 @@ mapped_directory_mount := {"allowed": true}
 mapped_directory_unmount := {"allowed": true}
 unmount_cims := {"allowed": true}
 log_provider := {"allowed": true}
-load_transparency_trust_list := {"allowed": true}
+load_transparency_trust_list := {"allowed": true, "allowed_ledgers": input.ledgers}
 host_network := {"allowed": true}
