@@ -469,11 +469,14 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 			return true
 		})
 	}
-	if signal == 0x9 && eid == "" && ht.host != nil {
+	if signal == 0x9 && eid == "" && ht.host != nil && ht.ownsHost {
 		// If this is a SIGKILL against the init process we start a background
 		// timer and wait on either the timer expiring or the process exiting
 		// cleanly. If the timer expires first we forcibly close the UVM as we
 		// assume the guest is misbehaving for some reason.
+		//
+		// Only a task that owns its UVM may close it. A workload container
+		// shares the pod UVM, and closing it would tear down the whole pod.
 		go func() {
 			t := time.NewTimer(30 * time.Second)
 			execExited := make(chan struct{})

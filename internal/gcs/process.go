@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/cow"
@@ -30,6 +31,12 @@ const (
 	exitProbeTimeoutMs = 50
 )
 
+// missingProcessExitGrace is how long releaseMissingProcessExit waits for the
+// real exit before closing the stdio relay. It matches the default
+// CopyAfterExitTimeout the host allows stdio relays after a process exits.
+// A variable so tests can shorten it.
+var missingProcessExitGrace = time.Second
+
 // Process represents a process in a container or container host.
 type Process struct {
 	gc                    *GuestConnection
@@ -43,6 +50,8 @@ type Process struct {
 	// stdinPort, stdoutPort, stderrPort are the vsock ports gc.exec
 	// allocated for this process's stdio relay.
 	stdinPort, stdoutPort, stderrPort uint32
+	// missingOnce starts releaseMissingProcessExit at most once.
+	missingOnce sync.Once
 }
 
 var _ cow.Process = &Process{}
@@ -294,11 +303,45 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 				logrus.ErrorKey:       err,
 				logfields.ContainerID: p.cid,
 				logfields.ProcessID:   p.id,
-			}).Warn("ignoring missing process")
+			}).Warn("process reported missing by guest while its wait is pending")
+			// gc.os is the OS of the guest (the UVM), not of the host. Only a
+			// Windows guest (WCOW) holds the wait response until the host
+			// closes the stdio relay. A Linux guest (LCOW) drains and closes
+			// the relay itself, and reconnects if the host closes it first.
+			if p.gc.os == "windows" {
+				p.missingOnce.Do(func() {
+					go p.releaseMissingProcessExit(context.WithoutCancel(ctx))
+				})
+			}
 		}
 		return false, nil
 	}
 	return true, nil
+}
+
+// releaseMissingProcessExit closes the host side of the stdio relay of a
+// process the guest reported missing while its wait is still pending.
+//
+// A Windows guest holds the wait response of a process until the host closes
+// its stdio relay, and a descendant process can keep the relay open after the
+// process itself exits. The host only closes the relay once the wait
+// completes, so neither side would make progress. The real exit normally
+// follows the missing report closely, so give it a short grace period first.
+func (p *Process) releaseMissingProcessExit(ctx context.Context) {
+	t := time.NewTimer(missingProcessExitGrace)
+	defer t.Stop()
+	select {
+	case <-p.waitCall.ch:
+		return
+	case <-t.C:
+	}
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.ContainerID: p.cid,
+		logfields.ProcessID:   p.id,
+	}).Warn("closing stdio relay of process reported missing by guest")
+	_ = p.stdin.Close()
+	_ = p.stdout.Close()
+	_ = p.stderr.Close()
 }
 
 // Stdio returns the standard IO streams associated with the container. They
