@@ -54,6 +54,7 @@ const (
 	HashEnvelopeReferenceInfoFilename = "transparent-reference-info-base64"
 	TCBReferenceInfoFilename          = "tcb-reference-info-base64"
 	PlatformReferenceInfoFilename     = "platform-reference-info-base64"
+	TransparencyTrustListFilename     = "transparency-trust-list-base64"
 )
 
 // PolicyConfig contains toml or JSON config for security policy.

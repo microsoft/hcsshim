@@ -37,10 +37,15 @@ type SecurityOptions struct {
 	UvmHashEnvelopeReferenceInfo string
 	policyMutex                  sync.Mutex
 
-	// Used for both tcbReferenceInfo and platformReferenceInfo
-	platformReferenceInfoMutex sync.RWMutex
-	tcbReferenceInfo           []byte
-	platformReferenceInfo      []byte
+	fragmentInjectedSecurityContextMutex sync.RWMutex
+	tcbReferenceInfo                     []byte
+	platformReferenceInfo                []byte
+	// The "first-party TTL" we will put in security-context the next time
+	// we start a container.  This is populated when we receive a fragment
+	// injection request with a TTL, and the TTL issuer and subject
+	// matches constants defined below.
+	transparencyTrustList    []byte
+	transparencyTrustListSVN int64
 
 	logWriter             io.Writer
 	runtimeLoggingChanged func(bool)
@@ -179,6 +184,21 @@ const (
 	mediaTypePlatformReferenceInfo = "application/vnd.platform-reference-info.v1+cose"
 )
 
+// The following 4 constants identify our "first party" TTL, which when
+// received we will put in the security-context directory. It is intended
+// for the application to send alongside the transparent UVM or TCB
+// reference info to a relying party. A matching TTL is added to the
+// security context regardless of whether it is accepted by the Rego
+// policy (from the gcs's perspective it being in the security-context is
+// purely infromative, and we do not otherwise give such a TTL special
+// privileges or use keys in it without first consulting the policy).
+const (
+	firstPartyTTLIssuer      = "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.3"
+	firstPartyTTLSubject     = "mcr.microsoft.com/aci/aci-cc-ttl"
+	firstPartyTTLIssuerTest  = "did:x509:0:sha256:wVkSM46SDpw4LuyEYoH6r5ym07whL5lWxNlGN-UPtf4::eku:1.3.6.1.4.1.311.10.3.13"
+	firstPartyTTLSubjectTest = "acidevacr.azurecr.io/internal/aci/aci-cc-ttl"
+)
+
 // asInt64 coerces a CBOR-decoded integer value (which may be returned as
 // int64, uint64 or int by different decoders) to an int64.
 func asInt64(v interface{}) (int64, error) {
@@ -308,13 +328,13 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 
 	// We do not need to validate this.
 	if mediaType == mediaTypeTCBReferenceInfo || mediaType == mediaTypePlatformReferenceInfo {
-		s.platformReferenceInfoMutex.Lock()
+		s.fragmentInjectedSecurityContextMutex.Lock()
 		if mediaType == mediaTypeTCBReferenceInfo {
 			s.tcbReferenceInfo = append(s.tcbReferenceInfo[:0], raw...)
 		} else {
 			s.platformReferenceInfo = append(s.platformReferenceInfo[:0], raw...)
 		}
-		s.platformReferenceInfoMutex.Unlock()
+		s.fragmentInjectedSecurityContextMutex.Unlock()
 		return nil
 	}
 
@@ -381,6 +401,20 @@ func (s *SecurityOptions) InjectFragment(ctx context.Context, fragment *guestres
 		parsedTTL, err := cosesign1.ParseTTLPayload(unpacked.Payload)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse transparency trust list payload")
+		}
+
+		if (issuer == firstPartyTTLIssuer && feed == firstPartyTTLSubject) ||
+			(issuer == firstPartyTTLIssuerTest && feed == firstPartyTTLSubjectTest) {
+			s.fragmentInjectedSecurityContextMutex.Lock()
+			// This SVN non-rollback check is just to prevent older TTLs
+			// from overwriting newer ones even if the older one comes
+			// later in the injection order. It is not otherwise a
+			// security feature.
+			if len(s.transparencyTrustList) == 0 || s.transparencyTrustListSVN <= *svnFromCwt {
+				s.transparencyTrustList = append(s.transparencyTrustList[:0], raw...)
+				s.transparencyTrustListSVN = *svnFromCwt
+			}
+			s.fragmentInjectedSecurityContextMutex.Unlock()
 		}
 
 		// feed is the "subject" in the new-style envelope terminology.
@@ -466,22 +500,25 @@ func writeFileInDir(dir string, filename string, data []byte, perm os.FileMode) 
 // because there was nothing to write.
 func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, error) {
 	encodedPolicy := s.PolicyEnforcer.EncodedSecurityPolicy()
-	s.platformReferenceInfoMutex.RLock()
-	var tcbReferenceInfoBase64, platformReferenceInfoBase64 string
+	s.fragmentInjectedSecurityContextMutex.RLock()
+	var tcbReferenceInfoBase64, platformReferenceInfoBase64, transparencyTrustListBase64 string
 	if len(s.tcbReferenceInfo) > 0 {
 		tcbReferenceInfoBase64 = base64.StdEncoding.EncodeToString(s.tcbReferenceInfo)
 	}
 	if len(s.platformReferenceInfo) > 0 {
 		platformReferenceInfoBase64 = base64.StdEncoding.EncodeToString(s.platformReferenceInfo)
 	}
-	s.platformReferenceInfoMutex.RUnlock()
+	if len(s.transparencyTrustList) > 0 {
+		transparencyTrustListBase64 = base64.StdEncoding.EncodeToString(s.transparencyTrustList)
+	}
+	s.fragmentInjectedSecurityContextMutex.RUnlock()
 	// HostAMDCertificate is a deprecated alias of the LCOW key. Prefer that
 	// key, but preserve support for callers that supply the WCOW key.
 	hostAMDCert := spec.Annotations[annotations.LCOWHostAMDCertificate]
 	if hostAMDCert == "" {
 		hostAMDCert = spec.Annotations[annotations.WCOWHostAMDCertificate]
 	}
-	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 || len(tcbReferenceInfoBase64) > 0 || len(platformReferenceInfoBase64) > 0 {
+	if len(encodedPolicy) > 0 || len(hostAMDCert) > 0 || len(s.UvmReferenceInfo) > 0 || len(s.UvmHashEnvelopeReferenceInfo) > 0 || len(tcbReferenceInfoBase64) > 0 || len(platformReferenceInfoBase64) > 0 || len(transparencyTrustListBase64) > 0 {
 		// Use os.MkdirTemp to make sure that the directory is unique.
 		securityContextDir, err := os.MkdirTemp(spec.Root.Path, SecurityContextDirTemplate)
 		if err != nil {
@@ -515,6 +552,11 @@ func (s *SecurityOptions) WriteSecurityContextDir(spec *specs.Spec) (string, err
 		if len(platformReferenceInfoBase64) > 0 {
 			if err := writeFileInDir(securityContextDir, PlatformReferenceInfoFilename, []byte(platformReferenceInfoBase64), 0777); err != nil {
 				return "", fmt.Errorf("failed to write platform reference info: %w", err)
+			}
+		}
+		if len(transparencyTrustListBase64) > 0 {
+			if err := writeFileInDir(securityContextDir, TransparencyTrustListFilename, []byte(transparencyTrustListBase64), 0777); err != nil {
+				return "", fmt.Errorf("failed to write transparency trust list: %w", err)
 			}
 		}
 
