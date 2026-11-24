@@ -2472,12 +2472,67 @@ func Test_Rego_Version_Future_Enforcement_Point(t *testing.T) {
 	}
 }
 
+func Test_Rego_Unsupported_APIVersion(t *testing.T) {
+	tests := []struct {
+		name       string
+		versionKey string
+		version    string
+		supported  bool
+	}{
+		{
+			name:       "below minimum",
+			versionKey: "api_version",
+			version:    "0.5.9",
+		},
+		{
+			name:       "minimum",
+			versionKey: "api_version",
+			version:    "0.6.0",
+			supported:  true,
+		},
+		{
+			name:       "above minimum",
+			versionKey: "api_version",
+			version:    "0.7.0",
+			supported:  true,
+		},
+		{
+			name:       "deprecated key below minimum",
+			versionKey: "api_svn",
+			version:    "0.5.9",
+		},
+		{
+			name:       "deprecated key at minimum",
+			versionKey: "api_svn",
+			version:    "0.6.0",
+			supported:  true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code := fmt.Sprintf("package policy\n\n%s := %q", test.versionKey, test.version)
+			_, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{}, testOSType)
+			if test.supported {
+				if err != nil {
+					t.Fatalf("supported policy version %s was rejected: %v", test.version, err)
+				}
+				return
+			}
+
+			if err == nil {
+				t.Fatalf("unsupported policy version %s was accepted", test.version)
+			}
+		})
+	}
+}
+
 // Tests whether the enforcement point logic returns the default behavior
 // and "unsupported" when the enforcement point was added in a version of the
 // framework that was released after the policy was authored as indicated
 // by their respective version information.
 func Test_Rego_Version_Unavailable_Enforcement_Point(t *testing.T) {
-	code := "package policy\n\napi_version := \"0.0.1\""
+	code := "package policy\n\napi_version := \"0.6.0\""
 	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{}, testOSType)
 
 	if err != nil {
@@ -2511,7 +2566,7 @@ func Test_Rego_Version_Unavailable_Enforcement_Point(t *testing.T) {
 }
 
 func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
-	code := "package policy\n\napi_version := \"0.0.1\""
+	code := "package policy\n\napi_version := \"0.6.0\""
 	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{}, testOSType)
 
 	if err != nil {
@@ -2560,7 +2615,7 @@ func Test_Rego_Enforcement_Point_Extra(t *testing.T) {
 	ctx := context.Background()
 	code := `package policy
 
-api_version := "0.0.1"
+api_version := "0.6.0"
 
 __fixture_for_allowed_extra__ := {"allowed": true}
 `
@@ -8921,7 +8976,7 @@ func Test_Rego_APISVN(t *testing.T) {
 func Test_Rego_NoReason(t *testing.T) {
 	code := `package policy
 
-	api_version := "0.0.1"
+	api_version := "0.6.0"
 
 	mount_device := {"allowed": false}
 `
@@ -9013,7 +9068,7 @@ func Test_Rego_ErrorTruncation_Unable(t *testing.T) {
 func Test_Rego_ErrorTruncation_CustomPolicy(t *testing.T) {
 	code := fmt.Sprintf(`package policy
 
-	api_version := "0.1.0"
+	api_version := "0.6.0"
 
 	mount_device := {"allowed": false}
 

@@ -3311,6 +3311,13 @@ default policy_api_version := null
 policy_framework_version := data.policy.framework_version
 policy_api_version := data.policy.api_version
 
+default is_unsupported_api_version := false
+
+is_unsupported_api_version if {
+    policy_api_version != null
+    semver.compare(policy_api_version, "0.6.0") < 0
+}
+
 # deprecated
 policy_framework_version := data.policy.framework_svn
 policy_api_version := data.policy.api_svn
