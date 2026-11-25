@@ -204,6 +204,21 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 		return nil, fmt.Errorf("rego compilation failed: %w", err)
 	}
 
+	result, err := policy.rego.RawQuery("data.framework.is_unsupported_api_version", map[string]interface{}{})
+	if err != nil {
+		return nil, fmt.Errorf("error checking policy api_version: %w", err)
+	}
+	if len(result) != 1 || len(result[0].Expressions) != 1 {
+		return nil, errors.New("error checking policy api_version: unexpected result")
+	}
+	unsupported, ok := result[0].Expressions[0].Value.(bool)
+	if !ok {
+		return nil, errors.New("error checking policy api_version: result is not a boolean")
+	}
+	if unsupported {
+		return nil, errors.New("policy api_version is unsupported: minimum supported version is 0.6.0")
+	}
+
 	// by default we do not perform message truncation
 	policy.maxErrorMessageLength = 0
 
