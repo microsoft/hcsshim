@@ -269,6 +269,15 @@ type NegotiateProtocolRequest struct {
 	RequestBase
 	MinimumVersion uint32
 	MaximumVersion uint32
+	// MinContractVersion and MaxContractVersion advertise the host's supported
+	// guest/host contract range (see internal/gcscompat). They are additive and
+	// optional: a guest that predates the contract ignores them, and a zero
+	// MaxContractVersion means the sender does not advertise a contract.
+	MinContractVersion uint32 `json:",omitempty"`
+	MaxContractVersion uint32 `json:",omitempty"`
+	// HostCommit is the hcsshim source commit the host was built from. It is
+	// diagnostic only, used to make a contract mismatch error actionable.
+	HostCommit string `json:",omitempty"`
 }
 
 type NegotiateProtocolResponse struct {
@@ -400,6 +409,14 @@ type GcsCapabilities struct {
 	SupportedSchemaVersions        []hcsschema.Version
 	RuntimeOsType                  string
 	GuestDefinedCapabilities       json.RawMessage
+	// MinContractVersion and MaxContractVersion advertise the guest's supported
+	// guest/host contract range (see internal/gcscompat). A zero
+	// MaxContractVersion means the guest predates the contract.
+	MinContractVersion uint32 `json:",omitempty"`
+	MaxContractVersion uint32 `json:",omitempty"`
+	// GcsCommit is the hcsshim source commit the GCS was built from. It is
+	// diagnostic only, used to make a contract mismatch error actionable.
+	GcsCommit string `json:",omitempty"`
 }
 
 type ContainerCreateResponse struct {
